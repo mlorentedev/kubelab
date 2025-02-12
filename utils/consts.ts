@@ -1,4 +1,5 @@
 export const SITE_TITLE = 'mlorenteDev';
+export const SITE_DOMAIN = 'mlorente.dev';
 export const SITE_SUBTITLE = 'Ingeniero | Cloud & DevOps';
 export const SITE_DESCRIPTION = 'Ingeniero | Cloud & DevOps';
 export const SITE_AUTHOR = 'Manu Lorente';
@@ -22,3 +23,4 @@ export const CALENDLY_URL = "https://calendly.com/mlorentedev/videollamada";
 export const CALENDLY_TEXT_COLOR = "#424242";
 export const CALENDLY_PRIMARY_COLOR = "#0097a7";
 export const CALENDLY_BUTTON_TEXT = 'Quiero una videollamada';
+export const BEEHIIV_API_URL = "https://api.beehiiv.com/v2/publications/***REDACTED***/subscriptions";

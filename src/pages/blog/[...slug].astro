@@ -4,7 +4,7 @@ import { render } from 'astro:content';
 
 import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
 import FormattedDate from '../../components/FormattedDate.astro';
-import { getReadingTime } from '../../../utils/reading-time';
+import { getReadingTime } from '../../../public/assets/reading-time';
 
 export async function getStaticPaths() {
   const pages = await getCollection('blog');

@@ -1,46 +1,33 @@
 ---
-import type { APIRoute } from "astro";
-import { QUOTE, QUOTE_AUTHOR } from "../../utils/consts";
-
-export const POST: APIRoute = async ({ request }) => {
-  const { email } = await request.json();
-
-  const response = await fetch("https://<DC>.api.mailchimp.com/3.0/lists/<LIST_ID>/members", {
-    method: "POST",
-    headers: {
-      "Authorization": `apikey ${import.meta.env.MAILCHIMP_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      email_address: email,
-      status: "subscribed"
-    })
-  });
-
-  if (!response.ok) {
-    return new Response(JSON.stringify({ message: "Error al suscribirse" }), { status: 500 });
-  }
-
-  return new Response(JSON.stringify({ message: "¡Suscripción exitosa! Revisa tu correo." }), { status: 200 });
-};
 
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
-  <form id="subscribe-form" class="flex flex-col gap-6">
+  <form 
+    class="flex flex-col gap-6"
+    id="subscribe-form"
+  >
     <input
       type="email"
-      id="email"
+      name="email"
       placeholder="Tu correo electrónico"
       required
       class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-cyan-300"
-    />
+    />   
     <button
       type="submit"
       class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
     >
       📩 VALE
     </button>
+    <div class="flex justify-center items-center text-center">
+      <input type="checkbox" id="privacy-policy" name="privacy-policy">
+      <label for="privacy-policy">
+        Acepto la <a href="/privacy-policy" target="_blank" class="text-white">política de privacidad</a>.
+      </label>
+    </div>    
   </form>
-  <p id="status-message" class="mt-2 text-xs"></p>
+  <p id="status-message" class="mt-4 text-xs text-center"></p>
 </div>
+
+<script type="module" src="/assets/subscribe.js" defer></script>
