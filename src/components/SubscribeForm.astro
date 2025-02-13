@@ -1,11 +1,13 @@
 ---
-
+const { tag = "new", utm_source = "landing" } = Astro.props;
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
   <form 
     class="flex flex-col gap-6"
     id="subscribe-form"
+    data-tag={tag}
+    utm-source={utm_source}
   >
     <input
       type="email"

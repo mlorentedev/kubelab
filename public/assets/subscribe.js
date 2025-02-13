@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusMessage = document.getElementById('status-message');
   const emailField = document.querySelector('[name="email"]');
   const privacyPolicyCheckbox = document.getElementById('privacy-policy');
+  const tag = form.getAttribute('data-tag');
+  const utm_source = form.getAttribute('utm-source');  
 
   statusMessage.textContent = '';
 
@@ -25,14 +27,22 @@ document.addEventListener('DOMContentLoaded', () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, tag, utm_source }),
     });
 
     const result = await response.json();
     statusMessage.textContent = result.message;
     if (response.ok) {
-      console.log('Subscription successful:', result);
-      window.location.href = '/subscription';
+      if (result.already_subscribed) {
+        console.log('El usuario ya está suscrito.');
+        window.location.href = '/resource-success';
+      } else {
+        console.log('Subscription successful:', result);
+        window.location.href = '/subscription-success';
+      }
+    } else {
+      console.error('Subscription failed:', result);
+      statusMessage.textContent = 'Hubo un error al intentar suscribirte. Por favor, inténtalo de nuevo.';
     }
   });
 });
