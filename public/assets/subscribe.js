@@ -1,15 +1,19 @@
-
-
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('subscribe-form');
   const statusMessage = document.getElementById('status-message');
   const emailField = document.querySelector('[name="email"]');
   const privacyPolicyCheckbox = document.getElementById('privacy-policy');
   const tag = form.getAttribute('data-tag');
-  const utm_source = form.getAttribute('utm-source');  
-  const aut_id = form.getAttribute('aut-id');
+  const utmSource = form.getAttribute('utm-source');  
+  const autId = form.getAttribute('aut-id');
 
   statusMessage.textContent = '';
+
+  console.log('Sending data to the server:', {
+    tag,
+    utmSource,
+    autId,
+  });
 
   if (!emailField) {
     console.error('Email field not found in the form.');
@@ -24,12 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const email = emailField.value;
-    const response = await fetch('/api/subscribe', {
+    const response = await fetch('/api/newsletter', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, tag, utm_source, aut_id }),
+      body: JSON.stringify({ email, tag, utmSource, autId }),
     });
 
     const result = await response.json();
