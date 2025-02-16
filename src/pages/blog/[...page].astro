@@ -7,6 +7,21 @@ import { getCollection } from 'astro:content';
 
 const { lang } = Astro.params;
 const today = new Date();
+const { page }: { page: PageProps } = Astro.props;
+
+interface Post {
+  blog_slug: string;
+  data: {
+    heroImage: string | null | undefined;
+    description: string;
+    title: string;
+    pubDate: Date;
+  };
+}
+
+interface PageProps {
+  data: Post[];
+}
 
 export async function getStaticPaths(
   {
@@ -19,11 +34,14 @@ export async function getStaticPaths(
   const _posts = await getCollection('blog');
   const posts_filtered = _posts
     .filter((blog) => new Date(blog.data.pubDate) <= today)
+    .map(post => ({
+      ...post,
+      blog_slug: post.id,
+    }))
     .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
   return paginate(posts_filtered, { pageSize: PAGE_SIZE });
 }
 
-const { page } = Astro.props;
 ---
 
 <BaseLayout title="Blog" description="Blog" lang={lang} pubDate={today}>

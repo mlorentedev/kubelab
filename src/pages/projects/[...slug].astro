@@ -7,11 +7,11 @@ import FormattedDate from '../../components/FormattedDate.astro';
 import { getReadingTime } from '../../../public/assets/reading-time';
 
 export async function getStaticPaths() {
-  const pages = await getCollection('projects');
+  const projects = await getCollection('projects');
 
-  const paths = pages.map((page) => ({
-    params: { slug: page.id },
-    props: page,
+  const paths = projects.map((project) => ({
+    params: { slug: project.id },
+    props: project,
   }));
 
   return paths;
