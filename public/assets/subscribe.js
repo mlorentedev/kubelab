@@ -9,12 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   statusMessage.textContent = '';
 
-  console.log('Sending data to the server:', {
-    tag,
-    utmSource,
-    autId,
-  });
-
   if (!emailField) {
     console.error('Email field not found in the form.');
     return;

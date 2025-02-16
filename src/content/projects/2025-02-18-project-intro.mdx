@@ -2,16 +2,26 @@
 title: 'Introducción a la programación'
 description: 'Curso de programación básica'
 pubDate: 2024-01-07
-lang: es
+lang: 'es'
 heroImage: /img/curso-programacion/funciones.png
 pdf_url: /pdf/2024-01-07-introduccion-a-la-programacion.pdf
 ---
 
-import HeaderLink from '../../components/HeaderLink.astro';
+export const UTM_SOURCE = "proyecto";
+export const BUTTON_TEXT = "LO QUIERO";
+export const AUT_ID = "aut_5c0f656e-b371-49f3-9535-b2eb26b189a8";
+export const TAG = "armonia-devops-sre";
 
-<HeaderLink href="#" onclick="alert('clicked!')">
-  Embedded component in MDX
-</HeaderLink>
+import HeaderLink from '../../components/HeaderLink.astro';
+import SubscribeForm from '../../components/SubscribeForm.astro';
+
+Déjame aquí tu correo y te mando el recurso con tips:
+<SubscribeForm 
+  tag = {TAG}
+  utm_source = {UTM_SOURCE}
+  button_text = {BUTTON_TEXT}
+  aut_id = {AUT_ID}
+  />
 
 La informática es la ciencia que estudia todo lo regerente al procesamiento de la información de manera automática. La programación es una de las disciplinas más importantes de la informática, ya que es la que permite a los seres humanos comunicarse con las máquinas.
 
@@ -486,8 +496,6 @@ Toman como operando valores numéricos y producen como resultado un valor entero
 
 - _==_ Devuelve verdadero si los dos operandos son iguales.
 - _!=_ Devuelve verdadero si los dos operandos son diferentes.
-- _<_ Devuelve verdadero si el primer operando es menor que el segundo.
-- _<=_ Devuelve verdadero si el primer operando es menor o igual que el segundo.
 - _\>_ Devuelve verdadero si el primer operando es mayor que el segundo.
 - _\>=_ Devuelve verdadero si el primer operando es mayor o igual que el segundo.
 
@@ -536,7 +544,6 @@ Sólo admiten operandos de tipo entero, y se aplican bit a bit. Los operadores d
 - _&_ Operador de conjunción bit a bit. Realiza la operación lógica AND bit a bit.
 - _|_ Operador de disyunción bit a bit. Realiza la operación lógica OR bit a bit.
 - _^_ Operador de disyunción exclusiva bit a bit. Realiza la operación lógica XOR bit a bit.
-- _<<_ Operador de desplazamiento a la izquierda. Desplaza los bits de un operando a la izquierda un número de posiciones determinado.
 - _>>_ Operador de desplazamiento a la derecha. Desplaza los bits de un operando a la derecha un número de posiciones determinado.
 
 Lo mejor para utilizar correctamente estos operadores es obtener la representación binaria de los operandos y aplicar la operación bit a bit, y luego volver a convertir el resultado a decimal.
@@ -634,8 +641,6 @@ La asociatividad de los operadores determina el orden en el que se evalúan los 
 | 5         | +, -, !, ~, ++, --     | Derecha       | Operadores unarios prefijos             |
 | 6         | \*, /, %               | Izquierda     | Operadores de multiplicación y división |
 | 7         | +, -                   | Izquierda     | Operadores de suma y resta              |
-| 8         | <<, >>                 | Izquierda     | Operadores de desplazamiento            |
-| 9         | <, <=, >, >=           | Izquierda     | Operadores de relación                  |
 | 10        | ==, !=                 | Izquierda     | Operadores de igualdad                  |
 | 11        | &                      | Izquierda     | Operadores de conjunción                |
 | 12        | \|                     | Izquierda     | Operadores de disyunción                |
@@ -754,7 +759,6 @@ El funcionamiento es el siguiente:
 
 Es importante destacar que puede que el bloque que acompaña a la sentencia _while_ no se ejecute nunca si la condición es falsa desde el principio. Además alguno de los valores que determinan la condición de salida del bucle deben cambiar en algún momento para que el bucle no sea infinito.
 
-En la condición, es conveniente utilizar los operadores de rango (>, <, >=, <=) en lugar de los operadores de igualdad (==, !=) para evitar problemas de precisión.
 
 ```java
     // Programa que copia la entrada estándar en la salida estándar
@@ -1203,7 +1207,6 @@ El formato general de las órdenes es el siguiente:
     comando -opciones argumentos
 ```
 
-Los corchetes angulares (<>) se utilizan para indicar que el usuario debe sustituir el valor por el valor real. Los corchetes cuadrados ([]) se utilizan para indicar que el argumento es opcional.
 
 ```bash
     # Ejemplo de formato con corchetes

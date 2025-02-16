@@ -8,6 +8,19 @@ import { getCollection } from 'astro:content';
 
 const { lang } = Astro.params;
 const today = new Date();
+const { page } = Astro.props as { page: { data: Project[] } };
+
+interface Project {
+  project_slug: string;
+  data: {
+    description: string;
+    title: string;
+    pubDate: Date;
+    heroImage?: string;
+    pdf_url?: string;
+    video_url?: string;
+  };
+}
 
 export async function getStaticPaths(
   {
@@ -20,11 +33,14 @@ export async function getStaticPaths(
   const _projects = await getCollection('projects');
   const projects_filtered = _projects
     .filter((project) => new Date(project.data.pubDate) <= today)
+    .map((project) => ({
+      ...project,
+      project_slug: project.id,
+    }))
     .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
   return paginate(projects_filtered, { pageSize: PAGE_SIZE });
 }
 
-const { page } = Astro.props;
 ---
 
 <BaseLayout title="Projects" description="Projects" lang={lang} pubDate={today}>
@@ -33,22 +49,12 @@ const { page } = Astro.props;
     <ul class="flex flex-col gap-8 list-none px-10">
       {
         page.data.map(
-          (
-            project: {
-              project_slug: any;
-              data: {
-                description: string;
-                title: unknown;
-                pubDate: Date;
-                heroImage: string | null | undefined;
-                pdf_url: string | null | undefined;
-                video_url: string | null | undefined;
-              };
-            },
+        (
+            project: Project,
             index: number
           ) => (
             <li class="w-full sm:w-auto">
-              <a href={`/${lang}/projects/${project.project_slug}`} class="block">
+              <a href={`/projects/${project.project_slug}`} class="block">
                 <h4
                   class={`text-gray-800 font-bold text-4xl mb-2 hover:text-cyan-700 transition-colors duration-200`}
                 >
@@ -61,7 +67,7 @@ const { page } = Astro.props;
               <p>
                 {project.data.description}
                 <a
-                  href={`/${lang}/projects/${project.project_slug}`}
+                  href={`/projects/${project.project_slug}`}
                   class="block font-semibold text-lg hover:text-cyan-700 transition-colors duration-200"
                 >
                   Ver más
