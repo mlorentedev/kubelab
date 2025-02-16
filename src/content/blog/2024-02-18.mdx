@@ -5,11 +5,21 @@ pubDate: 2024-02-18
 lang: 'es'
 ---
 
-import HeaderLink from '../../components/HeaderLink.astro';
+export const UTM_SOURCE = "blog";
+export const BUTTON_TEXT = "LO QUIERO";
+export const AUT_ID = "aut_5c0f656e-b371-49f3-9535-b2eb26b189a8";
+export const TAG = "armonia-devops-sre";
 
-<HeaderLink href="#" onclick="alert('clicked!')">
-  Embedded component in MDX
-</HeaderLink>
+import HeaderLink from '../../components/HeaderLink.astro';
+import SubscribeForm from '../../components/SubscribeForm.astro';
+
+Déjame aquí tu correo y te mando el recurso con tips:
+<SubscribeForm 
+  tag = {TAG}
+  utm_source = {UTM_SOURCE}
+  button_text = {BUTTON_TEXT}
+  aut_id = {AUT_ID}
+  />
 
 > ⚡️ **Resumen**  
 > En la acelerada cocina del desarrollo de software, surgen dos roles cruciales para asegurar una operación fluida: el chef y el asistente de cocina. En nuestro mundo tecnológico, estos roles están representados por DevOps y la Ingeniería de Confiabilidad del Sitio (SRE).
@@ -34,9 +44,7 @@ Antes del advenimiento de DevOps, el panorama del desarrollo de software era dif
 
 Echemos un vistazo más de cerca a algunas de las características definitorias del desarrollo de software tradicional.
 
-<div align="center">
-  <img src="/img/2024-02-18/waterfall-model.png" alt="Modelo de Cascada"> 
-</div>
+<img src="/img/2024-02-18/waterfall-model.png" alt="Modelo de Cascada" />
 
 #### Modelo de Cascada
 

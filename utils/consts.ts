@@ -23,4 +23,4 @@ export const CALENDLY_URL = "https://calendly.com/mlorentedev/videollamada";
 export const CALENDLY_TEXT_COLOR = "#424242";
 export const CALENDLY_PRIMARY_COLOR = "#0097a7";
 export const CALENDLY_BUTTON_TEXT = 'Quiero una videollamada';
-export const BEEHIIV_API_URL = "https://api.beehiiv.com/v2/publications/***REDACTED***/subscriptions";
+export const BEEHIIV_PUB_ID = "***REDACTED***";
