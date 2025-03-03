@@ -2,7 +2,7 @@ import * as dotenv from "dotenv";
 import type { APIRoute } from "astro";
 import { validateEmail } from "./utils";
 import { logFunction } from "./logger";
-import { Tag } from "./types";
+import { Tag } from "./newsletter/types";
 import {
   checkSubscriber,
   subscribeUser,

@@ -20,3 +20,16 @@ export enum Tag {
     message: string;
     already_subscribed?: boolean;
   }
+
+  // Add this type definition near the top
+export type Resource = {
+  id: string;
+  title: string;
+  description: string;
+  fileId: string;
+  tags: string[];
+};
+
+export type ResourceMap = {
+  [key: string]: Resource;
+};

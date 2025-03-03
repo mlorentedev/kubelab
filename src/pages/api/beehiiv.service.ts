@@ -1,6 +1,6 @@
 import { logFunction } from './logger';
-import type { CreateSubscriber, GetSubscriber, Tag } from './types';
-import { BEEHIIV_PUB_ID } from "../../../../utils/consts";
+import type { CreateSubscriber, GetSubscriber, Tag } from './newsletter/types';
+import { BEEHIIV_PUB_ID } from "../../../utils/consts";
 
 const BEEHIIV_API_SUBSCRIPTIONS = `https://api.beehiiv.com/v2/publications/${BEEHIIV_PUB_ID}/subscriptions`;
 const BEEHIIV_API_AUTOMATIONS = `https://api.beehiiv.com/v2/publications/${BEEHIIV_PUB_ID}/automations`;

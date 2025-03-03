@@ -6,7 +6,7 @@ import * as dotenv from "dotenv";
 
 import type { APIRoute } from "astro";
 
-import { BEEHIIV_PUB_ID } from "../../../../utils/consts";
+import { BEEHIIV_PUB_ID } from "../../../utils/consts";
 
 dotenv.config();
 
