@@ -1,13 +1,18 @@
 ---
-import { SITE_AUTHOR } from '../../utils/consts';
+import { ENV } from '../pages/api/env';
 
 const today = new Date();
+const email = ENV.SITE.MAIL;
+const githubUrl = ENV.RRSS.GITHUB;
+const twitterUrl = ENV.RRSS.TWITTER;
+const youtubeUrl = ENV.RRSS.YOUTUBE;
+const siteAuthor = ENV.SITE.AUTHOR;
 ---
 
 <footer class="bg-gray-100 text-gray-800 p-2 text-center">
   <div class="flex justify-center gap-4 mt-4">
     <!-- Mail -->
-    <a href="mailto:hello@mlorente.dev" target="_blank" class="hover:text-cyan-700">
+    <a href=`mailto:${email}` target="_blank" class="hover:text-cyan-700">
       <span class="sr-only">Aquí tienes mi email</span>
       <svg viewBox="0 0 16 16" aria-hidden="true" width="32" height="32" fill="currentColor">
         <path
@@ -17,7 +22,7 @@ const today = new Date();
     </a>
 
     <!-- GitHub -->
-    <a href="https://github.com/mlorentedev" target="_blank" class="hover:text-cyan-700">
+    <a href={githubUrl} target="_blank" class="hover:text-cyan-700">
       <span class="sr-only">Este es mi GitHub</span>
       <svg viewBox="0 0 16 16" aria-hidden="true" width="32" height="32" fill="currentColor">
         <path
@@ -27,7 +32,7 @@ const today = new Date();
     </a>
 
     <!-- X (Twitter) -->
-    <a href="https://twitter.com/mlorentedev" target="_blank" class="hover:text-cyan-700">
+    <a href={twitterUrl} target="_blank" class="hover:text-cyan-700">
       <span class="sr-only">Sígueme en X</span>
       <svg viewBox="0 0 16 16" aria-hidden="true" width="32" height="32" fill="currentColor">
         <path
@@ -37,7 +42,7 @@ const today = new Date();
     </a>
 
     <!-- YouTube -->
-    <a href="https://www.youtube.com/@mlorentedev" target="_blank" class="hover:text-cyan-700">
+    <a href={youtubeUrl} target="_blank" class="hover:text-cyan-700">
       <span class="sr-only">Suscríbete a mi canal de YouTube</span>
       <svg viewBox="0 0 16 16" aria-hidden="true" width="32" height="32" fill="currentColor">
         <path
@@ -45,10 +50,9 @@ const today = new Date();
         ></path>
       </svg>
     </a>
-
   </div>
 
   <div class="mt-4">
-    <p>© {today.getFullYear()} &nbsp;&bull;&nbsp; {SITE_AUTHOR}</p>
+    <p>© {today.getFullYear()} &nbsp;&bull;&nbsp; {siteAuthor}</p>
   </div>
 </footer>

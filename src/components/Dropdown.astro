@@ -2,7 +2,6 @@
 import HeaderLink from './HeaderLink.astro';
 
 const homeSlug = `/`;
-const blogSlug = `/blog`;
 const projectsSlug = `/projects`;
 const aboutSlug = `/about`;
 const contactSlug = `/contact`;
@@ -25,22 +24,16 @@ const contactSlug = `/contact`;
   </HeaderLink>
   <HeaderLink
     id="menu-link"
-    href={blogSlug}
-    class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-200 animate-fadeIn"
+    href={projectsSlug}
+    class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-300 animate-fadeIn"
   >
-    Mi vlog
-    <HeaderLink
-      id="menu-link"
-      href={projectsSlug}
-      class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-300 animate-fadeIn"
-    >
-      Mis proyectos
-    </HeaderLink>
-    <HeaderLink
+    HomeLab
+  </HeaderLink>
+  <HeaderLink
     id="menu-link"
     href={contactSlug}
     class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-300 animate-fadeIn"
-    >
+  >
     Videollamada
-    </HeaderLink>
+  </HeaderLink>
 </div>

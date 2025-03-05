@@ -2,14 +2,24 @@
 import BaseLayout from './BaseLayout.astro';
 import SectionHeader from '../components/SectionHeader.astro';
 
-import { ABOUT_TITLE, ABOUT_SUBTITLE } from '../../utils/consts';
-
-const { title, description, heroImage, lang } = Astro.props;
+const { title, description, heroImage } = Astro.props;
 const pubDate = new Date();
+const tags = ['defaultTag'];
+const buttonText = 'defaultButtonText';
+const resourceId = 'defaultResourceId';
+const fileId = 'defaultFileId';
 ---
 
-<BaseLayout title={title} description={description} heroImage={heroImage} pubDate={pubDate} lang={lang}>
-  <SectionHeader title={ABOUT_TITLE} subtitle={ABOUT_SUBTITLE} />
+<BaseLayout
+  title={title}
+  description={description}
+  pubDate={pubDate}
+  resourceId={resourceId}
+  fileId={fileId}
+  tags={tags}
+  buttonText={buttonText}
+>
+  <SectionHeader title={title} subtitle={description} />
   <article class="text-gray-800 max-w-3xl mx-auto p-4">
     <div class="w-full max-w-full h-auto overflow-hidden rounded-lg shadow-lg mb-6">
       {heroImage && <img width={896} height={500} src={heroImage} alt="Manu" />}

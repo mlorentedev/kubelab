@@ -1,15 +1,15 @@
 ---
+import { ENV } from '../pages/api/env';
 import HeaderLink from './HeaderLink.astro';
-import { SITE_TITLE, AVATAR } from '../../utils/consts';
 import Avatar from './Avatar.astro';
 import Dropdown from './Dropdown.astro';
 
 const homeSlug = `/`;
-const blogSlug = `/blog`;
 const projectsSlug = `/projects`;
 const aboutSlug = `/about`;
 const contactSlug = `/contact`;
-
+const siteTitle = ENV.SITE.TITLE;
+const avatarPic = '/img/me-2.webp';
 ---
 
 <header class="bg-gray-100 text-gray-800 fixed w-full">
@@ -17,7 +17,7 @@ const contactSlug = `/contact`;
     <nav class="flex items-center justify-between text-gray-800">
       <h2 class="text-lg font-extrabold">
         <a href={homeSlug} class="no-underline hover:text-cyan-700 transition-colors duration-200"
-          >{SITE_TITLE}</a
+          >{siteTitle}</a
         >
       </h2>
       <!-- Desktop Links -->
@@ -28,17 +28,14 @@ const contactSlug = `/contact`;
         <HeaderLink href={aboutSlug} class="hover:text-cyan-700 transition-colors duration-200"
           >Quién soy</HeaderLink
         >
-        <HeaderLink href={blogSlug} class="hover:text-cyan-700 transition-colors duration-200"
-          >Mi vlog</HeaderLink
-        >
         <HeaderLink href={projectsSlug} class="hover:text-cyan-700 transition-colors duration-200"
-          >Mis proyectos</HeaderLink
+          >HomeLab</HeaderLink
         >
         <HeaderLink href={contactSlug} class="hover:text-cyan-700 transition-colors duration-200"
-          >Contáctame</HeaderLink
-        >      
+          >Videollamada</HeaderLink
+        >
       </div>
-      <Avatar src={AVATAR} link={homeSlug} />
+      <Avatar src={avatarPic} link={homeSlug} />
       <button
         id="menu-toggle"
         class="custom:hidden border-2 border-gray-400 bg-gray-100 px-2 py-1 rounded transition-colors duration-700"
@@ -77,10 +74,10 @@ const contactSlug = `/contact`;
     }
   });
 
-  menuLinks.forEach(link => {
+  menuLinks.forEach((link) => {
     link.addEventListener('click', closeMenu);
   });
-  
+
   window.addEventListener('scroll', closeMenu);
   window.addEventListener('resize', closeMenu);
   window.addEventListener('orientationchange', closeMenu);

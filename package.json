@@ -19,6 +19,7 @@
     "@astrojs/sitemap": "^3.2.1",
     "@astrojs/tailwind": "^6.0.0",
     "@stripe/stripe-js": "^5.6.0",
+    "@types/node": "^22.13.9",
     "@types/nodemailer": "^6.4.17",
     "astro": "^5.2.5",
     "dotenv": "^16.4.7",
@@ -26,13 +27,15 @@
     "nodemailer": "^6.10.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
-    "tailwindcss": "^3.4.14"
+    "tailwindcss": "^3.4.14",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@tailwindcss/typography": "^0.5.15",
     "prettier": "^3.3.3",
     "prettier-plugin-astro": "^0.14.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.12.2"
   }

@@ -1,72 +1,41 @@
-// utils/resourceEmail.ts
+import { ENV } from '../api/env';
+
 import nodemailer from 'nodemailer';
-import { logFunction } from './logger';
-import { SITE_TITLE, SITE_DOMAIN } from '../../../utils/consts';
+import { logFunction } from './utils';
 
-// Configuración del transporte de email
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: process.env.EMAIL_SECURE === 'true',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+const siteTitle = ENV.SITE.TITLE;
+const siteDomain = ENV.SITE.DOMAIN;
+const siteUrl = ENV.SITE.URL;
 
-// Interfaces para tipado
-interface ResourceEmailOptions {
+export interface ResourceEmailOptions {
   email: string;
   resourceId: string;
   resourceTitle: string;
-  resourceDescription: string;
+  resourceDescription?: string;
   resourceLink: string;
 }
 
-/**
- * Envía un email con el enlace al recurso solicitado
- */
-export async function sendResourceEmail(options: ResourceEmailOptions): Promise<boolean> {
-  const { email, resourceId, resourceTitle, resourceDescription, resourceLink } = options;
-  
-  try {
-    const mailOptions = {
-      from: `"${SITE_TITLE}" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: `Tu recurso: ${resourceTitle}`,
-      html: getEmailTemplate({
-        resourceTitle,
-        resourceDescription,
-        resourceLink,
-        email
-      })
-    };
-
-    await transporter.sendMail(mailOptions);
-    logFunction("info", "Resource email sent successfully", { email, resourceId });
-    return true;
-  } catch (error) {
-    logFunction("error", "Error sending resource email", error);
-    return false;
-  }
+function createEmailTransporter() {
+  return nodemailer.createTransport({
+    host: ENV.EMAIL.HOST,
+    port: parseInt(ENV.EMAIL.PORT),
+    secure: ENV.EMAIL.SECURE,
+    auth: {
+      user: ENV.EMAIL.USER,
+      pass: ENV.EMAIL.PASS,
+    },
+  });
 }
 
-/**
- * Plantilla de email para recursos
- */
-function getEmailTemplate({ 
-  resourceTitle, 
-  resourceDescription, 
-  resourceLink, 
-  email 
-}: {
-  resourceTitle: string;
-  resourceDescription: string;
-  resourceLink: string;
-  email: string;
-}) {
+function generateResourceEmailHTML(options: ResourceEmailOptions): string {
+  const {
+    resourceTitle,
+    resourceDescription = 'Recurso solicitado',
+    resourceLink,
+    email,
+  } = options;
   const year = new Date().getFullYear();
-  
+
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
       <div style="background-color: #0097a7; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -98,12 +67,12 @@ function getEmailTemplate({
       
       <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
         <p>
-          © ${year} ${SITE_DOMAIN}<br>
+          © ${year} ${siteTitle}<br>
           Este email fue enviado a ${email} porque solicitaste este recurso.
         </p>
         
         <p>
-          <a href="https://${SITE_DOMAIN}" style="color: #0097a7; text-decoration: none;">Visita mi web</a> |
+          <a href="${siteUrl}" style="color: #0097a7; text-decoration: none;">Visita mi web</a> |
           <a href="https://twitter.com/mlorentedev" style="color: #0097a7; text-decoration: none;">Twitter</a> |
           <a href="https://www.youtube.com/@mlorentedev" style="color: #0097a7; text-decoration: none;">YouTube</a>
         </p>
@@ -111,3 +80,45 @@ function getEmailTemplate({
     </div>
   `;
 }
+
+export async function sendResourceEmail(options: ResourceEmailOptions): Promise<boolean> {
+  try {
+    if (!options.email || !options.resourceLink) {
+      logFunction('error', 'Datos incompletos para envío de email', options);
+      return false;
+    }
+
+    const transporter = createEmailTransporter();
+
+    const mailOptions = {
+      from: `"${siteTitle}" <${ENV.EMAIL.USER}>`,
+      to: options.email,
+      subject: `Tu recurso: ${options.resourceTitle}`,
+      html: generateResourceEmailHTML(options),
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    logFunction('info', 'Email de recurso enviado exitosamente', {
+      email: options.email,
+      resourceId: options.resourceId,
+    });
+
+    return true;
+  } catch (error) {
+    logFunction('error', 'Error al enviar email de recurso', error);
+    return false;
+  }
+}
+
+export function validateEmailConfiguration() {
+  const requiredVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'];
+
+  const missingVars = requiredVars.filter((varName) => !process.env[varName]);
+
+  if (missingVars.length > 0) {
+    throw new Error(`Faltan configuraciones de email: ${missingVars.join(', ')}`);
+  }
+}
+
+validateEmailConfiguration();

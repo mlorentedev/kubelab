@@ -3,24 +3,15 @@ import IndexLayout from '../layouts/IndexLayout.astro';
 
 const { lang } = Astro.props;
 
-const TITLE = 'Tienes que mirar el correo';
+const title = 'Tienes que mirar el correo';
 
-const SUBTITLE = '';
-
+const subtitle = '';
 ---
 
-<IndexLayout title={TITLE} description={SUBTITLE} lang={lang}>
-
+<IndexLayout title={title} description={subtitle} lang={lang}>
   <section class="space-y-6">
-  
-    <p>
-      El recurso debe estar en la bandeja de entrada de tu correo electrónico.
-    </p>
+    <p>El recurso debe estar en la bandeja de entrada de tu correo electrónico.</p>
 
-    <p class="font-bold">
-      Si no ves el correo, revisa la carpeta de spam o promociones.
-    </p>
-
+    <p class="font-bold">Si no ves el correo, revisa la carpeta de spam o promociones.</p>
   </section>
-
 </IndexLayout>

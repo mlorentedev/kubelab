@@ -1,22 +1,25 @@
 ---
+import { ENV } from '../pages/api/env';
 import type { CollectionEntry } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import { SITE_TITLE } from '../../utils/consts';
 
-type Props = CollectionEntry<'blog'>['data'];
+type Props = CollectionEntry<'resources'>['data'];
 
-const { title, description, lang } = Astro.props;
+const { title, description } = Astro.props;
+
+const lang = 'es';
+const siteTitle = ENV.SITE.TITLE;
 ---
 
 <!doctype html>
-<html lang={lang}>
+<html lang="{lang}">
   <head>
     <BaseHead lang={lang} title={title} description={description} />
   </head>
   <body class="flex flex-col min-h-screen">
-    <Header title={SITE_TITLE} lang={lang} />
+    <Header title={siteTitle} lang={lang} />
     <main class="flex-grow py-16">
       <slot />
     </main>
