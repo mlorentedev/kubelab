@@ -1,16 +1,11 @@
 function setupFormHandling(formId, endpoint, redirectUrl = '/success') {
   const form = document.getElementById(formId);
-  const statusMessage = form.querySelector('.status-message');
+  const statusMessage = document.getElementById('status-message');
   const emailInput = form.querySelector('input[name="email"]');
   const privacyPolicyCheckbox = form.querySelector('input[name="privacy-policy"]');
   const submitButton = form.querySelector('button[type="submit"]');
 
   const originalButtonText = submitButton.textContent;
-
-  const tag = form.dataset.tag;
-  const utmSource = form.dataset.utmSource;
-  const resourceId = form.dataset.resourceId;
-  const tags = form.dataset.tags ? form.dataset.tags.split(',') : [];
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -20,15 +15,18 @@ function setupFormHandling(formId, endpoint, redirectUrl = '/success') {
       return;
     }
 
-    const payload = {
-      email: emailInput.value,
-      tag,
-      utmSource,
-    };
+    const payload = {};
 
-    if (resourceId) {
-      payload.resourceId = resourceId;
-      payload.tags = tags;
+    if (formId === 'subscribe-form') {
+      payload.email = emailInput.value;
+      payload.utmSource = form.dataset.utmSource;
+      payload.tag = form.dataset.tag;
+    } else {
+      payload.email = emailInput.value;
+      payload.utmSource = form.dataset.utmSource;
+      payload.fileId = form.dataset.fileId;
+      payload.resourceId = form.dataset.resourceId;
+      payload.tags = form.dataset.tags ? form.dataset.tags.split(',') : [];
     }
 
     try {
@@ -47,12 +45,20 @@ function setupFormHandling(formId, endpoint, redirectUrl = '/success') {
       const result = await response.json();
 
       if (response.ok) {
+        if (result.alreadySubscribed && formId === 'subscribe-form') {
+          showStatus(
+            statusMessage,
+            'Ya estabas suscrito, mándame un correo si no estás recibiendo los mails ;)',
+            'error'
+          );
+          return;
+        }
         window.location.href = redirectUrl;
       } else {
         showStatus(statusMessage, result.message || 'Hubo un error', 'error');
       }
     } catch (error) {
-      showStatus(statusMessage, 'Error de conexión', 'error');
+      showStatus(statusMessage, 'Error de conexión', error);
     } finally {
       setButtonState(submitButton, false, originalButtonText);
       emailInput.disabled = false;
@@ -67,10 +73,10 @@ function showStatus(statusElement, message, type = 'info') {
   }
 
   statusElement.textContent = message;
-  statusElement.classList.remove('hidden', 'text-white', 'text-red-500');
+  statusElement.classList.remove('hidden', 'text-white', 'text-white-500');
 
   if (type === 'error') {
-    statusElement.classList.add('text-red-500');
+    statusElement.classList.add('text-white-500');
   } else {
     statusElement.classList.add('text-white');
   }

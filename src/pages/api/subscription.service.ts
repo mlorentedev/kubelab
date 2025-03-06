@@ -15,7 +15,12 @@ export async function processSubscription(
       const tagResults = await Promise.all(
         tags.map((tag) => addTagToSubscriber(subscriberCheck.subscriber!.id, tag))
       );
-
+      if (tagResults.some((result) => !result)) {
+        return {
+          success: false,
+          message: 'Error al actualizar los tags del suscriptor',
+        };
+      }
       return {
         success: true,
         message: 'Suscriptor existente actualizado',
@@ -27,11 +32,18 @@ export async function processSubscription(
     const newSubscription = await subscribeUser(email, utmSource);
 
     if (newSubscription.success && newSubscription.subscriber) {
-      await addTagToSubscriber(newSubscription.subscriber.id, SubscriptionTag.NewSubscriber);
+      const allTags = new Set([SubscriptionTag.NewSubscriber, ...tags]);
 
-      const additionalTagResults = await Promise.all(
-        tags.map((tag) => addTagToSubscriber(newSubscription.subscriber!.id, tag))
+      const tagResults = await Promise.all(
+        Array.from(allTags).map((tag) => addTagToSubscriber(newSubscription.subscriber!.id, tag))
       );
+
+      if (tagResults.some((result) => !result)) {
+        return {
+          success: false,
+          message: 'Error al actualizar los tags del suscriptor',
+        };
+      }
 
       return {
         success: true,

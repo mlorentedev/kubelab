@@ -1,4 +1,4 @@
-import setupFormHandling from './form-handler.js';
+import setupFormHandling from './formHandler.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const subscribeForm = document.getElementById('subscribe-form');

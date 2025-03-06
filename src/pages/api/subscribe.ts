@@ -2,6 +2,8 @@ import { processSubscription } from './subscription.service';
 import { SubscriptionSource } from './types';
 import { validateEmail, logFunction } from './utils';
 
+export const prerender = false;
+
 import type { APIRoute } from 'astro';
 
 export const POST: APIRoute = async ({ request }) => {

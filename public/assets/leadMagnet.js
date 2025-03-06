@@ -1,9 +1,9 @@
-import setupFormHandling from './form-handler.js';
+import setupFormHandling from './formHandler.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const leadMagnetForm = document.getElementById('lead-magnet-form');
 
   if (leadMagnetForm) {
-    setupFormHandling('lead-magnet-form', '/api/lead-magnet', '/resource-success');
+    setupFormHandling('lead-magnet-form', '/api/leadMagnet', '/resource-success');
   }
 });

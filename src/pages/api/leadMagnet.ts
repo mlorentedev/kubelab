@@ -4,6 +4,8 @@ import { sendResourceEmail } from './resourceEmail';
 import { logFunction } from './utils';
 import type { APIRoute } from 'astro';
 
+export const prerender = false;
+
 export const POST: APIRoute = async ({ request }) => {
   try {
     const { email, resourceId, fileId, tags = [] } = await request.json();
@@ -34,17 +36,16 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    const emailSent = await sendResourceEmail({
+    scheduleResourceEmail({
       email,
       resourceId,
-      resourceTitle: `Recurso ${resourceId}`,
-      resourceLink: `https://drive.google.com/uc?export=download&id=${fileId}`,
+      fileId,
     });
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: emailSent ? 'Recurso enviado exitosamente' : 'Recurso suscrito, email pendiente',
+        message: 'Recurso enviado',
       }),
       { status: 200 }
     );
@@ -58,4 +59,41 @@ export const POST: APIRoute = async ({ request }) => {
       { status: 500 }
     );
   }
+};
+
+const scheduleResourceEmail = async ({
+  email,
+  resourceId,
+  fileId,
+}: {
+  email: string;
+  resourceId: string;
+  fileId: string;
+}) => {
+  return new Promise<void>((resolve, reject) => {
+    setTimeout(
+      async () => {
+        try {
+          const emailSent = await sendResourceEmail({
+            email,
+            resourceId,
+            resourceTitle: `Recurso ${resourceId}`,
+            resourceLink: `https://drive.google.com/file/d/${fileId}/view?usp=drive_link`,
+          });
+
+          if (emailSent) {
+            logFunction('info', 'Delayed email sent successfully', { email, resourceId });
+            resolve();
+          } else {
+            logFunction('warn', 'Delayed email not sent', { email, resourceId, fileId });
+            reject(new Error('Email could not be sent'));
+          }
+        } catch (error) {
+          logFunction('error', 'Error sending delayed email', error);
+          reject(error);
+        }
+      },
+      1000 * 60 * 1
+    );
+  });
 };

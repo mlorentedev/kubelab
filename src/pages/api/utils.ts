@@ -51,7 +51,7 @@ export function validateEnvironmentVariables() {
 
   try {
     envSchema.parse(process.env);
-    console.log('All environment variables are valid.');
+    logFunction('info', 'Environment variables are valid');
   } catch (error) {
     if (error instanceof z.ZodError) {
       handleValidationError(error);

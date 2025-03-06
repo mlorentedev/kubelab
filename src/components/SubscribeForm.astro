@@ -1,5 +1,5 @@
 ---
-const { tag = 'new', utm_source = 'landing', button_text = '📩 VALE' } = Astro.props;
+const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.props;
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
@@ -29,4 +29,4 @@ const { tag = 'new', utm_source = 'landing', button_text = '📩 VALE' } = Astro
   <p id="status-message" class="mt-4 text-xs text-center"></p>
 </div>
 
-<script type="module" src="/assets/subscribe.js" defer></script>
+<script is:inline type="module" src="/assets/subscribe.js" defer></script>

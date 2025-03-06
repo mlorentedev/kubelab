@@ -7,6 +7,7 @@ const { resourceId = '', fileId = '', buttonText = '📩 LO QUIERO', tags = [] }
     id="lead-magnet-form"
     class="flex flex-col gap-6"
     data-resource-id={resourceId}
+    data-file-id={fileId}
     data-tags={tags.join(',')}
     data-utm-source="lead_magnet"
   >
@@ -26,7 +27,7 @@ const { resourceId = '', fileId = '', buttonText = '📩 LO QUIERO', tags = [] }
     </button>
 
     <div class="flex justify-center items-center text-center">
-      <input type="checkbox" id="privacy-policy" name="privacy-policy" required class="mr-2" />
+      <input type="checkbox" id="privacy-policy" name="privacy-policy" class="mr-2" />
       <label for="privacy-policy" class="text-xs">
         Acepto la <a href="/privacy-policy" target="_blank" class="text-white"
           >política de privacidad</a
@@ -34,8 +35,8 @@ const { resourceId = '', fileId = '', buttonText = '📩 LO QUIERO', tags = [] }
       </label>
     </div>
 
-    <div class="status-message hidden p-2 text-xs text-center rounded-md"></div>
+    <div id="status-message" class="hidden p-2 text-xs text-center rounded-md"></div>
   </form>
 </div>
 
-<script type="module" src="/assets/lead-magnet.js" defer></script>
+<script is:inline type="module" src="/assets/leadMagnet.js" defer></script>

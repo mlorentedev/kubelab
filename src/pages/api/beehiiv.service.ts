@@ -77,6 +77,10 @@ export async function subscribeUser(
 
 export async function addTagToSubscriber(subscription_id: string, tag: string): Promise<boolean> {
   try {
+    if (tag === '') {
+      logFunction('warn', 'Empty tag not added to subscriber:', subscription_id);
+      return false;
+    }
     const response = await fetch(`${BEEHIIV_API_SUBSCRIPTIONS}/${subscription_id}/tags`, {
       method: 'POST',
       headers: {
@@ -105,5 +109,59 @@ export async function addTagToSubscriber(subscription_id: string, tag: string): 
   } catch (e) {
     logFunction('error', 'Error adding tag to subscriber:', { subscription_id, tag, error: e });
     return false;
+  }
+}
+
+export async function unsubscribeUser(
+  email: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const subscriberCheck = await checkSubscriber(email);
+
+    if (!subscriberCheck.success || !subscriberCheck.subscriber) {
+      logFunction('warn', 'Subscriber not found for unsubscribe:', email);
+      return {
+        success: false,
+        message: 'Este email no está suscrito',
+      };
+    }
+
+    const subscriptionId = subscriberCheck.subscriber.id;
+    logFunction('info', `Unsubscribing user with id: ${subscriptionId}`, email);
+
+    const response = await fetch(`${BEEHIIV_API_SUBSCRIPTIONS}/${subscriptionId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ENV.BEEHIIV.API_KEY}`,
+      },
+    });
+
+    if (response.status === 204) {
+      logFunction('info', 'User unsubscribed successfully:', email);
+      return {
+        success: true,
+        message: 'User unsubscribed successfully',
+      };
+    } else {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        errorData = { status: response.status };
+      }
+
+      logFunction('error', 'Error unsubscribing user, API response:', errorData);
+      return {
+        success: false,
+        message: 'Error unsubscribing user',
+      };
+    }
+  } catch (e) {
+    logFunction('error', 'Exception unsubscribing user:', e);
+    return {
+      success: false,
+      message: 'Internal server error during unsubscribe process',
+    };
   }
 }

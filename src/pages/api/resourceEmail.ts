@@ -1,17 +1,14 @@
 import { ENV } from '../api/env';
-
 import nodemailer from 'nodemailer';
 import { logFunction } from './utils';
 
 const siteTitle = ENV.SITE.TITLE;
-const siteDomain = ENV.SITE.DOMAIN;
 const siteUrl = ENV.SITE.URL;
 
 export interface ResourceEmailOptions {
   email: string;
   resourceId: string;
   resourceTitle: string;
-  resourceDescription?: string;
   resourceLink: string;
 }
 
@@ -20,6 +17,7 @@ function createEmailTransporter() {
     host: ENV.EMAIL.HOST,
     port: parseInt(ENV.EMAIL.PORT),
     secure: ENV.EMAIL.SECURE,
+    from: `"${ENV.SITE.AUTHOR}" <${ENV.SITE.MAIL}>`,
     auth: {
       user: ENV.EMAIL.USER,
       pass: ENV.EMAIL.PASS,
@@ -28,57 +26,42 @@ function createEmailTransporter() {
 }
 
 function generateResourceEmailHTML(options: ResourceEmailOptions): string {
-  const {
-    resourceTitle,
-    resourceDescription = 'Recurso solicitado',
-    resourceLink,
-    email,
-  } = options;
+  const { resourceTitle, resourceLink } = options;
   const year = new Date().getFullYear();
 
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-      <div style="background-color: #0097a7; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 24px;">${resourceTitle}</h1>
-      </div>
-      
-      <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
-        <p style="margin-top: 0;">Hola,</p>
-        
-        <p>Gracias por tu interés en <strong>${resourceTitle}</strong>.</p>
-        
-        <p>${resourceDescription}</p>
-        
-        <div style="margin: 30px 0; text-align: center;">
-          <a href="${resourceLink}" 
-             style="background-color: #0097a7; color: white; padding: 12px 25px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
-            Descargar recurso
-          </a>
-        </div>
-        
-        <p style="margin-top: 30px; font-size: 14px; color: #666;">
-          Si tienes problemas para acceder al recurso, copia y pega este enlace en tu navegador:
-        </p>
-        
-        <p style="background-color: #eee; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px;">
-          <a href="${resourceLink}" style="color: #0097a7; text-decoration: none;">${resourceLink}</a>
-        </p>
-      </div>
-      
-      <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
-        <p>
-          © ${year} ${siteTitle}<br>
-          Este email fue enviado a ${email} porque solicitaste este recurso.
-        </p>
-        
-        <p>
-          <a href="${siteUrl}" style="color: #0097a7; text-decoration: none;">Visita mi web</a> |
-          <a href="https://twitter.com/mlorentedev" style="color: #0097a7; text-decoration: none;">Twitter</a> |
-          <a href="https://www.youtube.com/@mlorentedev" style="color: #0097a7; text-decoration: none;">YouTube</a>
-        </p>
-      </div>
+    <div>
+      <p>Hola,</p>
+      <p>Aquí tienes tu ${resourceTitle}.</p>
+      <p><a href="${resourceLink}">Ver</a></p>
+      <p>Si el enlace no funciona, copia esta URL: ${resourceLink}</p>
+      <p>---</p>
+      <p>© ${year} ${siteTitle} | <a href="${siteUrl}">${siteUrl}</a></p>
     </div>
   `;
+}
+
+function handleEmailError(error: any): void {
+  const errorDetails = {
+    code: error.code,
+    response: error.response,
+    responseCode: error.responseCode,
+    command: error.command,
+  };
+
+  if (error.code === 'EAUTH') {
+    logFunction('error', 'Authentication failed. Check credentials.', errorDetails);
+  } else if (error.code === 'ECONNECTION') {
+    logFunction('error', 'Connection error. Check network or firewall.', errorDetails);
+  } else if (error.code === 'ETIMEDOUT') {
+    logFunction('error', 'Connection timed out. Check network.', errorDetails);
+  } else if (error.responseCode >= 500) {
+    logFunction('error', 'Server error from mail provider.', errorDetails);
+  } else if (error.responseCode >= 400) {
+    logFunction('error', 'Client error in email sending.', errorDetails);
+  } else {
+    logFunction('error', 'Unknown error during email sending', errorDetails);
+  }
 }
 
 export async function sendResourceEmail(options: ResourceEmailOptions): Promise<boolean> {
@@ -91,22 +74,38 @@ export async function sendResourceEmail(options: ResourceEmailOptions): Promise<
     const transporter = createEmailTransporter();
 
     const mailOptions = {
-      from: `"${siteTitle}" <${ENV.EMAIL.USER}>`,
+      from: `"${ENV.SITE.AUTHOR}" <${ENV.EMAIL.USER}>`,
       to: options.email,
-      subject: `Tu recurso: ${options.resourceTitle}`,
+      subject: `Aquí tienes: ${options.resourceTitle}`,
       html: generateResourceEmailHTML(options),
+
+      headers: {
+        Precedence: 'bulk',
+        'X-Auto-Response-Suppress': 'All',
+        'List-Unsubscribe': `<${siteUrl}/unsubscribe>`,
+        'X-Site-Origin': siteTitle,
+      },
+
+      dsn: {
+        id: `resource-${options.resourceId}`,
+        return: 'full',
+        notify: ['failure', 'delay'],
+        recipient: ENV.EMAIL.USER,
+      },
     };
 
-    await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
 
     logFunction('info', 'Email de recurso enviado exitosamente', {
       email: options.email,
       resourceId: options.resourceId,
+      accepted: info.accepted,
+      rejected: info.rejected,
     });
 
     return true;
   } catch (error) {
-    logFunction('error', 'Error al enviar email de recurso', error);
+    handleEmailError(error);
     return false;
   }
 }
