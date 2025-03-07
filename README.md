@@ -64,10 +64,16 @@ To disable the devToolbar, run this command:
 
 ## TODO
 
-- [ ] Copy in landing page
-- [ ] Add homelab sections
-- [ ] Dynamic quotes at the end of the page
+- [ ] Add homelab section: learning-path, homelabs, etc. similar to Collabnix
+- [ ] CI/CD with GitHub Actions
 - [ ] Most recent RRSS in some section - dynamic with CI/CD
-- [ ] Tests
-- [ ] CI/CD
+- [ ] Testing
 - [ ] Slack community integration with the API
+- [ ] Dynamic quotes at the end of the page
+- [ ] Copy in all pages
+- [ ] Simple and minimalistic design
+- [ ] Indexed search by tags
+
+## CONTRIBUTING
+
+If you want to contribute to this project, please read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
