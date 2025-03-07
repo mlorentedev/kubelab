@@ -135,7 +135,7 @@ jobs:
           script: |
             const prTitle = context.payload.pull_request.title;
             const conventionalTitlePattern = /^(feat|fix|docs|style|refactor|test|chore)(\([a-z-]+\))?:\s.+$/;
-            
+
             if (!conventionalTitlePattern.test(prTitle)) {
               core.setFailed('PR title does not follow conventional commit format. Examples: "feat: add new feature", "fix(api): resolve authentication issue"');
             }

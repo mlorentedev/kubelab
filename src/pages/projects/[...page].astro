@@ -11,9 +11,9 @@ const projectsTitle = 'HomeLabs';
 const projectsSubtitle = 'Mi colección de laboratorios cloud para aprender haciendo';
 
 const colors = {
-  'beginner': 'bg-green-100 text-green-800',
-  'intermediate': 'bg-yellow-100 text-yellow-800',
-  'advanced': 'bg-red-100 text-red-800'
+  beginner: 'bg-green-100 text-green-800',
+  intermediate: 'bg-yellow-100 text-yellow-800',
+  advanced: 'bg-red-100 text-red-800',
 };
 
 interface Project {
@@ -53,7 +53,7 @@ export async function getStaticPaths(
 
 function getLevelColor(level: keyof typeof colors | undefined) {
   if (!level) return '';
-  
+
   return colors[level] || '';
 }
 ---
@@ -69,59 +69,61 @@ function getLevelColor(level: keyof typeof colors | undefined) {
 >
   <div class="px-4 py-8">
     <SectionHeader title={projectsTitle} subtitle={projectsSubtitle} />
-       
+
     <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
-      {page.data.map((project) => (
-        <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-          {project.data.heroImage && (
-            <div class="h-48 overflow-hidden">
-              <img 
-                src={project.data.heroImage} 
-                alt={project.data.title} 
-                class="w-full h-full object-cover"
-              />
-            </div>
-          )}
-          
-          <div class="p-6">
-            <h2 class="text-xl font-bold text-gray-800 mb-2">
-              {project.data.title}
-            </h2>
-            
-            <p class="text-gray-600 mb-4 line-clamp-2">
-              {project.data.description}
-            </p>
-            
-            <div class="flex flex-wrap gap-2 mb-4">
-              {project.data.level && (
-                <span class={`px-3 py-1 rounded-full text-xs font-medium ${getLevelColor(project.data.level)}`}>
-                  {project.data.level}
-                </span>
-              )}
-              
-              {project.data.tags && project.data.tags.slice(0, 3).map(tag => (
-                <span class="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs">
-                  {tag}
-                </span>
-              ))}
-            </div>
-            
-            <div class="flex justify-between items-center">
-              <p class="text-gray-500 text-sm">
-                <FormattedDate date={project.data.updatedDate || project.data.pubDate} />
-              </p>
-              
-              <a 
-                href={`/projects/${project.project_slug}`} 
-                class="text-cyan-700 font-medium hover:underline"
-              >
-                Ver más →
-              </a>
+      {
+        page.data.map((project) => (
+          <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+            {project.data.heroImage && (
+              <div class="h-48 overflow-hidden">
+                <img
+                  src={project.data.heroImage}
+                  alt={project.data.title}
+                  class="w-full h-full object-cover"
+                />
+              </div>
+            )}
+
+            <div class="p-6">
+              <h2 class="text-xl font-bold text-gray-800 mb-2">{project.data.title}</h2>
+
+              <p class="text-gray-600 mb-4 line-clamp-2">{project.data.description}</p>
+
+              <div class="flex flex-wrap gap-2 mb-4">
+                {project.data.level && (
+                  <span
+                    class={`px-3 py-1 rounded-full text-xs font-medium ${getLevelColor(project.data.level)}`}
+                  >
+                    {project.data.level}
+                  </span>
+                )}
+
+                {project.data.tags &&
+                  project.data.tags
+                    .slice(0, 3)
+                    .map((tag) => (
+                      <span class="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs">
+                        {tag}
+                      </span>
+                    ))}
+              </div>
+
+              <div class="flex justify-between items-center">
+                <p class="text-gray-500 text-sm">
+                  <FormattedDate date={project.data.updatedDate || project.data.pubDate} />
+                </p>
+
+                <a
+                  href={`/projects/${project.project_slug}`}
+                  class="text-cyan-700 font-medium hover:underline"
+                >
+                  Ver más →
+                </a>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))
+      }
     </div>
-    
   </div>
 </BaseLayout>

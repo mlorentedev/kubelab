@@ -1,0 +1,21 @@
+# Build outputs
+dist/
+.astro/
+
+# Dependency directories
+node_modules/
+
+# Configuration files
+*.config.js
+*.config.mjs
+*.config.cjs
+
+# Specific directories
+.github/
+.vscode/
+public/
+
+# Backup and temp files
+*.bak
+*.swp
+.DS_Store

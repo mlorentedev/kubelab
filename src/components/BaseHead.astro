@@ -20,7 +20,6 @@ const {
 } = Astro.props;
 
 const siteTitle = ENV.SITE.TITLE;
-
 ---
 
 <!-- Global Metadata -->
@@ -28,11 +27,19 @@ const siteTitle = ENV.SITE.TITLE;
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <link rel="sitemap" href="/sitemap-index.xml" />
-<link rel="alternate" type="application/rss+xml" title={siteTitle} href={new URL('rss.xml', Astro.site)} />
+<link
+  rel="alternate"
+  type="application/rss+xml"
+  title={siteTitle}
+  href={new URL('rss.xml', Astro.site)}
+/>
 <meta name="generator" content={Astro.generator} />
 
 <!-- Font preloads -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"/>
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+/>
 <link rel="preload" href="/fonts/Roboto-Regular.woff" as="font" type="font/woff" crossorigin />
 <link rel="preload" href="/fonts/Roboto-Bold.woff" as="font" type="font/woff" crossorigin />
 
