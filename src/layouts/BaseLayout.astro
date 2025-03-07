@@ -7,7 +7,7 @@ import Footer from '../components/Footer.astro';
 
 type Props = CollectionEntry<'resources'>['data'];
 
-const { title, description } = Astro.props;
+const { title, description} = Astro.props;
 
 const lang = 'es';
 const siteTitle = ENV.SITE.TITLE;
@@ -26,7 +26,10 @@ const googleAnalyticsTracking = ENV.ANALYTICS.GOOGLE_ID;
       gtag('js', new Date());
       gtag('config', '{{ googleAnalyticsTracking }}');
     </script>
-    <BaseHead lang={lang} title={title} description={description} />
+    <BaseHead 
+      title={title} 
+      description={description}
+    />
   </head>
   <body class="flex flex-col min-h-screen">
     <Header title={siteTitle} lang={lang} />

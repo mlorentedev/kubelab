@@ -7,13 +7,20 @@ interface Props {
   description: string;
   image?: string;
   lang?: string;
+  type?: string;
+  canonicalURL?: URL;
 }
 
-const canonicalURL = new URL(Astro.url.pathname, Astro.site);
-
-const { title, description, image = '' } = Astro.props;
+const {
+  title,
+  description,
+  image = '/images/me.webp',
+  type = 'website',
+  canonicalURL = new URL(Astro.url.pathname, Astro.site),
+} = Astro.props;
 
 const siteTitle = ENV.SITE.TITLE;
+
 ---
 
 <!-- Global Metadata -->
@@ -21,26 +28,16 @@ const siteTitle = ENV.SITE.TITLE;
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <link rel="sitemap" href="/sitemap-index.xml" />
-<link
-  rel="alternate"
-  type="application/rss+xml"
-  title={siteTitle}
-  href={new URL('rss.xml', Astro.site)}
-/>
+<link rel="alternate" type="application/rss+xml" title={siteTitle} href={new URL('rss.xml', Astro.site)} />
 <meta name="generator" content={Astro.generator} />
-<!-- Font preloads -->
-<link
-  rel="stylesheet"
-  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-/>
 
+<!-- Font preloads -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"/>
 <link rel="preload" href="/fonts/Roboto-Regular.woff" as="font" type="font/woff" crossorigin />
 <link rel="preload" href="/fonts/Roboto-Bold.woff" as="font" type="font/woff" crossorigin />
 
 <!-- Canonical URL -->
 <link rel="canonical" href={canonicalURL} />
-
-<!-- Alternate URLs -->
 
 <!-- Primary Meta Tags -->
 <title>{title}</title>
@@ -48,15 +45,32 @@ const siteTitle = ENV.SITE.TITLE;
 <meta name="description" content={description} />
 
 <!-- Open Graph / Facebook -->
-<meta property="og:type" content="website" />
-<meta property="og:url" content={Astro.url} />
+<meta property="og:site_name" content={siteTitle} />
+<meta property="og:type" content={type} />
+<meta property="og:url" content={canonicalURL} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
-<meta property="og:image" content={new URL(image, Astro.url)} />
+<meta property="og:image" content={new URL(image, Astro.site)} />
+<meta property="og:locale" content="es_ES" />
 
 <!-- Twitter -->
 <meta property="twitter:card" content="summary_large_image" />
-<meta property="twitter:url" content={Astro.url} />
+<meta property="twitter:url" content={canonicalURL} />
 <meta property="twitter:title" content={title} />
 <meta property="twitter:description" content={description} />
-<meta property="twitter:image" content={new URL(image, Astro.url)} />
+<meta property="twitter:image" content={new URL(image, Astro.site)} />
+<meta name="twitter:site" content="@mlorentedev" />
+
+<script is:inline type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "${siteTitle}",
+    "url": "${Astro.site}",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "${Astro.site}?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  }
+</script>
