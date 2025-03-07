@@ -68,9 +68,6 @@ To disable the devToolbar, run this command:
 - [ ] Add homelab sections
 - [ ] Dynamic quotes at the end of the page
 - [ ] Most recent RRSS in some section - dynamic with CI/CD
-- [ ] Replace javascript with htmx
-- [ ] RSS Feed support
-- [ ] Sitemap support
 - [ ] SEO-friendly with canonical URLs and OpenGraph data
 - [ ] 100/100 Lighthouse performance
 - [ ] Tests
