@@ -3,12 +3,16 @@ const { url, text, color, textColor, hideEventDetails, hideGdprBanner } = Astro.
 ---
 
 <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
-<script src="https://assets.calendly.com/assets/external/widget.js" type="text/javascript" defer></script>
+<script
+  is:inline
+  src="https://assets.calendly.com/assets/external/widget.js"
+  type="text/javascript"
+  defer></script>
 
-<a 
+<a
   href="#"
   class="inline-block px-6 py-3 text-lg font-semibold text-white rounded-lg hover:bg-[#007a8d] no-underline"
-  style={`background-color: ${color};`} 
+  style={`background-color: ${color};`}
   onclick={`
     Calendly.initPopupWidget({
       url: '${url}?hide_event_type_details=${hideEventDetails}&hide_gdpr_banner=${hideGdprBanner}&text_color=${textColor}&primary_color=${color}'

@@ -1,13 +1,15 @@
 ---
-import { ABOUT_SUBTITLE, ABOUT_TITLE } from '../../utils/consts';
 import AboutLayout from '../layouts/AboutLayout.astro';
 
 const heroImage = '/img/colorado.webp';
 
+const aboutTitle = '¿Quién soy?';
+const aboutSubtitle = 'Un ingeniero electrónico dando lecciones de DevOps';
+
 const { lang } = Astro.props;
 ---
 
-<AboutLayout title={ABOUT_TITLE} description={ABOUT_SUBTITLE} heroImage={heroImage} lang={lang}>
+<AboutLayout title={aboutTitle} description={aboutSubtitle} heroImage={heroImage} lang={lang}>
   <div class="py-2">
     <p>
       <span class="fa fa-briefcase about-icon"></span>

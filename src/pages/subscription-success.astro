@@ -1,28 +1,20 @@
 ---
 import IndexLayout from '../layouts/IndexLayout.astro';
 
-import { SITE_DOMAIN } from '../../utils/consts';
-
 const { lang } = Astro.props;
 
-const TITLE = 'Todavía NO estás suscrito';
+const title = 'Todavía NO estás suscrito';
 
-const SUBTITLE = 'Tienes que mirar el correo';
-
+const subtitle = 'Tienes que mirar el correo';
 ---
 
-<IndexLayout title={TITLE} description={SUBTITLE} lang={lang}>
-
+<IndexLayout title={title} description={subtitle} lang={lang}>
   <section class="space-y-6">
-  
     <p>
-      Lo único que tienes que hacer el entrar en el enlace que te he enviado y confirmar que quieres recibir mis correos.
+      Lo único que tienes que hacer el entrar en el enlace que te he enviado y confirmar que quieres
+      recibir mis correos.
     </p>
 
-    <p class="font-bold">
-      Si no ves el correo, revisa la carpeta de spam o promociones.
-    </p>
-
+    <p class="font-bold">Si no ves el correo, revisa la carpeta de spam o promociones.</p>
   </section>
-
 </IndexLayout>

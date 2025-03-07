@@ -1,9 +1,16 @@
 ---
-const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.props;
+const { resourceId = '', fileId = '', buttonText = '📩 LO QUIERO', tags = [] } = Astro.props;
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
-  <form id="subscribe-form" class="flex flex-col gap-6" data-tag={tag} data-utm-source={utm_source}>
+  <form
+    id="lead-magnet-form"
+    class="flex flex-col gap-6"
+    data-resource-id={resourceId}
+    data-file-id={fileId}
+    data-tags={tags.join(',')}
+    data-utm-source="lead_magnet"
+  >
     <input
       type="email"
       name="email"
@@ -11,22 +18,25 @@ const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.pr
       required
       class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-cyan-300"
     />
+
     <button
       type="submit"
       class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
     >
-      {button_text}
+      {buttonText}
     </button>
+
     <div class="flex justify-center items-center text-center">
-      <input type="checkbox" id="privacy-policy" name="privacy-policy" />
-      <label for="privacy-policy">
+      <input type="checkbox" id="privacy-policy" name="privacy-policy" class="mr-2" />
+      <label for="privacy-policy" class="text-xs">
         Acepto la <a href="/privacy-policy" target="_blank" class="text-white"
           >política de privacidad</a
         >.
       </label>
     </div>
+
+    <div id="status-message" class="hidden p-2 text-xs text-center rounded-md"></div>
   </form>
-  <p id="status-message" class="mt-4 text-xs text-center"></p>
 </div>
 
-<script is:inline type="module" src="/assets/subscribe.js" defer></script>
+<script is:inline type="module" src="/assets/leadMagnet.js" defer></script>

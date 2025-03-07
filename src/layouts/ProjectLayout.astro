@@ -4,10 +4,22 @@ import BaseLayout from './BaseLayout.astro';
 
 type Props = CollectionEntry<'projects'>['data'];
 
-const { title, description, pubDate, heroImage, lang } = Astro.props;
+const { title, description, pubDate, heroImage } = Astro.props;
+const tags = ['defaultTag'];
+const buttonText = 'defaultButtonText';
+const resourceId = 'defaultResourceId';
+const fileId = 'defaultFileId';
 ---
 
-<BaseLayout title={title} description={description} heroImage={heroImage} pubDate={pubDate} lang={lang}>
+<BaseLayout
+  title={title}
+  description={description}
+  pubDate={pubDate}
+  resourceId={resourceId}
+  fileId={fileId}
+  tags={tags}
+  buttonText={buttonText}
+>
   <article class="max-w-3xl mx-auto p-4">
     <img src={heroImage} alt={title} class="w-full h-64 object-cover rounded-lg" />
     <div class="prose lg:prose-xl mx-auto">

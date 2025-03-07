@@ -82,9 +82,15 @@ Check out usefull documentation for this template:
 ## TODO
 
 - [ ] Copy in landing page
-- [ ] Sections: Inicio, Blog, Sobre mí
+- [ ] Add homelab section
 - [ ] Dynamic quotes at the end of the page
 - [ ] Lead capture with some freebie in landing page
 - [ ] Most recent RRSS in some section - dynamic with CI/CD
-- [ ] Search bar for posts and tags
+- [ ] Add htmx to the project
+- [ ] Prepare Slack community and link to join
 - [ ] Light and dark mode
+- [ ] Add rss feed
+- [ ] Add sitemap
+- [ ] Add tests
+- [ ] Add CI/CD
+- [ ] Add analytics

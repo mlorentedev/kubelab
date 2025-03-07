@@ -1,0 +1,48 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SectionHeader from '../../components/SectionHeader.astro';
+import LeadMagnetForm from '../../components/LeadMagnetForm.astro';
+
+export async function getStaticPaths() {
+  const resources = await getCollection('resources');
+  return resources.map((resource) => ({
+    params: { slug: resource.slug },
+    props: { resource },
+  }));
+}
+
+// Obtener el recurso de las props
+const { resource } = Astro.props;
+const { Content } = await resource.render();
+
+// Extraer los datos del frontmatter
+const { title, description, resourceId, fileId, pubDate, tags, buttonText } = resource.data;
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  pubDate={pubDate}
+  resourceId={resourceId}
+  fileId={fileId}
+  tags={tags}
+  buttonText={buttonText}
+>
+  <div>
+    <SectionHeader title={title} subtitle={description} />
+    <div class="max-w-3xl mx-auto px-4 py-8">
+      <article class="prose lg:prose-lg mx-auto">
+        <Content />
+        <LeadMagnetForm
+          resourceId={resourceId}
+          title={`Descarga ${title}`}
+          description="Déjame tu email y te envio lo prometido"
+          buttonText={buttonText}
+          fileId={fileId}
+          tags={tags}
+        />
+      </article>
+    </div>
+  </div>
+</BaseLayout>

@@ -7,21 +7,16 @@ heroImage: /img/curso-programacion/funciones.png
 pdf_url: /pdf/2024-01-07-introduccion-a-la-programacion.pdf
 ---
 
-export const UTM_SOURCE = "proyecto";
-export const BUTTON_TEXT = "LO QUIERO";
-export const AUT_ID = "aut_5c0f656e-b371-49f3-9535-b2eb26b189a8";
-export const TAG = "armonia-devops-sre";
+export const UTM_SOURCE = 'proyecto';
+export const BUTTON_TEXT = 'LO QUIERO';
+export const TAG = 'armonia-devops-sre';
 
 import HeaderLink from '../../components/HeaderLink.astro';
 import SubscribeForm from '../../components/SubscribeForm.astro';
 
 Déjame aquí tu correo y te mando el recurso con tips:
-<SubscribeForm 
-  tag = {TAG}
-  utm_source = {UTM_SOURCE}
-  button_text = {BUTTON_TEXT}
-  aut_id = {AUT_ID}
-  />
+
+<SubscribeForm tag={TAG} utm_source={UTM_SOURCE} button_text={BUTTON_TEXT} />
 
 La informática es la ciencia que estudia todo lo regerente al procesamiento de la información de manera automática. La programación es una de las disciplinas más importantes de la informática, ya que es la que permite a los seres humanos comunicarse con las máquinas.
 
@@ -759,7 +754,6 @@ El funcionamiento es el siguiente:
 
 Es importante destacar que puede que el bloque que acompaña a la sentencia _while_ no se ejecute nunca si la condición es falsa desde el principio. Además alguno de los valores que determinan la condición de salida del bucle deben cambiar en algún momento para que el bucle no sea infinito.
 
-
 ```java
     // Programa que copia la entrada estándar en la salida estándar
     char c;
@@ -1206,7 +1200,6 @@ El formato general de las órdenes es el siguiente:
     # Ejemplo de formato general de las órdenes
     comando -opciones argumentos
 ```
-
 
 ```bash
     # Ejemplo de formato con corchetes

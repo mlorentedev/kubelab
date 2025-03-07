@@ -1,14 +1,14 @@
 ---
 import FormattedDate from '../../components/FormattedDate.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import Pagination from '../../components/Pagination.astro';
-import { PAGE_SIZE, PROJECTS_TITLE, PROJECTS_SUBTITLE } from '../../../utils/consts';
 import SectionHeader from '../../components/SectionHeader.astro';
 import { getCollection } from 'astro:content';
 
-const { lang } = Astro.params;
 const today = new Date();
 const { page } = Astro.props as { page: { data: Project[] } };
+
+const projectsTitle = 'Proyectos';
+const projectsSubtitle = 'Proyectos destacados';
 
 interface Project {
   project_slug: string;
@@ -38,48 +38,48 @@ export async function getStaticPaths(
       project_slug: project.id,
     }))
     .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-  return paginate(projects_filtered, { pageSize: PAGE_SIZE });
+  return paginate(projects_filtered, { pageSize: 5 });
 }
-
 ---
 
-<BaseLayout title="Projects" description="Projects" lang={lang} pubDate={today}>
-  <SectionHeader title={PROJECTS_TITLE} subtitle={PROJECTS_SUBTITLE} />
+<BaseLayout
+  title="Projects"
+  description="Projects"
+  pubDate={today}
+  resourceId=""
+  fileId=""
+  tags={[]}
+  buttonText=""
+>
+  <SectionHeader title={projectsTitle} subtitle={projectsSubtitle} />
   <section id="projects-list" class="max-w-screen-lg mx-auto px-10">
     <ul class="flex flex-col gap-8 list-none px-10">
       {
-        page.data.map(
-        (
-            project: Project,
-            index: number
-          ) => (
-            <li class="w-full sm:w-auto">
-              <a href={`/projects/${project.project_slug}`} class="block">
-                <h4
-                  class={`text-gray-800 font-bold text-4xl mb-2 hover:text-cyan-700 transition-colors duration-200`}
-                >
-                  {project.data.title}
-                </h4>
+        page.data.map((project: Project, index: number) => (
+          <li class="w-full sm:w-auto">
+            <a href={`/projects/${project.project_slug}`} class="block">
+              <h4
+                class={`text-gray-800 font-bold text-4xl mb-2 hover:text-cyan-700 transition-colors duration-200`}
+              >
+                {project.data.title}
+              </h4>
+            </a>
+            <p class="text-gray-600 italic text-base mb-2">
+              <FormattedDate date={project.data.pubDate} />
+            </p>
+            <p>
+              {project.data.description}
+              <a
+                href={`/projects/${project.project_slug}`}
+                class="block font-semibold text-lg hover:text-cyan-700 transition-colors duration-200"
+              >
+                Ver más
               </a>
-              <p class="text-gray-600 italic text-base mb-2">
-                <FormattedDate date={project.data.pubDate} />
-              </p>
-              <p>
-                {project.data.description}
-                <a
-                  href={`/projects/${project.project_slug}`}
-                  class="block font-semibold text-lg hover:text-cyan-700 transition-colors duration-200"
-                >
-                  Ver más
-                </a>
-              </p>
-              {index < page.data.length - 1 && <hr class="my-4 border-gray-300" />}
-            </li>
-          )
-        )
+            </p>
+            {index < page.data.length - 1 && <hr class="my-4 border-gray-300" />}
+          </li>
+        ))
       }
     </ul>
-
-    <Pagination page={page} />
   </section>
 </BaseLayout>
