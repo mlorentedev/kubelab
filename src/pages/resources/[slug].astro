@@ -12,11 +12,9 @@ export async function getStaticPaths() {
   }));
 }
 
-// Obtener el recurso de las props
 const { resource } = Astro.props;
 const { Content } = await resource.render();
 
-// Extraer los datos del frontmatter
 const { title, description, resourceId, fileId, pubDate, tags, buttonText } = resource.data;
 ---
 
@@ -37,7 +35,7 @@ const { title, description, resourceId, fileId, pubDate, tags, buttonText } = re
         <LeadMagnetForm
           resourceId={resourceId}
           title={`Descarga ${title}`}
-          description="Déjame tu email y te envio lo prometido"
+          description="Déjame tu email y te envío lo prometido"
           buttonText={buttonText}
           fileId={fileId}
           tags={tags}

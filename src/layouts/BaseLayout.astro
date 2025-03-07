@@ -7,7 +7,7 @@ import Footer from '../components/Footer.astro';
 
 type Props = CollectionEntry<'resources'>['data'];
 
-const { title, description } = Astro.props;
+const { title, description} = Astro.props;
 
 const lang = 'es';
 const siteTitle = ENV.SITE.TITLE;
@@ -17,7 +17,7 @@ const googleAnalyticsTracking = ENV.ANALYTICS.GOOGLE_ID;
 <!doctype html>
 <html lang={lang}>
   <head>
-    <script async src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}></script>
+    <script is:inline src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(...args: any[]) {
@@ -26,7 +26,10 @@ const googleAnalyticsTracking = ENV.ANALYTICS.GOOGLE_ID;
       gtag('js', new Date());
       gtag('config', '{{ googleAnalyticsTracking }}');
     </script>
-    <BaseHead lang={lang} title={title} description={description} />
+    <BaseHead 
+      title={title} 
+      description={description}
+    />
   </head>
   <body class="flex flex-col min-h-screen">
     <Header title={siteTitle} lang={lang} />
