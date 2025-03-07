@@ -24,6 +24,7 @@ const envSchema = z.object({
   TWITTER_URL: z.string(),
   YOUTUBE_URL: z.string(),
   GITHUB_URL: z.string(),
+  GOOGLE_ANALYTICS_ID: z.string(),
 });
 
 const prettyStream = pretty({

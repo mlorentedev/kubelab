@@ -1,23 +1,14 @@
 # mlorente.dev
 
-This is mi minimal website [mlorente.dev](https://mlorente.dev).
-
-## Features
-
-- ✅ Same features as Astro Starter Kit Blog
-- ✅ Minimal styling (make it your own!)
-- ✅ 100/100 Lighthouse performance
-- ✅ SEO-friendly with canonical URLs and OpenGraph data
-- ✅ Sitemap support
-- ✅ RSS Feed support
-- ✅ Markdown & MDX support
+This is my minimal website [mlorente.dev](https://mlorente.dev).
 
 ## Project Structure
 
-Inside of your Astro project, you'll see the following folders and files:
+Inside of this project, you'll see the following folders and files:
 
 ```text
 |── .github/
+|   |── workflows/
 |── .vscode/
 ├── public/
 ├── src/
@@ -25,7 +16,7 @@ Inside of your Astro project, you'll see the following folders and files:
 │   ├── content/
 │   ├── layouts/
 │   └── pages/
-│       ├── blog/
+│       ├── projects/
 │           ├── [slug]/
 ├── utils/
 |── .gitignore
@@ -44,8 +35,7 @@ Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page
 There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
 
 The `src/content/` directory contains "collections" of related Markdown and MDX documents.
-Use `getCollection()` to retrieve posts from `src/content/blog/`, and type-check your frontmatter using an optional schema. See [Astro's Content Collections docs](https://docs.astro.build/en/guides/content-collections/) to learn more.
-Or use `getBlogPosts()` from the `src/content/config.ts` file, which adds the blog_slug key as a property to the collection. This is the slug that will be used in the header, blogs list page and as canonical and alternate URLs.
+The `src/content/config.ts` file  adds the `slug` key as a property to the collections. This is the slug that will be used in the header, blogs list page and as canonical and alternate URLs.
 
 Any static assets, like images, can be placed in the `public/` directory.
 
@@ -72,25 +62,17 @@ To disable the devToolbar, run this command:
     astro preferences disable devToolbar
 ```
 
-## Want to learn more?
-
-Check out usefull documentation for this template:
-
-[Astro](https://docs.astro.build)  
-[Astro sitemaps](https://docs.astro.build/en/guides/integrations-guide/sitemap/)
-
 ## TODO
 
 - [ ] Copy in landing page
-- [ ] Add homelab section
+- [ ] Add homelab sections
 - [ ] Dynamic quotes at the end of the page
-- [ ] Lead capture with some freebie in landing page
 - [ ] Most recent RRSS in some section - dynamic with CI/CD
-- [ ] Add htmx to the project
-- [ ] Prepare Slack community and link to join
-- [ ] Light and dark mode
-- [ ] Add rss feed
-- [ ] Add sitemap
-- [ ] Add tests
-- [ ] Add CI/CD
-- [ ] Add analytics
+- [ ] Replace javascript with htmx
+- [ ] RSS Feed support
+- [ ] Sitemap support
+- [ ] SEO-friendly with canonical URLs and OpenGraph data
+- [ ] 100/100 Lighthouse performance
+- [ ] Tests
+- [ ] CI/CD
+- [ ] Slack community integration with the API

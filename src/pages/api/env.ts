@@ -30,4 +30,7 @@ export const ENV = {
     YOUTUBE: getEnv('YOUTUBE_URL'),
     GITHUB: getEnv('GITHUB_URL'),
   },
+  ANALYTICS: {
+    GOOGLE_ID: getEnv('GOOGLE_ANALYTICS_ID'),
+  },
 };
