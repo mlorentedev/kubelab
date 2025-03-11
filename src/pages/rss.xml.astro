@@ -1,6 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
-import { ENV } from './api/env';
+import { ENV } from '../config/env';
 
 const projects = await getCollection('projects');
 const resources = await getCollection('resources');

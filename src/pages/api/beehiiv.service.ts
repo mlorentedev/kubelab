@@ -1,4 +1,4 @@
-import { ENV } from './env';
+import { ENV } from '../../config/env';
 import { logFunction } from './utils';
 import type { CreateSubscriber, GetSubscriber } from './types';
 

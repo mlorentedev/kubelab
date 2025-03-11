@@ -1,4 +1,4 @@
-import { ENV } from '../api/env';
+import { ENV } from '../../config/env';
 import nodemailer from 'nodemailer';
 import { logFunction } from './utils';
 

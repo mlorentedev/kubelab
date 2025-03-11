@@ -64,16 +64,17 @@ To disable the devToolbar, run this command:
 
 ## TODO
 
-- [ ] Script to populate secrets in GitHub Actions
 - [ ] Add homelab section: learning-path, homelabs, etc. similar to Collabnix
+- [ ] Script to populate secrets in GitHub Actions
 - [ ] CI/CD with GitHub Actions
-- [ ] Most recent RRSS in some section - dynamic with CI/CD
 - [ ] Testing
 - [ ] Slack community integration with the API
-- [ ] Dynamic quotes at the end of the page
+- [ ] Most recent RRSS in some section - dynamic with CI/CD
+- [ ] Indexed search by tags
 - [ ] Copy in all pages
 - [ ] Simple and minimalistic design
-- [ ] Indexed search by tags
+- [ ] Add analytics
+- [ ] Dynamic quotes at the end of the page
 
 ## CONTRIBUTING
 

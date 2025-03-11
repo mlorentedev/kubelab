@@ -1,11 +1,12 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsp from '@typescript-eslint/parser';
+import astro from 'eslint-plugin-astro';
 
 export default [
-  // Base recommended configuration
   js.configs.recommended,
   
-  // Global configuration
   {
     languageOptions: {
       globals: {
@@ -18,7 +19,6 @@ export default [
       },
     },
     
-    // Base rules
     rules: {
       'no-unused-vars': 'warn',
       'no-console': 'off',
@@ -32,12 +32,41 @@ export default [
     },
   },
   
-  // Explicitly include source files
   {
     files: ['src/**/*.{js,ts,astro}'],
+    languageOptions: {
+      parser: tsp,
+      parserOptions: {
+        project: './tsconfig.json',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+    }, 
+    rules: {
+      ...tseslint.configs.recommended.rules, 
+    },
   },
-  
-  // Ignore patterns
+
+  {
+    files: ['src/**/*.astro'],
+    languageOptions: {
+      parser: 'astro-eslint-parser',
+      parserOptions: {
+        parser: {
+          ts: tsp,
+        },
+        extraFileExtensions: ['.astro'],
+      },
+    },
+    plugins: {
+      astro,
+    },
+    rules: {
+      ...astro.configs.recommended.rules,
+    },
+  },
+
   {
     ignores: [
       'dist/',

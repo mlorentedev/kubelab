@@ -33,4 +33,9 @@ export const ENV = {
   ANALYTICS: {
     GOOGLE_ID: getEnv('GOOGLE_ANALYTICS_ID'),
   },
+  FEATURE_FLAGS: {
+    ENABLE_HOMELABS: getEnv('ENABLE_HOMELABS', 'false') === 'true',
+    ENABLE_BLOG: getEnv('ENABLE_BLOG', 'false') === 'true',
+    ENABLE_CONTACT: getEnv('ENABLE_CONTACT', 'false') === 'true',
+  },
 };
