@@ -6,7 +6,7 @@ import astro from 'eslint-plugin-astro';
 
 export default [
   js.configs.recommended,
-  
+
   {
     languageOptions: {
       globals: {
@@ -18,20 +18,20 @@ export default [
         sourceType: 'module',
       },
     },
-    
+
     rules: {
       'no-unused-vars': 'warn',
       'no-console': 'off',
-      'eqeqeq': 'error',
-      'curly': 'error',
-      'semi': ['error', 'always'],
-      'quotes': ['error', 'single'],
+      eqeqeq: 'error',
+      curly: 'error',
+      semi: ['error', 'always'],
+      quotes: ['error', 'single'],
       'no-duplicate-imports': 'error',
       'prefer-const': 'warn',
       'no-var': 'error',
     },
   },
-  
+
   {
     files: ['src/**/*.{js,ts,astro}'],
     languageOptions: {
@@ -42,9 +42,9 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint,
-    }, 
+    },
     rules: {
-      ...tseslint.configs.recommended.rules, 
+      ...tseslint.configs.recommended.rules,
     },
   },
 

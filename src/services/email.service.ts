@@ -1,17 +1,17 @@
-import { ENV } from '../../config/env';
+// src/services/email.service.ts
+import { ENV } from '../config/env';
 import nodemailer from 'nodemailer';
-import { logFunction } from './utils';
+import { logFunction } from '../utils/logging';
+import { SERVER_MESSAGES } from '../config/constants';
+import type { ResourceEmailOptions } from '../domain/models';
+import { generateResourceTitle, generateResourceUrl } from '../domain/business';
 
 const siteTitle = ENV.SITE.TITLE;
 const siteUrl = ENV.SITE.URL;
 
-export interface ResourceEmailOptions {
-  email: string;
-  resourceId: string;
-  resourceTitle: string;
-  resourceLink: string;
-}
-
+/**
+ * Crea un transporter de email
+ */
 function createEmailTransporter() {
   return nodemailer.createTransport({
     host: ENV.EMAIL.HOST,
@@ -25,6 +25,9 @@ function createEmailTransporter() {
   });
 }
 
+/**
+ * Genera el HTML para el email de recurso
+ */
 function generateResourceEmailHTML(options: ResourceEmailOptions): string {
   const { resourceTitle, resourceLink } = options;
   const year = new Date().getFullYear();
@@ -41,6 +44,9 @@ function generateResourceEmailHTML(options: ResourceEmailOptions): string {
   `;
 }
 
+/**
+ * Maneja errores de envío de email
+ */
 function handleEmailError(error: any): void {
   const errorDetails = {
     code: error.code,
@@ -64,10 +70,13 @@ function handleEmailError(error: any): void {
   }
 }
 
+/**
+ * Envía un email con un recurso
+ */
 export async function sendResourceEmail(options: ResourceEmailOptions): Promise<boolean> {
   try {
     if (!options.email || !options.resourceLink) {
-      logFunction('error', 'Datos incompletos para envío de email', options);
+      logFunction('error', 'Incomplete data for email sending', options);
       return false;
     }
 
@@ -96,7 +105,7 @@ export async function sendResourceEmail(options: ResourceEmailOptions): Promise<
 
     const info = await transporter.sendMail(mailOptions);
 
-    logFunction('info', 'Email de recurso enviado exitosamente', {
+    logFunction('info', SERVER_MESSAGES.INFO.EMAIL_SENT, {
       email: options.email,
       resourceId: options.resourceId,
       accepted: info.accepted,
@@ -110,14 +119,68 @@ export async function sendResourceEmail(options: ResourceEmailOptions): Promise<
   }
 }
 
-export function validateEmailConfiguration() {
-  const requiredVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'];
+/**
+ * Programa el envío de un email con recurso (con delay)
+ */
+export async function scheduleResourceEmail({
+  email,
+  resourceId,
+  fileId,
+  delayMinutes = 1,
+}: {
+  email: string;
+  resourceId: string;
+  fileId: string;
+  delayMinutes?: number;
+}): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    setTimeout(
+      async () => {
+        try {
+          const emailSent = await sendResourceEmail({
+            email,
+            resourceId,
+            resourceTitle: generateResourceTitle(resourceId),
+            resourceLink: generateResourceUrl(fileId),
+          });
 
-  const missingVars = requiredVars.filter((varName) => !process.env[varName]);
-
-  if (missingVars.length > 0) {
-    throw new Error(`Faltan configuraciones de email: ${missingVars.join(', ')}`);
-  }
+          if (emailSent) {
+            logFunction('info', 'Delayed email sent successfully', { email, resourceId });
+            resolve();
+          } else {
+            logFunction('warn', SERVER_MESSAGES.WARN.EMAIL_DELIVERY_ISSUE, {
+              email,
+              resourceId,
+              fileId,
+            });
+            reject(new Error('Email could not be sent'));
+          }
+        } catch (error) {
+          logFunction('error', 'Error sending delayed email', error);
+          reject(error);
+        }
+      },
+      delayMinutes * 60 * 1000
+    );
+  });
 }
 
-validateEmailConfiguration();
+/**
+ * Valida que exista la configuración de email
+ */
+export function validateEmailConfiguration(): boolean {
+  try {
+    const requiredVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'];
+    const missingVars = requiredVars.filter((varName) => !process.env[varName]);
+
+    if (missingVars.length > 0) {
+      logFunction('error', `Missing email configuration: ${missingVars.join(', ')}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logFunction('error', 'Error validating email configuration', error);
+    return false;
+  }
+}

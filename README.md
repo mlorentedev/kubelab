@@ -68,6 +68,7 @@ To disable the devToolbar, run this command:
 - [ ] Script to populate secrets in GitHub Actions
 - [ ] CI/CD with GitHub Actions
 - [ ] Testing
+- [ ] Deploy to Hetzner
 - [ ] Slack community integration with the API
 - [ ] Most recent RRSS in some section - dynamic with CI/CD
 - [ ] Indexed search by tags

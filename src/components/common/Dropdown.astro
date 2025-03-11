@@ -1,0 +1,49 @@
+---
+import HeaderLink from '../sections/HeaderLink.astro';
+
+import { featureFlags } from '../../config/feature-flags';
+
+const homeSlug = `/`;
+const projectsSlug = `/projects`;
+const aboutSlug = `/about`;
+const contactSlug = `/contact`;
+---
+
+<div id="menu" class="text-gray-800 md:hidden flex flex-col px-2">
+  <HeaderLink
+    id="menu-link"
+    href={homeSlug}
+    class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-100 animate-fadeIn"
+  >
+    Inicio
+  </HeaderLink>
+  <HeaderLink
+    id="menu-link"
+    href={aboutSlug}
+    class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-200 animate-fadeIn"
+  >
+    Quién soy
+  </HeaderLink>
+  {
+    featureFlags.enableHomelabs && (
+      <HeaderLink
+        id="menu-link"
+        href={projectsSlug}
+        class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-300 animate-fadeIn"
+      >
+        HomeLab
+      </HeaderLink>
+    )
+  }
+  {
+    featureFlags.enableContact && (
+      <HeaderLink
+        id="menu-link"
+        href={contactSlug}
+        class="hover:text-cyan-700 block px-2 py-1 transition-transform duration-500 transform -translate-y-5 opacity-0 delay-300 animate-fadeIn"
+      >
+        Videollamada
+      </HeaderLink>
+    )
+  }
+</div>

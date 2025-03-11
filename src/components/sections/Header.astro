@@ -1,11 +1,9 @@
 ---
+import { ENV } from '../../config/env';
+import { featureFlags } from '../../config/feature-flags';
+import Avatar from '../common/Avatar.astro';
+import Dropdown from '../common/Dropdown.astro';
 import HeaderLink from './HeaderLink.astro';
-import Avatar from './Avatar.astro';
-import Dropdown from './Dropdown.astro';
-
-import { ENV } from '../config/env';
-
-import { featureFlags } from '../config/featureFlags';
 
 const siteTitle = ENV.SITE.TITLE;
 const homeSlug = `/`;
@@ -31,14 +29,26 @@ const avatarPic = '/images/me-2.webp';
         <HeaderLink href={aboutSlug} class="hover:text-cyan-700 transition-colors duration-200"
           >Quién soy</HeaderLink
         >
-        {featureFlags.enableHomelabs && (
-          <HeaderLink href={projectsSlug} class="hover:text-cyan-700 transition-colors duration-200"
-            >HomeLab</HeaderLink>
-        )}
-        {featureFlags.enableContact && (
-          <HeaderLink href={contactSlug} class="hover:text-cyan-700 transition-colors duration-200"
-            >Videollamada</HeaderLink>
-        )}
+        {
+          featureFlags.enableHomelabs && (
+            <HeaderLink
+              href={projectsSlug}
+              class="hover:text-cyan-700 transition-colors duration-200"
+            >
+              HomeLab
+            </HeaderLink>
+          )
+        }
+        {
+          featureFlags.enableContact && (
+            <HeaderLink
+              href={contactSlug}
+              class="hover:text-cyan-700 transition-colors duration-200"
+            >
+              Videollamada
+            </HeaderLink>
+          )
+        }
       </div>
       <Avatar src={avatarPic} link={homeSlug} />
       <button
