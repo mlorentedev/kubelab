@@ -1,13 +1,13 @@
 ---
-import { ENV } from '../pages/api/env';
+import BaseHead from '../components/common/BaseHead.astro';
+import Footer from '../components/sections/Footer.astro';
+import Header from '../components/sections/Header.astro';
+import { ENV } from '../config/env';
 import type { CollectionEntry } from 'astro:content';
-import BaseHead from '../components/BaseHead.astro';
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
 
 type Props = CollectionEntry<'resources'>['data'];
 
-const { title, description} = Astro.props;
+const { title, description } = Astro.props;
 
 const lang = 'es';
 const siteTitle = ENV.SITE.TITLE;
@@ -17,7 +17,8 @@ const googleAnalyticsTracking = ENV.ANALYTICS.GOOGLE_ID;
 <!doctype html>
 <html lang={lang}>
   <head>
-    <script is:inline src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}></script>
+    <script is:inline src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}
+    ></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(...args: any[]) {
@@ -26,10 +27,7 @@ const googleAnalyticsTracking = ENV.ANALYTICS.GOOGLE_ID;
       gtag('js', new Date());
       gtag('config', '{{ googleAnalyticsTracking }}');
     </script>
-    <BaseHead 
-      title={title} 
-      description={description}
-    />
+    <BaseHead title={title} description={description} />
   </head>
   <body class="flex flex-col min-h-screen">
     <Header title={siteTitle} lang={lang} />

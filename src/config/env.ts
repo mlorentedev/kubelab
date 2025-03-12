@@ -1,8 +1,47 @@
-import pino from 'pino';
-import pretty from 'pino-pretty';
-
 import * as dotenv from 'dotenv';
+
 import { z } from 'zod';
+import { logFunction } from '../utils/logging';
+
+validateEnvironmentVariables();
+
+export const ENV = {
+  BEEHIIV: {
+    API_KEY: getEnv('BEEHIIV_API_KEY'),
+    PUB_ID: getEnv('BEEHIIV_PUB_ID'),
+  },
+  EMAIL: {
+    HOST: getEnv('EMAIL_HOST'),
+    PORT: getEnv('EMAIL_PORT'),
+    SECURE: getEnv('EMAIL_SECURE', 'false') === 'true',
+    USER: getEnv('EMAIL_USER'),
+    PASS: getEnv('EMAIL_PASS'),
+  },
+  SITE: {
+    DOMAIN: getEnv('SITE_DOMAIN'),
+    URL: getEnv('SITE_URL'),
+    MAIL: getEnv('SITE_MAIL'),
+    TITLE: getEnv('SITE_TITLE'),
+    DESCRIPTION: getEnv('SITE_DESCRIPTION'),
+    KEYWORDS: getEnv('SITE_KEYWORDS'),
+    AUTHOR: getEnv('SITE_AUTHOR'),
+  },
+  RRSS: {
+    CALENDLY: getEnv('CALENDLY_URL'),
+    BUY_ME_A_COFFEE: getEnv('BUY_ME_A_COFFEE_URL'),
+    TWITTER: getEnv('TWITTER_URL'),
+    YOUTUBE: getEnv('YOUTUBE_URL'),
+    GITHUB: getEnv('GITHUB_URL'),
+  },
+  ANALYTICS: {
+    GOOGLE_ID: getEnv('GOOGLE_ANALYTICS_ID'),
+  },
+  FEATURE_FLAGS: {
+    ENABLE_HOMELABS: getEnv('ENABLE_HOMELABS', 'false') === 'true',
+    ENABLE_BLOG: getEnv('ENABLE_BLOG', 'false') === 'true',
+    ENABLE_CONTACT: getEnv('ENABLE_CONTACT', 'false') === 'true',
+  },
+};
 
 const envSchema = z.object({
   BEEHIIV_API_KEY: z.string(),
@@ -27,26 +66,6 @@ const envSchema = z.object({
   GOOGLE_ANALYTICS_ID: z.string(),
 });
 
-const prettyStream = pretty({
-  colorize: true,
-  ignore: 'pid,hostname',
-  messageKey: 'msg',
-  singleLine: true,
-});
-
-export const logger = pino(prettyStream);
-
-export function logFunction(level: 'info' | 'warn' | 'error', message: string, data?: any) {
-  const stack = new Error().stack || '';
-  const functionName = stack.split('\n')[2]?.trim().split(' ')[1] || 'unknown function';
-  logger[level](`${functionName}: ${message} ${data !== undefined ? JSON.stringify(data) : ''}`);
-}
-
-export function validateEmail(email: string): boolean {
-  const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return re.test(email);
-}
-
 export function validateEnvironmentVariables() {
   dotenv.config();
 
@@ -64,7 +83,7 @@ function handleValidationError(error: z.ZodError) {
   if (error instanceof z.ZodError) {
     console.error('Validation error:', error.errors);
     console.error('Invalid environment variables:');
-    error.errors.forEach((err: any) => {
+    error.errors.forEach((err) => {
       console.error(`- ${err.path.join('.')} is invalid: ${err.message}`);
     });
     throw new Error('Invalid environment variables');

@@ -1,12 +1,16 @@
-import { ENV } from './env';
-import { logFunction } from './utils';
-import type { CreateSubscriber, GetSubscriber } from './types';
+import { ENV } from '../config/env';
+import { logFunction } from '../utils/logging';
+import { SERVER_MESSAGES, FRONTEND_MESSAGES } from '../config/constants';
+import type { Subscriber, SubscriptionResult } from '../domain/models';
 
 const BEEHIIV_API_SUBSCRIPTIONS = `https://api.beehiiv.com/v2/publications/${ENV.BEEHIIV.PUB_ID}/subscriptions`;
 
+/**
+ * Verifica si un suscriptor existe por email
+ */
 export async function checkSubscriber(
   email: string
-): Promise<{ success: boolean; subscriber?: GetSubscriber }> {
+): Promise<{ success: boolean; subscriber?: Subscriber }> {
   try {
     const response = await fetch(`${BEEHIIV_API_SUBSCRIPTIONS}/by_email/${email}`, {
       method: 'GET',
@@ -20,25 +24,28 @@ export async function checkSubscriber(
     const subscriber = result.data;
 
     if (!subscriber || !subscriber.id) {
-      logFunction('warn', 'Subscriber not found:', email);
+      logFunction('warn', SERVER_MESSAGES.INFO.SUBSCRIBER_NOT_FOUND, email);
       return { success: false };
     }
 
-    logFunction('info', 'Subscriber already exists:', email);
+    logFunction('info', SERVER_MESSAGES.INFO.SUBSCRIBER_EXISTS, email);
     return {
       success: true,
       subscriber: subscriber,
     };
   } catch (e) {
-    logFunction('error', 'Error checking subscriber:', e);
+    logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} checking subscriber:`, e);
     return { success: false };
   }
 }
 
+/**
+ * Crea un nuevo suscriptor
+ */
 export async function subscribeUser(
   email: string,
   utm_source = 'landing_page'
-): Promise<{ success: boolean; subscriber?: CreateSubscriber }> {
+): Promise<{ success: boolean; subscriber?: Subscriber }> {
   try {
     logFunction('info', `Subscribing user with utm_source: ${utm_source}`, email);
 
@@ -60,7 +67,7 @@ export async function subscribeUser(
     const subscriber = result.data;
 
     if (subscriber && subscriber.id) {
-      logFunction('info', 'New subscriber created:', email);
+      logFunction('info', SERVER_MESSAGES.INFO.NEW_SUBSCRIBER, email);
       return {
         success: true,
         subscriber: subscriber,
@@ -70,17 +77,21 @@ export async function subscribeUser(
       return { success: false };
     }
   } catch (e) {
-    logFunction('error', 'Exception subscribing user:', e);
+    logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} subscribing user:`, e);
     return { success: false };
   }
 }
 
+/**
+ * Añade una etiqueta a un suscriptor existente
+ */
 export async function addTagToSubscriber(subscription_id: string, tag: string): Promise<boolean> {
   try {
     if (tag === '') {
-      logFunction('warn', 'Empty tag not added to subscriber:', subscription_id);
+      logFunction('warn', SERVER_MESSAGES.WARN.EMPTY_TAG, subscription_id);
       return false;
     }
+
     const response = await fetch(`${BEEHIIV_API_SUBSCRIPTIONS}/${subscription_id}/tags`, {
       method: 'POST',
       headers: {
@@ -96,7 +107,7 @@ export async function addTagToSubscriber(subscription_id: string, tag: string): 
     const subscriber = result.data;
 
     if (!subscriber || !subscriber.id) {
-      logFunction('error', 'Error adding tag to subscriber:', {
+      logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} adding tag to subscriber:`, {
         subscription_id,
         tag,
         response: result,
@@ -104,25 +115,33 @@ export async function addTagToSubscriber(subscription_id: string, tag: string): 
       return false;
     }
 
-    logFunction('info', `Tag "${tag}" added to subscriber:`, subscription_id);
+    logFunction('info', `${SERVER_MESSAGES.INFO.TAG_ADDED}: "${tag}"`, subscription_id);
     return true;
   } catch (e) {
-    logFunction('error', 'Error adding tag to subscriber:', { subscription_id, tag, error: e });
+    logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} adding tag to subscriber:`, {
+      subscription_id,
+      tag,
+      error: e,
+    });
     return false;
   }
 }
 
-export async function unsubscribeUser(
-  email: string
-): Promise<{ success: boolean; message: string }> {
+/**
+ * Cancela la suscripción de un usuario
+ */
+export async function unsubscribeUser(email: string): Promise<SubscriptionResult> {
   try {
     const subscriberCheck = await checkSubscriber(email);
 
     if (!subscriberCheck.success || !subscriberCheck.subscriber) {
-      logFunction('warn', 'Subscriber not found for unsubscribe:', email);
+      logFunction('warn', SERVER_MESSAGES.INFO.SUBSCRIBER_NOT_FOUND, {
+        action: 'unsubscribe',
+        email,
+      });
       return {
         success: false,
-        message: 'Este email no está suscrito',
+        message: FRONTEND_MESSAGES.ERRORS.EMAIL_NOT_SUBSCRIBED,
       };
     }
 
@@ -138,30 +157,30 @@ export async function unsubscribeUser(
     });
 
     if (response.status === 204) {
-      logFunction('info', 'User unsubscribed successfully:', email);
+      logFunction('info', SERVER_MESSAGES.INFO.USER_UNSUBSCRIBED, email);
       return {
         success: true,
-        message: 'User unsubscribed successfully',
+        message: FRONTEND_MESSAGES.SUCCESS.UNSUBSCRIPTION,
       };
     } else {
       let errorData;
       try {
         errorData = await response.json();
       } catch (e) {
-        errorData = { status: response.status };
+        errorData = { status: e };
       }
 
-      logFunction('error', 'Error unsubscribing user, API response:', errorData);
+      logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} unsubscribing user:`, errorData);
       return {
         success: false,
-        message: 'Error unsubscribing user',
+        message: FRONTEND_MESSAGES.ERRORS.SERVER_ERROR,
       };
     }
   } catch (e) {
-    logFunction('error', 'Exception unsubscribing user:', e);
+    logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} unsubscribing user:`, e);
     return {
       success: false,
-      message: 'Internal server error during unsubscribe process',
+      message: FRONTEND_MESSAGES.ERRORS.SERVER_ERROR,
     };
   }
 }

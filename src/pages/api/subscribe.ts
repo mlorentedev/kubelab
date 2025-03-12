@@ -1,27 +1,36 @@
-import { processSubscription } from './subscription.service';
-import { SubscriptionSource } from './types';
-import { validateEmail, logFunction } from './utils';
+// src/api/subscribe.ts
+
+import { FRONTEND_MESSAGES } from '../../config/constants';
+import type { APIRoute } from 'astro';
+import { SubscriptionSource } from '../../domain/models';
+import { processSubscription } from '../../services/subscription.service';
+import { logFunction } from '../../utils/logging';
+import { validateEmail } from '../../utils/validation';
 
 export const prerender = false;
 
-import type { APIRoute } from 'astro';
-
+/**
+ * Endpoint POST para suscribir usuarios
+ */
 export const POST: APIRoute = async ({ request }) => {
   try {
     const { email, tag, utmSource } = await request.json();
 
+    // Validar entrada
     if (!email || !validateEmail(email)) {
-      return new Response(JSON.stringify({ message: 'Correo electrónico inválido.' }), {
+      return new Response(JSON.stringify({ message: FRONTEND_MESSAGES.ERRORS.INVALID_EMAIL }), {
         status: 400,
       });
     }
 
+    // Procesar suscripción
     const result = await processSubscription(
       email,
-      [tag],
+      tag ? [tag] : [],
       utmSource || SubscriptionSource.LandingPage
     );
 
+    // Devolver respuesta
     return new Response(
       JSON.stringify({
         message: result.message,
@@ -30,7 +39,9 @@ export const POST: APIRoute = async ({ request }) => {
       { status: result.success ? 200 : 500 }
     );
   } catch (error) {
-    logFunction('error', 'Error en endpoint de suscripción', error);
-    return new Response(JSON.stringify({ message: 'Error interno del servidor' }), { status: 500 });
+    logFunction('error', 'Error in subscription endpoint', error);
+    return new Response(JSON.stringify({ message: FRONTEND_MESSAGES.ERRORS.SERVER_ERROR }), {
+      status: 500,
+    });
   }
 };

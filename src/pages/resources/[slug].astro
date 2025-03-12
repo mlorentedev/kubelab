@@ -1,8 +1,8 @@
 ---
 import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import SectionHeader from '../../components/SectionHeader.astro';
-import LeadMagnetForm from '../../components/LeadMagnetForm.astro';
+import LeadMagnetForm from '../../components/features/subscription/LeadMagnetForm.astro';
+import SectionHeader from '../../components/sections/SectionHeader.astro';
 
 export async function getStaticPaths() {
   const resources = await getCollection('resources');

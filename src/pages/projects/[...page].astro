@@ -1,14 +1,20 @@
 ---
-import FormattedDate from '../../components/FormattedDate.astro';
+import FormattedDate from '../../components/common/FormattedDate.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import SectionHeader from '../../components/SectionHeader.astro';
+import SectionHeader from '../../components/sections/SectionHeader.astro';
 import { getCollection } from 'astro:content';
 
 const today = new Date();
 const { page } = Astro.props as { page: { data: Project[] } };
 
-const projectsTitle = 'Proyectos';
-const projectsSubtitle = 'Proyectos destacados';
+const projectsTitle = 'HomeLabs';
+const projectsSubtitle = 'Mi colección de laboratorios cloud para aprender haciendo';
+
+const colors = {
+  beginner: 'bg-green-100 text-green-800',
+  intermediate: 'bg-yellow-100 text-yellow-800',
+  advanced: 'bg-red-100 text-red-800',
+};
 
 interface Project {
   project_slug: string;
@@ -16,18 +22,17 @@ interface Project {
     description: string;
     title: string;
     pubDate: Date;
+    updatedDate?: Date;
     heroImage?: string;
     pdf_url?: string;
     video_url?: string;
+    githubRepo?: string;
+    tags?: string[];
+    level?: 'beginner' | 'intermediate' | 'advanced';
   };
 }
 
 export async function getStaticPaths(
-  {
-    paginate,
-  }: {
-    paginate: (items: any[], options: { pageSize: number }) => any;
-  },
   today = new Date()
 ) {
   const _projects = await getCollection('projects');
@@ -38,48 +43,82 @@ export async function getStaticPaths(
       project_slug: project.id,
     }))
     .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-  return paginate(projects_filtered, { pageSize: 5 });
+  return projects_filtered;
+}
+
+function getLevelColor(level: keyof typeof colors | undefined) {
+  if (!level) {return '';}
+
+  return colors[level] || '';
 }
 ---
 
 <BaseLayout
-  title="Projects"
-  description="Projects"
+  title={projectsTitle}
+  description={projectsSubtitle}
   pubDate={today}
   resourceId=""
   fileId=""
   tags={[]}
   buttonText=""
 >
-  <SectionHeader title={projectsTitle} subtitle={projectsSubtitle} />
-  <section id="projects-list" class="max-w-screen-lg mx-auto px-10">
-    <ul class="flex flex-col gap-8 list-none px-10">
+  <div class="px-4 py-8">
+    <SectionHeader title={projectsTitle} subtitle={projectsSubtitle} />
+
+    <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
       {
-        page.data.map((project: Project, index: number) => (
-          <li class="w-full sm:w-auto">
-            <a href={`/projects/${project.project_slug}`} class="block">
-              <h4
-                class={`text-gray-800 font-bold text-4xl mb-2 hover:text-cyan-700 transition-colors duration-200`}
-              >
-                {project.data.title}
-              </h4>
-            </a>
-            <p class="text-gray-600 italic text-base mb-2">
-              <FormattedDate date={project.data.pubDate} />
-            </p>
-            <p>
-              {project.data.description}
-              <a
-                href={`/projects/${project.project_slug}`}
-                class="block font-semibold text-lg hover:text-cyan-700 transition-colors duration-200"
-              >
-                Ver más
-              </a>
-            </p>
-            {index < page.data.length - 1 && <hr class="my-4 border-gray-300" />}
-          </li>
+        page.data.map((project) => (
+          <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+            {project.data.heroImage && (
+              <div class="h-48 overflow-hidden">
+                <img
+                  src={project.data.heroImage}
+                  alt={project.data.title}
+                  class="w-full h-full object-cover"
+                />
+              </div>
+            )}
+
+            <div class="p-6">
+              <h2 class="text-xl font-bold text-gray-800 mb-2">{project.data.title}</h2>
+
+              <p class="text-gray-600 mb-4 line-clamp-2">{project.data.description}</p>
+
+              <div class="flex flex-wrap gap-2 mb-4">
+                {project.data.level && (
+                  <span
+                    class={`px-3 py-1 rounded-full text-xs font-medium ${getLevelColor(project.data.level)}`}
+                  >
+                    {project.data.level}
+                  </span>
+                )}
+
+                {project.data.tags &&
+                  project.data.tags
+                    .slice(0, 3)
+                    .map((tag) => (
+                      <span class="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs">
+                        {tag}
+                      </span>
+                    ))}
+              </div>
+
+              <div class="flex justify-between items-center">
+                <p class="text-gray-500 text-sm">
+                  <FormattedDate date={project.data.updatedDate || project.data.pubDate} />
+                </p>
+
+                <a
+                  href={`/projects/${project.project_slug}`}
+                  class="text-cyan-700 font-medium hover:underline"
+                >
+                  Ver más →
+                </a>
+              </div>
+            </div>
+          </div>
         ))
       }
-    </ul>
-  </section>
+    </div>
+  </div>
 </BaseLayout>

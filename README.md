@@ -35,7 +35,7 @@ Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page
 There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
 
 The `src/content/` directory contains "collections" of related Markdown and MDX documents.
-The `src/content/config.ts` file  adds the `slug` key as a property to the collections. This is the slug that will be used in the header, blogs list page and as canonical and alternate URLs.
+The `src/content/config.ts` file adds the `slug` key as a property to the collections. This is the slug that will be used in the header, blogs list page and as canonical and alternate URLs.
 
 Any static assets, like images, can be placed in the `public/` directory.
 
@@ -64,10 +64,19 @@ To disable the devToolbar, run this command:
 
 ## TODO
 
-- [ ] Copy in landing page
-- [ ] Add homelab sections
-- [ ] Dynamic quotes at the end of the page
-- [ ] Most recent RRSS in some section - dynamic with CI/CD
-- [ ] Tests
-- [ ] CI/CD
+- [ ] Add homelab section: learning-path, homelabs, etc. similar to Collabnix
+- [ ] Script to populate secrets in GitHub Actions
+- [ ] CI/CD with GitHub Actions
+- [ ] Testing
+- [ ] Deploy to Hetzner
 - [ ] Slack community integration with the API
+- [ ] Most recent RRSS in some section - dynamic with CI/CD
+- [ ] Indexed search by tags
+- [ ] Copy in all pages
+- [ ] Simple and minimalistic design
+- [ ] Add analytics
+- [ ] Dynamic quotes at the end of the page
+
+## CONTRIBUTING
+
+If you want to contribute to this project, please read the [CONTRIBUTING.md](CONTRIBUTING.md) file.

@@ -1,9 +1,8 @@
 ---
-import { getCollection } from 'astro:content';
-import { render } from 'astro:content';
+import { getCollection, render } from 'astro:content';
 
 import ProjectLayout from '../../layouts/ProjectLayout.astro';
-import FormattedDate from '../../components/FormattedDate.astro';
+import FormattedDate from '../../components/common/FormattedDate.astro';
 
 export async function getStaticPaths() {
   const projects = await getCollection('projects');

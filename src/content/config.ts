@@ -9,8 +9,12 @@ const projects = defineCollection({
     pubDate: z.coerce.date(),
     updatedDate: z.coerce.date().optional(),
     heroImage: z.string().optional(),
-    videoUrl: z.string().optional(),
+    pdf_url: z.string().optional(),
+    video_url: z.string().optional(),
+    lang: z.string().optional(),
     githubRepo: z.string().optional(),
+    tags: z.array(z.string()).default([]),
+    level: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
   }),
 });
 
