@@ -1,0 +1,44 @@
+---
+import { env } from '../../data/env';
+
+export const prerender = false;
+
+// Este endpoint redirige al backend
+if (Astro.request.method === 'POST') {
+  try {
+    const requestBody = await Astro.request.json();
+    
+    // Redirigir la petición al backend
+    const backendUrl = `${env.API.BACKEND_URL}/resource-email`;
+    const response = await fetch(backendUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    const data = await response.json();
+    
+    return new Response(JSON.stringify(data), {
+      status: response.status,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error forwarding resource-email request:', error);
+    return new Response(JSON.stringify({ 
+      message: 'Error interno del servidor.' 
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+}
+
+// Método no permitido para otros verbos HTTP
+return new Response(null, { status: 405 });
+---

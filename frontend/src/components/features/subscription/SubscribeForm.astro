@@ -1,0 +1,39 @@
+---
+const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.props;
+---
+
+<div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
+  <form 
+    hx-post="/api/subscribe" 
+    hx-trigger="submit" 
+    hx-target="#status-message"
+    hx-swap="innerHTML"
+    class="flex flex-col gap-6">
+    
+    <input type="hidden" name="tag" value={tag} />
+    <input type="hidden" name="utm_source" value={utm_source} />
+    
+    <input
+      type="email"
+      name="email"
+      placeholder="Tu correo electrónico"
+      required
+      class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-cyan-300"
+    />
+    <button
+      type="submit"
+      class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
+    >
+      {button_text}
+    </button>
+    <div class="flex justify-center items-center text-center">
+      <input type="checkbox" id="privacy-policy" name="privacy-policy" />
+      <label for="privacy-policy">
+        Acepto la <a href="/privacy-policy" target="_blank" class="text-white"
+          >política de privacidad</a
+        >.
+      </label>
+    </div>
+  </form>
+  <p id="status-message" class="mt-4 text-xs text-center"></p>
+</div>

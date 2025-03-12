@@ -1,0 +1,40 @@
+---
+import BaseHead from '../components/common/BaseHead.astro';
+import Footer from '../components/sections/Footer.astro';
+import Header from '../components/sections/Header.astro';
+import type { CollectionEntry } from 'astro:content';
+import { env } from '../data/env';
+
+type Props = CollectionEntry<'resources'>['data'];
+
+const { title, description } = Astro.props;
+
+const lang = 'es';
+const siteTitle = env.SITE.TITLE;
+const googleAnalyticsTracking = env.ANALYTICS.GOOGLE_ID;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <script is:inline src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(...args: any[]) {
+        window.dataLayer.push(args);
+      }
+      gtag('js', new Date());
+      gtag('config', '{{ googleAnalyticsTracking }}');
+    </script>
+    <BaseHead title={title} description={description} />
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+  </head>
+  <body class="flex flex-col min-h-screen">
+    <Header title={siteTitle} lang={lang} />
+    <main class="flex-grow py-16">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>
