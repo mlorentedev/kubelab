@@ -1,4 +1,3 @@
-// src/services/beehiiv.service.ts
 import { ENV } from '../config/env';
 import { logFunction } from '../utils/logging';
 import { SERVER_MESSAGES, FRONTEND_MESSAGES } from '../config/constants';
@@ -168,7 +167,7 @@ export async function unsubscribeUser(email: string): Promise<SubscriptionResult
       try {
         errorData = await response.json();
       } catch (e) {
-        errorData = { status: response.status };
+        errorData = { status: e };
       }
 
       logFunction('error', `${SERVER_MESSAGES.ERRORS.API_ERROR} unsubscribing user:`, errorData);

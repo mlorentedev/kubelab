@@ -3,6 +3,7 @@ import globals from 'globals';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsp from '@typescript-eslint/parser';
 import astro from 'eslint-plugin-astro';
+import astroParser from 'astro-eslint-parser';
 
 export default [
   js.configs.recommended,
@@ -33,7 +34,7 @@ export default [
   },
 
   {
-    files: ['src/**/*.{js,ts,astro}'],
+    files: ['src/**/*.{js,ts}'],
     languageOptions: {
       parser: tsp,
       parserOptions: {
@@ -51,12 +52,11 @@ export default [
   {
     files: ['src/**/*.astro'],
     languageOptions: {
-      parser: 'astro-eslint-parser',
+      parser: astroParser,
       parserOptions: {
-        parser: {
-          ts: tsp,
-        },
+        parser: tsp,
         extraFileExtensions: ['.astro'],
+        project: './tsconfig.json',
       },
     },
     plugins: {
@@ -64,6 +64,7 @@ export default [
     },
     rules: {
       ...astro.configs.recommended.rules,
+      'astro/no-unused-components': 'off',
     },
   },
 

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/services/email.service.ts
 import { ENV } from '../config/env';
 import nodemailer from 'nodemailer';

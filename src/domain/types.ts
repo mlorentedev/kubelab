@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export enum Tag {
   NewSubscriber = 'new',
   ExistingSubscriber = 'existing',

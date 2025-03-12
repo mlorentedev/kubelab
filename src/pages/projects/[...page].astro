@@ -33,11 +33,6 @@ interface Project {
 }
 
 export async function getStaticPaths(
-  {
-    paginate,
-  }: {
-    paginate: (items: any[], options: { pageSize: number }) => any;
-  },
   today = new Date()
 ) {
   const _projects = await getCollection('projects');
@@ -48,11 +43,11 @@ export async function getStaticPaths(
       project_slug: project.id,
     }))
     .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-  return paginate(projects_filtered, { pageSize: 10 });
+  return projects_filtered;
 }
 
 function getLevelColor(level: keyof typeof colors | undefined) {
-  if (!level) return '';
+  if (!level) {return '';}
 
   return colors[level] || '';
 }

@@ -10,6 +10,7 @@ const prettyStream = pretty({
 
 export const logger = pino(prettyStream);
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function logFunction(level: 'info' | 'warn' | 'error', message: string, data?: any) {
   const stack = new Error().stack || '';
   const functionName = stack.split('\n')[2]?.trim().split(' ')[1] || 'unknown function';

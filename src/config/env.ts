@@ -83,7 +83,7 @@ function handleValidationError(error: z.ZodError) {
   if (error instanceof z.ZodError) {
     console.error('Validation error:', error.errors);
     console.error('Invalid environment variables:');
-    error.errors.forEach((err: any) => {
+    error.errors.forEach((err) => {
       console.error(`- ${err.path.join('.')} is invalid: ${err.message}`);
     });
     throw new Error('Invalid environment variables');
