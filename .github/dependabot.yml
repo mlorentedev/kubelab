@@ -1,51 +1,41 @@
 version: 2
 updates:
-  # Frontend dependencies
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 10
+    groups:
+      all-frontend-dependencies:
+        patterns:
+          - "*"
     labels:
       - "dependencies"
-      - "frontend"
-    versioning-strategy: auto
-    
-  # Backend dependencies
+
   - package-ecosystem: "gomod"
     directory: "/backend"
     schedule:
       interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 10
+    groups:
+      all-backend-dependencies:
+        patterns:
+          - "*"
     labels:
       - "dependencies"
-      - "backend"
-    
-  # GitHub Actions
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 5
+      interval: "weekly"
     labels:
       - "dependencies"
-      - "github-actions"
-      
-  # Docker
+
   - package-ecosystem: "docker"
-    directory: "/docker/frontend"
+    directory: "/docker"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
+    groups:
+      all-docker-dependencies:
+        patterns:
+          - "*"
     labels:
       - "dependencies"
-      - "docker"
-      
-  - package-ecosystem: "docker"
-    directory: "/docker/backend"
-    schedule:
-      interval: "monthly"
-    labels:
-      - "dependencies"
-      - "docker"

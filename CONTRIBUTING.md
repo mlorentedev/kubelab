@@ -2,6 +2,27 @@
 
 ## 🌿 Branch Naming Conventions
 
+- `master`: Stable code for production
+- `develop`: Active development and integration
+- `feature/*`: Feature branches for new functionality
+- `hotfix/*`: Hotfix branches for urgent fixes
+
+### Workflow
+
+1. Create a new branch from `develop` for new features (`feature/name`) or from `master` for hotfixes (`hotfix/name`)
+
+2. Make your changes and commit them
+
+3. Create a Pull Request to merge your branch into `develop`.
+
+4. After code review and approval, merge your branch into `develop`.
+
+### Code conventions
+
+- Frontend: Follow the Astro and HTMX conventions.
+- Backend: Follow the Go conventions.
+- Commits: Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
 ### 1. Master Branch
 
 - Branch Name: `master`

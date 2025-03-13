@@ -89,26 +89,26 @@ This project has a single `.env` file in the root directory that contains enviro
 
 1. Clone the repository:
 
-   ```bash
-   git clone
-   cd mlorente.dev
-   ```
+    ```bash
+    git clone
+    cd mlorente.dev
+    ```
 
-2. Prepare the environment:
+2. To configure the development environment:
 
-   ```bash
-   # Prepare the environment
-   ./scripts/dev-setup.sh
+    ```bash
+    # Prepare development environment
+    ./scripts/dev-setup.sh
 
-   # Configure GitHub secrets for CI/CD
+    # Configure GitHub secrets (for CI/CD)
     ./scripts/setup-github-secrets.sh
 
-   # Configure development environment
-   ./scripts/setup-hetzner.sh staging
+    # Configure production server on Hetzner
+    ./scripts/setup-server.sh 123.456.789.0 production
 
-   # Configure production environment
-   ./scripts/setup-hetzner.sh production
-   ```
+    # Configure staging server on Hetzner
+    ./scripts/setup-server.sh 123.456.789.1 staging
+    ```
 
 ### Local development
 
@@ -156,7 +156,7 @@ If you prefer not to use Docker for development, you can run the frontend and ba
 
    ```bash
    go mod download
-    go run cmd/server/main.go
+   go run cmd/server/main.go
     ```
 
 Need to install Air for hot reloading:
@@ -174,21 +174,60 @@ The project is configured for CI/CD using GitHub Actions. Ensure you have set up
 - Any push to the `master` branch will trigger a deployment to production.
 - Any push to the `feature/*` or `hotfix/*` branch will trigger a deployment to staging.
 
-This process includes tests, builds, and deployment steps.
+The project is configured for automated deployment through GitHub Actions:
+
+1. Frontend CI: Tests and builds the frontend
+
+    - Triggers: Changes in /frontend or related workflows
+    - Process: Lint, tests, build and push Docker image
+    - Result: Updated Docker image for the frontend
+
+2. Backend CI: Tests and builds the backend
+
+    - Triggers: Changes in /backend or related workflows
+    - Process: Go vet, tests, build and push Docker image
+    - Result: Updated Docker image for the backend
+
+3. Deploy: Unified deployment
+
+    - Triggers: Completion of CI or manual from GitHub
+    - Process: Updates services on the server
+    - Scripts: Uses external scripts for complex deployment logic
+    - Environments: Staging (for develop branch) or Production (for master branch)
+
+#### Branch strategy
+
+The project follows this branch strategy:
+
+`master`: Stable code for production deployment  
+`develop`: Active development and integration  
+`feature/*`: Feature branches for new functionality  
+`hotfix/*`: Hotfix branches for urgent fixes  
+
+#### Automated Deployment
+
+This project implements an hybrid approach for deployment. The frontend is deployed using GitHub Actions, while the backend is deployed manually with some scripts.
+
+- `scripts/deploy.sh`: Deploy from CI/CD to production
+- `scripts/update-env.sh`: Update environment variables
+- `scripts/rollback.sh`: Rollback to previous version in case of issues
 
 #### Manual Deployment
 
-If you need to deploy manually, you can use the following commands in the production server:
+If you need to deploy manually, you can use the following commands in the server:
 
 ```bash
+# Deployment in staging
+./scripts/deploy.sh staging
+
+# Deployment in production
+./scripts/deploy.sh production
+
+# Direct deployment in production
 cd /opt/mlorente
 docker-compose pull
 docker-compose up -d
 ```
-
-#### Environment Variables
-
-Environment variables are managed in `opt/mlorente/.env`. This file is generated during deployment, but can be manually edited if needed.
 
 ## API
 
@@ -226,6 +265,60 @@ docker-compose logs backend
 docker-compose restart certbot
 ```
 
+- Environment variables issues. If you are missing environment variables, check the `.env` file or the GitHub secrets.
+
+```bash
+# Update environment variables
+./scripts/update-env.sh production
+```
+
+- If a deployment fails, you can rollback to the previous version:
+
+```bash
+# List available versions
+./scripts/rollback.sh production
+
+# Rollback to a specific version
+./scripts/rollback.sh production v1.2.3
+```
+
+## Advanced operations
+
+The project includes several advanced scripts for operations and maintenance:
+
+### Performance testing
+
+To test the performance of the backend:
+
+```bash
+# Basic performance test
+./scripts/perf-test.sh production
+
+# Test specific endpoint
+./scripts/perf-test.sh production /api/subscribe
+```
+
+### Security checks
+
+Verify the security configuration of the server:
+
+```bash
+# Check server security
+./scripts/security-check.sh production
+```
+
+### Log analysis
+
+Analyse application logs:
+
+```bash
+# Analyze all logs
+./scripts/analyze-logs.sh production
+
+# Analyze specific service logs
+./scripts/analyze-logs.sh production nginx
+```
+
 ## Aditional notes
 
 Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name and its language parameter.
@@ -237,54 +330,9 @@ The `src/content/config.ts` file adds the `slug` key as a property to the collec
 
 Any static assets, like images, can be placed in the `public/` directory.
 
-To run this project, need to create a file `.env.dev` in the root directory with the necessary environment variables:
+## Server
 
-```env
-# Example .env.dev file
-ENV=development
-
-# Application
-SITE_TITLE=mlorente.dev
-SITE_DESCRIPTION=Blog personal de Manuel Lorente
-SITE_DOMAIN=localhost
-SITE_URL=http://localhost:3000
-SITE_MAIL=mlorentedev@gmail.com
-SITE_AUTHOR=Manuel Lorente
-SITE_KEYWORDS=devops, cloud, kubernetes, aws, azure, python, go
-
-# Social Media
-TWITTER_URL=https://twitter.com/mlorentedev
-YOUTUBE_URL=https://youtube.com/@mlorentedev
-GITHUB_URL=https://github.com/mlorentedev
-CALENDLY_URL=
-BUY_ME_A_COFFEE_URL=
-
-# Analytics
-GOOGLE_ANALYTICS_ID=
-
-# Features
-ENABLE_HOMELABS=true
-ENABLE_BLOG=true
-ENABLE_CONTACT=true
-
-# Backend
-BACKEND_URL=http://backend:8080
-
-# Beehiiv
-BEEHIIV_API_KEY=dev_key
-BEEHIIV_PUB_ID=dev_pub
-
-# Email
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_SECURE=false
-EMAIL_USER=
-EMAIL_PASS=
-```
-
-## HETZNER
-
-This project is designed to be deployed on Hetzner Cloud. You can use the `scripts/setup-hetzner.sh` script to configure your environment.
+This project is designed to be deployed on Hetzner Cloud. You can use the `scripts/setup-server.sh` script to configure your environment.
 
 You need to have a Hetzner account and API token to use this script.
 
@@ -346,11 +394,15 @@ If you want to contribute to this project, please read the [CONTRIBUTING.md](CON
 - [ ] CI/CD with GitHub Actions
 - [ ] Testing
 - [ ] Deploy to Hetzner
-- [ ] Add homelab section: learning-path, homelabs, etc. similar to Collabnix
+- [ ] HTTPS and Fail2Ban
+- [ ] Homelab section: learning-path, homelabs, etc. similar to Collabnix
 - [ ] Slack community integration with the API
 - [ ] Most recent RRSS in some section - dynamic with CI/CD
 - [ ] Indexed search by tags
 - [ ] Copy in all pages
 - [ ] Simple and minimalistic design
-- [ ] Add analytics
+- [ ] Google Analytics
+- [ ] Observability with TIG or PLG stack + alerts // Loki + Netdata
+- [ ] Docker secrets or Vault for sensitive data
+- [ ] Healthchecks for backend
 - [ ] Dynamic quotes at the end of the page
