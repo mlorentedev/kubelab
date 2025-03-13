@@ -5,7 +5,6 @@ import SectionHeader from '../../components/sections/SectionHeader.astro';
 import { getCollection } from 'astro:content';
 
 const today = new Date();
-const { page } = Astro.props as { page: { data: Project[] } };
 
 const projectsTitle = 'HomeLabs';
 const projectsSubtitle = 'Mi colección de laboratorios cloud para aprender haciendo';
@@ -16,38 +15,21 @@ const colors = {
   advanced: 'bg-red-100 text-red-800',
 };
 
-interface Project {
-  project_slug: string;
-  data: {
-    description: string;
-    title: string;
-    pubDate: Date;
-    updatedDate?: Date;
-    heroImage?: string;
-    pdf_url?: string;
-    video_url?: string;
-    githubRepo?: string;
-    tags?: string[];
-    level?: 'beginner' | 'intermediate' | 'advanced';
-  };
-}
+const projects = await getCollection('projects', (project) => {
+  return new Date(project.data.pubDate) <= today;
+});
 
-export async function getStaticPaths(
-  today = new Date()
-) {
-  const _projects = await getCollection('projects');
-  const projects_filtered = _projects
-    .filter((project) => new Date(project.data.pubDate) <= today)
-    .map((project) => ({
-      ...project,
-      project_slug: project.id,
-    }))
-    .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-  return projects_filtered;
-}
+const sortedProjects = projects
+  .map((project) => ({
+    ...project,
+    project_slug: project.id,
+  }))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
 function getLevelColor(level: keyof typeof colors | undefined) {
-  if (!level) {return '';}
+  if (!level) {
+    return '';
+  }
 
   return colors[level] || '';
 }
@@ -67,7 +49,7 @@ function getLevelColor(level: keyof typeof colors | undefined) {
 
     <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
       {
-        page.data.map((project) => (
+        sortedProjects.map((project) => (
           <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
             {project.data.heroImage && (
               <div class="h-48 overflow-hidden">

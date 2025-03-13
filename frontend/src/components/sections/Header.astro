@@ -63,38 +63,4 @@ const avatarPic = '/images/me-2.webp';
   <Dropdown />
 </header>
 
-<script is:inline>
-  const toggleButton = document.getElementById('menu-toggle');
-  const menu = document.getElementById('menu');
-  const menuLinks = document.querySelectorAll('.menu-link');
-
-  function closeMenu() {
-    if (!menu.classList.contains('hidden')) {
-      menu.classList.add('hidden');
-      toggleButton.classList.remove('border-gray-800', 'bg-gray-300', 'text-gray-800');
-      toggleButton.classList.add('border-gray-600', 'bg-gray-100', 'text-gray-800');
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', closeMenu);
-
-  toggleButton.addEventListener('click', () => {
-    menu.classList.toggle('hidden');
-
-    if (menu.classList.contains('hidden')) {
-      toggleButton.classList.remove('border-gray-800', 'bg-gray-300', 'text-gray-800');
-      toggleButton.classList.add('border-gray-600', 'bg-gray-100', 'text-gray-800');
-    } else {
-      toggleButton.classList.add('border-gray-800', 'bg-gray-300', 'text-gray-800');
-      toggleButton.classList.remove('border-gray-600', 'bg-gray-100', 'text-gray-800');
-    }
-  });
-
-  menuLinks.forEach((link) => {
-    link.addEventListener('click', closeMenu);
-  });
-
-  window.addEventListener('scroll', closeMenu);
-  window.addEventListener('resize', closeMenu);
-  window.addEventListener('orientationchange', closeMenu);
-</script>
+<script is:inline src="/assets/dropdown-menu.js"></script>

@@ -3,16 +3,16 @@ const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.pr
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
-  <form 
-    hx-post="/api/subscribe" 
-    hx-trigger="submit" 
+  <form
+    hx-post="/api/subscribe"
+    hx-trigger="submit"
     hx-target="#status-message"
     hx-swap="innerHTML"
-    class="flex flex-col gap-6">
-    
+    class="flex flex-col gap-6"
+  >
     <input type="hidden" name="tag" value={tag} />
     <input type="hidden" name="utm_source" value={utm_source} />
-    
+
     <input
       type="email"
       name="email"

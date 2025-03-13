@@ -12,12 +12,13 @@ const emailFromParam = searchParams.get('email') || '';
 
 <IndexLayout title={title} description={subtitle} lang={lang}>
   <section class="max-w-md mx-auto p-8 bg-white rounded-lg shadow-md">
-    <form 
-      id="unsubscribe-form" 
+    <form
+      id="unsubscribe-form"
       class="flex flex-col gap-4"
       hx-post="/api/unsubscribe"
       hx-target="#status-message"
-      hx-swap="innerHTML">
+      hx-swap="innerHTML"
+    >
       <div>
         <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
           Correo electrónico

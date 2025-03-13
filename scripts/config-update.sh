@@ -1,7 +1,7 @@
 #!/bin/bash
-# update-env.sh - Update environment variables on the server
-# Usage: ./update-env.sh <environment>
-# Example: ./update-env.sh production
+# config-update.sh - Update environment variables on the server
+# Usage: ./config-update.sh <environment>
+# Example: ./config-update.sh production
 set -e
 
 # Source utilities

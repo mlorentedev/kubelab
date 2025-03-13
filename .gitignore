@@ -17,6 +17,12 @@ build/
 .env.development
 .env.production
 .env.dev
+frontend/.env
+backend/.env
+frontend/.env.*
+backend/.env.*
+frontend/.env.local
+backend/.env.local
 
 # Directorios temporales y de caché
 tmp/
