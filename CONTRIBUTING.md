@@ -2,139 +2,85 @@
 
 ## 🌿 Branch Naming Conventions
 
-- `master`: Stable code for production
-- `develop`: Active development and integration
-- `feature/*`: Feature branches for new functionality
-- `hotfix/*`: Hotfix branches for urgent fixes
+`master`: Stable code for production  
+`develop`: Active development and integration  
+`feature/*`: Feature branches for new functionality  
+`hotfix/*`: Hotfix branches for urgent fixes  
 
-### Workflow
+**Examples:**
 
-1. Create a new branch from `develop` for new features (`feature/name`) or from `master` for hotfixes (`hotfix/name`)
+```bash
+# Feature branch example
+git checkout -b feature/add-user-authentication
 
-2. Make your changes and commit them
+# Hotfix branch example
+git checkout -b hotfix/fix-login-bug
+```
 
-3. Create a Pull Request to merge your branch into `develop`.
+## 🔄 Workflow
 
-4. After code review and approval, merge your branch into `develop`.
+1. **Create a branch**:  
+   - For new features: branch off `develop` → `feature/[short-descriptive-name]`  
+   - For hotfixes: branch off `master` → `hotfix/[short-descriptive-name]`  
 
-### Code conventions
+2. **Make your changes** and commit them following the commit guidelines (see below).  
 
-- Frontend: Follow the Astro and HTMX conventions.
-- Backend: Follow the Go conventions.
-- Commits: Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+3. **Push your branch** and open a Pull Request (PR) to merge into `develop`.  
 
-### 1. Master Branch
+4. **Review and approval**: Request a code review. Address any feedback and ensure CI checks pass.  
 
-- Branch Name: `master`
-- Purpose: Main production branch
+5. **Merge your PR** into `develop` after approval.  
 
-### 2. Feature Branches
+## 📝 Commit Message Format
 
-- Format: `feature/[descriptive-name]`
-- Rules:
-  - Must start with `feature/`
-  - Use lowercase letters
-  - Separate words with hyphens
-- Examples:
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) standard to keep commit history clear and consistent:
 
-  ```git
-  feature/add-login-page
-  feature/improve-navigation
-  feature/user-authentication
-  ```
+**Format:** `<type>(<optional scope>): <description>`
 
-### 3. Hotfix Branches
+**Allowed Types:**
 
-- Format: `hotfix/[descriptive-name]`
-- Rules:
-  - Must start with `hotfix/`
-  - Use lowercase letters
-  - Separate words with hyphens
-- Examples:
+- `feat` → New feature  
+- `fix` → Bug fix  
+- `docs` → Documentation update  
+- `style` → Code style changes (formatting, no logic changes)  
+- `refactor` → Code restructuring without changing behavior  
+- `test` → Adding or improving tests  
+- `chore` → Maintenance tasks (e.g., dependency updates)  
 
-  ```git
-  hotfix/security-vulnerability
-  hotfix/fix-login-bug
-  hotfix/update-dependencies
-  ```
+**Examples:**
 
-## 📝 Pull Request Title Conventions
+```bash
+git commit -m "feat(auth): add user registration feature"
+git commit -m "fix(api): resolve pagination issue"
+git commit -m "docs: update installation instructions"
+git commit -m "refactor: simplify database query logic"
+git commit -m "chore: update npm dependencies"
+```
 
-### Conventional Commits Format
+## 🚦 Pull Request Guideline
 
-`<type>(<optional scope>): <description>`
+When opening a Pull Request:
 
-### Allowed Types
+- **Title**: Use the same Conventional Commit format for the PR title.  
+- **Description**: Clearly explain what the PR does and why it’s needed. Add context, screenshots, or references if helpful.  
+- **Link issues**: If applicable, mention related issues (e.g., `Closes #42`).  
+- **Ensure tests pass**: All CI checks and tests must pass before merging.  
+- **Request a review**: Assign at least one reviewer for feedback. s
 
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style updates
-- `refactor`: Code refactoring
-- `test`: Test-related changes
-- `chore`: Maintenance tasks
+## ✅ Best Practices
 
-### PR Title Examples
+- **Keep branches focused**: One feature or fix per branch.  
+- **Write meaningful commit messages**: Clearly explain the purpose of each change.  
+- **Keep PRs small**: Easier to review and less prone to merge conflicts.  
+- **Rebase frequently**: Keep your branch up to date with `develop`.  
+- **Write tests**: Ensure new functionality has adequate test coverage.
 
-#### Features
+## 🚫 What to Avoid
 
-- `feat: add user registration`
-- `feat(auth): implement login functionality`
-
-#### Bug Fixes
-
-- `fix: resolve pagination issue`
-- `fix(api): handle authentication error`
-
-#### Documentation
-
-- `docs: update README with installation instructions`
-- `docs(api): improve code comments`
-
-#### Code Style
-
-- `style: format code with prettier`
-- `style(css): improve responsive design`
-
-#### Refactoring
-
-- `refactor: simplify user service`
-- `refactor(database): optimize query performance`
-
-#### Testing
-
-- `test: add unit tests for user model`
-- `test(e2e): implement login flow tests`
-
-#### Maintenance
-
-- `chore: update npm dependencies`
-- `chore(ci): improve GitHub Actions workflow`
-
-## 🤝 Contribution Workflow
-
-1. Create a new branch from `master`
-2. Follow branch naming conventions
-3. Make your changes
-4. Write clear, descriptive commit messages
-5. Open a Pull Request with a conventional commit title
-6. Ensure all CI checks pass
-7. Request a code review
-
-## 💡 Best Practices
-
-- Keep branches focused and atomic
-- Write clear, concise descriptions
-- Break large features into smaller, manageable branches
-- Rebase your branch on the latest `master` before creating a PR
-- Ensure your code passes all linting and testing checks
-
-## 🚨 What to Avoid
-
-- Don't create branches with unclear or generic names
-- Avoid mixing multiple features in a single branch
-- Don't ignore linting or testing failures
-- Never force-push to `master`
+- **Vague branch names**: Use descriptive and focused names.  
+- **Mixing unrelated changes**: Stick to one feature or fix per branch.  
+- **Ignoring failing tests**: Fix issues before merging.  
+- **Force-pushing to `master`**: Never do this — use PRs for all changes.  
 
 ## 📢 Need Help?
 

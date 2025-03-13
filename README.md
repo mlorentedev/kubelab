@@ -2,393 +2,479 @@
 
 This is my minimal website [mlorente.dev](https://mlorente.dev) with modern architecture based in containers.
 
-## Architecture
+This project demonstrates a production-ready microservices approach using containers, seamlessly integrating a static frontend with a dynamic backend. It showcases best practices for development, deployment, and maintenance of a modern web application with minimal JavaScript.
 
-This project  uses a microservice architecture with the following technologies:
+## Technology Stack
 
-- **Frontend**: Astro with HTMX and Tailwind CSS
-- **Backend**: API RESTful with Go and Gin
-- **Deployment**: Docker containers in Hetzner Cloud
+- **Frontend**:
 
-Inside of this project, you'll see the following folders and files:
+  - [Astro](https://astro.build) for static site generation and server-side rendering
+  - [HTMX](https://htmx.org) for dynamic content without complex JavaScript
+  - [TailwindCSS](https://tailwindcss.com) for utility-first styling
+  - Minimal client-side JavaScript for enhanced performance
+
+- **Backend**:
+  - [Go](https://golang.org) for high-performance API services
+  - Clean architecture with clear separation of concerns
+  - RESTful API design principles
+  - Structured logging and error handling
+
+- **Infrastructure**:
+  - [Docker](https://www.docker.com) for containerization and consistent environments
+  - [Docker Compose](https://docs.docker.com/compose) for service orchestration
+  - [GitHub Actions](https://github.com/features/actions) for CI/CD automation
+  - [Nginx](https://nginx.org) as reverse proxy and SSL termination
+  - [Let's Encrypt](https://letsencrypt.org) for SSL certificates
+
+## Project Structure
 
 ```text
-|── .github/
-|   |── workflows/
-|── .vscode/
-├── backend
-│   ├── cmd
-│   │   └── server
-│   ├── internal
-│   │   ├── api
-│   │   ├── constants
-│   │   ├── models
-│   │   └── services
-│   └── pkg
-│       ├── config
-│       └── logger
-├── docker
-│   ├── backend
-│   ├── frontend
-│   └── nginx
-├── frontend
-│   ├── public
-│   │   ├── cv
-│   │   ├── fonts
-│   │   ├── images
-│   │   │   ├── homelab
-│   │   │   └── me
-│   │   └── pdf
-│   └── src
-│       ├── components
-│       │   ├── common
-│       │   ├── features
-│       │   │   ├── booking
-│       │   │   ├── homelab
-│       │   │   ├── recent
-│       │   │   └── subscription
-│       │   └── sections
-│       ├── content
-│       │   ├── projects
-│       │   └── resources
-│       ├── data
-│       ├── layouts
-│       ├── pages
-│       │   ├── api
-│       │   ├── projects
-│       │   └── resources
-│       └── styles
-|── scripts/
-|── .env.dev
-|── .gitignore
-|── CONTRIBUTING.md
-|── docker-compose.dev.yml
-|── docker-compose.yml
-|── LICENSE
-|── README.md
+|── .github/workflows/      # CI/CD workflows
+├── backend/                # Go backend services
+│   ├── cmd/server/         # Application entry point
+│   ├── internal/           # Private application code
+│   └── pkg/                # Shared packages
+├── docker/                 # Docker configuration files
+├── frontend/               # Astro application
+│   ├── public/             # Static assets
+│   └── src/                # Source code
+│       ├── components/     # UI components
+│       ├── content/        # Markdown/MDX content
+│       ├── layouts/        # Page templates
+│       └── pages/          # Route definitions
+├── scripts/                # Utility scripts
+└── .env.dev               # Development environment variables
 ```
 
-## Requirements
+## Getting Started
 
-- [Node.js](https://nodejs.org) version 18.0.0 or higher
-- [npm](https://www.npmjs.com/get-npm) version 6.0.0 or higher
-- [Docker](https://www.docker.com/get-started) (optional, for deployment)
-- [Docker Compose](https://docs.docker.com/compose/install/) (optional, for deployment)
-- [Go](https://golang.org/dl/) version 1.18 or higher (optional, for backend development)
+### Requirements
 
-## Environment Setup
-
-### Environment variables
-
-This project has a single `.env` file in the root directory that contains environment variables for both the frontend and backend.
-
-- `.env.dev`: Development environment variables
-- `/opt/mlorente/.env`: Production environment variables (generated during deployment)
+- Node.js 18.0.0+
+- npm 6.0.0+
+- Docker and Docker Compose (for containerized development)
+- Go 1.18+ (for backend development)
 
 ### Initial Setup
 
 1. Clone the repository:
 
-    ```bash
-    git clone
-    cd mlorente.dev
-    ```
+   ```bash
+   git clone https://github.com/username/mlorente.dev.git
+   cd mlorente.dev
+   ```
 
-2. To configure the development environment:
+2. Setup development environment:
 
-    ```bash
-    # Prepare development environment
-    ./scripts/dev-setup.sh
+   ```bash
+   # Configure development environment
+   ./scripts/dev-setup.sh
+   ```
 
-    # Configure GitHub secrets (for CI/CD)
-    ./scripts/setup-github-secrets.sh
+### Development Workflow
 
-    # Configure production server on Hetzner
-    ./scripts/setup-server.sh 123.456.789.0 production
-
-    # Configure staging server on Hetzner
-    ./scripts/setup-server.sh 123.456.789.1 staging
-    ```
-
-### Local development
-
-#### Containerized Development
-
-To run the project in a containerized environment for development, use Docker Compose.
+#### Containerized Development (Recommended)
 
 ```bash
 # Start all services
 docker-compose -f docker-compose.dev.yml up
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f
-
-# View logs for a specific service
-docker-compose -f docker-compose.dev.yml logs -f <service_name>
+docker-compose -f docker-compose.dev.yml logs -f [service_name]
 
 # Stop all services
 docker-compose -f docker-compose.dev.yml down
 ```
 
-With this setup:
+Containerized development provides:
 
-- Frontend is accessible at `http://localhost:3000`
-- Backend is accessible at `http://localhost:8080`
+- Frontend at <http://localhost:3000>
+- Backend at <http://localhost:8080>
+- Hot reloading for both frontend and backend
+- Consistent environment across team members
 
-This mode includes:
+#### Individual Component Development
 
-- Hot reloading for frontend changes with Astro
-- Hot reloading for backend changes with Air
-- Mounted volumes for easy development
+**Frontend**:
 
-#### Non-Containerized Development
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-If you prefer not to use Docker for development, you can run the frontend and backend separately.
+**Backend**:
 
-1. **Frontend**: Navigate to the `frontend` directory and run:
+```bash
+cd backend
+go mod download
+go run cmd/server/main.go
+```
 
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-2. **Backend**: Navigate to the `backend` directory and run:
-
-   ```bash
-   go mod download
-   go run cmd/server/main.go
-    ```
-
-Need to install Air for hot reloading:
+For hot reloading with Go:
 
 ```bash
 go install github.com/cosmtrek/air@latest
+air
 ```
 
-### Production Deployment
+## API Endpoints
 
-#### CI/CD
+The backend exposes these RESTful endpoints to support the frontend application:
 
-The project is configured for CI/CD using GitHub Actions. Ensure you have set up the necessary secrets in your GitHub repository.
+- **`/api/subscribe`**:
+  - **Method**: POST
+  - **Purpose**: Register a new email for newsletter subscription
+  - **Request Body**: `{ "email": "user@example.com", "tags": ["tag1", "tag2"], "utmSource": "source" }`
+  - **Response**: Subscription confirmation with subscriber ID
 
-- Any push to the `master` branch will trigger a deployment to production.
-- Any push to the `feature/*` or `hotfix/*` branch will trigger a deployment to staging.
+- **`/api/unsubscribe`**:
+  - **Methods**: POST, GET
+  - **Purpose**: Remove an email from newsletter subscriptions
+  - **Request Body** (POST): `{ "email": "user@example.com" }`
+  - **Query Params** (GET): `?email=user@example.com`
+  - **Response**: Confirmation of unsubscription
 
-The project is configured for automated deployment through GitHub Actions:
+- **`/api/lead-magnet`**:
+  - **Method**: POST
+  - **Purpose**: Subscribe user and send a resource (lead magnet)
+  - **Request Body**: `{ "email": "user@example.com", "resourceId": "id", "fileId": "file", "tags": ["tag1"] }`
+  - **Response**: Confirmation of subscription and resource delivery
 
-1. Frontend CI: Tests and builds the frontend
+- **`/api/resource-email`**:
+  - **Method**: POST
+  - **Purpose**: Send an email with resource to existing subscriber
+  - **Request Body**: `{ "email": "user@example.com", "resourceId": "id", "resourceLink": "url" }`
+  - **Response**: Confirmation of email delivery
 
-    - Triggers: Changes in /frontend or related workflows
-    - Process: Lint, tests, build and push Docker image
-    - Result: Updated Docker image for the frontend
+These endpoints utilize HTMX-compatible responses, allowing for seamless frontend integration without complex JavaScript.
 
-2. Backend CI: Tests and builds the backend
+## Deployment
 
-    - Triggers: Changes in /backend or related workflows
-    - Process: Go vet, tests, build and push Docker image
-    - Result: Updated Docker image for the backend
+### CI/CD Pipeline
 
-3. Deploy: Unified deployment
+The project uses GitHub Actions for continuous integration and deployment with separate workflows for frontend and backend:
 
-    - Triggers: Completion of CI or manual from GitHub
-    - Process: Updates services on the server
-    - Scripts: Uses external scripts for complex deployment logic
-    - Environments: Staging (for develop branch) or Production (for master branch)
+#### Frontend CI Workflow
 
-#### Branch strategy
+- **Trigger**: Changes to `/frontend` or workflow files
+- **Steps**:
+  1. Checkout code
+  2. Setup Node.js environment
+  3. Install dependencies
+  4. Run linting and type checking
+  5. Execute tests
+  6. Build the application
+  7. Create and push Docker image
 
-The project follows this branch strategy:
+#### Backend CI Workflow
 
-`master`: Stable code for production deployment  
-`develop`: Active development and integration  
-`feature/*`: Feature branches for new functionality  
-`hotfix/*`: Hotfix branches for urgent fixes  
+- **Trigger**: Changes to `/backend` or workflow files
+- **Steps**:
+  1. Checkout code
+  2. Setup Go environment
+  3. Install dependencies
+  4. Run `go vet` for static analysis
+  5. Execute tests
+  6. Build the application
+  7. Create and push Docker image
 
-#### Automated Deployment
+#### Deploy Workflow
 
-This project implements an hybrid approach for deployment. The frontend is deployed using GitHub Actions, while the backend is deployed manually with some scripts.
+- **Trigger**:
+  - Completion of CI workflows
+  - Manual trigger from GitHub UI
+  - Repository dispatch event
+- **Environment Selection**:
+  - `master` branch → Production (`mlorente.dev`)
+  - `feature/*` or `hotfix/*` branches → Staging (`staging.mlorente.dev`)
+- **Steps**:
+  1. Connect to server via SSH
+  2. Update configuration
+  3. Pull latest Docker images
+  4. Apply database migrations (if needed)
+  5. Restart services
+  6. Run health checks
 
-- `scripts/deploy.sh`: Deploy from CI/CD to production
-- `scripts/update-env.sh`: Update environment variables
-- `scripts/rollback.sh`: Rollback to previous version in case of issues
+### Branch Strategy
 
-#### Manual Deployment
+- **`master`**: Production-ready code, deployed to production
+- **`develop`**: Integration branch for feature development
+- **`feature/*`**: Isolated feature development, merged to develop
+- **`hotfix/*`**: Urgent fixes applied directly to master and develop
 
-If you need to deploy manually, you can use the following commands in the server:
+### Deployment Environments
+
+| Environment | URL | Purpose | Access |
+|-------------|-----|---------|--------|
+| Production | mlorente.dev | Live site | Public |
+| Staging | staging.mlorente.dev | Pre-release testing | Private |
+
+### Manual Deployment
+
+For situations where CI/CD is not suitable, manual deployment is possible:
 
 ```bash
-# Deployment in staging
-./scripts/deploy.sh staging
-
-# Deployment in production
+# Deploy to production
 ./scripts/deploy.sh production
 
-# Direct deployment in production
+# Deploy to staging
+./scripts/deploy.sh staging
+
+# Direct deployment on production server
 cd /opt/mlorente
 docker-compose pull
 docker-compose up -d
 ```
 
-## API
+### Deployment Verification
 
-Backend expose below endpoints:
+After deployment, automatic health checks verify the application status:
 
-- `/api/subscribe`: Subscribe to newsletter
-- `/api/unsubscribe`: Unsubscribe from newsletter
-- `/api/lead-magnet`: Subscribe to newsletter and send lead magnet
-- `/api/resource-email`: Send email with resource
+```bash
+# Check application health
+./scripts/health-check.sh production
+
+# View deployment logs
+./scripts/deployment-logs.sh production
+```
+
+## Infrastructure
+
+### Hosting Environment
+
+The application is hosted on Hetzner Cloud with the following specifications:
+
+#### Production Server
+
+- **Hostname**: `mlorente.dev`
+- **Server Type**: Hetzner CX41 (4 vCPU, 16GB RAM)
+- **Location**: Falkenstein, Germany (EU-central)
+- **Operating System**: Ubuntu 22.04 LTS
+- **Firewall**: UFW with restricted access
+- **Monitoring**: Node Exporter + Prometheus
+
+#### Staging Server
+
+- **Hostname**: `staging.mlorente.dev`
+- **Server Type**: Hetzner CX21 (2 vCPU, 4GB RAM)
+- **Location**: Falkenstein, Germany (EU-central)
+- **Operating System**: Ubuntu 22.04 LTS
+- **Firewall**: UFW with restricted access
+
+### Server Setup
+
+Each server is configured using the `setup-server.sh` script, which:
+
+1. Updates the system
+2. Installs Docker and Docker Compose
+3. Configures firewall rules
+4. Sets up fail2ban for SSH protection
+5. Creates a non-root deployment user
+6. Configures automatic security updates
+7. Sets up Let's Encrypt certificates
+
+### Docker Images
+
+Docker images are stored on DockerHub with the following versioning scheme:
+
+#### Frontend Images
+
+- `mlorentedev/mlorente-frontend:latest` - Production version (master branch)
+- `mlorentedev/mlorente-frontend:develop` - Development version
+- `mlorentedev/mlorente-frontend:[commit-hash]` - Specific commit version
+- `mlorentedev/mlorente-frontend:feature-*` - Feature branch versions
+
+#### Backend Images
+
+- `mlorentedev/mlorente-backend:latest` - Production version (master branch)
+- `mlorentedev/mlorente-backend:develop` - Development version
+- `mlorentedev/mlorente-backend:[commit-hash]` - Specific commit version
+- `mlorentedev/mlorente-backend:feature-*` - Feature branch versions
+
+### Network Architecture
+
+```text
+                   ┌─────────────┐
+                   │    Nginx    │
+                   │Reverse Proxy│
+                   └──────┬──────┘
+                          │
+                          ▼
+          ┌───────────────┴───────────────┐
+          │                               │
+┌─────────▼──────────┐       ┌────────────▼─────────┐
+│                    │       │                      │
+│  Frontend (Astro)  │       │   Backend (Go API)   │
+│                    │       │                      │
+└────────────────────┘       └──────────────────────┘
+```
+
+All services run as Docker containers orchestrated with Docker Compose, with Nginx serving as the entry point and handling SSL termination.
 
 ## Troubleshooting
 
-- Server does not respond. Check if the containers are running:
+### Common Issues and Solutions
+
+#### Application Not Responding
+
+If the application is not responding, first check the container status:
 
 ```bash
 docker-compose ps
+```
+
+Look for containers in an unhealthy state or containers that have restarted multiple times. If needed, restart services:
+
+```bash
 docker-compose restart
 ```
 
-- Frontend gets errors. View logs:
+#### Frontend Errors
+
+For issues with the frontend application:
 
 ```bash
 docker-compose logs frontend
 ```
 
-- Backend gets errors. View logs:
+Common frontend issues include:
+
+- Missing environment variables
+- Build failures due to syntax errors
+- Static asset loading problems
+- CORS issues when communicating with the backend
+
+#### Backend Errors
+
+For backend service issues:
 
 ```bash
 docker-compose logs backend
 ```
 
-- SSL issues. Ensure your domain is correctly configured and SSL certificates are valid or restart certbot:
+Common backend issues include:
+
+- Database connection failures
+- API validation errors
+- External service integration problems
+- Resource constraints (memory/CPU)
+
+#### SSL Certificate Issues
+
+If experiencing SSL errors:
 
 ```bash
+# Check certificate status
+docker-compose exec nginx openssl x509 -in /etc/letsencrypt/live/mlorente.dev/fullchain.pem -text -noout
+
+# Restart certbot to attempt renewal
 docker-compose restart certbot
 ```
 
-- Environment variables issues. If you are missing environment variables, check the `.env` file or the GitHub secrets.
+#### Deployment Failures
+
+If a deployment fails or introduces issues:
+
+```bash
+# List available versions
+./scripts/rollback.sh production list
+
+# Roll back to a specific version
+./scripts/rollback.sh production v1.2.3
+```
+
+#### Environment Variable Problems
+
+If environment variables are missing or incorrect:
 
 ```bash
 # Update environment variables
 ./scripts/update-env.sh production
 ```
 
-- If a deployment fails, you can rollback to the previous version:
+## Advanced Operations
+
+The project includes utility scripts for maintenance and operational tasks:
+
+### Performance Testing
+
+Test the performance of individual endpoints or the entire application:
 
 ```bash
-# List available versions
-./scripts/rollback.sh production
+# Test performance of all endpoints in production
+./scripts/monitor-performance.sh production
 
-# Rollback to a specific version
-./scripts/rollback.sh production v1.2.3
+# Test specific endpoint with 1000 requests and 50 concurrent users
+./scripts/monitor-performance.sh production /api/subscribe 1000 50
+
+# Compare performance between environments
+./scripts/monitor-performance.sh compare production staging
 ```
 
-## Advanced operations
+The performance testing script uses `wrk` under the hood and provides metrics on:
 
-The project includes several advanced scripts for operations and maintenance:
+- Requests per second
+- Average response time
+- P95/P99 response times
+- Error rates
 
-### Performance testing
+### Security Verification
 
-To test the performance of the backend:
+Verify security configuration and identify potential vulnerabilities:
 
 ```bash
-# Basic performance test
-./scripts/perf-test.sh production
+# Comprehensive security scan of production environment
+./scripts/monitor-security.sh production
 
-# Test specific endpoint
-./scripts/perf-test.sh production /api/subscribe
+# Check specific aspect (ssl, headers, firewall, etc.)
+./scripts/monitor-security.sh production ssl
+
+# Generate a detailed security report
+./scripts/monitor-security.sh production --report
 ```
 
-### Security checks
+The security check includes:
 
-Verify the security configuration of the server:
+- SSL configuration and certificate validation
+- HTTP security headers
+- Firewall rule verification
+- Open port scanning
+- Docker configuration best practices
+
+### Log Analysis
+
+Analyze application logs to identify issues or patterns:
 
 ```bash
-# Check server security
-./scripts/security-check.sh production
-```
-
-### Log analysis
-
-Analyse application logs:
-
-```bash
-# Analyze all logs
-./scripts/analyze-logs.sh production
+# Analyze all service logs in production
+./scripts/monitor-logs.sh production
 
 # Analyze specific service logs
-./scripts/analyze-logs.sh production nginx
+./scripts/monitor-logs.sh production nginx
+
+# Focus on errors only
+./scripts/monitor-logs.sh production --errors-only
+
+# Analyze logs within a time period
+./scripts/monitor-logs.sh production --since "2023-01-01" --until "2023-01-02"
 ```
 
-## Aditional notes
+The log analysis provides:
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name and its language parameter.
+- Error frequency and patterns
+- Request path analysis
+- Performance bottlenecks
+- User behavior insights
+- Anomaly detection
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+## Additional Resources
 
-The `src/content/` directory contains "collections" of related Markdown and MDX documents.
-The `src/content/config.ts` file adds the `slug` key as a property to the collections. This is the slug that will be used in the header, blogs list page and as canonical and alternate URLs.
+- [CONTRIBUTING.md](CONTRIBUTING.md): Contribution guidelines
+- [LICENSE](LICENSE): MIT License information
+- [scripts/README.md](scripts/README.md): Documentation for utility scripts
 
-Any static assets, like images, can be placed in the `public/` directory.
-
-## Server
-
-This project is designed to be deployed on Hetzner Cloud. You can use the `scripts/setup-server.sh` script to configure your environment.
-
-You need to have a Hetzner account and API token to use this script.
-
-This project is intended to be used with CAX21 or higher instances, and initially these are the steps:
-
-1. Create a new server with Ubuntu 22.04 or higher.
-2. Enable IPv4 and IPv6.
-3. Add a public network interface.
-4. Add a private network interface (optional, but recommended for internal communication).
-5. SSH key for access.
-
-    ```bash
-    ssh-keygen -t ed25519 -C "mlorentedev@deployment"
-    # This will create:
-    # - Private key: ~/.ssh/id_ed25519
-    # - Public key: ~/.ssh/id_ed25519.pub
-    ```
-
-6. Intial server hardening:
-
-    - Disable root login
-    - Configure fail2ban to protect SSH
-    - Setup automatic security updates
-    - Configure UFW firewall
-
-7. Connect to the server and run the setup script.
-
-    ```bash
-    ssh root@your_server_ip
-    bash <(curl -s https://raw.githubusercontent.com/mlorentedev/mlorente.dev/master/scripts/setup-hetzner.sh)
-    ```
-
-8. Follow the instructions to complete the setup.
-9. After the setup, you can access your site at `http://your_server_ip`.
-10. For production, you need to configure a domain and SSL certificates.
-11. For staging, you can use a subdomain or a different domain.
-12. For SSL, you can use Let's Encrypt with Certbot.
-
-For SSH access, you can use the private key generated in step 5.
-
-```bash
-# Copy public key to server manually
-ssh-copy-id -i ~/.ssh/id_ed25519.pub deployer@your_server_ip
-```
-
-For further details about scripting and automation, refer to the [scripts/README.md](scripts/README.md) file.
-
-## LICENSE
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
-
-## CONTRIBUTING
-
-If you want to contribute to this project, please read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
-
-## TODO
+## Roadmap
 
 - [ ] Script to populate secrets in GitHub Actions
 - [ ] CI/CD with GitHub Actions

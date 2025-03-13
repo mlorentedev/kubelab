@@ -1,114 +1,239 @@
-# Project Scripts
+# mlorente.dev Deployment & Management Scripts
 
-## Overview
+This directory contains a comprehensive set of scripts for managing the mlorente.dev project throughout its lifecycle - from initial development setup to production deployment and monitoring.
 
-This directory contains utility scripts for managing the development, deployment, and configuration of the mlorente.dev project.
+## Common Utilities
 
-## Prerequisites
+All scripts use a shared utilities library that provides consistent functions for:
 
-- Bash shell
-- GitHub CLI (`gh`)
-- Docker
-- Docker Compose
-- SSH key pair
+- Logging and colors
+- Environment validation
+- Server connectivity checks
+- Dependency verification
+- User confirmation prompts
+- SSH key management
+- Error handling
 
-## Scripts
+## Setup Scripts
 
-### 1. `dev-setup.sh`
+### Development Environment
 
-Configures local development environment for the project.
+- **`setup-dev.sh`** - Sets up the local development environment
+  - Creates development configuration files (.env.dev, docker-compose.dev.yml)
+  - Creates Docker configuration for frontend and backend
+  - Initializes basic project structure
+  - Starts development services
+  - **Usage:** `./setup-dev.sh`
 
-#### Usage
+### Server Configuration
 
-```bash
-./dev-setup.sh
-```
+- **`setup-server.sh`** - Configures a new server for deployment
+  - Installs required packages (Docker, Nginx, etc.)
+  - Sets up security (firewall, fail2ban)
+  - Creates deployment user with proper permissions
+  - Configures SSL with Let's Encrypt
+  - Creates application directory structure
+  - **Usage:** `./setup-server.sh <server_ip> <environment>`
+  - **Example:** `./setup-server.sh 123.456.789.0 production`
 
-#### Features
+### CI/CD Configuration
 
-- Checks Docker and Docker Compose installation
-- Creates `.env.dev` file
-- Generates development Docker Compose configuration
-- Prepares Dockerfiles for frontend and backend
-- Configures hot-reload for backend
+- **`setup-ci.sh`** - Configures GitHub repository secrets for CI/CD
+  - Sets up deployment credentials
+  - Configures environment variables for all environments
+  - Sets API keys and integration tokens
+  - **Usage:** `./setup-ci.sh`
 
-### 2. `setup-github-secrets.sh`
+- **`setup-ssh.sh`** - Comprehensive SSH key management
+  - Generates SSH keys for deployment
+  - Adds keys to servers
+  - Configures GitHub secrets for SSH keys
+  - Creates SSH config entries
+  - **Usage:** `./setup-ssh.sh`
 
-Helps configure GitHub repository secrets.
+## Deployment Scripts
 
-#### Prerequisites
+### Deployment Management
 
-- Authenticated GitHub CLI (`gh auth login`)
-- Access to repository
+- **`deploy-app.sh`** - Deploys the application to staging or production
+  - Pulls the latest code from the repository
+  - Backs up existing configuration
+  - Updates Docker containers
+  - Verifies deployment success
+  - **Usage:** `./deploy-app.sh <environment> [version]`
+  - **Example:** `./deploy-app.sh production v1.2.3`
 
-#### Usage
+- **`deploy-rollback.sh`** - Rolls back to a previous version
+  - Lists available versions if none specified
+  - Creates backups before rollback
+  - Verifies successful rollback
+  - **Usage:** `./deploy-rollback.sh <environment> [version]`
+  - **Example:** `./deploy-rollback.sh production v1.1.0`
 
-```bash
-./setup-github-secrets.sh
-```
+### Configuration Management
 
-#### Features
+- **`config-update.sh`** - Updates environment variables on the server
+  - Validates critical variables
+  - Creates a backup of previous configuration
+  - Restarts services after updating
+  - **Usage:** `./config-update.sh <environment>`
+  - **Example:** `./config-update.sh staging`
 
-- Interactively set GitHub secrets
-- Supports configuration for different environments
-- Covers various secret types (SSH, DockerHub, server configs)
+## Monitoring & Diagnostic Scripts
 
-### 3. `setup-hetzner.sh`
+### Status Monitoring
 
-Configures Hetzner server for staging or production.
+- **`monitor-status.sh`** - Checks the status of all services
+  - Displays system information (CPU, memory, disk)
+  - Shows container status and health
+  - Displays recent logs
+  - Verifies application accessibility
+  - **Usage:** `./monitor-status.sh <environment>`
+  - **Example:** `./monitor-status.sh production`
 
-#### Usage
+### Log Analysis
 
-```bash
-./setup-hetzner.sh [production|staging]
-```
+- **`monitor-logs.sh`** - Analyzes application logs
+  - Shows most visited URLs
+  - Displays error summaries
+  - Analyzes API endpoint usage
+  - Identifies error patterns
+  - **Usage:** `./monitor-logs.sh <environment> [service]`
+  - **Example:** `./monitor-logs.sh production nginx`
 
-#### Features
+### Security Checks
 
-- Server configuration for different environments
-- Firewall and security setup
-- Docker and deployment user configuration
-- SSL certificate generation option
+- **`monitor-security.sh`** - Performs comprehensive security audit
+  - Checks server configuration (firewall, SSH, etc.)
+  - Validates SSL certificates
+  - Tests HTTP security headers
+  - Identifies potential vulnerabilities
+  - **Usage:** `./monitor-security.sh <environment>`
+  - **Example:** `./monitor-security.sh production`
 
-### 4. `ssh-key-management.sh`
+### Performance Testing
 
-Comprehensive SSH key management tool.
+- **`monitor-performance.sh`** - Runs performance tests against the application
+  - Measures response times and latency
+  - Performs load testing with various concurrency levels
+  - Generates detailed performance reports
+  - **Usage:** `./monitor-performance.sh <environment> [path]`
+  - **Example:** `./monitor-performance.sh staging /api/subscribe`
 
-#### Usage
+## Workflow Examples
 
-```bash
-./ssh-key-management.sh
-```
+### New Project Setup
 
-#### Features
+1. Initial setup:
 
-- Generate SSH keys
-- Add keys to servers
-- Configure GitHub secrets
-- Generate SSH config
-- Interactive menu-driven interface
+   ```bash
+   # Set up development environment
+   ./setup-dev.sh
+   
+   # Develop and test locally
+   cd frontend
+   npm run dev
+   ```
 
-## Security Recommendations
+2. Server preparation:
 
-- Use strong, unique passphrases for SSH keys
-- Limit SSH key permissions
-- Regularly rotate SSH keys
-- Use key-based authentication
-- Disable password login on servers
+   ```bash
+   # Generate SSH keys
+   ./setup-ssh.sh
+   
+   # Configure new server
+   ./setup-server.sh 123.456.789.0 staging
+   
+   # Configure GitHub secrets for CI/CD
+   ./setup-ci.sh
+   ```
 
-## Troubleshooting
+3. Initial deployment:
 
-- Ensure all scripts have executable permissions: `chmod +x *.sh`
-- Verify dependencies are installed
-- Check GitHub CLI authentication
-- Confirm server connectivity before setup
+   ```bash
+   # Update environment configuration
+   ./config-update.sh staging
+   
+   # Deploy application
+   ./deploy-app.sh staging
+   ```
 
-## Contributing
+### Regular Operations
 
-- Do not modify scripts without careful review
-- Test changes in a staging environment
-- Update documentation when making modifications
+1. Deployment:
 
-## Contact
+   ```bash
+   # Deploy to staging
+   ./deploy-app.sh staging
+   
+   # Check status after deployment
+   ./monitor-status.sh staging
+   
+   # Deploy to production
+   ./deploy-app.sh production
+   ```
 
-Manuel Lorente - mlorentedev@gmail.com
+2. Monitoring:
+
+   ```bash
+   # Check service status
+   ./monitor-status.sh production
+   
+   # Analyze logs
+   ./monitor-logs.sh production
+   
+   # Check security
+   ./monitor-security.sh production
+   
+   # Test performance
+   ./monitor-performance.sh production
+   ```
+
+3. Troubleshooting:
+
+   ```bash
+   # Check for errors
+   ./monitor-logs.sh production
+   
+   # Rollback if necessary
+   ./deploy-rollback.sh production v1.2.0
+   ```
+
+## Requirements
+
+- Bash 4.0+
+- SSH access to servers
+- Git
+- Docker and Docker Compose
+- Apache Benchmark (`ab`) for performance testing
+- GitHub CLI (`gh`) for secrets management
+
+## Script Naming Convention
+
+The scripts follow a consistent naming pattern for easier navigation:
+
+- **`setup-*`**: Scripts for setting up environments and infrastructure
+- **`deploy-*`**: Scripts for deployment and release management
+- **`config-*`**: Scripts for configuration management
+- **`monitor-*`**: Scripts for monitoring, diagnostics, and testing
+
+## Best Practices
+
+1. Always run scripts from the project root directory
+2. Keep a log of deployment versions for easy rollback
+3. Regularly check security and performance
+4. Review and update environment variables when needed
+5. Always back up configuration before making changes
+
+## Maintenance
+
+These scripts are designed to be maintainable and extensible:
+
+- Common functions are in `utils.sh` to reduce duplication
+- All scripts use a consistent parameter validation pattern
+- Error handling is implemented throughout
+- Clear documentation within each script
+
+## License
+
+These scripts are part of the mlorente.dev project and are licensed under the same terms as the project itself.

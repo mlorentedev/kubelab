@@ -1,94 +1,69 @@
 #!/bin/bash
-# setup-server.sh - Configure server on Hetzner
+# setup-server.sh - Configure server for mlorente.dev deployment
+# Usage: ./setup-server.sh <server_ip> <environment>
+# Example: ./setup-server.sh 123.456.789.0 production
 set -e
 
-# Output colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# Source utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/utils.sh"
+
+# Check dependencies
+check_dependencies "ssh" "ping" "ssh-keygen"
 
 # Check parameters
 if [ "$#" -ne 2 ]; then
-    echo -e "${RED}Error: Incorrect usage.${NC}"
-    echo "Usage: $0 <server_ip> <environment>"
-    echo "Example: $0 123.456.789.0 production"
-    exit 1
+    exit_error "Incorrect usage. Required: <server_ip> <environment>\nExample: $0 123.456.789.0 production"
 fi
 
 SERVER_IP=$1
 ENV=$2
 
-if [[ "$ENV" != "production" && "$ENV" != "staging" ]]; then
-    echo -e "${RED}Error: Environment must be 'production' or 'staging'.${NC}"
-    exit 1
+# Validate environment
+validate_environment "$ENV"
+
+# Check server connectivity
+log_info "Checking connectivity with $SERVER_IP..."
+if ! ping -c 1 "$SERVER_IP" &> /dev/null; then
+    exit_error "Cannot connect to server $SERVER_IP. Please check if it's online."
 fi
 
-# Check connectivity
-echo -e "${BLUE}Checking connectivity with $SERVER_IP...${NC}"
-if ! ping -c 1 $SERVER_IP &> /dev/null; then
-    echo -e "${RED}Error: Cannot connect to server $SERVER_IP${NC}"
-    exit 1
-fi
-
-# Define installation directory based on environment
-if [ "$ENV" == "production" ]; then
-    INSTALL_DIR="/opt/mlorente"
-    DOMAIN="mlorente.dev"
-else
-    INSTALL_DIR="/opt/mlorente-staging"
-    DOMAIN="staging.mlorente.dev"
-fi
-
-echo -e "${GREEN}Configuring $ENV server at $SERVER_IP${NC}"
-echo -e "${BLUE}Installation directory: $INSTALL_DIR${NC}"
-echo -e "${BLUE}Domain: $DOMAIN${NC}"
+log_info "Configuring $ENV server at $SERVER_IP"
+log_info "Installation directory: $DEPLOY_DIR"
+log_info "Domain: $DOMAIN"
 
 # Confirm action
-echo -e "${YELLOW}Are you sure you want to continue? (y/n)${NC}"
-read confirm
-if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-    echo -e "${RED}Operation cancelled.${NC}"
+if ! confirm_action "This will configure the server for deployment. Continue?"; then
     exit 0
 fi
 
-# Generate SSH key if it doesn't exist
-SSH_KEY="$HOME/.ssh/id_rsa_mlorente"
-if [ ! -f "$SSH_KEY" ]; then
-    echo -e "${YELLOW}SSH key not found. Do you want to generate a new one? (y/n)${NC}"
-    read gen_key
-    if [[ "$gen_key" == "y" || "$gen_key" == "Y" ]]; then
-        echo -e "${BLUE}Generating new SSH key...${NC}"
-        ssh-keygen -t rsa -b 4096 -f "$SSH_KEY" -N ""
-        echo -e "${GREEN}SSH key generated: $SSH_KEY${NC}"
-    else
-        echo -e "${YELLOW}Please provide the path to your SSH key:${NC}"
-        read SSH_KEY
-        if [ ! -f "$SSH_KEY" ]; then
-            echo -e "${RED}Error: Cannot find SSH key at $SSH_KEY${NC}"
-            exit 1
-        fi
-    fi
-fi
-
-# Show and copy public key
-echo -e "${YELLOW}SSH public key (copy this key):${NC}"
-cat "${SSH_KEY}.pub"
-echo ""
-echo -e "${YELLOW}Press Enter when you've copied the key...${NC}"
-read
+# Ensure SSH key exists
+ensure_ssh_key
 
 # Commands to configure the server
-SERVER_SETUP=$(cat <<'EOF'
+SERVER_SETUP=$(cat <<EOF
 #!/bin/bash
+set -e
+
+# Variables
+INSTALL_DIR="$DEPLOY_DIR"
+DOMAIN="$DOMAIN"
+ENV="$ENV"
+
+echo "=== Starting server configuration ==="
+
 # Update system
 echo "Updating system..."
 apt update && apt upgrade -y
 
 # Install required packages
 echo "Installing required packages..."
-apt install -y docker.io docker-compose curl git fail2ban ufw certbot
+apt install -y docker.io docker-compose curl git fail2ban ufw certbot \
+    unattended-upgrades apt-listchanges software-properties-common
+
+# Configure automatic security updates
+echo "Configuring automatic security updates..."
+dpkg-reconfigure -plow unattended-upgrades
 
 # Configure firewall
 echo "Configuring firewall..."
@@ -109,11 +84,12 @@ if ! id -u deployer &>/dev/null; then
     mkdir -p /home/deployer/.ssh
     chmod 700 /home/deployer/.ssh
     
-    # Request SSH key for deployer user
+    # Add SSH key for deployer user
     echo "Paste the SSH public key for the deployer user (press Ctrl+D when done):"
     cat > /home/deployer/.ssh/authorized_keys
     
-    echo 'deployer ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose' > /etc/sudoers.d/deployer
+    # Configure sudo access for Docker
+    echo 'deployer ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose, /usr/bin/systemctl' > /etc/sudoers.d/deployer
     chmod 440 /etc/sudoers.d/deployer
 fi
 
@@ -123,85 +99,145 @@ chmod 600 /home/deployer/.ssh/authorized_keys
 
 # Create directories for the application
 echo "Creating directories for the application..."
-mkdir -p INSTALL_DIR
-mkdir -p INSTALL_DIR/certbot/conf
-mkdir -p INSTALL_DIR/certbot/www
+mkdir -p \$INSTALL_DIR
+mkdir -p \$INSTALL_DIR/certbot/conf
+mkdir -p \$INSTALL_DIR/certbot/www
+mkdir -p \$INSTALL_DIR/backups
 
 # Create initial .env file
 echo "Creating initial .env..."
-cat > INSTALL_DIR/.env <<EOL
-# Environment: ENV
-# Generated on: $(date)
+cat > \$INSTALL_DIR/.env <<EOL
+# Environment: \$ENV
+# Generated on: \$(date)
 # WARNING: This file will be replaced during deployment
 
-ENV=ENV
-SITE_DOMAIN=DOMAIN
+ENV=\$ENV
+SITE_DOMAIN=\$DOMAIN
+EOL
+
+# Create basic docker-compose.yml
+echo "Creating basic docker-compose.yml..."
+cat > \$INSTALL_DIR/docker-compose.yml <<EOL
+version: '3.8'
+
+services:
+  frontend:
+    image: mlorentedev/mlorente-frontend:\${TAG:-latest}
+    restart: always
+    ports:
+      - "3000:4321"
+    env_file:
+      - .env
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  backend:
+    image: mlorentedev/mlorente-backend:\${TAG:-latest}
+    restart: always
+    env_file:
+      - .env
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: always
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait \\\$\\\$!; done;'"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 EOL
 
 # Get initial certificates (optional)
 echo "Do you want to obtain SSL certificates now? (y/n)"
 read GET_CERTS
 
-if [[ "$GET_CERTS" == "y" || "$GET_CERTS" == "Y" ]]; then
-    echo "Obtaining SSL certificates for DOMAIN..."
-    certbot certonly --standalone --agree-tos --email admin@DOMAIN -d DOMAIN -d www.DOMAIN
+if [[ "\$GET_CERTS" == "y" || "\$GET_CERTS" == "Y" ]]; then
+    echo "Obtaining SSL certificates for \$DOMAIN..."
+    certbot certonly --standalone --agree-tos --email admin@\$DOMAIN -d \$DOMAIN -d www.\$DOMAIN
     
-    mkdir -p INSTALL_DIR/certbot/conf/DOMAIN
-    cp -L /etc/letsencrypt/live/DOMAIN/* INSTALL_DIR/certbot/conf/DOMAIN/
-    cp -r /etc/letsencrypt/archive/DOMAIN/* INSTALL_DIR/certbot/conf/DOMAIN/
+    mkdir -p \$INSTALL_DIR/certbot/conf/\$DOMAIN
+    cp -L /etc/letsencrypt/live/\$DOMAIN/* \$INSTALL_DIR/certbot/conf/\$DOMAIN/
+    cp -r /etc/letsencrypt/archive/\$DOMAIN/* \$INSTALL_DIR/certbot/conf/\$DOMAIN/
 fi
 
 # Configure permissions
-chown -R deployer:deployer INSTALL_DIR
+chown -R deployer:deployer \$INSTALL_DIR
 
 # Configure Docker to start on boot
 systemctl enable docker
 systemctl start docker
 
+# Secure SSH configuration
+echo "Securing SSH configuration..."
+sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^PermitRootLogin yes/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+systemctl restart ssh
+
 echo "======================================"
 echo "Server configuration completed."
 echo "======================================"
-echo "IP: SERVER_IP"
-echo "Environment: ENV"
+echo "IP: $SERVER_IP"
+echo "Environment: \$ENV"
 echo "Deployment user: deployer"
-echo "Directory: INSTALL_DIR"
-echo "Domain: DOMAIN"
+echo "Directory: \$INSTALL_DIR"
+echo "Domain: \$DOMAIN"
 echo "======================================"
 EOF
 )
 
-# Replace variables in the script
-SERVER_SETUP=${SERVER_SETUP//INSTALL_DIR/$INSTALL_DIR}
-SERVER_SETUP=${SERVER_SETUP//ENV/$ENV}
-SERVER_SETUP=${SERVER_SETUP//DOMAIN/$DOMAIN}
-SERVER_SETUP=${SERVER_SETUP//SERVER_IP/$SERVER_IP}
-
 # Connect to the server and run configuration
-echo -e "${BLUE}Connecting to server...${NC}"
-ssh -o StrictHostKeyChecking=accept-new root@$SERVER_IP "bash -s" <<< "$SERVER_SETUP"
+log_info "Connecting to server and running configuration..."
+ssh -o StrictHostKeyChecking=accept-new "root@$SERVER_IP" "bash -s" <<< "$SERVER_SETUP"
 
 # Generate configuration file for simplified SSH access
-echo -e "${BLUE}Configuring simplified SSH access...${NC}"
+log_info "Configuring simplified SSH access..."
 
 SSH_CONFIG_FILE="$HOME/.ssh/config"
-SSH_ENTRY="Host mlorente-$ENV
+SSH_ENTRY="Host $SERVER_ALIAS
     HostName $SERVER_IP
     User deployer
-    IdentityFile $SSH_KEY
+    IdentityFile $SSH_KEY_PATH
     StrictHostKeyChecking no"
 
 if [ -f "$SSH_CONFIG_FILE" ]; then
     # Check if an entry for this server already exists
-    if grep -q "Host mlorente-$ENV" "$SSH_CONFIG_FILE"; then
-        echo -e "${YELLOW}Updating existing SSH configuration...${NC}"
-        sed -i.bak "/Host mlorente-$ENV/,/StrictHostKeyChecking/d" "$SSH_CONFIG_FILE"
+    if grep -q "Host $SERVER_ALIAS" "$SSH_CONFIG_FILE"; then
+        log_warning "Updating existing SSH configuration..."
+        sed -i.bak "/Host $SERVER_ALIAS/,/StrictHostKeyChecking/d" "$SSH_CONFIG_FILE"
     fi
     echo "$SSH_ENTRY" >> "$SSH_CONFIG_FILE"
 else
-    echo -e "${YELLOW}Creating SSH configuration file...${NC}"
+    log_info "Creating SSH configuration file..."
     echo "$SSH_ENTRY" > "$SSH_CONFIG_FILE"
     chmod 600 "$SSH_CONFIG_FILE"
 fi
 
-echo -e "${GREEN}Server configured successfully.${NC}"
-echo -e "${YELLOW}You can now connect simply with: ssh mlorente-$ENV${NC}"
+log_success "Server configured successfully."
+log_info "You can now connect simply with: ssh $SERVER_ALIAS"
+log_info "Next steps:"
+log_info "1. Update environment variables with: ./update-env.sh $ENV"
+log_info "2. Deploy the application with: ./deploy.sh $ENV"
