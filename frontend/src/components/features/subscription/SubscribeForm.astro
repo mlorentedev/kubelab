@@ -3,14 +3,13 @@ const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.pr
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
-  <form
+  <form 
     hx-post="/api/subscribe"
-    hx-trigger="submit"
     hx-target="#status-message"
     hx-swap="innerHTML"
     class="flex flex-col gap-6"
   >
-    <input type="hidden" name="tag" value={tag} />
+    {tag && <input type="hidden" name="tag" value={tag} />}
     <input type="hidden" name="utm_source" value={utm_source} />
 
     <input
@@ -27,13 +26,16 @@ const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.pr
       {button_text}
     </button>
     <div class="flex justify-center items-center text-center">
-      <input type="checkbox" id="privacy-policy" name="privacy-policy" />
-      <label for="privacy-policy">
+      <input type="checkbox" id="privacy-policy" name="privacy-policy" class="mr-2" required />
+      <label for="privacy-policy" class="text-xs">
         Acepto la <a href="/privacy-policy" target="_blank" class="text-white"
           >política de privacidad</a
-        >.
+        >
       </label>
     </div>
   </form>
-  <p id="status-message" class="mt-4 text-xs text-center"></p>
+  <div 
+    id="status-message" 
+    class="mt-4 text-xs text-center"
+  ></div>
 </div>

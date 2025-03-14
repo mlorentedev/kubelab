@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 
@@ -17,9 +18,11 @@ var conf *config.Config
 
 func init() {
 	var err error
-	conf, err = config.LoadConfig()
-	if err != nil {
-		panic(err)
+	if conf == nil {
+		conf, err = config.GetConfig()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -48,7 +51,7 @@ func CheckSubscriber(email string) (*struct {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.LogFunction("error", "Error reading response body", err.Error())
 		return nil, err

@@ -9,42 +9,66 @@ import (
 	"github.com/mlorentedev/mlorente-backend/pkg/logger"
 )
 
-// SubscribeHandler maneja las solicitudes para suscribir usuarios
 func SubscribeHandler(c *gin.Context) {
 	var request models.SubscriptionRequest
+
 	if err := c.ShouldBindJSON(&request); err != nil {
 		logger.LogFunction("error", "Error in subscription endpoint", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Correo electrónico inválido.",
+			"success": false,
+			"message": "Datos inválidos. Asegúrate de incluir un correo electrónico válido.",
 		})
 		return
 	}
 
-	// Validar email
+	// Validate email
 	if !services.IsValidEmailFormat(request.Email) {
 		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
 			"message": "Correo electrónico inválido.",
 		})
 		return
 	}
 
-	// Usar valor por defecto para utmSource si no está presente
+	// Use default value for utmSource if not present
 	if request.UtmSource == "" {
 		request.UtmSource = string(models.SubscriptionSourceLandingPage)
 	}
 
-	// Procesar suscripción
-	result, err := services.ProcessSubscription(request.Email, request.Tags, request.UtmSource)
+	// Check if subscriber already exists
+	existingSubscriber, err := services.CheckSubscriber(request.Email)
 	if err != nil {
-		logger.LogFunction("error", "Error processing subscription", err.Error())
+		logger.LogFunction("error", "Error checking subscriber", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
 			"message": "Error interno del servidor.",
 		})
 		return
 	}
 
-	// Devolver respuesta
+	// If subscriber exists, return a specific message
+	if existingSubscriber.Success && existingSubscriber.Subscriber != nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"message": "Este correo ya está suscrito.",
+		})
+		return
+	}
+
+	// Process new subscription
+	result, err := services.ProcessSubscription(request.Email, request.UtmSource, request.Tags)
+	if err != nil {
+		logger.LogFunction("error", "Error processing subscription", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Error interno del servidor.",
+		})
+		return
+	}
+
+	// Return response
 	c.JSON(http.StatusOK, gin.H{
+		"success":           true,
 		"message":           result.Message,
 		"alreadySubscribed": result.AlreadySubscribed,
 	})

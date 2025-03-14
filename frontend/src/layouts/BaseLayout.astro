@@ -28,7 +28,8 @@ const googleAnalyticsTracking = env.ANALYTICS.GOOGLE_ID;
       gtag('config', '{{ googleAnalyticsTracking }}');
     </script>
     <BaseHead title={title} description={description} />
-    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.6" defer></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js" defer></script>
   </head>
   <body class="flex flex-col min-h-screen">
     <Header title={siteTitle} lang={lang} />

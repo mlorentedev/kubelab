@@ -68,7 +68,7 @@ This project demonstrates a production-ready microservices approach using contai
 
    ```bash
    # Configure development environment
-   ./scripts/dev-setup.sh
+   ./scripts/setup-dev.sh
    ```
 
 ### Development Workflow
@@ -108,13 +108,14 @@ npm run dev
 ```bash
 cd backend
 go mod download
+go mod tidy
 go run cmd/server/main.go
 ```
 
 For hot reloading with Go:
 
 ```bash
-go install github.com/cosmtrek/air@latest
+go install github.com/air-verse/air@latest
 air
 ```
 
@@ -473,22 +474,3 @@ The log analysis provides:
 - [CONTRIBUTING.md](CONTRIBUTING.md): Contribution guidelines
 - [LICENSE](LICENSE): MIT License information
 - [scripts/README.md](scripts/README.md): Documentation for utility scripts
-
-## Roadmap
-
-- [ ] Script to populate secrets in GitHub Actions
-- [ ] CI/CD with GitHub Actions
-- [ ] Testing
-- [ ] Deploy to Hetzner
-- [ ] HTTPS and Fail2Ban
-- [ ] Homelab section: learning-path, homelabs, etc. similar to Collabnix
-- [ ] Slack community integration with the API
-- [ ] Most recent RRSS in some section - dynamic with CI/CD
-- [ ] Indexed search by tags
-- [ ] Copy in all pages
-- [ ] Simple and minimalistic design
-- [ ] Google Analytics
-- [ ] Observability with TIG or PLG stack + alerts // Loki + Netdata
-- [ ] Docker secrets or Vault for sensitive data
-- [ ] Healthchecks for backend
-- [ ] Dynamic quotes at the end of the page

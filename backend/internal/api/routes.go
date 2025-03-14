@@ -6,6 +6,10 @@ import (
 
 // SetupRoutes configura todas las rutas de la API
 func SetupRoutes(r *gin.Engine) {
+
+	// Health check routes
+	RegisterHealthCheckRoutes(r)
+
 	// Grupo API
 	api := r.Group("/api")
 	{

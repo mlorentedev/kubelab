@@ -38,6 +38,7 @@ export default defineConfig({
       'import.meta.env.PUBLIC_ENABLE_HOMELABS': process.env.PUBLIC_ENABLE_HOMELABS === 'true',
       'import.meta.env.PUBLIC_ENABLE_BLOG': process.env.PUBLIC_ENABLE_BLOG === 'true',
       'import.meta.env.PUBLIC_ENABLE_CONTACT': process.env.PUBLIC_ENABLE_CONTACT === 'true',
+      'import.meta.env.PUBLIC_BACKEND_URL': JSON.stringify(process.env.BACKEND_URL),
     },
     envPrefix: ['PUBLIC_'],
   },
@@ -60,3 +61,6 @@ console.log(`  PUBLIC_GOOGLE_ANALYTICS_ID: ${process.env.PUBLIC_GOOGLE_ANALYTICS
 console.log(`  PUBLIC_ENABLE_HOMELABS: ${process.env.PUBLIC_ENABLE_HOMELABS}`);
 console.log(`  PUBLIC_ENABLE_BLOG: ${process.env.PUBLIC_ENABLE_BLOG}`);
 console.log(`  PUBLIC_ENABLE_CONTACT: ${process.env.PUBLIC_ENABLE_CONTACT}`);
+console.log(`  BACKEND_URL: ${process.env.BACKEND_URL}`);
+console.log('Environment variables loaded successfully.');
+console.log('Astro configuration loaded successfully.');

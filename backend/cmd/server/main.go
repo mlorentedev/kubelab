@@ -1,26 +1,33 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/mlorentedev/mlorente-backend/internal/api"
+	"github.com/mlorentedev/mlorente-backend/pkg/config"
 	"github.com/mlorentedev/mlorente-backend/pkg/logger"
 )
 
 func main() {
-	// Cargar variables de entorno
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
-
 	// Configurar logger
 	logger := logger.NewLogger()
 
-	// Configurar router
-	r := gin.Default()
+	// Cargar variables de entorno
+	_, err := config.GetConfig()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Error al cargar la configuración")
+	}
+
+	// Establecer Gin en modo release (sin modo debug)
+	gin.SetMode(gin.ReleaseMode)
+
+	// Configurar router sin Logger y Recovery por defecto
+	r := gin.New() // Usar gin.New() en lugar de gin.Default()
+
+	// Usar middlewares personalizados (Logger, Recovery)
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
 
 	// Configurar CORS
 	r.Use(api.CorsMiddleware())
