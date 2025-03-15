@@ -42,29 +42,29 @@ if (Astro.request.method === 'POST') {
     if (result.success) {
       return new Response(result.message, {
         status: 200,
-        headers: { 
+        headers: {
           'Content-Type': 'text/plain',
-          'HX-Redirect': '/unsubscribe-success'
-        }
+          'HX-Redirect': '/unsubscribe-success',
+        },
       });
     }
 
     // Handle existing subscriber or other errors
     return new Response(result.message, {
       status: 200,
-      headers: { 
+      headers: {
         'Content-Type': 'text/plain',
-      }
+      },
     });
   } catch (error) {
     // Handle any unexpected errors
     console.error('Error en el servidor:', error);
     return new Response('Error interno del servidor', {
       status: 500,
-      headers: { 
+      headers: {
         'Content-Type': 'text/plain',
-        'HX-Trigger': 'error'
-      }
+        'HX-Trigger': 'error',
+      },
     });
   }
 }

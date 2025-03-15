@@ -17,7 +17,7 @@ if (Astro.request.method === 'POST') {
       payload = {
         email: formData.get('email')?.toString(),
         utm_source: formData.get('utm_source')?.toString() || 'landing_page',
-        tags: []
+        tags: [],
       };
     } else {
       throw new Error('Unsupported content type');
@@ -27,7 +27,7 @@ if (Astro.request.method === 'POST') {
     const normalizedPayload = {
       email: payload.email,
       tags: payload.tags || [],
-      utmSource: payload.utm_source || payload.utmSource || 'landing_page'
+      utmSource: payload.utm_source || payload.utmSource || 'landing_page',
     };
 
     // Forward request to backend
@@ -46,29 +46,29 @@ if (Astro.request.method === 'POST') {
     if (result.success) {
       return new Response(result.message, {
         status: 200,
-        headers: { 
+        headers: {
           'Content-Type': 'text/plain',
-          'HX-Redirect': '/subscribe-success'
-        }
+          'HX-Redirect': '/subscribe-success',
+        },
       });
     }
 
     // Handle existing subscriber or other errors
     return new Response(result.message, {
       status: 200,
-      headers: { 
+      headers: {
         'Content-Type': 'text/plain',
-      }
+      },
     });
   } catch (error) {
     // Handle any unexpected errors
     console.error('Error en el servidor:', error);
     return new Response('Error interno del servidor', {
       status: 500,
-      headers: { 
+      headers: {
         'Content-Type': 'text/plain',
-        'HX-Trigger': 'error'
-      }
+        'HX-Trigger': 'error',
+      },
     });
   }
 }

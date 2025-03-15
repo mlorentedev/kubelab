@@ -5,14 +5,13 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
-  <form 
+  <form
     class="flex flex-col gap-6"
     hx-post={endPoint}
     hx-target="#status-message"
-    hx-target-409="#status-message"
-    hx-trigger="submit"
+    hx-target-error="#status-message"
     hx-swap="innerHTML"
-    hx-swap-oob="true"
+    hx-json-enc="message"
     hx-include="[name='email'], [name='utm_source'], [name='tag']"
   >
     {tag && <input type="hidden" name="tag" value={tagsString} />}
@@ -22,7 +21,6 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
       type="email"
       name="email"
       placeholder="Tu correo electrónico"
-      required
       class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-cyan-300"
     />
     <button
@@ -32,8 +30,8 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
       {button_text}
     </button>
     <div class="flex justify-center items-center text-center">
-      <input type="checkbox" id="privacy-policy" name="privacy-policy" class="mr-2" required />
-      <label for="privacy-policy" class="text-xs">
+      <input type="checkbox" id="privacy_policy" name="privacy_policy" class="mr-2" required />
+      <label for="privacy_policy" class="text-xs">
         Acepto la <a href="/privacy-policy" target="_blank" class="text-white"
           >política de privacidad</a
         >

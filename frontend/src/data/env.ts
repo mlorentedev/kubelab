@@ -24,6 +24,6 @@ export const env = {
     ENABLE_CONTACT: import.meta.env.PUBLIC_ENABLE_CONTACT,
   },
   API: {
-    BACKEND_URL: (import.meta.env.BACKEND_URL),
+    BACKEND_URL: import.meta.env.BACKEND_URL,
   },
 };

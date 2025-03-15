@@ -5,6 +5,7 @@ import Footer from '../components/sections/Footer.astro';
 import Header from '../components/sections/Header.astro';
 import type { CollectionEntry } from 'astro:content';
 import { env } from '../data/env';
+import Gtag from '../components/common/Gtag.astro';
 
 type Props = CollectionEntry<'resources'>['data'];
 
@@ -12,32 +13,27 @@ const { title, description } = Astro.props;
 
 const lang = 'es';
 const siteTitle = env.SITE.TITLE;
-const googleAnalyticsTracking = env.ANALYTICS.GOOGLE_ID;
 ---
 
 <!doctype html>
 <html lang={lang}>
   <head>
-    <script defer src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}
-    ></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(...args: (string | Date)[]) {
-        window.dataLayer.push(args);
-      }
-      gtag('js', new Date());
-      gtag('config', '{{ googleAnalyticsTracking }}');
-    </script>
-    <script defer src="/node_modules/htmx.org/dist/htmx.min.js"></script>
-    <script defer src="/node_modules/htmx-ext-response-targets/dist/response-targets.min.js"></script>
-    <script defer src="/assets/dropdown-menu.js"></script>
     <BaseHead title={title} description={description} />
+    <Gtag />
+    <script defer src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script defer src="https://unpkg.com/htmx.org@1.9.12/dist/ext/response-targets.js"></script>
+    <script defer src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
   </head>
-  <body class="flex flex-col min-h-screen">
+  <body
+    class="flex flex-col min-h-screen"
+    hx-boost="true"
+    hx-ext="response-targets, json-enc, boost"
+  >
     <Header title={siteTitle} lang={lang} />
     <main class="flex-grow py-16">
       <slot />
     </main>
     <Footer />
+    <script defer src="/assets/dropdown-menu.js"></script>
   </body>
 </html>

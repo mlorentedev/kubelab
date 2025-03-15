@@ -11,59 +11,65 @@ import (
 
 func UnsubscribeHandler(c *gin.Context) {
 	var request models.UnsubscriptionRequest
+	var response models.UnsubscriptionResult
 
-	if err := c.ShouldBindJSON(&request); err != nil {
-		logger.LogFunction("error", "Error in unsubscribe endpoint: invalid request", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Correo electrónico inválido.",
-		})
+	// Helper function to set the common response attributes
+	setResponse := func(httpCode int, success bool, message string) {
+		response.HttpCode = httpCode
+		response.Success = success
+		response.Message = message
+	}
+
+	if err := c.ShouldBind(&request); err != nil {
+		logger.LogFunction("error", "Error al hacer bind de la solicitud", err.Error())
+		setResponse(http.StatusBadRequest, false, "Error al procesar la solicitud")
+		c.String(response.HttpCode, response.Message)
+		return
+	}
+
+	if request.Email == "" {
+		setResponse(http.StatusBadRequest, false, "El correo electrónico es obligatorio")
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Validar email
 	if !services.IsValidEmailFormat(request.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Correo electrónico inválido.",
-		})
+		setResponse(http.StatusBadRequest, false, "Correo electrónico inválido")
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Verificar si el suscriptor existe
 	existingSubscriber, err := services.CheckSubscriber(request.Email)
 	if err != nil {
-		logger.LogFunction("error", "Error checking subscriber", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error interno del servidor.",
-		})
+		setResponse(http.StatusInternalServerError, false, "Error interno del servidor")
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Si el suscriptor no existe, devolver un mensaje específico
 	if !existingSubscriber.Success || existingSubscriber.Subscriber == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "Este correo no está suscrito.",
-		})
+		setResponse(http.StatusNotFound, false, "Este correo no está en la lista")
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Procesar cancelación
 	result, err := services.UnsubscribeUser(request.Email)
 	if err != nil {
-		logger.LogFunction("error", "Error in unsubscribe endpoint", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error interno del servidor.",
-		})
+		setResponse(http.StatusInternalServerError, false, "Error interno del servidor")
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
-	// Devolver respuesta
-	c.JSON(http.StatusOK, gin.H{
-		"success": result.Success,
-		"message": result.Message,
-	})
+	// Successful unsubscription
+	if result.Success {
+		setResponse(http.StatusOK, true, "Desuscripción exitosa")
+		c.Header("HX-Redirect", "/unsubscribe-success")
+		c.String(response.HttpCode, response.Message)
+	} else {
+		setResponse(http.StatusInternalServerError, false, "Error al procesar la desuscripción")
+		c.String(response.HttpCode, response.Message)
+	}
 }

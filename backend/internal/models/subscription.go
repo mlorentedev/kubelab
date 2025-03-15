@@ -33,6 +33,7 @@ type SubscriptionRequest struct {
 
 // SubscriptionResult representa el resultado de una operación de suscripción
 type SubscriptionResult struct {
+	HttpCode          int    `json:"httpCode"`
 	Success           bool   `json:"success"`
 	Message           string `json:"message"`
 	SubscriberID      string `json:"subscriberId,omitempty"`
@@ -41,7 +42,14 @@ type SubscriptionResult struct {
 
 // UnsubscriptionRequest representa una solicitud de cancelación de suscripción
 type UnsubscriptionRequest struct {
-	Email string `json:"email" binding:"required"`
+	Email string `form:"email" binding:"required"`
+}
+
+// UnsubscriptionResult representa el resultado de una operación de cancelación de suscripción
+type UnsubscriptionResult struct {
+	HttpCode int    `json:"httpCode"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message"`
 }
 
 // ResourceRequest representa una solicitud de recurso
