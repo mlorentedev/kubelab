@@ -116,6 +116,7 @@ For hot reloading with Go:
 
 ```bash
 go install github.com/air-verse/air@latest
+export PATH=$(go env GOPATH)/bin:$PATH
 air
 ```
 

@@ -3,74 +3,72 @@ import { env } from '../../data/env';
 
 export const prerender = false;
 
-// Este endpoint redirige al backend
 if (Astro.request.method === 'POST') {
   try {
-    const requestBody = await Astro.request.json();
+    // Determine payload based on content type
+    let payload;
+    const contentType = Astro.request.headers.get('content-type');
 
-    // Redirigir la petición al backend
-    const backendUrl = `${env.API.BACKEND_URL}/unsubscribe`;
-    const response = await fetch(backendUrl, {
+    if (contentType?.includes('application/json')) {
+      const rawBody = await Astro.request.text();
+      payload = JSON.parse(rawBody);
+    } else if (contentType?.includes('application/x-www-form-urlencoded')) {
+      const formData = await Astro.request.formData();
+      payload = {
+        email: formData.get('email')?.toString(),
+      };
+    } else {
+      throw new Error('Unsupported content type');
+    }
+
+    // Normalize payload for backend
+    const normalizedPayload = {
+      email: payload.email,
+    };
+
+    // Forward request to backend
+    const response = await fetch(`${env.API.BACKEND_URL}/unsubscribe`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(normalizedPayload),
     });
 
-    const data = await response.json();
+    // Parse response
+    const result = await response.json();
 
-    return new Response(JSON.stringify(data), {
-      status: response.status,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error) {
-    console.error('Error forwarding unsubscribe request:', error);
-    return new Response(
-      JSON.stringify({
-        message: 'Error interno del servidor.',
-      }),
-      {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+    // Handle response based on success
+    if (result.success) {
+      return new Response(result.message, {
+        status: 200,
+        headers: { 
+          'Content-Type': 'text/plain',
+          'HX-Redirect': '/unsubscribe-success'
+        }
+      });
+    }
+
+    // Handle existing subscriber or other errors
+    return new Response(result.message, {
+      status: 200,
+      headers: { 
+        'Content-Type': 'text/plain',
       }
-    );
-  }
-}
-
-// También atender solicitudes GET para redirección
-if (Astro.request.method === 'GET') {
-  const email = Astro.url.searchParams.get('email');
-
-  if (!email) {
-    return Astro.redirect('/404');
-  }
-
-  try {
-    // Redirigir la petición GET al backend
-    const backendUrl = `${env.API.BACKEND_URL}/unsubscribe?email=${encodeURIComponent(email)}`;
-    const response = await fetch(backendUrl);
-
-    if (response.redirected) {
-      return Astro.redirect(response.url);
-    }
-
-    // Si no hay redirección, redirigir según el estado
-    if (response.ok) {
-      return Astro.redirect('/unsubscribe-success');
-    } else {
-      return Astro.redirect('/404');
-    }
+    });
   } catch (error) {
-    console.error('Error forwarding GET unsubscribe request:', error);
-    return Astro.redirect('/404');
+    // Handle any unexpected errors
+    console.error('Error en el servidor:', error);
+    return new Response('Error interno del servidor', {
+      status: 500,
+      headers: { 
+        'Content-Type': 'text/plain',
+        'HX-Trigger': 'error'
+      }
+    });
   }
 }
 
-// Método no permitido para otros verbos HTTP
+// Method not allowed
 return new Response(null, { status: 405 });
 ---

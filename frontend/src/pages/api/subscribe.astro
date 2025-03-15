@@ -23,14 +23,6 @@ if (Astro.request.method === 'POST') {
       throw new Error('Unsupported content type');
     }
 
-    // Validate email
-    if (!payload.email) {
-      return new Response('Correo electrónico es requerido', {
-        status: 400,
-        headers: { 'Content-Type': 'text/plain' }
-      });
-    }
-
     // Normalize payload for backend
     const normalizedPayload = {
       email: payload.email,
@@ -50,15 +42,13 @@ if (Astro.request.method === 'POST') {
     // Parse response
     const result = await response.json();
 
-    console.log('Response from backend:', result);
-
     // Handle response based on success
     if (result.success) {
       return new Response(result.message, {
         status: 200,
         headers: { 
           'Content-Type': 'text/plain',
-          'HX-Redirect': '/subscription-success'
+          'HX-Redirect': '/subscribe-success'
         }
       });
     }

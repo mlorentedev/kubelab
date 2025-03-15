@@ -18,7 +18,6 @@ func SetupRoutes(r *gin.Engine) {
 
 		// Cancelación de suscripción
 		api.POST("/unsubscribe", UnsubscribeHandler)
-		api.GET("/unsubscribe", UnsubscribeGetHandler)
 
 		// Lead magnet
 		api.POST("/lead-magnet", LeadMagnetHandler)
