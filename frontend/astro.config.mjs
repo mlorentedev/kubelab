@@ -44,23 +44,8 @@ export default defineConfig({
   },
 });
 
-console.log('Environment variables:');
-console.log(`  PUBLIC_SITE_TITLE: ${process.env.PUBLIC_SITE_TITLE}`);
-console.log(`  PUBLIC_SITE_DESCRIPTION: ${process.env.PUBLIC_SITE_DESCRIPTION}`);
-console.log(`  PUBLIC_SITE_DOMAIN: ${process.env.PUBLIC_SITE_DOMAIN}`);
-console.log(`  PUBLIC_SITE_URL: ${process.env.PUBLIC_SITE_URL}`);
-console.log(`  PUBLIC_SITE_MAIL: ${process.env.PUBLIC_SITE_MAIL}`);
-console.log(`  PUBLIC_SITE_AUTHOR: ${process.env.PUBLIC_SITE_AUTHOR}`);
-console.log(`  PUBLIC_SITE_KEYWORDS: ${process.env.PUBLIC_SITE_KEYWORDS}`);
-console.log(`  PUBLIC_TWITTER_URL: ${process.env.PUBLIC_TWITTER_URL}`);
-console.log(`  PUBLIC_YOUTUBE_URL: ${process.env.PUBLIC_YOUTUBE_URL}`);
-console.log(`  PUBLIC_GITHUB_URL: ${process.env.PUBLIC_GITHUB_URL}`);
-console.log(`  PUBLIC_CALENDLY_URL: ${process.env.PUBLIC_CALENDLY_URL}`);
-console.log(`  PUBLIC_BUY_ME_A_COFFEE_URL: ${process.env.PUBLIC_BUY_ME_A_COFFEE_URL}`);
-console.log(`  PUBLIC_GOOGLE_ANALYTICS_ID: ${process.env.PUBLIC_GOOGLE_ANALYTICS_ID}`);
-console.log(`  PUBLIC_ENABLE_HOMELABS: ${process.env.PUBLIC_ENABLE_HOMELABS}`);
-console.log(`  PUBLIC_ENABLE_BLOG: ${process.env.PUBLIC_ENABLE_BLOG}`);
-console.log(`  PUBLIC_ENABLE_CONTACT: ${process.env.PUBLIC_ENABLE_CONTACT}`);
-console.log(`  BACKEND_URL: ${process.env.BACKEND_URL}`);
-console.log('Environment variables loaded successfully.');
-console.log('Astro configuration loaded successfully.');
+// Check if the environment variables are loaded correctly
+if (result.error) {
+  throw result.error;
+}
+console.log('Environment variables loaded successfully: ', result.parsed);

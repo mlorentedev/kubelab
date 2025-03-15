@@ -22,7 +22,5 @@ func SetupRoutes(r *gin.Engine) {
 		// Lead magnet
 		api.POST("/lead-magnet", LeadMagnetHandler)
 
-		// Email con recurso
-		api.POST("/resource-email", ResourceEmailHandler)
 	}
 }

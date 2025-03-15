@@ -12,64 +12,71 @@ import (
 func SubscribeHandler(c *gin.Context) {
 	var request models.SubscriptionRequest
 
-	if err := c.ShouldBindJSON(&request); err != nil {
-		logger.LogFunction("error", "Error in subscription endpoint", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Datos inválidos. Asegúrate de incluir un correo electrónico válido.",
-		})
+	var response models.SubscriptionResult
+
+	// Intentamos hacer bind de los datos del formulario (x-www-form-urlencoded)
+	if err := c.ShouldBind(&request); err != nil {
+		logger.LogFunction("error", "Error al hacer bind de la solicitud", err.Error())
+		response.Success = false
+		response.Message = "Error al procesar la solicitud"
+		response.AlreadySubscribed = false
+		response.SubscriberID = ""
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
-	// Validate email
+	// Validamos el formato del correo electrónico
 	if !services.IsValidEmailFormat(request.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Correo electrónico inválido.",
-		})
+		response.Success = false
+		response.Message = "Correo electrónico inválido"
+		response.AlreadySubscribed = false
+		response.SubscriberID = ""
+		c.JSON(http.StatusOK, response)
 		return
 	}
 
-	// Use default value for utmSource if not present
+	// Asignamos un valor por defecto para utmSource si no se ha proporcionado
 	if request.UtmSource == "" {
 		request.UtmSource = string(models.SubscriptionSourceLandingPage)
 	}
 
-	// Check if subscriber already exists
+	// Comprobamos si el suscriptor ya existe
 	existingSubscriber, err := services.CheckSubscriber(request.Email)
 	if err != nil {
-		logger.LogFunction("error", "Error checking subscriber", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error interno del servidor.",
-		})
+		response.Success = false
+		response.Message = "Error interno del servidor"
+		response.AlreadySubscribed = false
+		response.SubscriberID = ""
+		c.JSON(http.StatusInternalServerError, response)
 		return
 	}
 
-	// If subscriber exists, return a specific message
+	// Si el suscriptor ya existe, devolvemos un mensaje específico
 	if existingSubscriber.Success && existingSubscriber.Subscriber != nil {
-		c.JSON(http.StatusConflict, gin.H{
-			"success": false,
-			"message": "Este correo ya está suscrito.",
-		})
+		response.Success = true
+		response.Message = "Ya estás suscrito"
+		response.AlreadySubscribed = true
+		response.SubscriberID = existingSubscriber.Subscriber.ID
+		c.JSON(http.StatusConflict, response)
 		return
 	}
 
-	// Process new subscription
+	// Procesamos la nueva suscripción
 	result, err := services.ProcessSubscription(request.Email, request.UtmSource, request.Tags)
 	if err != nil {
-		logger.LogFunction("error", "Error processing subscription", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error interno del servidor.",
-		})
+		response.Success = false
+		response.Message = "Error al procesar la suscripción"
+		response.AlreadySubscribed = false
+		response.SubscriberID = ""
+		c.JSON(http.StatusInternalServerError, response)
 		return
 	}
 
-	// Return response
-	c.JSON(http.StatusOK, gin.H{
-		"success":           true,
-		"message":           result.Message,
-		"alreadySubscribed": result.AlreadySubscribed,
-	})
+	// Devolvemos la respuesta
+	response.Success = true
+	response.Message = "Suscripción exitosa"
+	response.AlreadySubscribed = false
+	response.SubscriberID = result.SubscriberID
+	c.Header("HX-Redirect", "/subscribe-success")
+	c.JSON(http.StatusCreated, response)
 }

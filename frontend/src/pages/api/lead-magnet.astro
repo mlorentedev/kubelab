@@ -3,7 +3,6 @@ import { env } from '../../data/env';
 
 export const prerender = false;
 
-// Este endpoint redirige al backend
 if (Astro.request.method === 'POST') {
   try {
     const requestBody = await Astro.request.json();

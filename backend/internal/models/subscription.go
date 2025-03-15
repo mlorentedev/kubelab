@@ -24,19 +24,19 @@ type Subscriber struct {
 	Tags  []string `json:"tags"`
 }
 
+// SubscriptionRequest representa una solicitud de suscripción
+type SubscriptionRequest struct {
+	Email     string   `form:"email"`
+	Tags      []string `form:"tags"`
+	UtmSource string   `form:"utm_source"`
+}
+
 // SubscriptionResult representa el resultado de una operación de suscripción
 type SubscriptionResult struct {
 	Success           bool   `json:"success"`
 	Message           string `json:"message"`
 	SubscriberID      string `json:"subscriberId,omitempty"`
 	AlreadySubscribed bool   `json:"alreadySubscribed,omitempty"`
-}
-
-// SubscriptionRequest representa una solicitud de suscripción
-type SubscriptionRequest struct {
-	Email     string   `json:"email" binding:"required"`
-	Tags      []string `json:"tags"`
-	UtmSource string   `json:"utmSource"`
 }
 
 // UnsubscriptionRequest representa una solicitud de cancelación de suscripción

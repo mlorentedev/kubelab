@@ -1,15 +1,21 @@
 ---
 const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.props;
+const tagsString = Array.isArray(tag) ? tag.join(',') : tag;
+const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
 ---
 
 <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
   <form 
-    hx-post="/api/subscribe"
-    hx-target="#status-message"
-    hx-swap="innerHTML"
     class="flex flex-col gap-6"
+    hx-post={endPoint}
+    hx-target="#status-message"
+    hx-target-409="#status-message"
+    hx-trigger="submit"
+    hx-swap="innerHTML"
+    hx-swap-oob="true"
+    hx-include="[name='email'], [name='utm_source'], [name='tag']"
   >
-    {tag && <input type="hidden" name="tag" value={tag} />}
+    {tag && <input type="hidden" name="tag" value={tagsString} />}
     <input type="hidden" name="utm_source" value={utm_source} />
 
     <input
@@ -34,8 +40,5 @@ const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.pr
       </label>
     </div>
   </form>
-  <div 
-    id="status-message" 
-    class="mt-4 text-xs text-center"
-  ></div>
+  <div id="status-message" class="mt-4 text-xs text-center"></div>
 </div>

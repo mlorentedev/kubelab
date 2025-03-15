@@ -6,6 +6,9 @@ export default {
       custom: '875px',
     },
     extend: {
+      fontFamily: {
+        roboto: ['Roboto', 'sans-serif'],
+      },
       typography: {
         DEFAULT: {
           css: {
