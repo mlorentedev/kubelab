@@ -1,9 +1,10 @@
 ---
 import { env } from '../../data/env';
+
 const googleAnalyticsTracking = env.ANALYTICS.GOOGLE_ID;
 ---
 
-<script async src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}
+<script is:inline src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsTracking}`}
 ></script>
 <script is:inline>
   window.dataLayer = window.dataLayer || [];

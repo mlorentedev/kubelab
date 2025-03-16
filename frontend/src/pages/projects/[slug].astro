@@ -1,13 +1,12 @@
 ---
 import { getCollection, render } from 'astro:content';
-
 import ProjectLayout from '../../layouts/ProjectLayout.astro';
-import FormattedDate from '../../components/common/FormattedDate.astro';
+import FormattedDate from '../../components/ui/FormattedDate.astro';
 
 export async function getStaticPaths() {
   const projects = await getCollection('projects');
 
-  const paths = projects.map((project) => ({
+  const paths = projects.map((project: { id: any }) => ({
     params: { slug: project.id },
     props: project,
   }));
@@ -17,7 +16,15 @@ export async function getStaticPaths() {
 
 export const prerender = true;
 
-const page = Astro.props;
+interface PageProps {
+  data: {
+    title: string;
+    pubDate: string;
+    pdf_url: string;
+  };
+}
+
+const page = Astro.props as PageProps;
 
 const { Content } = await render(page);
 ---
@@ -29,7 +36,7 @@ const { Content } = await render(page);
       <hr class="my-4 border-gray-300" />
     </div>
     <p class="text-gray-600 italic text-base mb-2">
-      <FormattedDate date={page.data.pubDate} />
+      <FormattedDate date={new Date(page.data.pubDate)} />
     </p>
     <a
       href={page.data.pdf_url}

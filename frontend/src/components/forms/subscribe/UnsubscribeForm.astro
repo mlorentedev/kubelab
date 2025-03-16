@@ -1,5 +1,5 @@
 ---
-const { button_text = 'Darme de baja' } = Astro.props;
+const { buttonText = 'Darme de baja' } = Astro.props;
 const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/unsubscribe';
 ---
 
@@ -10,8 +10,7 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/unsubscribe';
     hx-target="#status-message"
     hx-target-error="#status-message"
     hx-swap="innerHTML"
-    hx-json-enc="message"
-    hx-include="[name='email']"
+    hx-json-enc="true"
   >
     <div>
       <input
@@ -26,7 +25,7 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/unsubscribe';
       type="submit"
       class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
     >
-      {button_text}
+      {buttonText}
     </button>
   </form>
   <div id="status-message" class="mt-4 text-xs text-center"></div>

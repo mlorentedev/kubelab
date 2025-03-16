@@ -18,15 +18,15 @@ var URLs = struct {
 		Unsubscribe  string
 		Booking      string
 	}{
-		Subscription: "/subscription-success",
-		Resource:     "/resource-success",
-		Unsubscribe:  "/unsubscribe-success",
-		Booking:      "/booking-success",
+		Subscription: "/success/subscribe",
+		Resource:     "/success/resource",
+		Unsubscribe:  "/success/unsubscribe",
+		Booking:      "/success/booking",
 	},
 	ErrorPages: struct {
 		NotFound string
 	}{
-		NotFound: "/404",
+		NotFound: "/errors/404",
 	},
 }
 
@@ -36,20 +36,21 @@ var FrontendMessages = struct {
 	Success map[string]string
 }{
 	Errors: map[string]string{
-		"InvalidEmail":       "Correo electrónico inválido.",
-		"IncompleteData":     "Datos incompletos para completar la operación.",
-		"ServerError":        "Error interno del servidor.",
-		"EmailNotSubscribed": "Este email no está suscrito.",
-		"EmailConfigError":   "Error en la configuración de email.",
-		"TagsUpdateError":    "Error al actualizar los tags del suscriptor.",
-		"SubscriptionError":  "No se pudo completar la suscripción.",
+		"InvalidEmail":        "Correo electrónico inválido",
+		"IncompleteData":      "Datos incompletos",
+		"ServerError":         "Error interno del servidor",
+		"EmailNotSubscribed":  "Este email no está en la lista",
+		"EmailConfigError":    "Error en la configuración de email",
+		"TagsUpdateError":     "Error al actualizar los tags del suscriptor",
+		"SubscriptionError":   "Ya estás suscrito",
+		"UnsubscriptionError": "Error al cancelar la suscripción",
 	},
 	Success: map[string]string{
-		"SubscriptionNew":     "Nuevo suscriptor añadido.",
-		"SubscriptionUpdated": "Suscriptor existente actualizado.",
-		"Unsubscription":      "Se ha cancelado tu suscripción correctamente.",
-		"ResourceSent":        "Recurso enviado correctamente.",
-		"EmailSent":           "Email enviado correctamente.",
+		"SubscriptionNew":     "Nuevo suscriptor añadido",
+		"SubscriptionUpdated": "Suscriptor existente actualizado",
+		"Unsubscription":      "Se ha cancelado tu suscripción correctamente",
+		"ResourceSent":        "Recurso enviado correctamente",
+		"EmailSent":           "Email enviado correctamente",
 	},
 }
 

@@ -5,13 +5,13 @@ on:
     branches: [master, develop, "feature/*", "hotfix/*"]
     paths:
       - 'frontend/**'
-      - '.github/workflows/frontend-ci.yml'
+      - '.github/workflows/ci-frontend.yml'
       - 'docker/frontend/**'
   pull_request:
     branches: [master, develop]
     paths:
       - 'frontend/**'
-      - '.github/workflows/frontend-ci.yml'
+      - '.github/workflows/ci-frontend.yml'
       - 'docker/frontend/**'
 
 env:

@@ -1,6 +1,7 @@
 ---
 import { getCollection } from 'astro:content';
 import { env } from '../data/env';
+import { ROUTES } from '../constants/routes';
 
 const projects = await getCollection('projects');
 const resources = await getCollection('resources');
@@ -18,7 +19,7 @@ const currentDate = new Date().toUTCString();
 
 let itemsXml = '';
 allItems.forEach((item) => {
-  const itemUrl = `${siteUrl}${item.collection === 'projects' ? `/projects/${item.id}/` : `/resources/${item.slug}/`}`;
+  const itemUrl = `${siteUrl}${item.collection === 'projects' ? `${ROUTES.PROJECTS}/${item.id}/` : `${ROUTES.RESOURCES}/${item.slug}/`}`;
   const pubDate = new Date(item.data.pubDate).toUTCString();
 
   itemsXml += `

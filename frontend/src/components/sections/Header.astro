@@ -1,16 +1,15 @@
 ---
-import { featureFlags } from '../../data/feature-flags';
-import Avatar from '../common/Avatar.astro';
-import Dropdown from '../common/Dropdown.astro';
+import Avatar from '../ui/Avatar.astro';
 import HeaderLink from './HeaderLink.astro';
-
 import { env } from '../../data/env';
+import { featureFlags } from '../../data/feature-flags';
+import { ROUTES } from '../../constants/routes';
 
 const siteTitle = env.SITE.TITLE;
-const homeSlug = '/';
-const projectsSlug = '/projects';
-const aboutSlug = '/about';
-const contactSlug = '/contact';
+const homeSlug = ROUTES.HOME;
+const projectsSlug = ROUTES.PROJECTS;
+const aboutSlug = ROUTES.ABOUT;
+const contactSlug = ROUTES.CONTACT;
 const avatarPic = '/images/me-2.webp';
 ---
 
@@ -23,7 +22,7 @@ const avatarPic = '/images/me-2.webp';
         >
       </h2>
       <!-- Desktop Links -->
-      <div class="hidden custom:flex custom:items-center custom:space-x-2 ml-auto">
+      <div class="flex items-center space-x-2 ml-auto">
         <HeaderLink href={homeSlug} class="hover:text-cyan-700 transition-colors duration-200"
           >Inicio</HeaderLink
         >
@@ -52,13 +51,6 @@ const avatarPic = '/images/me-2.webp';
         }
       </div>
       <Avatar src={avatarPic} link={homeSlug} />
-      <button
-        id="menu-toggle"
-        class="custom:hidden border-2 border-gray-400 bg-gray-100 px-2 py-1 rounded transition-colors duration-700"
-      >
-        &#9776;
-      </button>
     </nav>
   </div>
-  <Dropdown />
 </header>

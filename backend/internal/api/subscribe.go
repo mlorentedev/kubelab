@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mlorentedev/mlorente-backend/internal/constants"
 	"github.com/mlorentedev/mlorente-backend/internal/models"
 	"github.com/mlorentedev/mlorente-backend/internal/services"
 	"github.com/mlorentedev/mlorente-backend/pkg/logger"
@@ -24,22 +25,15 @@ func SubscribeHandler(c *gin.Context) {
 
 	// Bind form data
 	if err := c.ShouldBind(&request); err != nil {
-		logger.LogFunction("error", "Error al hacer bind de la solicitud", err.Error())
-		setResponse(http.StatusBadRequest, false, "Error al procesar la solicitud", false, "")
-		c.String(response.HttpCode, response.Message)
-		return
-	}
-
-	// Validate email field
-	if request.Email == "" {
-		setResponse(http.StatusBadRequest, false, "El correo electrónico es obligatorio", false, "")
+		logger.LogFunction("error", constants.ServerMessages.Errors["IncompletData"], err.Error())
+		setResponse(http.StatusBadRequest, false, constants.FrontendMessages.Errors["IncompletData"], false, "")
 		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Validate email format
-	if !services.IsValidEmailFormat(request.Email) {
-		setResponse(http.StatusBadRequest, false, "Correo electrónico inválido", false, "")
+	if request.Email == "" || !services.IsValidEmailFormat(request.Email) {
+		setResponse(http.StatusBadRequest, false, constants.FrontendMessages.Errors["InvalidEmail"], false, "")
 		c.String(response.HttpCode, response.Message)
 		return
 	}
@@ -52,13 +46,13 @@ func SubscribeHandler(c *gin.Context) {
 	// Check if the subscriber already exists
 	existingSubscriber, err := services.CheckSubscriber(request.Email)
 	if err != nil {
-		setResponse(http.StatusInternalServerError, false, "Error interno del servidor", false, "")
+		setResponse(http.StatusInternalServerError, false, constants.FrontendMessages.Errors["ServerError"], false, "")
 		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	if existingSubscriber.Success && existingSubscriber.Subscriber != nil {
-		setResponse(http.StatusConflict, false, "Ya estás suscrito", true, existingSubscriber.Subscriber.ID)
+		setResponse(http.StatusConflict, false, constants.FrontendMessages.Errors["SubscriptionError"], true, existingSubscriber.Subscriber.ID)
 		c.String(response.HttpCode, response.Message)
 		return
 	}
@@ -66,13 +60,13 @@ func SubscribeHandler(c *gin.Context) {
 	// Process the new subscription
 	result, err := services.ProcessSubscription(request.Email, request.UtmSource, request.Tags)
 	if err != nil {
-		setResponse(http.StatusInternalServerError, false, "Error al procesar la suscripción", false, "")
+		setResponse(http.StatusInternalServerError, false, constants.FrontendMessages.Errors["ServerError"], false, "")
 		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Successful subscription
-	setResponse(http.StatusCreated, true, "Suscripción exitosa", false, result.SubscriberID)
-	c.Header("HX-Redirect", "/subscribe-success")
+	setResponse(http.StatusCreated, true, constants.FrontendMessages.Success["SubscriptionNew"], false, result.SubscriberID)
+	c.Header("HX-Redirect", constants.URLs.SuccessPages.Subscription)
 	c.String(response.HttpCode, response.Message)
 }

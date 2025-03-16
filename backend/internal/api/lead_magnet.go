@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mlorentedev/mlorente-backend/internal/constants"
 	"github.com/mlorentedev/mlorente-backend/internal/models"
 	"github.com/mlorentedev/mlorente-backend/internal/services"
 	"github.com/mlorentedev/mlorente-backend/pkg/logger"
@@ -12,67 +12,53 @@ import (
 
 // LeadMagnetHandler maneja las solicitudes para procesar lead magnet (suscripción + envío de recurso)
 func LeadMagnetHandler(c *gin.Context) {
-	var request struct {
-		Email      string `json:"email" binding:"required"`
-		ResourceID string `json:"resourceId" binding:"required"`
-		FileID     string `json:"fileId" binding:"required"`
-		Tags       string `json:"tags"`
+	var request models.ResourceRequest
+	var response models.ResourceResult
+
+	// Helper function to set the common response attributes
+	setResponse := func(httpCode int, success bool, message string) {
+		response.HttpCode = httpCode
+		response.Success = success
+		response.Message = message
 	}
 
-	if err := c.ShouldBindJSON(&request); err != nil {
-		logger.LogFunction("error", "Error in lead magnet endpoint", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Datos incompletos para completar la operación.",
-		})
+	// Bind form data
+	if err := c.ShouldBind(&request); err != nil {
+		logger.LogFunction("error", constants.ServerMessages.Errors["IncompletData"], err.Error())
+		setResponse(http.StatusBadRequest, false, constants.FrontendMessages.Errors["IncompletData"])
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
-	// Validar email
-	if !services.IsValidEmailFormat(request.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Correo electrónico inválido.",
-		})
+	// Validate email format
+	if request.Email == "" || !services.IsValidEmailFormat(request.Email) {
+		logger.LogFunction("error", constants.ServerMessages.Errors["InvalidEmail"], request.Email)
+		setResponse(http.StatusBadRequest, false, constants.FrontendMessages.Errors["InvalidEmail"])
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
-	// Procesar tags
+	// Tags proccesing
 	var tags []string
-	if request.Tags != "" {
-		tags = strings.Split(request.Tags, ",")
+	if len(request.Tags) > 0 {
+		tags = request.Tags
 	}
 
-	// Añadir tag específico del recurso
+	// Add resource tag
 	resourceTag := "resource-" + request.ResourceID
 	tags = append(tags, resourceTag)
 
-	// Procesar suscripción
-	subscriptionResult, err := services.ProcessSubscription(
-		request.Email,
-		string(models.SubscriptionSourceLeadMagnet),
-		tags,
-	)
-
+	// Process the new subscription
+	logger.LogFunction("info", constants.ServerMessages.Info["RequestProcessing"], request)
+	result, err := services.ProcessSubscription(request.Email, string(models.SubscriptionSourceLeadMagnet), tags)
 	if err != nil {
-		logger.LogFunction("error", "Error processing subscription for lead magnet", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Error interno del servidor.",
-		})
+		setResponse(http.StatusInternalServerError, false, constants.FrontendMessages.Errors["ServerError"])
+		c.String(response.HttpCode, response.Message)
 		return
 	}
 
-	if !subscriptionResult.Success {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": subscriptionResult.Message,
-		})
-		return
-	}
-
-	// Si la suscripción fue exitosa, programar el envío del email con recurso
-	go func() {
+	if result.AlreadySubscribed {
+		logger.LogFunction("info", constants.ServerMessages.Info["NewSubscriber"], request)
 		err := services.ScheduleResourceEmail(services.ResourceEmailScheduleOptions{
 			Email:        request.Email,
 			ResourceID:   request.ResourceID,
@@ -80,18 +66,17 @@ func LeadMagnetHandler(c *gin.Context) {
 			DelayMinutes: 1,
 		})
 		if err != nil {
-			logger.LogFunction("error", "Error scheduling resource email", err.Error())
+			logger.LogFunction("error", constants.ServerMessages.Errors["ServerError"], err.Error())
+			setResponse(http.StatusInternalServerError, false, constants.FrontendMessages.Errors["ServerError"])
+			c.String(response.HttpCode, response.Message)
+			return
 		}
-	}()
+		logger.LogFunction("info", constants.ServerMessages.Info["EmailSent"], request)
+	}
 
-	logger.LogFunction("info", "Lead magnet processed successfully", map[string]string{
-		"email":      request.Email,
-		"resourceId": request.ResourceID,
-	})
+	logger.LogFunction("info", constants.ServerMessages.Info["SubscriptionNew"], request)
 
-	// Devolver respuesta
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Recurso enviado correctamente.",
-	})
+	setResponse(http.StatusCreated, true, constants.FrontendMessages.Success["ResourceSent"])
+	c.Header("HX-Redirect", constants.URLs.SuccessPages.Resource)
+	c.String(response.HttpCode, response.Message)
 }

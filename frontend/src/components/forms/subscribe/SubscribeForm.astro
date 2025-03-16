@@ -1,5 +1,7 @@
 ---
-const { tag = '', utm_source = 'landing', button_text = '📩 VALE' } = Astro.props;
+import { ROUTES } from '../../../constants/routes';
+
+const { tag = '', utmSource = 'landing', buttonText = '📩 VALE' } = Astro.props;
 const tagsString = Array.isArray(tag) ? tag.join(',') : tag;
 const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
 ---
@@ -11,12 +13,9 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
     hx-target="#status-message"
     hx-target-error="#status-message"
     hx-swap="innerHTML"
-    hx-json-enc="message"
-    hx-include="[name='email'], [name='utm_source'], [name='tag']"
+    hx-json-enc="true"
+    hx-vals={{ tags: { tagsString }, utm_source: { utmSource } }}
   >
-    {tag && <input type="hidden" name="tag" value={tagsString} />}
-    <input type="hidden" name="utm_source" value={utm_source} />
-
     <input
       type="email"
       name="email"
@@ -27,12 +26,12 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
       type="submit"
       class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
     >
-      {button_text}
+      {buttonText}
     </button>
     <div class="flex justify-center items-center text-center">
       <input type="checkbox" id="privacy_policy" name="privacy_policy" class="mr-2" required />
       <label for="privacy_policy" class="text-xs">
-        Acepto la <a href="/privacy-policy" target="_blank" class="text-white"
+        Acepto la <a href={ROUTES.PRIVACY} target="_blank" class="text-white"
           >política de privacidad</a
         >
       </label>

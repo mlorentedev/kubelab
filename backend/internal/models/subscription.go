@@ -51,20 +51,3 @@ type UnsubscriptionResult struct {
 	Success  bool   `json:"success"`
 	Message  string `json:"message"`
 }
-
-// ResourceRequest representa una solicitud de recurso
-type ResourceRequest struct {
-	Email      string   `json:"email" binding:"required"`
-	ResourceID string   `json:"resourceId" binding:"required"`
-	FileID     string   `json:"fileId" binding:"required"`
-	Tags       []string `json:"tags"`
-	UtmSource  string   `json:"utmSource"`
-}
-
-// ResourceEmailOptions representa opciones para envío de email con recurso
-type ResourceEmailOptions struct {
-	Email         string `json:"email"`
-	ResourceID    string `json:"resourceId"`
-	ResourceTitle string `json:"resourceTitle"`
-	ResourceLink  string `json:"resourceLink"`
-}

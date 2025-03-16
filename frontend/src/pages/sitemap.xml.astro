@@ -1,6 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
-import { ENV } from '../config/env';
+import { env } from '../data/env';
 
 function formatDate(date: Date) {
   return date.toISOString();
@@ -16,20 +16,24 @@ const regularPages = [
 const projects = await getCollection('projects');
 const resources = await getCollection('resources');
 
-const projectUrls = projects.map((project) => ({
-  url: `/projects/${project.id}/`,
-  lastMod: new Date(project.data.pubDate),
-  priority: '0.8',
-}));
+const projectUrls = projects.map(
+  (project: { id: any; data: { pubDate: string | number | Date } }) => ({
+    url: `/projects/${project.id}/`,
+    lastMod: new Date(project.data.pubDate),
+    priority: '0.8',
+  })
+);
 
-const resourceUrls = resources.map((resource) => ({
-  url: `/resources/${resource.slug}/`,
-  lastMod: new Date(resource.data.pubDate),
-  priority: '0.8',
-}));
+const resourceUrls = resources.map(
+  (resource: { slug: any; data: { pubDate: string | number | Date } }) => ({
+    url: `/resources/${resource.slug}/`,
+    lastMod: new Date(resource.data.pubDate),
+    priority: '0.8',
+  })
+);
 
 const allUrls = [...regularPages, ...projectUrls, ...resourceUrls];
-const siteUrl = ENV.SITE.URL;
+const siteUrl = env.SITE.URL;
 
 Astro.response.headers.set('Content-Type', 'application/xml');
 ---

@@ -1,5 +1,6 @@
 ---
-import IndexLayout from '../layouts/IndexLayout.astro';
+import IndexLayout from '../../layouts/IndexLayout.astro';
+import { ROUTES } from '../../constants/routes';
 
 const { lang } = Astro.props;
 
@@ -11,7 +12,7 @@ const subtitle = 'Que tengas un gran día';
   <section class="space-y-6 text-center">
     <p>
       Si ha sido un error, puedes volver a suscribirte en cualquier momento desde la <a
-        href="/"
+        href={ROUTES.HOME}
         class="text-cyan-700 hover:underline">página principal</a
       >.
     </p>

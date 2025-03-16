@@ -1,8 +1,7 @@
 ---
-import CalendlyPopup from '../components/features/booking/CalendlyPopup.astro';
-import { env } from '../data/env';
-
-import ContactLayout from '../layouts/ContactLayout.astro';
+import CalendlyForm from '../../components/forms/booking/CalendlyForm.astro';
+import ContactLayout from '../../layouts/ContactLayout.astro';
+import { env } from '../../data/env';
 
 const contactTitle = 'Resérvame tu tiempo';
 const contactSubtitle = 'Sea lo que fuere que necesites, este es tu sitio';
@@ -16,7 +15,7 @@ const calendlyButtonText = 'Quiero una videollamada';
 <ContactLayout contactTitle={contactTitle} contactSubtitle={contactSubtitle}>
   <div class="max-w-4xl mx-auto">
     <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-      <CalendlyPopup
+      <CalendlyForm
         url={calendlyURL}
         text={calendlyButtonText}
         color={calendlyPrimaryColor}

@@ -100,7 +100,7 @@ const buttonText = 'defaultButtonText';
     {
       tags && tags.length > 0 && (
         <div class="flex flex-wrap gap-2 mb-6">
-          {tags.map((tag) => (
+          {tags.map((tag: unknown) => (
             <span class="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-sm">{tag}</span>
           ))}
         </div>

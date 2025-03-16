@@ -50,7 +50,7 @@ export default [
   },
 
   {
-    files: ['src/**/*.astro'],
+    files: ['**/*.astro'],
     languageOptions: {
       parser: astroParser,
       parserOptions: {
