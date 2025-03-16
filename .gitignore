@@ -20,7 +20,9 @@ build/
 frontend/.env
 backend/.env
 frontend/.env.*
+!frontend/.env.example
 backend/.env.*
+!backend/.env.example
 frontend/.env.local
 backend/.env.local
 
