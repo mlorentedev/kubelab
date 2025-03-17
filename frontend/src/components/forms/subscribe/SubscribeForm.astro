@@ -1,0 +1,44 @@
+---
+import { ROUTES } from '../../../constants/routes';
+
+const { tag = 'new', utmSource = 'landing', buttonText = '📩 VALE' } = Astro.props;
+const tagsString = Array.isArray(tag) ? tag: [tag];
+const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
+---
+
+<div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
+  <form
+    class="flex flex-col gap-6"
+    hx-post={endPoint}
+    hx-target="#status-message"
+    hx-target-error="#status-message"
+    hx-swap="innerHTML"
+    hx-json-enc="true"
+    hx-vals={JSON.stringify({ 
+      tags: tagsString, 
+      utm_source: utmSource,
+    })}
+  >
+    <input
+      type="email"
+      name="email"
+      placeholder="Tu correo electrónico"
+      class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-cyan-300"
+    />
+    <button
+      type="submit"
+      class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
+    >
+      {buttonText}
+    </button>
+    <div class="flex justify-center items-center text-center">
+      <input type="checkbox" id="privacy_policy" name="privacy_policy" class="mr-2" required />
+      <label for="privacy_policy" class="text-xs">
+        Acepto la <a href={ROUTES.PRIVACY} target="_blank" class="text-white"
+          >política de privacidad</a
+        >
+      </label>
+    </div>
+  </form>
+  <div id="status-message" class="mt-4 text-xs text-center"></div>
+</div>

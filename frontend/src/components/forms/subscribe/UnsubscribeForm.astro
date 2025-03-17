@@ -1,0 +1,32 @@
+---
+const { buttonText = 'Darme de baja' } = Astro.props;
+const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/unsubscribe';
+---
+
+<div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto my-4">
+  <form
+    class="flex flex-col gap-6"
+    hx-post={endPoint}
+    hx-target="#status-message"
+    hx-target-error="#status-message"
+    hx-swap="innerHTML"
+    hx-json-enc="true"
+  >
+    <div>
+      <input
+        type="email"
+        name="email"
+        placeholder="Tu correo electrónico"
+        required
+        class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-cyan-300"
+      />
+    </div>
+    <button
+      type="submit"
+      class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors"
+    >
+      {buttonText}
+    </button>
+  </form>
+  <div id="status-message" class="mt-4 text-xs text-center"></div>
+</div>
