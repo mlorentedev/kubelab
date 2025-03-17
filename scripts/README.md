@@ -19,11 +19,26 @@ All scripts use a shared utilities library that provides consistent functions fo
 ### Development Environment
 
 - **`setup-dev.sh`** - Sets up the local development environment
-  - Creates development configuration files (.env.dev, docker-compose.dev.yml)
+  - Creates development configuration files (.env.*, docker-compose.dev.yml)
   - Creates Docker configuration for frontend and backend
   - Initializes basic project structure
   - Starts development services
   - **Usage:** `./setup-dev.sh`
+
+### CI/CD Configuration
+
+- **`setup-secrets.sh`** - Configures GitHub repository secrets for CI/CD
+  - Sets up deployment credentials
+  - Configures environment variables for all environments
+  - Sets API keys and integration tokens
+  - **Usage:** `./setup-secrets.sh`
+
+- **`setup-ssh.sh`** - Comprehensive SSH key management
+  - Generates SSH keys for deployment
+  - Adds keys to servers
+  - Configures GitHub secrets for SSH keys
+  - Creates SSH config entries
+  - **Usage:** `./setup-ssh.sh`
 
 ### Server Configuration
 
@@ -36,20 +51,6 @@ All scripts use a shared utilities library that provides consistent functions fo
   - **Usage:** `./setup-server.sh <server_ip> <environment>`
   - **Example:** `./setup-server.sh 123.456.789.0 production`
 
-### CI/CD Configuration
-
-- **`setup-ci.sh`** - Configures GitHub repository secrets for CI/CD
-  - Sets up deployment credentials
-  - Configures environment variables for all environments
-  - Sets API keys and integration tokens
-  - **Usage:** `./setup-ci.sh`
-
-- **`setup-ssh.sh`** - Comprehensive SSH key management
-  - Generates SSH keys for deployment
-  - Adds keys to servers
-  - Configures GitHub secrets for SSH keys
-  - Creates SSH config entries
-  - **Usage:** `./setup-ssh.sh`
 
 ## Deployment Scripts
 
@@ -145,7 +146,7 @@ All scripts use a shared utilities library that provides consistent functions fo
    ./setup-server.sh 123.456.789.0 staging
    
    # Configure GitHub secrets for CI/CD
-   ./setup-ci.sh
+   ./setup-secrets.sh
    ```
 
 3. Initial deployment:

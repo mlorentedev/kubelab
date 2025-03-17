@@ -95,9 +95,6 @@ func GetConfig() (*Config, error) {
 	cfg.Email.User = os.Getenv("EMAIL_USER")
 	cfg.Email.Pass = os.Getenv("EMAIL_PASS")
 	cfg.Email.Secure = true
-	cfg.GitHub.APIKey = os.Getenv("GITHUB_API_KEY")
-	cfg.DockerHub.Username = os.Getenv("DOCKERHUB_USERNAME")
-	cfg.DockerHub.Token = os.Getenv("DOCKERHUB_TOKEN")
 	cfg.Frontend.Host = os.Getenv("FRONTEND_HOST")
 	cfg.Frontend.Port = os.Getenv("FRONTEND_PORT")
 
