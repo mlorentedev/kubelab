@@ -33,10 +33,13 @@ jobs:
 
       - name: Prepare setup
         run: |
-          cd scripts
-          chmod +x setup-env.sh
-          ./setup-env.sh
-          cd ..
+          cd backend
+          if [ -f .env ]; then
+            echo "Using existing .env file"
+          else
+            echo "Creating .env file from .env.example"
+            mv .env.example .env
+          fi
       
       - name: Install dependencies
         run: |
