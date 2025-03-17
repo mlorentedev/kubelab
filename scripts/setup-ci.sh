@@ -136,7 +136,6 @@ set_secret "TWITTER_URL" "Twitter URL" "https://twitter.com/mlorentedev"
 set_secret "YOUTUBE_URL" "YouTube URL" "https://youtube.com/@mlorentedev"
 set_secret "GITHUB_URL" "GitHub URL" "https://github.com/mlorentedev"
 set_secret "CALENDLY_URL" "Calendly URL" ""
-set_secret "BUY_ME_A_COFFEE_URL" "Buy Me a Coffee URL" ""
 
 # Configure integration secrets
 log_info "API configuration:"

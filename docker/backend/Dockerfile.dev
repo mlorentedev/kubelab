@@ -1,7 +1,10 @@
-FROM golang:1.21-alpine
+FROM golang:1.23-alpine
 
 # Install air for hot reload
-RUN go install github.com/cosmtrek/air@latest
+RUN apk add --no-cache git make bash
+
+# Install air using go install with the correct syntax
+RUN go install github.com/air-verse/air@latest
 
 WORKDIR /app
 

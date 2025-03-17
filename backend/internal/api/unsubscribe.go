@@ -10,6 +10,7 @@ import (
 	"github.com/mlorentedev/mlorente-backend/pkg/logger"
 )
 
+// UnsubscribeHandler handles newsletter unsubscription requests
 func UnsubscribeHandler(c *gin.Context) {
 	var request models.UnsubscriptionRequest
 	var response models.UnsubscriptionResult
@@ -23,49 +24,69 @@ func UnsubscribeHandler(c *gin.Context) {
 
 	// Bind form data
 	if err := c.ShouldBind(&request); err != nil {
-		logger.LogFunction("error", constants.ServerMessages.Errors["IncompletData"], err.Error())
-		setResponse(http.StatusBadRequest, false, constants.FrontendMessages.Errors["IncompletData"])
+		logger.LogFunction("error", constants.Messages.Backend.Error["IncompleteData"], err.Error())
+		setResponse(http.StatusBadRequest, false, constants.Messages.Frontend.Errors["IncompleteData"])
 		c.String(response.HttpCode, response.Message)
 		return
 	}
 
 	// Validate email format
 	if request.Email == "" || !services.IsValidEmailFormat(request.Email) {
-		logger.LogFunction("error", constants.ServerMessages.Errors["InvalidEmail"], request.Email)
-		setResponse(http.StatusBadRequest, false, constants.FrontendMessages.Errors["InvalidEmail"])
+		logger.LogFunction("error", constants.Messages.Backend.Error["InvalidEmail"], request.Email)
+		setResponse(http.StatusBadRequest, false, constants.Messages.Frontend.Errors["InvalidEmail"])
 		c.String(response.HttpCode, response.Message)
 		return
 	}
 
-	// Check if the email is already subscribed
+	// Check if the subscriber exists
 	existingSubscriber, err := services.CheckSubscriber(request.Email)
 	if err != nil {
-		logger.LogFunction("error", constants.ServerMessages.Errors["ServerError"], err.Error())
-		setResponse(http.StatusInternalServerError, false, constants.FrontendMessages.Errors["ServerError"])
+		logger.LogFunction("error", constants.Messages.Backend.Error["CheckSubscriberError"], err.Error())
+		setResponse(http.StatusInternalServerError, false, constants.Messages.Frontend.Errors["ServerError"])
 		c.String(response.HttpCode, response.Message)
 		return
 	}
 
-	// If the email is already subscribed, proceed to unsubscribe
-	// If the email is not subscribed, return a conflict response
+	// Handle based on subscriber existence
 	if existingSubscriber.Success && existingSubscriber.Subscriber != nil {
-		_, err = services.UnsubscribeUser(request.Email)
+		// Subscriber exists, proceed with unsubscribe
+		logger.LogFunction("info", constants.Messages.Backend.Info["SubscriberExists"], map[string]string{
+			"email":  request.Email,
+			"id":     existingSubscriber.Subscriber.ID,
+			"action": "unsubscribe",
+		})
+
+		result, err := services.UnsubscribeUser(request.Email)
 		if err != nil {
-			logger.LogFunction("error", constants.ServerMessages.Errors["ServerError"], err.Error())
-			setResponse(http.StatusInternalServerError, false, constants.FrontendMessages.Errors["ServerError"])
+			logger.LogFunction("error", constants.Messages.Backend.Error["UnsubscribeError"], err.Error())
+			setResponse(http.StatusInternalServerError, false, constants.Messages.Frontend.Errors["ServerError"])
 			c.String(response.HttpCode, response.Message)
 			return
-		} else {
-			logger.LogFunction("info", constants.ServerMessages.Info["Unsubscribed"], request.Email)
-			setResponse(http.StatusOK, true, constants.FrontendMessages.Success["Unsubscription"])
+		}
+
+		if result.Success {
+			logger.LogFunction("info", constants.Messages.Backend.Info["UserUnsubscribed"], map[string]string{
+				"email": request.Email,
+				"id":    existingSubscriber.Subscriber.ID,
+			})
+
+			setResponse(http.StatusOK, true, constants.Messages.Frontend.Success["Unsubscription"])
 			c.Header("HX-Redirect", constants.URLs.SuccessPages.Unsubscribe)
 			c.String(response.HttpCode, response.Message)
+		} else {
+			logger.LogFunction("error", constants.Messages.Backend.Error["UnsubscribeError"], result.Message)
+			setResponse(http.StatusInternalServerError, false, constants.Messages.Frontend.Errors["UnsubscriptionError"])
+			c.String(response.HttpCode, response.Message)
 		}
-	} else if !existingSubscriber.Success {
-		logger.LogFunction("info", constants.ServerMessages.Info["NotSubscribed"], request.Email)
-		setResponse(http.StatusConflict, false, constants.FrontendMessages.Errors["EmailNotSubscribed"])
+	} else {
+		// Email not subscribed
+		logger.LogFunction("info", constants.Messages.Backend.Info["SubscriberNotFound"], map[string]string{
+			"email":  request.Email,
+			"action": "unsubscribe",
+		})
+
+		setResponse(http.StatusConflict, false, constants.Messages.Frontend.Errors["EmailNotSubscribed"])
 		c.String(response.HttpCode, response.Message)
 		return
 	}
-
 }

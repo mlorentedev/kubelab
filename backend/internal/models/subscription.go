@@ -26,9 +26,9 @@ type Subscriber struct {
 
 // SubscriptionRequest representa una solicitud de suscripción
 type SubscriptionRequest struct {
-	Email     string   `form:"email"`
-	Tags      []string `form:"tags"`
-	UtmSource string   `form:"utm_source"`
+	Email     string   `json:"email" binding:"required,email"`
+	Tags      []string `json:"tags"`
+	UtmSource string   `json:"utm_source"`
 }
 
 // SubscriptionResult representa el resultado de una operación de suscripción
@@ -42,7 +42,7 @@ type SubscriptionResult struct {
 
 // UnsubscriptionRequest representa una solicitud de cancelación de suscripción
 type UnsubscriptionRequest struct {
-	Email string `form:"email" binding:"required"`
+	Email string `json:"email" binding:"required"`
 }
 
 // UnsubscriptionResult representa el resultado de una operación de cancelación de suscripción

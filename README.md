@@ -77,13 +77,13 @@ This project demonstrates a production-ready microservices approach using contai
 
 ```bash
 # Start all services
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f [service_name]
+docker compose -f docker-compose.dev.yml logs -f [service_name]
 
 # Stop all services
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 ```
 
 Containerized development provides:
@@ -91,7 +91,7 @@ Containerized development provides:
 - Frontend at <http://localhost:3000>
 - Backend at <http://localhost:8080>
 - Hot reloading for both frontend and backend
-- Consistent environment across team members
+- Consistent logging and error handling
 
 #### Individual Component Development
 

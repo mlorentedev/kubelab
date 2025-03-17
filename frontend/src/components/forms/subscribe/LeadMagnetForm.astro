@@ -14,9 +14,9 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/lead-magnet';
     hx-swap="innerHTML"
     hx-json-enc="true"
     hx-vals={JSON.stringify({
-      resource_id: { resourceId },
-      file_id: { fileId },
-      tags,
+      resource_id: resourceId,
+      file_id: fileId,
+      tags: tags,
       utm_source: 'lead_magnet',
     })}
   >

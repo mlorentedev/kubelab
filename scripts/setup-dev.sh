@@ -22,9 +22,51 @@ if ! command -v docker-compose &> /dev/null; then
 fi
 
 # Create .env.development file if it doesn't exist
-if [ ! -f ".env.development" ]; then
-    echo -e "${YELLOW}Creating .env.development file...${NC}"
-    cat > .env.development <<EOL
+if [ ! -f ".env.backend.development" ]; then
+    echo -e "${YELLOW}Creating .env.backend.development file...${NC}"
+    cat > .env.backend.development <<EOL
+# Environment Variables - Development
+ENV=development
+VERSION=0.0.1
+PORT=8080
+
+# Application
+SITE_TITLE=mlorentedev
+SITE_AUTHOR=Manu Lorente
+SITE_DOMAIN=mlorente.dev
+SITE_MAIL=info@mlorente.dev
+SITE_URL=https://mlorente.dev
+
+# Newsletter & Subscription Service
+BEEHIIV_API_KEY=PLACEHOLDER
+BEEHIIV_PUB_ID=PLACEHOLDER
+
+# Email Configuration
+EMAIL_HOST=PLACEHOLDER
+EMAIL_PORT=PLACEHOLDER
+EMAIL_FROM=PLACEHOLDER
+EMAIL_SECURE=PLACEHOLDER
+EMAIL_USER=PLACEHOLDER
+EMAIL_PASS=PLACEHOLDER
+
+# External API Keys (Development/Restricted)
+GITHUB_API_TOKEN=PLACEHOLDER
+DOCKERHUB_USERNAME=PLACEHOLDER
+DOCKERHUB_TOKEN=PLACEHOLDER
+
+# Deployment & Infrastructure
+FRONTEND_HOST=localhost
+FRONTEND_PORT=3000
+EOL
+    echo -e "${GREEN}.env.backend.development file created successfully.${NC}"
+else
+    echo -e "${YELLOW}.env.backend.development file already exists.${NC}"
+fi
+
+# Create .env.development file if it doesn't exist
+if [ ! -f ".env.frontend.development" ]; then
+    echo -e "${YELLOW}Creating .env.frontend.development file...${NC}"
+    cat > .env.frontend.development <<EOL
 # Environment Variables - Development
 ENV=development
 VERSION=1.0.0
@@ -33,13 +75,12 @@ VERSION=1.0.0
 PUBLIC_SITE_TITLE=mlorente.dev
 PUBLIC_SITE_DESCRIPTION=mlorentedev site
 PUBLIC_SITE_DOMAIN=localhost
-PUBLIC_SITE_URL=http://localhost:3000
+PUBLIC_SITE_URL=http://localhost:4321
 PUBLIC_SITE_MAIL=mlorentedev@gmail.com
 PUBLIC_SITE_AUTHOR=Manuel Lorente
 PUBLIC_SITE_KEYWORDS=devops, cloud, kubernetes, aws, azure, python, go
 
 # Social media
-PUBLIC_BUY_ME_A_COFFEE_URL=https://www.buymeacoffee.com/mlorente
 PUBLIC_CALENDLY_URL=https://calendly.com/mlorentedev/videollamada
 PUBLIC_TWITTER_URL=https://x.com/mlorentedev
 PUBLIC_YOUTUBE_URL=https://www.youtube.com/@mlorentedev
@@ -51,21 +92,21 @@ PUBLIC_ENABLE_HOMELABS=true
 PUBLIC_ENABLE_CONTACT=false
 
 # Analytics & Tracking
-PUBLIC_GOOGLE_ANALYTICS_ID=G-PLL8SP2YFC
-PUBLIC_GOOGLE_TAG_MANAGER_ID=GTM-XXXXXX
+PUBLIC_GOOGLE_ANALYTICS_ID=PLACEHOLDER
+PUBLIC_GOOGLE_TAG_MANAGER_ID=PLACEHOLDER
 
 # Deployment & Infrastructure
-BACKEND_URL=http://backend:8080
+BACKEND_URL=http://localhost:8080
 EOL
-    echo -e "${GREEN}.env.development file created successfully.${NC}"
+    echo -e "${GREEN}.env.frontend.development file created successfully.${NC}"
 else
-    echo -e "${YELLOW}.env.development file already exists.${NC}"
+    echo -e "${YELLOW}.env.frontend.development file already exists.${NC}"
 fi
 
 # Copy .env.development to frontend if it doesn't exist
 if [ ! -f "frontend/.env" ]; then
-    echo -e "${YELLOW}Copying .env.development to frontend/.env...${NC}"
-    cp .env.development frontend/.env
+    echo -e "${YELLOW}Copying .env.frontend.development to frontend/.env...${NC}"
+    cp .env.frontend.development frontend/.env
     echo -e "${GREEN}.env file created successfully in frontend directory.${NC}"
 else
     echo -e "${YELLOW}.env file already exists in frontend directory.${NC}"
@@ -73,8 +114,8 @@ fi
 
 # Copy .env.development to backend if it doesn't exist
 if [ ! -f "backend/.env" ]; then
-    echo -e "${YELLOW}Copying .env.development to backend/.env...${NC}"
-    cp .env.development backend/.env
+    echo -e "${YELLOW}Copying .env.backend.development to backend/.env...${NC}"
+    cp .env.backend.development backend/.env
     echo -e "${GREEN}.env file created successfully in backend directory.${NC}"
 else
     echo -e "${YELLOW}.env file already exists in backend directory.${NC}"
@@ -85,6 +126,7 @@ if [ ! -f "backend/.air.toml" ]; then
     echo -e "${YELLOW}Creating configuration for backend hot-reload...${NC}"
     mkdir -p backend
     cat > backend/.air.toml <<EOL
+# .air.toml
 root = "."
 tmp_dir = "tmp"
 [build]

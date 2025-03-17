@@ -13,7 +13,6 @@ interface ImportMetaEnv {
   readonly PUBLIC_YOUTUBE_URL: string;
   readonly PUBLIC_GITHUB_URL: string;
   readonly PUBLIC_CALENDLY_URL: string;
-  readonly PUBLIC_BUY_ME_A_COFFEE_URL: string;
 
   readonly PUBLIC_GOOGLE_ANALYTICS_ID: string;
 

@@ -28,6 +28,7 @@ type Config struct {
 	Email struct {
 		Host   string
 		Port   string
+		From   string
 		Secure bool
 		User   string
 		Pass   string
@@ -90,14 +91,15 @@ func GetConfig() (*Config, error) {
 	cfg.Beehiiv.PubID = os.Getenv("BEEHIIV_PUB_ID")
 	cfg.Email.Host = os.Getenv("EMAIL_HOST")
 	cfg.Email.Port = os.Getenv("EMAIL_PORT")
+	cfg.Email.From = os.Getenv("EMAIL_FROM")
 	cfg.Email.User = os.Getenv("EMAIL_USER")
 	cfg.Email.Pass = os.Getenv("EMAIL_PASS")
+	cfg.Email.Secure = true
 	cfg.GitHub.APIKey = os.Getenv("GITHUB_API_KEY")
 	cfg.DockerHub.Username = os.Getenv("DOCKERHUB_USERNAME")
 	cfg.DockerHub.Token = os.Getenv("DOCKERHUB_TOKEN")
 	cfg.Frontend.Host = os.Getenv("FRONTEND_HOST")
 	cfg.Frontend.Port = os.Getenv("FRONTEND_PORT")
-	cfg.Email.Secure = true
 
 	// Validar configuración
 	if !validateConfig(cfg) {

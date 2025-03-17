@@ -3,9 +3,9 @@ const { src, link, alt = 'Avatar' } = Astro.props;
 ---
 
 <div
-  class="fixed left-1/2 transform -translate-x-1/2 top-1 transition-opacity duration-300 opacity-100"
+  class="fixed left-1/2 transform -translate-x-1/2 top-1 transition-opacity duration-300 opacity-100 custom:block hidden"
   id="avatar"
->
+  >
   <a href={link}>
     <img src={src} alt={alt} class="w-12 h-auto rounded-full border-1.5 border-white shadow-lg" />
   </a>

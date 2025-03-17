@@ -1,9 +1,12 @@
 FROM golang:1.21-alpine AS builder
 
+# Install air for hot reload
+RUN go install github.com/cosmtrek/air@latest
+
 WORKDIR /app
 
 # Copiar los archivos de módulos y descargar dependencias
-COPY backend/go.mod backend/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copiar el código fuente

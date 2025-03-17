@@ -13,7 +13,6 @@ export const env = {
     YOUTUBE: import.meta.env.PUBLIC_YOUTUBE_URL,
     GITHUB: import.meta.env.PUBLIC_GITHUB_URL,
     CALENDLY: import.meta.env.PUBLIC_CALENDLY_URL,
-    BUY_ME_A_COFFEE: import.meta.env.PUBLIC_BUY_ME_A_COFFEE_URL,
   },
   ANALYTICS: {
     GOOGLE_ID: import.meta.env.PUBLIC_GOOGLE_ANALYTICS_ID,

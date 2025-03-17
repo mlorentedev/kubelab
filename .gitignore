@@ -30,6 +30,7 @@ backend/.env.local
 tmp/
 .cache/
 .tmp/
+.cache_*
 
 # Archivos de log
 npm-debug.log*

@@ -29,9 +29,6 @@ export default defineConfig({
       'import.meta.env.PUBLIC_YOUTUBE_URL': JSON.stringify(process.env.PUBLIC_YOUTUBE_URL),
       'import.meta.env.PUBLIC_GITHUB_URL': JSON.stringify(process.env.PUBLIC_GITHUB_URL),
       'import.meta.env.PUBLIC_CALENDLY_URL': JSON.stringify(process.env.PUBLIC_CALENDLY_URL),
-      'import.meta.env.PUBLIC_BUY_ME_A_COFFEE_URL': JSON.stringify(
-        process.env.PUBLIC_BUY_ME_A_COFFEE_URL
-      ),
       'import.meta.env.PUBLIC_GOOGLE_ANALYTICS_ID': JSON.stringify(
         process.env.PUBLIC_GOOGLE_ANALYTICS_ID
       ),
