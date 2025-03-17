@@ -1,0 +1,18 @@
+name: Branch Protection Enforcement
+
+on:
+  pull_request:
+    branches:
+      - master
+      - develop
+
+jobs:
+  branch-protection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Branch Merge Restrictions
+        run: |
+          if [[ "${{ github.base_ref }}" == "master" && "${{ github.head_ref }}" != "develop" ]]; then
+            echo "Error: Pulls to master are only allowed from develop branch"
+            exit 1
+          fi
