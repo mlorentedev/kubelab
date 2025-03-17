@@ -41,6 +41,11 @@ jobs:
         run: |
           cd frontend
           npm run lint
+
+      - name: Format
+        run: |
+          cd frontend
+          npm run format
       
       - name: Type check
         run: |

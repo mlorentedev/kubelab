@@ -51,7 +51,6 @@ All scripts use a shared utilities library that provides consistent functions fo
   - **Usage:** `./setup-server.sh <server_ip> <environment>`
   - **Example:** `./setup-server.sh 123.456.789.0 production`
 
-
 ## Deployment Scripts
 
 ### Deployment Management
@@ -70,15 +69,6 @@ All scripts use a shared utilities library that provides consistent functions fo
   - Verifies successful rollback
   - **Usage:** `./deploy-rollback.sh <environment> [version]`
   - **Example:** `./deploy-rollback.sh production v1.1.0`
-
-### Configuration Management
-
-- **`config-update.sh`** - Updates environment variables on the server
-  - Validates critical variables
-  - Creates a backup of previous configuration
-  - Restarts services after updating
-  - **Usage:** `./config-update.sh <environment>`
-  - **Example:** `./config-update.sh staging`
 
 ## Monitoring & Diagnostic Scripts
 
@@ -150,11 +140,8 @@ All scripts use a shared utilities library that provides consistent functions fo
    ```
 
 3. Initial deployment:
-
-   ```bash
-   # Update environment configuration
-   ./config-update.sh staging
-   
+  
+  ```bash  
    # Deploy application
    ./deploy-app.sh staging
    ```

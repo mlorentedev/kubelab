@@ -2,7 +2,7 @@
 import { ROUTES } from '../../../constants/routes';
 
 const { tag = 'new', utmSource = 'landing', buttonText = '📩 VALE' } = Astro.props;
-const tagsString = Array.isArray(tag) ? tag: [tag];
+const tagsString = Array.isArray(tag) ? tag : [tag];
 const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
 ---
 
@@ -14,8 +14,8 @@ const endPoint = import.meta.env.PUBLIC_BACKEND_URL + '/api/subscribe';
     hx-target-error="#status-message"
     hx-swap="innerHTML"
     hx-json-enc="true"
-    hx-vals={JSON.stringify({ 
-      tags: tagsString, 
+    hx-vals={JSON.stringify({
+      tags: tagsString,
       utm_source: utmSource,
     })}
   >
