@@ -18,12 +18,12 @@ All scripts use a shared utilities library that provides consistent functions fo
 
 ### Development Environment
 
-- **`setup-dev.sh`** - Sets up the local development environment
+- **`setup-env.sh`** - Sets up the local development environment
   - Creates development configuration files (.env.*, docker-compose.dev.yml)
   - Creates Docker configuration for frontend and backend
   - Initializes basic project structure
   - Starts development services
-  - **Usage:** `./setup-dev.sh`
+  - **Usage:** `./setup-env.sh`
 
 ### CI/CD Configuration
 
@@ -119,7 +119,7 @@ All scripts use a shared utilities library that provides consistent functions fo
 
    ```bash
    # Set up development environment
-   ./setup-dev.sh
+   ./setup-env.sh
    
    # Develop and test locally
    cd frontend

@@ -30,6 +30,13 @@ jobs:
         with:
           go-version: '1.21'
           cache: true
+
+      - name: Prepare setup
+        run: |
+          cd scripts
+          chmod +x setup-env.sh
+          ./setup-env.sh
+          cd ..
       
       - name: Install dependencies
         run: |

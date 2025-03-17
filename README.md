@@ -68,7 +68,7 @@ This project demonstrates a production-ready microservices approach using contai
 
    ```bash
    # Configure development environment
-   ./scripts/setup-dev.sh
+   ./scripts/setup-env.sh
    ```
 
 ### Development Workflow
