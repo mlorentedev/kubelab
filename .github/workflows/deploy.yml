@@ -22,6 +22,58 @@ on:
         type: string
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # Determine version increment based on commit messages
+      - name: Analyze Commit Messages
+        id: commit-analysis
+        run: |
+          # Detect commit types
+          BREAKING_CHANGES=$(git log --oneline | grep -c "BREAKING CHANGE")
+          FEATURES=$(git log --oneline | grep -c "feat:")
+          FIXES=$(git log --oneline | grep -c "fix:")
+
+          # Determine version bump
+          if [ "$BREAKING_CHANGES" -gt 0 ]; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+          elif [ "$FEATURES" -gt 0 ]; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+          elif [ "$FIXES" -gt 0 ]; then
+            echo "bump=patch" >> $GITHUB_OUTPUT
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+          fi
+
+      # Advanced tagging with semantic versioning
+      - name: Bump Version
+        uses: anothrNick/github-tag-action@1.64.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          RELEASE_BRANCHES: master
+          DEFAULT_BUMP: ${{ steps.commit-analysis.outputs.bump }}
+          
+      # Optional: Generate detailed changelog
+      - name: Generate Changelog
+        id: changelog
+        uses: heinrichreimer/github-changelog-generator-action@v2.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      # Create GitHub Release with changelog
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: ${{ steps.changelog.outputs.changelog }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            
   prepare:
     name: Prepare Deployment
     runs-on: ubuntu-latest
@@ -220,3 +272,87 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+            # New job for creating tags
+  create-tag:
+    name: Create Semantic Version Tag
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: needs.deploy.result == 'success' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Ensures all history is fetched for tag creation
+
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@1.64.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          RELEASE_BRANCHES: master
+          DEFAULT_BUMP: patch  # Automatically bump patch version on successful deployment
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optional: Send notification about new release
+      - name: Notify Release
+        uses: slackapi/slack-github-action@v1.24.0
+        if: success()
+        with:
+          payload: |
+            {
+              "text": "🚀 New Release Created: ${{ steps.tag.outputs.tag }}\nDeployed to: ${{ needs.prepare.outputs.environment }}\nView release notes: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.tag }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Enhanced Slack Notification Job
+  deployment-notification:
+    name: Extended Deployment Notification
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: always()  # Run even if previous jobs failed
+    steps:
+      - name: Detailed Deployment Notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚀 Deployment ${{ needs.deploy.result == 'success' && 'Successful' || 'Failed' }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\n${{ needs.prepare.outputs.environment }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ needs.prepare.outputs.version }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Deployment result: ${{ needs.deploy.result }}\nView workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
