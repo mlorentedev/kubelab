@@ -22,6 +22,11 @@ check_result() {
   fi
 }
 
+# Configure ownership of the project directory
+echo -e "${YELLOW}Configuring ownership of the project directory...${NC}"
+sudo chown -R $USER:$USER $(pwd)/frontend/
+sudo chown -R $USER:$USER $(pwd)/backend/
+
 # ===================================
 # FRONTEND CI
 # ===================================

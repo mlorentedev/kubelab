@@ -13,7 +13,6 @@ RUN go mod download
 
 # Copiar el código fuente
 COPY backend/ ./
-COPY backend/.env ./.env
 
 # Compilar la aplicación con optimizaciones
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \

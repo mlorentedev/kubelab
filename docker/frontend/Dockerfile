@@ -11,7 +11,6 @@ RUN npm ci
 
 # Copiar el resto del código fuente
 COPY frontend/ ./
-COPY frontend/.env ./.env
 
 # Configuración de environment (si es necesario)
 ARG BUILD_ENV=production

@@ -28,16 +28,6 @@ jobs:
           go-version: '1.23'
           cache: true
           cache-dependency-path: backend/go.sum
-
-      - name: Prepare setup
-        working-directory: backend
-        run: |
-          if [ -f .env ]; then
-            echo "Using existing .env file"
-          else
-            echo "Creating .env file from .env.example"
-            mv .env.example .env
-          fi
       
       - name: Verify dependencies
         working-directory: backend
