@@ -55,9 +55,9 @@ process_env_files() {
 
             # Prefix environment-specific variables to avoid conflicts
             if [[ "$env_file" == *"backend"* ]]; then
-                prefixed_key="BACKEND_${key}"
+                prefixed_key="${key}"
             elif [[ "$env_file" == *"frontend"* ]]; then
-                prefixed_key="FRONTEND_${key}"
+                prefixed_key="PUBLIC_${key}"
             else
                 prefixed_key="$key"
             fi

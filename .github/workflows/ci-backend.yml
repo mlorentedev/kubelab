@@ -46,6 +46,38 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: backend
+        env:
+          # Environment variables for testing
+          ENV: test
+          VERSION: ${{ github.sha }}
+          
+          # Site Configuration
+          SITE_TITLE: ${{ secrets.SITE_TITLE }}
+          SITE_AUTHOR: ${{ secrets.SITE_AUTHOR }}
+          SITE_DOMAIN: ${{ secrets.SITE_DOMAIN }}
+          SITE_MAIL: ${{ secrets.SITE_MAIL }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          
+          # Sensitive Configurations
+          BEEHIIV_API_KEY: ${{ secrets.BEEHIIV_API_KEY }}
+          BEEHIIV_PUB_ID: ${{ secrets.BEEHIIV_PUB_ID }}
+          
+          # Email Configuration
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_SECURE: "true"
+          
+          # Frontend Configuration
+          FRONTEND_HOST: localhost
+          FRONTEND_PORT: 3000
+          
+          # GitHub and DockerHub Credentials
+          GITHUB_API_TOKEN: ${{ secrets.GITHUB_API_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 
   build:
@@ -69,6 +101,17 @@ jobs:
 
       - name: Build for multiple platforms
         working-directory: backend
+        env:
+          # Environment configuration for build
+          ENV: ${{ github.ref == 'refs/heads/master' && 'production' || (github.ref == 'refs/heads/develop' && 'staging' || 'development') }}
+          VERSION: ${{ github.ref == 'refs/heads/master' && 'latest' || (github.ref == 'refs/heads/develop' && 'develop' || github.sha) }}
+          
+          # Site Configuration
+          SITE_TITLE: ${{ secrets.SITE_TITLE }}
+          SITE_AUTHOR: ${{ secrets.SITE_AUTHOR }}
+          SITE_DOMAIN: ${{ secrets.SITE_DOMAIN }}
+          SITE_MAIL: ${{ secrets.SITE_MAIL }}
+          SITE_URL: ${{ secrets.SITE_URL }}
         run: |
           GOOS=linux GOARCH=amd64 go build -o ./bin/server-linux-amd64 ./cmd/server
           GOOS=linux GOARCH=arm64 go build -o ./bin/server-linux-arm64 ./cmd/server
@@ -131,6 +174,38 @@ jobs:
         
       - name: Build and push image
         uses: docker/build-push-action@v6
+        env:
+          # Environment configuration for Docker build
+          ENV: ${{ env.DEPLOY_ENV }}
+          VERSION: ${{ env.VERSION }}
+          
+          # Site Configuration
+          SITE_TITLE: ${{ secrets.SITE_TITLE }}
+          SITE_AUTHOR: ${{ secrets.SITE_AUTHOR }}
+          SITE_DOMAIN: ${{ secrets.SITE_DOMAIN }}
+          SITE_MAIL: ${{ secrets.SITE_MAIL }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          
+          # Sensitive Configurations
+          BEEHIIV_API_KEY: ${{ secrets.BEEHIIV_API_KEY }}
+          BEEHIIV_PUB_ID: ${{ secrets.BEEHIIV_PUB_ID }}
+          
+          # Email Configuration
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_SECURE: "true"
+          
+          # Frontend Configuration
+          FRONTEND_HOST: localhost
+          FRONTEND_PORT: 3000
+          
+          # GitHub and DockerHub Credentials
+          GITHUB_API_TOKEN: ${{ secrets.GITHUB_API_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           context: .
           file: docker/backend/Dockerfile
@@ -140,3 +215,11 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ github.sha }}
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:buildcache,mode=max
+          build-args: |
+            ENV=${{ env.ENV }}
+            VERSION=${{ env.VERSION }}
+            SITE_TITLE=${{ secrets.SITE_TITLE }}
+            SITE_AUTHOR=${{ secrets.SITE_AUTHOR }}
+            SITE_DOMAIN=${{ secrets.SITE_DOMAIN }}
+            SITE_MAIL=${{ secrets.SITE_MAIL }}
+            SITE_URL=${{ secrets.SITE_URL }}

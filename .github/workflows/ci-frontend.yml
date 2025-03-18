@@ -65,6 +65,23 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
+        env:
+          PUBLIC_SITE_TITLE: ${{ secrets.PUBLIC_SITE_TITLE }}
+          PUBLIC_SITE_DESCRIPTION: ${{ secrets.PUBLIC_SITE_DESCRIPTION }}
+          PUBLIC_SITE_DOMAIN: ${{ secrets.PUBLIC_SITE_DOMAIN }}
+          PUBLIC_SITE_URL: ${{ secrets.PUBLIC_SITE_URL }}
+          PUBLIC_SITE_MAIL: ${{ secrets.PUBLIC_SITE_MAIL }}
+          PUBLIC_SITE_AUTHOR: ${{ secrets.PUBLIC_SITE_AUTHOR }}
+          PUBLIC_SITE_KEYWORDS: ${{ secrets.PUBLIC_SITE_KEYWORDS }}
+          PUBLIC_TWITTER_URL: ${{ secrets.PUBLIC_TWITTER_URL }}
+          PUBLIC_YOUTUBE_URL: ${{ secrets.PUBLIC_YOUTUBE_URL }}
+          PUBLIC_GITHUB_URL: ${{ secrets.PUBLIC_GITHUB_URL }}
+          PUBLIC_CALENDLY_URL: ${{ secrets.PUBLIC_CALENDLY_URL }}  
+          PUBLIC_GOOGLE_ANALYTICS_ID: ${{ secrets.PUBLIC_GOOGLE_ANALYTICS_ID }}
+          PUBLIC_ENABLE_HOMELABS: ${{ secrets.PUBLIC_ENABLE_HOMELABS }}
+          PUBLIC_ENABLE_BLOG: ${{ secrets.PUBLIC_ENABLE_BLOG }}
+          PUBLIC_ENABLE_CONTACT: ${{ secrets.PUBLIC_ENABLE_CONTACT }}
+          PUBLIC_BACKEND_URL: ${{ secrets.PUBLIC_BACKEND_URL }}
         run: npm run build
 
       - name: Upload build artifacts
