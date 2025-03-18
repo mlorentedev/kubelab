@@ -70,3 +70,10 @@ Thumbs.db
 # Ignore sensitive keys
 **/*.key
 **/*.pem
+.cache_ggshield
+
+# Additional files
+backend/coverage.txt
+backend/coverage.html
+backend/bin
+deploy-test/

@@ -1,8 +1,11 @@
-name: Deploy
+name: Continuous Deployment
 
 on:
-  repository_dispatch:
-    types: [trigger-deploy]
+  workflow_run:
+    workflows: ["Frontend CI", "Backend CI"]
+    branches: [master, develop]
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       environment:
@@ -19,78 +22,97 @@ on:
         type: string
 
 jobs:
-  deploy:
+  prepare:
+    name: Prepare Deployment
     runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      version: ${{ steps.set-env.outputs.version }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set environment variables
+      - name: Set environment and version
+        id: set-env
         run: |
-          # Determine environment
+          # Determine environment based on trigger
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+            # Workflow dispatch: use inputs
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
             
-            # Determine version based on environment and input
             if [[ -n "${{ github.event.inputs.version }}" ]]; then
-              echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+              echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
             elif [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-              echo "VERSION=latest" >> $GITHUB_ENV
+              echo "version=latest" >> $GITHUB_OUTPUT
             else
-              echo "VERSION=develop" >> $GITHUB_ENV
+              echo "version=develop" >> $GITHUB_OUTPUT
             fi
           else
-            # In case of trigger from another workflow
-            echo "DEPLOY_ENV=${{ github.event.client_payload.env }}" >> $GITHUB_ENV
-            echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
-            echo "COMPONENT=${{ github.event.client_payload.component }}" >> $GITHUB_ENV
+            # Workflow run: based on branch
+            if [[ "${{ github.event.workflow_run.head_branch }}" == "master" ]]; then
+              echo "environment=production" >> $GITHUB_OUTPUT
+              echo "version=latest" >> $GITHUB_OUTPUT
+            else
+              echo "environment=staging" >> $GITHUB_OUTPUT
+              echo "version=develop" >> $GITHUB_OUTPUT
+            fi
           fi
-          
-          # Configure SSH and host based on environment
-          if [[ "$DEPLOY_ENV" == "production" ]]; then
+
+  deploy:
+    name: Deploy to ${{ needs.prepare.outputs.environment }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: ${{ needs.prepare.outputs.environment }}
+    concurrency: 
+      group: deploy-${{ needs.prepare.outputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set env vars for environment
+        run: |
+          if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
             echo "SSH_HOST=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.PRODUCTION_USERNAME }}" >> $GITHUB_ENV
-            echo "SSH_KEY=PRODUCTION_SSH_KEY" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente" >> $GITHUB_ENV
+            echo "DOMAIN=mlorente.dev" >> $GITHUB_ENV
           else
             echo "SSH_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.STAGING_USERNAME }}" >> $GITHUB_ENV
-            echo "SSH_KEY=STAGING_SSH_KEY" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
+            echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
       
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets[env.SSH_KEY] }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       
-      - name: Deploy to server
+      - name: Run deployment script
         run: |
-          # Create temporary deployment script
-          cat > deploy_script.sh << 'EOF'
+          # Create the deployment script
+          cat > deploy.sh <<'EOF'
           #!/bin/bash
           set -e
           
           # Deployment variables
-          DEPLOY_ENV="${DEPLOY_ENV}"
-          VERSION="${VERSION}"
-          DEPLOY_PATH="${DEPLOY_PATH}"
-          COMPONENT="${COMPONENT:-all}"
+          DEPLOY_ENV="${{ needs.prepare.outputs.environment }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
+          DOMAIN="${{ env.DOMAIN }}"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           
           echo "===== STARTING DEPLOYMENT ====="
           echo "Environment: ${DEPLOY_ENV}"
           echo "Version: ${VERSION}"
-          echo "Component: ${COMPONENT}"
           echo "Directory: ${DEPLOY_PATH}"
+          echo "Domain: ${DOMAIN}"
           echo "==============================="
           
           # Create backup directory
           BACKUP_DIR="${DEPLOY_PATH}/backups/${TIMESTAMP}"
           mkdir -p "${BACKUP_DIR}"
           
-          # Backup important files
-          echo "Backing up configuration..."
+          # Backup current configuration
           if [ -f "${DEPLOY_PATH}/.env" ]; then
             cp "${DEPLOY_PATH}/.env" "${BACKUP_DIR}/.env.backup"
           fi
@@ -98,65 +120,103 @@ jobs:
             cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
           fi
           
-          # Update repository if necessary
-          if [ -d "${DEPLOY_PATH}/repo" ]; then
-            echo "Updating repository..."
-            cd "${DEPLOY_PATH}/repo"
-            git fetch --all
-            git checkout $([ "${DEPLOY_ENV}" == "production" ] && echo "master" || echo "develop")
-            git pull origin $([ "${DEPLOY_ENV}" == "production" ] && echo "master" || echo "develop")
-          else
-            echo "Cloning repository..."
-            mkdir -p "${DEPLOY_PATH}/repo"
-            git clone -b $([ "${DEPLOY_ENV}" == "production" ] && echo "master" || echo "develop") https://github.com/mlorentedev/mlorente.dev.git "${DEPLOY_PATH}/repo"
-          fi
-          
-          # Update docker-compose.yml
+          # Update configuration if necessary (using your repo's docker-compose.yml)
           echo "Updating docker-compose.yml..."
-          cp "${DEPLOY_PATH}/repo/docker-compose.yml" "${DEPLOY_PATH}/"
+          cp docker-compose.yml "${DEPLOY_PATH}/"
+          
+          # Update Nginx config if it exists
+          if [ -d "docker/nginx" ]; then
+            echo "Updating Nginx configuration..."
+            mkdir -p "${DEPLOY_PATH}/docker/nginx"
+            cp -r docker/nginx/* "${DEPLOY_PATH}/docker/nginx/"
+          fi
           
           # Set version in environment variables
-          export TAG="${VERSION}"
-          
-          # Deploy services
-          echo "Deploying services..."
           cd "${DEPLOY_PATH}"
+          export TAG="${VERSION}"
+          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
           
-          if [ "${COMPONENT}" == "all" ]; then
-            docker-compose pull
-            docker-compose up -d
-          else
-            docker-compose pull "${COMPONENT}"
-            docker-compose up -d "${COMPONENT}"
+          # Pull latest images and restart containers
+          echo "Pulling latest images..."
+          docker-compose pull
+          
+          echo "Starting services..."
+          docker-compose up -d
+          
+          # Verify deployment
+          echo "Verifying deployment..."
+          sleep 10
+          
+          # Check if containers are running
+          if ! docker-compose ps | grep -q "Up"; then
+            echo "Error: Deployment verification failed. Some containers are not running!"
+            docker-compose logs
+            exit 1
           fi
           
-          # Clean old images
+          # Clean old images to save disk space
           echo "Cleaning old images..."
-          docker image prune -af --filter "until=48h"
+          docker image prune -af --filter "until=24h" || true
           
-          echo "===== DEPLOYMENT COMPLETED ====="
+          echo "===== DEPLOYMENT COMPLETED SUCCESSFULLY ====="
+          echo "Application is available at: https://${DOMAIN}"
           EOF
           
-          # Replace variables in the script
-          sed -i "s|\${DEPLOY_ENV}|$DEPLOY_ENV|g" deploy_script.sh
-          sed -i "s|\${VERSION}|$VERSION|g" deploy_script.sh
-          sed -i "s|\${DEPLOY_PATH}|$DEPLOY_PATH|g" deploy_script.sh
-          sed -i "s|\${COMPONENT}|$COMPONENT|g" deploy_script.sh
+          # Make script executable and run it
+          chmod +x deploy.sh
+          scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
           
-          # Transfer and execute script
-          chmod +x deploy_script.sh
-          scp deploy_script.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy_script.sh
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "bash /tmp/deploy_script.sh"
-      
-      - name: Verify deployment
-        run: |
-          # Check service status
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd $DEPLOY_PATH && docker-compose ps"
-          
-          # Show result
-          echo "🚀 Deployment completed to $DEPLOY_ENV"
-          if [[ "$DEPLOY_ENV" == "production" ]]; then
-            echo "📱 Application available at: https://mlorente.dev"
-          else
-            echo "📱 Application available at: https://staging.mlorente.dev"
+          if [ -d "docker/nginx" ]; then
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
+            scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
           fi
+          
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"
+      
+      - name: Run health checks
+        run: |
+          echo "Running health checks for ${{ needs.prepare.outputs.environment }}..."
+          
+          # Wait for services to be fully available
+          sleep 20
+          
+          # Check frontend service
+          FRONTEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
+          if [ "$FRONTEND_CHECK" != "200" ]; then
+            echo "Frontend health check failed with status $FRONTEND_CHECK"
+            exit 1
+          fi
+          
+          # Check backend API health endpoint
+          BACKEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }}/api/health)
+          if [ "$BACKEND_CHECK" != "200" ]; then
+            echo "Backend health check failed with status $BACKEND_CHECK"
+            exit 1
+          fi
+          
+          echo "All health checks passed!"
+          
+      - name: Notify deployment success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "✅ Successfully deployed to ${{ needs.prepare.outputs.environment }} (version: ${{ needs.prepare.outputs.version }})\nApplication available at: https://${{ env.DOMAIN }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+          
+      - name: Notify deployment failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ Deployment to ${{ needs.prepare.outputs.environment }} failed (version: ${{ needs.prepare.outputs.version }})\nSee details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

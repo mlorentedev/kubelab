@@ -14,12 +14,9 @@ on:
       - '.github/workflows/ci-backend.yml'
       - 'docker/backend/**'
 
-env:
-  REGISTRY: docker.io
-  BACKEND_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend
-
 jobs:
-  test-backend:
+  lint-and-test:
+    name: Lint and Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -28,12 +25,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.23'
           cache: true
+          cache-dependency-path: backend/go.sum
 
       - name: Prepare setup
+        working-directory: backend
         run: |
-          cd backend
           if [ -f .env ]; then
             echo "Using existing .env file"
           else
@@ -41,80 +39,121 @@ jobs:
             mv .env.example .env
           fi
       
-      - name: Install dependencies
-        run: |
-          cd backend
-          go mod download
-      
-      - name: Run tests
-        run: |
-          cd backend
-          go test ./... -v
-      
-      - name: Go vet
-        run: |
-          cd backend
-          go vet ./...
-
+          - name: Verify dependencies
+          working-directory: backend
+          run: go mod verify
   
-  #build-backend:
-  #  needs: test-backend
-  #  runs-on: ubuntu-latest
-  #  if: github.event_name != 'pull_request'
-  #  steps:
-  #    - name: Checkout code
-  #      uses: actions/checkout@v3
-  #    
-  #    - name: Set up QEMU
-  #      uses: docker/setup-qemu-action@v2
-  #    
-  #    - name: Set up Docker Buildx
-  #      uses: docker/setup-buildx-action@v2
-  #    
-  #    - name: Login to DockerHub
-  #      uses: docker/login-action@v2
-  #      with:
-  #        username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #        password: ${{ secrets.DOCKERHUB_TOKEN }}
-  #    
-  #    - name: Extract metadata
-  #      id: meta
-  #      run: |
-  #        # Configure version and tags
-  #        if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
-  #          echo "VERSION=latest" >> $GITHUB_ENV
-  #          echo "DEPLOY_ENV=production" >> $GITHUB_ENV
-  #        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-  #          echo "VERSION=develop" >> $GITHUB_ENV
-  #          echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
-  #        elif [[ "${{ github.ref }}" =~ ^refs/heads/feature/.+ ]]; then
-  #          # Extract feature name
-  #          FEATURE_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/feature/||')
-  #          echo "VERSION=feature-${FEATURE_NAME}" >> $GITHUB_ENV
-  #        elif [[ "${{ github.ref }}" =~ ^refs/heads/hotfix/.+ ]]; then
-  #          # Extract hotfix name
-  #          HOTFIX_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/hotfix/||')
-  #          echo "VERSION=hotfix-${HOTFIX_NAME}" >> $GITHUB_ENV
-  #        else
-  #          echo "VERSION=${GITHUB_SHA::8}" >> $GITHUB_ENV
-  #        fi
-  #    
-  #    - name: Build and push backend
-  #      uses: docker/build-push-action@v3
-  #      with:
-  #        context: .
-  #        file: docker/backend/Dockerfile
-  #        push: true
-  #        tags: |
-  #          ${{ env.BACKEND_IMAGE_NAME }}:${{ env.VERSION }}
-  #          ${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-  #        cache-from: type=registry,ref=${{ env.BACKEND_IMAGE_NAME }}:buildcache
-  #        cache-to: type=registry,ref=${{ env.BACKEND_IMAGE_NAME }}:buildcache,mode=max
-  #    
-  #    - name: Trigger deployment
-  #      if: success() && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
-  #      uses: peter-evans/repository-dispatch@v1
-  #      with:
-  #        token: ${{ secrets.REPO_ACCESS_TOKEN }}
-  #        event-type: trigger-deploy
-  #        client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "component": "backend", "env": "${{ env.DEPLOY_ENV }}", "version": "${{ env.VERSION }}"}'
+      - name: Run go vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        working-directory: backend
+        run: staticcheck ./...
+
+      - name: Run tests with coverage
+        working-directory: backend
+        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.txt
+          flags: backend
+          fail_ci_if_error: false
+
+  build:
+    name: Build Backend
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Install dependencies
+        working-directory: backend
+        run: go mod download
+
+      - name: Build for multiple platforms
+        working-directory: backend
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o ./bin/server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -o ./bin/server-linux-arm64 ./cmd/server
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/bin/
+          retention-days: 7
+
+  docker:
+    name: Build Docker Image
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: backend/bin
+
+      - name: Extract metadata and tag
+        id: meta
+        run: |
+          # Configure version and tags
+          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+            echo "VERSION=latest" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "VERSION=develop" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" =~ ^refs/heads/feature/.+ ]]; then
+            # Extract feature name
+            FEATURE_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/feature/||')
+            echo "VERSION=feature-${FEATURE_NAME}" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" =~ ^refs/heads/hotfix/.+ ]]; then
+            # Extract hotfix name
+            HOTFIX_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/hotfix/||')
+            echo "VERSION=hotfix-${HOTFIX_NAME}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_SHA::8}" >> $GITHUB_ENV
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: docker/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:buildcache,mode=max

@@ -21,6 +21,33 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
+# Create .env file if it doesn't exist
+if [ ! -f ".env" ]; then
+    echo -e "${YELLOW}Creating .env file...${NC}"
+    cat > .env <<EOL
+# DockerHub
+DOCKERHUB_USERNAME=PLACEHOLDER
+DOCKERHUB_TOKEN=PLACEHOLDER
+
+# Repository
+SSH_PRIVATE_KEY=PLACEHOLDER
+
+# Staging
+STAGING_HOST=PLACEHOLDER
+STAGING_USERNAME=PLACEHOLDER
+
+# Production
+PRODUCTION_HOST=PLACEHOLDER
+PRODUCTION_USERNAME=PLACEHOLDER
+
+# Notifications
+SLACK_WEBOOK_URL=PLACEHOLDER
+EOL
+    echo -e "${GREEN}.env file created successfully.${NC}"
+else
+    echo -e "${YELLOW}.env file already exists.${NC}"
+fi
+
 # Create .env.development file if it doesn't exist
 if [ ! -f ".env.backend.development" ]; then
     echo -e "${YELLOW}Creating .env.backend.development file...${NC}"

@@ -9,6 +9,7 @@ const result = dotenv.config('.env');
 
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL,
+  publicDir: 'public',
   output: 'server',
   adapter: node({
     mode: 'standalone',
