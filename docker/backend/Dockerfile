@@ -1,32 +1,44 @@
-FROM golang:1.21-alpine AS builder
-
-# Install air for hot reload
-RUN go install github.com/cosmtrek/air@latest
+# Build Stage
+FROM golang:1.23-alpine AS build
 
 WORKDIR /app
 
-# Copiar los archivos de módulos y descargar dependencias
-COPY go.mod go.sum ./
+# Instalar herramientas esenciales
+RUN apk add --no-cache git ca-certificates tzdata && \
+    update-ca-certificates
+
+# Copiar archivos de módulos y descargar dependencias
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 # Copiar el código fuente
-COPY backend/ .
+COPY backend/ ./
 
-# Construir la aplicación
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
+# Compilar la aplicación con optimizaciones
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-w -s" -o server ./cmd/server
 
-# Imagen final minimalista
-FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates tzdata
+# Runtime Stage - usando alpine mínimo
+FROM alpine:3.18 AS runtime
 
 WORKDIR /app
 
-# Copiar el ejecutable
-COPY --from=builder /app/server .
+# Instalar certificados y zona horaria
+RUN apk --no-cache add ca-certificates tzdata && \
+    update-ca-certificates
 
-# Exponer el puerto
+# Copiar el ejecutable compilado desde la etapa de build
+COPY --from=build /app/server ./
+
+# Crear usuario no-root para seguridad
+RUN addgroup -g 1001 -S app && \
+    adduser -S appuser -u 1001 -G app && \
+    chown -R appuser:app /app
+
+USER appuser
+
+# Puerto expuesto por la aplicación
 EXPOSE 8080
 
-# Comando por defecto
-CMD ["/app/server"]
+# Definir punto de entrada
+ENTRYPOINT ["/app/server"]

@@ -31,6 +31,8 @@ tmp/
 .cache/
 .tmp/
 .cache_*
+artifacts/
+coverage/
 
 # Archivos de log
 npm-debug.log*
@@ -70,3 +72,10 @@ Thumbs.db
 # Ignore sensitive keys
 **/*.key
 **/*.pem
+.cache_ggshield
+
+# Additional files
+backend/coverage.txt
+backend/coverage.html
+backend/bin
+deploy-test/

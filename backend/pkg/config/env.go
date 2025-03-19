@@ -2,7 +2,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -10,7 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Config contiene todas las variables de entorno
+// Config represents the complete application configuration
 type Config struct {
 	Env     string
 	Version string
@@ -33,216 +36,166 @@ type Config struct {
 		User   string
 		Pass   string
 	}
-	GitHub struct {
-		APIKey string
-	}
-	DockerHub struct {
-		Username string
-		Token    string
-	}
-	Frontend struct {
-		Host string
-		Port string
-	}
 }
 
 var config *Config
 
-// GetConfig devuelve la configuración global y un error si falla
+// GetConfig retrieves the global configuration
 func GetConfig() (*Config, error) {
-
 	// Return cached config if it exists
 	if config != nil {
 		return config, nil
 	}
 
-	possiblePaths := []string{
+	// Determine if running in GitHub Actions
+	isGitHubActions := os.Getenv("GITHUB_ACTIONS") == "true"
+
+	// Possible .env file paths
+	possiblePaths := getPossibleEnvPaths()
+
+	// Load .env file only for local development
+	if !isGitHubActions {
+		loadDotEnvFile(possiblePaths)
+	}
+
+	// Create and populate configuration
+	cfg, err := populateConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the configuration
+	config = cfg
+	return config, nil
+}
+
+// getPossibleEnvPaths returns potential .env file locations
+func getPossibleEnvPaths() []string {
+	// Get the directory of the calling file
+	_, filename, _, _ := runtime.Caller(0)
+	baseDir := filepath.Dir(filename)
+
+	return []string{
 		".env",
-		"../.env",
-		"../../.env",
-		"/../../.env",
+		filepath.Join(baseDir, ".env"),
+		filepath.Join(baseDir, "..", ".env"),
+		filepath.Join(baseDir, "..", ".env.development"),
 		"/app/.env",
 	}
+}
 
-	envLoaded := false
-	for _, path := range possiblePaths {
-		if err := godotenv.Load(path); err == nil {
+// loadDotEnvFile attempts to load .env file from possible paths
+func loadDotEnvFile(paths []string) {
+	for _, path := range paths {
+		err := godotenv.Load(path)
+		if err == nil {
 			log.Info().Str("path", path).Msg("Successfully loaded .env file")
-			envLoaded = true
-			break
+			return
 		}
 	}
+	log.Warn().Msg("Could not load .env file from any location")
+}
 
-	if !envLoaded {
-		log.Warn().Msg("Could not load .env file from any location")
-	}
-
+// populateConfig fills the configuration struct with environment variables
+func populateConfig() (*Config, error) {
 	cfg := &Config{}
 
-	// Cargar variables de entorno
-	cfg.Env = os.Getenv("ENV")
-	cfg.Version = os.Getenv("VERSION")
-	cfg.Site.Title = os.Getenv("SITE_TITLE")
-	cfg.Site.Author = os.Getenv("SITE_AUTHOR")
-	cfg.Site.Domain = os.Getenv("SITE_DOMAIN")
-	cfg.Site.Mail = os.Getenv("SITE_MAIL")
-	cfg.Site.URL = os.Getenv("SITE_URL")
+	// Environment and Version
+	cfg.Env = getEnvWithFallback("ENV", "development")
+	cfg.Version = getEnvWithFallback("VERSION", "0.0.1")
+
+	// Site Configuration
+	cfg.Site.Title = getEnvWithFallback("SITE_TITLE", "mlorente.dev")
+	cfg.Site.Author = getEnvWithFallback("SITE_AUTHOR", "Manuel Lorente")
+	cfg.Site.Domain = getEnvWithFallback("SITE_DOMAIN", "mlorente.dev")
+	cfg.Site.Mail = getEnvWithFallback("SITE_MAIL", "mlorentedev@gmail.com")
+	cfg.Site.URL = constructSiteURL(cfg)
+
+	// Beehiiv Configuration
 	cfg.Beehiiv.APIKey = os.Getenv("BEEHIIV_API_KEY")
 	cfg.Beehiiv.PubID = os.Getenv("BEEHIIV_PUB_ID")
-	cfg.Email.Host = os.Getenv("EMAIL_HOST")
-	cfg.Email.Port = os.Getenv("EMAIL_PORT")
-	cfg.Email.From = os.Getenv("EMAIL_FROM")
+
+	// Email Configuration
+	cfg.Email.Host = getEnvWithFallback("EMAIL_HOST", "smtp.gmail.com")
+	cfg.Email.Port = getEnvWithFallback("EMAIL_PORT", "587")
+	cfg.Email.From = getEnvWithFallback("EMAIL_FROM", "noreply@mlorente.dev")
 	cfg.Email.User = os.Getenv("EMAIL_USER")
 	cfg.Email.Pass = os.Getenv("EMAIL_PASS")
-	cfg.Email.Secure = true
-	cfg.GitHub.APIKey = os.Getenv("GITHUB_API_KEY")
-	cfg.DockerHub.Username = os.Getenv("DOCKERHUB_USERNAME")
-	cfg.DockerHub.Token = os.Getenv("DOCKERHUB_TOKEN")
-	cfg.Frontend.Host = os.Getenv("FRONTEND_HOST")
-	cfg.Frontend.Port = os.Getenv("FRONTEND_PORT")
+	cfg.Email.Secure = getBoolEnv("EMAIL_SECURE", true)
 
-	// Validar configuración
-	if !validateConfig(cfg) {
-		return nil, errors.New("invalid environment configuration")
+	// Validate configuration
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil
 }
 
-// validateConfig verifies that the configuration is valid
-func validateConfig(cfg *Config) bool {
-	// Validate required environment field
-	if cfg.Env == "" {
-		cfg.Env = "development" // Default to development if not specified
-		log.Info().Msg("No environment specified, defaulting to development")
-	} else if cfg.Env != "development" && cfg.Env != "staging" && cfg.Env != "production" {
-		log.Error().Str("env", cfg.Env).Msg("Invalid environment value, must be development, staging, or production")
-		return false
+// constructSiteURL builds the site URL based on environment and configuration
+func constructSiteURL(cfg *Config) string {
+	// If URL is explicitly set, use it
+	if url := os.Getenv("SITE_URL"); url != "" {
+		return url
 	}
 
-	// Check if we're in production mode
-	isProduction := cfg.Env == "production"
+	// Construct URL based on environment
+	if cfg.Env == "production" {
+		return fmt.Sprintf("https://%s", cfg.Site.Domain)
+	}
+
+	return "http://localhost:3000"
+}
+
+// getEnvWithFallback retrieves an environment variable with a default value
+func getEnvWithFallback(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+// getBoolEnv parses a boolean environment variable
+func getBoolEnv(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	boolValue, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Warn().Str("key", key).Msg("Invalid boolean value, using default")
+		return defaultValue
+	}
+	return boolValue
+}
+
+// validateConfig checks the configuration for completeness and correctness
+func validateConfig(cfg *Config) error {
+	// Validate environment
+	if cfg.Env != "development" && cfg.Env != "staging" && cfg.Env != "production" {
+		return fmt.Errorf("invalid environment: %s. Must be development, staging, or production", cfg.Env)
+	}
 
 	// Validate site information
 	if cfg.Site.Title == "" {
-		if isProduction {
-			log.Error().Msg("Site title is required in production")
-			return false
-		}
-		log.Warn().Msg("Site title is missing")
+		return errors.New("site title cannot be empty")
 	}
 
 	if cfg.Site.Domain == "" {
-		if isProduction {
-			log.Error().Msg("Site domain is required in production")
-			return false
-		}
-		log.Warn().Msg("Site domain is missing")
-		cfg.Site.Domain = "localhost" // Default for development
+		return errors.New("site domain cannot be empty")
 	}
 
-	// Validate email format for site mail
-	if cfg.Site.Mail != "" {
-		if !strings.Contains(cfg.Site.Mail, "@") || !strings.Contains(cfg.Site.Mail, ".") {
-			log.Error().Str("email", cfg.Site.Mail).Msg("Invalid email format")
-			return false
-		}
-	} else if isProduction {
-		log.Error().Msg("Site email is required in production")
-		return false
+	// Validate site URL
+	if !strings.HasPrefix(cfg.Site.URL, "http://") && !strings.HasPrefix(cfg.Site.URL, "https://") {
+		return fmt.Errorf("invalid site URL: %s. Must start with http:// or https://", cfg.Site.URL)
 	}
 
-	// Validate or construct site URL
-	if cfg.Site.URL == "" {
-		// Construct URL from domain if not provided
-		if isProduction {
-			cfg.Site.URL = "https://" + cfg.Site.Domain
-		} else {
-			cfg.Site.URL = "http://" + cfg.Site.Domain
-			if cfg.Frontend.Port != "" {
-				cfg.Site.URL += ":" + cfg.Frontend.Port
-			}
-		}
-		log.Info().Str("url", cfg.Site.URL).Msg("Constructed site URL")
-	} else {
-		// Basic URL validation
-		if !strings.HasPrefix(cfg.Site.URL, "http://") && !strings.HasPrefix(cfg.Site.URL, "https://") {
-			log.Error().Str("url", cfg.Site.URL).Msg("Site URL must start with http:// or https://")
-			return false
-		}
-	}
-
-	// Validate ports
-	if !validatePort(cfg.Email.Port) {
-		log.Error().Str("port", cfg.Email.Port).Msg("Invalid email port")
-		return false
-	}
-
-	if !validatePort(cfg.Frontend.Port) {
-		log.Error().Str("port", cfg.Frontend.Port).Msg("Invalid frontend port")
-		return false
-	}
-
-	// In production, validate email configuration
-	if isProduction {
+	// Validate email configuration in production
+	if cfg.Env == "production" {
 		if cfg.Email.Host == "" || cfg.Email.Port == "" || cfg.Email.User == "" || cfg.Email.Pass == "" {
-			log.Error().Msg("Complete email configuration is required in production")
-			return false
+			return errors.New("complete email configuration is required in production")
 		}
-	} else if hasPartialEmailConfig(cfg) {
-		log.Warn().Msg("Incomplete email configuration")
 	}
 
-	// In production, validate Beehiiv configuration
-	if isProduction {
-		if cfg.Beehiiv.APIKey == "" || cfg.Beehiiv.PubID == "" {
-			log.Error().Msg("Complete Beehiiv configuration is required in production")
-			return false
-		}
-	} else if hasPartialBeehiivConfig(cfg) {
-		log.Warn().Msg("Incomplete Beehiiv configuration")
-	}
-
-	// Validate GitHub API Key format if provided
-	if cfg.GitHub.APIKey != "" && len(cfg.GitHub.APIKey) < 20 {
-		log.Warn().Msg("GitHub API key seems too short")
-	}
-
-	// Validate DockerHub credentials if provided
-	if hasPartialDockerHubConfig(cfg) {
-		log.Warn().Msg("Incomplete DockerHub credentials")
-	}
-
-	return true
-}
-
-// validatePort checks if a port string is a valid port number
-func validatePort(port string) bool {
-	if port == "" {
-		return true // Empty port is considered valid (will use default)
-	}
-
-	portNum, err := strconv.Atoi(port)
-	return err == nil && portNum > 0 && portNum <= 65535
-}
-
-// hasPartialEmailConfig checks if email configuration is partially provided
-func hasPartialEmailConfig(cfg *Config) bool {
-	hasAny := cfg.Email.Host != "" || cfg.Email.Port != "" || cfg.Email.User != "" || cfg.Email.Pass != ""
-	hasAll := cfg.Email.Host != "" && cfg.Email.Port != "" && cfg.Email.User != "" && cfg.Email.Pass != ""
-	return hasAny && !hasAll
-}
-
-// hasPartialBeehiivConfig checks if Beehiiv configuration is partially provided
-func hasPartialBeehiivConfig(cfg *Config) bool {
-	hasAny := cfg.Beehiiv.APIKey != "" || cfg.Beehiiv.PubID != ""
-	hasAll := cfg.Beehiiv.APIKey != "" && cfg.Beehiiv.PubID != ""
-	return hasAny && !hasAll
-}
-
-// hasPartialDockerHubConfig checks if DockerHub configuration is partially provided
-func hasPartialDockerHubConfig(cfg *Config) bool {
-	hasAny := cfg.DockerHub.Username != "" || cfg.DockerHub.Token != ""
-	hasAll := cfg.DockerHub.Username != "" && cfg.DockerHub.Token != ""
-	return hasAny && !hasAll
+	return nil
 }

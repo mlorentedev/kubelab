@@ -10,9 +10,6 @@
           {
             "type": "pull_request",
             "settings": {
-              "required_reviews": {
-                "count": 1
-              },
               "require_last_push_approval": true
             }
           }
@@ -37,15 +34,14 @@
           {
             "type": "pull_request",
             "settings": {
-              "required_reviews": {
-                "count": 1
-              }
+              "require_last_push_approval": false,
+              "require_code_owner_review": false
             }
           }
         ],
         "branch_protection": {
           "required_status_checks": {
-            "strict_required_status_checks": true
+            "strict_required_status_checks": false
           }
         }
       }

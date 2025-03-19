@@ -68,7 +68,7 @@ This project demonstrates a production-ready microservices approach using contai
 
    ```bash
    # Configure development environment
-   ./scripts/setup-dev.sh
+   ./scripts/setup-env.sh
    ```
 
 ### Development Workflow
@@ -76,8 +76,9 @@ This project demonstrates a production-ready microservices approach using contai
 #### Containerized Development (Recommended)
 
 ```bash
-# Start all services
-docker compose -f docker-compose.dev.yml up
+# Build and start services
+docker compose -f docker-compose.dev.yml build #--no-cache
+docker compose -f docker-compose.dev.yml up --force-recreate
 
 # View logs
 docker compose -f docker-compose.dev.yml logs -f [service_name]
