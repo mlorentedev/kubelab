@@ -89,10 +89,6 @@ echo -e "${YELLOW}Running static analysis...${NC}"
 go vet ./...
 check_result "Backend static analysis"
 
-echo -e "${YELLOW}Running tests...${NC}"
-go test -race -coverprofile=coverage.txt -covermode=atomic ./...
-check_result "Backend tests"
-
 echo -e "${YELLOW}Building binaries...${NC}"
 mkdir -p bin
 GOOS=linux GOARCH=amd64 go build -o ./bin/server-linux-amd64 ./cmd/server

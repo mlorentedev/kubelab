@@ -102,7 +102,7 @@ if [ ! -f ".env" ]; then
     sed -i "s|SITE_URL=.*|SITE_URL=http://localhost:4321|" .env
     
     # Add specific backend URL for the test environment
-    echo "PUBLIC_BACKEND_URL=http://localhost:8080" >> .env
+    echo "BACKEND_URL=http://localhost:8080" >> .env
     
     echo -e "${GREEN}✓ Deployment .env created and configured${NC}"
   else
@@ -115,7 +115,7 @@ PORT=8080
 SITE_DOMAIN=localhost
 SITE_URL=http://localhost:4321
 DOCKERHUB_USERNAME=mlorentedev
-PUBLIC_BACKEND_URL=http://localhost:8080
+BACKEND_URL=http://localhost:8080
 EOL
     echo -e "${YELLOW}⚠️ Created minimal .env file. Some features may not work properly.${NC}"
   fi

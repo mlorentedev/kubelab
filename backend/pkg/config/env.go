@@ -36,10 +36,6 @@ type Config struct {
 		User   string
 		Pass   string
 	}
-	Frontend struct {
-		Host string
-		Port string
-	}
 }
 
 var config *Config
@@ -127,10 +123,6 @@ func populateConfig() (*Config, error) {
 	cfg.Email.Pass = os.Getenv("EMAIL_PASS")
 	cfg.Email.Secure = getBoolEnv("EMAIL_SECURE", true)
 
-	// Frontend Configuration
-	cfg.Frontend.Host = getEnvWithFallback("FRONTEND_HOST", "localhost")
-	cfg.Frontend.Port = getEnvWithFallback("FRONTEND_PORT", "3000")
-
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
@@ -151,12 +143,7 @@ func constructSiteURL(cfg *Config) string {
 		return fmt.Sprintf("https://%s", cfg.Site.Domain)
 	}
 
-	// Development URL
-	port := cfg.Frontend.Port
-	if port == "" {
-		port = "3000"
-	}
-	return fmt.Sprintf("http://%s:%s", cfg.Site.Domain, port)
+	return "http://localhost:3000"
 }
 
 // getEnvWithFallback retrieves an environment variable with a default value
@@ -208,12 +195,6 @@ func validateConfig(cfg *Config) error {
 		if cfg.Email.Host == "" || cfg.Email.Port == "" || cfg.Email.User == "" || cfg.Email.Pass == "" {
 			return errors.New("complete email configuration is required in production")
 		}
-	}
-
-	// Validate port
-	port, err := strconv.Atoi(cfg.Frontend.Port)
-	if err != nil || port < 1 || port > 65535 {
-		return fmt.Errorf("invalid frontend port: %s", cfg.Frontend.Port)
 	}
 
 	return nil

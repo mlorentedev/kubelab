@@ -147,14 +147,14 @@ jobs:
           set -e
           
           # Deployment variables
-          DEPLOY_ENV="${{ needs.prepare.outputs.environment }}"
+          ENV="${{ needs.prepare.outputs.environment }}"
           VERSION="${{ needs.prepare.outputs.version }}"
           DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
           DOMAIN="${{ env.DOMAIN }}"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           
           echo "===== STARTING DEPLOYMENT ====="
-          echo "Environment: ${DEPLOY_ENV}"
+          echo "Environment: ${ENV}"
           echo "Version: ${VERSION}"
           echo "Directory: ${DEPLOY_PATH}"
           echo "Domain: ${DOMAIN}"

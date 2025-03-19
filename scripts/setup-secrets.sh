@@ -53,24 +53,15 @@ process_env_files() {
                 continue
             fi
 
-            # Prefix environment-specific variables to avoid conflicts
-            if [[ "$env_file" == *"backend"* ]]; then
-                prefixed_key="${key}"
-            elif [[ "$env_file" == *"frontend"* ]]; then
-                prefixed_key="PUBLIC_${key}"
-            else
-                prefixed_key="$key"
-            fi
-
             # Add to processed secrets to prevent duplicates
             processed_secrets+=("$key")
 
             # Mask potentially sensitive values
             masked_value=$(echo "$value" | sed 's/./*/g')
-            log_info "Setting secret: $prefixed_key (value masked: $masked_value)"
+            log_info "Setting secret: $key (value masked: $masked_value)"
 
             # Set GitHub secret
-            echo "$value" | gh secret set "$prefixed_key" --repo "$REPO"
+            echo "$value" | gh secret set "$key" --repo "$REPO"
         done < "$env_file"
     done
 }

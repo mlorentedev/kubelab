@@ -28,7 +28,7 @@ const loadEnvVariables = () => {
       PUBLIC_ENABLE_HOMELABS: process.env.PUBLIC_ENABLE_HOMELABS === 'true',
       PUBLIC_ENABLE_BLOG: process.env.PUBLIC_ENABLE_BLOG === 'true',
       PUBLIC_ENABLE_CONTACT: process.env.PUBLIC_ENABLE_CONTACT === 'true',
-      PUBLIC_BACKEND_URL: process.env.PUBLIC_BACKEND_URL,
+      BACKEND_URL: process.env.BACKEND_URL,
     };
   }
   
@@ -68,11 +68,11 @@ export default defineConfig({
       'import.meta.env.PUBLIC_ENABLE_HOMELABS': envVars.PUBLIC_ENABLE_HOMELABS === 'true',
       'import.meta.env.PUBLIC_ENABLE_BLOG': envVars.PUBLIC_ENABLE_BLOG === 'true',
       'import.meta.env.PUBLIC_ENABLE_CONTACT': envVars.PUBLIC_ENABLE_CONTACT === 'true',
-      'import.meta.env.PUBLIC_BACKEND_URL': JSON.stringify(envVars.PUBLIC_BACKEND_URL),
+      'import.meta.env.BACKEND_URL': JSON.stringify(envVars.BACKEND_URL),
     },
     envPrefix: ['PUBLIC_'],
   },
 });
 
 // Log environment variables for debugging
-console.log('Environment variables loaded successfully:', Object.keys(envVars));
+console.log('Environment variables loaded successfully:', Object.values(envVars));

@@ -66,6 +66,11 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         env:
+          # Environment configuration for build
+          ENV: ${{ github.ref == 'refs/heads/master' && 'production' || (github.ref == 'refs/heads/develop' && 'staging' || secrets.ENV ) }}
+          VERSION: ${{ github.ref == 'refs/heads/master' && 'latest' || (github.ref == 'refs/heads/develop' && 'develop' || secrets.VERSION) }}
+          
+          # Environment variables for build
           PUBLIC_SITE_TITLE: ${{ secrets.PUBLIC_SITE_TITLE }}
           PUBLIC_SITE_DESCRIPTION: ${{ secrets.PUBLIC_SITE_DESCRIPTION }}
           PUBLIC_SITE_DOMAIN: ${{ secrets.PUBLIC_SITE_DOMAIN }}
@@ -78,10 +83,11 @@ jobs:
           PUBLIC_GITHUB_URL: ${{ secrets.PUBLIC_GITHUB_URL }}
           PUBLIC_CALENDLY_URL: ${{ secrets.PUBLIC_CALENDLY_URL }}  
           PUBLIC_GOOGLE_ANALYTICS_ID: ${{ secrets.PUBLIC_GOOGLE_ANALYTICS_ID }}
+          PUBLIC_GOOGLE_TAG_MANAGER_ID: ${{ secrets.PUBLIC_GOOGLE_TAG_MANAGER_ID }}
           PUBLIC_ENABLE_HOMELABS: ${{ secrets.PUBLIC_ENABLE_HOMELABS }}
           PUBLIC_ENABLE_BLOG: ${{ secrets.PUBLIC_ENABLE_BLOG }}
           PUBLIC_ENABLE_CONTACT: ${{ secrets.PUBLIC_ENABLE_CONTACT }}
-          PUBLIC_BACKEND_URL: ${{ secrets.PUBLIC_BACKEND_URL }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
         run: npm run build
 
       - name: Upload build artifacts
@@ -117,10 +123,10 @@ jobs:
           # Configure version and tags
           if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
             echo "VERSION=latest" >> $GITHUB_ENV
-            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+            echo "ENV=production" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
             echo "VERSION=develop" >> $GITHUB_ENV
-            echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
+            echo "ENV=staging" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" =~ ^refs/heads/feature/.+ ]]; then
             # Extract feature name
             FEATURE_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/feature/||')
@@ -148,5 +154,3 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ env.VERSION }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:buildcache,mode=max
