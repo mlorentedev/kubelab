@@ -159,6 +159,6 @@ jobs:
           file: docker/frontend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.VERSION }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.VERSION_TAG }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.RC_TAG }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ env.VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ env.VERSION_TAG }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ env.RC_TAG }}
