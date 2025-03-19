@@ -13,6 +13,11 @@ VERSION=${1:-local}
 PROJECT_ROOT=$(pwd)
 TEST_DEPLOY_DIR=${PROJECT_ROOT}/deploy-test
 
+# Define port variables
+LOCAL_FRONTEND_PORT=4321
+LOCAL_BACKEND_PORT=8080
+LOCAL_NGINX_PORT=80
+
 echo -e "${BLUE}===============================================${NC}"
 echo -e "${BLUE}      STARTING LOCAL CD TESTING PROCESS        ${NC}"
 echo -e "${BLUE}===============================================${NC}"
@@ -21,6 +26,9 @@ echo -e "${YELLOW}Deploying version: ${VERSION}${NC}"
 # Create deployment directory if it doesn't exist
 mkdir -p $TEST_DEPLOY_DIR
 cd $TEST_DEPLOY_DIR
+
+# Configure ownership of the project directory
+sudo chown -R $USER:$USER $TEST_DEPLOY_DIR
 
 # Check if the directory is clean
 if [ "$(ls -A $TEST_DEPLOY_DIR)" ]; then
@@ -46,7 +54,7 @@ services:
     container_name: mlorente-test-frontend
     image: mlorentedev/mlorente-frontend:local
     ports:
-      - "4321:4321"
+      - "${LOCAL_FRONTEND_PORT}:4321"
     env_file:
       - .env
     networks:
@@ -58,7 +66,7 @@ services:
     container_name: mlorente-test-backend
     image: mlorentedev/mlorente-backend:local
     ports:
-      - "8080:8080"
+      - "${LOCAL_BACKEND_PORT}:8080"
     env_file:
       - .env
     networks:
@@ -68,11 +76,9 @@ services:
     container_name: mlorente-test-nginx
     image: nginx:alpine
     ports:
-      - "80:80"
+      - "${LOCAL_NGINX_PORT}:80"
     volumes:
       - ./docker/nginx/conf.d:/etc/nginx/conf.d
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
     depends_on:
       - frontend
       - backend
@@ -99,10 +105,10 @@ if [ ! -f ".env" ]; then
     sed -i "s/ENV=.*/ENV=development/" .env
     sed -i "s/VERSION=.*/VERSION=$VERSION/" .env
     sed -i "s/SITE_DOMAIN=.*/SITE_DOMAIN=localhost/" .env
-    sed -i "s|SITE_URL=.*|SITE_URL=http://localhost:4321|" .env
+    sed -i "s|SITE_URL=.*|SITE_URL=http://localhost:${LOCAL_FRONTEND_PORT}|" .env
     
     # Add specific backend URL for the test environment
-    echo "BACKEND_URL=http://localhost:8080" >> .env
+    echo "BACKEND_URL=http://localhost:${LOCAL_BACKEND_PORT}" >> .env
     
     echo -e "${GREEN}✓ Deployment .env created and configured${NC}"
   else
@@ -113,9 +119,18 @@ ENV=development
 VERSION=$VERSION
 PORT=8080
 SITE_DOMAIN=localhost
-SITE_URL=http://localhost:4321
+SITE_URL=http://localhost:${LOCAL_FRONTEND_PORT}
 DOCKERHUB_USERNAME=mlorentedev
-BACKEND_URL=http://localhost:8080
+BACKEND_URL=http://localhost:${LOCAL_BACKEND_PORT}
+PUBLIC_SITE_TITLE=mlorente.dev
+PUBLIC_SITE_DESCRIPTION=mlorentedev site
+PUBLIC_SITE_DOMAIN=localhost
+PUBLIC_SITE_URL=http://localhost:${LOCAL_FRONTEND_PORT}
+PUBLIC_SITE_MAIL=mlorentedev@gmail.com
+PUBLIC_SITE_AUTHOR=Manuel Lorente
+PUBLIC_ENABLE_HOMELABS=true
+PUBLIC_ENABLE_BLOG=false
+PUBLIC_ENABLE_CONTACT=false
 EOL
     echo -e "${YELLOW}⚠️ Created minimal .env file. Some features may not work properly.${NC}"
   fi
@@ -140,46 +155,50 @@ server {
     # Frontend
     location / {
         proxy_pass http://mlorente-test-frontend:4321;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;    
     }
 
     # Backend API
     location /api {
-        proxy_pass http://mlorente-test-backend:8080/api;
+        proxy_pass http://mlorente-test-backend:8080/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
     }
 
-    # Cache static assets
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|webp)$ {
-        proxy_pass http://mlorente-test-frontend:4321;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        expires 7d;
-        add_header Cache-Control "public";
-    }
-
-    # Let's Encrypt verification
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    # Error pages
-    error_page 404 /404.html;
-    error_page 500 502 503 504 /50x.html;
-    
-    # Healthcheck endpoint
+    # Health check endpoint
     location /health {
-        proxy_pass http://mlorente-test-backend:8080;
+        proxy_pass http://mlorente-test-backend:8080/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         access_log off;
     }
+
+    # Cache static assets
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|webp)$ {
+        proxy_pass http://mlorente-test-frontend:4321;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_cache_bypass \$http_upgrade;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
 }
 EOL
   echo -e "${GREEN}✓ Nginx configuration created${NC}"
@@ -221,17 +240,24 @@ BACKEND_UP=false
 for i in {1..5}; do
     echo -e "${BLUE}Health check attempt $i/5${NC}"
     
-    # Check frontend direct access
-    FRONTEND_DIRECT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4321 || echo "000")
-    if [ "$FRONTEND_DIRECT_STATUS" == "200" ]; then
+    # Check frontend via nginx
+    FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${LOCAL_NGINX_PORT} || echo "000")
+    if [ "$FRONTEND_STATUS" == "200" ]; then
         FRONTEND_UP=true
-        echo -e "${GREEN}✓ Frontend direct access check passed ($FRONTEND_DIRECT_STATUS)${NC}"
+        echo -e "${GREEN}✓ Frontend check passed ($FRONTEND_STATUS)${NC}"
     else
-        echo -e "${RED}✗ Frontend direct access check failed ($FRONTEND_DIRECT_STATUS)${NC}"
+        # Try direct access to frontend as a fallback
+        FRONTEND_DIRECT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${LOCAL_FRONTEND_PORT} || echo "000")
+        if [ "$FRONTEND_DIRECT_STATUS" == "200" ]; then
+            FRONTEND_UP=true
+            echo -e "${GREEN}✓ Frontend direct access check passed ($FRONTEND_DIRECT_STATUS)${NC}"
+        else
+            echo -e "${RED}✗ Frontend checks failed (Nginx: $FRONTEND_STATUS, Direct: $FRONTEND_DIRECT_STATUS)${NC}"
+        fi
     fi
     
-    # Check backend health endpoint directly
-    BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "000")
+    # Check backend health endpoint
+    BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${LOCAL_BACKEND_PORT}/health || echo "000")
     if [ "$BACKEND_STATUS" == "200" ]; then
         BACKEND_UP=true
         echo -e "${GREEN}✓ Backend health check passed ($BACKEND_STATUS)${NC}"
@@ -255,6 +281,16 @@ else
     echo -e "${RED}Some health checks failed. Service might not be fully operational.${NC}"
     echo -e "${YELLOW}Displaying logs:${NC}"
     docker compose logs
+    
+    # If frontend is the issue, show more detailed troubleshooting info
+    if ! $FRONTEND_UP; then
+        echo -e "${YELLOW}Frontend Troubleshooting:${NC}"
+        echo -e "1. Checking if frontend container is running properly:"
+        docker logs mlorente-test-frontend | tail -n 20
+        
+        echo -e "\n2. Testing frontend container network connectivity:"
+        docker exec mlorente-test-nginx curl -v mlorente-test-frontend:4321 || echo "Connection to frontend failed"
+    fi
 fi
 
 echo -e "${BLUE}===============================================${NC}"
@@ -262,7 +298,7 @@ echo -e "${GREEN}CD LOCAL TESTING COMPLETED!${NC}"
 echo -e "${BLUE}===============================================${NC}"
 echo -e "${YELLOW}Application is running at:${NC}"
 echo -e "${BLUE}- Frontend: http://localhost:${LOCAL_FRONTEND_PORT}${NC}"
-echo -e "${BLUE}- Backend: http://localhost:${LOCAL_BACKEND_PORT}/api/health${NC}"
+echo -e "${BLUE}- Backend: http://localhost:${LOCAL_BACKEND_PORT}/health${NC}"
 echo -e "${BLUE}- Nginx: http://localhost:${LOCAL_NGINX_PORT}${NC}"
 echo -e ""
 echo -e "${YELLOW}You can view test logs with: ${NC}${BLUE}cd ${TEST_DEPLOY_DIR} && docker compose logs -f${NC}"
