@@ -49,8 +49,8 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 environment_name: 'production',
-                wait_timer: parseInt('${{ github.event.inputs.production_wait_timer }}') * 60,
-                required_reviewers: Array.from(
+                wait_timer: parseInt('${{ github.event.inputs.production_wait_timer }}'),
+                reviewers: Array.from(
                   { length: parseInt('${{ github.event.inputs.production_required_reviewers }}') },
                   (_, i) => ({ type: 'User', id: context.payload.sender.id })
                 ),
