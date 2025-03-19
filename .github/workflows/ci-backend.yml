@@ -141,7 +141,7 @@ jobs:
 
           # Handle version with rc.X
           VERSION=${{ secrets.VERSION }}
-          VERSION_TAG="${VERSION}-${GITHUB_SHA::8}"
+          VERSION_TAG="${VERSION}"
           RC_TAG="${VERSION}-rc.$(date +%s)"
           echo "VERSION_TAG=${VERSION_TAG}" >> $GITHUB_ENV
           echo "RC_TAG=${RC_TAG}" >> $GITHUB_ENV
@@ -162,4 +162,3 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.VERSION }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.VERSION_TAG }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ env.RC_TAG }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ github.sha }}

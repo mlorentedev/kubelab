@@ -55,6 +55,8 @@ services:
     image: mlorentedev/mlorente-frontend:local
     ports:
       - "${LOCAL_FRONTEND_PORT}:4321"
+    environment:
+      - HOST=0.0.0.0      
     env_file:
       - .env
     networks:
@@ -109,7 +111,8 @@ if [ ! -f ".env" ]; then
     
     # Add specific backend URL for the test environment
     echo "BACKEND_URL=http://localhost:${LOCAL_BACKEND_PORT}" >> .env
-    
+    echo "HOST=0.0.0.0" >> .env
+
     echo -e "${GREEN}✓ Deployment .env created and configured${NC}"
   else
     echo -e "${YELLOW}No .env.example found. Creating basic .env file for deployment...${NC}"
@@ -117,11 +120,12 @@ if [ ! -f ".env" ]; then
 # Environment Variables
 ENV=development
 VERSION=$VERSION
+HOST=0.0.0.0
 PORT=8080
 SITE_DOMAIN=localhost
 SITE_URL=http://localhost:${LOCAL_FRONTEND_PORT}
 DOCKERHUB_USERNAME=mlorentedev
-BACKEND_URL=http://localhost:${LOCAL_BACKEND_PORT}
+BACKEND_URL=http://backend:${LOCAL_BACKEND_PORT}
 PUBLIC_SITE_TITLE=mlorente.dev
 PUBLIC_SITE_DESCRIPTION=mlorentedev site
 PUBLIC_SITE_DOMAIN=localhost
@@ -154,7 +158,7 @@ server {
 
     # Frontend
     location / {
-        proxy_pass http://mlorente-test-frontend:4321;
+        proxy_pass http://frontend:4321;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -167,7 +171,7 @@ server {
 
     # Backend API
     location /api {
-        proxy_pass http://mlorente-test-backend:8080/api/;
+        proxy_pass http://backend:8080/api/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -180,7 +184,7 @@ server {
 
     # Health check endpoint
     location /health {
-        proxy_pass http://mlorente-test-backend:8080/health;
+        proxy_pass http://backend:8080/health;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -191,7 +195,7 @@ server {
 
     # Cache static assets
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|webp)$ {
-        proxy_pass http://mlorente-test-frontend:4321;
+        proxy_pass http://frontend:4321;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_cache_bypass \$http_upgrade;
@@ -281,16 +285,6 @@ else
     echo -e "${RED}Some health checks failed. Service might not be fully operational.${NC}"
     echo -e "${YELLOW}Displaying logs:${NC}"
     docker compose logs
-    
-    # If frontend is the issue, show more detailed troubleshooting info
-    if ! $FRONTEND_UP; then
-        echo -e "${YELLOW}Frontend Troubleshooting:${NC}"
-        echo -e "1. Checking if frontend container is running properly:"
-        docker logs mlorente-test-frontend | tail -n 20
-        
-        echo -e "\n2. Testing frontend container network connectivity:"
-        docker exec mlorente-test-nginx curl -v mlorente-test-frontend:4321 || echo "Connection to frontend failed"
-    fi
 fi
 
 echo -e "${BLUE}===============================================${NC}"
