@@ -13,8 +13,8 @@ check_dependencies "gh"
 # Define environment files to process
 ENV_FILES=(
     "$(dirname "$0")/../.env"
-    "$(dirname "$0")/../.env.backend.development"
-    "$(dirname "$0")/../.env.frontend.development"
+    "$(dirname "$0")/../frontend/.env"
+    "$(dirname "$0")/../backend/.env"
 )
 
 # Function to process env files and set GitHub secrets

@@ -1,0 +1,241 @@
+name: CD Pipeline
+
+on:
+  repository_dispatch:
+    types: [trigger-deploy]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version to deploy'
+        required: false
+        type: string
+  pull_request:
+    types: [closed]
+    branches: [master, develop]
+
+jobs:
+  prepare:
+    name: Prepare Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      version: ${{ steps.set-env.outputs.version }}
+    steps:
+      - name: Set environment and version
+        id: set-env
+        run: |
+          # For workflow_dispatch
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+            
+            if [[ -n "${{ github.event.inputs.version }}" ]]; then
+              echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            elif [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+              echo "version=latest" >> $GITHUB_OUTPUT
+            else
+              echo "version=develop" >> $GITHUB_OUTPUT
+            fi
+          
+          # For repository_dispatch  
+          elif [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            if [[ "${{ github.event.client_payload.ref }}" == "refs/heads/master" ]]; then
+              echo "environment=production" >> $GITHUB_OUTPUT
+            else
+              echo "environment=staging" >> $GITHUB_OUTPUT
+            fi
+            echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          
+          # For pull_request merged  
+          else
+            if [[ "${{ github.event.pull_request.base.ref }}" == "master" ]]; then
+              echo "environment=production" >> $GITHUB_OUTPUT
+              echo "version=latest" >> $GITHUB_OUTPUT
+            else
+              echo "environment=staging" >> $GITHUB_OUTPUT
+              echo "version=develop" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  deploy:
+    name: Deploy to ${{ needs.prepare.outputs.environment }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: ${{ needs.prepare.outputs.environment }}
+    concurrency: 
+      group: deploy-${{ needs.prepare.outputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        
+      # Set deployment environment variables
+      - name: Set environment variables
+        run: |
+          if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
+            echo "SSH_HOST=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_ENV
+            echo "SSH_USER=${{ secrets.PRODUCTION_USERNAME }}" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=/opt/mlorente" >> $GITHUB_ENV
+            echo "DOMAIN=mlorente.dev" >> $GITHUB_ENV
+          else
+            echo "SSH_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
+            echo "SSH_USER=${{ secrets.STAGING_USERNAME }}" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
+            echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
+          fi
+      
+      # Setup SSH
+      - uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      # Create and run deployment script
+      - name: Deploy to server
+        run: |
+          cat > deploy.sh <<'EOL'
+          #!/bin/bash
+          set -e
+          
+          # Deployment variables
+          ENV="${{ needs.prepare.outputs.environment }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
+          DOMAIN="${{ env.DOMAIN }}"
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          
+          echo "===== STARTING DEPLOYMENT ====="
+          echo "Environment: ${ENV}"
+          echo "Version: ${VERSION}"
+          echo "Directory: ${DEPLOY_PATH}"
+          echo "Domain: ${DOMAIN}"
+          echo "==============================="
+          
+          # Backup existing configuration
+          BACKUP_DIR="${DEPLOY_PATH}/backups/${TIMESTAMP}"
+          mkdir -p "${BACKUP_DIR}"
+          [ -f "${DEPLOY_PATH}/.env" ] && cp "${DEPLOY_PATH}/.env" "${BACKUP_DIR}/.env.backup"
+          [ -f "${DEPLOY_PATH}/docker-compose.yml" ] && cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
+          
+          # Copy configurations
+          cp docker-compose.yml "${DEPLOY_PATH}/"
+          
+          # Update Nginx config if exists
+          [ -d "docker/nginx" ] && mkdir -p "${DEPLOY_PATH}/docker/nginx" && cp -r docker/nginx/* "${DEPLOY_PATH}/docker/nginx/"
+          
+          # Set environment variables
+          cd "${DEPLOY_PATH}"
+          export TAG="${VERSION}"
+          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          
+          # Pull and deploy
+          docker-compose pull
+          docker-compose up -d
+          
+          # Verify deployment
+          sleep 10
+          if ! docker-compose ps | grep -q "Up"; then
+            echo "ERROR: Deployment verification failed!"
+            docker-compose logs
+            exit 1
+          fi
+          
+          # Clean up old images
+          docker image prune -af --filter "until=24h" || true
+          
+          echo "===== DEPLOYMENT COMPLETED ====="
+          EOL
+          
+          chmod +x deploy.sh
+          scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
+          
+          [ -d "docker/nginx" ] && mkdir -p /tmp/docker/nginx && scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
+          
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"
+      
+      # Health checks
+      - name: Verify deployment
+        run: |
+          echo "Running health checks..."
+          sleep 15
+          
+          # Check frontend
+          FRONTEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
+          if [ "$FRONTEND_CHECK" != "200" ]; then
+            echo "Frontend check failed: $FRONTEND_CHECK"
+            exit 1
+          fi
+          
+          # Check backend API
+          BACKEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }}/health)
+          if [ "$BACKEND_CHECK" != "200" ]; then
+            echo "Backend check failed: $BACKEND_CHECK"
+            exit 1
+          fi
+          
+          echo "✅ All health checks passed!"
+
+  release:
+    name: Create Release
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      # Create semantic version tag
+      - name: Create release version
+        id: semver
+        uses: anothrNick/github-tag-action@1.64.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+      
+      # Create GitHub release
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.semver.outputs.new_tag }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
+      
+      # Push release tag to Docker images
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Tag and push Docker images
+        run: |
+          VERSION="${{ steps.semver.outputs.new_tag }}"
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:latest
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:latest
+          
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:latest ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${VERSION}
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:latest ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${VERSION}
+          
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${VERSION}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${VERSION}
+      
+      # Notify about release
+      - name: Notify release
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "🚀 New Release: ${{ steps.semver.outputs.new_tag }} has been created and deployed to production."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

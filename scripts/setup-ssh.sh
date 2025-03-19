@@ -56,7 +56,7 @@ generate_ssh_key() {
         fi
     fi
 
-    # Prompt for passphrase (optional but recommended)
+    # Generate the key
     ssh-keygen -t "$KEY_TYPE" -f "$KEY_PATH" -C "$KEY_COMMENT"
     
     if [[ $? -eq 0 ]]; then
@@ -100,7 +100,7 @@ configure_github_secrets() {
     if ! gh auth status &> /dev/null; then
         log "error" "Not authenticated with GitHub CLI. Run 'gh auth login' first."
         return 1
-    }
+    fi
 
     # Get repository
     local repo
