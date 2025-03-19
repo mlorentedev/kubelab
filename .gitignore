@@ -79,3 +79,5 @@ backend/coverage.txt
 backend/coverage.html
 backend/bin
 deploy-test/
+deploy-staging/
+deploy-prod/
