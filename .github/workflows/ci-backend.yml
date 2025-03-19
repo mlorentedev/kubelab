@@ -140,7 +140,7 @@ jobs:
           fi
 
           # Handle version with rc.X
-          VERSION=${{ env.VERSION }}
+          VERSION=${{ secrets.VERSION }}
           VERSION_TAG="${VERSION}-${GITHUB_SHA::8}"
           RC_TAG="${VERSION}-rc.$(date +%s)"
           echo "VERSION_TAG=${VERSION_TAG}" >> $GITHUB_ENV
