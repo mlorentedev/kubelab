@@ -20,8 +20,6 @@ jobs:
   lint-frontend:
     name: Frontend Lint & Type Check
     runs-on: ubuntu-latest
-    # Skip if only backend files were changed
-    if: contains(github.event.head_commit.modified, 'frontend/') || contains(github.event.head_commit.added, 'frontend/')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,8 +34,6 @@ jobs:
   lint-backend:
     name: Backend Lint & Type Check
     runs-on: ubuntu-latest
-    # Skip if only frontend files were changed
-    if: contains(github.event.head_commit.modified, 'backend/') || contains(github.event.head_commit.added, 'backend/')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
