@@ -152,9 +152,8 @@ jobs:
           file: docker/frontend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ needs.build.outputs.sha_short }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ needs.build.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ secrets.VERSION}}-${{ needs.build.outputs.sha_short }}     
-            
       # Build and push backend
       - uses: docker/build-push-action@v6
         with:
@@ -162,7 +161,6 @@ jobs:
           file: docker/backend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ needs.build.outputs.sha_short }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ needs.build.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ secrets.VERSION}}-${{ needs.build.outputs.sha_short }}     
             
