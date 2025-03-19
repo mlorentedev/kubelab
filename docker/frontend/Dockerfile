@@ -30,7 +30,6 @@ ENV NODE_ENV=production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 COPY --from=build /app/package-lock.json ./
-COPY --from=build /app/.env ./.env
 
 # Instalar solo las dependencias de producción
 RUN npm ci --omit=dev

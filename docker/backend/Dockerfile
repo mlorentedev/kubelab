@@ -29,7 +29,6 @@ RUN apk --no-cache add ca-certificates tzdata && \
 
 # Copiar el ejecutable compilado desde la etapa de build
 COPY --from=build /app/server ./
-COPY --from=build /app/.env ./
 
 # Crear usuario no-root para seguridad
 RUN addgroup -g 1001 -S app && \
