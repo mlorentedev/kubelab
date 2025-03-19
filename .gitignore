@@ -31,6 +31,8 @@ tmp/
 .cache/
 .tmp/
 .cache_*
+artifacts/
+coverage/
 
 # Archivos de log
 npm-debug.log*
