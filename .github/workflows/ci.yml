@@ -1,0 +1,174 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [master, develop, "feature/*", "hotfix/*"]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/ci.yml'
+      - 'docker/**'
+  pull_request:
+    branches: [master, develop]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/ci.yml'
+      - 'docker/**'
+
+jobs:
+  lint-frontend:
+    name: Frontend Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint
+      - run: cd frontend && npm run astro check
+
+  lint-backend:
+    name: Backend Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          cache: true
+          cache-dependency-path: backend/go.sum
+      - run: cd backend && go mod verify
+      - run: cd backend && go vet ./...
+      - run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - run: cd backend && staticcheck ./...
+
+  build:
+    name: Build Applications
+    needs: [lint-frontend, lint-backend]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+      sha_short: ${{ steps.set-version.outputs.sha_short }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Determine version
+      - name: Set version info
+        id: set-version
+        run: |
+          SHA_SHORT=${GITHUB_SHA::8}
+          echo "sha_short=$SHA_SHORT" >> $GITHUB_OUTPUT
+          
+          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+            echo "version=latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "version=develop" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" =~ ^refs/heads/feature/.+ ]]; then
+            FEATURE_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/feature/||')
+            echo "version=feature-${FEATURE_NAME}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" =~ ^refs/heads/hotfix/.+ ]]; then
+            HOTFIX_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/hotfix/||')
+            echo "version=hotfix-${HOTFIX_NAME}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$SHA_SHORT" >> $GITHUB_OUTPUT
+          fi
+      
+      # Build Frontend
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+        env:
+          # Forward environment variables
+          ENV: ${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}
+          VERSION: ${{ steps.set-version.outputs.version }}
+          # Plus your other env variables...
+      
+      # Build Backend
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          cache: true
+          cache-dependency-path: backend/go.sum
+      - name: Build backend
+        run: |
+          cd backend
+          go mod download
+          GOOS=linux GOARCH=amd64 go build -o ./bin/server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -o ./bin/server-linux-arm64 ./cmd/server
+        env:
+          # Forward environment variables
+          ENV: ${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}
+          VERSION: ${{ steps.set-version.outputs.version }}
+          # Plus your other env variables...
+      
+      # Upload artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            frontend/dist
+            backend/bin
+          retention-days: 1
+
+  docker:
+    name: Build & Push Docker Images
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      
+      # Download build artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
+      
+      # Login to DockerHub
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      # Build and push frontend
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ needs.build.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ secrets.VERSION}}-${{ needs.build.outputs.sha_short }}     
+      # Build and push backend
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ needs.build.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ secrets.VERSION}}-${{ needs.build.outputs.sha_short }}     
+            
+      # Trigger deployment for master/develop
+      - name: Trigger deployment
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.REPO_TOKEN }}
+          event-type: trigger-deploy
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "version": "${{ needs.build.outputs.version }}"}'

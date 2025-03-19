@@ -18,12 +18,27 @@ All scripts use a shared utilities library that provides consistent functions fo
 
 ### Development Environment
 
-- **`setup-dev.sh`** - Sets up the local development environment
-  - Creates development configuration files (.env.dev, docker-compose.dev.yml)
+- **`setup-env.sh`** - Sets up the local development environment
+  - Creates development configuration files (.env.*, docker-compose.dev.yml)
   - Creates Docker configuration for frontend and backend
   - Initializes basic project structure
   - Starts development services
-  - **Usage:** `./setup-dev.sh`
+  - **Usage:** `./setup-env.sh`
+
+### CI/CD Configuration
+
+- **`setup-secrets.sh`** - Configures GitHub repository secrets for CI/CD
+  - Sets up deployment credentials
+  - Configures environment variables for all environments
+  - Sets API keys and integration tokens
+  - **Usage:** `./setup-secrets.sh`
+
+- **`setup-ssh.sh`** - Comprehensive SSH key management
+  - Generates SSH keys for deployment
+  - Adds keys to servers
+  - Configures GitHub secrets for SSH keys
+  - Creates SSH config entries
+  - **Usage:** `./setup-ssh.sh`
 
 ### Server Configuration
 
@@ -35,21 +50,6 @@ All scripts use a shared utilities library that provides consistent functions fo
   - Creates application directory structure
   - **Usage:** `./setup-server.sh <server_ip> <environment>`
   - **Example:** `./setup-server.sh 123.456.789.0 production`
-
-### CI/CD Configuration
-
-- **`setup-ci.sh`** - Configures GitHub repository secrets for CI/CD
-  - Sets up deployment credentials
-  - Configures environment variables for all environments
-  - Sets API keys and integration tokens
-  - **Usage:** `./setup-ci.sh`
-
-- **`setup-ssh.sh`** - Comprehensive SSH key management
-  - Generates SSH keys for deployment
-  - Adds keys to servers
-  - Configures GitHub secrets for SSH keys
-  - Creates SSH config entries
-  - **Usage:** `./setup-ssh.sh`
 
 ## Deployment Scripts
 
@@ -69,15 +69,6 @@ All scripts use a shared utilities library that provides consistent functions fo
   - Verifies successful rollback
   - **Usage:** `./deploy-rollback.sh <environment> [version]`
   - **Example:** `./deploy-rollback.sh production v1.1.0`
-
-### Configuration Management
-
-- **`config-update.sh`** - Updates environment variables on the server
-  - Validates critical variables
-  - Creates a backup of previous configuration
-  - Restarts services after updating
-  - **Usage:** `./config-update.sh <environment>`
-  - **Example:** `./config-update.sh staging`
 
 ## Monitoring & Diagnostic Scripts
 
@@ -128,7 +119,7 @@ All scripts use a shared utilities library that provides consistent functions fo
 
    ```bash
    # Set up development environment
-   ./setup-dev.sh
+   ./setup-env.sh
    
    # Develop and test locally
    cd frontend
@@ -145,15 +136,12 @@ All scripts use a shared utilities library that provides consistent functions fo
    ./setup-server.sh 123.456.789.0 staging
    
    # Configure GitHub secrets for CI/CD
-   ./setup-ci.sh
+   ./setup-secrets.sh
    ```
 
 3. Initial deployment:
-
-   ```bash
-   # Update environment configuration
-   ./config-update.sh staging
-   
+  
+  ```bash  
    # Deploy application
    ./deploy-app.sh staging
    ```
