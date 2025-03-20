@@ -1,7 +1,7 @@
 FROM golang:1.23-alpine
 
 # Install air for hot reload
-RUN apk add --no-cache git make bash
+RUN apk add --no-cache git curl bash
 
 # Install air using go install with the correct syntax
 RUN go install github.com/air-verse/air@latest

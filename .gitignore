@@ -65,6 +65,9 @@ pnpm-debug.log*
 # Archivos de Docker
 .dockerignore
 
+# DevContainer
+.devcontainer/.env
+
 # Archivos específicos del sistema operativo
 Thumbs.db
 .Trash-*
