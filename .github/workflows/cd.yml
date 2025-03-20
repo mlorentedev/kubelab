@@ -1,8 +1,10 @@
 name: CD Pipeline
 
 on:
+  # Trigger when an event is dispatched to the repository like a Webhook
   repository_dispatch:
     types: [trigger-deploy]
+  # Trigger when a workflow is manually dispatched
   workflow_dispatch:
     inputs:
       environment:
@@ -17,6 +19,7 @@ on:
         description: 'Version to deploy'
         required: false
         type: string
+  # Trigger when a pull request is closed and merged
   pull_request:
     types: [closed]
     branches: [master, develop]
@@ -29,7 +32,7 @@ jobs:
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       version: ${{ steps.set-env.outputs.version }}
-    steps:
+    steps:   
       - name: Set environment and version
         id: set-env
         run: |
@@ -90,15 +93,16 @@ jobs:
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
             echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
-      
+
       # Setup SSH
       - uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PUBLIC_KEY }}
       
       # Create and run deployment script
       - name: Deploy to server
         run: |
+          # Crear deploy.sh
           cat > deploy.sh <<'EOL'
           #!/bin/bash
           set -e
@@ -122,17 +126,17 @@ jobs:
           mkdir -p "${BACKUP_DIR}"
           [ -f "${DEPLOY_PATH}/.env" ] && cp "${DEPLOY_PATH}/.env" "${BACKUP_DIR}/.env.backup"
           [ -f "${DEPLOY_PATH}/docker-compose.yml" ] && cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
+          [ -d "${DEPLOY_PATH}/docker/nginx" ] && cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
           
-          # Copy configurations
-          cp docker-compose.yml "${DEPLOY_PATH}/"
-          
-          # Update Nginx config if exists
-          [ -d "docker/nginx" ] && mkdir -p "${DEPLOY_PATH}/docker/nginx" && cp -r docker/nginx/* "${DEPLOY_PATH}/docker/nginx/"
-          
-          # Set environment variables
+          # Set environment variables for deployment
           cd "${DEPLOY_PATH}"
           export TAG="${VERSION}"
           export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          
+          # Replace placeholders in Nginx configuration if needed
+          if [ -f "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf" ]; then
+            sed -i "s/\${DOMAIN}/${DOMAIN}/g" "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf"
+          fi
           
           # Pull and deploy
           docker-compose pull
@@ -153,11 +157,13 @@ jobs:
           EOL
           
           chmod +x deploy.sh
+          
+          # Copiar archivos de configuración
+          scp -r docker ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
           scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
           
-          [ -d "docker/nginx" ] && mkdir -p /tmp/docker/nginx && scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
-          
+          # Ejecutar el despliegue
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"
       
       # Health checks
