@@ -94,6 +94,3 @@ gh secret set "CI_CD_BRANCH_PROTECTION" --repo "$REPO" <<< "true"
 
 log_success "Secret configuration completed successfully in $REPO."
 
-# Optional: Verify secrets configuration
-log_info "Verifying GitHub secrets configuration..."
-gh secret list --repo "$REPO"
