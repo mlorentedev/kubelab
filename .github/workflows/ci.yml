@@ -154,6 +154,10 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ needs.build.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${{ secrets.VERSION}}-${{ needs.build.outputs.sha_short }}     
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BUILD_ARCH=amd64
+            
       # Build and push backend
       - uses: docker/build-push-action@v6
         with:
@@ -163,7 +167,10 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ needs.build.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${{ secrets.VERSION}}-${{ needs.build.outputs.sha_short }}     
-            
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BUILD_ARCH=amd64
+
       # Trigger deployment for master/develop
       - name: Trigger deployment
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
