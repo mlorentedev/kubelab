@@ -83,11 +83,13 @@ jobs:
       - name: Set environment variables
         run: |
           if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
+            echo "Deploying to Production"
             echo "SSH_HOST=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.PRODUCTION_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente" >> $GITHUB_ENV
             echo "DOMAIN=mlorente.dev" >> $GITHUB_ENV
           else
+            echo "Deploying to Staging"
             echo "SSH_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.STAGING_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
@@ -95,9 +97,10 @@ jobs:
           fi
       - name: Add SSH key to known_hosts
         run: |
+          echo "SSH_HOST=${{ env.SSH_HOST }}" # Depuración
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
       - name: Decode and add SSH key
         run: |
           echo "${{ secrets.SSH_PRIVATE_KEY_BASE64 }}" | base64 --decode > /tmp/ssh-private-key
