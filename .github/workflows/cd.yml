@@ -75,10 +75,10 @@ jobs:
     environment: ${{ needs.prepare.outputs.environment }}
     concurrency: 
       group: deploy-${{ needs.prepare.outputs.environment }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-        
+
       # Set deployment environment variables
       - name: Set environment variables
         run: |
@@ -93,7 +93,11 @@ jobs:
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
             echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
-
+      - name: Add SSH key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          
       - name: Decode and add SSH key
         run: |
           echo "${{ secrets.SSH_PRIVATE_KEY_BASE64 }}" | base64 --decode > /tmp/ssh-private-key
@@ -172,7 +176,7 @@ jobs:
       - name: Verify deployment
         run: |
           echo "Running health checks..."
-          sleep 15
+          sleep 5
           
           # Check frontend
           FRONTEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
