@@ -2,8 +2,6 @@ services:
   frontend:
     image: ${DOCKERHUB_USERNAME:-mlorentedev}/mlorente-frontend:${TAG:-latest}
     restart: always
-    ports:
-      - "3000:4321"
     env_file:
       - .env
     networks:
@@ -33,9 +31,6 @@ services:
 
   nginx:
     image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
     restart: always
     volumes:
       - ./docker/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf

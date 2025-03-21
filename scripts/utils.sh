@@ -50,6 +50,39 @@ exit_error() {
 # Environment validation functions
 # ------------------------------------------------------------------------------
 
+# Load environment variables from .env file
+load_env_file() {
+    local env_file="$1"
+    
+    # Check if file exists
+    if [ ! -f "$env_file" ]; then
+        log_warning "Environment file not found: $env_file"
+        return 1
+    fi
+
+    # Read file line by line, handling multiline and quoted values
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^\s*#.* ]] && continue
+        [[ -z "$line" ]] && continue
+
+        # Extract key and value
+        key=$(echo "$line" | cut -d '=' -f1)
+        value=$(echo "$line" | cut -d '=' -f2-)
+
+        # Remove leading/trailing whitespace
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
+
+        # Remove surrounding quotes if present
+        value="${value%\"}"
+        value="${value#\"}"
+
+        # Export the variable, preserving multiline content
+        export "$key=$value"
+    done < "$env_file"
+}
+
 # Validate environment parameter
 validate_environment() {
     local env=$1
@@ -78,6 +111,20 @@ validate_environment() {
         export SITE_URL="https://staging.mlorente.dev"
         export BRANCH="develop"
     fi
+}
+
+debug_print_env() {
+    echo "=== Loaded Environment Variables ==="
+    
+    # Print all variables from the .env file
+    while IFS='=' read -r key value; do
+        # Skip comments and empty lines
+        [[ "$key" =~ ^\s*#.* ]] && continue
+        [[ -z "$key" ]] && continue
+        
+        # Print the key and its value
+        echo "${key}=${value}"
+    done < "$ENV_FILE"
 }
 
 # ------------------------------------------------------------------------------
@@ -172,41 +219,3 @@ get_timestamp() {
     echo "$(date +%Y%m%d%H%M%S)"
 }
 
-# ------------------------------------------------------------------------------
-# SSH key functions
-# ------------------------------------------------------------------------------
-
-# Generate SSH key if it doesn't exist
-ensure_ssh_key() {
-    local key_path=${1:-"$HOME/.ssh/id_rsa_mlorente"}
-    local comment=${2:-"mlorente-deployment"}
-    
-    if [ ! -f "$key_path" ]; then
-        log_info "SSH key not found at $key_path"
-        if confirm_action "Do you want to generate a new SSH key?"; then
-            log_info "Generating new SSH key..."
-            
-            # Ensure the .ssh directory exists
-            mkdir -p "$(dirname "$key_path")"
-            
-            # Generate the key
-            ssh-keygen -t rsa -b 4096 -f "$key_path" -C "$comment" -N ""
-            
-            # Set correct permissions
-            chmod 600 "$key_path"
-            chmod 644 "${key_path}.pub"
-            
-            log_success "SSH key generated: $key_path"
-        else
-            exit_error "SSH key is required for deployment."
-        fi
-    else
-        log_info "Using existing SSH key: $key_path"
-    fi
-    
-    # Display the public key
-    log_info "Public key (you may need to copy this):"
-    cat "${key_path}.pub"
-    
-    export SSH_KEY_PATH="$key_path"
-}

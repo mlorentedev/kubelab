@@ -3,11 +3,6 @@ name: Setup GitHub Environments
 on:
   workflow_dispatch:
     inputs:
-      production_required_reviewers:
-        description: 'Number of approvals required for production'
-        required: false
-        default: '1'
-        type: string
       production_wait_timer:
         description: 'Wait time in minutes before deployment to production'
         required: false
@@ -49,11 +44,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 environment_name: 'production',
-                wait_timer: parseInt('${{ github.event.inputs.production_wait_timer }}') * 60,
-                required_reviewers: Array.from(
-                  { length: parseInt('${{ github.event.inputs.production_required_reviewers }}') },
-                  (_, i) => ({ type: 'User', id: context.payload.sender.id })
-                ),
+                wait_timer: parseInt('${{ github.event.inputs.production_wait_timer }}'),
                 deployment_branch_policy: {
                   protected_branches: true,
                   custom_branch_policies: false

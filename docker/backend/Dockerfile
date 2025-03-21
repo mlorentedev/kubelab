@@ -15,7 +15,7 @@ RUN go mod download
 COPY backend/ ./
 
 # Compilar la aplicación con optimizaciones
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$BUILD_ARCH \
     go build -ldflags="-w -s" -o server ./cmd/server
 
 # Runtime Stage - usando alpine mínimo
