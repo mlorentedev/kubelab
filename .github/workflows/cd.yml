@@ -100,10 +100,9 @@ jobs:
           chmod 600 /tmp/ssh-private-key
 
       - name: Add SSH key to the agent
-        uses: webfactory/ssh-agent@v0.8.0
+        uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: /tmp/ssh-private-key
-          log-public-key: true
       
       # Create and run deployment script
       - name: Deploy to server
