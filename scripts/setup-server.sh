@@ -32,6 +32,9 @@ if [ -z "$SSH_PUBLIC_KEY" ]; then
     exit 1
 fi
 
+# Set deploy user from environment or use default
+DEPLOY_USER=${DEPLOY_USER:-"deployer"}
+
 # Validate environment
 validate_environment "$ENV"
 
@@ -44,6 +47,7 @@ fi
 log_info "Configuring $ENV server at $SERVER_IP"
 log_info "Installation directory: $DEPLOY_DIR"
 log_info "Domain: $DOMAIN"
+log_info "Deployment user: $DEPLOY_USER"
 
 # Confirm action
 if ! confirm_action "This will configure the server for deployment. Continue?"; then
@@ -61,6 +65,7 @@ INSTALL_DIR="$DEPLOY_DIR"
 DOMAIN="$DOMAIN"
 ENV="$ENV"
 SSH_PUBLIC_KEY="$SSH_PUBLIC_KEY"
+DEPLOY_USER="$DEPLOY_USER"
 
 echo "=== Starting server configuration ==="
 
@@ -91,11 +96,11 @@ echo "Configuring fail2ban..."
 systemctl enable fail2ban
 systemctl start fail2ban
 
-echo "Creating deployer user..."
-if ! id -u deployer &>/dev/null; then
-    useradd -m -s /bin/bash deployer
-    mkdir -p /home/deployer/.ssh
-    chmod 700 /home/deployer/.ssh
+echo "Creating \$DEPLOY_USER user..."
+if ! id -u \$DEPLOY_USER &>/dev/null; then
+    useradd -m -s /bin/bash \$DEPLOY_USER
+    mkdir -p /home/\$DEPLOY_USER/.ssh
+    chmod 700 /home/\$DEPLOY_USER/.ssh
 
     # Disable password authentication and root login
     echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
@@ -103,26 +108,36 @@ if ! id -u deployer &>/dev/null; then
     echo "AuthorizedKeysFile .ssh/authorized_keys" >> /etc/ssh/sshd_config
     systemctl restart ssh
     
-    # Add SSH key for deployer user from environment variable
+    # Add SSH key for deployment user from environment variable
     if [ -z "$SSH_PUBLIC_KEY" ]; then
         echo "Error: SSH_PUBLIC_KEY environment variable is not set."
         exit 1
     fi
 
-    touch /home/deployer/.ssh/authorized_keys
-    echo "$SSH_PUBLIC_KEY" > /home/deployer/.ssh/authorized_keys
-    chmod 600 /home/deployer/.ssh/authorized_keys
-    chown deployer:deployer /home/deployer/.ssh/authorized_keys
-    chown -R deployer:deployer /home/deployer/.ssh
+    touch /home/\$DEPLOY_USER/.ssh/authorized_keys
+    echo "$SSH_PUBLIC_KEY" > /home/\$DEPLOY_USER/.ssh/authorized_keys
+    chmod 600 /home/\$DEPLOY_USER/.ssh/authorized_keys
+    chown \$DEPLOY_USER:\$DEPLOY_USER /home/\$DEPLOY_USER/.ssh/authorized_keys
+    chown -R \$DEPLOY_USER:\$DEPLOY_USER /home/\$DEPLOY_USER/.ssh
 
     # Configure sudo access for Docker
-    echo 'deployer ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose, /usr/bin/systemctl' > /etc/sudoers.d/deployer
-    chmod 440 /etc/sudoers.d/deployer
+    echo '\$DEPLOY_USER ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose, /usr/bin/systemctl' > /etc/sudoers.d/\$DEPLOY_USER
+    chmod 440 /etc/sudoers.d/\$DEPLOY_USER
 fi
 
 # Configure permissions
-chown -R deployer:deployer /home/deployer/.ssh
-chmod 600 /home/deployer/.ssh/authorized_keys
+chown -R \$DEPLOY_USER:\$DEPLOY_USER /home/\$DEPLOY_USER/.ssh
+chmod 600 /home/\$DEPLOY_USER/.ssh/authorized_keys
+
+# Configure Docker permissions for deployment user
+echo "Configuring Docker permissions for \$DEPLOY_USER user..."
+usermod -aG docker \$DEPLOY_USER
+systemctl restart docker
+
+# Create Docker configuration directory for deployment user
+mkdir -p /home/\$DEPLOY_USER/.docker
+chown -R \$DEPLOY_USER:\$DEPLOY_USER /home/\$DEPLOY_USER/.docker
+chmod 700 /home/\$DEPLOY_USER/.docker
 
 # Create directories for the application
 echo "Creating directories for the application..."
@@ -131,6 +146,10 @@ mkdir -p \$INSTALL_DIR/certbot/conf
 mkdir -p \$INSTALL_DIR/certbot/www
 mkdir -p \$INSTALL_DIR/backups
 mkdir -p \$INSTALL_DIR/docker/nginx/conf.d
+
+# Set appropriate permissions for installation directory
+chown -R \$DEPLOY_USER:docker \$INSTALL_DIR
+chmod -R 775 \$INSTALL_DIR
 
 # Create initial .env file
 echo "Creating initial .env..."
@@ -142,6 +161,10 @@ cat > \$INSTALL_DIR/.env <<EOL
 ENV=\$ENV
 SITE_DOMAIN=\$DOMAIN
 EOL
+
+# Ensure .env file has proper permissions
+chown \$DEPLOY_USER:\$DEPLOY_USER \$INSTALL_DIR/.env
+chmod 640 \$INSTALL_DIR/.env
 
 # Obtain SSL certificates
 echo "Do you want to obtain SSL certificates for \$DOMAIN now? (y/n)"
@@ -168,18 +191,42 @@ if [[ "\$GET_CERTS" == "y" || "\$GET_CERTS" == "Y" ]]; then
     mkdir -p \$INSTALL_DIR/certbot/conf/renewal
     cp /etc/letsencrypt/renewal/\$DOMAIN.conf \$INSTALL_DIR/certbot/conf/renewal/
     
+    # Set appropriate permissions
+    chown -R \$DEPLOY_USER:docker \$INSTALL_DIR/certbot
+    chmod -R 775 \$INSTALL_DIR/certbot
+    
     echo "SSL certificates obtained and copied to Docker volumes"
 else
     echo "Skipping SSL certificate generation. You'll need to set up certificates later."
 fi
 
-# Configure permissions
-chown -R deployer:deployer \$INSTALL_DIR
-chmod -R 755 \$INSTALL_DIR
+# Ensure Docker socket has correct permissions
+echo "Configuring Docker socket permissions..."
+chmod 666 /var/run/docker.sock
+
+# Create Docker configuration to ensure proper permissions
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<EOL
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "userns-remap": "",
+  "live-restore": true
+}
+EOL
+
+# Restart Docker service to apply changes
+systemctl restart docker
+
+# Create a test file to verify Docker permissions
+echo "Testing Docker permissions for \$DEPLOY_USER user..."
+su - \$DEPLOY_USER -c "docker info" || echo "Warning: Docker permission test failed. Manual verification required."
 
 # Configure Docker to start on boot
 systemctl enable docker
-systemctl start docker
 
 # Secure SSH configuration
 echo "Securing SSH configuration..."
@@ -192,7 +239,7 @@ echo "Server configuration completed."
 echo "======================================"
 echo "IP: $SERVER_IP"
 echo "Environment: \$ENV"
-echo "Deployment user: deployer"
+echo "Deployment user: \$DEPLOY_USER"
 echo "Directory: \$INSTALL_DIR"
 echo "Domain: \$DOMAIN"
 echo "======================================"
@@ -216,7 +263,7 @@ log_info "Configuring simplified SSH access..."
 SSH_CONFIG_FILE="$HOME/.ssh/config"
 SSH_ENTRY="Host $SERVER_ALIAS
     HostName $SERVER_IP
-    User deployer
+    User $DEPLOY_USER
     IdentityFile $SSH_KEY_PATH
     StrictHostKeyChecking no"
 
@@ -255,6 +302,10 @@ if confirm_action "Do you want to copy your configuration files (docker-compose.
         log_warning "Nginx configuration directory not found."
     fi
 fi
+
+# Verify Docker permissions one more time
+log_info "Verifying Docker permissions..."
+ssh "$SERVER_ALIAS" "docker ps" || log_warning "Docker permissions may still need configuration. Run 'ssh $SERVER_ALIAS \"sudo usermod -aG docker $DEPLOY_USER && sudo chmod 666 /var/run/docker.sock\"' if needed."
 
 log_success "Server configured successfully."
 log_info "You can now connect simply with: ssh $SERVER_ALIAS"
