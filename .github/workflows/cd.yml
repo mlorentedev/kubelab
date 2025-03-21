@@ -167,11 +167,17 @@ jobs:
           scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
           scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
           
-          [ -d "docker/nginx" ] && mkdir -p /tmp/docker/nginx && scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
+          if [ -d "docker/nginx" ]; then
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
+            scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
+          fi    
+
+          # Create remote directories in deployment path
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/docker/nginx/conf.d"
           
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"
-      
-      # Health checks
+          # Execute deployment script
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"      
+
       - name: Verify deployment
         run: |
           echo "Running health checks..."
