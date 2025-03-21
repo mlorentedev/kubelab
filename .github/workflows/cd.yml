@@ -79,34 +79,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Set deployment environment variables
       - name: Set environment variables
         run: |
           if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
-            echo "Deploying to Production"
             echo "SSH_HOST=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.PRODUCTION_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente" >> $GITHUB_ENV
             echo "DOMAIN=mlorente.dev" >> $GITHUB_ENV
           else
-            echo "Deploying to Staging"
             echo "SSH_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.STAGING_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
             echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
-      - name: Add SSH key to known_hosts
+
+      # Setup SSH - Use the webfactory action which handles SSH properly
+      - uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      # Add the host key to known_hosts
+      - name: Add SSH host key
         run: |
-          echo "SSH_HOST=${{ env.SSH_HOST }}" # Depuración
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Decode and add SSH key
-        run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY_BASE64 }}" | base64 --decode > /tmp/ssh-private-key
-          chmod 600 /tmp/ssh-private-key
-          eval $(ssh-agent -s)
-          ssh-add /tmp/ssh-private-key
+          chmod 644 ~/.ssh/known_hosts
 
       # Create and run deployment script
       - name: Deploy to server
@@ -167,19 +164,18 @@ jobs:
           
           chmod +x deploy.sh
           
-          # Copiar archivos de configuración
-          scp -r docker ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
           scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
           
-          # Ejecutar el despliegue
+          [ -d "docker/nginx" ] && mkdir -p /tmp/docker/nginx && scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
+          
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"
       
       # Health checks
       - name: Verify deployment
         run: |
           echo "Running health checks..."
-          sleep 5
+          sleep 15
           
           # Check frontend
           FRONTEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
