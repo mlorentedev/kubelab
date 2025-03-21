@@ -94,16 +94,13 @@ jobs:
             echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
 
-      - name: Set up SSH
+      - name: Decode and add SSH key
         run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | sed 's/\\n/\n/g' > /tmp/ssh-private-key
+          echo "${{ secrets.SSH_PRIVATE_KEY_BASE64 }}" | base64 --decode > /tmp/ssh-private-key
           chmod 600 /tmp/ssh-private-key
+          eval $(ssh-agent -s)
+          ssh-add /tmp/ssh-private-key
 
-      - name: Add SSH key to the agent
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: /tmp/ssh-private-key
-      
       # Create and run deployment script
       - name: Deploy to server
         run: |
