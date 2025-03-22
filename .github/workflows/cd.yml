@@ -164,32 +164,24 @@ jobs:
           
           # Clean everything to avoid potential conflicts
           docker-compose down --volumes --remove-orphans || true
+          echo "Cleaning up previous certificate configurations..."
+          rm -rf "${DEPLOY_PATH}/certbot/conf/live/${DOMAIN}" 2>/dev/null || true
+          rm -rf "${DEPLOY_PATH}/certbot/conf/archive/${DOMAIN}" 2>/dev/null || true
+          rm -f "${DEPLOY_PATH}/certbot/conf/renewal/${DOMAIN}.conf" 2>/dev/null || true
 
           # Ensure Nginx is running for certificate validation
           docker-compose up -d nginx
           sleep 5
           
-          # Check if certificates exist and are valid
-          CERT_DIR="${DEPLOY_PATH}/certbot/conf/live/${DOMAIN}"
-          if [ ! -f "${CERT_DIR}/fullchain.pem" ] || [ "$(openssl x509 -checkend 2592000 -noout -in ${CERT_DIR}/fullchain.pem 2>/dev/null ; echo $?)" == "1" ]; then
-            echo "Certificates missing or will expire soon. Generating new certificates..."
-            
-            # Make sure certbot directories exist
-            mkdir -p "${DEPLOY_PATH}/certbot/conf"
-            mkdir -p "${DEPLOY_PATH}/certbot/www"
-            
-            # Run certbot to generate or renew certificates
-            docker-compose run --rm certbot certonly \
-              --webroot --webroot-path=/var/www/certbot \
-              --email ${EMAIL} \
-              --agree-tos \
-              --no-eff-email \
-              -d ${DOMAIN} -d www.${DOMAIN}
-            
-            echo "SSL certificates generated successfully"
-          else
-            echo "SSL certificates are valid and will not expire soon"
-          fi          
+          # Run local Certbot to obtain certificates
+          echo "Generating new certificates..."
+          docker-compose run --rm certbot certonly \
+            --webroot --webroot-path=/var/www/certbot \
+            --email ${EMAIL} \
+            --agree-tos \
+            --no-eff-email \
+            --force-renewal \
+            -d ${DOMAIN} -d www.${DOMAIN}          
           
           # Pull and deploy
           docker-compose pull
