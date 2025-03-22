@@ -9,6 +9,9 @@ COPY frontend/package.json frontend/package-lock.json ./
 # Instalar dependencias con cache optimizado
 RUN npm ci
 
+# Crear un .env temporal para la compilación
+RUN echo "ENV=production" > .env
+
 # Copiar el resto del código fuente
 COPY frontend/ ./
 

@@ -130,24 +130,43 @@ jobs:
           # Backup existing configuration
           BACKUP_DIR="${DEPLOY_PATH}/backups/${TIMESTAMP}"
           mkdir -p "${BACKUP_DIR}"
-          [ -f "${DEPLOY_PATH}/backend/.env" ] && cp "${DEPLOY_PATH}/backend/.env" "${BACKUP_DIR}/backend.env.backup"
-          [ -f "${DEPLOY_PATH}/frontend/.env" ] && cp "${DEPLOY_PATH}/frontend/.env" "${BACKUP_DIR}/frontend.env.backup"
-          [ -f "${DEPLOY_PATH}/docker-compose.yml" ] && cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
-          [ -d "${DEPLOY_PATH}/docker/nginx" ] && cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
+          
+          # Backup existing files if they exist
+          if [ -f "${DEPLOY_PATH}/docker-compose.yml" ]; then
+            cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
+          fi
+          
+          if [ -d "${DEPLOY_PATH}/docker/nginx" ]; then
+            mkdir -p "${BACKUP_DIR}/nginx.backup"
+            cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
+          fi
+          
+          if [ -d "${DEPLOY_PATH}/backend" ]; then
+            mkdir -p "${BACKUP_DIR}/backend.backup"
+            cp -r "${DEPLOY_PATH}/backend" "${BACKUP_DIR}/backend.backup"
+          fi
+          
+          if [ -d "${DEPLOY_PATH}/frontend" ]; then
+            mkdir -p "${BACKUP_DIR}/frontend.backup"
+            cp -r "${DEPLOY_PATH}/frontend" "${BACKUP_DIR}/frontend.backup"
+          fi
           
           # Set environment variables for deployment
           cd "${DEPLOY_PATH}"
           export TAG="${VERSION}"
-          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          export DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME"
           
           # Replace placeholders in Nginx configuration if needed
           if [ -f "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf" ]; then
             sed -i "s/\${DOMAIN}/${DOMAIN}/g" "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf"
           fi
           
+          # Clean everything to avoid potential conflicts
+          docker-compose down --volumes --remove-orphans || true
+          
           # Pull and deploy
           docker-compose pull
-          docker-compose up -d
+          docker-compose up -d --force-recreate
           
           # Verify deployment
           sleep 10
@@ -165,11 +184,22 @@ jobs:
           
           chmod +x deploy.sh
           
-          # Crear directorios para archivos .env
-          mkdir -p backend frontend
-              
-          # Crear archivo .env para el backend (siguiendo la estructura de backend.env.example)
-          cat > backend/.env << EOF
+          # Copiar files to server
+          scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
+          
+          if [ -d "docker/nginx" ]; then
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
+            scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
+          fi
+          
+          # Create directories on server
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/docker/nginx/conf.d"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/backend"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/frontend"
+          
+          # Create environment files on server directly
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat > ${{ env.DEPLOY_PATH }}/backend/.env << EOF
           # Environment
           ENV=${{ needs.prepare.outputs.environment }}
           VERSION=${{ needs.prepare.outputs.version }}
@@ -193,10 +223,9 @@ jobs:
           EMAIL_SECURE=true
           EMAIL_USER=${{ secrets.EMAIL_USER }}
           EMAIL_PASS=${{ secrets.EMAIL_PASS }}
-          EOF
+          EOF"
           
-          # Crear archivo .env para el frontend (siguiendo la estructura de frontend.env.example)
-          cat > frontend/.env << EOF
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat > ${{ env.DEPLOY_PATH }}/frontend/.env << EOF
           # Environment
           ENV=${{ needs.prepare.outputs.environment }}
           VERSION=${{ needs.prepare.outputs.version }}
@@ -227,32 +256,17 @@ jobs:
           
           # Backend URL (para acceso interno en Docker)
           BACKEND_URL=http://backend:8080
-          EOF
+          EOF"
           
-          # Copiar archivos al servidor
-          scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
-          scp -r backend ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/
-          scp -r frontend ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/
+          # Move configuration files to deployment path
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/docker-compose.yml ${{ env.DEPLOY_PATH }}/"
           
           if [ -d "docker/nginx" ]; then
-            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
-            scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
-          fi    
-
-          # Crear directorios en el path de despliegue
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/docker/nginx/conf.d"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/backend"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/frontend"
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp -r /tmp/docker/nginx/* ${{ env.DEPLOY_PATH }}/docker/nginx/"
+          fi
           
-          # Mover archivos de /tmp al directorio de despliegue
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/backend/.env ${{ env.DEPLOY_PATH }}/backend/"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/frontend/.env ${{ env.DEPLOY_PATH }}/frontend/"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/docker-compose.yml ${{ env.DEPLOY_PATH }}/"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp -r /tmp/docker/nginx/* ${{ env.DEPLOY_PATH }}/docker/nginx/"
-          
-          # Ejecutar script de despliegue
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && /tmp/deploy.sh"   
+          # Execute deployment script
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}' && cd ${{ env.DEPLOY_PATH }} && bash /tmp/deploy.sh"
 
       - name: Verify deployment
         run: |
