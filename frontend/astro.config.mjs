@@ -7,37 +7,40 @@ import dotenv from 'dotenv';
 
 // Function to load environment variables
 const loadEnvVariables = () => {
-  // Try to load local .env file for development
-  const localResult = dotenv.config({ path: '.env' });
+  let envVars = {};
   
-  // If running in GitHub Actions, use GitHub Secrets
-  if (process.env.GITHUB_ACTIONS) {
-    return {
-      PUBLIC_SITE_TITLE: process.env.PUBLIC_SITE_TITLE,
-      PUBLIC_SITE_DESCRIPTION: process.env.PUBLIC_SITE_DESCRIPTION,
-      PUBLIC_SITE_DOMAIN: process.env.PUBLIC_SITE_DOMAIN,
-      PUBLIC_SITE_URL: process.env.PUBLIC_SITE_URL,
-      PUBLIC_SITE_MAIL: process.env.PUBLIC_SITE_MAIL,
-      PUBLIC_SITE_AUTHOR: process.env.PUBLIC_SITE_AUTHOR,
-      PUBLIC_SITE_KEYWORDS: process.env.PUBLIC_SITE_KEYWORDS,
-      PUBLIC_TWITTER_URL: process.env.PUBLIC_TWITTER_URL,
-      PUBLIC_YOUTUBE_URL: process.env.PUBLIC_YOUTUBE_URL,
-      PUBLIC_GITHUB_URL: process.env.PUBLIC_GITHUB_URL,
-      PUBLIC_CALENDLY_URL: process.env.PUBLIC_CALENDLY_URL,
-      PUBLIC_GOOGLE_ANALYTICS_ID: process.env.PUBLIC_GOOGLE_ANALYTICS_ID,
-      PUBLIC_ENABLE_HOMELABS: process.env.PUBLIC_ENABLE_HOMELABS === 'true',
-      PUBLIC_ENABLE_BLOG: process.env.PUBLIC_ENABLE_BLOG === 'true',
-      PUBLIC_ENABLE_CONTACT: process.env.PUBLIC_ENABLE_CONTACT === 'true',
-      BACKEND_URL: process.env.BACKEND_URL,
-    };
+  try {
+    // Try to load local .env file for development
+    const localResult = dotenv.config({ path: '.env' });
+    if (localResult.parsed) {
+      envVars = { ...envVars, ...localResult.parsed };
+    }
+  } catch (error) {
+    console.log('No .env file found, using environment variables');
   }
   
-  // If local .env file loading failed and not in GitHub Actions, log a warning
-  if (localResult.error && !process.env.GITHUB_ACTIONS) {
-    console.warn('Could not load .env file:', localResult.error);
-  }
+  // Use environment variables as fallback
+  const envKeys = [
+    'ENV', 'VERSION', 
+    'PUBLIC_SITE_TITLE', 'PUBLIC_SITE_DESCRIPTION', 
+    'PUBLIC_SITE_DOMAIN', 'PUBLIC_SITE_URL', 
+    'PUBLIC_SITE_MAIL', 'PUBLIC_SITE_AUTHOR', 
+    'PUBLIC_SITE_KEYWORDS',
+    'PUBLIC_TWITTER_URL', 'PUBLIC_YOUTUBE_URL', 
+    'PUBLIC_GITHUB_URL', 'PUBLIC_CALENDLY_URL',
+    'PUBLIC_GOOGLE_ANALYTICS_ID', 'PUBLIC_GOOGLE_TAG_MANAGER_ID',
+    'PUBLIC_ENABLE_HOMELABS', 'PUBLIC_ENABLE_BLOG', 'PUBLIC_ENABLE_CONTACT',
+    'BACKEND_URL'
+  ];
   
-  return localResult.parsed || {};
+  // Add environment variables to the envVars object
+  envKeys.forEach(key => {
+    if (process.env[key]) {
+      envVars[key] = process.env[key];
+    }
+  });
+  
+  return envVars;
 };
 
 // Load environment variables
