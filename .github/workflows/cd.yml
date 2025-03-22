@@ -130,7 +130,8 @@ jobs:
           # Backup existing configuration
           BACKUP_DIR="${DEPLOY_PATH}/backups/${TIMESTAMP}"
           mkdir -p "${BACKUP_DIR}"
-          [ -f "${DEPLOY_PATH}/.env" ] && cp "${DEPLOY_PATH}/.env" "${BACKUP_DIR}/.env.backup"
+          [ -f "${DEPLOY_PATH}/backend/.env" ] && cp "${DEPLOY_PATH}/backend/.env" "${BACKUP_DIR}/backend.env.backup"
+          [ -f "${DEPLOY_PATH}/frontend/.env" ] && cp "${DEPLOY_PATH}/frontend/.env" "${BACKUP_DIR}/frontend.env.backup"
           [ -f "${DEPLOY_PATH}/docker-compose.yml" ] && cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
           [ -d "${DEPLOY_PATH}/docker/nginx" ] && cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
           
@@ -164,19 +165,94 @@ jobs:
           
           chmod +x deploy.sh
           
+          # Crear directorios para archivos .env
+          mkdir -p backend frontend
+              
+          # Crear archivo .env para el backend (siguiendo la estructura de backend.env.example)
+          cat > backend/.env << EOF
+          # Environment
+          ENV=${{ needs.prepare.outputs.environment }}
+          VERSION=${{ needs.prepare.outputs.version }}
+          PORT=8080
+          
+          # Application
+          SITE_TITLE=${{ secrets.PUBLIC_SITE_TITLE }}
+          SITE_AUTHOR=${{ secrets.PUBLIC_SITE_AUTHOR }}
+          SITE_DOMAIN=${{ env.DOMAIN }}
+          SITE_MAIL=${{ secrets.PUBLIC_SITE_MAIL }}
+          SITE_URL=https://${{ env.DOMAIN }}
+          
+          # Newsletter & Subscription Service
+          BEEHIIV_API_KEY=${{ secrets.BEEHIIV_API_KEY }}
+          BEEHIIV_PUB_ID=${{ secrets.BEEHIIV_PUB_ID }}
+          
+          # Email Configuration
+          EMAIL_HOST=${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT=${{ secrets.EMAIL_PORT }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+          EMAIL_SECURE=true
+          EMAIL_USER=${{ secrets.EMAIL_USER }}
+          EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+          EOF
+          
+          # Crear archivo .env para el frontend (siguiendo la estructura de frontend.env.example)
+          cat > frontend/.env << EOF
+          # Environment
+          ENV=${{ needs.prepare.outputs.environment }}
+          VERSION=${{ needs.prepare.outputs.version }}
+          
+          # Application
+          PUBLIC_SITE_TITLE=${{ secrets.PUBLIC_SITE_TITLE }}
+          PUBLIC_SITE_DESCRIPTION=${{ secrets.PUBLIC_SITE_DESCRIPTION }}
+          PUBLIC_SITE_DOMAIN=${{ env.DOMAIN }}
+          PUBLIC_SITE_URL=https://${{ env.DOMAIN }}
+          PUBLIC_SITE_MAIL=${{ secrets.PUBLIC_SITE_MAIL }}
+          PUBLIC_SITE_AUTHOR=${{ secrets.PUBLIC_SITE_AUTHOR }}
+          PUBLIC_SITE_KEYWORDS=${{ secrets.PUBLIC_SITE_KEYWORDS }}
+          
+          # Social media
+          PUBLIC_CALENDLY_URL=${{ secrets.PUBLIC_CALENDLY_URL }}
+          PUBLIC_TWITTER_URL=${{ secrets.PUBLIC_TWITTER_URL }}
+          PUBLIC_YOUTUBE_URL=${{ secrets.PUBLIC_YOUTUBE_URL }}
+          PUBLIC_GITHUB_URL=${{ secrets.PUBLIC_GITHUB_URL }}
+          
+          # Feature flags
+          PUBLIC_ENABLE_BLOG=${{ secrets.PUBLIC_ENABLE_BLOG }}
+          PUBLIC_ENABLE_HOMELABS=${{ secrets.PUBLIC_ENABLE_HOMELABS }}
+          PUBLIC_ENABLE_CONTACT=${{ secrets.PUBLIC_ENABLE_CONTACT }}
+          
+          # Analytics & Tracking
+          PUBLIC_GOOGLE_ANALYTICS_ID=${{ secrets.PUBLIC_GOOGLE_ANALYTICS_ID }}
+          PUBLIC_GOOGLE_TAG_MANAGER_ID=${{ secrets.PUBLIC_GOOGLE_TAG_MANAGER_ID }}
+          
+          # Backend URL (para acceso interno en Docker)
+          BACKEND_URL=http://backend:8080
+          EOF
+          
+          # Copiar archivos al servidor
           scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
           scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
+          scp -r backend ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/
+          scp -r frontend ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/
           
           if [ -d "docker/nginx" ]; then
             ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
             scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
           fi    
 
-          # Create remote directories in deployment path
+          # Crear directorios en el path de despliegue
           ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/docker/nginx/conf.d"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/backend"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/frontend"
           
-          # Execute deployment script
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"      
+          # Mover archivos de /tmp al directorio de despliegue
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/backend/.env ${{ env.DEPLOY_PATH }}/backend/"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/frontend/.env ${{ env.DEPLOY_PATH }}/frontend/"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/docker-compose.yml ${{ env.DEPLOY_PATH }}/"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp -r /tmp/docker/nginx/* ${{ env.DEPLOY_PATH }}/docker/nginx/"
+          
+          # Ejecutar script de despliegue
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && /tmp/deploy.sh"   
 
       - name: Verify deployment
         run: |
