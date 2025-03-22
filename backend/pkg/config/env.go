@@ -76,11 +76,11 @@ func getPossibleEnvPaths() []string {
 	baseDir := filepath.Dir(filename)
 
 	return []string{
+		"/app/.env",
 		".env",
 		filepath.Join(baseDir, ".env"),
 		filepath.Join(baseDir, "..", ".env"),
 		filepath.Join(baseDir, "..", ".env.development"),
-		"/app/.env",
 	}
 }
 
