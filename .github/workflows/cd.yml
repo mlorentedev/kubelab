@@ -118,6 +118,7 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
           DOMAIN="${{ env.DOMAIN }}"
+          EMAIL="${{ secrets.PUBLIC_SITE_MAIL }}"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           
           echo "===== STARTING DEPLOYMENT ====="
@@ -163,6 +164,32 @@ jobs:
           
           # Clean everything to avoid potential conflicts
           docker-compose down --volumes --remove-orphans || true
+
+          # Ensure Nginx is running for certificate validation
+          docker-compose up -d nginx
+          sleep 5
+          
+          # Check if certificates exist and are valid
+          CERT_DIR="${DEPLOY_PATH}/certbot/conf/live/${DOMAIN}"
+          if [ ! -f "${CERT_DIR}/fullchain.pem" ] || [ "$(openssl x509 -checkend 2592000 -noout -in ${CERT_DIR}/fullchain.pem 2>/dev/null ; echo $?)" == "1" ]; then
+            echo "Certificates missing or will expire soon. Generating new certificates..."
+            
+            # Make sure certbot directories exist
+            mkdir -p "${DEPLOY_PATH}/certbot/conf"
+            mkdir -p "${DEPLOY_PATH}/certbot/www"
+            
+            # Run certbot to generate or renew certificates
+            docker-compose run --rm certbot certonly \
+              --webroot --webroot-path=/var/www/certbot \
+              --email ${EMAIL} \
+              --agree-tos \
+              --no-eff-email \
+              -d ${DOMAIN} -d www.${DOMAIN}
+            
+            echo "SSL certificates generated successfully"
+          else
+            echo "SSL certificates are valid and will not expire soon"
+          fi          
           
           # Pull and deploy
           docker-compose pull
