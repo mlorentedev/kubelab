@@ -75,11 +75,10 @@ jobs:
     environment: ${{ needs.prepare.outputs.environment }}
     concurrency: 
       group: deploy-${{ needs.prepare.outputs.environment }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-        
-      # Set deployment environment variables
+
       - name: Set environment variables
         run: |
           if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
@@ -94,11 +93,18 @@ jobs:
             echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
 
-      # Setup SSH
+      # Setup SSH - Use the webfactory action which handles SSH properly
       - uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PUBLIC_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       
+      # Add the host key to known_hosts
+      - name: Add SSH host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
       # Create and run deployment script
       - name: Deploy to server
         run: |
@@ -112,6 +118,7 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
           DOMAIN="${{ env.DOMAIN }}"
+          EMAIL="${{ secrets.PUBLIC_SITE_MAIL }}"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           
           echo "===== STARTING DEPLOYMENT ====="
@@ -124,23 +131,61 @@ jobs:
           # Backup existing configuration
           BACKUP_DIR="${DEPLOY_PATH}/backups/${TIMESTAMP}"
           mkdir -p "${BACKUP_DIR}"
-          [ -f "${DEPLOY_PATH}/.env" ] && cp "${DEPLOY_PATH}/.env" "${BACKUP_DIR}/.env.backup"
-          [ -f "${DEPLOY_PATH}/docker-compose.yml" ] && cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
-          [ -d "${DEPLOY_PATH}/docker/nginx" ] && cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
+          
+          # Backup existing files if they exist
+          if [ -f "${DEPLOY_PATH}/docker-compose.yml" ]; then
+            cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
+          fi
+          
+          if [ -d "${DEPLOY_PATH}/docker/nginx" ]; then
+            mkdir -p "${BACKUP_DIR}/nginx.backup"
+            cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
+          fi
+          
+          if [ -d "${DEPLOY_PATH}/backend" ]; then
+            mkdir -p "${BACKUP_DIR}/backend.backup"
+            cp -r "${DEPLOY_PATH}/backend" "${BACKUP_DIR}/backend.backup"
+          fi
+          
+          if [ -d "${DEPLOY_PATH}/frontend" ]; then
+            mkdir -p "${BACKUP_DIR}/frontend.backup"
+            cp -r "${DEPLOY_PATH}/frontend" "${BACKUP_DIR}/frontend.backup"
+          fi
           
           # Set environment variables for deployment
           cd "${DEPLOY_PATH}"
           export TAG="${VERSION}"
-          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          export DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME"
           
           # Replace placeholders in Nginx configuration if needed
           if [ -f "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf" ]; then
             sed -i "s/\${DOMAIN}/${DOMAIN}/g" "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf"
           fi
           
+          # Clean everything to avoid potential conflicts
+          docker-compose down --volumes --remove-orphans || true
+          echo "Cleaning up previous certificate configurations..."
+          rm -rf "${DEPLOY_PATH}/certbot/conf/live/${DOMAIN}" 2>/dev/null || true
+          rm -rf "${DEPLOY_PATH}/certbot/conf/archive/${DOMAIN}" 2>/dev/null || true
+          rm -f "${DEPLOY_PATH}/certbot/conf/renewal/${DOMAIN}.conf" 2>/dev/null || true
+
+          # Ensure Nginx is running for certificate validation
+          docker-compose up -d nginx
+          sleep 5
+          
+          # Run local Certbot to obtain certificates
+          echo "Generating new certificates..."
+          docker-compose run --rm certbot certonly \
+            --webroot --webroot-path=/var/www/certbot \
+            --email ${EMAIL} \
+            --agree-tos \
+            --no-eff-email \
+            --force-renewal \
+            -d ${DOMAIN} -d www.${DOMAIN}          
+          
           # Pull and deploy
           docker-compose pull
-          docker-compose up -d
+          docker-compose up -d --force-recreate
           
           # Verify deployment
           sleep 10
@@ -158,15 +203,90 @@ jobs:
           
           chmod +x deploy.sh
           
-          # Copiar archivos de configuración
-          scp -r docker ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          # Copiar files to server
           scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
+          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
           
-          # Ejecutar el despliegue
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd /tmp && ./deploy.sh"
-      
-      # Health checks
+          if [ -d "docker/nginx" ]; then
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
+            scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
+          fi
+          
+          # Create directories on server
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/docker/nginx/conf.d"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/backend"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/frontend"
+          
+          # Create environment files on server directly
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat > ${{ env.DEPLOY_PATH }}/backend/.env << EOF
+          # Environment
+          ENV=${{ needs.prepare.outputs.environment }}
+          VERSION=${{ needs.prepare.outputs.version }}
+          PORT=8080
+          
+          # Application
+          SITE_TITLE=${{ secrets.PUBLIC_SITE_TITLE }}
+          SITE_AUTHOR=${{ secrets.PUBLIC_SITE_AUTHOR }}
+          SITE_DOMAIN=${{ env.DOMAIN }}
+          SITE_MAIL=${{ secrets.PUBLIC_SITE_MAIL }}
+          SITE_URL=https://${{ env.DOMAIN }}
+          
+          # Newsletter & Subscription Service
+          BEEHIIV_API_KEY=${{ secrets.BEEHIIV_API_KEY }}
+          BEEHIIV_PUB_ID=${{ secrets.BEEHIIV_PUB_ID }}
+          
+          # Email Configuration
+          EMAIL_HOST=${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT=${{ secrets.EMAIL_PORT }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+          EMAIL_SECURE=true
+          EMAIL_USER=${{ secrets.EMAIL_USER }}
+          EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+          EOF"
+          
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat > ${{ env.DEPLOY_PATH }}/frontend/.env << EOF
+          # Environment
+          ENV=${{ needs.prepare.outputs.environment }}
+          VERSION=${{ needs.prepare.outputs.version }}
+          
+          # Application
+          PUBLIC_SITE_TITLE=${{ secrets.PUBLIC_SITE_TITLE }}
+          PUBLIC_SITE_DESCRIPTION=${{ secrets.PUBLIC_SITE_DESCRIPTION }}
+          PUBLIC_SITE_DOMAIN=${{ env.DOMAIN }}
+          PUBLIC_SITE_URL=https://${{ env.DOMAIN }}
+          PUBLIC_SITE_MAIL=${{ secrets.PUBLIC_SITE_MAIL }}
+          PUBLIC_SITE_AUTHOR=${{ secrets.PUBLIC_SITE_AUTHOR }}
+          PUBLIC_SITE_KEYWORDS=${{ secrets.PUBLIC_SITE_KEYWORDS }}
+          
+          # Social media
+          PUBLIC_CALENDLY_URL=${{ secrets.PUBLIC_CALENDLY_URL }}
+          PUBLIC_TWITTER_URL=${{ secrets.PUBLIC_TWITTER_URL }}
+          PUBLIC_YOUTUBE_URL=${{ secrets.PUBLIC_YOUTUBE_URL }}
+          PUBLIC_GITHUB_URL=${{ secrets.PUBLIC_GITHUB_URL }}
+          
+          # Feature flags
+          PUBLIC_ENABLE_BLOG=${{ secrets.PUBLIC_ENABLE_BLOG }}
+          PUBLIC_ENABLE_HOMELABS=${{ secrets.PUBLIC_ENABLE_HOMELABS }}
+          PUBLIC_ENABLE_CONTACT=${{ secrets.PUBLIC_ENABLE_CONTACT }}
+          
+          # Analytics & Tracking
+          PUBLIC_GOOGLE_ANALYTICS_ID=${{ secrets.PUBLIC_GOOGLE_ANALYTICS_ID }}
+          PUBLIC_GOOGLE_TAG_MANAGER_ID=${{ secrets.PUBLIC_GOOGLE_TAG_MANAGER_ID }}
+          
+          # Backend URL (para acceso interno en Docker)
+          BACKEND_URL=http://backend:8080
+          EOF"
+          
+          # Move configuration files to deployment path
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/docker-compose.yml ${{ env.DEPLOY_PATH }}/"
+          
+          if [ -d "docker/nginx" ]; then
+            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp -r /tmp/docker/nginx/* ${{ env.DEPLOY_PATH }}/docker/nginx/"
+          fi
+          
+          # Execute deployment script
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}' && cd ${{ env.DEPLOY_PATH }} && bash /tmp/deploy.sh"
+
       - name: Verify deployment
         run: |
           echo "Running health checks..."

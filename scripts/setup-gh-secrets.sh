@@ -56,6 +56,29 @@ process_env_files() {
             # Add to processed secrets to prevent duplicates
             processed_secrets+=("$key")
 
+            # Handle special cases for SSH keys
+            if [[ "$key" == *"SSH_PRIVATE_KEY"* && "$key" == *"BASE64"* ]]; then
+                # Found a base64 encoded SSH key - decode it
+                log_info "Found base64 encoded SSH key: $key"
+                
+                # Create a non-base64 key secret name
+                new_key=${key/_BASE64/}
+                
+                # Decode the key and store in a temp file
+                echo "$value" | base64 --decode > /tmp/ssh_key_decoded
+                chmod 600 /tmp/ssh_key_decoded
+                
+                # Set the decoded key as a GitHub secret
+                log_info "Setting decoded SSH key as: $new_key"
+                gh secret set "$new_key" --repo "$REPO" < /tmp/ssh_key_decoded
+                
+                # Clean up
+                rm -f /tmp/ssh_key_decoded
+                
+                # Continue processing other secrets
+                continue
+            fi            
+
             # Mask potentially sensitive values
             masked_value=$(echo "$value" | sed 's/./*/g')
             log_info "Setting secret: $key (value masked: $masked_value)"
@@ -94,6 +117,8 @@ gh secret set "CI_CD_BRANCH_PROTECTION" --repo "$REPO" <<< "true"
 
 log_success "Secret configuration completed successfully in $REPO."
 
-# Optional: Verify secrets configuration
-log_info "Verifying GitHub secrets configuration..."
-gh secret list --repo "$REPO"
+# Show information about the SSH key configuration
+log_info "SSH Key Configuration:"
+log_info "1. If you provided SSH_PRIVATE_KEY_BASE64, it's been decoded and set as SSH_PRIVATE_KEY"
+log_info "2. Make sure the corresponding public key is added to your server's authorized_keys"
+log_info "3. Use the SSH_PRIVATE_KEY in your GitHub Actions workflows"
