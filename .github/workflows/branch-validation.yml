@@ -1,0 +1,47 @@
+name: Branch Validation
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!master'
+      - '!develop'
+  pull_request:
+    branches:
+      - master
+      - develop
+
+jobs:
+  validate-branch-name:
+    name: Validate Branch Name
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Check branch naming convention
+        run: |
+          branch_name=$(git symbolic-ref --short HEAD)
+          if [[ ! "$branch_name" =~ ^(feature|hotfix)/.* ]]; then
+            echo "Error: Branch name must start with 'feature/' or 'hotfix/'."
+            exit 1
+          fi
+          
+          # Log success message for visibility in GitHub Actions UI
+          echo "✅ Branch name '$branch_name' follows the required convention"
+  
+  validate-merge-rules:
+    name: Validate Merge Rules
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check branch merge restrictions
+        run: |
+          if [[ "${{ github.base_ref }}" == "master" && "${{ github.head_ref }}" != "develop" ]]; then
+            echo "Error: Pull requests to master are only allowed from develop branch"
+            exit 1
+          fi
+          
+          # Log success message for visibility in GitHub Actions UI
+          echo "✅ Branch merge from '${{ github.head_ref }}' to '${{ github.base_ref }}' is allowed"

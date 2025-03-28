@@ -1,0 +1,20 @@
+api:
+  dashboard: {{TRAEFIK_DASHBOARD}}
+  insecure: {{TRAEFIK_INSECURE}}
+
+ping: {}
+
+log:
+  level: INFO
+
+accessLog: {}
+
+entryPoints:
+  web:
+    address: :80
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik_network

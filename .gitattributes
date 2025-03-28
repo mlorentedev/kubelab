@@ -1,0 +1,88 @@
+# C and C++ files
+*.c linguist-language=C
+*.h linguist-language=C++
+*.cpp linguist-language=C++
+
+
+# Python files
+*.py linguist-language=Python
+
+# JavaScript files
+*.js linguist-language=JavaScript
+
+
+# HTML and CSS files
+*.html linguist-language=HTML
+*.css linguist-language=CSS
+
+
+# C# files
+*.cs linguist-language=C#
+
+
+# Markdown files
+*.md linguist-language=Markdown
+
+
+# JSON files
+*.json linguist-language=JSON
+
+
+# Shell scripts
+*.sh linguist-language=Shell
+
+
+# Ignore binary files from language detection
+*.png linguist-vendored
+*.jpg linguist-vendored
+*.gif linguist-vendored
+*.zip linguist-vendored
+
+# Define standard eol format
+
+# Web Files
+*.html text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+
+# Jekyll related files
+*.yml text eol=lf
+
+# Git related files
+.gittattributes text eol=lf
+.gitignore text eol=lf
+.gitkeep text eol=lf
+
+# Ruby files
+*.rb text eol=lf
+Gemfile text eol=lf
+Gemfile.lock text eol=lf
+
+# Github specific fies
+LICENCE text eol=lf
+
+# Docker specific files
+Dockerfile text eol=lf
+
+# VSCode files
+*.json text eol=lf
+
+# General multimedia files
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.png binary
+*.t3x binary
+*.t3d binary
+*.exe binary
+*.data binary
+*.ttf binary
+*.eof binary
+*.eot binary
+*.swf binary
+*.mov binary
+*.mp4 binary
+*.mp3 binary
+*.ogg binary
+*.flv binary
