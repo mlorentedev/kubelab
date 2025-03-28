@@ -1,10 +1,7 @@
-name: CD Pipeline
+name: Continuous Deployment
 
 on:
-  # Trigger when an event is dispatched to the repository like a Webhook
-  repository_dispatch:
-    types: [trigger-deploy]
-  # Trigger when a workflow is manually dispatched
+  # Trigger when manually dispatched
   workflow_dispatch:
     inputs:
       environment:
@@ -19,19 +16,20 @@ on:
         description: 'Version to deploy'
         required: false
         type: string
-  # Trigger when a pull request is closed and merged
-  pull_request:
-    types: [closed]
-    branches: [master, develop]
+      cleanup:
+        description: 'Perform cleanup before deployment'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   prepare:
     name: Prepare Deployment
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       version: ${{ steps.set-env.outputs.version }}
+      domain: ${{ steps.set-env.outputs.domain }}
     steps:   
       - name: Set environment and version
         id: set-env
@@ -56,16 +54,13 @@ jobs:
               echo "environment=staging" >> $GITHUB_OUTPUT
             fi
             echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          fi
           
-          # For pull_request merged  
+          # Set domain based on environment
+          if [[ "${{ steps.set-env.outputs.environment }}" == "production" ]]; then
+            echo "domain=mlorente.dev" >> $GITHUB_OUTPUT
           else
-            if [[ "${{ github.event.pull_request.base.ref }}" == "master" ]]; then
-              echo "environment=production" >> $GITHUB_OUTPUT
-              echo "version=latest" >> $GITHUB_OUTPUT
-            else
-              echo "environment=staging" >> $GITHUB_OUTPUT
-              echo "version=develop" >> $GITHUB_OUTPUT
-            fi
+            echo "domain=staging.mlorente.dev" >> $GITHUB_OUTPUT
           fi
 
   deploy:
@@ -75,25 +70,36 @@ jobs:
     environment: ${{ needs.prepare.outputs.environment }}
     concurrency: 
       group: deploy-${{ needs.prepare.outputs.environment }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: deployment
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.client_payload.run_id || github.run_id }}
+          github-token: ${{ secrets.REPO_TOKEN }}
+          
       - name: Set environment variables
         run: |
           if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
             echo "SSH_HOST=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.PRODUCTION_USERNAME }}" >> $GITHUB_ENV
-            echo "DEPLOY_PATH=/opt/mlorente" >> $GITHUB_ENV
+            echo "DEPLOY_PATH=/opt/mlorente.dev" >> $GITHUB_ENV
+            echo "COMPOSE_FILE=docker-compose.production.yml" >> $GITHUB_ENV
             echo "DOMAIN=mlorente.dev" >> $GITHUB_ENV
           else
             echo "SSH_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.STAGING_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
+            echo "COMPOSE_FILE=docker-compose.staging.yml" >> $GITHUB_ENV
             echo "DOMAIN=staging.mlorente.dev" >> $GITHUB_ENV
           fi
 
-      # Setup SSH - Use the webfactory action which handles SSH properly
+      # Setup SSH
       - uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -105,10 +111,9 @@ jobs:
           ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # Create and run deployment script
-      - name: Deploy to server
+      # Prepare deployment script
+      - name: Create deployment script
         run: |
-          # Crear deploy.sh
           cat > deploy.sh <<'EOL'
           #!/bin/bash
           set -e
@@ -118,6 +123,7 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
           DOMAIN="${{ env.DOMAIN }}"
+          COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
           EMAIL="${{ secrets.PUBLIC_SITE_MAIL }}"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           
@@ -128,164 +134,99 @@ jobs:
           echo "Domain: ${DOMAIN}"
           echo "==============================="
           
-          # Backup existing configuration
+          # Create backup directory
           BACKUP_DIR="${DEPLOY_PATH}/backups/${TIMESTAMP}"
           mkdir -p "${BACKUP_DIR}"
           
-          # Backup existing files if they exist
-          if [ -f "${DEPLOY_PATH}/docker-compose.yml" ]; then
-            cp "${DEPLOY_PATH}/docker-compose.yml" "${BACKUP_DIR}/docker-compose.yml.backup"
+          # Backup existing files
+          if [ -d "${DEPLOY_PATH}/core" ]; then
+            echo "Creating backup of current configuration..."
+            cp -r "${DEPLOY_PATH}/core" "${BACKUP_DIR}/"
           fi
           
-          if [ -d "${DEPLOY_PATH}/docker/nginx" ]; then
-            mkdir -p "${BACKUP_DIR}/nginx.backup"
-            cp -r "${DEPLOY_PATH}/docker/nginx" "${BACKUP_DIR}/nginx.backup"
+          # Create Docker network if not exists
+          docker network create traefik_network 2>/dev/null || true
+          
+          # Transfer deployment files
+          echo "Transferring deployment files..."
+          mkdir -p ${DEPLOY_PATH}/core/infrastructure
+          cp -r deployment/core/infrastructure/docker-compose ${DEPLOY_PATH}/core/infrastructure/
+          cp -r deployment/core/infrastructure/scripts ${DEPLOY_PATH}/core/infrastructure/
+          cp -r deployment/core/infrastructure/traefik ${DEPLOY_PATH}/core/infrastructure/
+          
+          # Make scripts executable
+          chmod +x ${DEPLOY_PATH}/core/infrastructure/scripts/*.sh
+          
+          # Create .env file
+          cat > ${DEPLOY_PATH}/.env << EOF
+          # Environment
+          ENVIRONMENT=${ENV}
+          VERSION=${VERSION}
+          
+          # Domain
+          DOMAIN=${DOMAIN}
+          EMAIL=${EMAIL}
+          
+          # Docker
+          DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+          
+          # Additional variables
+          TRAEFIK_DASHBOARD=${{ secrets.TRAEFIK_DASHBOARD || 'false' }}
+          TRAEFIK_INSECURE=${{ secrets.TRAEFIK_INSECURE || 'false' }}
+          TRAEFIK_BASICAUTH=${{ secrets.TRAEFIK_BASICAUTH }}
+          EOF
+          
+          # Perform cleanup if requested
+          if [ "${{ github.event.inputs.cleanup }}" = "true" ]; then
+            echo "Performing cleanup..."
+            cd "${DEPLOY_PATH}"
+            ./core/infrastructure/scripts/cleanup.sh
           fi
           
-          if [ -d "${DEPLOY_PATH}/backend" ]; then
-            mkdir -p "${BACKUP_DIR}/backend.backup"
-            cp -r "${DEPLOY_PATH}/backend" "${BACKUP_DIR}/backend.backup"
-          fi
-          
-          if [ -d "${DEPLOY_PATH}/frontend" ]; then
-            mkdir -p "${BACKUP_DIR}/frontend.backup"
-            cp -r "${DEPLOY_PATH}/frontend" "${BACKUP_DIR}/frontend.backup"
-          fi
-          
-          # Set environment variables for deployment
+          # Generate Traefik configuration
+          echo "Generating Traefik configuration..."
           cd "${DEPLOY_PATH}"
-          export TAG="${VERSION}"
-          export DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME"
+          ./core/infrastructure/scripts/generate-traefik-config.sh
           
-          # Replace placeholders in Nginx configuration if needed
-          if [ -f "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf" ]; then
-            sed -i "s/\${DOMAIN}/${DOMAIN}/g" "${DEPLOY_PATH}/docker/nginx/conf.d/default.conf"
-          fi
+          # Deploy common services
+          echo "Deploying common services..."
+          cd "${DEPLOY_PATH}"
+          ./core/infrastructure/scripts/deploy.sh deploy common
           
-          # Clean everything to avoid potential conflicts
-          docker-compose down --volumes --remove-orphans || true
-          echo "Cleaning up previous certificate configurations..."
-          rm -rf "${DEPLOY_PATH}/certbot/conf/live/${DOMAIN}" 2>/dev/null || true
-          rm -rf "${DEPLOY_PATH}/certbot/conf/archive/${DOMAIN}" 2>/dev/null || true
-          rm -f "${DEPLOY_PATH}/certbot/conf/renewal/${DOMAIN}.conf" 2>/dev/null || true
-
-          # Ensure Nginx is running for certificate validation
-          docker-compose up -d nginx
-          sleep 5
+          # Deploy environment-specific services
+          echo "Deploying ${ENV} environment..."
+          ./core/infrastructure/scripts/deploy.sh deploy ${ENV}
           
-          # Run local Certbot to obtain certificates
-          echo "Generating new certificates..."
-          docker-compose run --rm certbot certonly \
-            --webroot --webroot-path=/var/www/certbot \
-            --email ${EMAIL} \
-            --agree-tos \
-            --no-eff-email \
-            --force-renewal \
-            -d ${DOMAIN} -d www.${DOMAIN}          
-          
-          # Pull and deploy
-          docker-compose pull
-          docker-compose up -d --force-recreate
+          # Wait for services to start
+          echo "Waiting for services to start..."
+          sleep 10
           
           # Verify deployment
-          sleep 10
-          if ! docker-compose ps | grep -q "Up"; then
-            echo "ERROR: Deployment verification failed!"
-            docker-compose logs
+          echo "Checking deployment status..."
+          COMPOSE_FILE=./core/infrastructure/docker-compose/${COMPOSE_FILE}
+          if docker-compose -f ${COMPOSE_FILE} ps | grep -q "Exit"; then
+            echo "Deployment failed! Container exited."
+            docker-compose -f ${COMPOSE_FILE} logs
             exit 1
           fi
           
-          # Clean up old images
-          docker image prune -af --filter "until=24h" || true
-          
-          echo "===== DEPLOYMENT COMPLETED ====="
+          echo "Deployment completed successfully!"
           EOL
           
           chmod +x deploy.sh
-          
-          # Copiar files to server
-          scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
-          scp docker-compose.yml ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker-compose.yml
-          
-          if [ -d "docker/nginx" ]; then
-            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/docker/nginx"
-            scp -r docker/nginx/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/docker/nginx/
-          fi
-          
-          # Create directories on server
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/docker/nginx/conf.d"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/backend"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}/frontend"
-          
-          # Create environment files on server directly
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat > ${{ env.DEPLOY_PATH }}/backend/.env << EOF
-          # Environment
-          ENV=${{ needs.prepare.outputs.environment }}
-          VERSION=${{ needs.prepare.outputs.version }}
-          PORT=8080
-          
-          # Application
-          SITE_TITLE=${{ secrets.PUBLIC_SITE_TITLE }}
-          SITE_AUTHOR=${{ secrets.PUBLIC_SITE_AUTHOR }}
-          SITE_DOMAIN=${{ env.DOMAIN }}
-          SITE_MAIL=${{ secrets.PUBLIC_SITE_MAIL }}
-          SITE_URL=https://${{ env.DOMAIN }}
-          
-          # Newsletter & Subscription Service
-          BEEHIIV_API_KEY=${{ secrets.BEEHIIV_API_KEY }}
-          BEEHIIV_PUB_ID=${{ secrets.BEEHIIV_PUB_ID }}
-          
-          # Email Configuration
-          EMAIL_HOST=${{ secrets.EMAIL_HOST }}
-          EMAIL_PORT=${{ secrets.EMAIL_PORT }}
-          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-          EMAIL_SECURE=true
-          EMAIL_USER=${{ secrets.EMAIL_USER }}
-          EMAIL_PASS=${{ secrets.EMAIL_PASS }}
-          EOF"
-          
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cat > ${{ env.DEPLOY_PATH }}/frontend/.env << EOF
-          # Environment
-          ENV=${{ needs.prepare.outputs.environment }}
-          VERSION=${{ needs.prepare.outputs.version }}
-          
-          # Application
-          PUBLIC_SITE_TITLE=${{ secrets.PUBLIC_SITE_TITLE }}
-          PUBLIC_SITE_DESCRIPTION=${{ secrets.PUBLIC_SITE_DESCRIPTION }}
-          PUBLIC_SITE_DOMAIN=${{ env.DOMAIN }}
-          PUBLIC_SITE_URL=https://${{ env.DOMAIN }}
-          PUBLIC_SITE_MAIL=${{ secrets.PUBLIC_SITE_MAIL }}
-          PUBLIC_SITE_AUTHOR=${{ secrets.PUBLIC_SITE_AUTHOR }}
-          PUBLIC_SITE_KEYWORDS=${{ secrets.PUBLIC_SITE_KEYWORDS }}
-          
-          # Social media
-          PUBLIC_CALENDLY_URL=${{ secrets.PUBLIC_CALENDLY_URL }}
-          PUBLIC_TWITTER_URL=${{ secrets.PUBLIC_TWITTER_URL }}
-          PUBLIC_YOUTUBE_URL=${{ secrets.PUBLIC_YOUTUBE_URL }}
-          PUBLIC_GITHUB_URL=${{ secrets.PUBLIC_GITHUB_URL }}
-          
-          # Feature flags
-          PUBLIC_ENABLE_BLOG=${{ secrets.PUBLIC_ENABLE_BLOG }}
-          PUBLIC_ENABLE_HOMELABS=${{ secrets.PUBLIC_ENABLE_HOMELABS }}
-          PUBLIC_ENABLE_CONTACT=${{ secrets.PUBLIC_ENABLE_CONTACT }}
-          
-          # Analytics & Tracking
-          PUBLIC_GOOGLE_ANALYTICS_ID=${{ secrets.PUBLIC_GOOGLE_ANALYTICS_ID }}
-          PUBLIC_GOOGLE_TAG_MANAGER_ID=${{ secrets.PUBLIC_GOOGLE_TAG_MANAGER_ID }}
-          
-          # Backend URL (para acceso interno en Docker)
-          BACKEND_URL=http://backend:8080
-          EOF"
-          
-          # Move configuration files to deployment path
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp /tmp/docker-compose.yml ${{ env.DEPLOY_PATH }}/"
-          
-          if [ -d "docker/nginx" ]; then
-            ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp -r /tmp/docker/nginx/* ${{ env.DEPLOY_PATH }}/docker/nginx/"
-          fi
-          
-          # Execute deployment script
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}' && cd ${{ env.DEPLOY_PATH }} && bash /tmp/deploy.sh"
+      
+      - name: Transfer deployment script
+        run: scp deploy.sh ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deploy.sh
+      
+      - name: Transfer deployment files
+        run: |
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p /tmp/deployment"
+          scp -r deployment/* ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/tmp/deployment/
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "mkdir -p ${{ env.DEPLOY_PATH }}"
+          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cp -r /tmp/deployment/* ${{ env.DEPLOY_PATH }}/"
+      
+      - name: Execute deployment
+        run: ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "cd ${{ env.DEPLOY_PATH }} && /tmp/deploy.sh"
 
       - name: Verify deployment
         run: |
@@ -293,16 +234,9 @@ jobs:
           sleep 15
           
           # Check frontend
-          FRONTEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
+          FRONTEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ needs.prepare.outputs.domain }})
           if [ "$FRONTEND_CHECK" != "200" ]; then
             echo "Frontend check failed: $FRONTEND_CHECK"
-            exit 1
-          fi
-          
-          # Check backend API
-          BACKEND_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }}/health)
-          if [ "$BACKEND_CHECK" != "200" ]; then
-            echo "Backend check failed: $BACKEND_CHECK"
             exit 1
           fi
           
@@ -312,13 +246,12 @@ jobs:
     name: Create Release
     needs: [prepare, deploy]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    if: needs.prepare.outputs.environment == 'production' && (github.event_name == 'repository_dispatch' && github.event.client_payload.ref == 'refs/heads/master')
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      # Create semantic version tag
       - name: Create release version
         id: semver
         uses: anothrNick/github-tag-action@1.64.0
@@ -327,16 +260,25 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
       
-      # Create GitHub release
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: .
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.client_payload.run_id || github.run_id }}
+          github-token: ${{ secrets.REPO_TOKEN }}
+      
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.semver.outputs.new_tag }}
+          name: Release ${{ steps.semver.outputs.new_tag }}
           generate_release_notes: true
+          files: release-artifacts.zip
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
       
-      # Push release tag to Docker images
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
@@ -346,16 +288,17 @@ jobs:
       - name: Tag and push Docker images
         run: |
           VERSION="${{ steps.semver.outputs.new_tag }}"
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:latest
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:latest
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-jekyll:latest
           
-          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:latest ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${VERSION}
-          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:latest ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${VERSION}
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-jekyll:latest ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-jekyll:${VERSION}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-jekyll:${VERSION}
           
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-frontend:${VERSION}
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${VERSION}
+          # Also tag backend if it exists
+          if docker pull ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:latest 2>/dev/null; then
+            docker tag ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:latest ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${VERSION}
+            docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-backend:${VERSION}
+          fi
       
-      # Notify about release
       - name: Notify release
         uses: slackapi/slack-github-action@v1.24.0
         with:
