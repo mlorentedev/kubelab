@@ -1,0 +1,61 @@
+name: Setup Environments
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_wait_timer:
+        description: 'Wait time in minutes before deployment to production'
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  setup-environments:
+    name: Setup GitHub Environments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create environments
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.REPO_TOKEN }}
+          script: |
+            const environments = [
+              {
+                name: 'staging',
+                waitTimer: 0,
+                protectedBranches: false,
+                customBranchPolicies: false
+              },
+              {
+                name: 'production',
+                waitTimer: parseInt('${{ github.event.inputs.production_wait_timer }}'),
+                protectedBranches: true,
+                customBranchPolicies: false
+              }
+            ];
+            
+            for (const env of environments) {
+              try {
+                console.log(`Creating ${env.name} environment...`);
+                
+                const deploymentBranchPolicy = env.protectedBranches || env.customBranchPolicies 
+                  ? {
+                      protected_branches: env.protectedBranches,
+                      custom_branch_policies: env.customBranchPolicies
+                    }
+                  : null;
+                
+                await github.rest.repos.createOrUpdateEnvironment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  environment_name: env.name,
+                  wait_timer: env.waitTimer,
+                  deployment_branch_policy: deploymentBranchPolicy
+                });
+                
+                console.log(`${env.name} environment created successfully`);
+              } catch (error) {
+                console.error(`Error creating ${env.name} environment:`, error);
+                throw error;
+              }
+            }

@@ -1,0 +1,12 @@
+User-agent: *
+Disallow: /private/
+Disallow: /tmp/
+Disallow: /backup/
+Disallow: /cgi-bin/
+Disallow: /scripts/
+
+# Allow all other content
+Allow: /
+
+# Specify the location of the sitemap
+Sitemap: https://mlorente.dev/sitemap.xml

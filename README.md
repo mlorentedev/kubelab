@@ -1,478 +1,275 @@
-# mlorente.dev
+# My site
 
-This is my minimal website [mlorente.dev](https://mlorente.dev) with modern architecture based in containers.
+My personal site built with Jekyll, containerized with Docker, and deployed using Traefik for SSL termination and reverse proxy.
 
-This project demonstrates a production-ready microservices approach using containers, seamlessly integrating a static frontend with a dynamic backend. It showcases best practices for development, deployment, and maintenance of a modern web application with minimal JavaScript.
+## Features
 
-## Technology Stack
-
-- **Frontend**:
-
-  - [Astro](https://astro.build) for static site generation and server-side rendering
-  - [HTMX](https://htmx.org) for dynamic content without complex JavaScript
-  - [TailwindCSS](https://tailwindcss.com) for utility-first styling
-  - Minimal client-side JavaScript for enhanced performance
-
-- **Backend**:
-  - [Go](https://golang.org) for high-performance API services
-  - Clean architecture with clear separation of concerns
-  - RESTful API design principles
-  - Structured logging and error handling
-
-- **Infrastructure**:
-  - [Docker](https://www.docker.com) for containerization and consistent environments
-  - [Docker Compose](https://docs.docker.com/compose) for service orchestration
-  - [GitHub Actions](https://github.com/features/actions) for CI/CD automation
-  - [Nginx](https://nginx.org) as reverse proxy and SSL termination
-  - [Let's Encrypt](https://letsencrypt.org) for SSL certificates
+- Static website built with Jekyll
+- Fully responsive design
+- Containerized with Docker
+- Automated builds via GitHub Actions
+- SSL certificates managed by Traefik via Let's Encrypt
+- Content categories and tags
+- Reading time estimation
+- Markdown support for content
+- SEO optimized
 
 ## Project Structure
 
-```text
-|── .github/workflows/      # CI/CD workflows
-├── backend/                # Go backend services
-│   ├── cmd/server/         # Application entry point
-│   ├── internal/           # Private application code
-│   └── pkg/                # Shared packages
-├── docker/                 # Docker configuration files
-├── frontend/               # Astro application
-│   ├── public/             # Static assets
-│   └── src/                # Source code
-│       ├── components/     # UI components
-│       ├── content/        # Markdown/MDX content
-│       ├── layouts/        # Page templates
-│       └── pages/          # Route definitions
-├── scripts/                # Utility scripts
-└── .env.dev               # Development environment variables
+```bash
+├── .github/                       # GitHub Actions workflow configurations
+├── docker-compose.local.yml       # Local environment docker-compose config
+├── docker-compose.production.yml  # Production environment config
+├── docker-compose.staging.yml     # Staging environment config
+├── docker-compose.traefik.yml     # Traefik proxy configuration
+├── .env.example                   # Example environment variables
+├── jekyll                         # Main Jekyll site directory
+│   ├── _config.yml                # Jekyll configuration
+│   ├── _data                      # Data files for Jekyll
+│   ├── _includes                  # Template includes
+│   ├── _layouts                   # Page layouts
+│   ├── _posts                     # Blog post content
+│   ├── 404.html                   # 404 error page
+│   ├── aboutme.html               # About me page
+│   ├── assets                     # Static assets
+│   │   ├── css                    # Stylesheets
+│   │   ├── cv                     # Resume/CV files
+│   │   ├── img                    # Image assets
+│   │   ├── js                     # JavaScript files
+│   │   └── pdf                    # PDF documents
+│   ├── Dockerfile                 # Docker image definition
+│   ├── Gemfile                    # Ruby dependencies
+│   └── index.html                 # Site homepage
+├── README.md                      # Project documentation
+├── scripts                        # Utility scripts
+│   ├── cleanup.sh                 # Resource cleanup
+│   ├── deploy.sh                  # Deployment script
+│   ├── generate-traefik-config.sh # Traefik config generator
+│   ├── generate-traefik-credentials.sh # Auth credential generator
+│   └── utils.sh                   # Shared utility functions
+└── traefik                        # Traefik configuration templates
+    ├── traefik.template.http.yml  # HTTP configuration template
+    └── traefik.template.https.yml # HTTPS configuration template
 ```
 
-## Getting Started
+## Prerequisites
 
-### Requirements
+- Docker and Docker Compose
+- Git
+- A DockerHub account for storing container images
+- A domain name (for staging and production environments)
+- A server with SSH access (for staging and production)
 
-- Node.js 18.0.0+
-- npm 6.0.0+
-- Docker and Docker Compose (for containerized development)
-- Go 1.18+ (for backend development)
+## Local Development
 
-### Initial Setup
+To run the project locally:
 
-1. Clone the repository:
+1. Clone the repository
+
+2. Create a local environment file
 
    ```bash
-   git clone https://github.com/username/mlorente.dev.git
-   cd mlorente.dev
+   cp .env.example .env.local
    ```
 
-2. Setup development environment:
+3. Edit `.env.local` with your local configuration
+
+   ```.env.local
+   # Site
+   ENVIRONMENT=local
+   ARTIFACT_NAME=blog-site
+   DOMAIN=localhost
+   EMAIL=your-email@example.com
+
+   # DockerHub
+   DOCKERHUB_USERNAME=your-dockerhub-username
+   DOCKERHUB_TOKEN=your-dockerhub-token
+
+   # Environment
+   ENVIRONMENT=local
+   TRAEFIK_DASHBOARD=true
+   TRAEFIK_INSECURE=true
+   ```
+
+4. Copy to `.env` file
 
    ```bash
-   # Configure development environment
-   ./scripts/setup-env.sh
+   cp .env.local .env
    ```
 
-### Development Workflow
+5. Change url in `_config.yml` to match your local domain
 
-#### Containerized Development (Recommended)
+   ```yaml
+    url: ""
+   ```
 
-```bash
-# Build and start services
-docker compose -f docker-compose.dev.yml build #--no-cache
-docker compose -f docker-compose.dev.yml up --force-recreate
+6. Launch the services
 
-# View logs
-docker compose -f docker-compose.dev.yml logs -f [service_name]
+   ```bash
+   docker network create traefik_network
+   ./scripts/generate-traefik-config.sh   
+   docker-compose -f docker-compose.local.yml up -d --build
+   ```
 
-# Stop all services
-docker compose -f docker-compose.dev.yml down
-```
-
-Containerized development provides:
-
-- Frontend at <http://localhost:3000>
-- Backend at <http://localhost:8080>
-- Hot reloading for both frontend and backend
-- Consistent logging and error handling
-
-#### Individual Component Development
-
-**Frontend**:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-**Backend**:
-
-```bash
-cd backend
-go mod download
-go mod tidy
-go run cmd/server/main.go
-```
-
-For hot reloading with Go:
-
-```bash
-go install github.com/air-verse/air@latest
-export PATH=$(go env GOPATH)/bin:$PATH
-air
-```
-
-## API Endpoints
-
-The backend exposes these RESTful endpoints to support the frontend application:
-
-- **`/api/subscribe`**:
-  - **Method**: POST
-  - **Purpose**: Register a new email for newsletter subscription
-  - **Request Body**: `{ "email": "user@example.com", "tags": ["tag1", "tag2"], "utmSource": "source" }`
-  - **Response**: Subscription confirmation with subscriber ID
-
-- **`/api/unsubscribe`**:
-  - **Methods**: POST, GET
-  - **Purpose**: Remove an email from newsletter subscriptions
-  - **Request Body** (POST): `{ "email": "user@example.com" }`
-  - **Query Params** (GET): `?email=user@example.com`
-  - **Response**: Confirmation of unsubscription
-
-- **`/api/lead-magnet`**:
-  - **Method**: POST
-  - **Purpose**: Subscribe user and send a resource (lead magnet)
-  - **Request Body**: `{ "email": "user@example.com", "resourceId": "id", "fileId": "file", "tags": ["tag1"] }`
-  - **Response**: Confirmation of subscription and resource delivery
-
-- **`/api/resource-email`**:
-  - **Method**: POST
-  - **Purpose**: Send an email with resource to existing subscriber
-  - **Request Body**: `{ "email": "user@example.com", "resourceId": "id", "resourceLink": "url" }`
-  - **Response**: Confirmation of email delivery
-
-These endpoints utilize HTMX-compatible responses, allowing for seamless frontend integration without complex JavaScript.
+7. Access your site at <http://localhost>
 
 ## Deployment
 
-### CI/CD Pipeline
+Prior to deploying to staging or production, ensure you have created the necessary environment files and have access to your server based on the example `.env.example` file.
 
-The project uses GitHub Actions for continuous integration and deployment with separate workflows for frontend and backend:
-
-#### Frontend CI Workflow
-
-- **Trigger**: Changes to `/frontend` or workflow files
-- **Steps**:
-  1. Checkout code
-  2. Setup Node.js environment
-  3. Install dependencies
-  4. Run linting and type checking
-  5. Execute tests
-  6. Build the application
-  7. Create and push Docker image
-
-#### Backend CI Workflow
-
-- **Trigger**: Changes to `/backend` or workflow files
-- **Steps**:
-  1. Checkout code
-  2. Setup Go environment
-  3. Install dependencies
-  4. Run `go vet` for static analysis
-  5. Execute tests
-  6. Build the application
-  7. Create and push Docker image
-
-#### Deploy Workflow
-
-- **Trigger**:
-  - Completion of CI workflows
-  - Manual trigger from GitHub UI
-  - Repository dispatch event
-- **Environment Selection**:
-  - `master` branch → Production (`mlorente.dev`)
-  - `feature/*` or `hotfix/*` branches → Staging (`staging.mlorente.dev`)
-- **Steps**:
-  1. Connect to server via SSH
-  2. Update configuration
-  3. Pull latest Docker images
-  4. Apply database migrations (if needed)
-  5. Restart services
-  6. Run health checks
-
-### Branch Strategy
-
-- **`master`**: Production-ready code, deployed to production
-- **`develop`**: Integration branch for feature development
-- **`feature/*`**: Isolated feature development, merged to develop
-- **`hotfix/*`**: Urgent fixes applied directly to master and develop
-
-### Deployment Environments
-
-| Environment | URL | Purpose | Access |
-|-------------|-----|---------|--------|
-| Production | mlorente.dev | Live site | Public |
-| Staging | staging.mlorente.dev | Pre-release testing | Private |
-
-### Manual Deployment
-
-For situations where CI/CD is not suitable, manual deployment is possible:
+First need to generate a password for Traefik dashboard and set it in the environment files. You can use the following script to generate the user and password for the Traefik dashboard:
 
 ```bash
-# Deploy to production
-./scripts/deploy.sh production
-
-# Deploy to staging
-./scripts/deploy.sh staging
-
-# Direct deployment on production server
-cd /opt/mlorente
-docker-compose pull
-docker-compose up -d
+./scripts/generate-traefik-credentials.sh
 ```
 
-### Deployment Verification
+1. Copy all necessary files to your staging server. You can use `scp` or any other file transfer method. For example:
 
-After deployment, automatic health checks verify the application status:
+   ```bash
+   ssh mlorente-deployer "mkdir -p /opt/mlorente.dev"
+   ssh mlorente-deployer "rm -f /opt/mlorente.dev/traefik/traefik.yml"
+   scp -r -p scripts/* mlorente-deployer:/opt/mlorente.dev/scripts/
+   scp -r -p traefik/* mlorente-deployer:/opt/mlorente.dev/traefik/
+   scp -p .env.staging mlorente-deployer:/opt/mlorente.dev/
+   scp -p .env.production mlorente-deployer:/opt/mlorente.dev/
+   scp -p docker-compose.staging.yml mlorente-deployer:/opt/mlorente.dev/
+   scp -p docker-compose.production.yml mlorente-deployer:/opt/mlorente.dev/
+   scp -p docker-compose.traefik.yml mlorente-deployer:/opt/mlorente.dev/
+   ```
+
+2. Access your server via SSH and navigate to your project directory.
+
+   ```bash
+   ssh user@server
+   cd /opt/mlorente.dev
+   ```
+
+3. Create the Docker network for Traefik if it doesn't exist
+
+   ```bash
+   docker network create traefik_network
+   ```
+
+4. Make the scripts executable.
+
+   ```bash
+   chmod a+x scripts/*.sh
+   ```
+
+5. Run the deployment script for common services.
+
+   ```bash
+   ./scripts/deploy.sh deploy common
+   ```
+
+6. Run the deployment script for staging or production
+
+   ```bash
+   ./scripts/deploy.sh deploy [staging|production|all]
+   ```
+
+Resources can be cleaned up by running the following command:
 
 ```bash
-# Check application health
-./scripts/health-check.sh production
-
-# View deployment logs
-./scripts/deployment-logs.sh production
+./scripts/cleanuo.sh
 ```
 
-## Infrastructure
+This will set up the environment for the specified deployment, including copying the appropriate `.env` file, generating the Traefik configuration, and starting the Docker containers.
 
-### Hosting Environment
+To test locally the staging environment, you need to copy the certificate generated by Traefik to your local machine and then use it to test your local environment.
 
-The application is hosted on Hetzner Cloud with the following specifications:
-
-#### Production Server
-
-- **Hostname**: `mlorente.dev`
-- **Server Type**: Hetzner CX41 (4 vCPU, 16GB RAM)
-- **Location**: Falkenstein, Germany (EU-central)
-- **Operating System**: Ubuntu 22.04 LTS
-- **Firewall**: UFW with restricted access
-- **Monitoring**: Node Exporter + Prometheus
-
-#### Staging Server
-
-- **Hostname**: `staging.mlorente.dev`
-- **Server Type**: Hetzner CX21 (2 vCPU, 4GB RAM)
-- **Location**: Falkenstein, Germany (EU-central)
-- **Operating System**: Ubuntu 22.04 LTS
-- **Firewall**: UFW with restricted access
-
-### Server Setup
-
-Each server is configured using the `setup-server.sh` script, which:
-
-1. Updates the system
-2. Installs Docker and Docker Compose
-3. Configures firewall rules
-4. Sets up fail2ban for SSH protection
-5. Creates a non-root deployment user
-6. Configures automatic security updates
-7. Sets up Let's Encrypt certificates
-
-### Docker Images
-
-Docker images are stored on DockerHub with the following versioning scheme:
-
-#### Frontend Images
-
-- `mlorentedev/mlorente-frontend:latest` - Production version (master branch)
-- `mlorentedev/mlorente-frontend:develop` - Development version
-- `mlorentedev/mlorente-frontend:[commit-hash]` - Specific commit version
-- `mlorentedev/mlorente-frontend:feature-*` - Feature branch versions
-
-#### Backend Images
-
-- `mlorentedev/mlorente-backend:latest` - Production version (master branch)
-- `mlorentedev/mlorente-backend:develop` - Development version
-- `mlorentedev/mlorente-backend:[commit-hash]` - Specific commit version
-- `mlorentedev/mlorente-backend:feature-*` - Feature branch versions
-
-### Network Architecture
-
-```text
-                   ┌─────────────┐
-                   │    Nginx    │
-                   │Reverse Proxy│
-                   └──────┬──────┘
-                          │
-                          ▼
-          ┌───────────────┴───────────────┐
-          │                               │
-┌─────────▼──────────┐       ┌────────────▼─────────┐
-│                    │       │                      │
-│  Frontend (Astro)  │       │   Backend (Go API)   │
-│                    │       │                      │
-└────────────────────┘       └──────────────────────┘
+```bash
+scp mlorente-deployer:/opt/mlorente.dev/traefik/acme.json ~/Downloads/acme.json
+cat ~/Downloads/acme.json | jq -r '.myresolver.Certificates[0].certificate' | base64 -d > ~/Downloads/staging-cert.crt
+cat ~/Downloads/acme.json | jq -r '.myresolver.Certificates[0].key' | base64 -d > ~/Downloads/staging-key.key
+sudo cp ~/Downloads/staging-cert.crt ~/Downloads/staging-key.key /usr/local/share/ca-certificates/
+sudo update-ca-certificates
 ```
 
-All services run as Docker containers orchestrated with Docker Compose, with Nginx serving as the entry point and handling SSL termination.
+Then, you can use this certificate to test your local environment with the staging configuration.
+
+By default any browser accepts the self-signed certificate generated by Traefik for staging. If you want to test it need to add the certificate to your browser's trusted certificates or launch the browser with the `--ignore-certificate-errors` flag (not recommended for production).
+
+```bash
+    google-chrome --ignore-certificate-errors --user-data-dir=/tmp/chrome-test
+```
+
+**Note**: For production, we use the Let's Encrypt production ACME server rather than the staging one. Be careful not to exceed their rate limits.
+
+To access the Traefik dashboard, navigate to `https://traefik.mlorente.dev:8080/dashboard/` (or `https://SERVER-IP:8080/dashboard/` for secure environments). The dashboard will require basic authentication using the credentials you generated earlier.
+
+## CI/CD Pipeline
+
+The project includes a GitHub Actions workflow that:
+
+1. Builds the Jekyll site
+2. Creates a Docker image
+3. Pushes the image to DockerHub
+4. Creates deployment artifacts
+5. Generates a new release
+
+The workflow is triggered by:
+
+- Push to the `master` branch
+- Daily at midnight `(cron: '0 0 * * *')`
+- Manual execution via workflow_dispatch
+
+### Versioning
+
+The project follows Semantic Versioning through commit messages:
+
+- **Major version** increments with breaking changes:
+  - Messages containing "BREAKING CHANGE:" or "!:"
+  - Example: `feat!: breaking change description`
+
+- **Minor version** increments with new features:
+  - Messages starting with `feat:`
+  - Example: `feat: add new search functionality`
+
+- **Patch version** increments with fixes/small changes:
+  - Messages starting with `fix:`, `docs:`, `chore:`, `style:`, etc.
+  - Example: `fix: correct contact form error`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on commit message conventions and versioning.
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+If you encounter issues with the deployment:
 
-#### Application Not Responding
+1. Check container status
 
-If the application is not responding, first check the container status:
+   ```bash
+   docker ps
+   ```
 
-```bash
-docker-compose ps
-```
+2. Review container logs
 
-Look for containers in an unhealthy state or containers that have restarted multiple times. If needed, restart services:
+   ```bash
+   docker-compose logs jekyll
+   docker-compose logs traefik
+   ```
 
-```bash
-docker-compose restart
-```
+3. Verify Traefik configuration
 
-#### Frontend Errors
+   ```bash
+   cat traefik/traefik.yml
+   ```
 
-For issues with the frontend application:
+4. Check SSL certificates  
+    If you are using Traefik with Let's Encrypt, ensure that the `acme.json` file has the correct permissions and contains valid certificates:
 
-```bash
-docker-compose logs frontend
-```
+   ```bash
+   docker-compose exec traefik cat /acme.json
+   ```
 
-Common frontend issues include:
+5. Restart the containers  
+    If you make changes to the configuration or environment variables, you may need to restart the containers:
 
-- Missing environment variables
-- Build failures due to syntax errors
-- Static asset loading problems
-- CORS issues when communicating with the backend
+   ```bash
+   docker-compose down
+   docker-compose up -d
+   ```
 
-#### Backend Errors
+## License
 
-For backend service issues:
-
-```bash
-docker-compose logs backend
-```
-
-Common backend issues include:
-
-- Database connection failures
-- API validation errors
-- External service integration problems
-- Resource constraints (memory/CPU)
-
-#### SSL Certificate Issues
-
-If experiencing SSL errors:
-
-```bash
-# Check certificate status
-docker-compose exec nginx openssl x509 -in /etc/letsencrypt/live/mlorente.dev/fullchain.pem -text -noout
-
-# Restart certbot to attempt renewal
-docker-compose restart certbot
-```
-
-#### Deployment Failures
-
-If a deployment fails or introduces issues:
-
-```bash
-# List available versions
-./scripts/rollback.sh production list
-
-# Roll back to a specific version
-./scripts/rollback.sh production v1.2.3
-```
-
-#### Environment Variable Problems
-
-If environment variables are missing or incorrect:
-
-```bash
-# Update environment variables
-./scripts/update-env.sh production
-```
-
-## Advanced Operations
-
-The project includes utility scripts for maintenance and operational tasks:
-
-### Performance Testing
-
-Test the performance of individual endpoints or the entire application:
-
-```bash
-# Test performance of all endpoints in production
-./scripts/monitor-performance.sh production
-
-# Test specific endpoint with 1000 requests and 50 concurrent users
-./scripts/monitor-performance.sh production /api/subscribe 1000 50
-
-# Compare performance between environments
-./scripts/monitor-performance.sh compare production staging
-```
-
-The performance testing script uses `wrk` under the hood and provides metrics on:
-
-- Requests per second
-- Average response time
-- P95/P99 response times
-- Error rates
-
-### Security Verification
-
-Verify security configuration and identify potential vulnerabilities:
-
-```bash
-# Comprehensive security scan of production environment
-./scripts/monitor-security.sh production
-
-# Check specific aspect (ssl, headers, firewall, etc.)
-./scripts/monitor-security.sh production ssl
-
-# Generate a detailed security report
-./scripts/monitor-security.sh production --report
-```
-
-The security check includes:
-
-- SSL configuration and certificate validation
-- HTTP security headers
-- Firewall rule verification
-- Open port scanning
-- Docker configuration best practices
-
-### Log Analysis
-
-Analyze application logs to identify issues or patterns:
-
-```bash
-# Analyze all service logs in production
-./scripts/monitor-logs.sh production
-
-# Analyze specific service logs
-./scripts/monitor-logs.sh production nginx
-
-# Focus on errors only
-./scripts/monitor-logs.sh production --errors-only
-
-# Analyze logs within a time period
-./scripts/monitor-logs.sh production --since "2023-01-01" --until "2023-01-02"
-```
-
-The log analysis provides:
-
-- Error frequency and patterns
-- Request path analysis
-- Performance bottlenecks
-- User behavior insights
-- Anomaly detection
-
-## Additional Resources
-
-- [CONTRIBUTING.md](CONTRIBUTING.md): Contribution guidelines
-- [LICENSE](LICENSE): MIT License information
-- [scripts/README.md](scripts/README.md): Documentation for utility scripts
+This project is licensed under the MIT License - see the LICENSE file for details.
