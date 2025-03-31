@@ -1,0 +1,5 @@
+# ansible/inventory/group_vars/staging.yml
+---
+traefik_insecure: true
+acme_email: info@mlorente.dev
+acme_server: https://acme-staging-v02.api.letsencrypt.org/directory

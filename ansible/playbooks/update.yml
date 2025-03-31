@@ -1,0 +1,47 @@
+# ansible/playbooks/update.yml
+---
+- name: Actualizar Jekyll Site
+  hosts: "{{ env }}"
+  become: false
+  vars:
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
+  
+  tasks:
+    - name: Crear directorio de respaldo
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+    
+    - name: Respaldar configuración existente
+      copy:
+        src: "{{ deploy_path }}/{{ item }}"
+        dest: "{{ backup_dir }}/"
+        remote_src: yes
+      with_items:
+        - core
+      ignore_errors: true
+    
+    - name: Actualizar imagen de Docker
+      shell: docker pull {{ dockerhub_username }}/{{ artifact_name }}:{{ environment }}-latest
+      register: pull_result
+      changed_when: "'Status: Downloaded' in pull_result.stdout or 'Status: Image is up to date' in pull_result.stdout"
+    
+    - name: Reiniciar contenedor
+      shell: docker-compose -f ./core/infrastructure/docker-compose/docker-compose.{{ environment }}.yml up -d
+      args:
+        chdir: "{{ deploy_path }}"
+    
+    - name: Esperar a que los servicios inicien
+      pause:
+        seconds: 5
+    
+    - name: Verificar estado del despliegue
+      shell: docker ps | grep jekyll-{{ environment }}
+      register: container_status
+      failed_when: container_status.rc != 0
+    
+    - name: Mensaje de éxito de la actualización
+      debug:
+        msg: "Actualización en {{ environment }} completada con éxito"
