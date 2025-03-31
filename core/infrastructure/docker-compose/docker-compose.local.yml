@@ -1,18 +1,21 @@
 services:
-  jekyll-local:
+  frontend-local:
     build:
-      context: ./jekyll
+      context: ../../../frontend
       dockerfile: Dockerfile
     container_name: jekyll-site
+    restart: always
+    ports:
+      - "4000:4000"
     volumes:
-      - ./jekyll:/srv/jekyll
+      - ../../../frontend:/srv/jekyll
     env_file:
-      - .env   
+      - .env  
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.jekyll.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.jekyll.entrypoints=web"
-      - "traefik.http.services.jekyll.loadbalancer.server.port=4000"  
+      - "traefik.http.services.jekyll.loadbalancer.server.port=4000"
     networks:
       - traefik_network
 
@@ -21,14 +24,14 @@ services:
     restart: always
     container_name: traefik-local
     env_file:
-      - .env
+      - .env  
     ports:
       - 80:80
       - 443:443
       - "8080:8080"  # Traefik dashboard
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./traefik/traefik.yml:/etc/traefik/traefik.yml"
+      - "../traefik/traefik.yml:/etc/traefik/traefik.yml"
     networks:
       - traefik_network
 

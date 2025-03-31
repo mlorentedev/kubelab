@@ -20,9 +20,11 @@ beautiful-jekyll-theme-*.gem
 .env
 .env.*
 !.env.example
-infrastructure/traefik/acme.json
-infrastructure/traefik/traefik.yml
-infrastructure/traefik/certs/
+core/infrastructure/traefik/acme.json
+core/infrastructure/traefik/traefik.yml
+core/infrastructure/traefik/certs/
+core/infrastructure/docker-compose/.env
+core/infrastructure/docker-compose/.env.*
 certbot/
 .cache_ggshield
 certs

@@ -7,7 +7,7 @@ cd "$PROJECT_DIR"
 
 # Load environment variables from .env file if it exists
 [ -f "./scripts/utils.sh" ] && source ./scripts/utils.sh
-[ -f "./.env" ] && source ./.env
+[ -f "../../.env" ] && source ../../.env
 
 # Check if .env is sourced
 if [ -z "$TRAEFIK_DASHBOARD" ]; then

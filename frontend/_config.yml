@@ -9,9 +9,9 @@ title: Manu Lorente
 author: Manu Lorente
 
 # SEO
-url: "https://mlorente.dev" # Production
+#url: "https://mlorente.dev" # Production
 #url: "https://staging.mlorente.dev" # Staging
-#url: "" # Local
+url: "" # Local
 baseurl: ''
 
 ###############################################
