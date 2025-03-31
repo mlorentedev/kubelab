@@ -1,0 +1,5 @@
+# ansible/inventory/group_vars/production.yml
+---
+traefik_insecure: false
+acme_email: info@mlorente.dev
+acme_server: https://acme-v02.api.letsencrypt.org/directory

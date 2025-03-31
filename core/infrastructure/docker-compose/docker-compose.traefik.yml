@@ -9,11 +9,11 @@ services:
       - 8080:8080  # Traefik dashboard
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./traefik/traefik.yml:/etc/traefik/traefik.yml"
-      - "./traefik/acme.json:/acme.json"
-      - "./traefik/logs:/var/log/traefik"       
+      - "../traefik/traefik.yml:/etc/traefik/traefik.yml"
+      - "../traefik/acme.json:/acme.json"
+      - "../traefik/logs:/var/log/traefik"       
     env_file:
-      - .env      
+      - .env  
     labels:
       - "traefik.enable=true"
       # Dashboard access

@@ -1,80 +1,94 @@
-# My site
+# mlorente.dev
 
-My personal site built with Jekyll, containerized with Docker, and deployed using Traefik for SSL termination and reverse proxy.
+Web personal construida con Jekyll, contenerizada con Docker y desplegada utilizando Traefik para terminación SSL y proxy inverso.
 
-## Features
+## Características
 
-- Static website built with Jekyll
-- Fully responsive design
-- Containerized with Docker
-- Automated builds via GitHub Actions
-- SSL certificates managed by Traefik via Let's Encrypt
-- Content categories and tags
-- Reading time estimation
-- Markdown support for content
-- SEO optimized
+- Sitio web estático construido con Jekyll
+- Diseño totalmente responsive
+- Contenerizado con Docker
+- Compilaciones automatizadas via GitHub Actions
+- Certificados SSL gestionados por Traefik vía Let's Encrypt
+- Categorías y etiquetas para el contenido
+- Estimación de tiempo de lectura
+- Soporte para Markdown
+- Optimizado para SEO
 
-## Project Structure
+## Estructura del proyecto
 
 ```bash
-├── .github/                       # GitHub Actions workflow configurations
-├── docker-compose.local.yml       # Local environment docker-compose config
-├── docker-compose.production.yml  # Production environment config
-├── docker-compose.staging.yml     # Staging environment config
-├── docker-compose.traefik.yml     # Traefik proxy configuration
-├── .env.example                   # Example environment variables
-├── jekyll                         # Main Jekyll site directory
-│   ├── _config.yml                # Jekyll configuration
-│   ├── _data                      # Data files for Jekyll
-│   ├── _includes                  # Template includes
-│   ├── _layouts                   # Page layouts
-│   ├── _posts                     # Blog post content
-│   ├── 404.html                   # 404 error page
-│   ├── aboutme.html               # About me page
-│   ├── assets                     # Static assets
-│   │   ├── css                    # Stylesheets
-│   │   ├── cv                     # Resume/CV files
-│   │   ├── img                    # Image assets
-│   │   ├── js                     # JavaScript files
-│   │   └── pdf                    # PDF documents
-│   ├── Dockerfile                 # Docker image definition
-│   ├── Gemfile                    # Ruby dependencies
-│   └── index.html                 # Site homepage
-├── README.md                      # Project documentation
-├── scripts                        # Utility scripts
-│   ├── cleanup.sh                 # Resource cleanup
-│   ├── deploy.sh                  # Deployment script
-│   ├── generate-traefik-config.sh # Traefik config generator
-│   ├── generate-traefik-credentials.sh # Auth credential generator
-│   └── utils.sh                   # Shared utility functions
-└── traefik                        # Traefik configuration templates
-    ├── traefik.template.http.yml  # HTTP configuration template
-    └── traefik.template.https.yml # HTTPS configuration template
+├── .github/                       # Configuraciones de workflows de GitHub Actions
+├── ansible/                       # Configuración de Ansible para despliegues
+│   ├── inventory/                 # Inventario de hosts y variables
+│   ├── playbooks/                 # Playbooks para diferentes tareas
+│   └── templates/                 # Plantillas para configuración
+├── core/
+│   └── infrastructure/            # Archivos de infraestructura
+│       ├── docker-compose/        # Configuraciones de Docker Compose
+│       ├── scripts/               # Scripts de utilidad (legacy)
+│       └── traefik/               # Plantillas de configuración de Traefik
+├── frontend/                      # Directorio principal del sitio Jekyll
+│   ├── _config.yml                # Configuración de Jekyll
+│   ├── _data                      # Archivos de datos para Jekyll
+│   ├── _includes                  # Includes de plantillas
+│   ├── _layouts                   # Layouts de páginas
+│   ├── _posts                     # Contenido de posts del blog
+│   ├── 404.html                   # Página de error 404
+│   ├── aboutme.html               # Página "Sobre mí"
+│   ├── assets                     # Activos estáticos
+│   │   ├── css                    # Hojas de estilo
+│   │   ├── cv                     # Archivos de CV/currículum
+│   │   ├── img                    # Recursos de imágenes
+│   │   ├── js                     # Archivos JavaScript
+│   │   └── pdf                    # Documentos PDF
+│   ├── Dockerfile                 # Definición de imagen Docker
+│   ├── Gemfile                    # Dependencias de Ruby
+│   └── index.html                 # Página de inicio
+├── .env.example                   # Ejemplo de variables de entorno
+├── Makefile                       # Makefile para automatización
+├── README.md                      # Documentación del proyecto
+└── LICENSE                        # Archivo de licencia
 ```
 
-## Prerequisites
+## Prerrequisitos
 
-- Docker and Docker Compose
+- Docker y Docker Compose
 - Git
-- A DockerHub account for storing container images
-- A domain name (for staging and production environments)
-- A server with SSH access (for staging and production)
+- Make
+- Ansible (opcional, para despliegues remotos)
+- Una cuenta de DockerHub para almacenar las imágenes de contenedor
+- Un nombre de dominio (para entornos de staging y producción)
+- Un servidor con acceso SSH (para staging y producción)
 
-## Local Development
+## Instalación de dependencias
 
-To run the project locally:
+Para instalar todas las dependencias necesarias:
 
-1. Clone the repository
+```bash
+make install-deps
+```
 
-2. Create a local environment file
+Para instalar Ansible y sus colecciones (necesario para despliegues remotos):
+
+```bash
+make install-ansible
+```
+
+## Desarrollo local
+
+Para ejecutar el proyecto localmente:
+
+1. Clona el repositorio
+
+2. Crea un archivo de entorno local
 
    ```bash
    cp .env.example .env.local
    ```
 
-3. Edit `.env.local` with your local configuration
+3. Edita `.env.local` con tu configuración local
 
-   ```.env.local
+   ```env
    # Site
    ENVIRONMENT=local
    ARTIFACT_NAME=blog-site
@@ -83,193 +97,242 @@ To run the project locally:
 
    # DockerHub
    DOCKERHUB_USERNAME=your-dockerhub-username
-   DOCKERHUB_TOKEN=your-dockerhub-token
 
    # Environment
-   ENVIRONMENT=local
    TRAEFIK_DASHBOARD=true
    TRAEFIK_INSECURE=true
    ```
 
-4. Copy to `.env` file
+4. Inicia el entorno de desarrollo
 
    ```bash
-   cp .env.local .env
+   make dev
    ```
 
-5. Change url in `_config.yml` to match your local domain
+5. Accede al sitio en <http://localhost>
 
-   ```yaml
-    url: ""
-   ```
+## Comandos disponibles
 
-6. Launch the services
+El Makefile proporciona una interfaz unificada para todas las operaciones:
 
-   ```bash
-   docker network create traefik_network
-   ./scripts/generate-traefik-config.sh   
-   docker-compose -f docker-compose.local.yml up -d --build
-   ```
-
-7. Access your site at <http://localhost>
-
-## Deployment
-
-Prior to deploying to staging or production, ensure you have created the necessary environment files and have access to your server based on the example `.env.example` file.
-
-First need to generate a password for Traefik dashboard and set it in the environment files. You can use the following script to generate the user and password for the Traefik dashboard:
+### Comandos de desarrollo
 
 ```bash
-./scripts/generate-traefik-credentials.sh
+# Iniciar entorno de desarrollo local
+make dev
+
+# Limpiar recursos locales
+make clean
+
+# Generar configuración de Traefik
+make generate-config
+
+# Generar credenciales de autenticación para acceso al dashboard de Traefik
+make generate-auth
 ```
 
-1. Copy all necessary files to your staging server. You can use `scp` or any other file transfer method. For example:
-
-   ```bash
-   ssh mlorente-deployer "mkdir -p /opt/mlorente.dev"
-   ssh mlorente-deployer "rm -f /opt/mlorente.dev/traefik/traefik.yml"
-   scp -r -p scripts/* mlorente-deployer:/opt/mlorente.dev/scripts/
-   scp -r -p traefik/* mlorente-deployer:/opt/mlorente.dev/traefik/
-   scp -p .env.staging mlorente-deployer:/opt/mlorente.dev/
-   scp -p .env.production mlorente-deployer:/opt/mlorente.dev/
-   scp -p docker-compose.staging.yml mlorente-deployer:/opt/mlorente.dev/
-   scp -p docker-compose.production.yml mlorente-deployer:/opt/mlorente.dev/
-   scp -p docker-compose.traefik.yml mlorente-deployer:/opt/mlorente.dev/
-   ```
-
-2. Access your server via SSH and navigate to your project directory.
-
-   ```bash
-   ssh user@server
-   cd /opt/mlorente.dev
-   ```
-
-3. Create the Docker network for Traefik if it doesn't exist
-
-   ```bash
-   docker network create traefik_network
-   ```
-
-4. Make the scripts executable.
-
-   ```bash
-   chmod a+x scripts/*.sh
-   ```
-
-5. Run the deployment script for common services.
-
-   ```bash
-   ./scripts/deploy.sh deploy common
-   ```
-
-6. Run the deployment script for staging or production
-
-   ```bash
-   ./scripts/deploy.sh deploy [staging|production|all]
-   ```
-
-Resources can be cleaned up by running the following command:
+### Comandos de despliegue
 
 ```bash
-./scripts/cleanuo.sh
+# Verificar requisitos previos
+make check
+
+# Configuración inicial del entorno (staging o production)
+make setup ENV=staging
+
+# Desplegar aplicación (staging o production)
+make deploy ENV=production
+
+# Actualizar aplicación sin reiniciar servicios
+make update ENV=staging
+
+# Rollback al despliegue anterior
+make rollback ENV=production
+
+# Ver logs de la aplicación
+make logs ENV=staging
+
+# Ver estado de los servicios
+make status ENV=production
 ```
 
-This will set up the environment for the specified deployment, including copying the appropriate `.env` file, generating the Traefik configuration, and starting the Docker containers.
+## Despliegue
 
-To test locally the staging environment, you need to copy the certificate generated by Traefik to your local machine and then use it to test your local environment.
+Antes de desplegar a staging o producción, asegúrate de tener configurados los archivos de entorno necesarios y tener acceso a tu servidor.
+
+### Configuración inicial del servidor
+
+Para preparar un servidor nuevo:
 
 ```bash
-scp mlorente-deployer:/opt/mlorente.dev/traefik/acme.json ~/Downloads/acme.json
-cat ~/Downloads/acme.json | jq -r '.myresolver.Certificates[0].certificate' | base64 -d > ~/Downloads/staging-cert.crt
-cat ~/Downloads/acme.json | jq -r '.myresolver.Certificates[0].key' | base64 -d > ~/Downloads/staging-key.key
-sudo cp ~/Downloads/staging-cert.crt ~/Downloads/staging-key.key /usr/local/share/ca-certificates/
-sudo update-ca-certificates
+make setup ENV=staging
 ```
 
-Then, you can use this certificate to test your local environment with the staging configuration.
+Este comando:
+- Actualiza los paquetes del sistema
+- Instala Docker y Docker Compose
+- Configura el firewall
+- Crea la estructura de directorios necesaria
+- Configura la red de Docker
 
-By default any browser accepts the self-signed certificate generated by Traefik for staging. If you want to test it need to add the certificate to your browser's trusted certificates or launch the browser with the `--ignore-certificate-errors` flag (not recommended for production).
+### Despliegue a entornos remotos
+
+Para desplegar la aplicación:
 
 ```bash
-    google-chrome --ignore-certificate-errors --user-data-dir=/tmp/chrome-test
+make deploy ENV=production
 ```
 
-**Note**: For production, we use the Let's Encrypt production ACME server rather than the staging one. Be careful not to exceed their rate limits.
+Este comando:
+- Crea un respaldo de la configuración actual
+- Copia todos los archivos necesarios al servidor
+- Genera la configuración de Traefik
+- Inicia los contenedores de Docker
+- Verifica que el despliegue se haya completado correctamente
 
-To access the Traefik dashboard, navigate to `https://traefik.mlorente.dev:8080/dashboard/` (or `https://SERVER-IP:8080/dashboard/` for secure environments). The dashboard will require basic authentication using the credentials you generated earlier.
+### Actualización de la aplicación
+
+Para actualizar la aplicación sin una reconstrucción completa:
+
+```bash
+make update ENV=staging
+```
+
+### Rollback
+
+Si necesitas volver a una versión anterior:
+
+```bash
+make rollback ENV=production
+```
+
+Este comando restaura la configuración desde el último respaldo disponible.
+
+## Monitoreo
+
+Para verificar el estado de los servicios:
+
+```bash
+make status ENV=production
+```
+
+Para ver los logs de la aplicación:
+
+```bash
+make logs ENV=staging
+```
 
 ## CI/CD Pipeline
 
-The project includes a GitHub Actions workflow that:
+El proyecto incluye un workflow de GitHub Actions que:
 
-1. Builds the Jekyll site
-2. Creates a Docker image
-3. Pushes the image to DockerHub
-4. Creates deployment artifacts
-5. Generates a new release
+1. Construye el sitio Jekyll
+2. Crea una imagen Docker
+3. Sube la imagen a DockerHub
+4. Crea artefactos de despliegue
+5. Genera una nueva versión
 
-The workflow is triggered by:
+El workflow se activa por:
+- Push a la rama `master`
+- Diariamente a medianoche `(cron: '0 0 * * *')`
+- Ejecución manual via workflow_dispatch
 
-- Push to the `master` branch
-- Daily at midnight `(cron: '0 0 * * *')`
-- Manual execution via workflow_dispatch
+### Versionado
 
-### Versioning
+El proyecto sigue el Versionado Semántico a través de mensajes de commit:
 
-The project follows Semantic Versioning through commit messages:
+- **Versión Mayor** incrementa con cambios incompatibles:
+  - Mensajes conteniendo "BREAKING CHANGE:" o "!:"
+  - Ejemplo: `feat!: descripción de cambio incompatible`
 
-- **Major version** increments with breaking changes:
-  - Messages containing "BREAKING CHANGE:" or "!:"
-  - Example: `feat!: breaking change description`
+- **Versión Menor** incrementa con nuevas características:
+  - Mensajes comenzando con `feat:`
+  - Ejemplo: `feat: agregar nueva funcionalidad de búsqueda`
 
-- **Minor version** increments with new features:
-  - Messages starting with `feat:`
-  - Example: `feat: add new search functionality`
+- **Versión Parche** incrementa con correcciones/cambios pequeños:
+  - Mensajes comenzando con `fix:`, `docs:`, `chore:`, `style:`, etc.
+  - Ejemplo: `fix: corregir error en formulario de contacto`
 
-- **Patch version** increments with fixes/small changes:
-  - Messages starting with `fix:`, `docs:`, `chore:`, `style:`, etc.
-  - Example: `fix: correct contact form error`
+Ver [CONTRIBUTING.md](CONTRIBUTING.md) para más detalles sobre convenciones de mensajes de commit y versionado.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on commit message conventions and versioning.
+## Solución de problemas
 
-## Troubleshooting
+Si encuentras problemas con el despliegue:
 
-If you encounter issues with the deployment:
-
-1. Check container status
-
+1. Verifica los requisitos previos:
    ```bash
-   docker ps
+   make check
    ```
 
-2. Review container logs
-
+2. Revisa el estado de los contenedores:
    ```bash
-   docker-compose logs jekyll
-   docker-compose logs traefik
+   make status ENV=staging
    ```
 
-3. Verify Traefik configuration
-
+3. Verifica los logs:
    ```bash
-   cat traefik/traefik.yml
+   make logs ENV=production
    ```
 
-4. Check SSL certificates  
-    If you are using Traefik with Let's Encrypt, ensure that the `acme.json` file has the correct permissions and contains valid certificates:
-
+4. Limpia los recursos locales y vuelve a intentar:
    ```bash
-   docker-compose exec traefik cat /acme.json
+   make clean
+   make dev
    ```
 
-5. Restart the containers  
-    If you make changes to the configuration or environment variables, you may need to restart the containers:
-
+5. Si es necesario, realiza un rollback a la versión anterior:
    ```bash
-   docker-compose down
-   docker-compose up -d
+   make rollback ENV=production
    ```
 
-## License
+## Ejemplos de uso
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Desarrollo completo en local
+
+```bash
+# Instalar dependencias
+make install-deps
+
+# Iniciar entorno de desarrollo
+make dev
+
+# Realizar cambios en los archivos del proyecto...
+
+# Ver los cambios en http://localhost
+
+# Limpiar recursos cuando termines
+make clean
+```
+
+### Despliegue a producción
+
+```bash
+# Verificar requisitos previos
+make check
+
+# Configuración inicial (solo la primera vez)
+make setup ENV=production
+
+# Desplegar la aplicación
+make deploy ENV=production
+
+# Verificar estado
+make status ENV=production
+
+# Ver logs
+make logs ENV=production
+```
+
+### Actualización y rollback
+
+```bash
+# Actualizar aplicación
+make update ENV=staging
+
+# Si hay problemas, hacer rollback
+make rollback ENV=staging
+```
+
+## Licencia
+
+Este proyecto está licenciado bajo la Licencia MIT - ver el archivo LICENSE para más detalles.

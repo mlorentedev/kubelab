@@ -1,0 +1,50 @@
+# ansible/playbooks/rollback.yml
+---
+- name: Rollback Jekyll Site
+  hosts: "{{ env }}"
+  become: false
+  tasks:
+    - name: Buscar último respaldo
+      shell: "ls -dt {{ deploy_path }}/backups/* | head -n 1"
+      register: latest_backup
+      changed_when: false
+    
+    - name: Verificar si existe respaldo
+      stat:
+        path: "{{ latest_backup.stdout }}/core"
+      register: backup_exists
+    
+    - name: Mostrar mensaje si no hay respaldos
+      debug:
+        msg: "No se encontraron respaldos para realizar rollback"
+      when: not backup_exists.stat.exists
+    
+    - name: Detener servicios actuales
+      shell: docker-compose -f ./core/infrastructure/docker-compose/docker-compose.{{ environment }}.yml down
+      args:
+        chdir: "{{ deploy_path }}"
+      when: backup_exists.stat.exists
+    
+    - name: Restaurar configuración desde respaldo
+      copy:
+        src: "{{ latest_backup.stdout }}/core/"
+        dest: "{{ deploy_path }}/core/"
+        remote_src: yes
+      when: backup_exists.stat.exists
+    
+    - name: Reiniciar servicios con la configuración restaurada
+      shell: docker-compose -f ./core/infrastructure/docker-compose/docker-compose.{{ environment }}.yml up -d
+      args:
+        chdir: "{{ deploy_path }}"
+      when: backup_exists.stat.exists
+    
+    - name: Verificar estado del rollback
+      shell: docker ps | grep jekyll-{{ environment }}
+      register: container_status
+      failed_when: container_status.rc != 0
+      when: backup_exists.stat.exists
+    
+    - name: Mensaje de éxito del rollback
+      debug:
+        msg: "Rollback a {{ environment }} completado con éxito desde {{ latest_backup.stdout }}"
+      when: backup_exists.stat.exists

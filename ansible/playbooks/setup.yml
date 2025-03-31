@@ -1,0 +1,91 @@
+# ansible/playbooks/setup.yml
+---
+- name: Configuración inicial del servidor
+  hosts: "{{ env }}"
+  become: true
+  
+  tasks:
+    - name: Actualizar paquetes
+      apt:
+        update_cache: yes
+        upgrade: 'yes'
+
+    - name: Instalar dependencias
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - software-properties-common
+          - python3-pip
+          - jq
+        state: present
+
+    - name: Añadir clave GPG de Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Añadir repositorio de Docker
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Instalar Docker y Docker Compose
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose
+        state: present
+
+    - name: Añadir usuario al grupo Docker
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Crear directorios de despliegue
+      file:
+        path: "{{ deploy_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      with_items:
+        - backups
+        - core/infrastructure/traefik
+        - core/infrastructure/scripts
+        - core/infrastructure/docker-compose
+
+    - name: Crear red Docker
+      community.docker.docker_network:
+        name: "{{ docker_network }}"
+        state: present
+
+    - name: Configurar firewall UFW
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      with_items:
+        - "22"
+        - "80"
+        - "443"
+        - "8080"
+
+    - name: Habilitar firewall UFW
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Instalar herramientas de monitorización
+      apt:
+        name:
+          - htop
+          - iotop
+          - sysstat
+          - net-tools
+        state: present

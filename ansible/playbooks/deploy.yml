@@ -1,0 +1,104 @@
+# ansible/playbooks/deploy.yml
+---
+- name: Desplegar Jekyll Site
+  hosts: "{{ env }}"
+  become: false
+  vars:
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
+  
+  tasks:
+    - name: Crear directorio de respaldo
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+    
+    - name: Respaldar configuración existente
+      copy:
+        src: "{{ deploy_path }}/{{ item }}"
+        dest: "{{ backup_dir }}/"
+        remote_src: yes
+      with_items:
+        - core
+      ignore_errors: true
+    
+    - name: Crear red Docker si no existe
+      community.docker.docker_network:
+        name: "{{ docker_network }}"
+        state: present
+    
+    - name: Crear directorios necesarios
+      file:
+        path: "{{ deploy_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items:
+        - core/infrastructure/traefik
+        - core/infrastructure/scripts
+        - core/infrastructure/docker-compose
+    
+    - name: Copiar plantillas de configuración de Traefik
+      copy:
+        src: "{{ playbook_dir }}/../../core/infrastructure/traefik/"
+        dest: "{{ deploy_path }}/core/infrastructure/traefik/"
+        mode: '0644'
+    
+    - name: Copiar scripts
+      copy:
+        src: "{{ playbook_dir }}/../../core/infrastructure/scripts/"
+        dest: "{{ deploy_path }}/core/infrastructure/scripts/"
+        mode: '0755'
+    
+    - name: Copiar archivos Docker Compose
+      copy:
+        src: "{{ playbook_dir }}/../../core/infrastructure/docker-compose/"
+        dest: "{{ deploy_path }}/core/infrastructure/docker-compose/"
+        mode: '0644'
+    
+    - name: Crear archivo .env
+      template:
+        src: "../templates/env.j2"
+        dest: "{{ deploy_path }}/.env"
+        mode: '0644'
+    
+    - name: Copiar archivo .env a directorio docker-compose
+      copy:
+        src: "{{ deploy_path }}/.env"
+        dest: "{{ deploy_path }}/core/infrastructure/docker-compose/.env"
+        remote_src: yes
+        mode: '0644'
+    
+    - name: Generar configuración de Traefik
+      shell: ./core/infrastructure/scripts/generate-traefik-config.sh
+      args:
+        chdir: "{{ deploy_path }}"
+    
+    - name: Inicializar acme.json
+      file:
+        path: "{{ deploy_path }}/core/infrastructure/traefik/acme.json"
+        state: touch
+        mode: '0600'
+    
+    - name: Desplegar Traefik
+      shell: ./core/infrastructure/scripts/deploy.sh deploy common
+      args:
+        chdir: "{{ deploy_path }}"
+    
+    - name: Desplegar servicios específicos del entorno
+      shell: ./core/infrastructure/scripts/deploy.sh deploy {{ environment }}
+      args:
+        chdir: "{{ deploy_path }}"
+    
+    - name: Esperar a que los servicios inicien
+      pause:
+        seconds: 10
+    
+    - name: Verificar estado del despliegue
+      shell: docker ps | grep jekyll-{{ environment }}
+      register: container_status
+      failed_when: container_status.rc != 0
+    
+    - name: Mensaje de éxito del despliegue
+      debug:
+        msg: "Despliegue a {{ environment }} completado con éxito"
