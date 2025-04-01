@@ -2,7 +2,8 @@
 SHELL := /bin/zsh
 .SHELLFLAGS := -c -l
 
-# Variables
+# Variables - Main ssh configuration is in ~/.ssh/config
+SSH_KEY = ~/.ssh/id_ed25519
 ANSIBLE_PATH = ./ansible
 PLAYBOOK_PATH = $(ANSIBLE_PATH)/playbooks
 INVENTORY_PATH = $(ANSIBLE_PATH)/inventory
@@ -54,6 +55,7 @@ help:
 	@echo "  make clean                # Clean local resources"
 	@echo "  make generate-config      # Generate Traefik configuration"
 	@echo "  make generate-auth        # Generate authentication credentials"
+	@echo "  make copy-certificates    # Copy certificates to the local directory"
 	@echo ""
 	$(call log_info,Deployment commands:)
 	@echo "  make check                # Verify prerequisites"
@@ -100,7 +102,7 @@ install-ansible:
 	$(call log_success,Ansible successfully installed.)
 
 # Start development environment
-dev: check
+dev: check generate-config
 	$(call log_info,Starting local development environment...)
 	@docker network create traefik_network 2>/dev/null || true
 	@if [ ! -f ".env.local" ]; then \
@@ -120,12 +122,12 @@ setup: check
 		$(call log_error,Inventory file $(INVENTORY) not found); \
 		exit 1; \
 	fi
-	ansible-playbook $(PLAYBOOK_PATH)/setup.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)"
+	ansible-playbook $(PLAYBOOK_PATH)/setup.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)" --private-key $(SSH_KEY) --ask-become-pass -v
 
 # Deploy application
-deploy: check
+deploy: check generate-config
 	$(call log_info,Deploying to $(ENV)...)
-	ansible-playbook $(PLAYBOOK_PATH)/deploy.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)"
+	ansible-playbook $(PLAYBOOK_PATH)/deploy.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)" --private-key $(SSH_KEY) --ask-become-pass -v
 
 # Update application
 update: check
@@ -154,10 +156,11 @@ clean:
 	docker volume prune -f
 	$(call log_success,Local resources cleaned.)
 
-# Generate Traefik configuration
+# Generate environment-specific configuration files
 generate-config:
 	$(call log_info,Generating Traefik configuration...)
 	@chmod +x ./core/infrastructure/scripts/generate-traefik-config.sh
+	@cp .env.$(ENV) core/infrastructure/docker-compose/.env
 	@./core/infrastructure/scripts/generate-traefik-config.sh
 	$(call log_success,Traefik configuration generated.)
 
@@ -167,3 +170,17 @@ generate-auth:
 	@chmod +x ./core/infrastructure/scripts/generate-traefik-credentials.sh
 	@./core/infrastructure/scripts/generate-traefik-credentials.sh
 	$(call log_success,Credentials successfully generated.)
+
+# Copy certificates to the appropriate directory
+copy-certificates:
+	$(call log_info,Copying certificates to the appropriate directory...)
+	@scp mlorente-deployer:/opt/traefik/acme.json /tmp/acme.json
+	$(call log_success,Certificates copied to /tmp/acme.json successfully.)
+	@chmod 600 /tmp/acme.json
+	@cat /tmp/acme.json | jq -r '.myresolver.Certificates[0].certificate' | base64 -d > /tmp/staging-cert.crt
+	@cat /tmp/acme.json | jq -r '.myresolver.Certificates[0].key' | base64 -d > /tmp/staging-key.key
+	$(call log_success,Certificates extracted successfully.)
+	@sudo cp /tmp/staging-cert.crt /tmp/staging-key.key /usr/local/share/ca-certificates/
+	$(call log_info,Updating CA certificates...)
+	@sudo update-ca-certificates
+	$(call log_success,Certificates copied successfully.)

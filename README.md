@@ -131,6 +131,79 @@ make generate-config
 make generate-auth
 ```
 
+### Configuracion SSH
+
+Primero, asegúrate de tener configurada tu clave SSH para acceder a los servidores remotos. Si no tienes una clave SSH, puedes generarla con el siguiente comando:
+
+```bash
+ssh-keygen -t rsa -b 4096 -C "tu-correo@ejemplo.com"
+```
+
+Cuando se te pregunte dónde guardar la clave, puedes presionar Enter para aceptar la ubicación predeterminada (`~/.ssh/id_rsa`). También puedes establecer una frase de contraseña para mayor seguridad.
+Esto generará dos archivos: `id_rsa` (clave privada) y `id_rsa.pub` (clave pública).
+Asegúrate de que el agente SSH esté en ejecución y agrega tu clave privada:
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa
+```
+
+Si no tienes el agente SSH en ejecución, puedes iniciarlo con el comando anterior. Luego, agrega tu clave privada al agente SSH:
+
+```bash
+ssh-add ~/.ssh/id_rsa
+```
+
+Si ya tienes una clave SSH, asegúrate de que esté en el directorio `~/.ssh/` y que tenga los permisos correctos:
+
+```bash
+chmod 600 ~/.ssh/id_rsa
+chmod 644 ~/.ssh/id_rsa.pub
+```
+
+Asegúrate de que el archivo `~/.ssh/config` tenga la siguiente configuración:
+
+```bash
+Host servidor-remoto
+    HostName ip-del-servidor
+    User usuario
+    IdentityFile ~/.ssh/id_rsa
+```
+
+Esto te permitirá conectarte al servidor remoto usando el alias `servidor-remoto` en lugar de la dirección IP completa.
+Asegúrate de que el archivo `~/.ssh/config` tenga los permisos correctos:
+
+```bash
+chmod 644 ~/.ssh/config
+```
+
+Si no tienes el archivo `~/.ssh/config`, puedes crearlo con el siguiente comando:
+
+```bash
+touch ~/.ssh/config
+```
+
+Luego, edítalo con tu editor de texto favorito y agrega la configuración anterior.
+Asegúrate de que el archivo `~/.ssh/config` tenga los permisos correctos:
+
+```bash
+chmod 644 ~/.ssh/config
+```
+
+Si el servidor remoto no tiene tu clave pública SSH, puedes copiarla manualmente o usar el siguiente comando para agregarla automáticamente:
+
+```bash
+ssh-copy-id usuario@servidor-remoto
+```
+
+Este comando te pedirá la contraseña del usuario en el servidor remoto. Una vez ingresada, se copiará tu clave pública al servidor remoto y se agregará al archivo `~/.ssh/authorized_keys`, permitiéndote conectarte sin necesidad de ingresar una contraseña.
+
+Asegúrate de que tu usuario tenga permisos para ejecutar comandos de Docker y Ansible así como permisos de sudo.
+
+```bash
+sudo usermod -aG sudo $USER
+```
+
 ### Comandos de despliegue
 
 ```bash
@@ -156,6 +229,18 @@ make logs ENV=staging
 make status ENV=production
 ```
 
+Cuando se despliega en staging los certificados generados por Let's Encrypt son temporales y los navegadores pueden mostrar advertencias de seguridad. Para poder testar localmente el entorno de staging sin advertencias,  tienes que copiar los certificados generados a tu máquina local y añadirlos a tu almacén de certificados de confianza.
+
+```bash
+make copy-certs ENV=staging
+```
+
+Por defecto ningún navegador acepta certificados autofirmados pero puedes añadirlos a tu almacén de certificados de confianza. En sistemas basados en Unix, como Ubuntu, puedes hacer lo siguiente:
+
+```bash
+google-chrome --ignore-certificate-errors --user-data-dir=/tmp/chrome-test
+```
+
 ## Despliegue
 
 Antes de desplegar a staging o producción, asegúrate de tener configurados los archivos de entorno necesarios y tener acceso a tu servidor.
@@ -169,6 +254,7 @@ make setup ENV=staging
 ```
 
 Este comando:
+
 - Actualiza los paquetes del sistema
 - Instala Docker y Docker Compose
 - Configura el firewall
@@ -184,6 +270,7 @@ make deploy ENV=production
 ```
 
 Este comando:
+
 - Crea un respaldo de la configuración actual
 - Copia todos los archivos necesarios al servidor
 - Genera la configuración de Traefik
@@ -233,6 +320,7 @@ El proyecto incluye un workflow de GitHub Actions que:
 5. Genera una nueva versión
 
 El workflow se activa por:
+
 - Push a la rama `master`
 - Diariamente a medianoche `(cron: '0 0 * * *')`
 - Ejecución manual via workflow_dispatch
@@ -260,27 +348,32 @@ Ver [CONTRIBUTING.md](CONTRIBUTING.md) para más detalles sobre convenciones de 
 Si encuentras problemas con el despliegue:
 
 1. Verifica los requisitos previos:
+
    ```bash
    make check
    ```
 
 2. Revisa el estado de los contenedores:
+
    ```bash
    make status ENV=staging
    ```
 
 3. Verifica los logs:
+
    ```bash
    make logs ENV=production
    ```
 
 4. Limpia los recursos locales y vuelve a intentar:
+
    ```bash
    make clean
    make dev
    ```
 
 5. Si es necesario, realiza un rollback a la versión anterior:
+
    ```bash
    make rollback ENV=production
    ```
@@ -335,4 +428,4 @@ make rollback ENV=staging
 
 ## Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - ver el archivo LICENSE para más detalles.
+Este proyecto está licenciado bajo la Licencia MIT - ver [LICENSE](LICENSE) para más detalles.

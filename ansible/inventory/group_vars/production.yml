@@ -1,5 +1,8 @@
 # ansible/inventory/group_vars/production.yml
 ---
+deploy_path: /opt/mlorente.dev
+domain: mlorente.dev
 traefik_insecure: false
 acme_email: info@mlorente.dev
 acme_server: https://acme-v02.api.letsencrypt.org/directory
+traefik_users: "admin:$apr1$8FKrd3Ks$nB1Fvnk7OLRdhYzQIUS6u/"

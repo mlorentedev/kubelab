@@ -1,0 +1,21 @@
+api:
+  dashboard: true
+  insecure: true
+
+ping: {}
+
+log:
+  level: INFO
+
+accessLog: {}
+
+entryPoints:
+  web:
+    address: :80
+
+providers:
+  docker:
+    exposedByDefault: false
+  file:
+    directory: "/etc/traefik/dynamic_conf/"
+    watch: true
