@@ -1,0 +1,17 @@
+http:
+  routers:
+    production:
+      rule: "Host(`mlorente.dev`)"
+      entryPoints:
+        - websecure
+      service: production-service
+      tls:
+        certResolver: myresolver
+      middlewares:
+        - secure-headers
+
+  services:
+    production-service:
+      loadBalancer:
+        servers:
+          - url: "http://jekyll-production:4000"

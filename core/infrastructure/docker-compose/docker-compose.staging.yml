@@ -3,20 +3,12 @@ services:
     image: "${DOCKERHUB_USERNAME}/${ARTIFACT_NAME}:${ENVIRONMENT}-latest"
     container_name: jekyll-staging
     restart: always
-    ports:
-      - "4001:4000"
+    expose:
+      - "4000"
     env_file:
       - .env   
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.jekyll-staging.rule=Host(`staging.${DOMAIN}`)"
-      - "traefik.http.routers.jekyll-staging.entrypoints=web"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
-      - "traefik.http.routers.jekyll-staging.middlewares=redirect-to-https@docker"
-      - "traefik.http.routers.jekyll-staging-ssl.rule=Host(`staging.${DOMAIN}`)"
-      - "traefik.http.routers.jekyll-staging-ssl.entrypoints=websecure"
-      - "traefik.http.routers.jekyll-staging-ssl.tls.certresolver=myresolver"
       - "traefik.http.services.jekyll-staging.loadbalancer.server.port=4000"
     networks:
       - traefik_network

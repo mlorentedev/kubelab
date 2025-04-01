@@ -10,8 +10,8 @@ author: Manu Lorente
 
 # SEO
 #url: "https://mlorente.dev" # Production
-#url: "https://staging.mlorente.dev" # Staging
-url: "" # Local
+url: "https://staging.mlorente.dev" # Staging
+#url: "" # Local
 baseurl: ''
 
 ###############################################

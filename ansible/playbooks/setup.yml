@@ -1,16 +1,16 @@
 # ansible/playbooks/setup.yml
 ---
-- name: Configuración inicial del servidor
+- name: Server initial setup
   hosts: "{{ env }}"
   become: true
   
   tasks:
-    - name: Actualizar paquetes
+    - name: Update system
       apt:
         update_cache: yes
         upgrade: 'yes'
 
-    - name: Instalar dependencias
+    - name: Install dependencies
       apt:
         name:
           - apt-transport-https
@@ -21,18 +21,21 @@
           - python3-pip
           - jq
         state: present
+        update_cache: yes
+      become: true      
 
-    - name: Añadir clave GPG de Docker
+    - name: Add Docker's official GPG key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
+        keyring: /etc/apt/keyrings/docker.gpg
 
-    - name: Añadir repositorio de Docker
+    - name: Add Docker repository
       apt_repository:
-        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        repo: "deb [arch=arm64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
 
-    - name: Instalar Docker y Docker Compose
+    - name: Install Docker and Docker-compose
       apt:
         name:
           - docker-ce
@@ -40,32 +43,30 @@
           - containerd.io
           - docker-compose
         state: present
+        update_cache: yes
+      become: true      
 
-    - name: Añadir usuario al grupo Docker
+    - name: Ensure Docker is started and enabled
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to Docker group
       user:
         name: "{{ ansible_user }}"
         groups: docker
         append: yes
 
-    - name: Crear directorios de despliegue
-      file:
-        path: "{{ deploy_path }}/{{ item }}"
-        state: directory
-        mode: '0755'
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-      with_items:
-        - backups
-        - core/infrastructure/traefik
-        - core/infrastructure/scripts
-        - core/infrastructure/docker-compose
+    - name: Reset connection to apply group changes
+      meta: reset_connection
 
-    - name: Crear red Docker
+    - name: Create Docker network
       community.docker.docker_network:
         name: "{{ docker_network }}"
         state: present
 
-    - name: Configurar firewall UFW
+    - name: Configure firewall UFW
       ufw:
         rule: allow
         port: "{{ item }}"
@@ -76,12 +77,12 @@
         - "443"
         - "8080"
 
-    - name: Habilitar firewall UFW
+    - name: Enable firewall UFW
       ufw:
         state: enabled
         policy: deny
 
-    - name: Instalar herramientas de monitorización
+    - name: Install monitoring tools
       apt:
         name:
           - htop
@@ -89,3 +90,23 @@
           - sysstat
           - net-tools
         state: present
+
+    - name: Create Traefik directory
+      file:
+        path: /opt/traefik
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Create deployment directories
+      file:
+        path: "{{ deploy_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      with_items:
+        - backups
+        - core/infrastructure/docker-compose
+        - traefik
