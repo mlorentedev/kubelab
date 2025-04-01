@@ -3,20 +3,12 @@ services:
     image: "${DOCKERHUB_USERNAME}/${ARTIFACT_NAME}:${ENVIRONMENT}-latest"
     container_name: jekyll-production
     restart: always
-    ports:
-      - "4002:4000"
+    expose:
+      - "4000"
     env_file:
       - .env   
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.jekyll-production.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.jekyll-production.entrypoints=web"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
-      - "traefik.http.routers.jekyll-production.middlewares=redirect-to-https@docker"
-      - "traefik.http.routers.jekyll-production-ssl.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.jekyll-production-ssl.entrypoints=websecure"
-      - "traefik.http.routers.jekyll-production-ssl.tls.certresolver=myresolver"
       - "traefik.http.services.jekyll-production.loadbalancer.server.port=4000"
     networks:
       - traefik_network
