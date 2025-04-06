@@ -1,0 +1,24 @@
+# Traefik HTTP configuration template (for local development)
+api:
+  dashboard: {{TRAEFIK_DASHBOARD}}
+  insecure: {{TRAEFIK_INSECURE}}
+
+ping: {}
+
+log:
+  level: {{LOG_LEVEL}}
+
+accessLog: {}
+
+entryPoints:
+  web:
+    address: :{{HTTP_PORT}}
+
+providers:
+  docker:
+    endpoint: {{DOCKER_ENDPOINT}}
+    exposedByDefault: {{DOCKER_EXPOSED_BY_DEFAULT}}
+    network: {{DOCKER_NETWORK}}
+  file:
+    directory: "/etc/traefik/dynamic_conf"
+    watch: {{WATCH_DYNAMIC_CONF}}

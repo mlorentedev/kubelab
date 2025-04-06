@@ -1,0 +1,15 @@
+http:
+  middlewares:
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: {{HTTPS_PERMANENT_REDIRECT}}
+    secure-headers:
+      headers:
+        frameDeny: {{HEADERS_FRAME_DENY}}
+        sslRedirect: {{HEADERS_SSL_REDIRECT}}
+        browserXssFilter: {{HEADERS_XSS_FILTER}}
+        contentTypeNosniff: {{HEADERS_NOSNIFF}}
+        stsSeconds: {{HEADERS_STS_SECONDS}}
+        stsIncludeSubdomains: {{HEADERS_STS_INCLUDE_SUBDOMAINS}}
+        stsPreload: {{HEADERS_STS_PRELOAD}}

@@ -71,6 +71,7 @@ check:
 	$(call log_info,Verifying prerequisites...)
 	$(call check_command,ansible,ansible)
 	$(call check_command,docker,docker)
+	$(call check_command,awk,awk)
 	$(call check_command,docker-compose,docker-compose)
 	$(call log_success,All requirements are met.)
 
@@ -113,7 +114,7 @@ dev: check generate-config
 	@chmod +x ./core/infrastructure/scripts/*.sh
 	@./core/infrastructure/scripts/generate-traefik-config.sh
 	@docker compose -f $(DOCKER_COMPOSE_LOCAL) up -d --build
-	$(call log_success,Development environment started at http://localhost)
+	$(call log_success,Development environment started at http://0.0.0.0:4000)
 
 # Initial setup
 setup: check
@@ -160,7 +161,7 @@ clean:
 generate-config:
 	$(call log_info,Generating Traefik configuration...)
 	@chmod +x ./core/infrastructure/scripts/generate-traefik-config.sh
-	@cp .env.$(ENV) core/infrastructure/docker-compose/.env
+	@cp .env core/infrastructure/docker-compose/.env
 	@./core/infrastructure/scripts/generate-traefik-config.sh
 	$(call log_success,Traefik configuration generated.)
 

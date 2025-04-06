@@ -1,0 +1,17 @@
+http:
+  routers:
+    staging:
+      rule: "Host(`{{STAGING_HOST}}`)"
+      entryPoints:
+        - {{STAGING_ENTRYPOINT}}
+      service: {{STAGING_SERVICE}}
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+      middlewares:
+        - {{STAGING_MIDDLEWARE}}
+
+  services:
+    {{STAGING_SERVICE}}:
+      loadBalancer:
+        servers:
+          - url: "http://{{STAGING_SERVER}}:{{STAGING_PORT}}"

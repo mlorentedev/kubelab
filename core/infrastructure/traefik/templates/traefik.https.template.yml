@@ -1,0 +1,71 @@
+# Traefik HTTPS configuration template
+api:
+  dashboard: {{TRAEFIK_DASHBOARD}}
+  insecure: {{TRAEFIK_INSECURE}}
+
+ping: {}
+
+log:
+  level: {{LOG_LEVEL}}
+  format: {{LOG_FORMAT}}
+
+accessLog:
+  format: {{ACCESSLOG_FORMAT}}
+  fields:
+    headers:
+      defaultMode: {{HEADERS_DEFAULT_MODE}}
+      names:
+        User-Agent: {{HEADERS_USER_AGENT}}
+        Authorization: {{HEADERS_AUTHORIZATION}}
+        Content-Type: {{HEADERS_CONTENT_TYPE}}
+
+entryPoints:
+  web:
+    address: :{{HTTP_PORT}}
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: {{HTTPS_PERMANENT_REDIRECT}}
+  websecure:
+    address: :{{HTTPS_PORT}}
+    http:
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+        options: {{TLS_OPTIONS}}
+
+tls:
+  options:
+    default:
+      minVersion: {{TLS_MIN_VERSION}}
+      cipherSuites:
+        - {{TLS_CIPHER_SUITE_1}}
+        - {{TLS_CIPHER_SUITE_2}}
+        - {{TLS_CIPHER_SUITE_3}}
+        - {{TLS_CIPHER_SUITE_4}}
+        - {{TLS_CIPHER_SUITE_5}}
+        - {{TLS_CIPHER_SUITE_6}}
+  domains:
+    - main: "{{DOMAIN}}"
+      sans:
+        - "*.{{DOMAIN}}"
+        - "traefik.{{DOMAIN}}"
+
+providers:
+  docker:
+    endpoint: {{DOCKER_ENDPOINT}}
+    exposedByDefault: {{DOCKER_EXPOSED_BY_DEFAULT}}
+    network: {{DOCKER_NETWORK}}
+  file:
+    directory: "/etc/traefik/dynamic_conf"
+    watch: {{WATCH_DYNAMIC_CONF}}
+       
+certificatesResolvers:
+  {{CERT_RESOLVER}}:
+    acme:
+      caServer: {{ACME_SERVER}}
+      email: {{ACME_EMAIL}}
+      storage: "/acme.json"
+      httpChallenge:
+        entryPoint: "web"
