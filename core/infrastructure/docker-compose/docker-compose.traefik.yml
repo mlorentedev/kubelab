@@ -17,15 +17,15 @@ services:
       - "./ssl/private/default.key:/etc/ssl/private/default.key"
     env_file:
       - .env  
-    command:
-      - "--global.checkNewVersion=true"
-      - "--global.sendAnonymousUsage=false"
-      - "--api.dashboard=${TRAEFIK_DASHBOARD:-true}"
-      - "--api.insecure=${INSECURE:-false}"
-      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
-      - "--certificatesresolvers.myresolver.acme.caServer=${SERVER}"
-      - "--certificatesresolvers.myresolver.acme.httpChallenge.entryPoint=web"
+    #command:
+    #  - "--global.checkNewVersion=true"
+    #  - "--global.sendAnonymousUsage=false"
+    #  - "--api.dashboard=${TRAEFIK_DASHBOARD:-true}"
+    #  - "--api.insecure=${INSECURE:-false}"
+    #  - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+    #  - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
+    #  - "--certificatesresolvers.myresolver.acme.caServer=${SERVER}"
+    #  - "--certificatesresolvers.myresolver.acme.httpChallenge.entryPoint=web"
     labels:
       - "traefik.enable=true"
       # Allow ACME HTTP Challenge

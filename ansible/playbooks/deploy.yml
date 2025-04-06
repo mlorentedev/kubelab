@@ -20,36 +20,44 @@
         dest: "{{ backup_dir }}/"
         remote_src: yes
       with_items:
-        - core
+        - docker-compose
       ignore_errors: true
 
-    - name: Stop and remove existing containers (Traefik)
-      docker_compose:
-        project_src: /opt/traefik
-        files:
-          - docker-compose.traefik.yml
-        state: absent
-      ignore_errors: true
-
-    - name: Stop and remove existing containers (Applications)
-      docker_compose:
-        project_src: "{{ deploy_path }}/core/infrastructure/docker-compose"
-        files:
-          - docker-compose.{{ env }}.yml
-        state: absent
+    - name: Backup current Traefik
+      copy:
+        src: "/opt/{{ item }}"
+        dest: "{{ backup_dir }}"
+        remote_src: yes
+      with_items:
+        - traefik
       ignore_errors: true
 
     - name: Copy docker-compose files
       copy:
         src: "{{ playbook_dir }}/../../core/infrastructure/docker-compose/"
-        dest: "{{ deploy_path }}/core/infrastructure/docker-compose/"
+        dest: "{{ deploy_path }}/docker-compose/"
         mode: '0644'
+        
+    - name: Stop and remove existing containers
+      docker_compose:
+        project_src: "{{ deploy_path }}/docker-compose/"
+        files:
+          - docker-compose.{{ env }}.yml
+          - docker-compose.traefik.yml
+        state: absent
+      ignore_errors: true
     
     - name: Copy Traefik configuration
       copy:
-        src: "{{ playbook_dir }}/../../core/infrastructure/traefik/"
-        dest: "/opt/traefik/"
+        src: "{{ playbook_dir }}/../../core/infrastructure/traefik/dynamic_conf/"
+        dest: "/opt/traefik/dynamic_conf/"
         mode: '0644'
+
+    - name: Copy Traefik manifest
+      copy:
+        src: "{{ playbook_dir }}/../../core/infrastructure/traefik/traefik.yml"
+        dest: "/opt/traefik/"
+        mode: '0644'        
 
     - name: Update acme file
       file:
@@ -59,14 +67,14 @@
 
     - name: Copy .env file to Traefik
       copy:
-        src: "{{ deploy_path }}/core/infrastructure/docker-compose/.env"
+        src: "{{ deploy_path }}/docker-compose/.env"
         dest: "/opt/traefik/.env"
         remote_src: yes
         mode: '0644'
 
     - name: Deploy Traefik
       docker_compose:
-        project_src: /opt/traefik
+        project_src: "{{ deploy_path }}/docker-compose/"
         files:
           - docker-compose.traefik.yml
       environment:
@@ -75,7 +83,7 @@
     
     - name: Deploy applications
       docker_compose:
-        project_src: "{{ deploy_path }}/core/infrastructure/docker-compose"
+        project_src: "{{ deploy_path }}/docker-compose/"
         files:
           - docker-compose.{{ env }}.yml
       environment:
