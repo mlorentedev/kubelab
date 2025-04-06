@@ -1,0 +1,16 @@
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: {{DEFAULT_CERT_FILE}}
+        keyFile: {{DEFAULT_KEY_FILE}}
+  options:
+    default:
+      minVersion: {{TLS_MIN_VERSION}}
+      cipherSuites:
+        - {{TLS_CIPHER_SUITE_1}}
+        - {{TLS_CIPHER_SUITE_2}}
+        - {{TLS_CIPHER_SUITE_3}}
+        - {{TLS_CIPHER_SUITE_4}}
+        - {{TLS_CIPHER_SUITE_5}}
+        - {{TLS_CIPHER_SUITE_6}}

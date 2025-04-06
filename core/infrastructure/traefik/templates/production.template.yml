@@ -1,0 +1,17 @@
+http:
+  routers:
+    production:
+      rule: "Host(`{{PRODUCTION_HOST}}`)"
+      entryPoints:
+        - {{PRODUCTION_ENTRYPOINT}}
+      service: {{PRODUCTION_SERVICE}}
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+      middlewares:
+        - {{PRODUCTION_MIDDLEWARE}}
+
+  services:
+    {{PRODUCTION_SERVICE}}:
+      loadBalancer:
+        servers:
+          - url: "http://{{PRODUCTION_SERVER}}:{{PRODUCTION_PORT}}"
