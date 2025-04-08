@@ -1,14 +1,14 @@
 services:
   frontend-local:
     build:
-      context: ../../../frontend
+      context: ../../services/frontend
       dockerfile: Dockerfile
     container_name: jekyll-site
     restart: always
     ports:
       - "4000:4000"
     volumes:
-      - ../../../frontend:/srv/jekyll
+      - ../../services/frontend:/srv/jekyll
     env_file:
       - .env  
     labels:
