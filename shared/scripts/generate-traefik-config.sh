@@ -3,8 +3,8 @@
 
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-TRAEFIK_DIR="$SCRIPT_DIR/../traefik"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TRAEFIK_DIR="$PROJECT_ROOT/deployment/traefik"
 TEMPLATES_DIR="$TRAEFIK_DIR/templates"
 DYNAMIC_CONF_DIR="$TRAEFIK_DIR/dynamic_conf"
 
@@ -27,8 +27,6 @@ fi
 # Create directories if they don't exist
 mkdir -p "$DYNAMIC_CONF_DIR"
 mkdir -p "$TRAEFIK_DIR/logs"
-mkdir -p "$TRAEFIK_DIR/ssl/private"
-mkdir -p "$TRAEFIK_DIR/ssl/certs"
 
 # Ensure templates directory exists
 if [ ! -d "$TEMPLATES_DIR" ]; then
@@ -64,13 +62,17 @@ replace_placeholders() {
     
     # Copy template to temporary file
     cp "$template" "$tmpfile"
-    
+
+    # Escape slashes in the email address
+    escaped_email="${ACME_EMAIL//\//\\/}"
+    escaped_email="${escaped_email//@/\\@}"
+
     # Replace each placeholder with its value
     perl -p -e "s#{{DOMAIN}}#${DOMAIN//\//\\/}#g" -i "$tmpfile"
     perl -p -e "s#{{TRAEFIK_DASHBOARD}}#${TRAEFIK_DASHBOARD}#g" -i "$tmpfile"
     perl -p -e "s#{{TRAEFIK_INSECURE}}#${TRAEFIK_INSECURE}#g" -i "$tmpfile"
     perl -p -e "s#{{ACME_SERVER}}#${ACME_SERVER//\//\\/}#g" -i "$tmpfile"
-    perl -p -e "s#{{ACME_EMAIL}}#${ACME_EMAIL//\//\\/}#g" -i "$tmpfile"
+    perl -p -e "s#{{ACME_EMAIL}}#${escaped_email}#g" -i "$tmpfile"
     perl -p -e "s#{{LOG_LEVEL}}#${LOG_LEVEL}#g" -i "$tmpfile"
     perl -p -e "s#{{LOG_FORMAT}}#${LOG_FORMAT}#g" -i "$tmpfile"
     perl -p -e "s#{{ACCESSLOG_FORMAT}}#${ACCESSLOG_FORMAT}#g" -i "$tmpfile"
@@ -105,8 +107,6 @@ replace_placeholders() {
     perl -p -e "s#{{HEADERS_STS_SECONDS}}#${HEADERS_STS_SECONDS}#g" -i "$tmpfile"
     perl -p -e "s#{{HEADERS_STS_INCLUDE_SUBDOMAINS}}#${HEADERS_STS_INCLUDE_SUBDOMAINS}#g" -i "$tmpfile"
     perl -p -e "s#{{HEADERS_STS_PRELOAD}}#${HEADERS_STS_PRELOAD}#g" -i "$tmpfile"
-    perl -p -e "s#{{DEFAULT_CERT_FILE}}#${DEFAULT_CERT_FILE}#g" -i "$tmpfile"
-    perl -p -e "s#{{DEFAULT_KEY_FILE}}#${DEFAULT_KEY_FILE}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_HOST}}#${PRODUCTION_HOST}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_ENTRYPOINT}}#${PRODUCTION_ENTRYPOINT}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_SERVICE}}#${PRODUCTION_SERVICE}#g" -i "$tmpfile"

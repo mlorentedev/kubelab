@@ -1,0 +1,53 @@
+services:
+  traefik-proxy:
+    image: traefik:v2.11
+    container_name: traefik-proxy
+    restart: always
+    ports:
+      - "${HTTP_PORT}:80"
+      - "${HTTPS_PORT}:443"
+      - "8080:8080" # Dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "./acme.json:/acme.json"
+      - "./dynamic_conf:/etc/traefik/dynamic_conf"
+      - "./logs:/var/log/traefik"       
+    env_file:
+      - .env  
+    command:
+      - "--entrypoints.web.address=:${HTTP_PORT}"
+      - "--entrypoints.websecure.address=:${HTTPS_PORT}"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
+      - "--certificatesresolvers.myresolver.acme.caServer=${ACME_SERVER}"
+      - "--certificatesresolvers.myresolver.acme.httpChallenge.entryPoint=web"
+      - "--log.level=${LOG_LEVEL}"
+      - "--log.format=${LOG_FORMAT}"
+      - "--accesslog.format=${ACCESSLOG_FORMAT}"
+      - "--api.dashboard=${TRAEFIK_DASHBOARD}"
+      - "--api.insecure=${TRAEFIK_INSECURE}"
+      - "--providers.docker.endpoint=${DOCKER_ENDPOINT}"
+      - "--providers.docker.exposedbydefault=${DOCKER_EXPOSED_BY_DEFAULT}"
+      - "--providers.docker.network=${DOCKER_NETWORK}"
+      - "--providers.file.directory=/etc/traefik/dynamic_conf"
+      - "--providers.file.watch=${WATCH_DYNAMIC_CONF}"
+    labels:
+      - "traefik.enable=true"
+      # Allow ACME HTTP Challenge
+      - "traefik.http.routers.acme-http-solver.rule=PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.acme-http-solver.entrypoints=web"
+      - "traefik.http.routers.acme-http-solver.priority=100"
+      # Traefik Dashboard protection
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DASHBOARD_HOST}`)"
+      - "traefik.http.routers.traefik.entrypoints=${DASHBOARD_ENTRYPOINT}"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=${DASHBOARD_AUTH_MIDDLEWARE},${DASHBOARD_SECURITY_MIDDLEWARE}"
+      - "traefik.http.middlewares.${DASHBOARD_AUTH_MIDDLEWARE}.basicauth.users=${TRAEFIK_DASHBOARD_USERS}"
+    networks:
+      - ${DOCKER_NETWORK}
+
+networks:
+  traefik_network:
+    name: traefik_network
+    external: true

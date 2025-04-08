@@ -232,7 +232,7 @@ make status ENV=production
 Cuando se despliega en staging los certificados generados por Let's Encrypt son temporales y los navegadores pueden mostrar advertencias de seguridad. Para poder testar localmente el entorno de staging sin advertencias,  tienes que copiar los certificados generados a tu máquina local y añadirlos a tu almacén de certificados de confianza.
 
 ```bash
-make copy-certs ENV=staging
+make copy-certificates ENV=staging
 ```
 
 Por defecto ningún navegador acepta certificados autofirmados pero puedes añadirlos a tu almacén de certificados de confianza. En sistemas basados en Unix, como Ubuntu, puedes hacer lo siguiente:

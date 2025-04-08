@@ -1,0 +1,103 @@
+# ansible/playbooks/deploy.yml
+---
+- name: Deploy application
+  hosts: "{{ env }}"
+  become: false
+  vars:
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
+    traefik_path: "/opt/traefik"
+    compose_path: "{{ deploy_path }}/docker-compose"
+    infra_base: "{{ playbook_dir }}/../../core/infrastructure"
+  
+  tasks:
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+    
+    - name: Backup existing config (docker-compose and traefik)
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ backup_dir }}/"
+        remote_src: yes
+      loop:
+        - { src: "{{ deploy_path }}/docker-compose" }
+        - { src: "/opt/traefik" }
+      ignore_errors: true
+
+    - name: Copy docker-compose files
+      copy:
+        src: "{{ infra_base }}/docker-compose/"
+        dest: "{{ compose_path }}/"
+        mode: '0644'
+        
+    - name: Stop and remove existing applications
+      docker_compose:
+        project_src: "{{ compose_path }}/"
+        files:
+          - "docker-compose.{{ env }}.yml"
+        state: absent
+      ignore_errors: true
+
+    - name: Stop and remove Traefik
+      docker_compose:
+        project_src: "{{ traefik_path }}/"
+        files:
+          - "docker-compose.traefik.yml"
+        state: absent
+      ignore_errors: true
+
+    - name: Copy Traefik configuration files
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        mode: '0644'
+      loop:
+        - { src: "{{ infra_base }}/traefik/dynamic_conf/", dest: "{{ traefik_path }}/dynamic_conf/" }
+        - { src: "{{ infra_base }}/traefik/traefik.yml", dest: "{{ traefik_path }}/traefik.yml" }
+        - { src: "{{ infra_base }}/traefik/docker-compose.traefik.yml", dest: "{{ traefik_path }}/docker-compose.traefik.yml" }
+     
+    - name: Ensure acme.json exists with correct permissions
+      file:
+        path: "{{ traefik_path }}/acme.json"
+        state: touch
+        mode: '0600'
+
+    - name: Copy .env file to Traefik
+      copy:
+        src: "{{ compose_path }}/.env"
+        dest: "{{ traefik_path }}/.env"
+        remote_src: yes
+        mode: '0644'
+
+    - name: Deploy Traefik
+      docker_compose:
+        project_src: "{{ traefik_path }}/"
+        files:
+          - "docker-compose.traefik.yml"
+      environment:
+        DOMAIN: "{{ domain }}"
+        TRAEFIK_USERS: "{{ traefik_users }}"
+
+    - name: Deploy application containers
+      docker_compose:
+        project_src: "{{ compose_path }}/"
+        files:
+          - "docker-compose.{{ env }}.yml"
+      environment:
+        DOMAIN: "{{ domain }}"
+
+    - name: Wait for services to be ready
+      pause:
+        seconds: 10
+
+    - name: Check container status
+      shell: docker ps | grep jekyll-{{ env }}
+      register: container_status
+      failed_when: container_status.rc != 0
+
+    - name: Deployment finished successfully
+      debug:
+        msg: "Deployment to {{ env }} successful!"

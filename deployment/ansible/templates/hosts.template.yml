@@ -1,0 +1,16 @@
+# ansible/inventory/hosts.yml
+---
+all:
+  children:
+    staging:
+      hosts:
+        {{STAGING_HOST_NAME}}:
+          ansible_host: {{STAGING_HOST_IP}}
+          ansible_user: {{STAGING_HOST_USER}}
+          ansible_port: {{STAGING_HOST_PORT}}
+    production:
+      hosts:
+        {{PRODUCTION_HOST_NAME}}:
+          ansible_host: {{PRODUCTION_HOST_IP}}
+          ansible_user: {{PRODUCTION_HOST_USER}}
+          ansible_port: {{PRODUCTION_HOST_PORT}}
