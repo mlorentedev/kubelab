@@ -1,8 +1,0 @@
-# ansible/inventory/group_vars/staging.yml
----
-deploy_path: /opt/staging.mlorente.dev
-domain: staging.mlorente.dev
-traefik_insecure: true
-acme_email: info@mlorente.dev
-acme_server: https://acme-staging-v02.api.letsencrypt.org/directory
-traefik_users: "admin:$apr1$8FKrd3Ks$nB1Fvnk7OLRdhYzQIUS6u/"

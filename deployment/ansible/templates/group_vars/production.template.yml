@@ -1,0 +1,9 @@
+# ansible/inventory/group_vars/production.yml
+---
+deploy_path: {{DEPLOY_PATH_PRODUCTION}}
+domain: {{DOMAIN_PRODUCTION}}
+traefik_insecure: {{TRAEFIK_INSECURE_PRODUCTION}}
+disable_https: {{DISABLE_HTTPS_PRODUCTION}}
+acme_email: {{ACME_EMAIL}}
+acme_server: {{ACME_SERVER_PRODUCTION}}
+traefik_users: "{{TRAEFIK_USERS}}"

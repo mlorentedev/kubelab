@@ -1,5 +1,0 @@
-# ansible/inventory/group_vars/all.yml
----
-docker_network: traefik_network
-traefik_dashboard: true
-artifact_name: jekyll-site

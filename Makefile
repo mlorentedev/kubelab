@@ -4,16 +4,15 @@ SHELL := /bin/zsh
 
 # Variables - Main ssh configuration is in ~/.ssh/config
 SSH_KEY = ~/.ssh/id_ed25519
-ANSIBLE_PATH = ./ansible
+DEPLOYMENT_PATH = ./deployment
+ANSIBLE_PATH = $(DEPLOYMENT_PATH)/ansible
 PLAYBOOK_PATH = $(ANSIBLE_PATH)/playbooks
 INVENTORY_PATH = $(ANSIBLE_PATH)/inventory
-DOCKER_COMPOSE_LOCAL = ./core/infrastructure/docker-compose/docker-compose.local.yml
-DOCKER_COMPOSE_COMMON = ./core/infrastructure/docker-compose/docker-compose.traefik.yml
-DOCKER_COMPOSE_STAGING = ./core/infrastructure/docker-compose/docker-compose.staging.yml
-DOCKER_COMPOSE_PRODUCTION = ./core/infrastructure/docker-compose/docker-compose.production.yml
+DOCKER_COMPOSE_PATH = $(DEPLOYMENT_PATH)/docker
+DOCKER_COMPOSE_LOCAL = $(DOCKER_COMPOSE_PATH )/docker-compose.local.yml
 
 # Include utils.sh
-UTILS_PATH = ./core/infrastructure/scripts/utils.sh
+UTILS_PATH = ./shared/scripts/utils.sh
 
 # Define log functions for use in Makefile
 define log_info
@@ -78,14 +77,14 @@ check:
 # Install development dependencies
 install-deps:
 	$(call log_info,Installing development dependencies...)
-	@if [ -f "./frontend/package.json" ]; then \
+	@if [ -f "./services/frontend/package.json" ]; then \
 		which npm > /dev/null || ($(call log_error,npm is not installed.) && exit 1); \
-		cd ./frontend && npm install; \
+		cd ./services/frontend && npm install; \
 	fi
-	@if [ -f "./frontend/Gemfile" ]; then \
+	@if [ -f "./services/frontend/Gemfile" ]; then \
 		which ruby > /dev/null || ($(call log_error,Ruby is not installed.) && exit 1); \
 		$(RUBY_HOME)/bin/gem install bundler; \
-		cd ./frontend && $(RUBY_HOME)/bin/gem exec bundler install || \
+		cd ./services/frontend && $(RUBY_HOME)/bin/gem exec bundler install || \
 			($(call log_error,Error installing Ruby dependencies.) && exit 1); \
 	fi
 	$(call log_success,Dependencies installed.)
@@ -110,9 +109,9 @@ dev: check generate-config
 		$(call log_error,.env.local file not found. Create one based on .env.example); \
 		exit 1; \
 	fi
-	@cp .env.local core/infrastructure/docker-compose/.env
-	@chmod +x ./core/infrastructure/scripts/*.sh
-	@./core/infrastructure/scripts/generate-traefik-config.sh
+	@cp .env.local deploymeny/docker/.env
+	@chmod +x ./shared/scripts/*.sh
+	@./shared/scripts/generate-traefik-config.sh
 	@docker compose -f $(DOCKER_COMPOSE_LOCAL) up -d --build
 	$(call log_success,Development environment started at http://0.0.0.0:4000)
 
@@ -159,17 +158,20 @@ clean:
 
 # Generate environment-specific configuration files
 generate-config:
-	$(call log_info,Generating Traefik configuration...)
-	@chmod +x ./core/infrastructure/scripts/generate-traefik-config.sh
-	@cp .env core/infrastructure/docker-compose/.env
-	@./core/infrastructure/scripts/generate-traefik-config.sh
-	$(call log_success,Traefik configuration generated.)
+	$(call log_info,Generating Traefik and Ansible configuration files...)
+	@chmod +x ./shared/scripts/generate-traefik-config.sh
+	@chmod +x ./shared/scripts/generate-ansible-config.sh
+	@cp .env deployment/docker/.env
+	@cp .env deployment/ansible/.env
+	@./shared/scripts/generate-traefik-config.sh
+	@./shared/scripts/generate-ansible-config.sh
+	$(call log_success,Configuration files generated successfully.)
 
 # Generate authentication credentials for Traefik
 generate-auth:
 	$(call log_info,Generating authentication credentials for Traefik...)
-	@chmod +x ./core/infrastructure/scripts/generate-traefik-credentials.sh
-	@./core/infrastructure/scripts/generate-traefik-credentials.sh
+	@chmod +x ./shared/scripts/generate-traefik-credentials.sh
+	@./shared/scripts/generate-traefik-credentials.sh
 	$(call log_success,Credentials successfully generated.)
 
 # Copy certificates to the appropriate directory

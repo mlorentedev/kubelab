@@ -1,0 +1,5 @@
+# ansible/inventory/group_vars/all.yml
+---
+docker_network: {{DOCKER_NETWORK}}
+traefik_dashboard: {{TRAEFIK_DASHBOARD}}
+artifact_name: {{ARTIFACT_NAME}}
