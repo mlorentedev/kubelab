@@ -86,13 +86,13 @@ jobs:
       - name: Set environment variables
         run: |
           if [[ "${{ needs.prepare.outputs.environment }}" == "production" ]]; then
-            echo "SSH_HOST=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_ENV
+            echo "SSH_HOST=${{ secrets.PRODUCTION_DOMAIN }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.PRODUCTION_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente.dev" >> $GITHUB_ENV
             echo "COMPOSE_FILE=docker-compose.production.yml" >> $GITHUB_ENV
             echo "DOMAIN=mlorente.dev" >> $GITHUB_ENV
           else
-            echo "SSH_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
+            echo "SSH_HOST=${{ secrets.STAGING_DOMAIN }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.STAGING_USERNAME }}" >> $GITHUB_ENV
             echo "DEPLOY_PATH=/opt/mlorente-staging" >> $GITHUB_ENV
             echo "COMPOSE_FILE=docker-compose.staging.yml" >> $GITHUB_ENV

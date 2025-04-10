@@ -10,7 +10,9 @@ tls:
         - {{TLS_CIPHER_SUITE_5}}
         - {{TLS_CIPHER_SUITE_6}}
   domains:
-  - main: "mlorente.dev"
+  - main: "{{DOMAIN}}"
     sans:
-      - "*.mlorente.dev"
-      - "traefik.mlorente.dev"
+      - "*.{{DOMAIN}}"
+      - "traefik.{{DOMAIN}}"
+      - "{{STAGING_DOMAIN}}"
+      - "{{PRODUCTION_DOMAIN}}"

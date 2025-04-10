@@ -1,7 +1,7 @@
 http:
   routers:
     production:
-      rule: "Host(`{{PRODUCTION_HOST}}`)"
+      rule: "Host(`{{PRODUCTION_DOMAIN}}`)"
       entryPoints:
         - {{PRODUCTION_ENTRYPOINT}}
       service: {{PRODUCTION_SERVICE}}

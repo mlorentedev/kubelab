@@ -3,3 +3,8 @@
 docker_network: {{DOCKER_NETWORK}}
 traefik_dashboard: {{TRAEFIK_DASHBOARD}}
 artifact_name: {{ARTIFACT_NAME}}
+traefik_insecure: {{TRAEFIK_INSECURE}}
+disable_https: {{DISABLE_HTTPS}}
+acme_email: {{ACME_EMAIL}}
+acme_server: {{ACME_SERVER}}
+traefik_users: {{TRAEFIK_DASHBOARD_USERS}}
