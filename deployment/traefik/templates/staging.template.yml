@@ -1,7 +1,7 @@
 http:
   routers:
     staging:
-      rule: "Host(`{{STAGING_HOST}}`)"
+      rule: "Host(`{{STAGING_DOMAIN}}`)"
       entryPoints:
         - {{STAGING_ENTRYPOINT}}
       service: {{STAGING_SERVICE}}
