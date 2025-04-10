@@ -1,5 +1,5 @@
 #!/bin/bash
-# generate-ansible-config.sh
+# ansible-config-with-traefik-auth.sh
 
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,15 +19,46 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
-# Create directories if they don't exist
-mkdir -p "$INVENTORY_DIR"
-mkdir -p "$GROUP_VARS_DIR"
+# Function to generate basic auth credentials
+generate_basic_auth() {
+  local username=$1
+  local password=$2
+  
+  # Generate password hash
+  if command -v htpasswd > /dev/null; then
+    local hashed_password=$(htpasswd -nb "$username" "$password")
+    echo "$hashed_password"
+  else
+    # Fallback to using openssl if htpasswd is not available
+    local hashed_password=$(openssl passwd -apr1 "$password")
+    echo "${username}:${hashed_password}"
+  fi
+}
 
-# Ensure templates directory exists
-if [ ! -d "$TEMPLATES_DIR" ]; then
-    log_error "Error: Templates directory not found: $TEMPLATES_DIR"
-    exit 1
-fi
+# Function to update environment files with new credentials
+update_env_files() {
+  local credentials=$1
+  
+  for env_file in "$PROJECT_ROOT/.env" "$PROJECT_ROOT/.env.local"; do
+    if [ -f "$env_file" ]; then
+      # Check if TRAEFIK_DASHBOARD_USERS line exists
+      if grep -q "TRAEFIK_DASHBOARD_USERS=" "$env_file"; then
+        # Replace existing line in-place
+        sed -i "s|TRAEFIK_DASHBOARD_USERS=.*|TRAEFIK_DASHBOARD_USERS=$credentials|" "$env_file"
+        log_success "Updated credentials in $env_file"
+      else
+        # Add the new credentials if line doesn't exist
+        echo "TRAEFIK_DASHBOARD_USERS=$credentials" >> "$env_file"
+        log_success "Added credentials to $env_file"
+      fi
+    else
+      log_warning "File $env_file doesn't exist, skipping."
+    fi
+  done
+
+  # Update the current environment variable
+  export TRAEFIK_DASHBOARD_USERS="$credentials"
+}
 
 # Function to safely replace placeholders
 replace_placeholders() {
@@ -43,32 +74,77 @@ replace_placeholders() {
     # Escape slashes in the email address
     escaped_email="${ACME_EMAIL//\//\\/}"
     escaped_email="${escaped_email//@/\\@}"
-    
+    escaped_users="${TRAEFIK_DASHBOARD_USERS//$/\\/}"
+
     # Replace each placeholder with its value
-    perl -p -e "s#{{DOMAIN}}#${DOMAIN//\//\\/}#g" -i "$tmpfile"
-    perl -p -e "s#{{ARTIFACT_NAME}}#${ARTIFACT_NAME}#g" -i "$tmpfile"
-    perl -p -e "s#{{ENVIRONMENT}}#${ENVIRONMENT}#g" -i "$tmpfile"
     perl -p -e "s#{{DOCKER_NETWORK}}#${DOCKER_NETWORK}#g" -i "$tmpfile"
     perl -p -e "s#{{TRAEFIK_DASHBOARD}}#${TRAEFIK_DASHBOARD}#g" -i "$tmpfile"
+    perl -p -e "s#{{ARTIFACT_NAME}}#${ARTIFACT_NAME}#g" -i "$tmpfile"
     perl -p -e "s#{{TRAEFIK_INSECURE}}#${TRAEFIK_INSECURE}#g" -i "$tmpfile"
     perl -p -e "s#{{DISABLE_HTTPS}}#${DISABLE_HTTPS}#g" -i "$tmpfile"
     perl -p -e "s#{{ACME_EMAIL}}#${escaped_email}#g" -i "$tmpfile"
     perl -p -e "s#{{ACME_SERVER}}#${ACME_SERVER//\//\\/}#g" -i "$tmpfile"
-    perl -p -e "s#{{TRAEFIK_DASHBOARD_USERS}}#${TRAEFIK_DASHBOARD_USERS}#g" -i "$tmpfile"
+    perl -p -e "s#{{TRAEFIK_DASHBOARD_USERS}}#$escaped_users#g" -i "$tmpfile"
+    perl -p -e "s#{{STAGING_DOMAIN}}#${STAGING_DOMAIN}#g" -i "$tmpfile"
     perl -p -e "s#{{STAGING_HOST_NAME}}#${STAGING_HOST_NAME}#g" -i "$tmpfile"
     perl -p -e "s#{{STAGING_HOST_IP}}#${STAGING_HOST_IP}#g" -i "$tmpfile"
     perl -p -e "s#{{STAGING_HOST_USER}}#${STAGING_HOST_USER}#g" -i "$tmpfile"
     perl -p -e "s#{{STAGING_HOST_PORT}}#${STAGING_HOST_PORT}#g" -i "$tmpfile"
+    perl -p -e "s#{{STAGING_DEPLOY_PATH}}#${STAGING_DEPLOY_PATH//\//\\/}#g" -i "$tmpfile"
+    perl -p -e "s#{{PRODUCTION_DOMAIN}}#${PRODUCTION_DOMAIN}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_HOST_NAME}}#${PRODUCTION_HOST_NAME}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_HOST_IP}}#${PRODUCTION_HOST_IP}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_HOST_USER}}#${PRODUCTION_HOST_USER}#g" -i "$tmpfile"
     perl -p -e "s#{{PRODUCTION_HOST_PORT}}#${PRODUCTION_HOST_PORT}#g" -i "$tmpfile"
-    perl -p -e "s#{{DEPLOY_PATH_PRODUCTION}}#${DEPLOY_PATH_PRODUCTION//\//\\/}#g" -i "$tmpfile"
-    perl -p -e "s#{{DEPLOY_PATH_STAGING}}#${DEPLOY_PATH_STAGING//\//\\/}#g" -i "$tmpfile"
+    perl -p -e "s#{{PRODUCTION_DEPLOY_PATH}}#${PRODUCTION_DEPLOY_PATH//\//\\/}#g" -i "$tmpfile"
 
     # Move the processed file to the output location
     mv "$tmpfile" "$output"
 }
+
+# Create directories if they don't exist
+mkdir -p "$INVENTORY_DIR"
+mkdir -p "$GROUP_VARS_DIR"
+
+# Ensure templates directory exists
+if [ ! -d "$TEMPLATES_DIR" ]; then
+    log_error "Error: Templates directory not found: $TEMPLATES_DIR"
+    exit 1
+fi
+
+# Generate Traefik dashboard credentials
+log_info "Generating Traefik dashboard credentials..."
+
+# Request username
+read -p "Enter username for Traefik dashboard (default: admin): " username
+username=${username:-admin}
+
+# Request password with confirmation
+read -s -p "Enter password: " password
+echo
+if [ -z "$password" ]; then
+  log_error "Password cannot be empty"
+  exit 1
+fi
+
+# Confirm password
+read -s -p "Confirm password: " password_confirm
+echo
+if [ "$password" != "$password_confirm" ]; then
+  log_error "Passwords do not match"
+  exit 1
+fi
+
+# Generate the credentials
+credentials=$(generate_basic_auth "$username" "$password")
+
+# Update .env files
+update_env_files "$credentials"
+    
+log_success "Traefik dashboard credentials generated successfully."
+log_info "Username: $username"
+log_info "Password: ********"
+log_info "Please save these credentials securely."
 
 # Process hosts.yml file
 log_info "Generating hosts.yml configuration..."

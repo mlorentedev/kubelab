@@ -1,4 +1,3 @@
-# ansible/playbooks/deploy.yml
 ---
 - name: Deploy application
   hosts: "{{ env }}"
@@ -8,31 +7,162 @@
     backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
     traefik_path: "/opt/traefik"
     compose_path: "{{ deploy_path }}/docker-compose"
-    infra_base: "{{ playbook_dir }}/../../core/infrastructure"
+    project_root: "{{ playbook_dir | dirname | dirname }}"
+    docker_files: "{{ project_root }}/docker"
+    traefik_files: "{{ project_root }}/traefik"
   
   tasks:
+    - name: Debug project paths
+      debug:
+        msg: 
+          - "Project Root: {{ project_root }}"
+          - "Docker Files: {{ docker_files }}"
+          - "Traefik Files: {{ traefik_files }}"
+          - "Playbook Dir: {{ playbook_dir }}"
+      run_once: true
+    
+    - name: Find traefik.yml in local directories
+      find:
+        paths: "{{ project_root }}"
+        patterns: "traefik.yml"
+        recurse: yes
+      register: traefik_yml_find
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Find docker-compose.traefik.yml in local directories
+      find:
+        paths: "{{ project_root }}"
+        patterns: "docker-compose.traefik.yml"
+        recurse: yes
+      register: compose_traefik_find
+      delegate_to: localhost
+      run_once: true
+      
+    - name: Debug found files
+      debug:
+        msg:
+          - "traefik.yml locations: {{ traefik_yml_find.files | map(attribute='path') | list }}"
+          - "docker-compose.traefik.yml locations: {{ compose_traefik_find.files | map(attribute='path') | list }}"
+      run_once: true
+    
+    - name: Set file paths based on found files
+      set_fact:
+        traefik_yml_path: "{{ traefik_yml_find.files[0].path if traefik_yml_find.files else '' }}"
+        docker_compose_traefik_path: "{{ compose_traefik_find.files[0].path if compose_traefik_find.files else '' }}"
+      run_once: true
+    
+    - name: Display selected file paths
+      debug:
+        msg:
+          - "Using traefik.yml: {{ traefik_yml_path | default('Not found') }}"
+          - "Using docker-compose.traefik.yml: {{ docker_compose_traefik_path | default('Not found') }}"
+      run_once: true
+
     - name: Create backup directory
       file:
         path: "{{ backup_dir }}"
         state: directory
         mode: '0755'
     
-    - name: Backup existing config (docker-compose and traefik)
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ backup_dir }}/"
-        remote_src: yes
+    - name: Check if directories exist for backup
+      stat:
+        path: "{{ item }}"
+      register: dir_stats
       loop:
-        - { src: "{{ deploy_path }}/docker-compose" }
-        - { src: "/opt/traefik" }
-      ignore_errors: true
+        - "{{ compose_path }}"
+        - "{{ traefik_path }}"
+    
+    - name: Display backup status for directories
+      debug:
+        msg: "Directory {{ item.item }} {{ 'exists' if item.stat.exists else 'does not exist, skipping backup' }}"
+      loop: "{{ dir_stats.results }}"
+
+    - name: Backup existing docker-compose directory
+      copy:
+        src: "{{ compose_path }}/"
+        dest: "{{ backup_dir }}/docker-compose/"
+        remote_src: yes
+      when: dir_stats.results[0].stat.exists
+    
+    - name: Backup existing traefik directory
+      copy:
+        src: "{{ traefik_path }}/"
+        dest: "{{ backup_dir }}/traefik/"
+        remote_src: yes
+      when: dir_stats.results[1].stat.exists
+
+    - name: Create docker-compose directory if it doesn't exist
+      file:
+        path: "{{ compose_path }}"
+        state: directory
+        mode: '0755'
+      when: not dir_stats.results[0].stat.exists
+
+    - name: Create traefik directory if it doesn't exist
+      file:
+        path: "{{ traefik_path }}"
+        state: directory
+        mode: '0755'
+      when: not dir_stats.results[1].stat.exists
 
     - name: Copy docker-compose files
       copy:
-        src: "{{ infra_base }}/docker-compose/"
+        src: "{{ docker_files }}/"
         dest: "{{ compose_path }}/"
         mode: '0644'
-        
+      when: docker_files_stat.stat.exists is defined and docker_files_stat.stat.exists
+      
+    - name: Ensure traefik directories exist
+      file:
+        path: "{{ traefik_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "dynamic_conf"
+        - "logs"
+
+    - name: Copy dynamic_conf directory
+      copy:
+        src: "{{ traefik_files }}/dynamic_conf/"
+        dest: "{{ traefik_path }}/dynamic_conf/"
+        mode: '0644'
+      when: traefik_files_stat.stat.exists is defined and traefik_files_stat.stat.exists
+
+    - name: Copy traefik.yml if found
+      copy:
+        src: "{{ traefik_yml_path }}"
+        dest: "{{ traefik_path }}/traefik.yml"
+        mode: '0644'
+      when: traefik_yml_path is defined and traefik_yml_path != ''
+    
+    - name: Copy docker-compose.traefik.yml if found
+      copy:
+        src: "{{ docker_compose_traefik_path }}"
+        dest: "{{ traefik_path }}/docker-compose.traefik.yml"
+        mode: '0644'
+      when: docker_compose_traefik_path is defined and docker_compose_traefik_path != ''
+    
+    - name: Fail if required files not found
+      fail:
+        msg: "Required files not found. Please ensure traefik.yml and docker-compose.traefik.yml exist somewhere in your project."
+      when: (traefik_yml_path is not defined or traefik_yml_path == '') or 
+            (docker_compose_traefik_path is not defined or docker_compose_traefik_path == '')
+
+    - name: Ensure acme.json exists with correct permissions
+      file:
+        path: "{{ traefik_path }}/acme.json"
+        state: touch
+        mode: '0600'
+
+    - name: Copy .env file to Traefik
+      copy:
+        src: "{{ compose_path }}/.env"
+        dest: "{{ traefik_path }}/.env"
+        remote_src: yes
+        mode: '0644'
+      ignore_errors: true
+
     - name: Stop and remove existing applications
       docker_compose:
         project_src: "{{ compose_path }}/"
@@ -48,29 +178,6 @@
           - "docker-compose.traefik.yml"
         state: absent
       ignore_errors: true
-
-    - name: Copy Traefik configuration files
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        mode: '0644'
-      loop:
-        - { src: "{{ infra_base }}/traefik/dynamic_conf/", dest: "{{ traefik_path }}/dynamic_conf/" }
-        - { src: "{{ infra_base }}/traefik/traefik.yml", dest: "{{ traefik_path }}/traefik.yml" }
-        - { src: "{{ infra_base }}/traefik/docker-compose.traefik.yml", dest: "{{ traefik_path }}/docker-compose.traefik.yml" }
-     
-    - name: Ensure acme.json exists with correct permissions
-      file:
-        path: "{{ traefik_path }}/acme.json"
-        state: touch
-        mode: '0600'
-
-    - name: Copy .env file to Traefik
-      copy:
-        src: "{{ compose_path }}/.env"
-        dest: "{{ traefik_path }}/.env"
-        remote_src: yes
-        mode: '0644'
 
     - name: Deploy Traefik
       docker_compose:
