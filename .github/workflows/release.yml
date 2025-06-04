@@ -1,0 +1,93 @@
+name: Release ➜ Retag ➜ Deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  DOCKER_REG: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.release.outputs.upload_url }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+        id: release
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+      - name: Rename release title
+        run: gh release edit ${{ github.ref_name }} --title "🚀 Release ${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  package-infra:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create ZIP with playbooks & compose
+        run: |
+          zip -r infra-${{ github.ref_name }}.zip ansible docker-compose
+
+      - name: Upload asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: infra-${{ github.ref_name }}.zip
+          asset_name: infra-${{ github.ref_name }}.zip
+          asset_content_type: application/zip
+
+  retag-images:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [static, frontend, backend]
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_REG }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Retag & push ${{ matrix.service }}
+        run: |
+          SRC=${DOCKER_REG}/mlorente-${{ matrix.service }}:latest
+          DST=${DOCKER_REG}/mlorente-${{ matrix.service }}:${{ github.ref_name }}
+          docker pull $SRC
+          docker tag  $SRC $DST
+          docker push $DST
+
+  deploy-prod:
+    needs: retag-images
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      tag: ${{ github.ref_name }}            # v1.2.3
+    secrets: inherit
+
+  slack:
+    needs: [create-release, retag-images, deploy-prod]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR:  ${{ needs.deploy-prod.result == 'success' && 'good' || 'danger' }}
+          SLACK_TITLE:  "🚀 Release ${{ github.ref_name }}"
+          SLACK_MESSAGE: |
+            *Release:* <${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}|${{ github.ref_name }}>
+            *Retag:*   ${{ needs.retag-images.result }}
+            *Deploy:*  ${{ needs.deploy-prod.result }}
