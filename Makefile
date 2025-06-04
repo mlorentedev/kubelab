@@ -129,21 +129,6 @@ deploy: check generate-config
 	$(call log_info,Deploying to $(ENV)...)
 	ansible-playbook $(PLAYBOOK_PATH)/deploy.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)" --private-key $(SSH_KEY) --ask-become-pass -v
 
-# Update application
-update: check
-	$(call log_info,Updating application in $(ENV)...)
-	ansible-playbook $(PLAYBOOK_PATH)/update.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)"
-
-# Rollback to previous deployment
-rollback: check
-	$(call log_info,Rolling back in $(ENV)...)
-	ansible-playbook $(PLAYBOOK_PATH)/rollback.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)"
-
-# View logs
-logs: check
-	$(call log_info,Getting logs from $(ENV)...)
-	ansible $(ENV) -i $(INVENTORY) -m shell -a "docker logs jekyll-$(ENV)" 
-
 # View service status
 status: check
 	$(call log_info,Checking status in $(ENV)...)

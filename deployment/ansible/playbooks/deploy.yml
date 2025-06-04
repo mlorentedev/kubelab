@@ -2,9 +2,16 @@
 - name: Deploy application
   hosts: "{{ env }}"
   become: false
+  pre_tasks:
+  - name: Generate a single timestamp for this run
+    set_fact:
+      timestamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    run_once: true
+    delegate_facts: true
+  - name: Build backup_dir once the timestamp exists
+    set_fact:
+      backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
   vars:
-    timestamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
-    backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
     traefik_path: "/opt/traefik"
     compose_path: "{{ deploy_path }}/docker-compose"
     project_root: "{{ playbook_dir | dirname | dirname }}"
@@ -106,10 +113,29 @@
         force: yes
         mode: '0644'
 
-    - name: Ensure acme.json exists with correct permissions
+    - name: Stat acme.json
+      stat:
+        path: "{{ traefik_path }}/acme.json"
+      register: acme_stat
+      
+    - name: Backup current acme.json (if present)
+      copy:
+        src: "{{ traefik_path }}/acme.json"
+        dest: "{{ backup_dir }}/acme.json.{{ timestamp }}"
+        remote_src: yes
+      when: acme_stat.stat.exists
+      ignore_errors: true
+
+    - name: Remove old acme.json so Traefik will re-generate it
       file:
         path: "{{ traefik_path }}/acme.json"
-        state: touch
+        state: absent
+      when: acme_stat.stat.exists
+
+    - name: Create empty acme.json with secure perms
+      copy:
+        content: ''
+        dest: "{{ traefik_path }}/acme.json"
         mode: '0600'
 
     - name: Copy .env file to remote folders
