@@ -3,7 +3,7 @@
 
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TRAEFIK_DIR="$PROJECT_ROOT/deployment/traefik"
 TEMPLATES_DIR="$TRAEFIK_DIR/templates"
 DYNAMIC_CONF_DIR="$TRAEFIK_DIR/dynamic_conf"

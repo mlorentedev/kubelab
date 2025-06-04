@@ -3,7 +3,7 @@
 
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANSIBLE_DIR="$PROJECT_ROOT/deployment/ansible"
 TEMPLATES_DIR="$ANSIBLE_DIR/templates"
 INVENTORY_DIR="$ANSIBLE_DIR/inventory"
