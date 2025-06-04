@@ -1,0 +1,13 @@
+{% if site.gtm %}
+  <script>
+    window.onload = function() {
+      var gtm = document.createElement('script');
+      gtm.src = 'https://www.googletagmanager.com/gtm.js?id={{ site.gtm }}';
+      gtm.async = true;
+      document.head.appendChild(gtm);
+    };
+  </script>
+  <noscript>
+    <iframe src="https://www.googletagmanager.com/ns.html?id={{ site.gtm }}" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+  </noscript>
+{% endif %}
