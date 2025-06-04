@@ -1,0 +1,8 @@
+http:
+  routers:
+    acme-http-solver:
+      rule: "PathPrefix(`/ .well-known/acme-challenge/`)"
+      entryPoints:
+        - web
+      service: acme-http@internal
+      priority: 100

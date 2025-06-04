@@ -9,10 +9,10 @@ ANSIBLE_PATH = $(DEPLOYMENT_PATH)/ansible
 PLAYBOOK_PATH = $(ANSIBLE_PATH)/playbooks
 INVENTORY_PATH = $(ANSIBLE_PATH)/inventory
 DOCKER_COMPOSE_PATH = $(DEPLOYMENT_PATH)/docker
-DOCKER_COMPOSE_LOCAL = $(DOCKER_COMPOSE_PATH )/docker-compose.local.yml
+DOCKER_COMPOSE_LOCAL = $(DOCKER_COMPOSE_PATH)/docker-compose.local.yml
 
 # Include utils.sh
-UTILS_PATH = ./shared/scripts/utils.sh
+UTILS_PATH = ./scripts/utils.sh
 
 # Define log functions for use in Makefile
 define log_info
@@ -109,9 +109,9 @@ dev: check generate-config
 		$(call log_error,.env.local file not found. Create one based on .env.example); \
 		exit 1; \
 	fi
-	@cp .env.local deploymeny/docker/.env
-	@chmod +x ./shared/scripts/*.sh
-	@./shared/scripts/generate-traefik-config.sh
+	@cp .env.local $(DOCKER_COMPOSE_PATH)/.env
+	@chmod +x ./scripts/*.sh
+	@./scripts/generate-traefik-config.sh
 	@docker compose -f $(DOCKER_COMPOSE_LOCAL) up -d --build
 	$(call log_success,Development environment started at http://0.0.0.0:4000)
 
@@ -159,19 +159,19 @@ clean:
 # Generate environment-specific configuration files
 generate-config:
 	$(call log_info,Generating Traefik and Ansible configuration files...)
-	@chmod +x ./shared/scripts/generate-traefik-config.sh
-	@chmod +x ./shared/scripts/generate-ansible-config.sh
+	@chmod +x ./scripts/generate-traefik-config.sh
+	@chmod +x ./scripts/generate-ansible-config.sh
 	@cp .env deployment/docker/.env
-	@cp .env deployment/ansible/.env
-	@./shared/scripts/generate-traefik-config.sh
-	@./shared/scripts/generate-ansible-config.sh
+	@cp .env deployment/ansible/.env		
+	@./scripts/generate-traefik-config.sh
+	@./scripts/generate-ansible-config.sh
 	$(call log_success,Configuration files generated successfully.)
 
 # Generate authentication credentials for Traefik
 generate-auth:
 	$(call log_info,Generating authentication credentials for Traefik...)
-	@chmod +x ./shared/scripts/generate-traefik-credentials.sh
-	@./shared/scripts/generate-traefik-credentials.sh
+	@chmod +x ./scripts/generate-traefik-credentials.sh
+	@./scripts/generate-traefik-credentials.sh
 	$(call log_success,Credentials successfully generated.)
 
 # Copy certificates to the appropriate directory
