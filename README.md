@@ -4,77 +4,67 @@ Web personal construida con Jekyll, contenerizada con Docker y desplegada utiliz
 
 ## Características
 
-- Sitio web estático construido con Jekyll
-- Diseño totalmente responsive
-- Contenerizado con Docker
-- Compilaciones automatizadas via GitHub Actions
-- Certificados SSL gestionados por Traefik vía Let's Encrypt
-- Categorías y etiquetas para el contenido
-- Estimación de tiempo de lectura
-- Soporte para Markdown
-- Optimizado para SEO
+- **Sitio web estático**: Construido con Jekyll para rendimiento óptimo
+- **Diseño responsive**: Adaptado para todos los dispositivos
+- **Contenerización completa**: Docker y Docker Compose para desarrollo y producción
+- **CI/CD automatizado**: GitHub Actions para builds, tests y despliegue
+- **SSL automático**: Certificados Let's Encrypt gestionados por Traefik
+- **Infraestructura como código**: Configuración automatizada con Ansible
+- **Multi-ambiente**: Soporte para local, staging y producción
+- **Seguridad integrada**: Escaneo de secretos y vulnerabilidades
+- **Monitoreo**: Dashboard de Traefik con autenticación
 
 ## Estructura del proyecto
 
-```bash
-├── .github/                       # Configuraciones de workflows de GitHub Actions
-├── ansible/                       # Configuración de Ansible para despliegues
-│   ├── inventory/                 # Inventario de hosts y variables
-│   ├── playbooks/                 # Playbooks para diferentes tareas
-│   └── templates/                 # Plantillas para configuración
-├── core/
-│   └── infrastructure/            # Archivos de infraestructura
-│       ├── docker-compose/        # Configuraciones de Docker Compose
-│       ├── scripts/               # Scripts de utilidad (legacy)
-│       └── traefik/               # Plantillas de configuración de Traefik
-├── frontend/                      # Directorio principal del sitio Jekyll
-│   ├── _config.yml                # Configuración de Jekyll
-│   ├── _data                      # Archivos de datos para Jekyll
-│   ├── _includes                  # Includes de plantillas
-│   ├── _layouts                   # Layouts de páginas
-│   ├── _posts                     # Contenido de posts del blog
-│   ├── 404.html                   # Página de error 404
-│   ├── aboutme.html               # Página "Sobre mí"
-│   ├── assets                     # Activos estáticos
-│   │   ├── css                    # Hojas de estilo
-│   │   ├── cv                     # Archivos de CV/currículum
-│   │   ├── img                    # Recursos de imágenes
-│   │   ├── js                     # Archivos JavaScript
-│   │   └── pdf                    # Documentos PDF
-│   ├── Dockerfile                 # Definición de imagen Docker
-│   ├── Gemfile                    # Dependencias de Ruby
-│   └── index.html                 # Página de inicio
-├── .env.example                   # Ejemplo de variables de entorno
-├── Makefile                       # Makefile para automatización
-├── README.md                      # Documentación del proyecto
-└── LICENSE                        # Archivo de licencia
+```text
+├── .github/workflows/          # Pipelines de CI/CD
+│   ├─ ci-static.yml             # CI del sitio estático
+|   ├─ ci-frontend.yml           # CI del frontend
+|   ├─ ci-backend.yml            # CI del backend
+|   ├─ test-build-push.yml       # Job reutilizable de CI
+|   ├─ deploy.yml                # Job reutilizable de CD
+|   ├─ cd.yml                    # Despliegue auto staging/producción
+|   └─ release.yml               # Release + retag + deploy
+├── deployment/                # Configuración de despliegue
+│   ├── ansible/                 # Playbooks y configuración
+│   │   ├── inventory/              # Inventario de hosts
+│   │   ├── playbooks/              # Playbooks de despliegue
+│   │   └── templates/              # Plantillas de configuración
+│   ├── docker/                  # Configuración Docker
+│   └── traefik/                 # Configuración de proxy
+├── services/                 # Servicios de la aplicación
+│   ├── backend/                 # Servicio backend (futuro)
+│   ├── frontend/                # Servicio frontend (futuro)
+│   └── static/                  # Sitio Jekyll estático
+├── scripts/                  # Scripts de automatización
+├── docs/                     # Documentación adicional
+├── .env.example              # Plantilla de variables de entorno
+└── Makefile                  # Comandos de automatización
 ```
 
 ## Prerrequisitos
 
-- Docker y Docker Compose
-- Git
-- Make
-- Ansible (opcional, para despliegues remotos)
-- Una cuenta de DockerHub para almacenar las imágenes de contenedor
-- Un nombre de dominio (para entornos de staging y producción)
-- Un servidor con acceso SSH (para staging y producción)
+- **Docker** y **Docker Compose** (v2.0+)
+- **Git**
+- **Make**
+- **Ansible** (opcional, para despliegues remotos)
+- **Cuenta DockerHub** para almacenar imágenes
+- **Dominio** (para staging y producción)
+- **Servidor con SSH** (para despliegues remotos)
 
-## Instalación de dependencias
+## Instalación
 
-Para instalar todas las dependencias necesarias:
+### Dependencias del sistema
 
 ```bash
+# Instalar todas las dependencias necesarias
 make install-deps
-```
 
-Para instalar Ansible y sus colecciones (necesario para despliegues remotos):
-
-```bash
+# Instalar Ansible y colecciones (para despliegues remotos)
 make install-ansible
 ```
 
-## Desarrollo local
+### Configuración del entorno en local
 
 Para ejecutar el proyecto localmente:
 
@@ -106,14 +96,13 @@ Para ejecutar el proyecto localmente:
 4. Inicia el entorno de desarrollo
 
    ```bash
+   # Iniciar entorno de desarrollo
    make dev
+
+   # El sitio estará disponible en:
+   # - Sitio web: http://localhost
+   # - Dashboard Traefik: http://localhost:8080
    ```
-
-5. Accede al sitio en <http://localhost>
-
-## Comandos disponibles
-
-El Makefile proporciona una interfaz unificada para todas las operaciones:
 
 ### Comandos de desarrollo
 
@@ -130,6 +119,8 @@ make generate-config
 # Generar credenciales de autenticación para acceso al dashboard de Traefik
 make generate-auth
 ```
+
+## Despliegue remoto
 
 ### Configuracion SSH
 
@@ -216,12 +207,6 @@ make setup ENV=staging
 # Desplegar aplicación (staging o production)
 make deploy ENV=staging
 
-# Actualizar aplicación sin reiniciar servicios
-make update ENV=staging
-
-# Rollback al despliegue anterior
-make rollback ENV=staging
-
 # Ver logs de la aplicación
 make logs ENV=staging
 
@@ -241,7 +226,7 @@ Por defecto ningún navegador acepta certificados autofirmados pero puedes añad
 google-chrome --ignore-certificate-errors --user-data-dir=/tmp/chrome-test
 ```
 
-## Despliegue
+## Configuración del servidor
 
 Antes de desplegar a staging o producción, asegúrate de tener configurados los archivos de entorno necesarios y tener acceso a tu servidor.
 
@@ -276,107 +261,6 @@ Este comando:
 - Genera la configuración de Traefik
 - Inicia los contenedores de Docker
 - Verifica que el despliegue se haya completado correctamente
-
-### Actualización de la aplicación
-
-Para actualizar la aplicación sin una reconstrucción completa:
-
-```bash
-make update ENV=staging
-```
-
-### Rollback
-
-Si necesitas volver a una versión anterior:
-
-```bash
-make rollback ENV=production
-```
-
-Este comando restaura la configuración desde el último respaldo disponible.
-
-## Monitoreo
-
-Para verificar el estado de los servicios:
-
-```bash
-make status ENV=production
-```
-
-Para ver los logs de la aplicación:
-
-```bash
-make logs ENV=staging
-```
-
-## CI/CD Pipeline
-
-El proyecto incluye un workflow de GitHub Actions que:
-
-1. Construye el sitio Jekyll
-2. Crea una imagen Docker
-3. Sube la imagen a DockerHub
-4. Crea artefactos de despliegue
-5. Genera una nueva versión
-
-El workflow se activa por:
-
-- Push a la rama `master`
-- Diariamente a medianoche `(cron: '0 0 * * *')`
-- Ejecución manual via workflow_dispatch
-
-### Versionado
-
-El proyecto sigue el Versionado Semántico a través de mensajes de commit:
-
-- **Versión Mayor** incrementa con cambios incompatibles:
-  - Mensajes conteniendo "BREAKING CHANGE:" o "!:"
-  - Ejemplo: `feat!: descripción de cambio incompatible`
-
-- **Versión Menor** incrementa con nuevas características:
-  - Mensajes comenzando con `feat:`
-  - Ejemplo: `feat: agregar nueva funcionalidad de búsqueda`
-
-- **Versión Parche** incrementa con correcciones/cambios pequeños:
-  - Mensajes comenzando con `fix:`, `docs:`, `chore:`, `style:`, etc.
-  - Ejemplo: `fix: corregir error en formulario de contacto`
-
-Ver [CONTRIBUTING.md](CONTRIBUTING.md) para más detalles sobre convenciones de mensajes de commit y versionado.
-
-## Solución de problemas
-
-Si encuentras problemas con el despliegue:
-
-1. Verifica los requisitos previos:
-
-   ```bash
-   make check
-   ```
-
-2. Revisa el estado de los contenedores:
-
-   ```bash
-   make status ENV=staging
-   ```
-
-3. Verifica los logs:
-
-   ```bash
-   make logs ENV=production
-   ```
-
-4. Limpia los recursos locales y vuelve a intentar:
-
-   ```bash
-   make clean
-   make dev
-   ```
-
-5. Si es necesario, realiza un rollback a la versión anterior:
-
-   ```bash
-   make rollback ENV=production
-   ```
 
 ## Ejemplos de uso
 
@@ -416,16 +300,45 @@ make status ENV=staging
 make logs ENV=staging
 ```
 
-### Actualización y rollback
+## CI/CD Pipeline
 
-```bash
-# Actualizar aplicación
-make update ENV=staging
+El proyecto incluye un workflow de GitHub Actions que:
 
-# Si hay problemas, hacer rollback
-make rollback ENV=staging
+| Etapa | Disparador | Pasos clave | Resultado |
+|-------|------------|-------------|-----------|
+| **CI de servicio** (`ci-static`, `ci-frontend`, `ci-backend`) | Push / PR a `master`, `develop`, `feature/*`, `hotfix/*` | *Draft‑skip* → Linter → Tests → Gitleaks → **Build** multi‑arquitectura → Push a Docker Hub (etiquetas `version`, `sha`, `branch`) → Aviso Slack | Imagen fresca en Docker Hub |
+| **CD automático** (`cd.yml`) | Push a `develop` → *staging*<br>Push a `master` → *production* | Llama a `deploy.yml` → Roles Ansible (Traefik + backups + certs + prune) → Smoke test → Aviso Slack | Contenedores actualizados en el VPS |
+| **Release** (`release.yml`) | Push de tag `vX.Y.Z` | Crea Release en GitHub con notas → Comprime infra y la adjunta → Retag/push de imágenes `vX.Y.Z` → Despliegue en *production* con esa tag → Aviso Slack | Release inmutable + producción desplegada |
+
+```text
+Commit / PR
+    │
+    ├─► CI-Static ──┐
+    ├─► CI-Frontend ├─► Tests → Buildx → Docker Hub → Slack
+    └─► CI-Backend ─┘
+                      │
+                      ├─► Push a *develop* → Deploy (staging) → Health-check → Slack
+                      └─► Push a *master*  → Deploy (production) → Health-check → Slack
+
+Tag vX.Y.Z
+    │
+    └─► GitHub Release → Zip infra
+                        │
+                        └─► Retag imágenes (vX.Y.Z) → Deploy (prod vX.Y.Z) → Health-check → Slack
 ```
 
-## Licencia
+## Documentación adicional
 
-Este proyecto está licenciado bajo la Licencia MIT - ver [LICENSE](LICENSE) para más detalles
+- [Guía de contribución](docs/CONTRIBUTING.md)
+- [Documentación de CubeLab](docs/CUBELAB.md)
+- [Workflows de GitHub](.github/workflows/)
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+
+---
+
+**Autor**: Manuel Lorente  
+**Sitio web**: [mlorente.dev](https://mlorente.dev)  
+**Email**: <info@mlorente.dev>
