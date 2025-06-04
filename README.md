@@ -214,19 +214,19 @@ make check
 make setup ENV=staging
 
 # Desplegar aplicación (staging o production)
-make deploy ENV=production
+make deploy ENV=staging
 
 # Actualizar aplicación sin reiniciar servicios
 make update ENV=staging
 
 # Rollback al despliegue anterior
-make rollback ENV=production
+make rollback ENV=staging
 
 # Ver logs de la aplicación
 make logs ENV=staging
 
 # Ver estado de los servicios
-make status ENV=production
+make status ENV=staging
 ```
 
 Cuando se despliega en staging los certificados generados por Let's Encrypt son temporales y los navegadores pueden mostrar advertencias de seguridad. Para poder testar localmente el entorno de staging sin advertencias,  tienes que copiar los certificados generados a tu máquina local y añadirlos a tu almacén de certificados de confianza.
@@ -397,23 +397,23 @@ make dev
 make clean
 ```
 
-### Despliegue a producción
+### Despliegue a un entorno de staging o producción
 
 ```bash
 # Verificar requisitos previos
 make check
 
 # Configuración inicial (solo la primera vez)
-make setup ENV=production
+make setup ENV=staging
 
 # Desplegar la aplicación
-make deploy ENV=production
+make deploy ENV=staging
 
 # Verificar estado
-make status ENV=production
+make status ENV=staging
 
 # Ver logs
-make logs ENV=production
+make logs ENV=staging
 ```
 
 ### Actualización y rollback
@@ -428,4 +428,4 @@ make rollback ENV=staging
 
 ## Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - ver [LICENSE](LICENSE) para más detalles.
+Este proyecto está licenciado bajo la Licencia MIT - ver [LICENSE](LICENSE) para más detalles

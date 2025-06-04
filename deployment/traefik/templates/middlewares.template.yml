@@ -4,10 +4,18 @@ http:
       redirectScheme:
         scheme: https
         permanent: {{HTTPS_PERMANENT_REDIRECT}}
+    auth:
+      basicAuth:
+        users:
+          - '{{TRAEFIK_DASHBOARD_USERS}}'
+    rate-limit:
+      rateLimit:
+        average: {{RATE_LIMIT_AVERAGE}}
+        burst: {{RATE_LIMIT_BURST}}
+        period: {{RATE_LIMIT_PERIOD}}
     secure-headers:
       headers:
         frameDeny: {{HEADERS_FRAME_DENY}}
-        sslRedirect: {{HEADERS_SSL_REDIRECT}}
         browserXssFilter: {{HEADERS_XSS_FILTER}}
         contentTypeNosniff: {{HEADERS_NOSNIFF}}
         stsSeconds: {{HEADERS_STS_SECONDS}}
