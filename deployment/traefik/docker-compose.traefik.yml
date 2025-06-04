@@ -32,18 +32,6 @@ services:
       - "--providers.docker.network=${DOCKER_NETWORK}"
       - "--providers.file.directory=/etc/traefik/dynamic_conf"
       - "--providers.file.watch=${WATCH_DYNAMIC_CONF}"
-    labels:
-      - "traefik.enable=true"
-      # Allow ACME HTTP Challenge
-      - "traefik.http.routers.acme-http-solver.rule=PathPrefix(`/.well-known/acme-challenge/`)"
-      - "traefik.http.routers.acme-http-solver.entrypoints=web"
-      - "traefik.http.routers.acme-http-solver.priority=100"
-      # Traefik Dashboard protection
-      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DASHBOARD_HOST}`)"
-      - "traefik.http.routers.traefik.entrypoints=${DASHBOARD_ENTRYPOINT}"
-      - "traefik.http.routers.traefik.service=api@internal"
-      - "traefik.http.routers.traefik.middlewares=${DASHBOARD_AUTH_MIDDLEWARE},${DASHBOARD_SECURITY_MIDDLEWARE}"
-      - "traefik.http.middlewares.${DASHBOARD_AUTH_MIDDLEWARE}.basicauth.users=${TRAEFIK_DASHBOARD_USERS}"
     networks:
       - ${DOCKER_NETWORK}
 

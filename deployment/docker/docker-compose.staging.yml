@@ -1,6 +1,6 @@
 services:
   jekyll-staging:
-    image: "${DOCKERHUB_USERNAME}/${ARTIFACT_NAME}:${ENVIRONMENT}-latest"
+    image: "${DOCKERHUB_USERNAME}/${ARTIFACT_NAME}:staging-latest"
     container_name: jekyll-staging
     restart: always
     expose:
@@ -8,8 +8,11 @@ services:
     env_file:
       - .env   
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.jekyll-staging.loadbalancer.server.port=4000"
+      - "traefik.enable=false" # Disable Traefik for this service by default
+      - "traefik.http.routers.jekyll-staging.rule=Host(`${STAGING_DOMAIN}`)"
+      - "traefik.http.routers.jekyll-staging.entrypoints=websecure"
+      - "traefik.http.routers.jekyll-staging.tls.certresolver=myresolver"
+      - "traefik.http.services.jekyll-staging.loadbalancer.server.port=4000"   
     networks:
       - traefik_network
 
