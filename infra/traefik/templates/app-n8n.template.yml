@@ -1,0 +1,18 @@
+http:
+  routers:
+    {{APP_N8N_NAME}}:
+      rule: "Host(`{{APP_N8N_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: {{APP_N8N_NAME}}
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+      middlewares:
+        - secure-headers@file
+        - rate-limit@file
+
+  services:
+    {{APP_N8N_NAME}}:
+      loadBalancer:
+        servers:
+          - url: "http://{{APP_N8N_NAME}}:{{APP_N8N_PORT}}"

@@ -1,0 +1,18 @@
+http:
+  routers:
+    {{APP_API_NAME}}:
+      rule: "Host(`{{APP_API_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: {{APP_API_NAME}}
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+      middlewares:
+        - secure-headers@file
+        - rate-limit@file
+
+  services:
+    {{APP_API_NAME}}:
+      loadBalancer:
+        servers:
+          - url: "http://{{APP_API_NAME}}:{{APP_API_PORT}}"

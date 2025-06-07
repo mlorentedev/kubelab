@@ -1,0 +1,54 @@
+---
+import { getCollection } from 'astro:content';
+import { env } from '../data/env';
+import { ROUTES } from '../constants/routes';
+
+const projects = await getCollection('projects');
+const resources = await getCollection('resources');
+
+const allItems = [...projects, ...resources]
+  .filter((item) => new Date(item.data.pubDate) <= new Date())
+  .sort((a, b) => new Date(b.data.pubDate).valueOf() - new Date(a.data.pubDate).valueOf());
+
+const siteTitle = env.SITE.TITLE;
+const siteDescription = env.SITE.DESCRIPTION;
+const siteUrl = env.SITE.URL;
+const siteMail = env.SITE.MAIL;
+const siteAuthor = env.SITE.AUTHOR;
+const currentDate = new Date().toUTCString();
+
+let itemsXml = '';
+allItems.forEach((item) => {
+  const itemUrl = `${siteUrl}${item.collection === 'projects' ? `${ROUTES.PROJECTS}/${item.id}/` : `${ROUTES.RESOURCES}/${item.slug}/`}`;
+  const pubDate = new Date(item.data.pubDate).toUTCString();
+
+  itemsXml += `
+    <item>
+      <title>${item.data.title}</title>
+      <description>${item.data.description}</description>
+      <pubDate>${pubDate}</pubDate>
+      <link>${itemUrl}</link>
+      <guid isPermaLink="true">${itemUrl}</guid>
+    </item>
+  `;
+});
+
+Astro.response.headers.set('Content-Type', 'application/xml');
+
+const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${siteTitle}</title>
+    <description>${siteDescription}</description>
+    <link>${siteUrl}/</link>
+    <language>es-es</language>
+    <lastBuildDate>${currentDate}</lastBuildDate>
+    <managingEditor>${siteMail} (${siteAuthor})</managingEditor>
+    <webMaster>${siteMail} (${siteAuthor})</webMaster>
+    <atom:link href="${siteUrl}/rss.xml" rel="self" type="application/rss+xml" />
+    ${itemsXml}
+  </channel>
+</rss>`;
+---
+
+{xml}

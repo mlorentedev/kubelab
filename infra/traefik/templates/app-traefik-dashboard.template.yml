@@ -1,0 +1,13 @@
+http:
+  routers:
+    traefik-dashboard:
+      rule: "Host(`{{TRAEFIK_DASHBOARD_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: api@internal
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+      middlewares:
+        - auth@file
+        - secure-headers@file
+        - rate-limit@file

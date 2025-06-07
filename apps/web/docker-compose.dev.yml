@@ -1,0 +1,23 @@
+services:
+  web:
+    image: "${REGISTRY-docker.io/mlorentedev}/web:${TAG:-latest}"
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    container_name: web
+    restart: always
+    expose:
+      - ${PORT}  
+    env_file:
+      - ./.env
+    volumes:
+      - ./astro-site:/app
+      - .env:/app/.env
+    user: "0:0"      
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"] 
+    networks:
+      - proxy
+      
+networks:
+  proxy:
+    external: true
