@@ -1,0 +1,56 @@
+---
+import Avatar from '../ui/Avatar.astro';
+import HeaderLink from './HeaderLink.astro';
+import { env } from '../../data/env';
+import { featureFlags } from '../../data/feature-flags';
+import { ROUTES } from '../../constants/routes';
+
+const siteTitle = env.SITE.TITLE;
+const homeSlug = ROUTES.HOME;
+const projectsSlug = ROUTES.PROJECTS;
+const aboutSlug = ROUTES.ABOUT;
+const contactSlug = ROUTES.CONTACT;
+const avatarPic = '/images/me-2.webp';
+---
+
+<header class="bg-gray-100 text-gray-800 fixed w-full">
+  <div class="border-2 px-4 py-2">
+    <nav class="flex items-center justify-between text-gray-800">
+      <h2 class="text-lg font-extrabold">
+        <a href={homeSlug} class="no-underline hover:text-cyan-700 transition-colors duration-200"
+          >{siteTitle}</a
+        >
+      </h2>
+      <!-- Desktop Links -->
+      <div class="flex items-center space-x-2 ml-auto">
+        <HeaderLink href={homeSlug} class="hover:text-cyan-700 transition-colors duration-200"
+          >Inicio</HeaderLink
+        >
+        <HeaderLink href={aboutSlug} class="hover:text-cyan-700 transition-colors duration-200"
+          >Quién soy</HeaderLink
+        >
+        {
+          featureFlags.enableHomelabs && (
+            <HeaderLink
+              href={projectsSlug}
+              class="hover:text-cyan-700 transition-colors duration-200"
+            >
+              HomeLab
+            </HeaderLink>
+          )
+        }
+        {
+          featureFlags.enableContact && (
+            <HeaderLink
+              href={contactSlug}
+              class="hover:text-cyan-700 transition-colors duration-200"
+            >
+              Videollamada
+            </HeaderLink>
+          )
+        }
+      </div>
+      <Avatar src={avatarPic} link={homeSlug} />
+    </nav>
+  </div>
+</header>

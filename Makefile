@@ -3,69 +3,78 @@ SHELL := /bin/zsh
 .SHELLFLAGS := -c -l
 
 # Variables - Main ssh configuration is in ~/.ssh/config
+ENVIRONMENT ?= local
 SSH_KEY = ~/.ssh/id_ed25519
-DEPLOYMENT_PATH = ./deployment
-ANSIBLE_PATH = $(DEPLOYMENT_PATH)/ansible
-PLAYBOOK_PATH = $(ANSIBLE_PATH)/playbooks
-INVENTORY_PATH = $(ANSIBLE_PATH)/inventory
-DOCKER_COMPOSE_PATH = $(DEPLOYMENT_PATH)/docker
-DOCKER_COMPOSE_LOCAL = $(DOCKER_COMPOSE_PATH)/docker-compose.local.yml
-
-# Include utils.sh
-UTILS_PATH = ./scripts/utils.sh
+SCRIPTS_PATH = ./scripts
+ANSIBLE_PATH = ./infra/ansible
+TRAEFIK_PATH = ./infra/traefik
+WEB_PATH = ./apps/web
+BLOG_PATH = ./apps/blog
+API_PATH = ./apps/api
+N8N_PATH = ./apps/n8n
+MONITORING_PATH = ./apps/monitoring
 
 # Define log functions for use in Makefile
 define log_info
-	@bash -c 'source $(UTILS_PATH) && log_info "$1"'
+	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_info "$1"'
 endef
 
 define log_success
-	@bash -c 'source $(UTILS_PATH) && log_success "$1"'
+	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_success "$1"'
 endef
 
 define log_warning
-	@bash -c 'source $(UTILS_PATH) && log_warning "$1"'
+	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_warning "$1"'
 endef
 
 define log_error
-	@bash -c 'source $(UTILS_PATH) && log_error "$1"'
+	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_error "$1"'
 endef
 
 define check_command
-	@bash -c 'source $(UTILS_PATH) && check_command "$1" "$2"'
+	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && check_command "$1" "$2"'
 endef
 
 define exit_error
-	@bash -c 'source $(UTILS_PATH) && exit_error "$1" "$2"'
+	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && exit_error "$1" "$2"'
 endef
 
-# Determine default environment
-ENV ?= staging
-INVENTORY = $(INVENTORY_PATH)/hosts.yml
+.PHONY: help check install-deps install-ansible create-network \
+		up-traefik up-n8n up-monitoring up-blog up-web up-api up \
+		setup deploy status down down-traefik down-n8n down-monitoring down-web down-blog down-api down \
+		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets
 
-.PHONY: help setup dev deploy-local deploy update rollback logs status clean generate-config generate-auth install-deps install-ansible check
-
-# Help
 help:
+	$(call log_info,Installation and setup commands:)
+	@echo "  make check                			- Check prerequisites"
+	@echo "  make install-deps         			- Install development dependencies"
+	@echo "  make install-ansible      			- Install Ansible and dependencies"
+	@echo "  make create-network       			- Create Docker network if it does not exist"
 	$(call log_info,Development commands:)
-	@echo "  make install-deps         # Install development dependencies"
-	@echo "  make install-ansible      # Install Ansible and dependencies"
-	@echo "  make dev                  # Start local development environment"
-	@echo "  make clean                # Clean local resources"
-	@echo "  make generate-config      # Generate Traefik configuration"
-	@echo "  make generate-auth        # Generate authentication credentials"
-	@echo "  make copy-certificates    # Copy certificates to the local directory"
-	@echo ""
-	$(call log_info,Deployment commands:)
-	@echo "  make check                # Verify prerequisites"
-	@echo "  make setup ENV=<env>      # Initial environment setup (staging|production)"
-	@echo "  make deploy ENV=<env>     # Deploy application (staging|production)"
-	@echo "  make update ENV=<env>     # Update application without restarting services"
-	@echo "  make rollback ENV=<env>   # Rollback to previous deployment"
-	@echo "  make logs ENV=<env>       # View application logs"
-	@echo "  make status ENV=<env>     # View service status"
+	@echo "  make dev-web             			- Start local development environment for WEB"
+	@echo "  make dev-api             			- Start local development environment for API"
+	@echo "  make dev-blog            			- Start local development environment for BLOG"
+	@echo "  make dev-traefik         			- Start local development environment for Traefik"
+	@echo "  make dev                 			- Start all local development environments"
+	$(call log_info,Server deployment commands:)
+	@echo "  make setup               			- Initial setup for the environment"
+	@echo "  make deploy              			- Deploy application to the environment"
+	@echo "  make status              			- View service status in the environment"
+	$(call log_info,Utility commands:)
+	@echo "  make clean               			- Clean local resources"
+	@echo "  make generate-config     			- Generate all configuration files from templates"
+	@echo "  make generate-traefik-credentials 		- Generate authentication credentials for Traefik"
+	@echo "  make generate-traefik-config 			- Generate Traefik configuration files from templates"
+	@echo "  make generate-ansible-config 			- Generate Ansible configuration files from templates"
+	@echo "  make copy-certificates   			- Copy self-signed SSL certificates to the in the local machine"
+	@echo "  make setup-secrets       			- Configure GitHub secrets from .env files"
+	@echo "  make list-secrets        			- List configured GitHub secrets"
+	@echo "  make create-env-example  			- Create .env.example from .env files"
 
-# Check requirements
+############################################################################################
+# Installation and setup commands
+############################################################################################
+
 check:
 	$(call log_info,Verifying prerequisites...)
 	$(call check_command,ansible,ansible)
@@ -74,22 +83,23 @@ check:
 	$(call check_command,docker-compose,docker-compose)
 	$(call log_success,All requirements are met.)
 
-# Install development dependencies
 install-deps:
 	$(call log_info,Installing development dependencies...)
-	@if [ -f "./services/frontend/package.json" ]; then \
-		which npm > /dev/null || ($(call log_error,npm is not installed.) && exit 1); \
-		cd ./services/frontend && npm install; \
+	@if [ -f "$(WEB_PATH)/astro-site/package.json" ]; then \
+	  command -v npm >/dev/null 2>&1 || { \
+	    $(call log_error,NPM is not installed.); exit 1; \
+	  }; \
+	  cd $(WEB_PATH)/astro-site && npm install && npm audit fix; \
 	fi
-	@if [ -f "./services/frontend/Gemfile" ]; then \
-		which ruby > /dev/null || ($(call log_error,Ruby is not installed.) && exit 1); \
-		$(RUBY_HOME)/bin/gem install bundler; \
-		cd ./services/frontend && $(RUBY_HOME)/bin/gem exec bundler install || \
-			($(call log_error,Error installing Ruby dependencies.) && exit 1); \
+	$(call log_success,NPM dependencies installed for WEB.)
+	@if [ -f "$(BLOG_PATH)/jekyll-site/Gemfile" ]; then \
+	  command -v bundle >/dev/null 2>&1 || { \
+	    $(call log_error,Bundler is not installed.); exit 1; \
+	  }; \
+	  cd $(BLOG_PATH)/jekyll-site && bundle install && bundle exec jekyll build; \
 	fi
-	$(call log_success,Dependencies installed.)
+	$(call log_success,Bundler dependencies installed for BLOG.)
 
-# Install Ansible
 install-ansible:
 	$(call log_info,Installing Ansible and dependencies...)
 	@if [ -x "$(command -v apt-get)" ]; then \
@@ -101,65 +111,164 @@ install-ansible:
 	ansible-galaxy collection install community.docker
 	$(call log_success,Ansible successfully installed.)
 
-# Start development environment
-dev: check generate-config
-	$(call log_info,Starting local development environment...)
-	@docker network create traefik_network 2>/dev/null || true
-	@if [ ! -f ".env.local" ]; then \
-		$(call log_error,.env.local file not found. Create one based on .env.example); \
-		exit 1; \
-	fi
-	@cp .env.local $(DOCKER_COMPOSE_PATH)/.env
-	@chmod +x ./scripts/*.sh
-	@./scripts/generate-traefik-config.sh
-	@docker compose -f $(DOCKER_COMPOSE_LOCAL) up -d --build
-	$(call log_success,Development environment started at http://0.0.0.0:4000)
+create-network:
+	$(call log_info,Creating Docker network if it does not exist...)
+	@docker network inspect proxy >/dev/null 2>&1 || docker network create proxy >/dev/null
+	$(call log_success,Docker network created or already exists.)
 
-# Initial setup
+#################################################################################################
+# Cleanup commands
+#################################################################################################
+
+up-traefik: create-network generate-traefik-config
+	$(call log_info,Starting local development environment for Traefik...)
+	@grep -qxF 'ENVIRONMENT=local' $(TRAEFIK_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(TRAEFIK_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(TRAEFIK_PATH)/docker-compose.yml up -d
+	$(call log_success,Development environment for Traefik started successfully. Remember to add traefik.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,Traefik is running on port 8080. You can access the dashboard at http://localhost:8080/dashboard/ or http://traefik.mlorentedev.test/dashboard/)
+
+up-n8n: up-traefik
+	$(call log_info,Starting local development environment for N8N...)
+	@grep -qxF 'ENVIRONMENT=local' $(N8N_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(N8N_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(N8N_PATH)//docker-compose.yml up -d
+	$(call log_success,Development environment for N8N started successfully. Remember to add n8n.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,N8N is running on port 5678. You can access it at http://n8n.mlorentedev.test)
+
+up-monitoring: up-traefik
+	$(call log_info,Starting local development environment for Monitoring...)
+	@grep -qxF 'ENVIRONMENT=local' $(MONITORING_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(MONITORING_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(MONITORING_PATH)/docker-compose.yml up -d 
+	$(call log_success,Development environment for Monitoring started successfully. Remember to add grafana.mlorentedev.test, loki.mlorentedev.test and status.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,Grafana is running on port 3000. You can access it at http://grafana.mlorentedev.test)
+	$(call log_success,Loki is running on port 3100. You can access it at http://loki.mlorentedev.test)
+	$(call log_success,Status page is running on port 8000. You can access it at http://status.mlorentedev.test)
+
+up-blog: up-traefik
+	$(call log_info,Starting local development environment for BLOG...)
+	@grep -qxF 'ENVIRONMENT=local' $(BLOG_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(BLOG_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(BLOG_PATH)/docker-compose.dev.yml build --no-cache
+	@docker compose -f $(BLOG_PATH)/docker-compose.dev.yml up -d
+	$(call log_success,Development environment for BLOG started successfully. Remember to add blog.mlorentedev.test to your /etc/hosts file.)
+	${call log_success,BLOG is running on port 4000. You can access it at http://blog.mlorentedev.test}
+
+up-web: up-traefik
+	$(call log_info,Starting local development environment for WEB...)
+	@grep -qxF 'ENVIRONMENT=local' $(WEB_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(WEB_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(WEB_PATH)/docker-compose.dev.yml build --no-cache
+	@docker compose -f $(WEB_PATH)/docker-compose.dev.yml up -d
+	$(call log_success,Development environment for WEB started successfully. Remember to add site.mlorentedev.test to your /etc/hosts file.)	
+	$(call log_success,WEB is running on port 4321. You can access it at http://site.mlorentedev.test)
+
+up-api: up-traefik
+	$(call log_info,Starting local development environment for API...)
+	@grep -qxF 'ENVIRONMENT=local' $(API_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(API_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(API_PATH)/docker-compose.dev.yml build --no-cache
+	@docker compose -f $(API_PATH)/docker-compose.dev.yml up -d
+	$(call log_success,Development environment for API started successfully. Remember to add api.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,API is running on port 8080. You can access it at http://api.mlorentedev.test/api)
+
+up: check up-traefik up-blog up-api up-web up-n8n up-monitoring
+
+################################################################################################
+# Deployment commands
+################################################################################################
+
 setup: check
-	$(call log_info,Setting up $(ENV) environment...)
-	@if [ ! -f "$(INVENTORY)" ]; then \
-		$(call log_error,Inventory file $(INVENTORY) not found); \
+	$(call log_info,Setting up $(ENVIRONMENT) environment...)
+	@if [ ! -f "$(ANSIBLE_PATH)/inventories/hosts.yml" ]; then \
+		$(call log_error,Inventory file $(ANSIBLE_PATH)/inventories/hosts.yml not found); \
 		exit 1; \
 	fi
-	ansible-playbook $(PLAYBOOK_PATH)/setup.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)" --private-key $(SSH_KEY) --ask-become-pass -v
+	ansible-playbook $(ANSIBLE_PATH)/playbooks/setup.yml -i $(ANSIBLE_PATH)/inventories/hosts.yml --limit $(ENVIRONMENT) -e "env=$(ENVIRONMENT)" --private-key $(SSH_KEY) --ask-become-pass -v
 
-# Deploy application
 deploy: check generate-config
-	$(call log_info,Deploying to $(ENV)...)
-	ansible-playbook $(PLAYBOOK_PATH)/deploy.yml -i $(INVENTORY) --limit $(ENV) -e "env=$(ENV)" --private-key $(SSH_KEY) --ask-become-pass -v
+	$(call log_info,Deploying to $(ENVIRONMENT)...)
+	ansible-playbook $(PLAYBOOK_PATH)/deploy.yml -i $(INVENTORY) --limit $(ENVIRONMENT) -e "env=$(ENVIRONMENT)" --private-key $(SSH_KEY) --ask-become-pass -v
 
-# View service status
 status: check
-	$(call log_info,Checking status in $(ENV)...)
-	ansible $(ENV) -i $(INVENTORY) -m shell -a "docker ps"
+	$(call log_info,Checking status in $(ENVIRONMENT)...)
+	ansible $(ENVIRONMENT) -i $(INVENTORY) -m shell -a "docker ps"
 
-# Clean local resources
-clean:
-	$(call log_info,Cleaning local resources...)
-	docker compose -f $(DOCKER_COMPOSE_LOCAL) down --remove-orphans
-	docker volume prune -f
+##################################################################################################
+# Utility commands
+##################################################################################################
+
+down-traefik:
+	$(call log_info,Cleaning Traefik resources...)
+	-@docker compose -f $(TRAEFIK_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Traefik resources cleaned.)
+
+down-n8n:
+	$(call log_info,Cleaning N8N resources...)
+	-@docker compose -f $(N8N_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,N8N resources cleaned.)
+
+down-monitoring:
+	$(call log_info,Cleaning Monitoring resources...)
+	-@docker compose -f $(MONITORING_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Monitoring resources cleaned.)
+
+down-web:
+	$(call log_info,Cleaning WEB resources...)
+	-@docker compose -f $(WEB_PATH)/docker-compose.dev.yml down --remove-orphans
+	$(call log_success,WEB resources cleaned.)
+
+down-blog:
+	$(call log_info,Cleaning BLOG resources...)
+	-@docker compose -f $(BLOG_PATH)/docker-compose.dev.yml down --remove-orphans
+	$(call log_success,BLOG resources cleaned.)
+
+down-api:
+	$(call log_info,Cleaning API resources...)
+	-@docker compose -f $(API_PATH)/docker-compose.dev.yml down --remove-orphans
+	$(call log_success,API resources cleaned.)
+
+down: down-traefik down-web down-blog down-api down-n8n down-monitoring
+	@docker volume prune -f
 	$(call log_success,Local resources cleaned.)
 
-# Generate environment-specific configuration files
-generate-config:
-	$(call log_info,Generating Traefik and Ansible configuration files...)
-	@chmod +x ./scripts/generate-traefik-config.sh
-	@chmod +x ./scripts/generate-ansible-config.sh
-	@cp .env deployment/docker/.env
-	@cp .env deployment/ansible/.env		
-	@./scripts/generate-traefik-config.sh
-	@./scripts/generate-ansible-config.sh
-	$(call log_success,Configuration files generated successfully.)
+##################################################################################################
+# Utility commands
+##################################################################################################
 
-# Generate authentication credentials for Traefik
-generate-auth:
+generate-config: generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example
+
+generate-traefik-credentials:
 	$(call log_info,Generating authentication credentials for Traefik...)
-	@chmod +x ./scripts/generate-traefik-credentials.sh
-	@./scripts/generate-traefik-credentials.sh
+	@chmod +x $(SCRIPTS_PATH)/generate-traefik-credentials.sh
+	@$(SCRIPTS_PATH)/generate-traefik-credentials.sh
 	$(call log_success,Credentials successfully generated.)
 
-# Copy certificates to the appropriate directory
+generate-traefik-config:
+	$(call log_info,Generating Traefik configuration files from templates...)
+	@chmod +x $(SCRIPTS_PATH)/generate-traefik-config.sh
+	@$(SCRIPTS_PATH)/generate-traefik-config.sh
+	$(call log_success,Configuration files generated successfully.)
+
+generate-ansible-config:
+	$(call log_info,Generating Ansible configuration files from templates...)
+	@chmod +x $(SCRIPTS_PATH)/generate-ansible-config.sh
+	@$(SCRIPTS_PATH)/generate-ansible-config.sh
+	$(call log_success,Ansible configuration files generated successfully.)
+
 copy-certificates:
 	$(call log_info,Copying certificates to the appropriate directory...)
 	@scp mlorente-deployer:/opt/traefik/acme.json /tmp/acme.json
@@ -172,3 +281,30 @@ copy-certificates:
 	$(call log_info,Updating CA certificates...)
 	@sudo update-ca-certificates
 	$(call log_success,Certificates copied successfully.)
+
+create-env-example: 
+	$(call log_info,Creating .env.example file...)
+	@chmod +x $(SCRIPTS_PATH)/create-env-example.sh
+	@$(SCRIPTS_PATH)/create-env-example.sh $(WEB_PATH)/.env $(WEB_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(BLOG_PATH)/.env $(BLOG_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(API_PATH)/.env $(API_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(TRAEFIK_PATH)/.env $(TRAEFIK_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(N8N_PATH)/.env $(N8N_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(MONITORING_PATH)/.env $(MONITORING_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh .env .env.example
+	$(call log_success,.env.example files created successfully.)
+
+setup-secrets: 
+	$(call log_info,Setting up GitHub secrets...)
+	@chmod +x $(SCRIPTS_PATH)/setup-gh-secrets.sh
+	@if [ -f ".env" ]; then \
+	    $(SCRIPTS_PATH)/setup-gh-secrets.sh .env; \
+	elif [ -f "../.env" ]; then \
+        $(SCRIPTS_PATH)/setup-gh-secrets.sh ../.env; \
+	else \
+	    $(SCRIPTS_PATH)/setup-gh-secrets.sh; \
+	fi
+
+list-secrets:
+	$(call log_info,Listing GitHub secrets...)
+	@gh secret list

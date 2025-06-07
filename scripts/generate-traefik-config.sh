@@ -4,23 +4,23 @@
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TRAEFIK_DIR="$PROJECT_ROOT/deployment/traefik"
+TRAEFIK_DIR="$PROJECT_ROOT/infra/traefik"
 TEMPLATES_DIR="$TRAEFIK_DIR/templates"
-DYNAMIC_CONF_DIR="$TRAEFIK_DIR/dynamic_conf"
+DYNAMIC_CONF_DIR="$TRAEFIK_DIR/dynamic"
+
+# Load utility functions if utils.sh exists
+[ -f "$SCRIPT_DIR/utils.sh" ] && source "$SCRIPT_DIR/utils.sh"
 
 # Load environment variables from .env file if it exists
-[ -f "$SCRIPT_DIR/utils.sh" ] && source "$SCRIPT_DIR/utils.sh"
-[ -f "$PROJECT_ROOT/.env" ] && source "$PROJECT_ROOT/.env"
+env_file="$TRAEFIK_DIR/.env"
+[ -f "$env_file" ] && source "$env_file"
 
 # Check if .env is sourced
-required_vars=("DOMAIN" "TRAEFIK_DASHBOARD" "ACME_EMAIL")
+required_vars=("TRAEFIK_DASHBOARD" "ACME_EMAIL" "ENVIRONMENT" "TRAEFIK_DASHBOARD_USERS")
 if ! verify_required_vars "${required_vars[@]}"; then
-    exit 1
-fi
-
-# Check if required environment variables are set
-if [ -z "$TRAEFIK_DASHBOARD_USERS" ]; then
-    log_error "TRAEFIK_DASHBOARD_USERS not found. Please run 'make generate-auth' first."
+    if [ -z "$TRAEFIK_DASHBOARD_USERS" ]; then
+        log_error "TRAEFIK_DASHBOARD_USERS not found. Please run 'make generate-auth' first."
+    fi
     exit 1
 fi
 
@@ -37,7 +37,7 @@ fi
 log_info "Generating main Traefik configuration..."
 
 # Determine which template to use based on DISABLE_HTTPS
-if [ "${DISABLE_HTTPS}" = "true" ]; then
+if [ "${ENVIRONMENT}" = "local" ]; then
     MAIN_TEMPLATE="$TEMPLATES_DIR/traefik.http.template.yml"
     log_info "Using HTTP template for Traefik configuration."
 else
@@ -45,14 +45,13 @@ else
     log_info "Using HTTPS template for Traefik configuration."
 fi
 
-# Check if template exists
 if [ ! -f "$MAIN_TEMPLATE" ]; then
     log_error "Error: Template file not found: $MAIN_TEMPLATE"
     exit 1
 fi
 
 # Process the main template and replace placeholders
-replace_placeholders "$MAIN_TEMPLATE" "$TRAEFIK_DIR/traefik.yml"
+replace_placeholders "$MAIN_TEMPLATE" "$TRAEFIK_DIR/traefik.yml" "$env_file"
 log_success "Generated: $TRAEFIK_DIR/traefik.yml"
 
 # Process all dynamic configuration templates
@@ -66,12 +65,35 @@ for template_file in "$TEMPLATES_DIR"/*.template.yml; do
 
     # Extract the base filename without path and .template.yml extension
     base_name=$(basename "$template_file" .template.yml)
+
+    # Skip HTTP or HTTPS templates 
+    case "$base_name" in
+        traefik.http|traefik.https)
+            log_info "Skipping $base_name configuration."
+            continue
+            ;;
+    esac
+
+    if [ "${ENVIRONMENT}" = "local" ]; then
+        case "$base_name" in
+            acme-challenge|tls)
+                log_info "Skipping $base_name configuration in local environment."
+                continue
+                ;;
+        esac
+    fi
+
     output_file="$DYNAMIC_CONF_DIR/$base_name.yml"
     
     log_info "Processing template: $(basename "$template_file")"
     
     # Process the template
-    if replace_placeholders "$template_file" "$output_file"; then
+    if replace_placeholders "$template_file" "$output_file" "$env_file"; then
+        if [ "${ENVIRONMENT}" = "local" ]; then
+            # Remove any line with 'tls:' or 'certResolver'
+            sed -i '/^[[:space:]]*tls:/d' "$output_file"
+            sed -i '/^[[:space:]]*certResolver:/d' "$output_file"
+        fi
         log_success "Generated: $output_file"
     else
         log_error "Failed to generate: $output_file"
@@ -79,13 +101,12 @@ for template_file in "$TEMPLATES_DIR"/*.template.yml; do
 done
 
 # If acme.json doesn't exist, create it with proper permissions
-if [ ! -f "$TRAEFIK_DIR/acme.json" ]; then
+if [ ! -f "$TRAEFIK_DIR/certs/acme.json" ]; then
     log_info "Creating acme.json file with correct permissions..."
-    create_secure_file "$TRAEFIK_DIR/acme.json" "600"
+    create_secure_file "$TRAEFIK_DIR/certs/acme.json" "600"
 fi
 
 log_success "Traefik configuration generated successfully."
-log_info "Configuration files are located in: $TRAEFIK_DIR"
-log_info "Main configuration: $TRAEFIK_DIR/traefik.yml"
+log_info "Static configuration: $TRAEFIK_DIR/traefik.yml"
 log_info "Dynamic configuration: $DYNAMIC_CONF_DIR/"
 log_info "To apply these changes, restart the Traefik service."

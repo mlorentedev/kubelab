@@ -1,0 +1,18 @@
+http:
+  routers:
+    {{APP_UPTIME_KUMA_NAME}}:
+      rule: "Host(`{{APP_UPTIME_KUMA_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: {{APP_UPTIME_KUMA_NAME}}
+      tls:
+        certResolver: {{CERT_RESOLVER}}
+      middlewares:
+        - secure-headers@file
+        - rate-limit@file
+
+  services:
+    {{APP_UPTIME_KUMA_NAME}}:
+      loadBalancer:
+        servers:
+          - url: "http://{{APP_UPTIME_KUMA_NAME}}:{{APP_UPTIME_KUMA_PORT}}"
