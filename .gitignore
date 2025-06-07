@@ -21,15 +21,27 @@ beautiful-jekyll-theme-*.gem
 .env
 .env.*
 !.env.example
-deployment/traefik/acme.json
-deployment/traefik/traefik.yml
-deployment/traefik/dynamic_conf/
-deployment/traefik/logs/
-deployment/traefik/certs/
-deployment/traefik/ssl/
-deployment/trarfik/.env
-deployment/docker/.env
-deployment/ansible/inventory
 certbot/
 .cache_ggshield
 certs
+
+# Infra
+infra/traefik/acme.json
+infra/traefik/traefik.yml
+infra/traefik/dynamic/
+infra/traefik/logs/
+infra/traefik/certs/
+infra/traefik/ssl/
+infra/trarfik/.env
+infra/ansible/inventories
+
+# Apps
+apps/n8n/data
+apps/web/astro-site/node_modules
+apps/web/astro-site/.astro
+apps/web/astro-site/package-lock.json
+apps/web/package-lock.json
+apps/web/api/src/vendor
+apps/web/api/src/vendor.lock
+apps/web/api/src/tmp
+apps/web/api/src/bin

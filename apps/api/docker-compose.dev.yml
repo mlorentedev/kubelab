@@ -1,0 +1,22 @@
+services:
+  api:
+    image: "${REGISTRY-docker.io/mlorentedev}/api:${TAG:-latest}"
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: api
+    restart: always
+    expose:
+      - ${PORT}  
+    env_file:
+      - ./.env
+    volumes:
+      - ./src:/app/src:cached
+      - .env:/app/.env
+    command: ["air", "-c", ".air.toml"]
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true

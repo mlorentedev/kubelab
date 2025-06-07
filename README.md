@@ -18,7 +18,7 @@ Web personal construida con Jekyll, contenerizada con Docker y desplegada utiliz
 
 ```text
 ├── .github/workflows/          # Pipelines de CI/CD
-│   ├─ ci-static.yml             # CI del sitio estático
+│   ├─ ci-jekyll.yml             # CI del sitio estático
 |   ├─ ci-frontend.yml           # CI del frontend
 |   ├─ ci-backend.yml            # CI del backend
 |   ├─ test-build-push.yml       # Job reutilizable de CI
@@ -32,10 +32,10 @@ Web personal construida con Jekyll, contenerizada con Docker y desplegada utiliz
 │   │   └── templates/              # Plantillas de configuración
 │   ├── docker/                  # Configuración Docker
 │   └── traefik/                 # Configuración de proxy
-├── services/                 # Servicios de la aplicación
+├── src/                 # Servicios de la aplicación
 │   ├── backend/                 # Servicio backend (futuro)
 │   ├── frontend/                # Servicio frontend (futuro)
-│   └── static/                  # Sitio Jekyll estático
+│   └── jekyll/                  # Sitio Jekyll estático
 ├── scripts/                  # Scripts de automatización
 ├── docs/                     # Documentación adicional
 ├── .env.example              # Plantilla de variables de entorno
@@ -306,7 +306,7 @@ El proyecto incluye un workflow de GitHub Actions que:
 
 | Etapa | Disparador | Pasos clave | Resultado |
 |-------|------------|-------------|-----------|
-| **CI de servicio** (`ci-static`, `ci-frontend`, `ci-backend`) | Push / PR a `master`, `develop`, `feature/*`, `hotfix/*` | *Draft‑skip* → Linter → Tests → Gitleaks → **Build** multi‑arquitectura → Push a Docker Hub (etiquetas `version`, `sha`, `branch`) → Aviso Slack | Imagen fresca en Docker Hub |
+| **CI de servicio** (`ci-jekyll`, `ci-frontend`, `ci-backend`) | Push / PR a `master`, `develop`, `feature/*`, `hotfix/*` | *Draft‑skip* → Linter → Tests → Gitleaks → **Build** multi‑arquitectura → Push a Docker Hub (etiquetas `version`, `sha`, `branch`) → Aviso Slack | Imagen fresca en Docker Hub |
 | **CD automático** (`cd.yml`) | Push a `develop` → *staging*<br>Push a `master` → *production* | Llama a `deploy.yml` → Roles Ansible (Traefik + backups + certs + prune) → Smoke test → Aviso Slack | Contenedores actualizados en el VPS |
 | **Release** (`release.yml`) | Push de tag `vX.Y.Z` | Crea Release en GitHub con notas → Comprime infra y la adjunta → Retag/push de imágenes `vX.Y.Z` → Despliegue en *production* con esa tag → Aviso Slack | Release inmutable + producción desplegada |
 
@@ -325,6 +325,18 @@ Tag vX.Y.Z
     └─► GitHub Release → Zip infra
                         │
                         └─► Retag imágenes (vX.Y.Z) → Deploy (prod vX.Y.Z) → Health-check → Slack
+```
+
+### Configuración de secretos de GitHub
+
+El proyecto incluye un script automatizado para configurar todos los secretos necesarios en GitHub Actions desde tus archivos `.env`:
+
+```bash
+# Configurar secretos desde .env en el directorio raíz
+make setup-secrets
+
+# Configurar secretos desde un archivo específico
+make setup-secrets ../tmp/.env.production
 ```
 
 ## Documentación adicional

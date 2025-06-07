@@ -1,0 +1,38 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import BaseHead from '../components/meta/BaseHead.astro';
+import Footer from '../components/sections/Footer.astro';
+import Header from '../components/sections/Header.astro';
+import Gtag from '../components/ui/Gtag.astro';
+import { env } from '../data/env';
+import '../styles/global.css';
+
+type Props = CollectionEntry<'resources'>['data'];
+
+const { title, description } = Astro.props;
+
+const lang = 'es';
+const siteTitle = env.SITE.TITLE;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <BaseHead title={title} description={description} />
+    <Gtag />
+    <script is:inline src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script is:inline src="https://unpkg.com/htmx.org@1.9.12/dist/ext/response-targets.js"></script>
+    <script is:inline src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
+  </head>
+  <body
+    class="flex flex-col min-h-screen"
+    hx-boost="true"
+    hx-ext="response-targets, json-enc, boost"
+  >
+    <Header title={siteTitle} lang={lang} />
+    <main class="flex-grow py-16">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>
