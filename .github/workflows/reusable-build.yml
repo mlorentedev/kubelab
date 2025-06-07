@@ -1,0 +1,34 @@
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login registry
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build image
+        run: docker build -t ${{ vars.REGISTRY }}/${{ inputs.app }}:${{ github.sha }} apps/${{ inputs.app }}
+
+      - name: Push image
+        run: docker push ${{ vars.REGISTRY }}/${{ inputs.app }}:${{ github.sha }}
+
+      - name: Notify n8n
+        run: |
+          curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+               -d "app=${{ inputs.app }}&tag=${{ github.sha }}&env=${{ inputs.environment }}"

@@ -1,0 +1,15 @@
+services:
+  blog:
+    image: "${REGISTRY-docker.io/mlorentedev}/blog:${TAG:-latest}"
+    container_name: blog
+    restart: always
+    expose:
+      - ${PORT}  
+    env_file:
+      - ./.env
+    networks:
+      - proxy
+      
+networks:
+  proxy:
+    external: true
