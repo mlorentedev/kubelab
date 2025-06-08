@@ -1,0 +1,104 @@
+name: CI + Build for App
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+    outputs:
+      tag_version:
+        description: "Generated version tag"
+        value: ${{ jobs.validate.outputs.tag_version }}
+      sha_short:
+        description: "Short SHA"
+        value: ${{ jobs.validate.outputs.sha_short }}
+
+jobs:
+  app-pipeline:
+    name: CI + Docker Push for ${{ inputs.app }}
+    runs-on: ubuntu-latest
+    outputs:
+      tag_version: ${{ steps.tag_version.outputs.new_version }}
+      sha_short: ${{ steps.short_sha.outputs.sha }}      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4     
+
+      - name: Fail if app is unsupported
+        if: inputs.app != 'blog' && inputs.app != 'api' && inputs.app != 'web'
+        run: |
+          echo "Unsupported app: ${{ inputs.app }}"
+          exit 1
+
+      # Blog Jekyll site validation
+      - name: Set up Ruby
+        if: ${{ inputs.app == 'blog' }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          working-directory: './apps/blog/jekyll-site'
+
+      - name: Install dependencies
+        if: ${{ inputs.app == 'blog' }}
+        working-directory: './apps/blog/jekyll-site'
+        run: bundle install
+        
+      - name: Build Jekyll site
+        if: ${{ inputs.app == 'blog' }}
+        working-directory: './apps/blog/jekyll-site'
+        env:
+          JEKYLL_ENV: production
+        run: bundle exec jekyll build
+      
+      # API
+      - name: Set up Go (for api)
+        if: ${{ inputs.app == 'api' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.21
+
+      - name: Run tests (api)
+        if: ${{ inputs.app == 'api' }}
+        working-directory: ./apps/api
+        run: go test ./...
+
+      # ...
+
+      - name: Determine Docker context
+        id: context
+        run: |
+          case "${{ inputs.app }}" in
+            blog)
+              echo "context=./apps/blog/jekyll-site" >> $GITHUB_OUTPUT
+              ;;
+            api)
+              echo "context=./apps/api/src" >> $GITHUB_OUTPUT
+              ;;
+            web)
+              echo "context=./apps/web/astro-site" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "Unsupported app context"
+              exit 1
+              ;;
+          esac
+
+      - name: Tag version
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.REPO_TOKEN }}
+
+      - name: Extract short SHA
+        id: short_sha
+        run: echo "sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build and Push Docker Image for ${{ inputs.app }}
+        uses: ./.github/workflows/ci-publish.yml
+        with:
+          app: ${{ inputs.app }}
+          tag: ${{ steps.tag_version.outputs.new_version }}
+          sha: ${{ steps.short_sha.outputs.sha }}
+          context: ${{ steps.context.outputs.context }}
+        

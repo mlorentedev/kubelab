@@ -4,17 +4,20 @@
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ANSIBLE_DIR="$PROJECT_ROOT/deployment/ansible"
+ANSIBLE_DIR="$PROJECT_ROOT/infra/ansible"
 TEMPLATES_DIR="$ANSIBLE_DIR/templates"
 INVENTORY_DIR="$ANSIBLE_DIR/inventory"
 GROUP_VARS_DIR="$INVENTORY_DIR/group_vars"
 
 # Load environment variables from .env file if it exists
 [ -f "$SCRIPT_DIR/utils.sh" ] && source "$SCRIPT_DIR/utils.sh"
-[ -f "$PROJECT_ROOT/.env" ] && source "$PROJECT_ROOT/.env"
+
+# Load environment variables from .env file if it exists
+env_file="$ANSIBLE_DIR/.env"
+[ -f "$env_file" ] && source "$env_file"
 
 # Check if .env is sourced
-required_vars=("DOMAIN" "STAGING_DOMAIN" "PRODUCTION_DOMAIN")
+required_vars=("DOMAIN" "PRODUCTION_DOMAIN")
 if ! verify_required_vars "${required_vars[@]}"; then
     exit 1
 fi

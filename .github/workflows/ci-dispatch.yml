@@ -1,0 +1,51 @@
+name: CI Dispatcher per App
+
+on:
+  push:
+    branches: [develop, feature/*, hotfix/*]
+  workflow_dispatch:
+
+jobs:
+  detect-changed-apps:
+    name: Detect Changed Applications
+    runs-on: ubuntu-latest
+    outputs:
+      blog: ${{ steps.filter.outputs.blog }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            blog:           apps/blog/**
+            web:            apps/web/**
+            api:            apps/api/**
+  
+  run-blog-pipeline:
+    name: Run Full Pipeline for Blog
+    needs: detect-changed-apps
+    if: needs.detect-changed-apps.outputs.blog == 'true'
+    uses: ./.github/workflows/ci-pipeline.yml
+    with:
+      app: blog
+    secrets: inherit
+
+  run-api-pipeline:
+    name: Run Full Pipeline for API
+    needs: detect-changed-apps
+    if: needs.detect-changed-apps.outputs.api == 'true'
+    uses: ./.github/workflows/ci-pipeline.yml
+    with:
+      app: api
+    secrets: inherit
+
+  run-web-pipeline:
+    name: Run Full Pipeline for Web
+    needs: detect-changed-apps
+    if: needs.detect-changed-apps.outputs.web == 'true'
+    uses: ./.github/workflows/ci-pipeline.yml
+    with:
+      app: web
+    secrets: inherit
