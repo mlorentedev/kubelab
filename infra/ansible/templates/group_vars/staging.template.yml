@@ -1,4 +1,0 @@
-# ansible/inventory/group_vars/staging.yml
----
-deploy_path: {{STAGING_DEPLOY_PATH}}
-domain: {{STAGING_DOMAIN}}

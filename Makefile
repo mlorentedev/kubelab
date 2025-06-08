@@ -2,41 +2,29 @@
 SHELL := /bin/zsh
 .SHELLFLAGS := -c -l
 
-# Variables - Main ssh configuration is in ~/.ssh/config
-ENVIRONMENT ?= local
-SSH_KEY = ~/.ssh/id_ed25519
-SCRIPTS_PATH = ./scripts
-ANSIBLE_PATH = ./infra/ansible
-TRAEFIK_PATH = ./infra/traefik
-WEB_PATH = ./apps/web
-BLOG_PATH = ./apps/blog
-API_PATH = ./apps/api
-N8N_PATH = ./apps/n8n
-MONITORING_PATH = ./apps/monitoring
+ifneq (,$(wildcard .env))
+  include .env
+  export
+endif
 
-# Define log functions for use in Makefile
 define log_info
-	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_info "$1"'
+	@bash -c 'source "$(SCRIPTS_PATH)/utils.sh"; log_info "$$1"' dummy "$(1)"
 endef
 
 define log_success
-	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_success "$1"'
+	@bash -c 'source "$(SCRIPTS_PATH)/utils.sh"; log_success "$$1"' dummy "$(1)"
 endef
 
 define log_warning
-	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_warning "$1"'
+	@bash -c 'source "$(SCRIPTS_PATH)/utils.sh"; log_warning "$$1"' dummy "$(1)"
 endef
 
 define log_error
-	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && log_error "$1"'
+	@bash -c 'source "$(SCRIPTS_PATH)/utils.sh"; log_error "$$1"' dummy "$(1)"
 endef
 
 define check_command
-	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && check_command "$1" "$2"'
-endef
-
-define exit_error
-	@bash -c 'source $(SCRIPTS_PATH)/utils.sh && exit_error "$1" "$2"'
+	@bash -c 'source "$(SCRIPTS_PATH)/utils.sh"; check_command "$$1" "$$2"' dummy "$(1)" "$(2)"
 endef
 
 .PHONY: help check install-deps install-ansible create-network \
@@ -47,7 +35,8 @@ endef
 help:
 	$(call log_info,Installation and setup commands:)
 	@echo "  make check                			- Check prerequisites"
-	@echo "  make install-deps         			- Install development dependencies"
+	@echo "  make install-node	   				- Install NPM dependencies for WEB"
+	@echo "  make install-ruby         			- Install Ruby and Bundler dependencies for BLOG"
 	@echo "  make install-ansible      			- Install Ansible and dependencies"
 	@echo "  make create-network       			- Create Docker network if it does not exist"
 	$(call log_info,Development commands:)
@@ -79,23 +68,21 @@ check:
 	$(call log_info,Verifying prerequisites...)
 	$(call check_command,ansible,ansible)
 	$(call check_command,docker,docker)
+	$(call check_command,npm,bundle,python3,python3-pip)
 	$(call check_command,awk,awk)
 	$(call check_command,docker-compose,docker-compose)
 	$(call log_success,All requirements are met.)
 
-install-deps:
-	$(call log_info,Installing development dependencies...)
+install-node:
+	$(call log_info,Installing NPM dependencies...)
 	@if [ -f "$(WEB_PATH)/astro-site/package.json" ]; then \
-	  command -v npm >/dev/null 2>&1 || { \
-	    $(call log_error,NPM is not installed.); exit 1; \
-	  }; \
 	  cd $(WEB_PATH)/astro-site && npm install && npm audit fix; \
 	fi
 	$(call log_success,NPM dependencies installed for WEB.)
+
+install-ruby:
+	$(call log_info,Installing Ruby and Bundler dependencies...)
 	@if [ -f "$(BLOG_PATH)/jekyll-site/Gemfile" ]; then \
-	  command -v bundle >/dev/null 2>&1 || { \
-	    $(call log_error,Bundler is not installed.); exit 1; \
-	  }; \
 	  cd $(BLOG_PATH)/jekyll-site && bundle install && bundle exec jekyll build; \
 	fi
 	$(call log_success,Bundler dependencies installed for BLOG.)
@@ -121,17 +108,28 @@ create-network:
 #################################################################################################
 
 up-traefik: create-network generate-traefik-config
-	$(call log_info,Starting local development environment for Traefik...)
+	$(call log_info,Starting Traefik...)
 	@grep -qxF 'ENVIRONMENT=local' $(TRAEFIK_PATH)/.env || { \
 	  $(call log_error,ENVIRONMENT must be set to 'local' in $(TRAEFIK_PATH)/.env); \
 	  exit 1; \
 	}
 	@docker compose -f $(TRAEFIK_PATH)/docker-compose.yml up -d
 	$(call log_success,Development environment for Traefik started successfully. Remember to add traefik.mlorentedev.test to your /etc/hosts file.)
-	$(call log_success,Traefik is running on port 8080. You can access the dashboard at http://localhost:8080/dashboard/ or http://traefik.mlorentedev.test/dashboard/)
+	$(call log_success,Traefik is running on port 8080. You can access the dashboard at http://traefik.mlorentedev.test/dashboard/)
+
+up-portainer: up-traefik
+	$(call log_info,Starting Portainer...)
+	@docker compose -f $(PORTAINER_PATH)/docker-compose.yml up -d
+	$(call log_success,Development environment for Portainer started successfully. Remember to add portainer.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,Portainer is running on port 9000. You can access it at http://portainer.mlorentedev.test)
+
+up-nginx: up-traefik
+	$(call log_info,Starting Nginx...)
+	@docker compose -f $(NGINX_PATH)/docker-compose.yml up -d
+	$(call log_success,Nginx is served on port 80.)
 
 up-n8n: up-traefik
-	$(call log_info,Starting local development environment for N8N...)
+	$(call log_info,Starting N8N...)
 	@grep -qxF 'ENVIRONMENT=local' $(N8N_PATH)/.env || { \
 	  $(call log_error,ENVIRONMENT must be set to 'local' in $(N8N_PATH)/.env); \
 	  exit 1; \
@@ -141,7 +139,7 @@ up-n8n: up-traefik
 	$(call log_success,N8N is running on port 5678. You can access it at http://n8n.mlorentedev.test)
 
 up-monitoring: up-traefik
-	$(call log_info,Starting local development environment for Monitoring...)
+	$(call log_info,Starting Monitoring stack...)
 	@grep -qxF 'ENVIRONMENT=local' $(MONITORING_PATH)/.env || { \
 	  $(call log_error,ENVIRONMENT must be set to 'local' in $(MONITORING_PATH)/.env); \
 	  exit 1; \
@@ -185,7 +183,7 @@ up-api: up-traefik
 	$(call log_success,Development environment for API started successfully. Remember to add api.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,API is running on port 8080. You can access it at http://api.mlorentedev.test/api)
 
-up: check up-traefik up-blog up-api up-web up-n8n up-monitoring
+up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-monitoring
 
 ################################################################################################
 # Deployment commands
@@ -216,6 +214,16 @@ down-traefik:
 	-@docker compose -f $(TRAEFIK_PATH)/docker-compose.yml down --remove-orphans
 	$(call log_success,Traefik resources cleaned.)
 
+down-portainer:
+	$(call log_info,Cleaning Portainer resources...)
+	-@docker compose -f $(PORTAINER_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Portainer resources cleaned.)
+
+down-nginx:
+	$(call log_info,Cleaning Nginx resources...)
+	-@docker compose -f $(NGINX_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Nginx resources cleaned.)
+
 down-n8n:
 	$(call log_info,Cleaning N8N resources...)
 	-@docker compose -f $(N8N_PATH)/docker-compose.yml down --remove-orphans
@@ -241,7 +249,7 @@ down-api:
 	-@docker compose -f $(API_PATH)/docker-compose.dev.yml down --remove-orphans
 	$(call log_success,API resources cleaned.)
 
-down: down-traefik down-web down-blog down-api down-n8n down-monitoring
+down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx
 	@docker volume prune -f
 	$(call log_success,Local resources cleaned.)
 
@@ -249,7 +257,7 @@ down: down-traefik down-web down-blog down-api down-n8n down-monitoring
 # Utility commands
 ##################################################################################################
 
-generate-config: generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example
+generate-config: generate-traefik-credentials generate-traefik-config generate-ansible-config
 
 generate-traefik-credentials:
 	$(call log_info,Generating authentication credentials for Traefik...)
@@ -291,6 +299,9 @@ create-env-example:
 	@$(SCRIPTS_PATH)/create-env-example.sh $(TRAEFIK_PATH)/.env $(TRAEFIK_PATH)/.env.example
 	@$(SCRIPTS_PATH)/create-env-example.sh $(N8N_PATH)/.env $(N8N_PATH)/.env.example
 	@$(SCRIPTS_PATH)/create-env-example.sh $(MONITORING_PATH)/.env $(MONITORING_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(ANSIBLE_PATH)/.env $(ANSIBLE_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(PORTAINER_PATH)/.env $(PORTAINER_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(NGINX_PATH)/.env $(NGINX_PATH)/.env.example
 	@$(SCRIPTS_PATH)/create-env-example.sh .env .env.example
 	$(call log_success,.env.example files created successfully.)
 
