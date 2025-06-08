@@ -1,4 +1,0 @@
-# ansible/inventory/group_vars/production.yml
----
-deploy_path: {{PRODUCTION_DEPLOY_PATH}}
-domain: {{PRODUCTION_DOMAIN}}

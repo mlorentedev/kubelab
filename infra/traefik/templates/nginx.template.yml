@@ -1,0 +1,14 @@
+http:
+  middlewares:
+    error-pages:
+      errors:
+        status:
+          - "404"
+        service: nginx
+        query: "/404.html"
+
+  services:
+    nginx:
+      loadBalancer:
+        servers:
+          - url: "http://nginx:80"

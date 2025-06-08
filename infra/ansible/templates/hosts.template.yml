@@ -3,7 +3,7 @@
 all:
   hosts:
     vps_ml:
-      ansible_host: "{{ lookup('env', 'ANSIBLE_HOST') }}"
-      ansible_user: "{{ lookup('env', 'ANSIBLE_SSH_USER') }}"
-      ansible_port: "{{ lookup('env', 'ANSIBLE_HOST_PORT') }}"
+      ansible_host: {{ ANSIBLE_HOST }}
+      ansible_user: {{ ANSIBLE_SSH_USER }}
+      ansible_port: {{ ANSIBLE_HOST_PORT }}
       ansible_python_interpreter: /usr/bin/python3
