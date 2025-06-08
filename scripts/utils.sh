@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 # utils.sh - Common utilities for scripting
 # This script is sourced by other scripts to provide common functionality
 
@@ -423,7 +423,9 @@ replace_placeholders() {
     [ -n "$APP_UPTIME_KUMA_NAME" ] && perl -i -pe "s#\{\{APP_UPTIME_KUMA_NAME\}\}#$APP_UPTIME_KUMA_NAME#g" "$tmpfile"
     [ -n "$APP_UPTIME_KUMA_PORT" ] && perl -i -pe "s#\{\{APP_UPTIME_KUMA_PORT\}\}#$APP_UPTIME_KUMA_PORT#g" "$tmpfile"
     [ -n "$APP_UPTIME_KUMA_HOST" ] && perl -i -pe "s#\{\{APP_UPTIME_KUMA_HOST\}\}#$APP_UPTIME_KUMA_HOST#g" "$tmpfile"
-    
+    [ -n "$APP_PORTAINER_NAME" ] && perl -i -pe "s#\{\{APP_PORTAINER_NAME\}\}#$APP_PORTAINER_NAME#g" "$tmpfile"
+    [ -n "$APP_PORTAINER_PORT" ] && perl -i -pe "s#\{\{APP_PORTAINER_PORT\}\}#$APP_PORTAINER_PORT#g" "$tmpfile"
+    [ -n "$APP_PORTAINER_HOST" ] && perl -i -pe "s#\{\{APP_PORTAINER_HOST\}\}#$APP_PORTAINER_HOST#g" "$tmpfile"
     # Move the processed file to the output location
     mv "$tmpfile" "$output"
     return 0

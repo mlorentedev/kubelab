@@ -10,6 +10,7 @@ http:
       middlewares:
         - secure-headers@file
         - rate-limit@file
+        - error-pages
 
   services:
     {{APP_GRAFANA_NAME}}:
