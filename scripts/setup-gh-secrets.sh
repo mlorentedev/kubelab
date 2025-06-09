@@ -2,7 +2,7 @@
 # setup-github-secrets.sh - Configure secrets in GitHub repository from multiple .env files
 # Usage: ./setup-github-secrets.sh [ENV_PATH]
 # If ENV_PATH is not provided, it will use default locations
-set -e
+set -eu
 
 # Source utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,7 +42,8 @@ set_secret() {
     gh secret delete "$name" --repo "$REPO" -y 2>/dev/null || true
 
     # Set the new secret
-    echo -n "$value" | gh secret set "$name" --repo "$REPO" -b -
+    gh secret set "$name" --repo "$REPO" -b "$value"
+
 }
 
 # Function to process env files and set GitHub secrets
