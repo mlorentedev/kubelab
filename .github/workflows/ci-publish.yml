@@ -18,45 +18,6 @@ on:
         type: string
 
 jobs:
-  test-secrets:
-    name: Test Docker Secrets
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug Docker secrets only
-        run: |
-          echo "=== SIMPLE SECRET TEST ==="
-          echo "Username: '${{ secrets.DOCKERHUB_USERNAME }}'"
-          echo "Username length: $( [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && echo "${#{{ secrets.DOCKERHUB_USERNAME }}}" || echo 0 )"
-          echo "Token: '${{ secrets.DOCKERHUB_TOKEN }}'"
-          echo "Token length: $( [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ] && echo "${#{{ secrets.DOCKERHUB_TOKEN }}}" || echo 0 )"
-          
-      - name: Test with environment variables
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          echo "=== ENV VAR TEST ==="
-          echo "Username: '$DOCKERHUB_USERNAME'"
-          echo "Username length: ${#DOCKERHUB_USERNAME}"
-          echo "Username hex:"
-          echo -n "$DOCKERHUB_USERNAME" | hexdump -C
-          echo "Token: '$DOCKERHUB_TOKEN'"
-          echo "Token length: ${#DOCKERHUB_TOKEN}"
-          echo "Token hex:"
-          echo -n "$DOCKERHUB_TOKEN" | hexdump -C
-          
-      - name: Simple Docker login test
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          echo "=== SIMPLE LOGIN TEST ==="
-          if [ ${#DOCKERHUB_USERNAME} -eq 1 ] && [ ${#DOCKERHUB_TOKEN} -eq 1 ]; then
-            echo "❌ Both secrets are 1 char - problem confirmed"
-            exit 1
-          fi
-          
-          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin  
   docker-image-publish:
     name: Publish Docker Image for ${{ inputs.app }}
     runs-on: ubuntu-latest
@@ -66,32 +27,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Complete Docker debug
-        run: |
-          echo "=== DOCKER DEBUG ==="
-          echo "Docker version: $(docker --version)"
-          echo "Raw username: '$DOCKERHUB_USERNAME'"
-          echo "Username length: ${#DOCKERHUB_USERNAME}"
-          echo "Username hex dump:"
-          echo -n "$DOCKERHUB_USERNAME" | hexdump -C       
-          echo "Token length: ${#DOCKERHUB_TOKEN}"
-          echo "Token prefix: ${DOCKERHUB_TOKEN:0:12}..."
-
-          echo "=== CONNECTIVITY TEST ==="
-          curl -v https://index.docker.io/v1/search?q=hello-world 2>&1 | head -10
-
-          # Test manual más verboso
-          echo "=== VERBOSE LOGIN TEST ==="
-          echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin -v 2>&1 || true
-          
-          # Test con diferentes registries
-          echo "=== TEST WITH EXPLICIT REGISTRY ==="
-          echo "$DOCKERHUB_TOKEN" | docker login index.docker.io --username "$DOCKERHUB_USERNAME" --password-stdin || true
-
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}  
 
       - name: Login registry
         uses: docker/login-action@v3
