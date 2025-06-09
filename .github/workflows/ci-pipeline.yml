@@ -18,6 +18,10 @@ jobs:
   app-pipeline:
     name: CI + Build for ${{ inputs.app }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     outputs:
       tag_version: ${{ steps.tag_version.outputs.new_version }}
       sha_short: ${{ steps.short_sha.outputs.sha }}      
