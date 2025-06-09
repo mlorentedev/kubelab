@@ -1,3 +1,4 @@
+---
 name: CI + Build for App
 
 on:
@@ -23,11 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag_version: ${{ steps.tag_version.outputs.new_version }}
-      sha_short: ${{ steps.short_sha.outputs.sha }}    
-      context: ${{ steps.context.outputs.context }}  
+      sha_short: ${{ steps.short_sha.outputs.sha }}
+      context: ${{ steps.context.outputs.context }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4     
+        uses: actions/checkout@v4
 
       - name: Fail if app is unsupported
         if: inputs.app != 'blog' && inputs.app != 'api' && inputs.app != 'web'
@@ -47,14 +48,14 @@ jobs:
         if: ${{ inputs.app == 'blog' }}
         working-directory: './apps/blog/jekyll-site'
         run: bundle install
-        
+
       - name: Build Jekyll site
         if: ${{ inputs.app == 'blog' }}
         working-directory: './apps/blog/jekyll-site'
         env:
           JEKYLL_ENV: production
         run: bundle exec jekyll build
-      
+
       # API
       - name: Set up Go (for api)
         if: ${{ inputs.app == 'api' }}
@@ -112,7 +113,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
           release_branches: master,main,develop
-          pre_release_branches: feature/*,hotfix/*          
+          pre_release_branches: feature/*,hotfix/*
 
       - name: Check if tag exists and delete it
         run: |
@@ -121,19 +122,18 @@ jobs:
             echo "Tag $TAG_NAME already exists. Deleting..."
             git tag -d "$TAG_NAME"
             git push origin --delete "$TAG_NAME"
-          fi  
+          fi
 
       - name: Extract short SHA
         id: short_sha
         run: echo "sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
   call-publish:
-      name: Build and Push Docker Image for ${{ inputs.app }}
-      needs: app-pipeline
-      uses: ./.github/workflows/ci-publish.yml
-      with:
-        app: ${{ inputs.app }}
-        tag: ${{ needs.app-pipeline.outputs.tag_version }}
-        sha: ${{ needs.app-pipeline.outputs.sha_short }}
-        context: ${{ needs.app-pipeline.outputs.context }}
-        
+    name: Build and Push Docker Image for ${{ inputs.app }}
+    needs: app-pipeline
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: ${{ inputs.app }}
+      tag: ${{ needs.app-pipeline.outputs.tag_version }}
+      sha: ${{ needs.app-pipeline.outputs.sha_short }}
+      context: ${{ needs.app-pipeline.outputs.context }}

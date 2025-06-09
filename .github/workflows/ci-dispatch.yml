@@ -1,3 +1,4 @@
+---
 name: CI Dispatcher per App
 
 on:
@@ -37,8 +38,7 @@ jobs:
               - 'apps/web/astro-site/**'
               - 'apps/web/Dockerfile'
               - 'apps/web/docker-compose*.yml'
-          base: HEAD~1
-  
+
   run-blog-pipeline:
     name: Run Full Pipeline for Blog
     needs: detect-changed-apps
