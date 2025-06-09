@@ -38,7 +38,7 @@ jobs:
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.1
         with:
-          github_token: ${{ secrets.REPO_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if tag exists and delete it
         run: |
@@ -87,7 +87,7 @@ jobs:
           tag: ${{ inputs.tag }}
           name: Release ${{ inputs.tag }}
           artifacts: release-${{ inputs.tag }}.zip
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Notify via Webhook (optional)
         run: |
