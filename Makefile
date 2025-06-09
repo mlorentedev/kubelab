@@ -30,7 +30,8 @@ endef
 .PHONY: help check install-deps install-ansible create-network \
 		up-traefik up-n8n up-monitoring up-blog up-web up-api up \
 		setup deploy status down down-traefik down-n8n down-monitoring down-web down-blog down-api down \
-		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets
+		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets \
+		test-pipeline validate-yaml lint-workflows
 
 help:
 	$(call log_info,Installation and setup commands:)
@@ -59,6 +60,10 @@ help:
 	@echo "  make setup-secrets       			- Configure GitHub secrets from .env files"
 	@echo "  make list-secrets        			- List configured GitHub secrets"
 	@echo "  make create-env-example  			- Create .env.example from .env files"
+	$(call log_info,Pipeline testing commands:)
+	@echo "  make test-pipeline       			- Run parallel pipeline tests for BLOG, WEB, and API"
+	@echo "  make validate-yaml       			- Validate all YAML files"
+	@echo "  make lint-workflows      			- Lint GitHub Actions workflows"
 
 ############################################################################################
 # Installation and setup commands
@@ -68,7 +73,15 @@ check:
 	$(call log_info,Verifying prerequisites...)
 	$(call check_command,ansible,ansible)
 	$(call check_command,docker,docker)
-	$(call check_command,npm,bundle,python3,python3-pip)
+	$(call check_command,npm,npm)
+	$(call check_command,bundle,bundle)
+	$(call check_command,ruby,ruby)
+	$(call check_command,python3,python3)
+	$(call check_command,pip3,pip3)
+	$(call check_command,gh,gh)
+	$(call check_command,jq,jq)
+	$(call check_command,yamllint,yamllint)
+	$(call check_command,actionlint,actionlint)
 	$(call check_command,awk,awk)
 	$(call check_command,docker-compose,docker-compose)
 	$(call log_success,All requirements are met.)
@@ -319,3 +332,26 @@ setup-secrets:
 list-secrets:
 	$(call log_info,Listing GitHub secrets...)
 	@gh secret list
+
+###########################################################################################
+# Pipeline testing commands
+###########################################################################################
+
+test-pipeline: validate-yaml lint-workflows
+	$(call log_info,Starting parallel pipeline testing...)
+	@gh workflow run manual-test.yml -f app=blog & \
+	gh workflow run manual-test.yml -f app=web & \
+	gh workflow run manual-test.yml -f app=api & \
+	wait
+	$(call log_info,All workflows triggered. Watching latest run...)
+	@gh run watch
+	$(call log_success,Parallel pipeline tests completed!)
+
+# Validation
+validate-yaml: ## Validate all YAML files
+	@echo "$(GREEN)Validating YAML files...$(NC)"
+	@find .github/workflows -name "*.yml" -exec yamllint {} \;
+
+lint-workflows: ## Lint GitHub Actions workflows
+	@echo "$(GREEN)Linting workflows...$(NC)"
+	@actionlint .github/workflows/*.yml
