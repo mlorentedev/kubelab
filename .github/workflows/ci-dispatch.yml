@@ -23,9 +23,21 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            blog:           apps/blog/**
-            web:            apps/web/**
-            api:            apps/api/**
+            blog:
+              - 'apps/blog/jekyll-site/**'
+              - 'apps/blog/Dockerfile'
+              - 'apps/blog/docker-compose*.yml'
+            api:
+              - 'apps/api/src/**'
+              - 'apps/api/go.mod'
+              - 'apps/api/go.sum'
+              - 'apps/api/Dockerfile'
+              - 'apps/api/docker-compose*.yml'
+            web:
+              - 'apps/web/astro-site/**'
+              - 'apps/web/Dockerfile'
+              - 'apps/web/docker-compose*.yml'
+          base: HEAD~1
   
   run-blog-pipeline:
     name: Run Full Pipeline for Blog
