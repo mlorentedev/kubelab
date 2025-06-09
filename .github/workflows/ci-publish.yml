@@ -1,3 +1,4 @@
+---
 name: Reusable Docker Build
 
 on:
@@ -11,10 +12,10 @@ on:
         type: string
       sha:
         required: true
-        type: string   
+        type: string
       context:
         required: true
-        type: string     
+        type: string
 
 jobs:
   docker-image-publish:
@@ -40,7 +41,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ./apps/${{ inputs.app }}/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true          
+          push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag}}-${{ inputs.sha }}     
