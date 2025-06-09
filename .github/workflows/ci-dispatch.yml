@@ -5,6 +5,10 @@ on:
     branches: [develop, feature/*, hotfix/*]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
 jobs:
   detect-changed-apps:
     name: Detect Changed Applications

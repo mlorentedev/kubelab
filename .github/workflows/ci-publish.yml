@@ -34,21 +34,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Bump version and push tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check if tag exists and delete it
-        run: |
-          TAG_NAME=${{ steps.tag_version.outputs.new_version }}
-          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Tag $TAG_NAME already exists. Deleting..."
-            git tag -d "$TAG_NAME"
-            git push origin --delete "$TAG_NAME"
-          fi  
-
       - name: Build and Push Image for ${{ inputs.app }}
         uses: docker/build-push-action@v6
         with:
@@ -88,6 +73,8 @@ jobs:
           name: Release ${{ inputs.tag }}
           artifacts: release-${{ inputs.tag }}.zip
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          allowUpdates: true
+          prerelease: ${{ contains(github.ref, 'feature/') || contains(github.ref, 'hotfix/') }}
 
       - name: Notify via Webhook (optional)
         run: |
