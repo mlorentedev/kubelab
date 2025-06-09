@@ -44,7 +44,7 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag}}-${{ inputs.sha }}     
+            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag}}-${{ inputs.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:latest
 
       - name: Create deployment bundle
@@ -73,7 +73,7 @@ jobs:
           tag: ${{ inputs.tag }}
           name: Release ${{ inputs.tag }}
           artifacts: release-${{ inputs.tag }}.zip
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
           prerelease: ${{ contains(github.ref, 'feature/') || contains(github.ref, 'hotfix/') }}
 
