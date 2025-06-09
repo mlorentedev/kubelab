@@ -35,6 +35,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Generate Docker tags
+        id: docker_tags
+        run: |
+          TAG="${{ inputs.tag }}"
+
+          if [[ "${{ github.ref }}" == 'refs/heads/master' || "${{ github.ref }}" == 'refs/heads/develop' ]]; then
+          {
+            echo "tags<<EOF"
+            echo "${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${TAG}"
+            echo "${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"          
+          else
+            # Convert pre-release to rc.X
+            RC_TAG=$(echo "$TAG" | sed -E 's/-.*\.(.*)$/-rc.\1/')
+            echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${RC_TAG}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and Push Image for ${{ inputs.app }}
         uses: docker/build-push-action@v6
         with:
@@ -44,7 +62,6 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag}}-${{ inputs.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:latest
 
       - name: Create deployment bundle
@@ -73,11 +90,12 @@ jobs:
           tag: ${{ inputs.tag }}
           name: Release ${{ inputs.tag }}
           artifacts: release-${{ inputs.tag }}.zip
-          token: ${{ secrets.GITHUB_TOKEN }}
+          generateReleaseNotes: true
           allowUpdates: true
-          prerelease: ${{ contains(github.ref, 'feature/') || contains(github.ref, 'hotfix/') }}
+          prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/hotfix/') }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Notify via Webhook (optional)
-        run: |
-          curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
-            -d "app=${{ inputs.app }}&version=${{ inputs.tag }}&sha_short=${{ inputs.sha }}"
+      #- name: Notify via Webhook (optional)
+      #  run: |
+      #    curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+      #      -d "app=${{ inputs.app }}&version=${{ inputs.tag }}&sha_short=${{ inputs.sha }}"
