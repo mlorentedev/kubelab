@@ -42,7 +42,7 @@ jobs:
   run-blog-pipeline:
     name: Run Full Pipeline for Blog
     needs: detect-changed-apps
-    if: needs.detect-changed-apps.outputs.blog == 'true'
+    if: needs.detect-changed-apps.outputs.blog
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: blog
@@ -51,7 +51,7 @@ jobs:
   run-api-pipeline:
     name: Run Full Pipeline for API
     needs: detect-changed-apps
-    if: needs.detect-changed-apps.outputs.api == 'true'
+    if: needs.detect-changed-apps.outputs.api
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: api
@@ -60,7 +60,7 @@ jobs:
   run-web-pipeline:
     name: Run Full Pipeline for Web
     needs: detect-changed-apps
-    if: needs.detect-changed-apps.outputs.web == 'true'
+    if: needs.detect-changed-apps.outputs.web
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: web
