@@ -1,0 +1,97 @@
+---
+name: CI Dispatcher per App (Debug)
+
+on:
+  push:
+    branches: [develop, feature/*, hotfix/*]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  detect-changed-apps:
+    name: Detect Changed Applications
+    runs-on: ubuntu-latest
+    outputs:
+      blog: ${{ steps.filter.outputs.blog }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Obtener todo el historial
+          
+      - name: Debug - Show changed files
+        run: |
+          echo "=== COMMIT INFO ==="
+          echo "Current commit: $GITHUB_SHA"
+          echo "Event name: $GITHUB_EVENT_NAME"
+          echo "Ref: $GITHUB_REF"
+          
+          echo "=== CHANGED FILES (last commit) ==="
+          git diff --name-only HEAD~1 HEAD
+          
+          echo "=== CHANGED FILES (detailed) ==="
+          git diff --name-status HEAD~1 HEAD
+          
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            blog:
+              - 'apps/blog/**'
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+          list-files: json
+          
+      - name: Debug - Show filter results
+        run: |
+          echo "=== FILTER RESULTS ==="
+          echo "Blog changed: ${{ steps.filter.outputs.blog }}"
+          echo "API changed: ${{ steps.filter.outputs.api }}"
+          echo "Web changed: ${{ steps.filter.outputs.web }}"
+          echo "Changes detected: ${{ steps.filter.outputs.changes }}"
+          
+          echo "=== FILES PER APP ==="
+          echo "Blog files: ${{ steps.filter.outputs.blog_files }}"
+          echo "API files: ${{ steps.filter.outputs.api_files }}"
+          echo "Web files: ${{ steps.filter.outputs.web_files }}"
+  
+  # Solo ejecutar blog para test
+  run-blog-pipeline:
+    name: Run Full Pipeline for Blog  
+    needs: detect-changed-apps
+    if: needs.detect-changed-apps.outputs.blog == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug blog execution
+        run: |
+          echo "✅ Blog pipeline would execute here"
+          echo "Blog output was: ${{ needs.detect-changed-apps.outputs.blog }}"
+
+  run-api-pipeline:
+    name: Run Full Pipeline for API
+    needs: detect-changed-apps
+    if: needs.detect-changed-apps.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug API execution
+        run: |
+          echo "❌ API pipeline should NOT execute"
+          echo "API output was: ${{ needs.detect-changed-apps.outputs.api }}"
+
+  run-web-pipeline:
+    name: Run Full Pipeline for Web
+    needs: detect-changed-apps
+    if: needs.detect-changed-apps.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug web execution
+        run: |
+          echo "❌ Web pipeline should NOT execute"
+          echo "Web output was: ${{ needs.detect-changed-apps.outputs.web }}"
