@@ -2,8 +2,8 @@ services:
   web:
     image: "${REGISTRY-docker.io/mlorentedev}/web:${TAG:-latest}"
     build:
-      context: ../../
-      dockerfile: apps/web/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     container_name: web
     restart: always
     expose:
