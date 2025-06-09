@@ -261,7 +261,7 @@ down-api:
 	-@docker compose -f $(API_PATH)/docker-compose.dev.yml down --remove-orphans
 	$(call log_success,API resources cleaned.)
 
-down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx
+down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx down-portainer
 	@docker volume prune -f
 	$(call log_success,Local resources cleaned.)
 
