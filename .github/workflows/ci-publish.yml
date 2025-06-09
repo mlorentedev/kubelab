@@ -39,14 +39,12 @@ jobs:
         id: docker_tags
         run: |
           TAG="${{ inputs.tag }}"
-
+          BASE_TAG=$(echo "$TAG" | cut -d'-' -f1)
           if [[ "${{ github.ref }}" == 'refs/heads/master' || "${{ github.ref }}" == 'refs/heads/develop' ]]; then
-          {
-            echo "tags<<EOF"
-            echo "${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${TAG}"
-            echo "${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:latest"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"          
+            TAGS="${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${TAG}"
+            TAGS+=",${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:latest"
+            TAGS+=",${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${BASE_TAG}"
+            echo "tags=$TAGS" >> "$GITHUB_OUTPUT"        
           else
             # Convert pre-release to rc.X
             RC_TAG=$(echo "$TAG" | sed -E 's/-.*\.(.*)$/-rc.\1/')
@@ -60,9 +58,7 @@ jobs:
           file: ./apps/${{ inputs.app }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:latest
+          tags: ${{ steps.docker_tags.outputs.tags }}
 
       - name: Create deployment bundle
         run: |
