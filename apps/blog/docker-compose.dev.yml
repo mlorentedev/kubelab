@@ -2,8 +2,8 @@ services:
   blog:
     image: "${REGISTRY-docker.io/mlorentedev}/blog:${TAG:-latest}"
     build:
-      context: ../../
-      dockerfile: apps/blog/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     container_name: blog
     restart: always
     expose:
@@ -11,7 +11,7 @@ services:
     env_file:
       - ./.env
     volumes:
-      - ./jekyll-site:/srv/jekyll
+      - ./apps/blog/jekyll-site:/srv/jekyll
     networks:
       - proxy
       

@@ -6,13 +6,13 @@ RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 
 # Copiar solo los archivos necesarios para instalar dependencias
-COPY apps/web/astro-site/package.json apps/web/astro-site/package-lock.json ./
+COPY astro-site/package.json astro-site/package-lock.json ./
 
 # Instalar dependencias con cache optimizado
 RUN npm ci
 
 # Copiar el resto del código fuente
-COPY apps/web/astro-site/ ./
+COPY astro-site/ ./
 
 # Configuración de environment (si es necesario)
 ARG BUILD_ENV=production
