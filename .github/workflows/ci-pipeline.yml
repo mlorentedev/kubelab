@@ -93,13 +93,13 @@ jobs:
         run: |
           case "${{ inputs.app }}" in
             blog)
-              echo "context=./apps/blog/jekyll-site" >> $GITHUB_OUTPUT
+              echo "context=./apps/blog" >> $GITHUB_OUTPUT
               ;;
             api)
-              echo "context=./apps/api/src" >> $GITHUB_OUTPUT
+              echo "context=./apps/api" >> $GITHUB_OUTPUT
               ;;
             web)
-              echo "context=./apps/web/astro-site" >> $GITHUB_OUTPUT
+              echo "context=./apps/web" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "Unsupported app context"
