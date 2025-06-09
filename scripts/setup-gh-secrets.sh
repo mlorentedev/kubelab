@@ -67,13 +67,17 @@ process_env_files() {
             # Split key and value
             IFS='=' read -r key value <<< "$line"
 
-            # Trim leading/trailing whitespace
-            key=$(echo "$key" | xargs)
-            value=$(echo "$value" | xargs)
+            # Trim leading/trailing whitespace SAFELY (no xargs)
+            key="${key#"${key%%[![:space:]]*}"}"   # Remove leading whitespace
+            key="${key%"${key##*[![:space:]]}"}"   # Remove trailing whitespace
+            value="${value#"${value%%[![:space:]]*}"}"   # Remove leading whitespace  
+            value="${value%"${value##*[![:space:]]}"}"   # Remove trailing whitespace
 
             # Remove surrounding quotes from value if present
             value="${value%\"}"
             value="${value#\"}"
+            value="${value%\'}"
+            value="${value#\'}"
 
             # Skip already processed secrets to avoid duplicates
             if [[ " ${processed_secrets[*]} " =~ " $key " ]]; then
@@ -97,6 +101,18 @@ process_env_files() {
                 continue
             fi           
 
+            # Debug info for Docker tokens
+            if [[ $key == "DOCKERHUB_TOKEN" ]]; then
+                log_info "Docker token length: ${#value} characters"
+                log_info "Docker token prefix: ${value:0:20}..."
+                if [[ ${#value} -lt 30 ]]; then
+                    log_warning "Docker token seems too short (${#value} chars). Expected ~30+ chars."
+                fi
+                if [[ ! $value =~ ^dckr_pat_ ]]; then
+                    log_warning "Docker token should start with 'dckr_pat_'"
+                fi
+            fi
+            
             set_secret "$key" "$value"
 
         done < "$env_file"
@@ -114,7 +130,7 @@ if [ -z "$REPO" ]; then
     exit_error "Could not determine repository. Make sure you're in a Git repository directory."
 fi
 
-log_success "Configuring secrets for repository: $REPO"
+log_info "Configuring secrets for repository: $REPO"
 
 # Process environment files and set GitHub secrets
 process_env_files

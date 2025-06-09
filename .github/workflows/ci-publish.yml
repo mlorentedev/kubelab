@@ -32,12 +32,24 @@ jobs:
         run: |
           echo "=== DOCKER DEBUG ==="
           echo "Docker version: $(docker --version)"
-          echo "Username: ${DOCKERHUB_USERNAME:0:3}..."
+          echo "Raw username: '$DOCKERHUB_USERNAME'"
+          echo "Username length: ${#DOCKERHUB_USERNAME}"
+          echo "Username hex dump:"
+          echo -n "$DOCKERHUB_USERNAME" | hexdump -C       
           echo "Token length: ${#DOCKERHUB_TOKEN}"
           echo "Token prefix: ${DOCKERHUB_TOKEN:0:12}..."
+
+          echo "=== CONNECTIVITY TEST ==="
+          curl -v https://index.docker.io/v1/search?q=hello-world 2>&1 | head -10
+
+          # Test manual más verboso
+          echo "=== VERBOSE LOGIN TEST ==="
+          echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin -v 2>&1 || true
           
-          echo "=== TESTING LOGIN ==="
-          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          # Test con diferentes registries
+          echo "=== TEST WITH EXPLICIT REGISTRY ==="
+          echo "$DOCKERHUB_TOKEN" | docker login index.docker.io --username "$DOCKERHUB_USERNAME" --password-stdin || true
+
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}  
