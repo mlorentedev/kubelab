@@ -31,7 +31,7 @@ endef
 		up-traefik up-n8n up-monitoring up-blog up-web up-api up \
 		setup deploy status down down-traefik down-n8n down-monitoring down-web down-blog down-api down \
 		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets \
-		test-pipeline validate-yaml lint-workflows
+		validate-yaml lint-workflows
 
 help:
 	$(call log_info,Installation and setup commands:)
@@ -61,7 +61,6 @@ help:
 	@echo "  make list-secrets        			- List configured GitHub secrets"
 	@echo "  make create-env-example  			- Create .env.example from .env files"
 	$(call log_info,Pipeline testing commands:)
-	@echo "  make test-pipeline       			- Run parallel pipeline tests for BLOG, WEB, and API"
 	@echo "  make validate-yaml       			- Validate all YAML files"
 	@echo "  make lint-workflows      			- Lint GitHub Actions workflows"
 
@@ -334,18 +333,8 @@ list-secrets:
 	@gh secret list
 
 ###########################################################################################
-# Pipeline testing commands
+# Pipelines commands
 ###########################################################################################
-
-test-pipeline: validate-yaml lint-workflows
-	$(call log_info,Starting parallel pipeline testing...)
-	@gh workflow run manual-test.yml -f app=blog & \
-	gh workflow run manual-test.yml -f app=web & \
-	gh workflow run manual-test.yml -f app=api & \
-	wait
-	$(call log_info,All workflows triggered. Watching latest run...)
-	@gh run watch
-	$(call log_success,Parallel pipeline tests completed!)
 
 # Validation
 validate-yaml: ## Validate all YAML files
