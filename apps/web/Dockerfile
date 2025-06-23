@@ -1,52 +1,63 @@
-# Build Stage
+# ---------- Build Stage ----------
 FROM node:20-alpine AS build
 
 RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
-# Copiar solo los archivos necesarios para instalar dependencias
+# ⚠️  Fuerza a npm a ignorar las optionalDependencies (rollup-native)
+ENV npm_config_omit=optional \
+    ROLLUP_NATIVE_DISABLE=true
+
+# Copiar sólo los archivos de dependencias
 COPY astro-site/package.json astro-site/package-lock.json ./
 
-# Instalar dependencias con cache optimizado
-RUN npm ci
+# Instalar dependencias con caché
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Copiar el resto del código fuente
 COPY astro-site/ ./
 
-# Configuración de environment (si es necesario)
+# Variable de entorno (opcional)
 ARG BUILD_ENV=production
 ENV NODE_ENV=${BUILD_ENV}
 
-# Construir la aplicación
-RUN npm run build
+RUN npm install @rollup/rollup-linux-arm64-musl --no-save || true
 
-# Runtime Stage
+# Construir la aplicación
+RUN --mount=type=cache,target=/root/.npm \
+    npm run build
+
+
+# ---------- Runtime Stage ----------
 FROM node:20-alpine AS runtime
 
 RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
-ENV NODE_ENV=production
+# ⚠️  Mantener la omisión de optionalDependencies en runtime
+ENV NODE_ENV=production \
+    npm_config_omit=optional \
+    ROLLUP_NATIVE_DISABLE=true
 
-# Copiar solo los archivos necesarios de la etapa de build
+# Copiar artefactos desde la etapa de build
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 COPY --from=build /app/package-lock.json ./
 
-# Instalar solo las dependencias de producción
-RUN npm ci --omit=dev
+# Instalar SOLO dependencias de producción
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev && \
+    npm cache clean --force
 
-# Configurar usuario no-root para seguridad
+# Crear usuario no-root para seguridad
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S astro -u 1001 && \
     chown -R astro:nodejs /app
 
 USER astro
 
-# Puerto expuesto por la aplicación
 EXPOSE 4321
-
-# Comando para iniciar la aplicación
 CMD ["node", "./dist/server/entry.mjs"]

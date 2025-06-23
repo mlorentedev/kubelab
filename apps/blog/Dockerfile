@@ -9,17 +9,20 @@ RUN apk update && \
         git \
         musl-dev \
         linux-headers \
-        libffi-dev \
-        && gem update bundler \
-        && gem install bundler -v 2.5.22
+        libffi-dev
+
+RUN gem update bundler && \
+    gem install bundler -v 2.5.22
 
 WORKDIR /srv/jekyll
 
 # Copy only Gemfile(s) first
 COPY jekyll-site/Gemfile* ./
 
-RUN bundle config set --local force_ruby_platform true && \
-    bundle install
+RUN --mount=type=cache,target=/usr/local/bundle \
+    bundle config set --local force_ruby_platform true && \
+    bundle config set --local deployment false && \
+    bundle install --jobs 4 --retry 3 --verbose
 
 COPY jekyll-site/ .
 

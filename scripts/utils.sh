@@ -388,7 +388,8 @@ replace_placeholders() {
     [ -n "$PRODUCTION_SERVICE" ] && perl -i -pe "s#\{\{PRODUCTION_SERVICE\}\}#$PRODUCTION_SERVICE#g" "$tmpfile"
     [ -n "$PRODUCTION_SERVER" ] && perl -i -pe "s#\{\{PRODUCTION_SERVER\}\}#$PRODUCTION_SERVER#g" "$tmpfile"
     [ -n "$PRODUCTION_PORT" ] && perl -i -pe "s#\{\{PRODUCTION_PORT\}\}#$PRODUCTION_PORT#g" "$tmpfile"
-
+    [ -n "$PRODUCTION_DEPLOY_PATH" ] && perl -i -pe "s#\{\{PRODUCTION_DEPLOY_PATH\}\}#$PRODUCTION_DEPLOY_PATH#g" "$tmpfile"
+    
     # Ansible-specific variables
     [ -n "$ARTIFACT_NAME" ] && perl -i -pe "s#\{\{ARTIFACT_NAME\}\}#$ARTIFACT_NAME#g" "$tmpfile"
     [ -n "$DISABLE_HTTPS" ] && perl -i -pe "s#\{\{DISABLE_HTTPS\}\}#$DISABLE_HTTPS#g" "$tmpfile"
@@ -400,8 +401,13 @@ replace_placeholders() {
     [ -n "$PRODUCTION_HOST_IP" ] && perl -i -pe "s#\{\{PRODUCTION_HOST_IP\}\}#$PRODUCTION_HOST_IP#g" "$tmpfile"
     [ -n "$PRODUCTION_HOST_USER" ] && perl -i -pe "s#\{\{PRODUCTION_HOST_USER\}\}#$PRODUCTION_HOST_USER#g" "$tmpfile"
     [ -n "$PRODUCTION_HOST_PORT" ] && perl -i -pe "s#\{\{PRODUCTION_HOST_PORT\}\}#$PRODUCTION_HOST_PORT#g" "$tmpfile"
-
+    [ -n "$ANSIBLE_SSH_USER" ] && perl -i -pe "s#\{\{ANSIBLE_SSH_USER\}\}#$ANSIBLE_SSH_USER#g" "$tmpfile"
+    [ -n "$ANSIBLE_HOST" ] && perl -i -pe "s#\{\{ANSIBLE_HOST\}\}#$ANSIBLE_HOST#g" "$tmpfile"
+    [ -n "$ANSIBLE_HOST_PORT" ] && perl -i -pe "s#\{\{ANSIBLE_HOST_PORT\}\}#$ANSIBLE_HOST_PORT#g" "$tmpfile"
+    
     # App specific variables
+    [ -n "$IMAGE_NAME" ] && perl -i -pe "s#\{\{IMAGE_NAME\}\}#$IMAGE_NAME#g" "$tmpfile"
+    [ -n "$CONTAINER_NAME" ] && perl -i -pe "s#\{\{CONTAINER_NAME\}\}#$CONTAINER_NAME#g" "$tmpfile"
     [ -n "$APP_BLOG_NAME" ] && perl -i -pe "s#\{\{APP_BLOG_NAME\}\}#$APP_BLOG_NAME#g" "$tmpfile"
     [ -n "$APP_BLOG_PORT" ] && perl -i -pe "s#\{\{APP_BLOG_PORT\}\}#$APP_BLOG_PORT#g" "$tmpfile"
     [ -n "$APP_BLOG_HOST" ] && perl -i -pe "s#\{\{APP_BLOG_HOST\}\}#$APP_BLOG_HOST#g" "$tmpfile"

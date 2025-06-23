@@ -12,8 +12,25 @@ services:
     networks:
       - proxy
 
+  git_sync:
+    image: registry.k8s.io/git-sync/git-sync:v4.2.3
+    container_name: git_sync
+    restart: unless-stopped
+    environment:
+      GIT_SYNC_REPO: https://github.com/mlorentedev/second-brain.git
+      GIT_SYNC_BRANCH: main
+      GIT_SYNC_DEPTH: "1"
+      GIT_SYNC_PERIOD: 30s
+      GIT_SYNC_ROOT: /git
+      GIT_SYNC_SINGLE_BRANCH: "true"
+    volumes:
+      - vault:/git
+    networks:
+      - proxy
+
 volumes:
   n8n_data:
+  vault:
 
 networks:
   proxy:

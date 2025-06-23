@@ -1,7 +1,7 @@
 services:
   web:
-    image: "${REGISTRY-docker.io/mlorentedev}/web:${TAG:-latest}"
-    container_name: web
+    image: "${REGISTRY}/${IMAGE_NAME}:latest"
+    container_name: ${CONTAINER_NAME}
     restart: always
     expose:
       - ${PORT}  
