@@ -1,10 +1,10 @@
 services:
   api:
-    image: "${REGISTRY-docker.io/mlorentedev}/api:${TAG:-latest}"
+    image: "${REGISTRY}/${IMAGE_NAME}:${TAG}"
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: api
+    container_name: ${CONTAINER_NAME}
     restart: always
     expose:
       - ${PORT}  

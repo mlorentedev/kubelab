@@ -1,7 +1,17 @@
 # ansible/inventory/group_vars/all.yml
 ---
-deploy_path: {{ PRODUCTION_DEPLOY_PATH }}
-domain: {{ PRODUCTION_DOMAIN }}
+deploy_path: {{PRODUCTION_DEPLOY_PATH}}
+domain: {{PRODUCTION_DOMAIN}}
+apps:
+    - {{APP_BLOG_NAME}}
+    - {{APP_WEB_NAME}}
+    - {{APP_API_NAME}}
+    - {{APP_N8N_NAME}}
+    - {{APP_GRAFANA_NAME}}
+    - {{APP_LOKI_NAME}}
+    - {{APP_UPTIME_KUMA_NAME}}
+    - {{APP_PORTAINER_NAME}}
+
 #docker_network: {{ DOCKER_NETWORK}}
 #traefik_dashboard: {{ TRAEFIK_DASHBOARD }}
 #artifact_name: {{ ARTIFACT_NAME }}
