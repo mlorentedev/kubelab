@@ -1,10 +1,10 @@
 services:
   blog:
-    image: "${REGISTRY-docker.io/mlorentedev}/blog:${TAG:-latest}"
+    image: "${REGISTRY}/${IMAGE_NAME}:${TAG}"
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: blog
+    container_name: ${CONTAINER_NAME}
     restart: always
     expose:
       - ${PORT}  

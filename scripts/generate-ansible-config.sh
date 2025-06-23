@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANSIBLE_DIR="$PROJECT_ROOT/infra/ansible"
 TEMPLATES_DIR="$ANSIBLE_DIR/templates"
-INVENTORY_DIR="$ANSIBLE_DIR/inventory"
+INVENTORY_DIR="$ANSIBLE_DIR/inventories"
 GROUP_VARS_DIR="$INVENTORY_DIR/group_vars"
 
 # Load environment variables from .env file if it exists
