@@ -4,6 +4,7 @@
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TRAEFIK_DIR="$PROJECT_ROOT/infra/traefik"
 
 # Load environment variables from .env file if it exists
 [ -f "$SCRIPT_DIR/utils.sh" ] && source "$SCRIPT_DIR/utils.sh"
@@ -31,7 +32,7 @@ fi
 # Generate the credentials
 credentials=$(generate_basic_auth "$username" "$password")
 
-update_env_credentials "$credentials" "$PROJECT_ROOT/.env" "$PROJECT_ROOT/.env.local"
+update_env_credentials "$credentials" "$TRAEFIK_DIR/.env"
 
 log_success "Traefik dashboard credentials generated successfully."
 log_info "Username: $username"

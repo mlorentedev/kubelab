@@ -31,7 +31,9 @@ endef
 		up-traefik up-n8n up-monitoring up-blog up-web up-api up \
 		setup deploy status down down-traefik down-n8n down-monitoring down-web down-blog down-api down \
 		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets \
-		validate-yaml lint-workflows
+		validate-yaml lint-workflows \
+		setup-buildx docker-login push-app push-app-tag push-all push-all-tag \
+		pull-images clean-images list-images help-docker
 
 help:
 	$(call log_info,Installation and setup commands:)
@@ -46,6 +48,15 @@ help:
 	@echo "  make dev-blog            			- Start local development environment for BLOG"
 	@echo "  make dev-traefik         			- Start local development environment for Traefik"
 	@echo "  make dev                 			- Start all local development environments"
+	$(call log_info,Docker build and push commands:)
+	@echo "  make docker-login         			- Login to Docker registry"
+	@echo "  make push-app APP=<app>   			- Build and push specific app"
+	@echo "  make push-app-tag APP=<app> TAG=<tag>		- Build and push app with specific tag"
+	@echo "  make push-all             			- Build and push all apps"
+	@echo "  make push-all-tag TAG=<tag>			- Build and push all apps with tag"
+	@echo "  make pull-images          			- Pull latest images from registry"
+	@echo "  make clean-images         			- Clean local Docker images"
+	@echo "  make list-images          			- List local Docker images"
 	$(call log_info,Server deployment commands:)
 	@echo "  make setup               			- Initial setup for the environment"
 	@echo "  make deploy              			- Deploy application to the environment"
@@ -116,7 +127,7 @@ create-network:
 	$(call log_success,Docker network created or already exists.)
 
 #################################################################################################
-# Cleanup commands
+# Development commands
 #################################################################################################
 
 up-traefik: create-network generate-traefik-config
@@ -131,12 +142,20 @@ up-traefik: create-network generate-traefik-config
 
 up-portainer: up-traefik
 	$(call log_info,Starting Portainer...)
+	@grep -qxF 'ENVIRONMENT=local' $(PORTAINER_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(PORTAINER_PATH)/.env); \
+	  exit 1; \
+	}
 	@docker compose -f $(PORTAINER_PATH)/docker-compose.yml up -d
 	$(call log_success,Development environment for Portainer started successfully. Remember to add portainer.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,Portainer is running on port 9000. You can access it at http://portainer.mlorentedev.test)
 
 up-nginx: up-traefik
 	$(call log_info,Starting Nginx...)
+	@grep -qxF 'ENVIRONMENT=local' $(NGINX_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(NGINX_PATH)/.env); \
+	  exit 1; \
+	}
 	@docker compose -f $(NGINX_PATH)/docker-compose.yml up -d
 	$(call log_success,Nginx is served on port 80.)
 
@@ -197,28 +216,8 @@ up-api: up-traefik
 
 up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-monitoring
 
-################################################################################################
-# Deployment commands
-################################################################################################
-
-setup: check
-	$(call log_info,Setting up $(ENVIRONMENT) environment...)
-	@if [ ! -f "$(ANSIBLE_PATH)/inventories/hosts.yml" ]; then \
-		$(call log_error,Inventory file $(ANSIBLE_PATH)/inventories/hosts.yml not found); \
-		exit 1; \
-	fi
-	ansible-playbook $(ANSIBLE_PATH)/playbooks/setup.yml -i $(ANSIBLE_PATH)/inventories/hosts.yml --limit $(ENVIRONMENT) -e "env=$(ENVIRONMENT)" --private-key $(SSH_KEY) --ask-become-pass -v
-
-deploy: check generate-config
-	$(call log_info,Deploying to $(ENVIRONMENT)...)
-	ansible-playbook $(PLAYBOOK_PATH)/deploy.yml -i $(INVENTORY) --limit $(ENVIRONMENT) -e "env=$(ENVIRONMENT)" --private-key $(SSH_KEY) --ask-become-pass -v
-
-status: check
-	$(call log_info,Checking status in $(ENVIRONMENT)...)
-	ansible $(ENVIRONMENT) -i $(INVENTORY) -m shell -a "docker ps"
-
 ##################################################################################################
-# Utility commands
+# Cleanup commands
 ##################################################################################################
 
 down-traefik:
@@ -264,6 +263,123 @@ down-api:
 down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx down-portainer
 	@docker volume prune -f
 	$(call log_success,Local resources cleaned.)
+
+##################################################################################################
+# Docker Build and Push Commands
+##################################################################################################
+
+setup-buildx:
+	$(call log_info,Setting up Docker Buildx for multi-architecture builds...)
+	@docker buildx create --name multiarch --driver docker-container --use 2>/dev/null || \
+		docker buildx use multiarch 2>/dev/null || \
+		docker buildx create --name multiarch --driver docker-container --use
+	@docker buildx inspect --bootstrap >/dev/null 2>&1
+	$(call log_success,Docker Buildx setup completed.)
+
+# Docker login
+docker-login:
+	$(call log_info,Logging into Docker registry...)
+	@echo "$(DOCKERHUB_TOKEN)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+	$(call log_success,Successfully logged into Docker registry.)
+
+push-app: setup-buildx docker-login
+	@if [ -z "$(APP)" ]; then \
+		$(call log_error,APP is required. Usage: make push-app APP=blog); \
+		exit 1; \
+	fi
+	$(call log_info,Building and pushing $(APP) [multi-arch]...)
+	@if [ ! -f "apps/$(APP)/Dockerfile" ]; then \
+		$(call log_error,Dockerfile not found for app: $(APP)); \
+		exit 1; \
+	fi
+	@docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		-t $(DOCKERHUB_USERNAME)/mlorente-$(APP):latest \
+		--push \
+		apps/$(APP)
+	$(call log_success,Successfully pushed $(APP).)
+
+push-app-tag: setup-buildx docker-login
+	@if [ -z "$(APP)" ] || [ -z "$(TAG)" ]; then \
+		$(call log_error,APP and TAG are required. Usage: make push-app-tag APP=blog TAG=v1.0.0); \
+		exit 1; \
+	fi
+	$(call log_info,Building and pushing $(APP):$(TAG) [multi-arch]...)
+	@if [ ! -f "apps/$(APP)/Dockerfile" ]; then \
+		$(call log_error,Dockerfile not found for app: $(APP)); \
+		exit 1; \
+	fi
+	@docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		-t $(DOCKERHUB_USERNAME)/mlorente-$(APP):$(TAG) \
+		-t $(DOCKERHUB_USERNAME)/mlorente-$(APP):latest \
+		--push \
+		apps/$(APP)
+	$(call log_success,Successfully pushed $(APP):$(TAG).)
+
+# Build all application images
+build-all-images:
+	$(call log_info,Building all application images...)
+	@$(MAKE) build-image APP=api
+	@$(MAKE) build-image APP=blog
+	@$(MAKE) build-image APP=web
+	$(call log_success,Successfully built all application images.)
+
+# Build and push all apps
+push-all: setup-buildx docker-login
+	$(call log_info,Building and pushing all apps [multi-arch]...)
+	@$(MAKE) push-app APP=api
+	@$(MAKE) push-app APP=blog
+	@$(MAKE) push-app APP=web
+	$(call log_success,Successfully pushed all apps.)
+
+# Build and push all apps with specific tag
+push-all-tag: setup-buildx docker-login
+	@if [ -z "$(TAG)" ]; then \
+		$(call log_error,TAG is required. Usage: make push-all-tag TAG=v1.0.0); \
+		exit 1; \
+	fi
+	$(call log_info,Building and pushing all apps with tag $(TAG) [multi-arch]...)
+	@$(MAKE) push-app-tag APP=api TAG=$(TAG)
+	@$(MAKE) push-app-tag APP=blog TAG=$(TAG)
+	@$(MAKE) push-app-tag APP=web TAG=$(TAG)
+	$(call log_success,Successfully pushed all apps with tag $(TAG).)
+
+pull-images:
+	$(call log_info,Pulling latest images from registry...)
+	@docker pull $(DOCKERHUB_USERNAME)/mlorente-api:latest || echo "Failed to pull API image"
+	@docker pull $(DOCKERHUB_USERNAME)/mlorente-blog:latest || echo "Failed to pull Blog image"
+	@docker pull $(DOCKERHUB_USERNAME)/mlorente-web:latest || echo "Failed to pull Web image"
+	$(call log_success,Finished pulling images.)
+
+clean-images:
+	$(call log_info,Cleaning local Docker images...)
+	@docker images | grep $(DOCKERHUB_USERNAME)/mlorente- | awk '{print $$3}' | xargs -r docker rmi || true
+	$(call log_success,Cleaned local Docker images.)
+
+list-images:
+	$(call log_info,Listing local Docker images...)
+	@docker images | grep $(DOCKERHUB_USERNAME)/mlorente- || echo "No images found."
+
+################################################################################################
+# Deployment commands
+################################################################################################
+
+setup: check generate-ansible-config
+	$(call log_info,Setting up $(ENVIRONMENT) environment...)
+	@if [ ! -f "$(ANSIBLE_PATH)/inventories/hosts.yml" ]; then \
+		$(call log_error,Inventory file $(ANSIBLE_PATH)/inventories/hosts.yml not found); \
+		exit 1; \
+	fi
+	ansible-playbook $(ANSIBLE_PATH)/playbooks/setup.yml -i $(ANSIBLE_PATH)/inventories/hosts.yml --limit $(ENVIRONMENT) -e "env=$(ENVIRONMENT)" --private-key $(SSH_KEY)
+
+deploy: check generate-config
+	$(call log_info,Deploying to $(ENVIRONMENT)...)
+	ansible-playbook $(ANSIBLE_PATH)/playbooks/deploy.yml -i $(ANSIBLE_PATH)/inventories/hosts.yml --limit $(ENVIRONMENT) -e "env=$(ENVIRONMENT)" --private-key $(SSH_KEY)
+
+status: check
+	$(call log_info,Checking status in $(ENVIRONMENT)...)
+	ansible $(ENVIRONMENT) -i $(ANSIBLE_PATH)/inventories/hosts.yml -m shell -a "docker ps"
 
 ##################################################################################################
 # Utility commands

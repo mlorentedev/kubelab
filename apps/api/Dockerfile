@@ -13,13 +13,17 @@ RUN go install github.com/air-verse/air@latest
 
 # Copiar archivos de módulos y descargar dependencias
 COPY src/go.mod src/go.sum ./
-RUN go mod download
 
 # Copiar el código fuente
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 COPY src/ ./
 
 # Compilar la aplicación con optimizaciones
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
     go build -ldflags="-w -s" -o server ./cmd/server
 
 # Runtime Stage - usando alpine mínimo

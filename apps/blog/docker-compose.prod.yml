@@ -1,7 +1,7 @@
 services:
   blog:
-    image: "${REGISTRY-docker.io/mlorentedev}/blog:${TAG:-latest}"
-    container_name: blog
+    image: "${REGISTRY}/${IMAGE_NAME}:latest"
+    container_name: ${CONTAINER_NAME}
     restart: always
     expose:
       - ${PORT}  

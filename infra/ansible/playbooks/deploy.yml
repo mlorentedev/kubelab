@@ -1,5 +1,5 @@
 ---
-- name: Deploy application
+- name: Deploy cluster of applications
   hosts: "{{ env }}"
   become: false
   pre_tasks:
@@ -13,24 +13,26 @@
       backup_dir: "{{ deploy_path }}/backups/{{ timestamp }}"
   vars:
     traefik_path: "/opt/traefik"
-    compose_path: "{{ deploy_path }}/docker-compose"
-    project_root: "{{ playbook_dir | dirname | dirname }}"
-    docker_files: "{{ project_root }}/docker"
-    traefik_files: "{{ project_root }}/traefik"
-    compose_file: "docker-compose.{{ env }}.yml"
+    deploy_base: "{{ deploy_path }}"
+    project_root: "{{ playbook_dir | dirname | dirname | dirname }}"
+    traefik_files: "{{ project_root }}/infra/traefik"
+    apps_path: "{{ project_root }}/apps"
+    apps:
+      - { name: "api", compose: "docker-compose.prod.yml" }
+      - { name: "blog", compose: "docker-compose.prod.yml" }
+      - { name: "web", compose: "docker-compose.prod.yml" }
+      - { name: "n8n", compose: "docker-compose.yml" }
+      - { name: "monitoring", compose: "docker-compose.yml" }
+      - { name: "portainer", compose: "docker-compose.yml" }
+    deploy_apps: "{{ apps | map(attribute='name') | list }}"
 
   tasks:
-    - name: Debug project paths
+    - name: Debug deployment info
       debug:
         msg:
-          - "Project Root: {{ project_root }}"
-          - "Docker Files: {{ docker_files }}"
-          - "Traefik Files: {{ traefik_files }}"
-          - "Playbook Dir: {{ playbook_dir }}"
-          - "Deploy Path: {{ deploy_path }}"
-          - "Domain: {{ domain }}"
-          - "Environment: {{ env }}"
-          - "Compose File: {{ compose_file }}"          
+          - "Deploying to: {{ domain }}"
+          - "Apps: {{ deploy_apps | join(', ') }}"
+          - "Timestamp: {{ timestamp }}"        
       run_once: true
 
     - name: Create backup directory
@@ -41,156 +43,215 @@
 
     - name: Backup existing docker-compose directory (if present)
       copy:
-        src: "{{ compose_path }}/"
-        dest: "{{ backup_dir }}/docker-compose/"
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
         remote_src: yes
+      loop:
+        - { src: "{{ traefik_path }}/", dest: "{{ backup_dir }}/traefik/" }
+        - { src: "{{ deploy_base }}/apps/", dest: "{{ backup_dir }}/apps/" }
       ignore_errors: true
 
-    - name: Backup existing traefik directory (if present)
-      copy:
-        src: "{{ traefik_path }}/"
-        dest: "{{ backup_dir }}/traefik/"
-        remote_src: yes
-      ignore_errors: true
-
-    - name: Ensure docker-compose directory exists
-      file:
-        path: "{{ compose_path }}"
-        state: directory
-        mode: '0755'
-
-    - name: Ensure traefik directory exists
-      file:
-        path: "{{ traefik_path }}"
-        state: directory
-        mode: '0755'
-
-    - name: Check if environment-specific compose file exists
-      stat:
-        path: "{{ docker_files }}/{{ compose_file }}"
-      register: compose_file_stat
-      delegate_to: localhost
-
-    - name: Fail if compose file doesn't exist
-      fail:
-        msg: "Docker compose file {{ compose_file }} not found in {{ docker_files }}/"
-      when: not compose_file_stat.stat.exists
-
-    - name: Copy environment-specific docker-compose file only
-      copy:
-        src: "{{ docker_files }}/{{ compose_file }}"
-        dest: "{{ compose_path }}/{{ compose_file }}"
-        force: yes
-        mode: '0644'
-
-    - name: Ensure traefik subdirectories exist
+    - name: Ensure traefik directories exist
       file:
         path: "{{ traefik_path }}/{{ item }}"
         state: directory
         mode: '0755'
       loop:
-        - "dynamic_conf"
+        - "dynamic"
         - "logs"
+        - "certs"
 
-    - name: Copy dynamic_conf directory (overwrite always)
+    - name: Copy traefik configuration files
       copy:
-        src: "{{ traefik_files }}/dynamic_conf/"
-        dest: "{{ traefik_path }}/dynamic_conf/"
-        force: yes
-        mode: '0644'
-
-    - name: Copy traefik.yml (overwrite always)
-      copy:
-        src: "{{ traefik_files }}/traefik.yml"
-        dest: "{{ traefik_path }}/traefik.yml"
-        force: yes
-        mode: '0644'
-
-    - name: Copy docker-compose.traefik.yml (overwrite always)
-      copy:
-        src: "{{ traefik_files }}/docker-compose.traefik.yml"
-        dest: "{{ traefik_path }}/docker-compose.traefik.yml"
-        force: yes
-        mode: '0644'
-
-    - name: Stat acme.json
-      stat:
-        path: "{{ traefik_path }}/acme.json"
-      register: acme_stat
-      
-    - name: Backup current acme.json (if present)
-      copy:
-        src: "{{ traefik_path }}/acme.json"
-        dest: "{{ backup_dir }}/acme.json.{{ timestamp }}"
-        remote_src: yes
-      when: acme_stat.stat.exists
-      ignore_errors: true
-
-    - name: Remove old acme.json so Traefik will re-generate it
-      file:
-        path: "{{ traefik_path }}/acme.json"
-        state: absent
-      when: acme_stat.stat.exists
-
-    - name: Create empty acme.json with secure perms
-      copy:
-        content: ''
-        dest: "{{ traefik_path }}/acme.json"
-        mode: '0600'
-
-    - name: Copy .env file to remote folders
-      copy:
-        src: "{{ docker_files }}/.env"
-        dest: "{{ item }}"
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
         force: yes
         mode: '0644'
       loop:
-        - "{{ traefik_path }}/.env"
-        - "{{ compose_path }}/.env"
+        - { src: "{{ traefik_files }}/traefik.yml", dest: "{{ traefik_path }}/traefik.yml" }
+        - { src: "{{ traefik_files }}/docker-compose.yml", dest: "{{ traefik_path }}/docker-compose.yml" }
+        - { src: "{{ traefik_files }}/.env", dest: "{{ traefik_path }}/.env" }
+
+    - name: Copy traefik dynamic configuration
+      copy:
+        src: "{{ traefik_files }}/dynamic/"
+        dest: "{{ traefik_path }}/dynamic/"
+        force: yes
+        mode: '0644'
+
+    - name: Setup acme.json for SSL certificates
+      block:
+        - name: Backup existing acme.json
+          copy:
+            src: "{{ traefik_path }}/certs/acme.json"
+            dest: "{{ backup_dir }}/certs/acme.json"
+            remote_src: yes
+          ignore_errors: true
+        
+        - name: Create fresh acme.json
+          copy:
+            content: ''
+            dest: "{{ traefik_path }}/certs/acme.json"
+            mode: '0600'
+
+    - name: Create app directories
+      file:
+        path: "{{ deploy_base }}/apps/{{ app.name }}"
+        state: directory
+        mode: '0755'
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
+
+    - name: Copy app configurations
+      copy:
+        src: "{{ apps_path }}/{{ app.name }}/{{ app.compose }}"
+        dest: "{{ deploy_base }}/apps/{{ app.name }}/docker-compose.yml"
+        force: yes
+        mode: '0644'
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
       ignore_errors: true
 
-    - name: Stop and remove existing application containers
-      docker_compose:
-        project_src: "{{ compose_path }}/"
-        files:
-          - "docker-compose.{{ env }}.yml"
-        state: absent
+    - name: Copy app environment files
+      copy:
+        src: "{{ apps_path }}/{{ app.name }}/.env"
+        dest: "{{ deploy_base }}/apps/{{ app.name }}/.env"
+        force: yes
+        mode: '0644'
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
       ignore_errors: true
 
-    - name: Stop and remove existing Traefik container
-      docker_compose:
-        project_src: "{{ traefik_path }}/"
-        files:
-          - "docker-compose.traefik.yml"
-        state: absent
+    - name: Check if nginx exists in infra
+      stat:
+        path: "{{ project_root }}/infra/nginx/docker-compose.yml"
+      register: nginx_exists
+      delegate_to: localhost
+
+    - name: Setup nginx if it exists
+      block:
+        - name: Ensure nginx directory exists
+          file:
+            path: "{{ deploy_base }}/nginx"
+            state: directory
+            mode: '0755'
+        
+        - name: Copy nginx configuration
+          copy:
+            src: "{{ project_root }}/infra/nginx/"
+            dest: "{{ deploy_base }}/nginx/"
+            force: yes
+            mode: '0644'
+      when: nginx_exists.stat.exists
+
+    - name: Stop existing containers
+      shell: |
+        cd {{ traefik_path }} && docker compose down || true
+        cd {{ deploy_base }}/apps/{{ app.name }} && docker compose down || true
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
       ignore_errors: true
 
-    - name: Deploy Traefik
-      docker_compose:
-        project_src: "{{ traefik_path }}/"
-        files:
-          - "docker-compose.traefik.yml"
+    - name: Stop nginx if exists
+      shell: |
+        cd {{ deploy_base }}/nginx && docker compose down || true
+      when: nginx_exists.stat.exists
+      ignore_errors: true
+
+    - name: Create Docker proxy network
+      docker_network:
+        name: proxy
+        state: present
+      ignore_errors: true
+
+    - name: Pull latest images
+      shell: docker compose pull
+      args:
+        chdir: "{{ deploy_base }}/apps/{{ app.name }}"
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
+
+    - name: Start Traefik
+      shell: |
+        cd {{ traefik_path }}
+        docker compose up -d
       environment:
         DOMAIN: "{{ domain }}"
-        TRAEFIK_USERS: "{{ traefik_users }}"
 
-    - name: Deploy application containers
-      docker_compose:
-        project_src: "{{ compose_path }}/"
-        files:
-          - "docker-compose.{{ env }}.yml"
+    - name: Wait for Traefik to start
+      pause:
+        seconds: 15
+
+    - name: Start applications
+      shell: |
+        cd {{ deploy_base }}/apps/{{ app.name }}
+        docker compose up -d
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app
       environment:
         DOMAIN: "{{ domain }}"
 
-    - name: Wait for services to be ready
+    - name: Start nginx
+      shell: |
+        cd {{ deploy_base }}/nginx
+        docker compose up -d
+      when: nginx_exists.stat.exists
+      environment:
+        DOMAIN: "{{ domain }}"
+
+    - name: Wait for core apps to start
       pause:
         seconds: 10
 
-    - name: Check container status
-      shell: docker ps | grep jekyll-{{ env }}
-      register: container_status
-      failed_when: container_status.rc != 0
+    - name: Check running containers
+      shell: |
+        {% raw %}
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        {% endraw %}
+      register: containers_status
 
-    - name: Deployment finished successfully
+    - name: Display container status
       debug:
-        msg: "Deployment to {{ env }} successful!"
+        msg: "{{ containers_status.stdout_lines }}"
+
+    - name: Health check for blog
+      uri:
+        url: "https://{{ domain }}"
+        method: GET
+        status_code: 200
+        timeout: 30
+      register: blog_health
+      failed_when: false
+      when: "'blog' in deploy_apps"
+
+    - name: Health check for API
+      uri:
+        url: "https://api.{{ domain }}/health"
+        method: GET
+        status_code: 200
+        timeout: 30
+      register: api_health
+      failed_when: false
+      when: "'api' in deploy_apps"
+
+    - name: Show health check results
+      debug:
+        msg:
+          - "Blog health: {{ 'OK' if blog_health.status == 200 else 'FAILED' }}"
+          - "API health: {{ 'OK' if api_health.status == 200 else 'FAILED' }}"
+      when: blog_health is defined or api_health is defined
+
+    - name: Deployment completed successfully
+      debug:
+        msg: 
+          - "Production deployment completed!"
+          - "Domain: https://{{ domain }}"
+          - "Apps deployed: {{ deploy_apps | join(', ') }}"
+          - "Backup created: {{ backup_dir }}"
+          - "Traefik dashboard: https://{{ domain }}/dashboard/"
