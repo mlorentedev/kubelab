@@ -1,4 +1,3 @@
-# Traefik HTTPS configuration template
 api:
   dashboard: {{TRAEFIK_DASHBOARD}}
   insecure: {{TRAEFIK_INSECURE}}
@@ -34,6 +33,11 @@ entryPoints:
       tls:
         certResolver: {{CERT_RESOLVER}}
         options: {{TLS_OPTIONS}}
+        domains:
+        - main: "{{DOMAIN}}"
+          sans:
+            - "*.{{DOMAIN}}"
+
   traefik:
     address: :8080
     http:
@@ -54,9 +58,13 @@ providers:
        
 certificatesResolvers:
   {{CERT_RESOLVER}}:
-    acme:
-      httpChallenge:
-        entryPoint: "web"    
+    acme: 
       caServer: {{ACME_SERVER}}
       email: {{ACME_EMAIL}}
       storage: "/letsencrypt/acme.json"
+      dnsChallenge:
+        provider: {{DNS_PROVIDER}}
+        delayBeforeCheck: "{{DNS_DELAY_BEFORE_CHECK}}"
+        resolvers:
+          - {{DNS_RESOLVER_1}}
+          - {{DNS_RESOLVER_2}}

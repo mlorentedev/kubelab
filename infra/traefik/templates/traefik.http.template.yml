@@ -1,4 +1,3 @@
-# Traefik HTTP configuration template (for local development)
 api:
   dashboard: {{TRAEFIK_DASHBOARD}}
   insecure: {{TRAEFIK_INSECURE}}

@@ -27,7 +27,7 @@ define check_command
 	@bash -c 'source "$(SCRIPTS_PATH)/utils.sh"; check_command "$$1" "$$2"' dummy "$(1)" "$(2)"
 endef
 
-.PHONY: help check install-deps install-ansible create-network \
+.PHONY: help check env-setup install-deps install-ansible create-network \
 		up-traefik up-n8n up-monitoring up-blog up-web up-api up \
 		setup deploy status down down-traefik down-n8n down-monitoring down-web down-blog down-api down \
 		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets \
@@ -38,6 +38,7 @@ endef
 help:
 	$(call log_info,Installation and setup commands:)
 	@echo "  make check                			- Check prerequisites"
+	@echo "  make env-setup           			- Set up environment tools"
 	@echo "  make install-node	   				- Install NPM dependencies for WEB"
 	@echo "  make install-ruby         			- Install Ruby and Bundler dependencies for BLOG"
 	@echo "  make install-ansible      			- Install Ansible and dependencies"
@@ -95,6 +96,12 @@ check:
 	$(call check_command,awk,awk)
 	$(call check_command,docker-compose,docker-compose)
 	$(call log_success,All requirements are met.)
+
+env-setup:
+	$(call log_info,Setting up environment tools...)
+	@chmod +x $(SCRIPTS_PATH)/env-setup.sh
+	@$(SCRIPTS_PATH)/env-setup.sh
+	$(call log_success,Environment tools set up successfully.)
 
 install-node:
 	$(call log_info,Installing NPM dependencies...)

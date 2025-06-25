@@ -81,17 +81,17 @@
 
     - name: Setup acme.json for SSL certificates
       block:
-        - name: Backup existing acme.json
+        - name: Backup existing acme.json if it exists
           copy:
             src: "{{ traefik_path }}/certs/acme.json"
-            dest: "{{ backup_dir }}/certs/acme.json"
+            dest: "{{ backup_dir }}/traefik/certs/acme.json"
             remote_src: yes
           ignore_errors: true
-        
-        - name: Create fresh acme.json
-          copy:
-            content: ''
-            dest: "{{ traefik_path }}/certs/acme.json"
+
+        - name: Ensure acme.json exists with correct permissions
+          file:
+            path: "{{ traefik_path }}/certs/acme.json"
+            state: touch
             mode: '0600'
 
     - name: Create app directories
@@ -207,7 +207,7 @@
 
     - name: Wait for core apps to start
       pause:
-        seconds: 10
+        seconds: 20
 
     - name: Check running containers
       shell: |

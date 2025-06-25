@@ -1,26 +1,28 @@
-FROM ruby:3.1-alpine
+FROM ruby:3.1-slim
 
-# Add Jekyll dependencies to Alpine
-RUN apk update && \
-    apk add --no-cache \
-        build-base \
-        gcc \
-        cmake \
-        git \
-        musl-dev \
-        linux-headers \
-        libffi-dev
+# Evita prompts interactivos
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN gem update bundler && \
-    gem install bundler -v 2.5.22
+# Instala dependencias de Jekyll
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    cmake \
+    libffi-dev \
+    libyaml-dev \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bundler moderno
+RUN gem install bundler -v 2.5.22
 
 WORKDIR /srv/jekyll
 
-# Copy only Gemfile(s) first
+# Instala gems antes de copiar todo el proyecto (mejor cacheo)
 COPY jekyll-site/Gemfile* ./
 
-RUN --mount=type=cache,target=/usr/local/bundle \
-    bundle config set --local force_ruby_platform true && \
+RUN bundle config set --local force_ruby_platform true && \
     bundle config set --local deployment false && \
     bundle install --jobs 4 --retry 3 --verbose
 
