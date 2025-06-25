@@ -35,8 +35,13 @@ jobs:
   validate-merge-rules:
     name: Validate Merge Rules
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action != 'opened'
     steps:
+      - name: Debug refs and action
+        run: |
+          echo "PR action: ${{ github.event.action }}"
+          echo "Base branch: ${{ github.base_ref }}"
+          echo "Head branch: ${{ github.head_ref }}"
       - name: Check branch merge restrictions
         env:
           BASE_REF: ${{ github.base_ref }}
