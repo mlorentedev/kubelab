@@ -30,7 +30,7 @@ jobs:
           fi
 
           # Log success message for visibility in GitHub Actions UI
-          echo "✅ Branch name '$branch_name' follows the required convention"
+          echo "Branch name '$branch_name' follows the required convention"
 
   validate-merge-rules:
     name: Validate Merge Rules
@@ -43,8 +43,8 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           if [[ "$BASE_REF" == "master" && "$HEAD_REF" != "develop" ]]; then
-            echo "Error: Pull requests to master are only allowed from develop branch"
+            echo "Error: Pull requests to master are only allowed from develop"
             exit 1
           fi
           # Log success message for visibility in GitHub Actions UI
-          echo "✅ Branch merge from '$HEAD_REF' to '$BASE_REF' is allowed"
+          echo "Branch merge from '$HEAD_REF' to '$BASE_REF' is allowed"

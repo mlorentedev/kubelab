@@ -432,6 +432,12 @@ replace_placeholders() {
     [ -n "$APP_PORTAINER_NAME" ] && perl -i -pe "s#\{\{APP_PORTAINER_NAME\}\}#$APP_PORTAINER_NAME#g" "$tmpfile"
     [ -n "$APP_PORTAINER_PORT" ] && perl -i -pe "s#\{\{APP_PORTAINER_PORT\}\}#$APP_PORTAINER_PORT#g" "$tmpfile"
     [ -n "$APP_PORTAINER_HOST" ] && perl -i -pe "s#\{\{APP_PORTAINER_HOST\}\}#$APP_PORTAINER_HOST#g" "$tmpfile"
+    
+    # Server variables
+    [ -n "$DNS_PROVIDER" ] && perl -i -pe "s#\{\{DNS_PROVIDER\}\}#$DNS_PROVIDER#g" "$tmpfile"
+    [ -n "$DNS_DELAY_BEFORE_CHECK" ] && perl -i -pe "s#\{\{DNS_DELAY_BEFORE_CHECK\}\}#$DNS_DELAY_BEFORE_CHECK#g" "$tmpfile"
+    [ -n "$DNS_RESOLVER_1" ] && perl -i -pe "s#\{\{DNS_RESOLVER_1\}\}#$DNS_RESOLVER_1#g" "$tmpfile"
+    [ -n "$DNS_RESOLVER_2" ] && perl -i -pe "s#\{\{DNS_RESOLVER_2\}\}#$DNS_RESOLVER_2#g" "$tmpfile"
     # Move the processed file to the output location
     mv "$tmpfile" "$output"
     return 0
