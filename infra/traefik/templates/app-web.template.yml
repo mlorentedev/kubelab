@@ -5,8 +5,6 @@ http:
       entryPoints:
         - {{TRAEFIK_ENTRYPOINT}}
       service: {{APP_WEB_NAME}}
-      tls:
-        certResolver: {{CERT_RESOLVER}}
       middlewares:
         - secure-headers@file
         - rate-limit@file
