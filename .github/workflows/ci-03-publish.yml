@@ -137,14 +137,19 @@ jobs:
     steps:
       - name: Notify via Webhook
         run: |
+          cat <<EOF > payload.json
+          {
+            "app": "${{ inputs.app }}",
+            "tag": "${{ inputs.tag }}",
+            "sha": "${{ inputs.sha }}",
+            "branch": "${{ github.ref_name }}",
+            "status": "success",
+            "timestamp": "${{ github.event.head_commit.timestamp }}"
+          }
+          EOF
+
           curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
-            -d '{
-              "app": "${{ inputs.app }}",
-              "tag": "${{ inputs.tag }}",
-              "sha": "${{ inputs.sha }}",
-              "branch": "${{ github.ref_name }}",
-              "status": "success",
-              "timestamp": "${{ github.event.head_commit.timestamp }}"
-            }'
+            -d @payload.json
+

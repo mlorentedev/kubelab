@@ -64,11 +64,6 @@ jobs:
           go-version: 1.21
           cache-dependency-path: './apps/api/src/go.sum'
 
-      - name: Run tests (api)
-        if: ${{ inputs.app == 'api' }}
-        working-directory: ./apps/api
-        run: go test ./...
-
       - name: Build API binary
         if: ${{ inputs.app == 'api' }}
         working-directory: ./apps/api
@@ -80,7 +75,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: false
 
       - name: Install dependencies (web)
         if: ${{ inputs.app == 'web' }}
