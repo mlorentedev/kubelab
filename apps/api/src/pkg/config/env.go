@@ -15,11 +15,11 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Environment     string
-	Version string
-	Host string
-	Port string
-	Site    struct {
+	Environment string
+	Version     string
+	Host        string
+	Port        string
+	Site        struct {
 		Title  string
 		Author string
 		Domain string
@@ -49,7 +49,6 @@ func GetConfig() (*Config, error) {
 		return config, nil
 	}
 
-	// Determine if running in GitHub Actions
 	isGitHubActions := os.Getenv("GITHUB_ACTIONS") == "true"
 
 	// Possible .env file paths

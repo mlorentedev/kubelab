@@ -36,16 +36,22 @@ jobs:
     name: Validate Merge Rules
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action != 'opened'
+    env:
+      BASE_REF: ${{ github.base_ref }}
+      HEAD_REF: ${{ github.head_ref }}
     steps:
       - name: Debug refs and action
+        env:
+          BASE_REF: ${{ env.BASE_REF }}
+          HEAD_REF: ${{ env.HEAD_REF }}
         run: |
           echo "PR action: ${{ github.event.action }}"
-          echo "Base branch: ${{ github.base_ref }}"
-          echo "Head branch: ${{ github.head_ref }}"
+          echo "Base branch: $BASE_REF"
+          echo "Head branch: $HEAD_REF"
       - name: Check branch merge restrictions
         env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ env.BASE_REF }}
+          HEAD_REF: ${{ env.HEAD_REF }}
         run: |
           if [[ "$BASE_REF" == "master" && "$HEAD_REF" != "develop" ]]; then
             echo "Error: Pull requests to master are only allowed from develop"

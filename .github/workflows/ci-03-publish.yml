@@ -35,7 +35,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Generate Docker tags
+      - name: Generate Docker tags and convert pre-release to rc.X
         id: docker_tags
         run: |
           TAG="${{ inputs.tag }}"
@@ -46,9 +46,8 @@ jobs:
             TAGS+=",${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${BASE_TAG}"
             echo "tags=$TAGS" >> "$GITHUB_OUTPUT"        
           else
-            # Convert pre-release to rc.X
             RC_TAG=$(echo "$TAG" | sed -E 's/-.*\.(.*)$/-rc.\1/')
-            echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${RC_TAG}" >> $GITHUB_OUTPUT
+            echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${RC_TAG}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and Push Image
@@ -90,7 +89,6 @@ jobs:
             if [ -d "$app" ]; then
               name=$(basename "$app")
               mkdir -p deployment/$name
-              # Copy docker-compose files and env examples
               find "$app" -name "docker-compose*.yml" -exec cp {} deployment/$name/ \; 2>/dev/null || true
               find "$app" -name ".env.example" -exec cp {} deployment/$name/ \; 2>/dev/null || true
             fi
@@ -104,7 +102,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deployment-bundle-${{ inputs.app }}-${{ inputs.tag }}
-          path: deployment-${{ inputs.tag }}.zip
+          path: release-${{ inputs.tag }}.zip
           retention-days: 30
   create-github-release:
     name: Create GitHub Release
@@ -125,7 +123,7 @@ jobs:
         with:
           tag: ${{ inputs.tag }}
           name: Release ${{ inputs.tag }}
-          artifacts: deployment-${{ inputs.tag }}.zip
+          artifacts: release-${{ inputs.tag }}.zip
           generateReleaseNotes: true
           allowUpdates: true
           prerelease: ${{ github.ref != 'refs/heads/master' }}
@@ -149,4 +147,4 @@ jobs:
               "branch": "${{ github.ref_name }}",
               "status": "success",
               "timestamp": "${{ github.event.head_commit.timestamp }}"
-            }' 
+            }'

@@ -45,13 +45,16 @@ jobs:
               - 'apps/web/docker-compose*.yml'
       - name: Check if any app changed
         id: check_changes
+        env:
+          BLOG_CHANGED: ${{ steps.filter.outputs.blog }}
+          API_CHANGED: ${{ steps.filter.outputs.api }}
+          WEB_CHANGED: ${{ steps.filter.outputs.web }}
+          GITHUB_OUTPUT: ${{ github.env }}
         run: |
-          if [[ "${{ steps.filter.outputs.blog }}" == "true" || \
-                "${{ steps.filter.outputs.api }}" == "true" || \
-                "${{ steps.filter.outputs.web }}" == "true" ]]; then
-            echo "any_changed=true" >> $GITHUB_OUTPUT
+          if [[ "$BLOG_CHANGED" == "true" || "$API_CHANGED" == "true" || "$WEB_CHANGED" == "true" ]]; then
+            echo "any_changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "any_changed=false" >> $GITHUB_OUTPUT
+            echo "any_changed=false" >> "$GITHUB_OUTPUT"
           fi
   run-blog-pipeline:
     name: Blog Pipeline
