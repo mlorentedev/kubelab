@@ -51,7 +51,6 @@ func GetConfig() (*Config, error) {
 
 	isGitHubActions := os.Getenv("GITHUB_ACTIONS") == "true"
 
-	// Possible .env file paths
 	possiblePaths := getPossibleEnvPaths()
 
 	// Load .env file only for local development
