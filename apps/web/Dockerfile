@@ -6,7 +6,8 @@ RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 
 ENV npm_config_omit=optional \
-    ROLLUP_NATIVE_DISABLE=true
+    ROLLUP_NATIVE_DISABLE=true \
+    ROLLUP_NATIVE_SKIP=true 
 
 # Copiar sólo los archivos de dependencias
 COPY astro-site/package.json astro-site/package-lock.json ./
@@ -22,7 +23,10 @@ COPY astro-site/ ./
 ARG BUILD_ENV=production
 ENV NODE_ENV=${BUILD_ENV}
 
-RUN npm install @rollup/rollup-linux-arm64-musl --no-save || true
+#RUN npm install --no-save \
+#      @rollup/rollup-linux-arm64-musl \
+#      @rollup/rollup-linux-x64-musl \
+#    || true
 
 # Construir la aplicación
 RUN --mount=type=cache,target=/root/.npm \
