@@ -130,6 +130,8 @@ jobs:
           default_bump: ${{ steps.bump.outputs.default_bump }}
           release_branches: master,develop
           pre_release_branches: feature/*,hotfix/*
+          default_prerelease_bump: rc         # ← solo “-rc.1”, “-rc.2”…
+          tag_prefix: v
 
       - name: Check if tag exists and delete it
         run: |
