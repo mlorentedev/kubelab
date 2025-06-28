@@ -14,7 +14,6 @@ WORKDIR /app
 ENV npm_config_omit=optional
 
 COPY astro-site/package.json astro-site/package-lock.json ./
-COPY .env.example .env
 
 # Instalar dependencias con caché
 RUN --mount=type=cache,target=/root/.npm \
