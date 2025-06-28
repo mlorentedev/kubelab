@@ -88,9 +88,9 @@ jobs:
           for app in apps/*; do
             if [ -d "$app" ]; then
               name=$(basename "$app")
-              mkdir -p deployment/$name
-              find "$app" -name "docker-compose*.yml" -exec cp {} deployment/$name/ \; 2>/dev/null || true
-              find "$app" -name ".env.example" -exec cp {} deployment/$name/ \; 2>/dev/null || true
+              mkdir -p "deployment/$name"
+              find "$app" -name "docker-compose*.yml" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
+              find "$app" -name ".env.example" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
             fi
           done
 

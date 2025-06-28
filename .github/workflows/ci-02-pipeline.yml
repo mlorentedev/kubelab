@@ -66,8 +66,8 @@ jobs:
 
       - name: Build API binary
         if: ${{ inputs.app == 'api' }}
-        working-directory: ./apps/api
-        run: go build -o api-binary ./src
+        working-directory: ./apps/api/src
+        run: go build -o api-binary .
 
       # Web
       - name: Set up Node.js (for web)
@@ -75,7 +75,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: false
 
       - name: Install dependencies (web)
         if: ${{ inputs.app == 'web' }}
