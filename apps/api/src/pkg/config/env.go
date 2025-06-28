@@ -68,7 +68,6 @@ func GetConfig() (*Config, error) {
 	return config, nil
 }
 
-// getPossibleEnvPaths returns potential .env file locations
 func getPossibleEnvPaths() []string {
 	// Get the directory of the calling file
 	_, filename, _, _ := runtime.Caller(0)
