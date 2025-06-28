@@ -18,8 +18,8 @@ on:
         type: string
 
 jobs:
-  docker-image-publish:
-    name: Publish Docker Image for ${{ inputs.app }}
+  docker-build-push:
+    name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -51,7 +51,7 @@ jobs:
             echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${RC_TAG}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and Push Image for ${{ inputs.app }}
+      - name: Build and Push Image
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context }}
@@ -59,39 +59,94 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.docker_tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=mlorente-${{ inputs.app }}
+            org.opencontainers.image.description=${{ inputs.app }} service for mlorente.dev
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
 
+  create-deployment-bundle:
+    name: Create Deployment Bundle
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Create deployment bundle
         run: |
           mkdir -p deployment
-          cp -r scripts infra deployment/
+          
+          if [ -d "scripts" ]; then
+            cp -r scripts deployment/
+          fi
+          if [ -d "infra" ]; then
+            cp -r infra deployment/
+          fi
 
           for app in apps/*; do
-            name=$(basename "$app")
-            mkdir -p deployment/$name
-            cp -r "$app"/docker-compose.*.yml "$app"/.env.example deployment/$name/ 2>/dev/null || true
+            if [ -d "$app" ]; then
+              name=$(basename "$app")
+              mkdir -p deployment/$name
+              # Copy docker-compose files and env examples
+              find "$app" -name "docker-compose*.yml" -exec cp {} deployment/$name/ \; 2>/dev/null || true
+              find "$app" -name ".env.example" -exec cp {} deployment/$name/ \; 2>/dev/null || true
+            fi
           done
 
           cd deployment
           zip -r ../release-${{ inputs.tag }}.zip .
+          ls -la ../release-${{ inputs.tag }}.zip
 
       - name: Upload deployment artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: deployment-files
-          path: release-${{ inputs.tag }}.zip
+          name: deployment-bundle-${{ inputs.app }}-${{ inputs.tag }}
+          path: deployment-${{ inputs.tag }}.zip
+          retention-days: 30
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [docker-build-push, create-deployment-bundle]
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download deployment bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-bundle-${{ inputs.app }}-${{ inputs.tag }}
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ inputs.tag }}
           name: Release ${{ inputs.tag }}
-          artifacts: release-${{ inputs.tag }}.zip
+          artifacts: deployment-${{ inputs.tag }}.zip
           generateReleaseNotes: true
           allowUpdates: true
-          prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/hotfix/') }}
+          prerelease: ${{ github.ref != 'refs/heads/master' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      #- name: Notify via Webhook (optional)
-      #  run: |
-      #    curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
-      #      -d "app=${{ inputs.app }}&version=${{ inputs.tag }}&sha_short=${{ inputs.sha }}"
+  notify-deployment:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    if: always() && (needs.docker-build-push.result == 'success')
+    steps:
+      - name: Notify via Webhook
+        run: |
+          curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
+            -d '{
+              "app": "${{ inputs.app }}",
+              "tag": "${{ inputs.tag }}",
+              "sha": "${{ inputs.sha }}",
+              "branch": "${{ github.ref_name }}",
+              "status": "success",
+              "timestamp": "${{ github.event.head_commit.timestamp }}"
+            }' 

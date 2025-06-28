@@ -1,25 +1,176 @@
 ---
-name: Trigger Production Deployment via n8n
+name: Auto Deploy
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      app:
-        description: "App to deploy"
+      environment:
         required: true
         type: string
-      tag:
-        description: "Version tag to deploy"
-        required: true
+        description: 'Target environment (staging or production)'
+      blog_tag:
+        required: false
         type: string
+        default: 'latest'
+      api_tag:
+        required: false
+        type: string
+        default: 'latest'
+      web_tag:
+        required: false
+        type: string
+        default: 'latest'
 
 jobs:
-  notify-n8n:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
-      - name: Trigger n8n Deployment Webhook
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python for Ansible
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible and dependencies
         run: |
-          curl -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
+          python -m pip install --upgrade pip
+          pip install ansible docker paramiko
+          ansible-galaxy collection install community.docker
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Generate Ansible configuration
+        run: |
+          # Create inventory file
+          mkdir -p ansible/inventories
+          cat > ansible/inventories/hosts.yml << EOF
+          all:
+            children:
+              ${{ inputs.environment }}:
+                hosts:
+                  ${{ secrets.SERVER_HOST }}:
+                    ansible_user: ${{ secrets.SERVER_USER }}
+                    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+                    environment: ${{ inputs.environment }}
+          EOF
+
+          # Create environment-specific variables
+          mkdir -p ansible/group_vars
+          cat > ansible/group_vars/${{ inputs.environment }}.yml << EOF
+          ---
+          # Environment: ${{ inputs.environment }}
+          environment: ${{ inputs.environment }}
+          
+          # Docker images tags
+          blog_image_tag: ${{ inputs.blog_tag }}
+          api_image_tag: ${{ inputs.api_tag }}
+          web_image_tag: ${{ inputs.web_tag }}
+          
+          # Domain configuration
+          domain: ${{ inputs.environment == 'production' && secrets.PRODUCTION_DOMAIN || secrets.STAGING_DOMAIN }}
+          
+          # Docker registry
+          docker_registry: docker.io
+          docker_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          
+          # Backup configuration
+          backup_enabled: true
+          backup_retention_days: 7
+          EOF
+
+      - name: Verify server connectivity
+        run: |
+          ansible all -i ansible/inventories/hosts.yml --limit ${{ inputs.environment }} -m ping
+
+      - name: Run pre-deployment backup
+        run: |
+          ansible-playbook ansible/playbooks/backup.yml \
+            -i ansible/inventories/hosts.yml \
+            --limit ${{ inputs.environment }} \
+            -e "backup_type=pre_deploy" \
+            || echo "Backup failed, but continuing deployment..."
+
+      - name: Deploy application
+        run: |
+          ansible-playbook ansible/playbooks/deploy.yml \
+            -i ansible/inventories/hosts.yml \
+            --limit ${{ inputs.environment }} \
+            -e "environment=${{ inputs.environment }}" \
+            -e "blog_image_tag=${{ inputs.blog_tag }}" \
+            -e "api_image_tag=${{ inputs.api_tag }}" \
+            -e "web_image_tag=${{ inputs.web_tag }}"
+
+      - name: Health check
+        run: |
+          # Wait for services to be ready
+          sleep 30
+          
+          # Health check script
+          DOMAIN=${{ inputs.environment == 'production' && secrets.PRODUCTION_DOMAIN || secrets.STAGING_DOMAIN }}
+          
+          echo "Checking health of deployed services..."
+          
+          # Check web service
+          if curl -f -s --max-time 30 "https://${DOMAIN}/health" > /dev/null; then
+            echo "✅ Web service is healthy"
+          else
+            echo "❌ Web service health check failed"
+            exit 1
+          fi
+          
+          # Check API service
+          if curl -f -s --max-time 30 "https://api.${DOMAIN}/health" > /dev/null; then
+            echo "✅ API service is healthy"
+          else
+            echo "❌ API service health check failed"
+            exit 1
+          fi
+          
+          # Check blog service
+          if curl -f -s --max-time 30 "https://blog.${DOMAIN}/" > /dev/null; then
+            echo "✅ Blog service is healthy"
+          else
+            echo "❌ Blog service health check failed"
+            exit 1
+          fi
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
-            -d '{"app": "'"${{ github.event.inputs.app }}"'", "tag": "'"${{ github.event.inputs.tag }}"'"}'
+            -d '{
+              "environment": "${{ inputs.environment }}",
+              "status": "success",
+              "blog_tag": "${{ inputs.blog_tag }}",
+              "api_tag": "${{ inputs.api_tag }}",
+              "web_tag": "${{ inputs.web_tag }}",
+              "deployed_at": "${{ github.event.head_commit.timestamp }}",
+              "commit": "${{ github.sha }}"
+            }' || echo "Notification failed, but deployment was successful"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
+            -d '{
+              "environment": "${{ inputs.environment }}",
+              "status": "failed",
+              "blog_tag": "${{ inputs.blog_tag }}",
+              "api_tag": "${{ inputs.api_tag }}",
+              "web_tag": "${{ inputs.web_tag }}",
+              "failed_at": "${{ github.event.head_commit.timestamp }}",
+              "commit": "${{ github.sha }}"
+            }' || echo "Failure notification failed"
