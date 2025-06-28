@@ -49,7 +49,6 @@ func GetConfig() (*Config, error) {
 		return config, nil
 	}
 
-	// Determine if running in GitHub Actions
 	isGitHubActions := os.Getenv("GITHUB_ACTIONS") == "true"
 
 	// Possible .env file paths
