@@ -75,11 +75,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies (web)
         if: ${{ inputs.app == 'web' }}
         working-directory: './apps/web/astro-site'
-        run: npm install
+        run: npm ci
 
       - name: Build Astro site
         if: ${{ inputs.app == 'web' }}
