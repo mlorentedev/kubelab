@@ -14,6 +14,7 @@ WORKDIR /app
 ENV npm_config_omit=optional
 
 COPY astro-site/package.json astro-site/package-lock.json ./
+COPY astro-site/.env.example .env
 
 # Instalar dependencias con caché
 RUN --mount=type=cache,target=/root/.npm \
@@ -39,8 +40,8 @@ RUN --mount=type=cache,target=/root/.npm \
     esac
 
 # Construir la aplicación
-RUN --mount=type=cache,target=/root/.npm \
-    npm run build
+RUN --mount=type=cache,target=/root/.npm npm run build \
+ && npm audit --omit=dev --audit-level=high || true 
 
 # ---------- Runtime Stage ----------
 FROM node:20-alpine AS runtime
@@ -50,7 +51,8 @@ RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 
 # Environment variables for runtime
-ENV NODE_ENV=production \
+ENV HOST=0.0.0.0 \
+    NODE_ENV=production \
     npm_config_omit=optional \
     ROLLUP_NATIVE_DISABLE=true
 
