@@ -5,7 +5,6 @@ RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
-# ⚠️  Fuerza a npm a ignorar las optionalDependencies (rollup-native)
 ENV npm_config_omit=optional \
     ROLLUP_NATIVE_DISABLE=true
 
@@ -28,7 +27,6 @@ RUN npm install @rollup/rollup-linux-arm64-musl --no-save || true
 # Construir la aplicación
 RUN --mount=type=cache,target=/root/.npm \
     npm run build
-
 
 # ---------- Runtime Stage ----------
 FROM node:20-alpine AS runtime
