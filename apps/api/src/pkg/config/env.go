@@ -58,7 +58,6 @@ func GetConfig() (*Config, error) {
 		loadDotEnvFile(possiblePaths)
 	}
 
-	// Create and populate configuration
 	cfg, err := populateConfig()
 	if err != nil {
 		return nil, err
