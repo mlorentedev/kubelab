@@ -84,29 +84,30 @@ jobs:
             api)  PORT=8080 ;;
             blog) PORT=4000 ;;
           esac
-          HOST_PORT=$(( 8888 + ( "${{ matrix.arch }}" == "arm64" ? 1 : 0 ) ))
-          docker run -d --platform linux/${{ matrix.arch }} \
-            --name smoke-${{ matrix.arch }} \
+
+          HOST_PORT=$((8888 + ( "${{ matrix.arch }}" == "arm64" ? 1 : 0 )))
+          docker run -d --platform "linux/${{ matrix.arch }}" \
+            --name "smoke-${{ matrix.arch }}" \
             -e HOST=0.0.0.0 \
-            -p ${HOST_PORT}:${PORT} \
-            ${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag }}
+            -p "${HOST_PORT}:${PORT}" \
+            "${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}:${{ inputs.tag }}"
 
       - name: Probe endpoint
         run: |
           HOST_PORT=$(( 8888 + ( "${{ matrix.arch }}" == "arm64" ? 1 : 0 ) ))
           ENDPOINT="http://localhost:${HOST_PORT}"
           [[ "${{ inputs.app }}" == "api" ]] && ENDPOINT="$ENDPOINT/health"
-          for i in {1..30}; do
+          for _ in {1..30}; do
             curl -fs "$ENDPOINT" && exit 0
             sleep 2
           done
           echo "Timeout waiting for app"
-          docker logs smoke-${{ matrix.arch }}
-          docker rm -f smoke-${{ matrix.arch }}
+          docker logs "smoke-${{ matrix.arch }}"
+          docker rm -f "smoke-${{ matrix.arch }}"
           exit 1
       - name: Clean up
         if: always()
-        run: docker rm -f smoke-${{ matrix.arch }} || true
+        run: docker rm -f "smoke-${{ matrix.arch }}" || true
 
   create-deployment-bundle:
     name: Create Deployment Bundle

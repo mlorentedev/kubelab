@@ -124,13 +124,14 @@ jobs:
 
       - name: Tag version
         id: tag_version
-        uses: mathieudutour/github-tag-action@v6.1
+        uses: mathieudutour/github-tag-action@v6.2
         with:
+          fetch_all_tags: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: ${{ steps.bump.outputs.default_bump }}
           release_branches: master,develop
           pre_release_branches: feature/*,hotfix/*
-          default_prerelease_bump: rc         # ← solo “-rc.1”, “-rc.2”…
+          default_prerelease_bump: rc
           tag_prefix: v
 
       - name: Check if tag exists and delete it
