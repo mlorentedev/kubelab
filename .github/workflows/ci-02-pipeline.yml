@@ -29,6 +29,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Fail if app is unsupported
         if: inputs.app != 'blog' && inputs.app != 'api' && inputs.app != 'web'
