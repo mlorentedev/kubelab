@@ -1,0 +1,70 @@
+---
+name: Validation
+
+on:
+  push:
+    branches: [feature/*, hotfix/*]
+
+jobs:
+  validate-yaml:
+    name: Validate YAML files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Validate YAML files
+        run: find .github/workflows -name "*.yml" -exec yamllint {} \;
+
+  lint-workflows:
+    name: Lint GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo mv ./actionlint /usr/local/bin/
+
+      - name: Lint workflows
+        run: actionlint .github/workflows/*.yml
+
+  validate-makefiles:
+    name: Validate Makefiles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Makefile syntax
+        run: make -n help >/dev/null
+
+  check-prerequisites:
+    name: Check Prerequisites
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required files exist
+        run: |
+          # Check if required Docker files exist
+          for app in api blog web; do
+            if [ ! -f "apps/$app/Dockerfile" ]; then
+              echo "Missing Dockerfile for $app"
+              exit 1
+            fi
+          done
+          
+          # Check if .env.example files exist
+          for app in api blog web monitoring n8n portainer; do
+            if [ ! -f "apps/$app/.env.example" ]; then
+              echo "Missing .env.example for $app"
+              exit 1
+            fi
+          done
