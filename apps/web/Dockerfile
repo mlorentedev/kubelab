@@ -20,10 +20,11 @@ COPY astro-site/ ./
 ARG BUILD_ENV=production
 ENV NODE_ENV=${BUILD_ENV}
 
-RUN npm install --no-save \
-      @rollup/rollup-linux-arm64-musl \
-      @rollup/rollup-linux-x64-musl \
-    || true
+RUN case "$TARGETARCH" in \
+      "amd64") npm install --no-save @rollup/rollup-linux-x64-musl ;; \
+      "arm64") npm install --no-save @rollup/rollup-linux-arm64-musl ;; \
+      *) echo "Skip rollup native for $TARGETARCH" ;; \
+    esac
 
 # Construir la aplicación
 RUN --mount=type=cache,target=/root/.npm \
