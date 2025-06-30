@@ -81,5 +81,4 @@ export default defineConfig({
   },
 });
 
-// Log environment variables for debugging
 console.log('Environment variables loaded successfully:', Object.values(envVars));

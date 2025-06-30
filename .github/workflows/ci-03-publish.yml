@@ -26,6 +26,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -81,7 +85,7 @@ jobs:
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        
+
         with:
           platforms: linux/arm64,linux/amd64  
 
@@ -108,14 +112,17 @@ jobs:
           HOST_PORT=$(( 8888 + ( "${{ matrix.arch }}" == "arm64" ? 1 : 0 ) ))
           ENDPOINT="http://localhost:${HOST_PORT}"
           [[ "${{ inputs.app }}" == "api" ]] && ENDPOINT="$ENDPOINT/health"
-          for _ in {1..30}; do
+          MAX_ATTEMPTS=30
+          SLEEP_TIME=5
+          for _ in $(seq 1 $MAX_ATTEMPTS); do
             curl -fs "$ENDPOINT" && exit 0
-            sleep 2
+            sleep "$SLEEP_TIME"
           done
           echo "Timeout waiting for app"
           docker logs "smoke-${{ matrix.arch }}"
           docker rm -f "smoke-${{ matrix.arch }}"
           exit 1
+                  
       - name: Clean up
         if: always()
         run: docker rm -f "smoke-${{ matrix.arch }}" || true
