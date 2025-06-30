@@ -133,17 +133,8 @@ jobs:
           release_branches: master,develop
           pre_release_branches: feature/*,hotfix/*
           default_prerelease_bump: rc
-          tag_prefix: v
+          tag_prefix: ${{ inputs.app }}-v
           custom_release_rules: docs:patch:Documentation,chore:patch:Chores,ci:patch:CI,build:patch:Build,refactor:patch:Code Refactoring,style:patch:Style,test:patch:Tests,perf:patch:Performance,Merge pull request:patch:Merge,Merge branch:patch:Merge,Revert:patch:Reverts,Merge:patch:Merge,Bump:patch:Version Bumps,Update:patch:Updates,Fix:patch:Bug Fixes,Hotfix:patch:Hotfixes,Feat:minor:Features,Feature:minor:Features,Breaking change:major:Breaking Changes,BREAKING CHANGE:major:Breaking Changes
-
-      - name: Check if tag exists and delete it
-        run: |
-          TAG_NAME=${{ steps.tag_version.outputs.new_version }}
-          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Tag $TAG_NAME already exists. Deleting..."
-            git tag -d "$TAG_NAME"
-            git push origin --delete "$TAG_NAME"
-          fi
 
       - name: Extract short SHA
         id: short_sha

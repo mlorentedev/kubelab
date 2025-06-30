@@ -24,7 +24,6 @@ func main() {
 	// Configurar router sin Logger y Recovery por defecto
 	r := gin.New()
 
-	// Usar middlewares personalizados (Logger, Recovery)
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
