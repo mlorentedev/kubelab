@@ -28,7 +28,6 @@ func main() {
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
-	// Configurar CORS
 	r.Use(api.CorsMiddleware())
 
 	api.SetupRoutes(r)
