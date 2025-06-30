@@ -13,7 +13,6 @@ func main() {
 	// Configurar logger
 	logger := logger.NewLogger()
 
-	// Cargar variables de entorno
 	_, err := config.GetConfig()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error loading configuration")

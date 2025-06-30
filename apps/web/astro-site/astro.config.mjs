@@ -31,7 +31,6 @@ const loadEnvVariables = () => {
     };
   }
   
-  // If local .env file loading failed and not in GitHub Actions, log a warning
   if (localResult.error && !process.env.GITHUB_ACTIONS) {
     console.warn('Could not load .env file:', localResult.error);
   }
