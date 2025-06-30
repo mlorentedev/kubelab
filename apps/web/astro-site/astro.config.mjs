@@ -40,7 +40,6 @@ const loadEnvVariables = () => {
   return localResult.parsed || {};
 };
 
-// Load environment variables
 const envVars = loadEnvVariables();
 
 export default defineConfig({
