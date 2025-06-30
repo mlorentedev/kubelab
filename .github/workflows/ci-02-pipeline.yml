@@ -136,28 +136,9 @@ jobs:
           pre_release_branches: feature/*,hotfix/*
           default_prerelease_bump: rc
           tag_prefix: v
-          custom_release_rules: |
-            ^docs: patch
-            ^chore: patch
-            ^ci: patch
-            ^build: patch
-            ^refactor: patch
-            ^style: patch
-            ^test: patch
-            ^perf: patch
-            ^Merge pull request: patch
-            ^Merge branch: patch
-            ^Revert: patch
-            ^Merge: patch
-            ^Bump: patch
-            ^Update: patch
-            ^Fix: patch
-            ^Hotfix: patch
-            ^Feat: minor
-            ^Feature: minor
-            ^Breaking change: major
-            ^BREAKING CHANGE: major
-
+          custom_release_rules: '^docs: patch,^chore: patch,^ci: patch,^build: patch,^refactor: patch,^style: patch,^test: patch,^perf: patch,^Merge pull request: patch,^Merge branch: patch,^Revert: patch,^Merge: patch,^Bump: patch,^Update: patch,^Fix: patch,^Hotfix: patch,^Feat: minor,^Feature: minor,^Breaking change: major,^BREAKING CHANGE: major'
+          create_annotated_tag: false
+          dry_run: false
       - name: Check if tag exists and delete it
         run: |
           TAG_NAME=${{ steps.tag_version.outputs.new_version }}
