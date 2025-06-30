@@ -20,6 +20,7 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
       any_app_changed: ${{ steps.check_changes.outputs.any_changed }}
+      changed_apps: ${{ steps.list_changes.outputs.apps }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,14 +50,28 @@ jobs:
           BLOG_CHANGED: ${{ steps.filter.outputs.blog }}
           API_CHANGED: ${{ steps.filter.outputs.api }}
           WEB_CHANGED: ${{ steps.filter.outputs.web }}
-          GITHUB_OUTPUT: ${{ github.env }}
         run: |
           if [[ "$BLOG_CHANGED" == "true" || "$API_CHANGED" == "true" || "$WEB_CHANGED" == "true" ]]; then
             echo "any_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "any_changed=false" >> "$GITHUB_OUTPUT"
           fi
-            
+
+      - name: List changed apps
+        id: list_changes
+        env:
+          BLOG_CHANGED: ${{ steps.filter.outputs.blog }}
+          API_CHANGED: ${{ steps.filter.outputs.api }}
+          WEB_CHANGED: ${{ steps.filter.outputs.web }}
+        run: |
+          apps=()
+          [[ "$BLOG_CHANGED" == "true" ]] && apps+=("blog")
+          [[ "$API_CHANGED" == "true" ]] && apps+=("api")
+          [[ "$WEB_CHANGED" == "true" ]] && apps+=("web")
+          # Convert array to JSON format
+          apps_json=$(printf '%s\n' "${apps[@]}" | jq -R . | jq -s .)
+          echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
+
   run-blog-pipeline:
     name: Blog Pipeline
     needs: detect-changed-apps
@@ -83,3 +98,17 @@ jobs:
     with:
       app: web
     secrets: inherit
+  create-global-release:
+    name: Create Global Release
+    needs: [detect-changed-apps, run-blog-pipeline, run-api-pipeline, run-web-pipeline]
+    if: ${{ always() && needs.detect-changed-apps.outputs.any_app_changed == 'true' }}
+    uses: ./.github/workflows/ci-04-release.yml
+    with:
+      changed_apps: ${{ needs.detect-changed-apps.outputs.changed_apps }}
+      blog_tag: ${{ needs.run-blog-pipeline.outputs.tag_version || '' }}
+      api_tag: ${{ needs.run-api-pipeline.outputs.tag_version || '' }}
+      web_tag: ${{ needs.run-web-pipeline.outputs.tag_version || '' }}
+      blog_sha: ${{ needs.run-blog-pipeline.outputs.sha_short || '' }}
+      api_sha: ${{ needs.run-api-pipeline.outputs.sha_short || '' }}
+      web_sha: ${{ needs.run-web-pipeline.outputs.sha_short || '' }}
+    secrets: inherit    

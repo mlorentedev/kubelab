@@ -15,7 +15,7 @@ on:
         type: string
       context:
         required: true
-        type: string
+        type: string      
 
 jobs:
   docker-build-push:
@@ -23,13 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.docker_tags.outputs.actual_tag }}
+      registry_url: ${{ steps.docker_tags.outputs.registry }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,8 +46,8 @@ jobs:
         run: |
           TAG="${{ inputs.tag }}"
           REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}"
-          CLEAN_TAG=$(echo "$TAG" | sed "s/^${{ inputs.app }}-//")
-          BASE_TAG=$(echo "$CLEAN_TAG" | cut -d'-' -f1)
+          CLEAN_TAG="$(echo "$TAG" | sed "s/^${{ inputs.app }}-//")"
+          BASE_TAG="$(echo "$CLEAN_TAG" | cut -d'-' -f1)"
           if [[ "${{ github.ref }}" =~ ^refs/heads/(master|develop)$ ]]; then
             echo "tags=${REGISTRY}:${CLEAN_TAG},${REGISTRY}:latest" >> "$GITHUB_OUTPUT"
             echo "actual_tag=${CLEAN_TAG}" >> "$GITHUB_OUTPUT"
@@ -56,6 +56,7 @@ jobs:
             echo "tags=${REGISTRY}:${RC_TAG}" >> "$GITHUB_OUTPUT"
             echo "actual_tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
           fi
+          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Image
         uses: docker/build-push-action@v6
@@ -76,82 +77,29 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
 
-  create-deployment-bundle:
-    name: Create Deployment Bundle
-    runs-on: ubuntu-latest
-    needs: [docker-build-push]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Create deployment bundle
+      - name: Log build success
         run: |
-          mkdir -p deployment
-          
-          if [ -d "scripts" ]; then
-            cp -r scripts deployment/
-          fi
-          if [ -d "infra" ]; then
-            cp -r infra deployment/
-          fi
+          echo "Successfully built and pushed:"
+          echo "   Registry: ${{ steps.docker_tags.outputs.registry }}"
+          echo "   Tags: ${{ steps.docker_tags.outputs.tags }}"
+          echo "   Final tag: ${{ steps.docker_tags.outputs.actual_tag }}"          
 
-          for app in apps/*; do
-            if [ -d "$app" ]; then
-              name=$(basename "$app")
-              mkdir -p "deployment/$name"
-              find "$app" -name "docker-compose*.yml" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
-              find "$app" -name ".env.example" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
-            fi
-          done
-
-          cd deployment
-          zip -r ../release-${{ needs.docker-build-push.outputs.image_tag }}.zip .
-          ls -la ../release-${{ needs.docker-build-push.outputs.image_tag }}.zip
-
-      - name: Upload deployment artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-bundle-${{ inputs.app }}-${{ needs.docker-build-push.outputs.image_tag }}
-          path: release-${{ needs.docker-build-push.outputs.image_tag }}.zip
-          retention-days: 30
-          
-  create-github-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: [docker-build-push]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download deployment bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: deployment-bundle-${{ inputs.app }}-${{ needs.docker-build-push.outputs.image_tag }}
-
-      - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ needs.docker-build-push.outputs.image_tag }}
-          name: Release ${{ needs.docker-build-push.outputs.image_tag }}
-          artifacts: release-${{ needs.docker-build-push.outputs.image_tag }}.zip
-          generateReleaseNotes: true
-          allowUpdates: true
-          prerelease: ${{ !contains(github.ref, 'refs/heads/master') }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-  notify-deployment:
-    name: Notify Deployment
+  notify-build-completion:
+    name: Notify Build Completion
     runs-on: ubuntu-latest
     needs: [docker-build-push]
     if: always() && (needs.docker-build-push.result == 'success')
     steps:
       - name: Notify via Webhook
         run: |
-          # Create payload with proper error handling
+          # Create payload for build completion (not release)
           cat <<EOF > payload.json
           {
+            "type": "build_completed",
             "app": "${{ inputs.app }}",
             "original_tag": "${{ inputs.tag }}",
-            "tag": "${{ needs.docker-build-push.outputs.image_tag }}",
+            "image_tag": "${{ needs.docker-build-push.outputs.image_tag }}",
+            "registry": "${{ needs.docker-build-push.outputs.registry_url }}",
             "sha": "${{ inputs.sha }}",
             "branch": "${{ github.ref_name }}",
             "status": "success",
@@ -159,7 +107,6 @@ jobs:
             "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           }
           EOF
-
           # Send notification with retry logic
           for i in {1..3}; do
             if curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
@@ -168,11 +115,10 @@ jobs:
               -d @payload.json \
               --max-time 30 \
               --retry 2; then
-              echo "Notification sent successfully"
+              echo "Build completion notification sent successfully"
               break
             else
-              echo "Notification attempt $i failed, retrying..."
+              echo "Build notification attempt $i failed, retrying..."
               sleep 5
             fi
-          done || echo "All notification attempts failed, but deployment was successful"
-
+          done || echo "All notification attempts failed, but build was successful"

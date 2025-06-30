@@ -1,0 +1,242 @@
+---
+name: Create Global Release
+
+on:
+  workflow_call:
+    inputs:
+      changed_apps:
+        required: true
+        type: string
+        description: "JSON array of changed apps"
+      blog_tag:
+        required: false
+        type: string
+        default: ""
+      api_tag:
+        required: false
+        type: string
+        default: ""
+      web_tag:
+        required: false
+        type: string
+        default: ""
+      blog_sha:
+        required: false
+        type: string
+        default: ""
+      api_sha:
+        required: false
+        type: string
+        default: ""
+      web_sha:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  create-global-release:
+    name: Create Global Release
+    runs-on: ubuntu-latest
+    outputs:
+      global_version: ${{ steps.create_tag.outputs.new_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Generate global version
+        id: generate_version
+        run: |
+          # Parse changed apps
+          changed_apps='${{ inputs.changed_apps }}'
+          echo "Changed apps: $changed_apps"
+          # Detect bump type based on all commits since last release
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q "BREAKING CHANGE"; then
+            bump_type="major"
+          elif echo "$COMMIT_MSG" | grep -qE '^feat(\(.*\))?:'; then
+            bump_type="minor"
+          else
+            bump_type="patch"
+          fi
+          echo "Detected bump type: $bump_type"
+          echo "bump_type=$bump_type" >> "$GITHUB_OUTPUT"
+
+      - name: Create global version tag
+        id: create_tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: ${{ steps.generate_version.outputs.bump_type }}
+          release_branches: master,develop
+          pre_release_branches: feature/*,hotfix/*
+          default_prerelease_bump: rc
+          tag_prefix: "v"
+          custom_release_rules: docs:patch:Documentation,chore:patch:Chores,ci:patch:CI,build:patch:Build,refactor:patch:Code Refactoring,style:patch:Style,test:patch:Tests,perf:patch:Performance,Merge pull request:patch:Merge,Merge branch:patch:Merge,Revert:patch:Reverts,Merge:patch:Merge,Bump:patch:Version Bumps,Update:patch:Updates,Fix:patch:Bug Fixes,Hotfix:patch:Hotfixes,Feat:minor:Features,Feature:minor:Features,Breaking change:major:Breaking Changes,BREAKING CHANGE:major:Breaking Changes
+
+      - name: Create comprehensive deployment bundle
+        run: |
+          mkdir -p deployment
+          # Copy infrastructure and scripts
+          if [ -d "scripts" ]; then
+            cp -r scripts deployment/
+          fi
+          if [ -d "infra" ]; then
+            cp -r infra deployment/
+          fi
+          # Copy all app configurations (not just changed ones)
+          for app in apps/*; do
+            if [ -d "$app" ]; then
+              name=$(basename "$app")
+              mkdir -p "deployment/$name"
+              find "$app" -name "docker-compose*.yml" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
+              find "$app" -name ".env.example" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
+            fi
+          done
+          # Create version manifest
+          cat > deployment/VERSION_MANIFEST.md << EOF
+          # Release ${{ steps.create_tag.outputs.new_version }}
+          ## Changed Applications
+          $(echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- /')
+          ## Application Versions
+          EOF
+          # Add app versions if they exist
+          if [ -n "${{ inputs.blog_tag }}" ]; then
+            echo "- **blog**: ${{ inputs.blog_tag }} (SHA: ${{ inputs.blog_sha }})" >> deployment/VERSION_MANIFEST.md
+          fi
+          if [ -n "${{ inputs.api_tag }}" ]; then
+            echo "- **api**: ${{ inputs.api_tag }} (SHA: ${{ inputs.api_sha }})" >> deployment/VERSION_MANIFEST.md
+          fi
+          if [ -n "${{ inputs.web_tag }}" ]; then
+            echo "- **web**: ${{ inputs.web_tag }} (SHA: ${{ inputs.web_sha }})" >> deployment/VERSION_MANIFEST.md
+          fi
+          echo "" >> deployment/VERSION_MANIFEST.md
+          echo "## Docker Images" >> deployment/VERSION_MANIFEST.md
+          if [ -n "${{ inputs.blog_tag }}" ]; then
+            BLOG_IMAGE_TAG=$(echo "${{ inputs.blog_tag }}" | sed "s/^blog//")
+            echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-blog:${BLOG_IMAGE_TAG}\`" >> deployment/VERSION_MANIFEST.md
+          fi
+          if [ -n "${{ inputs.api_tag }}" ]; then
+            API_IMAGE_TAG=$(echo "${{ inputs.api_tag }}" | sed "s/^api//")
+            echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-api:${API_IMAGE_TAG}\`" >> deployment/VERSION_MANIFEST.md
+          fi
+          if [ -n "${{ inputs.web_tag }}" ]; then
+            WEB_IMAGE_TAG=$(echo "${{ inputs.web_tag }}" | sed "s/^web//")
+            echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-web:${WEB_IMAGE_TAG}\`" >> deployment/VERSION_MANIFEST.md
+          fi
+          echo "" >> deployment/VERSION_MANIFEST.md       
+          echo "## Deployment Instructions" >> deployment/VERSION_MANIFEST.md
+          echo "1. Extract this bundle to your deployment environment" >> deployment/VERSION_MANIFEST.md
+          echo "2. Review the VERSION_MANIFEST.md for changed components" >> deployment/VERSION_MANIFEST.md
+          echo "3. Update your docker-compose files with the new image tags" >> deployment/VERSION_MANIFEST.md
+          echo "4. Run deployment scripts from the scripts/ directory" >> deployment/VERSION_MANIFEST.md          
+          # Create deployment bundle
+          cd deployment
+          zip -r ../global-release-${{ steps.create_tag.outputs.new_version }}.zip .
+          ls -la ../global-release-${{ steps.create_tag.outputs.new_version }}.zip
+
+      - name: Upload global deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-deployment-bundle-${{ steps.create_tag.outputs.new_version }}
+          path: global-release-${{ steps.create_tag.outputs.new_version }}.zip
+          retention-days: 90
+
+      - name: Create comprehensive release notes
+        id: release_notes
+        run: |
+          # Create detailed release notes
+          cat > release_notes.md << EOF
+          # Global Release ${{ steps.create_tag.outputs.new_version }}
+          ## Changed Applications
+          $(echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- **/' | sed 's/$/**: Updated/')
+          ## Component Versions
+          EOF
+          if [ -n "${{ inputs.blog_tag }}" ]; then
+            echo "- **Blog**: \`${{ inputs.blog_tag }}\`" >> release_notes.md
+          fi
+          if [ -n "${{ inputs.api_tag }}" ]; then
+            echo "- **API**: \`${{ inputs.api_tag }}\`" >> release_notes.md
+          fi
+          if [ -n "${{ inputs.web_tag }}" ]; then
+            echo "- **Web**: \`${{ inputs.web_tag }}\`" >> release_notes.md
+          fi
+          echo "" >> release_notes.md
+          echo "## Docker Images" >> release_notes.md
+          if [ -n "${{ inputs.blog_tag }}" ]; then
+            BLOG_IMAGE_TAG=$(echo "${{ inputs.blog_tag }}" | sed "s/^blog-v//")
+            echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-blog:${BLOG_IMAGE_TAG}\`" >> release_notes.md
+          fi
+          if [ -n "${{ inputs.api_tag }}" ]; then
+            API_IMAGE_TAG=$(echo "${{ inputs.api_tag }}" | sed "s/^api-v//")
+            echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-api:${API_IMAGE_TAG}\`" >> release_notes.md
+          fi
+          if [ -n "${{ inputs.web_tag }}" ]; then
+            WEB_IMAGE_TAG=$(echo "${{ inputs.web_tag }}" | sed "s/^web-v//")
+            echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-web:${WEB_IMAGE_TAG}\`" >> release_notes.md
+          fi
+          echo "" >> release_notes.md          
+          echo "## What's Included" >> release_notes.md
+          echo "- Complete deployment bundle with all applications" >> release_notes.md
+          echo "- Infrastructure configuration" >> release_notes.md
+          echo "- Deployment scripts" >> release_notes.md
+          echo "- Version manifest with detailed component information" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Deployment" >> release_notes.md
+          echo "Download the \`global-release-${{ steps.create_tag.outputs.new_version }}.zip\` asset and follow the instructions in VERSION_MANIFEST.md" >> release_notes.md
+          # Set output for use in release
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            cat release_notes.md
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.create_tag.outputs.new_version }}
+          name: "Release ${{ steps.create_tag.outputs.new_version }}"
+          body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+          artifacts: global-release-${{ steps.create_tag.outputs.new_version }}.zip
+          generateReleaseNotes: true
+          allowUpdates: true
+          prerelease: ${{ !contains(github.ref, 'refs/heads/master') }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify global deployment
+        run: |
+          # Create comprehensive payload
+          cat <<EOF > payload.json
+          {
+            "type": "global_release",
+            "version": "${{ steps.create_tag.outputs.new_version }}",
+            "changed_apps": ${{ inputs.changed_apps }},
+            "app_versions": {
+              "blog": "${{ inputs.blog_tag }}",
+              "api": "${{ inputs.api_tag }}",
+              "web": "${{ inputs.web_tag }}"
+            },
+            "branch": "${{ github.ref_name }}",
+            "status": "success",
+            "timestamp": "${{ github.event.head_commit.timestamp }}",
+            "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ steps.create_tag.outputs.new_version }}"
+          }
+          EOF
+          # Send notification with retry logic
+          for i in {1..3}; do
+            if curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
+              -d @payload.json \
+              --max-time 30 \
+              --retry 2; then
+              echo "Global release notification sent successfully"
+              break
+            else
+              echo "Notification attempt $i failed, retrying..."
+              sleep 5
+            fi
+          done || echo "All notification attempts failed, but global release was successful"
