@@ -119,10 +119,8 @@ jobs:
             echo "default_bump=major" >> "$GITHUB_OUTPUT"
           elif echo "$COMMIT_MSG" | grep -qE '^feat(\(.*\))?:'; then
             echo "default_bump=minor" >> "$GITHUB_OUTPUT"
-          elif echo "$COMMIT_MSG" | grep -qE '^(chore|refactor|fix|ci)(\(.*\))?:'; then
-            echo "default_bump=patch" >> "$GITHUB_OUTPUT"
           else
-            echo "default_bump=false" >> "$GITHUB_OUTPUT"
+            echo "default_bump=patch" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Tag version

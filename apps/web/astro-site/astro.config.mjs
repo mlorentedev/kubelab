@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 
 // Function to load environment variables
 const loadEnvVariables = () => {
-  // Try to load local .env file for development
+
   const localResult = dotenv.config({ path: '../.env' });
   
   // If running in GitHub Actions, use GitHub Secrets

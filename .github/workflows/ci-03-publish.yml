@@ -51,7 +51,7 @@ jobs:
             echo "tags=${REGISTRY}:${TAG},${REGISTRY}:latest" >> "$GITHUB_OUTPUT"
             echo "actual_tag=${TAG}" >> "$GITHUB_OUTPUT"
           else
-            RC_TAG="${BASE_TAG}-rc.$(TZ=UTC date +%Y%m%d-%H%M%S)"
+            RC_TAG="${BASE_TAG}-rc"
             echo "tags=${REGISTRY}:${RC_TAG}" >> "$GITHUB_OUTPUT"
             echo "actual_tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
           fi
