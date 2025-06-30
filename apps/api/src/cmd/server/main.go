@@ -31,7 +31,6 @@ func main() {
 	// Configurar CORS
 	r.Use(api.CorsMiddleware())
 
-	// Configurar rutas
 	api.SetupRoutes(r)
 
 	port := os.Getenv("PORT")
