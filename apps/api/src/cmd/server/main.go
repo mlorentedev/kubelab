@@ -21,7 +21,6 @@ func main() {
 
 	gin.SetMode(gin.ReleaseMode)
 
-	// Configurar router sin Logger y Recovery por defecto
 	r := gin.New()
 
 	r.Use(gin.Logger())

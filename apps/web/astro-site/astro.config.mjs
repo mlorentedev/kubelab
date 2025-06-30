@@ -5,7 +5,6 @@ import sitemap from '@astrojs/sitemap';
 import node from '@astrojs/node';
 import dotenv from 'dotenv';
 
-// Function to load environment variables
 const loadEnvVariables = () => {
 
   const localResult = dotenv.config({ path: './.env' });
