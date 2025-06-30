@@ -1,0 +1,246 @@
+---
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      blog_tag:
+        description: 'Blog Docker image tag'
+        required: false
+        default: 'latest'
+        type: string
+      api_tag:
+        description: 'API Docker image tag'
+        required: false
+        default: 'latest'
+        type: string
+      web_tag:
+        description: 'Web Docker image tag'
+        required: false
+        default: 'latest'
+        type: string
+      force_deploy:
+        description: 'Force deployment even if health checks fail'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine image tags
+        id: tags
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Use manually specified tags
+            echo "BLOG_TAG=${{ inputs.blog_tag }}" >> $GITHUB_ENV
+            echo "API_TAG=${{ inputs.api_tag }}" >> $GITHUB_ENV
+            echo "WEB_TAG=${{ inputs.web_tag }}" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Extract version from tag (v1.2.3 -> 1.2.3)
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "BLOG_TAG=$VERSION" >> $GITHUB_ENV
+            echo "API_TAG=$VERSION" >> $GITHUB_ENV
+            echo "WEB_TAG=$VERSION" >> $GITHUB_ENV
+          else
+            # Use latest for push to master
+            echo "BLOG_TAG=latest" >> $GITHUB_ENV
+            echo "API_TAG=latest" >> $GITHUB_ENV
+            echo "WEB_TAG=latest" >> $GITHUB_ENV
+          fi
+
+      - name: Set up Python for Ansible
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq yamllint
+          python -m pip install --upgrade pip
+          pip install ansible docker paramiko
+          ansible-galaxy collection install community.docker
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.ANSIBLE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create environment files
+        run: |
+          # Main .env file
+          cat > .env << EOF
+          ENVIRONMENT=production
+          SCRIPTS_PATH=./scripts
+          ANSIBLE_PATH=./infra/ansible
+          TRAEFIK_PATH=./infra/traefik
+          WEB_PATH=./apps/web
+          BLOG_PATH=./apps/blog
+          API_PATH=./apps/api
+          N8N_PATH=./infra/n8n
+          MONITORING_PATH=./infra/monitoring
+          PORTAINER_PATH=./infra/portainer
+          NGINX_PATH=./infra/nginx
+          DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN=${{ secrets.DOCKERHUB_TOKEN }}
+          SSH_KEY=~/.ssh/id_rsa
+          EOF
+          
+          # Ansible .env file
+          mkdir -p infra/ansible
+          cat > infra/ansible/.env << EOF
+          DOMAIN=${{ secrets.DOMAIN }}
+          PRODUCTION_DOMAIN=${{ secrets.DOMAIN }}
+          PRODUCTION_DEPLOY_PATH=/opt/${{ secrets.DOMAIN }}
+          ANSIBLE_SSH_USER=${{ secrets.ANSIBLE_SSH_USER }}
+          ANSIBLE_HOST=${{ secrets.ANSIBLE_HOST }}
+          ANSIBLE_HOST_PORT=${{ secrets.ANSIBLE_HOST_PORT || '22' }}
+          APP_BLOG_NAME=blog
+          APP_WEB_NAME=web
+          APP_API_NAME=api
+          APP_N8N_NAME=n8n
+          APP_GRAFANA_NAME=grafana
+          APP_LOKI_NAME=loki
+          APP_UPTIME_KUMA_NAME=uptime-kuma
+          APP_PORTAINER_NAME=portainer
+          EOF
+
+      - name: Update Docker tags in app configs
+        run: |
+          for app in blog api web; do
+            if [ -f "apps/$app/.env" ]; then
+              case $app in
+                blog) tag="$BLOG_TAG" ;;
+                api) tag="$API_TAG" ;;
+                web) tag="$WEB_TAG" ;;
+              esac
+              
+              if grep -q "^DOCKER_TAG=" "apps/$app/.env"; then
+                sed -i "s/^DOCKER_TAG=.*/DOCKER_TAG=$tag/" "apps/$app/.env"
+              else
+                echo "DOCKER_TAG=$tag" >> "apps/$app/.env"
+              fi
+              
+              echo "✅ Updated apps/$app/.env with DOCKER_TAG=$tag"
+            fi
+          done
+
+      - name: Generate configuration (make generate-config)
+        run: |
+          chmod +x scripts/*.sh
+          
+          echo "🔧 Generating configurations..."
+          
+          # Run your existing scripts
+          ./scripts/generate-traefik-credentials.sh || echo "⚠️ Traefik credentials failed"
+          ./scripts/generate-traefik-config.sh || echo "⚠️ Traefik config failed"
+          ./scripts/generate-ansible-config.sh || {
+            echo "❌ Ansible config generation failed"
+            exit 1
+          }
+
+      - name: Verify setup
+        run: |
+          # Check that inventory was generated
+          if [ ! -f "infra/ansible/inventories/hosts.yml" ]; then
+            echo "❌ Inventory file not found"
+            exit 1
+          fi
+          
+          echo "✅ Configuration generated successfully"
+          echo "🔌 Testing server connectivity..."
+          ansible all -i infra/ansible/inventories/hosts.yml -m ping
+
+      - name: Deploy to production (make deploy)
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+        run: |
+          echo "🚀 Deploying to production..."
+          echo "📋 Using tags: Blog=$BLOG_TAG, API=$API_TAG, Web=$WEB_TAG"
+          
+          # Execute the exact same ansible-playbook command as your Makefile
+          ansible-playbook infra/ansible/playbooks/deploy.yml \
+            -i infra/ansible/inventories/hosts.yml \
+            --limit production \
+            -e "env=production" \
+            -e "domain=${{ secrets.DOMAIN }}" \
+            -e "deploy_path=/opt/${{ secrets.DOMAIN }}" \
+            --private-key ~/.ssh/id_rsa \
+            -v
+
+      - name: Post-deployment verification
+        run: |
+          echo "⏳ Waiting for services to initialize..."
+          sleep 30
+          
+          DOMAIN="${{ secrets.DOMAIN }}"
+          echo "🔍 Quick connectivity check..."
+          
+          # Simple connectivity verification (non-blocking)
+          for endpoint in "https://${DOMAIN}/" "https://api.${DOMAIN}/health" "https://blog.${DOMAIN}/"; do
+            if curl -f -s --max-time 10 --retry 2 "$endpoint" > /dev/null 2>&1; then
+              echo "✅ $endpoint is reachable"
+            else
+              echo "⚠️ $endpoint not immediately reachable"
+            fi
+          done
+          
+          echo "📝 Note: Detailed health checks were performed by Ansible"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Domain**: ${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch/Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags Used**: Blog=$BLOG_TAG, API=$API_TAG, Web=$WEB_TAG" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed At**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$STATUS" = "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Production deployment completed successfully!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🌐 **Access your deployment:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Main: https://${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Blog: https://blog.${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+            echo "- API: https://api.${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Send notifications
+        if: always()
+        run: |
+          if [ -n "${{ secrets.N8N_WEBHOOK_URL }}" ]; then
+            STATUS="${{ job.status }}"
+            curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
+              -d '{
+                "status": "'$STATUS'",
+                "domain": "${{ secrets.DOMAIN }}",
+                "blog_tag": "'$BLOG_TAG'",
+                "api_tag": "'$API_TAG'", 
+                "web_tag": "'$WEB_TAG'",
+                "commit": "${{ github.sha }}",
+                "actor": "${{ github.actor }}",
+                "timestamp": "'$(date -u)'"
+              }' || echo "Notification failed"
+          fi

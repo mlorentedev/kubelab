@@ -16,7 +16,7 @@ func main() {
 	// Cargar variables de entorno
 	_, err := config.GetConfig()
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Error al cargar la configuración")
+		logger.Fatal().Err(err).Msg("Error loading configuration")
 	}
 
 	// Establecer Gin en modo release (sin modo debug)
