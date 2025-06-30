@@ -56,6 +56,7 @@ jobs:
           else
             echo "any_changed=false" >> "$GITHUB_OUTPUT"
           fi
+            
   run-blog-pipeline:
     name: Blog Pipeline
     needs: detect-changed-apps
@@ -67,8 +68,8 @@ jobs:
 
   run-api-pipeline:
     name: API Pipeline
-    needs: detect-changed-apps
-    if: ${{ needs.detect-changed-apps.outputs.api == 'true' }}
+    needs: [detect-changed-apps, run-blog-pipeline]
+    if: ${{ always() && needs.detect-changed-apps.outputs.api == 'true' }}
     uses: ./.github/workflows/ci-02-pipeline.yml
     with:
       app: api
@@ -76,8 +77,8 @@ jobs:
 
   run-web-pipeline:
     name: Web Pipeline
-    needs: detect-changed-apps
-    if: ${{ needs.detect-changed-apps.outputs.web == 'true' }}
+    needs: [detect-changed-apps, run-blog-pipeline, run-api-pipeline]
+    if: ${{ always() && needs.detect-changed-apps.outputs.web == 'true' }}
     uses: ./.github/workflows/ci-02-pipeline.yml
     with:
       app: web
