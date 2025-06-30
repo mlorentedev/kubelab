@@ -43,21 +43,24 @@ jobs:
         id: tags
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Use manually specified tags
-            echo "BLOG_TAG=${{ inputs.blog_tag }}" >> "$GITHUB_ENV"
-            echo "API_TAG=${{ inputs.api_tag }}" >> "$GITHUB_ENV"
-            echo "WEB_TAG=${{ inputs.web_tag }}" >> "$GITHUB_ENV"
+            {
+              echo "BLOG_TAG=${{ inputs.blog_tag }}"
+              echo "API_TAG=${{ inputs.api_tag }}"
+              echo "WEB_TAG=${{ inputs.web_tag }}"
+            } >> "$GITHUB_ENV"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            # Extract version from tag (v1.2.3 -> 1.2.3)
             VERSION=${GITHUB_REF#refs/tags/v}
-            echo "BLOG_TAG=$VERSION" >> "$GITHUB_ENV"
-            echo "API_TAG=$VERSION" >> "$GITHUB_ENV"
-            echo "WEB_TAG=$VERSION" >> "$GITHUB_ENV"
+            {
+              echo "BLOG_TAG=$VERSION"
+              echo "API_TAG=$VERSION"
+              echo "WEB_TAG=$VERSION"
+            } >> "$GITHUB_ENV"
           else
-            # Use latest for push to master
-            echo "BLOG_TAG=latest" >> "$GITHUB_ENV"
-            echo "API_TAG=latest" >> "$GITHUB_ENV"
-            echo "WEB_TAG=latest" >> "$GITHUB_ENV"
+            {
+              echo "BLOG_TAG=latest"
+              echo "API_TAG=latest"
+              echo "WEB_TAG=latest"
+            } >> "$GITHUB_ENV"
           fi
 
       - name: Set up Python for Ansible
