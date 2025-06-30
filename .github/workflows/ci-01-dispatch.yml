@@ -69,7 +69,7 @@ jobs:
           [[ "$API_CHANGED" == "true" ]] && apps+=("api")
           [[ "$WEB_CHANGED" == "true" ]] && apps+=("web")
           # Convert array to JSON format
-          apps_json=$(printf '%s\n' "${apps[@]}" | jq -R . | jq -s .)
+          apps_json=$(printf '%s\n' "${apps[@]}" | jq -R . | jq -c -s .)
           echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
 
   run-blog-pipeline:
