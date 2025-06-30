@@ -46,8 +46,8 @@ jobs:
         run: |
           TAG="${{ inputs.tag }}"
           REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}"
-          CLEAN_TAG="$(echo "$TAG" | sed "s/^${{ inputs.app }}-//")"
-          BASE_TAG="$(echo "$CLEAN_TAG" | cut -d'-' -f1)"
+          CLEAN_TAG="${TAG#${{ inputs.app }}-}"
+          BASE_TAG="${CLEAN_TAG%%-*}"
           if [[ "${{ github.ref }}" =~ ^refs/heads/(master|develop)$ ]]; then
             echo "tags=${REGISTRY}:${CLEAN_TAG},${REGISTRY}:latest" >> "$GITHUB_OUTPUT"
             echo "actual_tag=${CLEAN_TAG}" >> "$GITHUB_OUTPUT"
