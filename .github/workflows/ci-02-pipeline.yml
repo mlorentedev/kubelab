@@ -119,8 +119,6 @@ jobs:
             echo "default_bump=major" >> "$GITHUB_OUTPUT"
           elif echo "$COMMIT_MSG" | grep -qE '^feat(\(.*\))?:'; then
             echo "default_bump=minor" >> "$GITHUB_OUTPUT"
-          elif echo "$COMMIT_MSG" | grep -qE '^fix(\(.*\))?:'; then
-            echo "default_bump=patch" >> "$GITHUB_OUTPUT"
           else
             echo "default_bump=patch" >> "$GITHUB_OUTPUT"
           fi
@@ -136,28 +134,8 @@ jobs:
           pre_release_branches: feature/*,hotfix/*
           default_prerelease_bump: rc
           tag_prefix: v
-          custom_release_rules: |
-            docs:patch:Documentation,
-            chore:patch:Chores,
-            ci:patch:CI,
-            build:patch:Build,
-            refactor:patch:Code Refactoring,
-            style:patch:Style,
-            test:patch:Tests,
-            perf:patch:Performance,
-            Merge pull request:patch:Merge,
-            Merge branch:patch:Merge,
-            Revert:patch:Reverts,
-            Merge:patch:Merge,
-            Bump:patch:Version Bumps,
-            Update:patch:Updates,
-            Fix:patch:Bug Fixes,
-            Hotfix:patch:Hotfixes,
-            Feat:minor:Features,
-            Feature:minor:Features,
-            Breaking change:major:Breaking Changes,
-            BREAKING CHANGE:major:Breaking Changes   
-                   
+          custom_release_rules: docs:patch:Documentation,chore:patch:Chores,ci:patch:CI,build:patch:Build,refactor:patch:Code Refactoring,style:patch:Style,test:patch:Tests,perf:patch:Performance,Merge pull request:patch:Merge,Merge branch:patch:Merge,Revert:patch:Reverts,Merge:patch:Merge,Bump:patch:Version Bumps,Update:patch:Updates,Fix:patch:Bug Fixes,Hotfix:patch:Hotfixes,Feat:minor:Features,Feature:minor:Features,Breaking change:major:Breaking Changes,BREAKING CHANGE:major:Breaking Changes
+
       - name: Check if tag exists and delete it
         run: |
           TAG_NAME=${{ steps.tag_version.outputs.new_version }}
