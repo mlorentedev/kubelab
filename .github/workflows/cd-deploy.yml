@@ -44,20 +44,20 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Use manually specified tags
-            echo "BLOG_TAG=${{ inputs.blog_tag }}" >> $GITHUB_ENV
-            echo "API_TAG=${{ inputs.api_tag }}" >> $GITHUB_ENV
-            echo "WEB_TAG=${{ inputs.web_tag }}" >> $GITHUB_ENV
+            echo "BLOG_TAG=${{ inputs.blog_tag }}" >> "$GITHUB_ENV"
+            echo "API_TAG=${{ inputs.api_tag }}" >> "$GITHUB_ENV"
+            echo "WEB_TAG=${{ inputs.web_tag }}" >> "$GITHUB_ENV"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             # Extract version from tag (v1.2.3 -> 1.2.3)
             VERSION=${GITHUB_REF#refs/tags/v}
-            echo "BLOG_TAG=$VERSION" >> $GITHUB_ENV
-            echo "API_TAG=$VERSION" >> $GITHUB_ENV
-            echo "WEB_TAG=$VERSION" >> $GITHUB_ENV
+            echo "BLOG_TAG=$VERSION" >> "$GITHUB_ENV"
+            echo "API_TAG=$VERSION" >> "$GITHUB_ENV"
+            echo "WEB_TAG=$VERSION" >> "$GITHUB_ENV"
           else
             # Use latest for push to master
-            echo "BLOG_TAG=latest" >> $GITHUB_ENV
-            echo "API_TAG=latest" >> $GITHUB_ENV
-            echo "WEB_TAG=latest" >> $GITHUB_ENV
+            echo "BLOG_TAG=latest" >> "$GITHUB_ENV"
+            echo "API_TAG=latest" >> "$GITHUB_ENV"
+            echo "WEB_TAG=latest" >> "$GITHUB_ENV"
           fi
 
       - name: Set up Python for Ansible
@@ -83,59 +83,59 @@ jobs:
       - name: Create environment files
         run: |
           # Main .env file
-          cat > .env << EOF
-          ENVIRONMENT=production
-          SCRIPTS_PATH=./scripts
-          ANSIBLE_PATH=./infra/ansible
-          TRAEFIK_PATH=./infra/traefik
-          WEB_PATH=./apps/web
-          BLOG_PATH=./apps/blog
-          API_PATH=./apps/api
-          N8N_PATH=./infra/n8n
-          MONITORING_PATH=./infra/monitoring
-          PORTAINER_PATH=./infra/portainer
-          NGINX_PATH=./infra/nginx
-          DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN=${{ secrets.DOCKERHUB_TOKEN }}
-          SSH_KEY=~/.ssh/id_rsa
-          EOF
+          {
+            echo "ENVIRONMENT=production"
+            echo "SCRIPTS_PATH=./scripts"
+            echo "ANSIBLE_PATH=./infra/ansible"
+            echo "TRAEFIK_PATH=./infra/traefik"
+            echo "WEB_PATH=./apps/web"
+            echo "BLOG_PATH=./apps/blog"
+            echo "API_PATH=./apps/api"
+            echo "N8N_PATH=./infra/n8n"
+            echo "MONITORING_PATH=./infra/monitoring"
+            echo "PORTAINER_PATH=./infra/portainer"
+            echo "NGINX_PATH=./infra/nginx"
+            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}"
+            echo "DOCKERHUB_TOKEN=${{ secrets.DOCKERHUB_TOKEN }}"
+            echo "SSH_KEY=~/.ssh/id_rsa"
+          } > .env
           
           # Ansible .env file
           mkdir -p infra/ansible
-          cat > infra/ansible/.env << EOF
-          DOMAIN=${{ secrets.DOMAIN }}
-          PRODUCTION_DOMAIN=${{ secrets.DOMAIN }}
-          PRODUCTION_DEPLOY_PATH=/opt/${{ secrets.DOMAIN }}
-          ANSIBLE_SSH_USER=${{ secrets.ANSIBLE_SSH_USER }}
-          ANSIBLE_HOST=${{ secrets.ANSIBLE_HOST }}
-          ANSIBLE_HOST_PORT=${{ secrets.ANSIBLE_HOST_PORT || '22' }}
-          APP_BLOG_NAME=blog
-          APP_WEB_NAME=web
-          APP_API_NAME=api
-          APP_N8N_NAME=n8n
-          APP_GRAFANA_NAME=grafana
-          APP_LOKI_NAME=loki
-          APP_UPTIME_KUMA_NAME=uptime-kuma
-          APP_PORTAINER_NAME=portainer
-          EOF
+          {
+            echo "DOMAIN=${{ secrets.DOMAIN }}"
+            echo "PRODUCTION_DOMAIN=${{ secrets.DOMAIN }}"
+            echo "PRODUCTION_DEPLOY_PATH=/opt/${{ secrets.DOMAIN }}"
+            echo "ANSIBLE_SSH_USER=${{ secrets.ANSIBLE_SSH_USER }}"
+            echo "ANSIBLE_HOST=${{ secrets.ANSIBLE_HOST }}"
+            echo "ANSIBLE_HOST_PORT=${{ secrets.ANSIBLE_HOST_PORT || '22' }}"
+            echo "APP_BLOG_NAME=blog"
+            echo "APP_WEB_NAME=web"
+            echo "APP_API_NAME=api"
+            echo "APP_N8N_NAME=n8n"
+            echo "APP_GRAFANA_NAME=grafana"
+            echo "APP_LOKI_NAME=loki"
+            echo "APP_UPTIME_KUMA_NAME=uptime-kuma"
+            echo "APP_PORTAINER_NAME=portainer"
+          } > infra/ansible/.env
 
       - name: Update Docker tags in app configs
         run: |
           for app in blog api web; do
             if [ -f "apps/$app/.env" ]; then
-              case $app in
+              case "$app" in
                 blog) tag="$BLOG_TAG" ;;
                 api) tag="$API_TAG" ;;
                 web) tag="$WEB_TAG" ;;
               esac
-              
+
               if grep -q "^DOCKER_TAG=" "apps/$app/.env"; then
                 sed -i "s/^DOCKER_TAG=.*/DOCKER_TAG=$tag/" "apps/$app/.env"
               else
                 echo "DOCKER_TAG=$tag" >> "apps/$app/.env"
               fi
-              
-              echo "✅ Updated apps/$app/.env with DOCKER_TAG=$tag"
+
+              echo "Updated apps/$app/.env with DOCKER_TAG=$tag"
             fi
           done
 
@@ -205,25 +205,30 @@ jobs:
         if: always()
         run: |
           STATUS="${{ job.status }}"
-          
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: $STATUS" >> $GITHUB_STEP_SUMMARY
-          echo "- **Domain**: ${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch/Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tags Used**: Blog=$BLOG_TAG, API=$API_TAG, Web=$WEB_TAG" >> $GITHUB_STEP_SUMMARY
-          echo "- **Deployed At**: $(date -u)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          
+
+          {
+            echo "## 🚀 Deployment Summary"
+            echo "- **Status**: $STATUS"
+            echo "- **Domain**: ${{ secrets.DOMAIN }}"
+            echo "- **Trigger**: ${{ github.event_name }}"
+            echo "- **Branch/Tag**: ${{ github.ref_name }}"
+            echo "- **Tags Used**: Blog=$BLOG_TAG, API=$API_TAG, Web=$WEB_TAG"
+            echo "- **Deployed At**: $(date -u)"
+            echo "- **Commit**: ${{ github.sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$STATUS" = "success" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ **Production deployment completed successfully!**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "🌐 **Access your deployment:**" >> $GITHUB_STEP_SUMMARY
-            echo "- Main: https://${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Blog: https://blog.${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
-            echo "- API: https://api.${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+            {
+              echo ""
+              echo "✅ **Production deployment completed successfully!**"
+              echo ""
+              echo "🌐 **Access your deployment:**"
+              echo "- Main: https://${{ secrets.DOMAIN }}"
+              echo "- Blog: https://blog.${{ secrets.DOMAIN }}"
+              echo "- API: https://api.${{ secrets.DOMAIN }}"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
+
 
       - name: Send notifications
         if: always()
