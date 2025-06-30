@@ -19,11 +19,10 @@ func main() {
 		logger.Fatal().Err(err).Msg("Error loading configuration")
 	}
 
-	// Establecer Gin en modo release (sin modo debug)
 	gin.SetMode(gin.ReleaseMode)
 
 	// Configurar router sin Logger y Recovery por defecto
-	r := gin.New() // Usar gin.New() en lugar de gin.Default()
+	r := gin.New()
 
 	// Usar middlewares personalizados (Logger, Recovery)
 	r.Use(gin.Logger())

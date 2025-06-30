@@ -79,6 +79,15 @@ jobs:
       matrix:
         arch: [amd64, arm64]
     steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        
+        with:
+          platforms: linux/arm64,linux/amd64  
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Run container (${{ matrix.arch }})
         run: |
           case "${{ inputs.app }}" in
