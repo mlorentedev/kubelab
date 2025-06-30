@@ -95,43 +95,47 @@ jobs:
               find "$app" -name ".env.example" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
             fi
           done
-          # Create version manifest
-          cat > deployment/VERSION_MANIFEST.md << EOF
-          # Release ${{ steps.create_tag.outputs.new_version }}
-          ## Changed Applications
-          $(echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- /')
-          ## Application Versions
-          EOF
-          # Add app versions if they exist
-          if [ -n "${{ inputs.blog_tag }}" ]; then
-            echo "- **blog**: ${{ inputs.blog_tag }} (SHA: ${{ inputs.blog_sha }})" >> deployment/VERSION_MANIFEST.md
-          fi
-          if [ -n "${{ inputs.api_tag }}" ]; then
-            echo "- **api**: ${{ inputs.api_tag }} (SHA: ${{ inputs.api_sha }})" >> deployment/VERSION_MANIFEST.md
-          fi
-          if [ -n "${{ inputs.web_tag }}" ]; then
-            echo "- **web**: ${{ inputs.web_tag }} (SHA: ${{ inputs.web_sha }})" >> deployment/VERSION_MANIFEST.md
-          fi
-          echo "" >> deployment/VERSION_MANIFEST.md
-          echo "## Docker Images" >> deployment/VERSION_MANIFEST.md
-          if [ -n "${{ inputs.blog_tag }}" ]; then
-            BLOG_IMAGE_TAG=$(echo "${{ inputs.blog_tag }}" | sed "s/^blog//")
-            echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-blog:${BLOG_IMAGE_TAG}\`" >> deployment/VERSION_MANIFEST.md
-          fi
-          if [ -n "${{ inputs.api_tag }}" ]; then
-            API_IMAGE_TAG=$(echo "${{ inputs.api_tag }}" | sed "s/^api//")
-            echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-api:${API_IMAGE_TAG}\`" >> deployment/VERSION_MANIFEST.md
-          fi
-          if [ -n "${{ inputs.web_tag }}" ]; then
-            WEB_IMAGE_TAG=$(echo "${{ inputs.web_tag }}" | sed "s/^web//")
-            echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-web:${WEB_IMAGE_TAG}\`" >> deployment/VERSION_MANIFEST.md
-          fi
-          echo "" >> deployment/VERSION_MANIFEST.md       
-          echo "## Deployment Instructions" >> deployment/VERSION_MANIFEST.md
-          echo "1. Extract this bundle to your deployment environment" >> deployment/VERSION_MANIFEST.md
-          echo "2. Review the VERSION_MANIFEST.md for changed components" >> deployment/VERSION_MANIFEST.md
-          echo "3. Update your docker-compose files with the new image tags" >> deployment/VERSION_MANIFEST.md
-          echo "4. Run deployment scripts from the scripts/ directory" >> deployment/VERSION_MANIFEST.md          
+          # Create version manifest using grouped redirects
+          {
+            echo "# Release ${{ steps.create_tag.outputs.new_version }}"
+            echo "## Changed Applications"
+            echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- /'
+            echo "## Application Versions"
+            # Add app versions if they exist
+            if [ -n "${{ inputs.blog_tag }}" ]; then
+              echo "- **blog**: ${{ inputs.blog_tag }} (SHA: ${{ inputs.blog_sha }})"
+            fi
+            if [ -n "${{ inputs.api_tag }}" ]; then
+              echo "- **api**: ${{ inputs.api_tag }} (SHA: ${{ inputs.api_sha }})"
+            fi
+            if [ -n "${{ inputs.web_tag }}" ]; then
+              echo "- **web**: ${{ inputs.web_tag }} (SHA: ${{ inputs.web_sha }})"
+            fi
+            echo ""
+            echo "## Docker Images"
+            # Add Docker images if they exist - assign variables first
+            if [ -n "${{ inputs.blog_tag }}" ]; then
+              BLOG_TAG="${{ inputs.blog_tag }}"
+              BLOG_IMAGE_TAG="${BLOG_TAG#blog-}"
+              echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-blog:${BLOG_IMAGE_TAG}\`"
+            fi
+            if [ -n "${{ inputs.api_tag }}" ]; then
+              API_TAG="${{ inputs.api_tag }}"
+              API_IMAGE_TAG="${API_TAG#api-}"
+              echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-api:${API_IMAGE_TAG}\`"
+            fi
+            if [ -n "${{ inputs.web_tag }}" ]; then
+              WEB_TAG="${{ inputs.web_tag }}"
+              WEB_IMAGE_TAG="${WEB_TAG#web-}"
+              echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-web:${WEB_IMAGE_TAG}\`"
+            fi 
+            echo ""       
+            echo "## Deployment Instructions"
+            echo "1. Extract this bundle to your deployment environment"
+            echo "2. Review the VERSION_MANIFEST.md for changed components"
+            echo "3. Update your docker-compose files with the new image tags"
+            echo "4. Run deployment scripts from the scripts/ directory"
+          } > deployment/VERSION_MANIFEST.md
           # Create deployment bundle
           cd deployment
           zip -r ../global-release-${{ steps.create_tag.outputs.new_version }}.zip .
@@ -147,45 +151,49 @@ jobs:
       - name: Create comprehensive release notes
         id: release_notes
         run: |
-          # Create detailed release notes
-          cat > release_notes.md << EOF
-          # Global Release ${{ steps.create_tag.outputs.new_version }}
-          ## Changed Applications
-          $(echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- **/' | sed 's/$/**: Updated/')
-          ## Component Versions
-          EOF
-          if [ -n "${{ inputs.blog_tag }}" ]; then
-            echo "- **Blog**: \`${{ inputs.blog_tag }}\`" >> release_notes.md
-          fi
-          if [ -n "${{ inputs.api_tag }}" ]; then
-            echo "- **API**: \`${{ inputs.api_tag }}\`" >> release_notes.md
-          fi
-          if [ -n "${{ inputs.web_tag }}" ]; then
-            echo "- **Web**: \`${{ inputs.web_tag }}\`" >> release_notes.md
-          fi
-          echo "" >> release_notes.md
-          echo "## Docker Images" >> release_notes.md
-          if [ -n "${{ inputs.blog_tag }}" ]; then
-            BLOG_IMAGE_TAG=$(echo "${{ inputs.blog_tag }}" | sed "s/^blog-v//")
-            echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-blog:${BLOG_IMAGE_TAG}\`" >> release_notes.md
-          fi
-          if [ -n "${{ inputs.api_tag }}" ]; then
-            API_IMAGE_TAG=$(echo "${{ inputs.api_tag }}" | sed "s/^api-v//")
-            echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-api:${API_IMAGE_TAG}\`" >> release_notes.md
-          fi
-          if [ -n "${{ inputs.web_tag }}" ]; then
-            WEB_IMAGE_TAG=$(echo "${{ inputs.web_tag }}" | sed "s/^web-v//")
-            echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-web:${WEB_IMAGE_TAG}\`" >> release_notes.md
-          fi
-          echo "" >> release_notes.md          
-          echo "## What's Included" >> release_notes.md
-          echo "- Complete deployment bundle with all applications" >> release_notes.md
-          echo "- Infrastructure configuration" >> release_notes.md
-          echo "- Deployment scripts" >> release_notes.md
-          echo "- Version manifest with detailed component information" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Deployment" >> release_notes.md
-          echo "Download the \`global-release-${{ steps.create_tag.outputs.new_version }}.zip\` asset and follow the instructions in VERSION_MANIFEST.md" >> release_notes.md
+          # Create detailed release notes using grouped redirects
+          {
+            echo "# Global Release ${{ steps.create_tag.outputs.new_version }}"
+            echo "## Changed Applications"
+            echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- **/' | sed 's/$/**: Updated/'
+            echo "## Component Versions"
+            if [ -n "${{ inputs.blog_tag }}" ]; then
+              echo "- **Blog**: \`${{ inputs.blog_tag }}\`"
+            fi
+            if [ -n "${{ inputs.api_tag }}" ]; then
+              echo "- **API**: \`${{ inputs.api_tag }}\`"
+            fi
+            if [ -n "${{ inputs.web_tag }}" ]; then
+              echo "- **Web**: \`${{ inputs.web_tag }}\`"
+            fi  
+            echo ""
+            echo "## Docker Images"
+            # Assign variables first to avoid GitHub Actions expression parsing issues
+            if [ -n "${{ inputs.blog_tag }}" ]; then
+              BLOG_TAG="${{ inputs.blog_tag }}"
+              BLOG_IMAGE_TAG="${BLOG_TAG#blog-}"
+              echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-blog:${BLOG_IMAGE_TAG}\`"
+            fi
+            if [ -n "${{ inputs.api_tag }}" ]; then
+              API_TAG="${{ inputs.api_tag }}"
+              API_IMAGE_TAG="${API_TAG#api-}"
+              echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-api:${API_IMAGE_TAG}\`"
+            fi
+            if [ -n "${{ inputs.web_tag }}" ]; then
+              WEB_TAG="${{ inputs.web_tag }}"
+              WEB_IMAGE_TAG="${WEB_TAG#web-}"
+              echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/mlorente-web:${WEB_IMAGE_TAG}\`"
+            fi
+            echo ""          
+            echo "## What's Included"
+            echo "- Complete deployment bundle with all applications"
+            echo "- Infrastructure configuration"
+            echo "- Deployment scripts"
+            echo "- Version manifest with detailed component information"
+            echo ""
+            echo "## Deployment"
+            echo "Download the \`global-release-${{ steps.create_tag.outputs.new_version }}.zip\` asset and follow the instructions in VERSION_MANIFEST.md"
+          } > release_notes.md
           # Set output for use in release
           {
             echo 'RELEASE_NOTES<<EOF'
