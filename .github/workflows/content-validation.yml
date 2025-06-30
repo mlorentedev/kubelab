@@ -60,7 +60,6 @@ jobs:
               exit 1
             fi
           done
-          
           # Check if .env.example files exist
           for app in api blog web monitoring n8n portainer; do
             if [ ! -f "apps/$app/.env.example" ]; then
