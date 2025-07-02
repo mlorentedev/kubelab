@@ -166,7 +166,7 @@ jobs:
               if [ -z "$LATEST_RC" ]; then
                 # No RC found - this might be the first release
                 echo "::warning::No RC version found. Creating first stable release."
-                
+
                 # Analyze commits to determine first version
                 COMMITS=$(git log --oneline)
                 if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
@@ -326,6 +326,7 @@ jobs:
           generateReleaseNotes: true
           allowUpdates: true
           prerelease: ${{ steps.release_strategy.outputs.strategy == 'prerelease' }}
+          makeLatest: ${{ steps.release_strategy.outputs.strategy == 'stable' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify global deployment

@@ -1,356 +1,207 @@
 # mlorente.dev
 
-Web personal construida con Jekyll, contenerizada con Docker y desplegada utilizando Traefik para terminación SSL y proxy inverso.
-
-## Características
-
-- **Sitio web estático**: Construido con Jekyll para rendimiento óptimo
-- **Diseño responsive**: Adaptado para todos los dispositivos
-- **Contenerización completa**: Docker y Docker Compose para desarrollo y producción
-- **CI/CD automatizado**: GitHub Actions para builds, tests y despliegue
-- **SSL automático**: Certificados Let's Encrypt gestionados por Traefik
-- **Infraestructura como código**: Configuración automatizada con Ansible
-- **Multi-ambiente**: Soporte para local, staging y producción
-- **Seguridad integrada**: Escaneo de secretos y vulnerabilidades
-- **Monitoreo**: Dashboard de Traefik con autenticación
-
-## Estructura del proyecto
-
-```text
-├── .github/workflows/          # Pipelines de CI/CD
-│   ├─ ci-jekyll.yml             # CI del sitio estático
-|   ├─ ci-frontend.yml           # CI del frontend
-|   ├─ ci-backend.yml            # CI del backend
-|   ├─ test-build-push.yml       # Job reutilizable de CI
-|   ├─ deploy.yml                # Job reutilizable de CD
-|   ├─ cd.yml                    # Despliegue auto staging/producción
-|   └─ release.yml               # Release + retag + deploy
-├── deployment/                # Configuración de despliegue
-│   ├── ansible/                 # Playbooks y configuración
-│   │   ├── inventory/              # Inventario de hosts
-│   │   ├── playbooks/              # Playbooks de despliegue
-│   │   └── templates/              # Plantillas de configuración
-│   ├── docker/                  # Configuración Docker
-│   └── traefik/                 # Configuración de proxy
-├── src/                 # Servicios de la aplicación
-│   ├── backend/                 # Servicio backend (futuro)
-│   ├── frontend/                # Servicio frontend (futuro)
-│   └── jekyll/                  # Sitio Jekyll estático
-├── scripts/                  # Scripts de automatización
-├── docs/                     # Documentación adicional
-├── .env.example              # Plantilla de variables de entorno
-└── Makefile                  # Comandos de automatización
-```
-
-## Prerrequisitos
-
-- **Docker** y **Docker Compose** (v2.0+)
-- **Git**
-- **Make**
-- **Ansible** (opcional, para despliegues remotos)
-- **Cuenta DockerHub** para almacenar imágenes
-- **Dominio** (para staging y producción)
-- **Servidor con SSH** (para despliegues remotos)
-
-## Instalación
-
-### Dependencias del sistema
-
-```bash
-# Instalar todas las dependencias necesarias
-make install-deps
-
-# Instalar Ansible y colecciones (para despliegues remotos)
-make install-ansible
-```
-
-### Configuración del entorno en local
-
-Para ejecutar el proyecto localmente:
-
-1. Clona el repositorio
-
-2. Crea un archivo de entorno local
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Edita `.env.local` con tu configuración local
-
-   ```env
-   # Site
-   ENVIRONMENT=local
-   ARTIFACT_NAME=blog-site
-   DOMAIN=localhost
-   EMAIL=your-email@example.com
-
-   # DockerHub
-   DOCKERHUB_USERNAME=your-dockerhub-username
-
-   # Environment
-   TRAEFIK_DASHBOARD=true
-   TRAEFIK_INSECURE=true
-   ```
-
-4. Inicia el entorno de desarrollo
-
-   ```bash
-   # Iniciar entorno de desarrollo
-   make dev
-
-   # El sitio estará disponible en:
-   # - Sitio web: http://localhost
-   # - Dashboard Traefik: http://localhost:8080
-   ```
-
-### Comandos de desarrollo
-
-```bash
-# Iniciar entorno de desarrollo local
-make dev
-
-# Limpiar recursos locales
-make clean
-
-# Generar configuración de Traefik
-make generate-config
-
-# Generar credenciales de autenticación para acceso al dashboard de Traefik
-make generate-auth
-```
-
-## Despliegue remoto
-
-### Configuracion SSH
-
-Primero, asegúrate de tener configurada tu clave SSH para acceder a los servidores remotos. Si no tienes una clave SSH, puedes generarla con el siguiente comando:
-
-```bash
-ssh-keygen -t rsa -b 4096 -C "tu-correo@ejemplo.com"
-```
-
-Cuando se te pregunte dónde guardar la clave, puedes presionar Enter para aceptar la ubicación predeterminada (`~/.ssh/id_rsa`). También puedes establecer una frase de contraseña para mayor seguridad.
-Esto generará dos archivos: `id_rsa` (clave privada) y `id_rsa.pub` (clave pública).
-Asegúrate de que el agente SSH esté en ejecución y agrega tu clave privada:
-
-```bash
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_rsa
-```
-
-Si no tienes el agente SSH en ejecución, puedes iniciarlo con el comando anterior. Luego, agrega tu clave privada al agente SSH:
-
-```bash
-ssh-add ~/.ssh/id_rsa
-```
-
-Si ya tienes una clave SSH, asegúrate de que esté en el directorio `~/.ssh/` y que tenga los permisos correctos:
-
-```bash
-chmod 600 ~/.ssh/id_rsa
-chmod 644 ~/.ssh/id_rsa.pub
-```
-
-Asegúrate de que el archivo `~/.ssh/config` tenga la siguiente configuración:
-
-```bash
-Host servidor-remoto
-    HostName ip-del-servidor
-    User usuario
-    IdentityFile ~/.ssh/id_rsa
-```
-
-Esto te permitirá conectarte al servidor remoto usando el alias `servidor-remoto` en lugar de la dirección IP completa.
-Asegúrate de que el archivo `~/.ssh/config` tenga los permisos correctos:
-
-```bash
-chmod 644 ~/.ssh/config
-```
-
-Si no tienes el archivo `~/.ssh/config`, puedes crearlo con el siguiente comando:
-
-```bash
-touch ~/.ssh/config
-```
-
-Luego, edítalo con tu editor de texto favorito y agrega la configuración anterior.
-Asegúrate de que el archivo `~/.ssh/config` tenga los permisos correctos:
-
-```bash
-chmod 644 ~/.ssh/config
-```
-
-Si el servidor remoto no tiene tu clave pública SSH, puedes copiarla manualmente o usar el siguiente comando para agregarla automáticamente:
-
-```bash
-ssh-copy-id usuario@servidor-remoto
-```
-
-Este comando te pedirá la contraseña del usuario en el servidor remoto. Una vez ingresada, se copiará tu clave pública al servidor remoto y se agregará al archivo `~/.ssh/authorized_keys`, permitiéndote conectarte sin necesidad de ingresar una contraseña.
-
-Asegúrate de que tu usuario tenga permisos para ejecutar comandos de Docker y Ansible así como permisos de sudo.
-
-```bash
-sudo usermod -aG sudo $USER
-```
-
-### Comandos de despliegue
-
-```bash
-# Verificar requisitos previos
-make check
-
-# Configuración inicial del entorno (staging o production)
-make setup ENV=staging
-
-# Desplegar aplicación (staging o production)
-make deploy ENV=staging
-
-# Ver logs de la aplicación
-make logs ENV=staging
-
-# Ver estado de los servicios
-make status ENV=staging
-```
-
-Cuando se despliega en staging los certificados generados por Let's Encrypt son temporales y los navegadores pueden mostrar advertencias de seguridad. Para poder testar localmente el entorno de staging sin advertencias,  tienes que copiar los certificados generados a tu máquina local y añadirlos a tu almacén de certificados de confianza.
-
-```bash
-make copy-certificates ENV=staging
-```
-
-Por defecto ningún navegador acepta certificados autofirmados pero puedes añadirlos a tu almacén de certificados de confianza. En sistemas basados en Unix, como Ubuntu, puedes hacer lo siguiente:
-
-```bash
-google-chrome --ignore-certificate-errors --user-data-dir=/tmp/chrome-test
-```
-
-## Configuración del servidor
-
-Antes de desplegar a staging o producción, asegúrate de tener configurados los archivos de entorno necesarios y tener acceso a tu servidor.
-
-### Configuración inicial del servidor
-
-Para preparar un servidor nuevo:
-
-```bash
-make setup ENV=staging
-```
-
-Este comando:
-
-- Actualiza los paquetes del sistema
-- Instala Docker y Docker Compose
-- Configura el firewall
-- Crea la estructura de directorios necesaria
-- Configura la red de Docker
-
-### Despliegue a entornos remotos
-
-Para desplegar la aplicación:
-
-```bash
-make deploy ENV=production
-```
-
-Este comando:
-
-- Crea un respaldo de la configuración actual
-- Copia todos los archivos necesarios al servidor
-- Genera la configuración de Traefik
-- Inicia los contenedores de Docker
-- Verifica que el despliegue se haya completado correctamente
-
-## Ejemplos de uso
-
-### Desarrollo completo en local
-
-```bash
-# Instalar dependencias
-make install-deps
-
-# Iniciar entorno de desarrollo
-make dev
-
-# Realizar cambios en los archivos del proyecto...
-
-# Ver los cambios en http://localhost
-
-# Limpiar recursos cuando termines
-make clean
-```
-
-### Despliegue a un entorno de staging o producción
-
-```bash
-# Verificar requisitos previos
-make check
-
-# Configuración inicial (solo la primera vez)
-make setup ENV=staging
-
-# Desplegar la aplicación
-make deploy ENV=staging
-
-# Verificar estado
-make status ENV=staging
-
-# Ver logs
-make logs ENV=staging
-```
-
-## CI/CD Pipeline
-
-El proyecto incluye un workflow de GitHub Actions que:
-
-| Etapa | Disparador | Pasos clave | Resultado |
-|-------|------------|-------------|-----------|
-| **CI de servicio** (`ci-jekyll`, `ci-frontend`, `ci-backend`) | Push / PR a `master`, `develop`, `feature/*`, `hotfix/*` | *Draft‑skip* → Linter → Tests → Gitleaks → **Build** multi‑arquitectura → Push a Docker Hub (etiquetas `version`, `sha`, `branch`) → Aviso Slack | Imagen fresca en Docker Hub |
-| **CD automático** (`cd.yml`) | Push a `develop` → *staging*<br>Push a `master` → *production* | Llama a `deploy.yml` → Roles Ansible (Traefik + backups + certs + prune) → Smoke test → Aviso Slack | Contenedores actualizados en el VPS |
-| **Release** (`release.yml`) | Push de tag `vX.Y.Z` | Crea Release en GitHub con notas → Comprime infra y la adjunta → Retag/push de imágenes `vX.Y.Z` → Despliegue en *production* con esa tag → Aviso Slack | Release inmutable + producción desplegada |
-
-```text
-Commit / PR
-    │
-    ├─► CI-Static ──┐
-    ├─► CI-Frontend ├─► Tests → Buildx → Docker Hub → Slack
-    └─► CI-Backend ─┘
-                      │
-                      ├─► Push a *develop* → Deploy (staging) → Health-check → Slack
-                      └─► Push a *master*  → Deploy (production) → Health-check → Slack
-
-Tag vX.Y.Z
-    │
-    └─► GitHub Release → Zip infra
-                        │
-                        └─► Retag imágenes (vX.Y.Z) → Deploy (prod vX.Y.Z) → Health-check → Slack
-```
-
-### Configuración de secretos de GitHub
-
-El proyecto incluye un script automatizado para configurar todos los secretos necesarios en GitHub Actions desde tus archivos `.env`:
-
-```bash
-# Configurar secretos desde .env en el directorio raíz
-make setup-secrets
-
-# Configurar secretos desde un archivo específico
-make setup-secrets ../tmp/.env.production
-```
-
-## Documentación adicional
-
-- [Guía de contribución](docs/CONTRIBUTING.md)
-- [Documentación de CubeLab](docs/CUBELAB.md)
-- [Workflows de GitHub](.github/workflows/)
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+Este *monorepo* concentra **todo** lo necesario para levantar y mantener el ecosistema de [mlorente.dev](https://mlorente.dev):
+
+* Front‑end moderno en **Astro** (`apps/web`)
+* Blog estático en **Jekyll** (`apps/blog`)
+* API REST en **Go 21** (`apps/api`)
+* Automatización low‑code con **n8n**
+* Observabilidad (**Vector**, **Prometheus**, **Grafana**, etc.)
+* Gestión Docker con **Portainer**
+* **Traefik** & **Nginx** como *reverse proxies*
+* Orquestación de despliegues con **Ansible**
+* **GitHub Actions** para CI (build + push imágenes)
+* **Makefile** como interfaz de mando única (dev, build, deploy)
+
+> **CD *manual*** → Las imágenes se construyen y publican automáticamente, **pero el despliegue se hace a mano** ejecutando `make deploy` sobre el servidor remoto.
 
 ---
 
-**Autor**: Manuel Lorente  
-**Sitio web**: [mlorente.dev](https://mlorente.dev)  
-**Email**: <info@mlorente.dev>
+## Tabla de contenidos
+
+1. [Estructura del repositorio](#estructura-del-repositorio)
+2. [Requisitos](#requisitos)
+3. [Puesta en marcha rápida](#puesta-en-marcha-rápida)
+4. [Workflow de desarrollo local](#workflow-de-desarrollo-local)
+5. [CI en GitHub Actions](#ci-en-github-actions)
+6. [Despliegue manual](#despliegue-manual)
+7. [Referencia de comandos Makefile](#referencia-de-comandos-makefile)
+8. [Preguntas frecuentes](#preguntas-frecuentes)
+9. [Licencia](#licencia)
+
+---
+
+## Estructura del repositorio
+
+```text
+.
+├── apps/                  # Micro‑servicios y apps de usuario
+│   ├── api/               # API Go (Dockerised)
+│   ├── blog/              # Jekyll site
+│   ├── web/               # Astro front‑end
+│   ├── n8n/               # n8n + flows
+│   ├── monitoring/        # Vector, Prometheus, Grafana
+│   └── portainer/         # Portainer stack
+├── infra/                 # Infra as Code
+│   ├── ansible/           # Playbooks, roles, inventories
+│   ├── traefik/           # Dyn. & static config
+│   └── nginx/             # Error pages, fallback
+├── scripts/               # Bash utilidades (generar configs, secrets…)
+├── .github/workflows/     # CI (build/push) — *no* despliegue
+├── Makefile               # Punto de entrada (dev / build / deploy)
+├── .env.example           # Variables globales
+└── docs/                  # Contribución, CubeLab, etc.
+```
+
+---
+
+## Requisitos
+
+| Herramienta                | Versión mínima         | Uso                     |
+| -------------------------- | ---------------------- | ----------------------- |
+| **Docker Engine**          | 24 +                   | Contenedores local/prod |
+| **Docker Compose v2**      | 2.20 +                 | Orquestación dev/prod   |
+| **Make**                   | 4.2 +                  | DSL de automatización   |
+| **Git**                    | —                      | SCM                     |
+| **Node 20** & **npm 10**   | (solo para *frontend*) |                         |
+| **Ruby 3.2** & **Bundler** | (solo para *blog*)     |                         |
+| **Go 21**                  | (solo para *API*)      |                         |
+| **Ansible**                | 9 +                    | *Playbooks* remotos     |
+
+> Opcional: **gh CLI** para gestionar *secrets* y **jq** para utilidades.
+
+---
+
+## Puesta en marcha rápida
+
+```bash
+# 1. Clona el repo
+$ git clone git@github.com:mlorente/mlorente.dev.git && cd mlorente.dev
+
+# 2. Crea tus variables (globales)
+$ cp .env.example .env && ${EDITOR} .env
+
+# 3. Prepara dependencias locales (node, ruby, etc.)
+$ make env-setup  # instala toolchain necesaria
+
+# 4. Levanta todo en modo dev
+$ make up         # Traefik + todas las apps
+
+# 5. Accede ↴
+#   http://site.mlorentedev.test (web)
+#   http://blog.mlorentedev.test (blog)
+#   http://api.mlorentedev.test/api (API)
+#   http://traefik.mlorentedev.test:8080 (dashboard)
+```
+
+**Tips:**
+
+1. Añade las entradas `*.mlorentedev.test` a `/etc/hosts` si no usas DNS local.
+2. Cada app tiene su `.env.example`; cópialo si necesitas variables adicionales.
+3. ¿Solo quieres una app? `make up-web` / `make up-blog` / …
+
+---
+
+## Workflow de desarrollo local
+
+```mermaid
+graph TD;
+  A[make up‑traefik] --> B1[make up‑blog];
+  A --> B2[make up‑web];
+  A --> B3[make up‑api];
+  subgraph Navegador
+    C1(site.mlorentedev.test) --> A;
+  end
+```
+
+1. **Traefik** se levanta primero y expone los nombres de host locales.
+2. Cada servicio se reconstruye en caliente (`docker compose ...dev.yml`).
+3. Hot‑reload: Astro (port **4321**), Jekyll (**4000**), Go (**air** auto‑reload).
+4. Logs en vivo: `make logs`.
+5. Para parar todo: `make down` o `docker compose down -v` por carpeta.
+
+---
+
+## CI en GitHub Actions
+
+| Fase             | Workflow                                   | Descripción                                                                                                                                                   |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dispatcher**   | `ci-01-dispatch.yml`                       | Detecta **apps** cambiadas y llama a *build* por matriz                                                                                                       |
+| **Build + Push** | `ci-02-pipeline.yml` → `ci-03-publish.yml` | Linter + tests → `docker buildx` **multi‑arch** → push a Docker Hub con etiquetas:<br> `latest`, semver (`vX.Y.Z`), rama (`develop`, `feature/…`) & short‑SHA |
+| **Release**      | `ci-04-release.yml`                        | Versión oficial manual (`gh release`) → retag imágenes → artefacto `infra.zip`                                                                                |
+
+**Resultado:** imágenes listas en el registry *no se despliegan solas*.
+
+---
+
+## Despliegue manual
+
+> Recomendación: usa un usuario dedicado (`mlorente-deployer`) con acceso *passwordless sudo* y **Docker** ya instalado.
+
+1. **Pre‑bootstrap** (solo primera vez)
+
+   ```bash
+   make setup ENV=production SSH_HOST=mlorente-deployer@my.vps.ip
+   ```
+
+   *Instala paquetes, crea red docker, copia configs base…*
+
+2. **Desplegar / actualizar**
+
+   ```bash
+   make deploy ENV=production
+   ```
+
+   Internamente ejecuta: `ansible-playbook infra/ansible/playbooks/deploy.yml -e env=production`.
+
+3. **Comprobar**
+
+   ```bash
+   make status ENV=production   # docker ps remoto
+   make logs   ENV=production   # tail -f de contenedores
+   ```
+
+4. **Rollback**: todo está versionado con *tags* → basta con cambiar variables y relanzar `make deploy`.
+
+---
+
+## Referencia de comandos Makefile
+
+| Categoría    | Comando                              | Acción                                |
+| ------------ | ------------------------------------ | ------------------------------------- |
+| Setup        | `make check`                         | Verifica prerequisitos locales        |
+|              | `make env-setup`                     | Instala toolchain Node, Ruby, Go      |
+|              | `make create-network`                | Crea red `mlorente_net` si falta      |
+| Desarrollo   | `make up`                            | Levanta Traefik + todas las apps      |
+|              | `make up-web` / `up-api` / `up-blog` | Solo un servicio                      |
+|              | `make down`                          | Derriba todo                          |
+| Build / Push | `make push-app APP=web`              | Construye + *push* multi‑arch         |
+|              | `make push-all`                      | Todas las apps                        |
+| Deploy       | `make setup ENV=staging`             | Bootstrap servidor remoto             |
+|              | `make deploy ENV=staging`            | Despliega imágenes ya publicadas      |
+| Utilidades   | `make generate-config`               | Renderiza templates Traefik + Ansible |
+|              | `make setup-secrets`                 | Sincroniza `.env` → *GitHub Secrets*  |
+
+> Ejecuta `make help` para ver la lista completa y descripciones coloreadas.
+
+---
+
+## Preguntas frecuentes
+
+**¿Necesito Ansible para desarrollo local?** No. Solo para despliegues remotos.
+
+**¿Se podría automatizar el CD?** Sí; bastaría con añadir un job que, tras `ci-02-pipeline`, ejecute `make deploy` con `ansible-playbook` en el runner o self‑hosted.
+
+**¿Cómo gestiono certificados en *staging*?** Usa `make copy-certificates ENV=staging` y añádelos a tu almacén de confianza local.
+
+**¿Puedo usar otra URL local?** Sí, cambia `DOMAIN_LOCAL` en `.env` y actualiza `/etc/hosts`.
+
+---
+
+## Licencia
+
+[MIT](LICENSE)
+
+---
+
+> *“Works on my machine”* no es suficiente. Con este Makefile y Ansible el despliegue es **reproducible** y **predecible**.
