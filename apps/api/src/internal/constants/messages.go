@@ -1,19 +1,15 @@
 package constants
 
-// All messages consolidated in a single structure
 var Messages = struct {
-	// Frontend messages (displayed to users - in Spanish)
 	Frontend struct {
 		Errors  map[string]string
 		Success map[string]string
 	}
-	// Backend messages (for logging - in English)
 	Backend struct {
 		Error map[string]string
 		Info  map[string]string
 		Warn  map[string]string
 	}
-	// Service-specific messages (for direct reference - in Spanish and English)
 	Service struct {
 		Subscription map[string]string
 		Email        map[string]string

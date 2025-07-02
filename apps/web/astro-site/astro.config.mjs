@@ -5,9 +5,8 @@ import sitemap from '@astrojs/sitemap';
 import node from '@astrojs/node';
 import dotenv from 'dotenv';
 
-// Function to load environment variables
 const loadEnvVariables = () => {
-  // Try to load local .env file for development
+
   const localResult = dotenv.config({ path: './.env' });
   
   // If running in GitHub Actions, use GitHub Secrets
@@ -32,7 +31,6 @@ const loadEnvVariables = () => {
     };
   }
   
-  // If local .env file loading failed and not in GitHub Actions, log a warning
   if (localResult.error && !process.env.GITHUB_ACTIONS) {
     console.warn('Could not load .env file:', localResult.error);
   }
@@ -40,7 +38,6 @@ const loadEnvVariables = () => {
   return localResult.parsed || {};
 };
 
-// Load environment variables
 const envVars = loadEnvVariables();
 
 export default defineConfig({
@@ -54,11 +51,8 @@ export default defineConfig({
   server: {
     allowedHosts: [
       'localhost',
-      'site.mlorente.dev',
-      'mlorente.dev',
-      'www.mlorente.dev',
-      'web',
-      'site.mlorentedev.test'
+      '*.mlorente.dev',
+      '*.mlorentedev.test'
     ],
   },
   vite: {
@@ -84,5 +78,4 @@ export default defineConfig({
   },
 });
 
-// Log environment variables for debugging
 console.log('Environment variables loaded successfully:', Object.values(envVars));
