@@ -1,15 +1,18 @@
 # ---------- Build Stage ----------
 FROM node:20-alpine AS build
 
+# Declare build arguments for multi-arch support
+ARG TARGETPLATFORM
+ARG TARGETOS  
+ARG TARGETARCH
+
 RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
-# ⚠️  Fuerza a npm a ignorar las optionalDependencies (rollup-native)
-ENV npm_config_omit=optional \
-    ROLLUP_NATIVE_DISABLE=true
+# Configure npm to skip optional dependencies for faster builds
+ENV npm_config_omit=optional
 
-# Copiar sólo los archivos de dependencias
 COPY astro-site/package.json astro-site/package-lock.json ./
 
 # Instalar dependencias con caché
@@ -23,12 +26,21 @@ COPY astro-site/ ./
 ARG BUILD_ENV=production
 ENV NODE_ENV=${BUILD_ENV}
 
-RUN npm install @rollup/rollup-linux-arm64-musl --no-save || true
+RUN --mount=type=cache,target=/root/.npm \
+    case "$TARGETARCH" in \
+      "amd64") \
+        echo "Installing Rollup for AMD64..." && \
+        npm install --no-save @rollup/rollup-linux-x64-musl ;; \
+      "arm64") \
+        echo "Installing Rollup for ARM64..." && \
+        npm install --no-save @rollup/rollup-linux-arm64-musl ;; \
+      *) \
+        echo "Warning: Unknown architecture $TARGETARCH, skipping Rollup native binaries" ;; \
+    esac
 
 # Construir la aplicación
-RUN --mount=type=cache,target=/root/.npm \
-    npm run build
-
+RUN --mount=type=cache,target=/root/.npm npm run build \
+ && npm audit --omit=dev --audit-level=high || true 
 
 # ---------- Runtime Stage ----------
 FROM node:20-alpine AS runtime
@@ -37,8 +49,9 @@ RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
-# ⚠️  Mantener la omisión de optionalDependencies en runtime
-ENV NODE_ENV=production \
+# Environment variables for runtime
+ENV HOST=0.0.0.0 \
+    NODE_ENV=production \
     npm_config_omit=optional \
     ROLLUP_NATIVE_DISABLE=true
 
@@ -60,4 +73,10 @@ RUN addgroup -g 1001 -S nodejs && \
 USER astro
 
 EXPOSE 4321
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:4321/health || exit 1
+
+# Start the application
 CMD ["node", "./dist/server/entry.mjs"]

@@ -15,11 +15,11 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Environment     string
-	Version string
-	Host string
-	Port string
-	Site    struct {
+	Environment string
+	Version     string
+	Host        string
+	Port        string
+	Site        struct {
 		Title  string
 		Author string
 		Domain string
@@ -49,10 +49,8 @@ func GetConfig() (*Config, error) {
 		return config, nil
 	}
 
-	// Determine if running in GitHub Actions
 	isGitHubActions := os.Getenv("GITHUB_ACTIONS") == "true"
 
-	// Possible .env file paths
 	possiblePaths := getPossibleEnvPaths()
 
 	// Load .env file only for local development
@@ -60,7 +58,6 @@ func GetConfig() (*Config, error) {
 		loadDotEnvFile(possiblePaths)
 	}
 
-	// Create and populate configuration
 	cfg, err := populateConfig()
 	if err != nil {
 		return nil, err
@@ -71,7 +68,6 @@ func GetConfig() (*Config, error) {
 	return config, nil
 }
 
-// getPossibleEnvPaths returns potential .env file locations
 func getPossibleEnvPaths() []string {
 	// Get the directory of the calling file
 	_, filename, _, _ := runtime.Caller(0)

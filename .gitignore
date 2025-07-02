@@ -39,8 +39,6 @@ infra/ansible/inventories
 apps/n8n/data
 apps/web/astro-site/node_modules
 apps/web/astro-site/.astro
-apps/web/astro-site/package-lock.json
-apps/web/package-lock.json
 apps/web/api/src/vendor
 apps/web/api/src/vendor.lock
 apps/web/api/src/tmp
