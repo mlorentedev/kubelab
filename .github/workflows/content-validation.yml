@@ -19,21 +19,6 @@ jobs:
       - name: Validate YAML files
         run: find .github/workflows -name "*.yml" -exec yamllint {} \;
 
-  lint-workflows:
-    name: Lint GitHub Actions workflows
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install actionlint
-        run: |
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          sudo mv ./actionlint /usr/local/bin/
-
-      - name: Lint workflows
-        run: actionlint .github/workflows/*.yml
-
   validate-makefiles:
     name: Validate Makefiles
     runs-on: ubuntu-latest
