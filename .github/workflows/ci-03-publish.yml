@@ -72,8 +72,6 @@ jobs:
               # Develop branch: 1.3.0-rc.123
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
-              # Also tag as 'latest-rc' for convenience
-              DOCKER_TAGS="${DOCKER_TAGS},${REGISTRY}:latest-rc"
               echo "::notice::RC version detected: $FINAL_TAG"
               ;;
             *)
@@ -83,19 +81,6 @@ jobs:
               echo "::notice::Stable version detected: $FINAL_TAG"
               ;;
           esac
-          
-          # Additional tagging for master/develop branches
-          if [[ "$BRANCH_NAME" =~ ^(master|main)$ ]]; then
-            # Master: always include 'latest' tag
-            if [[ "$DOCKER_TAGS" != *":latest"* ]]; then
-              DOCKER_TAGS="${DOCKER_TAGS},${REGISTRY}:latest"
-            fi
-            echo "::notice::Added 'latest' tag for master branch"
-          elif [[ "$BRANCH_NAME" == "develop" ]]; then
-            # Develop: always include 'develop' tag  
-            DOCKER_TAGS="${DOCKER_TAGS},${REGISTRY}:develop"
-            echo "::notice::Added 'develop' tag for develop branch"
-          fi
           
           # Set outputs
           echo "tags=${DOCKER_TAGS}" >> "$GITHUB_OUTPUT"
