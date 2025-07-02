@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-	// Configurar logger
 	logger := logger.NewLogger()
 
 	_, err := config.GetConfig()
