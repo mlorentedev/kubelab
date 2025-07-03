@@ -119,7 +119,7 @@ jobs:
                 echo "::notice::Feature: Feature detected - MINOR bump"
               else
                 BUMP_TYPE="patch"
-                echo "::notice::Feature: Patch/fix detected - PATCH bump"
+                echo "::notice::Feature: Feature/fix detected - PATCH bump"
               fi
               
               # Calculate next base version
@@ -163,7 +163,7 @@ jobs:
               fi
               
               DOCKER_VERSION="${BASE_VERSION}-alpha.${ALPHA_NUMBER}"
-              echo "::notice::Generated Docker alpha version: $DOCKER_VERSION (base: $BASE_VERSION)"
+              echo "::notice::Generated Docker alpha version: $DOCKER_VERSION (base: $BASE_VERSION, commits: ${ALPHA_NUMBER})"
               ;;
               
             "beta")
@@ -182,17 +182,8 @@ jobs:
               echo "Analyzing hotfix commits for $APP:"
               echo "$COMMITS"
               
-              # Hotfixes are typically patches, but check for breaking changes
-              if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
-                BUMP_TYPE="major"
-                echo "::notice::Hotfix: Breaking change detected - MAJOR bump"
-              elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
-                BUMP_TYPE="minor"
-                echo "::notice::Hotfix: Feature detected - MINOR bump"
-              else
-                BUMP_TYPE="patch"
-                echo "::notice::Hotfix: Patch/fix detected - PATCH bump"
-              fi
+              BUMP_TYPE="patch"
+              echo "::notice::Hotfix: FORCED patch bump (hotfixes should not add features or breaking changes)"
               
               # Calculate next base version
               if [ "$CURRENT_VERSION" = "0.0.0" ]; then
@@ -236,7 +227,6 @@ jobs:
               
               DOCKER_VERSION="${BASE_VERSION}-beta.${BETA_NUMBER}"
               echo "::notice::Generated Docker beta version: $DOCKER_VERSION (base: $BASE_VERSION, commits: ${BETA_NUMBER})"
-              echo "::notice::Generated Docker beta version: $DOCKER_VERSION (base: $BASE_VERSION)"
               ;;
               
             "rc")
@@ -312,7 +302,6 @@ jobs:
               
               DOCKER_VERSION="${BASE_VERSION}-rc.${RC_NUMBER}"
               echo "::notice::Generated Docker RC version: $DOCKER_VERSION (base: $BASE_VERSION, commits: ${RC_NUMBER})"
-              echo "::notice::Generated Docker RC version: $DOCKER_VERSION (base: $BASE_VERSION)"
               ;;
               
             "stable")

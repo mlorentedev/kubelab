@@ -224,13 +224,21 @@ jobs:
           if [ -d "infra" ]; then
             cp -r infra deployment/
           fi
-          # Copy all app configurations (not just changed ones)
+          if [ -f "Makefile" ]; then
+            cp Makefile deployment/
+          fi
+          if [ -f "README.md" ]; then
+            cp README.md deployment/
+          fi
+          if [ -f ".env.example" ]; then
+            cp .env.example deployment/
+          fi
           for app in apps/*; do
             if [ -d "$app" ]; then
               name=$(basename "$app")
-              mkdir -p "deployment/$name"
-              find "$app" -name "docker-compose*.yml" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
-              find "$app" -name ".env.example" -exec cp {} "deployment/$name/" \; 2>/dev/null || true
+              mkdir -p "deployment/apps/$name"
+              find "$app" -name "docker-compose*.yml" -exec cp {} "deployment/apps/$name/" \; 2>/dev/null || true
+              find "$app" -name ".env.example" -exec cp {} "deployment/apps/$name/" \; 2>/dev/null || true
             fi
           done
           
