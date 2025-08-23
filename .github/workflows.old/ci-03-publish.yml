@@ -16,14 +16,12 @@ on:
         type: string
       context:
         required: true
-        type: string
+        type: string       
 
 jobs:
   docker-build-push:
     name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
     runs-on: ubuntu-latest
-    env:
-      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'mlorente' }}
     outputs:
       image_tag: ${{ steps.docker_tags.outputs.final_tag }}
       registry_url: ${{ steps.docker_tags.outputs.registry }}
@@ -47,15 +45,15 @@ jobs:
 
       - name: Generate Docker tags for new versioning system
         id: docker_tags
-        run: |
+        run: |          
           DOCKER_VERSION="${{ inputs.tag }}"
-          REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}"
+          REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/mlorente-${{ inputs.app }}"
           BRANCH_NAME="${{ github.ref_name }}"
-
+          
           echo "Processing Docker version: $DOCKER_VERSION"
           echo "Registry: $REGISTRY"
           echo "Branch: $BRANCH_NAME"
-
+          
           # Determine tag strategy based on version format and branch
           case "$DOCKER_VERSION" in
             *-alpha.*)
@@ -65,7 +63,7 @@ jobs:
               echo "::notice::Alpha version detected: $FINAL_TAG"
               ;;
             *-beta.*)
-              # Hotfix branch: 1.2.6-beta.45
+              # Hotfix branch: 1.2.6-beta.45  
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
               echo "::notice::Beta version detected: $FINAL_TAG"
@@ -83,13 +81,13 @@ jobs:
               echo "::notice::Stable version detected: $FINAL_TAG"
               ;;
           esac
-
+          
           # Set outputs
           echo "tags=${DOCKER_TAGS}" >> "$GITHUB_OUTPUT"
           echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
           echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
           echo "full_image=${REGISTRY}:${FINAL_TAG}" >> "$GITHUB_OUTPUT"
-
+          
           echo "::notice::Final Docker tags: $DOCKER_TAGS"
 
       - name: Build and Push Image
@@ -105,10 +103,10 @@ jobs:
           build-args: |
             BUILD_ENV=production
             VERSION=${{ inputs.tag }}
-            COMMIT_SHA=${{ inputs.sha }}
+            COMMIT_SHA=${{ inputs.sha }}            
           labels: |
-            org.opencontainers.image.title=${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}
-            org.opencontainers.image.description=${{ inputs.app }} service for ${{ env.REGISTRY_PREFIX }}.dev
+            org.opencontainers.image.title=mlorente-${{ inputs.app }}
+            org.opencontainers.image.description=${{ inputs.app }} service for mlorente.dev
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ inputs.tag }}
@@ -124,7 +122,7 @@ jobs:
           echo "- **Primary Image**: ${{ steps.docker_tags.outputs.full_image }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY  
 
   notify-build-completion:
     name: Notify Build Completion
@@ -132,10 +130,10 @@ jobs:
     needs: [docker-build-push]
     if: always() && (needs.docker-build-push.result == 'success')
     steps:
-      - name: Notify via Secure Webhook
+      - name: Notify via Webhook
         run: |
           # Create enhanced payload for build completion
-          PAYLOAD=$(cat <<EOF
+          cat <<EOF > payload.json
           {
             "type": "docker_build_completed",
             "app": "${{ inputs.app }}",
@@ -151,35 +149,19 @@ jobs:
             "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           }
           EOF
-          )
-
-          # Send notification with retry logic and better error handling
-          WEBHOOK_URL="${{ secrets.N8N_WEBHOOK_URL }}"
-          WEBHOOK_TOKEN="${{ secrets.N8N_DEPLOY_TOKEN }}"
-
-          if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_TOKEN" ]; then
-            echo "::warning::Webhook URL or token not configured, skipping notification"
-            exit 0
-          fi
-
+          
+          # Send notification with retry logic
           for i in {1..3}; do
-            echo "Sending notification attempt $i/3..."
-
-            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+            if curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $WEBHOOK_TOKEN" \
-              -d "$PAYLOAD" \
+              -H "Authorization: Bearer ${{ secrets.N8N_DEPLOY_TOKEN }}" \
+              -d @payload.json \
               --max-time 30 \
-              --retry 0 2>/dev/null)
-
-            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-            RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
-
-            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-              echo "✅ Docker build notification sent successfully (HTTP $HTTP_CODE)"
+              --retry 2; then
+              echo "Docker build notification sent successfully"
               break
             else
-              echo "❌ Notification attempt $i failed (HTTP $HTTP_CODE)"
-              [ $i -lt 3 ] && echo "Retrying in 5 seconds..." && sleep 5
+              echo "Notification attempt $i failed, retrying..."
+              sleep 5
             fi
-          done || echo "⚠️ All notification attempts failed, but build was successful"
+          done || echo "All notification attempts failed, but build was successful"
