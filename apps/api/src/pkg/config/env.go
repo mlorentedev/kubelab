@@ -81,7 +81,6 @@ func getPossibleEnvPaths() []string {
 	}
 }
 
-// loadDotEnvFile attempts to load .env file from possible paths
 func loadDotEnvFile(paths []string) {
 	for _, path := range paths {
 		err := godotenv.Load(path)
