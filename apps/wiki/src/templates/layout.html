@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>{{block "title" .}}Platform Wiki{{end}}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <!-- Minimal styling via Tailwind CDN (no build needed) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="max-w-5xl mx-auto px-4 py-6">
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <a href="/" class="text-xl font-semibold">Platform Wiki</a>
+
+    <div class="flex items-center gap-3 w-full sm:w-auto">
+      <!-- Branch selector: submits with ?branch=... ; cookie persists selection -->
+      <form action="/" method="get" class="flex items-center gap-2">
+        <label for="branch" class="text-sm text-gray-600">Branch</label>
+        <select id="branch" name="branch" class="border rounded px-2 py-1" onchange="this.form.submit()">
+          {{range .Branches}}
+            <option value="{{.}}" {{if eq . $.CurrentBranch}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </form>
+
+      <!-- Simple search (server returns a fragment) -->
+      <form class="w-full sm:w-80" onsubmit="return false;">
+        <input class="w-full border rounded px-3 py-2"
+               type="search" name="q" placeholder="Search…"
+               hx-get="/search" hx-trigger="keyup changed delay:300ms"
+               hx-target="#results" aria-label="Search">
+      </form>
+    </div>
+  </header>
+
+  <div id="results"></div>
+
+  <main>
+    {{block "content" .}}{{end}}
+  </main>
+
+  <!-- HTMX for partial updates -->
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</body>
+</html>

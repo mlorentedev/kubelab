@@ -8,6 +8,8 @@ _site
 .DS_Store
 Thumbs.db
 ehthumbs.db
+.claude
+.archive
 
 # IDE
 Gemfile.lock

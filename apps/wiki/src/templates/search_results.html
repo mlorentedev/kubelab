@@ -1,0 +1,8 @@
+{{range .}}
+<a class="block border rounded p-3 mb-2 hover:bg-gray-50" href="{{.Path}}">
+  <div class="font-medium">{{.Title}}</div>
+  <div class="text-sm text-gray-600">{{.Path}}</div>
+</a>
+{{else}}
+<div class="text-gray-500">No results.</div>
+{{end}}

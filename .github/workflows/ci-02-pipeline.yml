@@ -114,14 +114,20 @@ jobs:
           echo "Branch type: $BRANCH_TYPE"
           echo "Version strategy: $VERSION_STRATEGY"
 
+          # Get last app-specific tag instead of global tag
+          LAST_APP_TAG=$(git tag -l "${APP}-v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "")
+          
+          if [ -z "$LAST_APP_TAG" ]; then
+            echo "No previous stable version found for $APP, starting from 0.0.0"
+            CURRENT_VERSION="0.0.0"
+          else
+            echo "Using app-specific tag as reference: $LAST_APP_TAG"
+            CURRENT_VERSION=$(echo "$LAST_APP_TAG" | sed "s/${APP}-v//")
+          fi
+
           case "$VERSION_STRATEGY" in
             "alpha")
               # Feature branches: Calculate next version and use as alpha base
-              # Use global tags as reference for version calculation
-              LAST_GLOBAL_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "v0.0.0")
-              echo "Using global tag as reference: $LAST_GLOBAL_TAG"
-              CURRENT_VERSION=$(echo "$LAST_GLOBAL_TAG" | sed "s/v//")
-
               # Analyze commits in this feature branch to determine bump type
               MERGE_BASE=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
               if [ -n "$MERGE_BASE" ]; then
@@ -133,6 +139,13 @@ jobs:
 
               echo "Analyzing feature commits for $APP:"
               echo "$COMMITS"
+
+              # Skip if no changes to this app
+              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
+                echo "::notice::No changes detected for $APP in this feature branch"
+                echo "version=skip" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
 
               # Determine bump type for feature
               if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
@@ -179,7 +192,7 @@ jobs:
               # Generate incremental alpha number by counting commits in this branch
               # Count commits since branching from develop
               MERGE_BASE=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~10")
-              ALPHA_NUMBER=$(git rev-list --count HEAD ^${MERGE_BASE} 2>/dev/null || echo "1")
+              ALPHA_NUMBER=$(git rev-list --count HEAD ^${MERGE_BASE} -- apps/${APP}/ 2>/dev/null || echo "1")
 
               # Ensure minimum of 1
               if [ "$ALPHA_NUMBER" -eq 0 ]; then
@@ -192,9 +205,6 @@ jobs:
 
             "beta")
               # Hotfix branches: Similar logic but for beta
-              LAST_GLOBAL_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "v0.0.0")
-              CURRENT_VERSION=$(echo "$LAST_GLOBAL_TAG" | sed "s/v//")
-
               # Analyze commits in this hotfix branch
               MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/develop 2>/dev/null || echo "")
               if [ -n "$MERGE_BASE" ]; then
@@ -206,43 +216,32 @@ jobs:
               echo "Analyzing hotfix commits for $APP:"
               echo "$COMMITS"
 
+              # Skip if no changes to this app
+              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
+                echo "::notice::No changes detected for $APP in this hotfix branch"
+                echo "version=skip" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+
               BUMP_TYPE="patch"
               echo "::notice::Hotfix: FORCED patch bump (hotfixes should not add features or breaking changes)"
 
               # Calculate next base version
               if [ "$CURRENT_VERSION" = "0.0.0" ]; then
-                case "$BUMP_TYPE" in
-                  major) BASE_VERSION="1.0.0" ;;
-                  minor) BASE_VERSION="0.1.0" ;;
-                  *) BASE_VERSION="0.0.1" ;;
-                esac
+                BASE_VERSION="0.0.1"
               else
                 IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
                 MAJOR=${VERSION_PARTS[0]:-0}
                 MINOR=${VERSION_PARTS[1]:-0}
                 PATCH=${VERSION_PARTS[2]:-0}
-
-                case "$BUMP_TYPE" in
-                  major)
-                    MAJOR=$((MAJOR + 1))
-                    MINOR=0
-                    PATCH=0
-                    ;;
-                  minor)
-                    MINOR=$((MINOR + 1))
-                    PATCH=0
-                    ;;
-                  *)
-                    PATCH=$((PATCH + 1))
-                    ;;
-                esac
+                PATCH=$((PATCH + 1))
                 BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
               fi
 
               # Generate incremental beta number by counting commits in this branch
               # Count commits since branching from main
               MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || echo "HEAD~10")
-              BETA_NUMBER=$(git rev-list --count HEAD ^${MERGE_BASE} 2>/dev/null || echo "1")
+              BETA_NUMBER=$(git rev-list --count HEAD ^${MERGE_BASE} -- apps/${APP}/ 2>/dev/null || echo "1")
 
               # Ensure minimum of 1
               if [ "$BETA_NUMBER" -eq 0 ]; then
@@ -255,18 +254,22 @@ jobs:
 
             "rc")
               # Develop branch: Calculate SEMVER and create RC
-              LAST_GLOBAL_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "v0.0.0")
-              echo "Last global stable version: $LAST_GLOBAL_TAG"
-
-              # Analyze commits since last stable to determine bump type
-              if [ "$LAST_GLOBAL_TAG" != "v0.0.0" ]; then
-                COMMITS=$(git log ${LAST_GLOBAL_TAG}..HEAD --oneline -- apps/${APP}/)
+              # Analyze commits since last stable app version
+              if [ -n "$LAST_APP_TAG" ]; then
+                COMMITS=$(git log ${LAST_APP_TAG}..HEAD --oneline -- apps/${APP}/)
               else
                 COMMITS=$(git log --oneline -- apps/${APP}/)
               fi
 
-              echo "Analyzing commits for $APP since $LAST_GLOBAL_TAG:"
+              echo "Analyzing commits for $APP since $LAST_APP_TAG:"
               echo "$COMMITS"
+
+              # Skip if no changes to this app
+              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
+                echo "::notice::No changes detected for $APP since last stable version"
+                echo "version=skip" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
 
               # Determine SEMVER bump
               if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
@@ -281,7 +284,6 @@ jobs:
               fi
 
               # Calculate new base version
-              CURRENT_VERSION=$(echo "$LAST_GLOBAL_TAG" | sed "s/v//")
               if [ "$CURRENT_VERSION" = "0.0.0" ]; then
                 case "$BUMP_TYPE" in
                   major) BASE_VERSION="1.0.0" ;;
@@ -312,9 +314,9 @@ jobs:
               fi
 
               # Generate incremental RC number by counting relevant commits since last stable
-              # Count commits that affected this app since last stable tag
-              if [ "$LAST_GLOBAL_TAG" != "v0.0.0" ]; then
-                RC_NUMBER=$(git rev-list --count ${LAST_GLOBAL_TAG}..HEAD -- apps/${APP}/ 2>/dev/null || echo "1")
+              # Count commits that affected this app since last stable app tag
+              if [ -n "$LAST_APP_TAG" ]; then
+                RC_NUMBER=$(git rev-list --count ${LAST_APP_TAG}..HEAD -- apps/${APP}/ 2>/dev/null || echo "1")
               else
                 RC_NUMBER=$(git rev-list --count HEAD -- apps/${APP}/ 2>/dev/null || echo "1")
               fi
@@ -330,18 +332,22 @@ jobs:
 
             "stable")
               # Master branch: Use semantic version directly (no prerelease suffix)
-              LAST_GLOBAL_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "v0.0.0")
-              echo "Last global stable version: $LAST_GLOBAL_TAG"
-
-              # Analyze commits since last stable
-              if [ "$LAST_GLOBAL_TAG" != "v0.0.0" ]; then
-                COMMITS=$(git log ${LAST_GLOBAL_TAG}..HEAD --oneline -- apps/${APP}/)
+              # Analyze commits since last stable app version
+              if [ -n "$LAST_APP_TAG" ]; then
+                COMMITS=$(git log ${LAST_APP_TAG}..HEAD --oneline -- apps/${APP}/)
               else
                 COMMITS=$(git log --oneline -- apps/${APP}/)
               fi
 
-              echo "Analyzing commits for $APP since $LAST_GLOBAL_TAG:"
+              echo "Analyzing commits for $APP since $LAST_APP_TAG:"
               echo "$COMMITS"
+
+              # Skip if no changes to this app
+              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
+                echo "::notice::No changes detected for $APP since last stable version"
+                echo "version=skip" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
 
               # Determine SEMVER bump
               if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
@@ -356,7 +362,6 @@ jobs:
               fi
 
               # Calculate final stable version
-              CURRENT_VERSION=$(echo "$LAST_GLOBAL_TAG" | sed "s/v//")
               if [ "$CURRENT_VERSION" = "0.0.0" ]; then
                 case "$BUMP_TYPE" in
                   major) DOCKER_VERSION="1.0.0" ;;
@@ -482,6 +487,31 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Note**: This workflow calculates Docker image versions only. GitHub tags are managed by the global release workflow." >> $GITHUB_STEP_SUMMARY
 
+      - name: Create app-specific tag
+        if: steps.docker_version.outputs.version != 'skip' && (steps.branch_detection.outputs.version_strategy == 'stable' || steps.branch_detection.outputs.version_strategy == 'rc')
+        run: |
+          APP="${{ inputs.app }}"
+          VERSION="${{ steps.docker_version.outputs.version }}"
+          STRATEGY="${{ steps.branch_detection.outputs.version_strategy }}"
+          
+          APP_TAG="${APP}-v${VERSION}"
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if tag already exists
+          if git rev-parse "refs/tags/$APP_TAG" >/dev/null 2>&1; then
+            echo "::error::App tag $APP_TAG already exists!"
+            exit 1
+          fi
+          
+          # Create and push app-specific tag
+          git tag "$APP_TAG"
+          git push origin "$APP_TAG"
+          
+          echo "::notice::Successfully created app tag: $APP_TAG"
+
       - name: Extract short SHA
         id: short_sha
         run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -489,6 +519,7 @@ jobs:
   call-publish:
     name: Build and Push Docker Image for ${{ inputs.app }}
     needs: app-pipeline
+    if: needs.app-pipeline.outputs.docker_version != 'skip'
     uses: ./.github/workflows/ci-03-publish.yml
     with:
       app: ${{ inputs.app }}
