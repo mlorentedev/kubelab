@@ -109,9 +109,9 @@ jobs:
     uses: ./.github/workflows/ci-04-release.yml
     with:
       changed_apps: ${{ needs.detect-changed-apps.outputs.changed_apps }}
-      blog_docker_version: ${{ needs.run-blog-pipeline.outputs.docker_version || '' }}
-      api_docker_version: ${{ needs.run-api-pipeline.outputs.docker_version || '' }}
-      web_docker_version: ${{ needs.run-web-pipeline.outputs.docker_version || '' }}
+      blog_docker_version: ${{ needs.run-blog-pipeline.outputs.docker_version || 'skip' }}
+      api_docker_version: ${{ needs.run-api-pipeline.outputs.docker_version || 'skip' }}
+      web_docker_version: ${{ needs.run-web-pipeline.outputs.docker_version || 'skip' }}
       blog_sha: ${{ needs.run-blog-pipeline.outputs.sha_short || '' }}
       api_sha: ${{ needs.run-api-pipeline.outputs.sha_short || '' }}
       web_sha: ${{ needs.run-web-pipeline.outputs.sha_short || '' }}
