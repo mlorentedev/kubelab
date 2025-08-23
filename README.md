@@ -128,7 +128,7 @@ graph TD;
 | ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Dispatcher**   | `ci-01-dispatch.yml`                       | Detecta **apps** cambiadas y llama a *build* por matriz                                                                                                       |
 | **Build + Push** | `ci-02-pipeline.yml` → `ci-03-publish.yml` | Linter + tests → `docker buildx` **multi‑arch** → push a Docker Hub con etiquetas:<br> `latest`, semver (`vX.Y.Z`), rama (`develop`, `feature/…`) & short‑SHA |
-| **Release**      | `ci-04-release.yml`                        | Versión oficial manual (`gh release`) → retag imágenes → artefacto `infra.zip`                                                                                |
+| **Release**      | `ci-04-release.yml`                        | Versión oficial manual (`gh release`) → retag imágenes → bundle `global-release-vX.Y.Z.zip`                                                                                |
 
 **Resultado:** imágenes listas en el registry *no se despliegan solas*.
 
@@ -183,6 +183,19 @@ graph TD;
 |              | `make setup-secrets`                 | Sincroniza `.env` → *GitHub Secrets*  |
 
 > Ejecuta `make help` para ver la lista completa y descripciones coloreadas.
+
+---
+
+## 📚 Documentación Adicional
+
+- **[📖 Wiki - Índice Completo](docs/WIKI.md)** - **Punto de entrada principal** - Navegación por roles, búsqueda rápida y enlaces cruzados
+- **[⚡ How-To - Referencia Rápida](docs/HOW-TO.md)** - Comandos y tareas comunes organizados por categorías
+- **[🏗️ ADRs - Decisiones Arquitectónicas](docs/ADR.md)** - 10 Architecture Decision Records explicando el "por qué" del diseño
+- **[🏷️ Estrategia de Versionado](docs/VERSIONING.md)** - Cómo funcionan las imágenes Docker y releases por rama  
+- **[🚀 Despliegue Avanzado](docs/DEPLOYMENT.md)** - Configuración avanzada de servidores y despliegues
+- **[🔧 Resolución de Problemas](docs/TROUBLESHOOTING.md)** - Solución a problemas comunes y debugging  
+- **[⚙️ Internals CI/CD](docs/CI-CD.md)** - Funcionamiento interno de los workflows (1,388 líneas)
+- **[👥 Guía de Contribución](docs/CONTRIBUTING.md)** - Convenciones de código, flujo de desarrollo y mejores prácticas
 
 ---
 

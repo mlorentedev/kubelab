@@ -1,0 +1,61 @@
+---
+name: Branch Validation
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!master'
+      - '!develop'
+  pull_request:
+    branches:
+      - master
+      - develop
+
+jobs:
+  validate-branch-name:
+    name: Validate Branch Name
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check branch naming convention
+        run: |
+          branch_name=$(git symbolic-ref --short HEAD)
+          if [[ ! "$branch_name" =~ ^(feature|hotfix)/.* ]]; then
+            echo "Error: Branch name must start with 'feature/' or 'hotfix/'."
+            exit 1
+          fi
+
+          # Log success message for visibility in GitHub Actions UI
+          echo "Branch name '$branch_name' follows the required convention"
+
+  validate-merge-rules:
+    name: Validate Merge Rules
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action != 'opened'
+    env:
+      BASE_REF: ${{ github.base_ref }}
+      HEAD_REF: ${{ github.head_ref }}
+    steps:
+      - name: Debug refs and action
+        env:
+          BASE_REF: ${{ env.BASE_REF }}
+          HEAD_REF: ${{ env.HEAD_REF }}
+        run: |
+          echo "PR action: ${{ github.event.action }}"
+          echo "Base branch: $BASE_REF"
+          echo "Head branch: $HEAD_REF"
+      - name: Check branch merge restrictions
+        env:
+          BASE_REF: ${{ env.BASE_REF }}
+          HEAD_REF: ${{ env.HEAD_REF }}
+        run: |
+          if [[ "$BASE_REF" == "master" && "$HEAD_REF" != "develop" ]]; then
+            echo "Error: Pull requests to master are only allowed from develop"
+            exit 1
+          fi
+          # Log success message for visibility in GitHub Actions UI
+          echo "Branch merge from '$HEAD_REF' to '$BASE_REF' is allowed"
