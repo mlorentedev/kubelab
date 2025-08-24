@@ -45,3 +45,4 @@ apps/web/api/src/vendor
 apps/web/api/src/vendor.lock
 apps/web/api/src/tmp
 apps/web/api/src/bin
+apps/wiki/site

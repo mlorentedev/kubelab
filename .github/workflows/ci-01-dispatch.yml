@@ -20,6 +20,7 @@ jobs:
       blog: ${{ steps.filter.outputs.blog }}
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
+      wiki: ${{ steps.filter.outputs.wiki }}
       any_app_changed: ${{ steps.check_changes.outputs.any_changed }}
       changed_apps: ${{ steps.list_changes.outputs.apps }}
     steps:
@@ -46,6 +47,13 @@ jobs:
               - 'apps/web/astro-site/**'
               - 'apps/web/Dockerfile'
               - 'apps/web/docker-compose*.yml'
+            wiki:
+              - 'apps/wiki/**'
+              - 'apps/wiki/Dockerfile'
+              - 'apps/wiki/docker-compose*.yml'
+              - 'apps/**/README.md'
+              - 'infra/**/README.md'
+              - 'README.md'
 
       - name: Check if any app changed
         id: check_changes
@@ -53,8 +61,9 @@ jobs:
           BLOG_CHANGED: ${{ steps.filter.outputs.blog }}
           API_CHANGED: ${{ steps.filter.outputs.api }}
           WEB_CHANGED: ${{ steps.filter.outputs.web }}
+          WIKI_CHANGED: ${{ steps.filter.outputs.wiki }}
         run: |
-          if [[ "$BLOG_CHANGED" == "true" || "$API_CHANGED" == "true" || "$WEB_CHANGED" == "true" ]]; then
+          if [[ "$BLOG_CHANGED" == "true" || "$API_CHANGED" == "true" || "$WEB_CHANGED" == "true" || "$WIKI_CHANGED" == "true" ]]; then
             echo "any_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "any_changed=false" >> "$GITHUB_OUTPUT"
@@ -66,11 +75,13 @@ jobs:
           BLOG_CHANGED: ${{ steps.filter.outputs.blog }}
           API_CHANGED: ${{ steps.filter.outputs.api }}
           WEB_CHANGED: ${{ steps.filter.outputs.web }}
+          WIKI_CHANGED: ${{ steps.filter.outputs.wiki }}
         run: |
           apps=()
           [[ "$BLOG_CHANGED" == "true" ]] && apps+=("blog")
           [[ "$API_CHANGED" == "true" ]] && apps+=("api")
           [[ "$WEB_CHANGED" == "true" ]] && apps+=("web")
+          [[ "$WIKI_CHANGED" == "true" ]] && apps+=("wiki")
           # Convert array to JSON format
           apps_json=$(printf '%s\n' "${apps[@]}" | jq -R . | jq -c -s .)
           echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
@@ -102,9 +113,18 @@ jobs:
       app: web
     secrets: inherit
 
+  run-wiki-pipeline:
+    name: Wiki Pipeline
+    needs: detect-changed-apps
+    if: ${{ needs.detect-changed-apps.outputs.wiki == 'true' }}
+    uses: ./.github/workflows/ci-02-pipeline.yml
+    with:
+      app: wiki
+    secrets: inherit
+
   create-global-release:
     name: Create Global Release
-    needs: [detect-changed-apps, run-blog-pipeline, run-api-pipeline, run-web-pipeline]
+    needs: [detect-changed-apps, run-blog-pipeline, run-api-pipeline, run-web-pipeline, run-wiki-pipeline]
     if: ${{ always() && needs.detect-changed-apps.outputs.any_app_changed == 'true' }}
     uses: ./.github/workflows/ci-04-release.yml
     with:
@@ -112,7 +132,9 @@ jobs:
       blog_docker_version: ${{ needs.run-blog-pipeline.outputs.docker_version || 'skip' }}
       api_docker_version: ${{ needs.run-api-pipeline.outputs.docker_version || 'skip' }}
       web_docker_version: ${{ needs.run-web-pipeline.outputs.docker_version || 'skip' }}
+      wiki_docker_version: ${{ needs.run-wiki-pipeline.outputs.docker_version || 'skip' }}
       blog_sha: ${{ needs.run-blog-pipeline.outputs.sha_short || '' }}
       api_sha: ${{ needs.run-api-pipeline.outputs.sha_short || '' }}
       web_sha: ${{ needs.run-web-pipeline.outputs.sha_short || '' }}
+      wiki_sha: ${{ needs.run-wiki-pipeline.outputs.sha_short || '' }}
     secrets: inherit

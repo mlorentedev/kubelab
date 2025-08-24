@@ -1,0 +1,21 @@
+site_name: mlorente.dev Wiki
+site_url: https://wiki.mlorente.dev/
+
+theme:
+  name: material
+  language: es
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+  - admonition
+  - footnotes  

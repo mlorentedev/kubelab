@@ -20,6 +20,10 @@ on:
         required: false
         type: string
         default: ""
+      wiki_docker_version:
+        required: false
+        type: string
+        default: ""
       blog_sha:
         required: false
         type: string
@@ -29,6 +33,10 @@ on:
         type: string
         default: ""
       web_sha:
+        required: false
+        type: string
+        default: ""
+      wiki_sha:
         required: false
         type: string
         default: ""
@@ -61,6 +69,11 @@ jobs:
           if [ -n "${{ inputs.web_docker_version }}" ] && [ "${{ inputs.web_docker_version }}" != "skip" ]; then
             versions+=("web:${{ inputs.web_docker_version }}")
             valid_versions+=("${{ inputs.web_docker_version }}")
+          fi
+
+          if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
+            versions+=("wiki:${{ inputs.wiki_docker_version }}")
+            valid_versions+=("${{ inputs.wiki_docker_version }}")
           fi
 
           if [ ${#valid_versions[@]} -eq 0 ]; then
@@ -326,6 +339,11 @@ jobs:
             else
               echo "- **web**: No changes - using previous version"
             fi
+            if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
+              echo "- **wiki**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-wiki:${{ inputs.wiki_docker_version }}\` (SHA: ${{ inputs.wiki_sha }}) ✅ **Updated**"
+            else
+              echo "- **wiki**: No changes - using previous version"
+            fi
             echo ""
             echo "## Deployment Instructions"
             echo "1. Extract this bundle to your deployment environment"
@@ -378,6 +396,11 @@ jobs:
             else
               echo "- **web**: No changes (using previous version)"
             fi
+            if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
+              echo "- **wiki**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-wiki:${{ inputs.wiki_docker_version }}\` ✅ Updated"
+            else
+              echo "- **wiki**: No changes (using previous version)"
+            fi
             echo ""
             echo "## What's Included"
             echo "- Complete deployment bundle with all applications"
@@ -423,7 +446,8 @@ jobs:
             "docker_versions": {
               "blog": "${{ inputs.blog_docker_version }}",
               "api": "${{ inputs.api_docker_version }}",
-              "web": "${{ inputs.web_docker_version }}"
+              "web": "${{ inputs.web_docker_version }}",
+              "wiki": "${{ inputs.wiki_docker_version }}"
             },
             "branch": "${{ github.ref_name }}",
             "status": "success",
@@ -493,4 +517,9 @@ jobs:
             echo "- **web**: ${{ inputs.web_docker_version }} ✅ Updated" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **web**: No changes" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
+            echo "- **wiki**: ${{ inputs.wiki_docker_version }} ✅ Updated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **wiki**: No changes" >> $GITHUB_STEP_SUMMARY
           fi

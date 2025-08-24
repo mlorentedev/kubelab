@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{# Banner global opcional #}
+{% block announce %}
+  <a href="/{{ config.extra.default_branch | default('develop') }}/" style="font-weight:600">
+    📚 Documentación – usa el conmutador de ramas del header para cambiar de versión
+  </a>
+{% endblock %}
+
+{# Hero solo en la portada #}
+{% block hero %}
+  {% if page and page.is_homepage %}
+  <section class="mdx-hero" style="padding: 2rem 0;">
+    <div class="mdx-hero__content">
+      <h1 style="margin:0">mlorente.dev · Docs</h1>
+      <p style="margin:.5rem 0 1rem 0">Guías y notas de las apps e infra.</p>
+      <a class="md-button md-button--primary" href="/develop/">Entrar en develop</a>
+      <a class="md-button" href="/master/">Entrar en master</a>
+    </div>
+  </section>
+  {% endif %}
+{% endblock %}
