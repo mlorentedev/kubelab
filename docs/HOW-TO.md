@@ -10,6 +10,7 @@
 - [🌐 DNS y Dominios](#-dns-y-dominios)
 - [🐳 Docker](#-docker)
 - [📊 Monitorización](#-monitorización)
+- [🤖 Automation](#-automation)
 
 ---
 
@@ -329,7 +330,7 @@ docker image prune -f
 docker stats --no-stream
 
 # Ver imágenes por tamaño
-docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | sort -k3 -h
+docker images --format "table {{.Repository}}	{{.Tag}}	{{.Size}}" | sort -k3 -h
 
 # Ver volúmenes
 docker volume ls
@@ -353,7 +354,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t user/image:tag --push 
 
 ```bash
 # Ver estado de health checks
-docker ps --format "table {{.Names}}\t{{.Status}}"
+docker ps --format "table {{.Names}}	{{.Status}}"
 
 # Inspeccionar health check de contenedor
 docker inspect $(docker ps -q -f name=web) | jq '.[0].State.Health'
@@ -367,7 +368,7 @@ docker inspect $(docker ps -q -f name=web) | jq '.[0].State.Health'
 
 ```bash
 # CPU y memoria por contenedor
-docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"
+docker stats --format "table {{.Container}}	{{.CPUPerc}}	{{.MemUsage}}	{{.NetIO}}"
 
 # Uso de disco
 df -h /opt/mlorente-*
@@ -513,6 +514,95 @@ echo "✅ Deployment complete!"
 | Rollback producción | `make emergency-rollback ENV=production` | 1 min |
 | Ver logs aplicación | `make logs APP=api` | Inmediato |
 | Limpiar Docker | `docker system prune -af` | 1-2 min |
+
+---
+
+## 🤖 Automation
+
+### Política general
+
+- Todas las salidas se generan en `docs/AUTOMATION/`  
+- Subcarpetas: `reports/`, `indexes/`, `changelogs/`, `adrs/`, `digests/`, `security/`  
+- Una tarea → un output (archivo o diff).  
+- Los PRs se hacen siempre manualmente.  
+- Usar Conventional Commits (`docs:`, `chore:`, `fix:`, `ci:`, `feat:`).  
+- Idempotencia: sin cambios, diff vacío.  
+
+### Tareas comunes
+
+```bash
+# Normalizar READMEs
+Task: Normalize and improve README.md for module {{path}}.
+Output: unified diff only
+
+# Generar índices
+Task: Sync READMEs to wiki/docs and generate indexes with tables.
+Output: markdown in docs/AUTOMATION/indexes
+
+# Generar CHANGELOG
+Task: Generate CHANGELOG from Conventional Commits since last tag.
+Output: docs/AUTOMATION/changelogs/CHANGELOG-<date>.md
+```
+
+### Auditorías
+
+```bash
+# Deriva de .env
+Task: Compare all .env.example files and report missing/extra keys.
+Output: docs/AUTOMATION/reports/env-drift.md
+
+# Enlaces rotos
+Task: Scan docs/** and apps/wiki/docs/** for broken links/anchors.
+Output: diff + docs/AUTOMATION/reports/broken-links.md
+
+# Auditoría Traefik
+Task: Audit traefik labels for TLS, routers, entrypoints, duplicates.
+Output: docs/AUTOMATION/reports/traefik-audit.md
+```
+
+### Scripts de mantenimiento
+
+```bash
+# Inventario Docker
+Task: Extract services from docker-compose.*.yml.
+Output: docs/AUTOMATION/indexes/services-inventory.md
+
+# Targets Makefile
+Task: Parse Makefiles and generate documentation of targets.
+Output: docs/AUTOMATION/indexes/make-targets.md
+
+# Health Ansible
+Task: Validate Ansible playbooks syntax and variables.
+Output: docs/AUTOMATION/reports/ansible-health.md
+```
+
+### Seguridad
+
+```bash
+# Escaneo secretos
+Task: Run secret scan and review .gitignore coverage.
+Output: docs/AUTOMATION/security/secrets-scan.md
+
+# Licencias
+Task: Check license headers in .go, .sh, .astro files.
+Output: docs/AUTOMATION/reports/license-check.md
+
+# Workflows CI
+Task: Audit GitHub Actions workflows (permissions, tags, cache).
+Output: docs/AUTOMATION/reports/ci-audit.md
+```
+
+### Resúmenes y ADRs
+
+```bash
+# Weekly Ops Digest
+Task: Summarize weekly ops (PRs, issues, docs, next steps).
+Output: docs/AUTOMATION/digests/ops-digest-YYYY-WW.md
+
+# ADRs
+Task: Create ADR with context, decision, consequences.
+Output: docs/AUTOMATION/adrs/ADR-<n>-<slug>.md
+```
 
 ---
 

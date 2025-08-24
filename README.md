@@ -1,5 +1,19 @@
 # mlorente.dev
 
+<div align="center">
+
+![Project Status](https://img.shields.io/badge/Status-Production-008099?style=for-the-badge&logo=rocket&logoColor=white)
+![License](https://img.shields.io/github/license/mlorentedev/mlorente.dev?style=for-the-badge&color=008099)
+![GitHub Repo Stars](https://img.shields.io/github/stars/mlorentedev/mlorente.dev?style=for-the-badge&color=008099)
+![CI/CD](https://img.shields.io/github/actions/workflow/status/mlorentedev/mlorente.dev/ci-01-dispatcher.yml?style=for-the-badge&label=CI/CD&color=008099)
+
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Ansible-EE0000?style=for-the-badge&logo=ansible&logoColor=white)
+![Traefik](https://img.shields.io/badge/Traefik-24A1C1?style=for-the-badge&logo=traefik&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)
+
+</div>
+
 Este *monorepo* concentra **todo** lo necesario para levantar y mantener el ecosistema de [mlorente.dev](https://mlorente.dev):
 
 * Front‑end moderno en **Astro** (`apps/web`)
@@ -188,8 +202,7 @@ graph TD;
 
 ## 📚 Documentación Adicional
 
-- **[📖 Wiki - Índice Completo](docs/WIKI.md)** - **Punto de entrada principal** - Navegación por roles, búsqueda rápida y enlaces cruzados
-- **[⚡ How-To - Referencia Rápida](docs/HOW-TO.md)** - Comandos y tareas comunes organizados por categorías
+- **[⚡ How-To - Referencia Rápida](docs/HOW-TO.md)** - **Punto de entrada principal** - Comandos, tareas comunes, automation y navegación rápida
 - **[🏗️ ADRs - Decisiones Arquitectónicas](docs/ADR.md)** - 10 Architecture Decision Records explicando el "por qué" del diseño
 - **[🏷️ Estrategia de Versionado](docs/VERSIONING.md)** - Cómo funcionan las imágenes Docker y releases por rama  
 - **[🚀 Despliegue Avanzado](docs/DEPLOYMENT.md)** - Configuración avanzada de servidores y despliegues
