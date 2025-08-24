@@ -9,8 +9,9 @@ TEMPLATES_DIR="$ANSIBLE_DIR/templates"
 INVENTORY_DIR="$ANSIBLE_DIR/inventories"
 GROUP_VARS_DIR="$INVENTORY_DIR/group_vars"
 
-# Load environment variables from .env file if it exists
+# Load utility functions if utils.sh exists
 [ -f "$SCRIPT_DIR/utils.sh" ] && source "$SCRIPT_DIR/utils.sh"
+[ -f "$SCRIPT_DIR/replace-placeholders.sh" ] && source "$SCRIPT_DIR/replace-placeholders.sh"
 
 # Load environment variables from .env file if it exists
 env_file="$ANSIBLE_DIR/.env"

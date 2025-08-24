@@ -1,0 +1,12 @@
+title: Documentación General
+nav:
+  - "1. HOW-TO": HOW-TO
+  - "2. ADR": ADR
+  - "3. Troubleshooting": TROUBLESHOOTING
+  - "4. Deployment": DEPLOYMENT
+  - "5. CI-CD": CI-CD
+  - "6. Contributing": CONTRIBUTING
+  - "7. Versioning": VERSIONING
+  - "8. Architecture": ARCHITECTURE
+  - "9. CubeLab": CUBELAB
+  - "10. Wiki Index": WIKI

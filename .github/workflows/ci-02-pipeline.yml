@@ -455,6 +455,36 @@ jobs:
         working-directory: './apps/web/astro-site'
         run: npm run build
 
+      # Wiki
+      - name: Set up Python (for wiki)
+        if: ${{ inputs.app == 'wiki' }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install MkDocs + Material
+        if: ${{ inputs.app == 'wiki' }}
+        run: |
+          pip install --upgrade pip
+          pip install \
+          mkdocs mkdocs-material \
+          mkdocs-minify-plugin \
+          mkdocs-redirects \
+          mkdocs-awesome-pages-plugin \
+          mkdocs-include-markdown-plugin \
+          mkdocs-glightbox \
+          mkdocs-enumerate-headings-plugin \
+          mkdocs-macros-plugin \
+          mkdocs-section-index
+
+      - name: Install zsh
+        if: ${{ inputs.app == 'wiki' }}
+        run: sudo apt-get update && sudo apt-get install -y zsh
+      
+      - name: Build wiki multiversion site
+        if: ${{ inputs.app == 'wiki' }}
+        run: zsh scripts/wiki.sh sync
+
       - name: Determine Docker context
         id: context
         run: |
@@ -467,6 +497,9 @@ jobs:
               ;;
             web)
               echo "context=./apps/web" >> "$GITHUB_OUTPUT"
+              ;;
+            wiki)
+              echo "context=./apps/wiki" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unsupported app context"

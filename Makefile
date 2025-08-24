@@ -95,6 +95,7 @@ check:
 	$(call check_command,actionlint,actionlint)
 	$(call check_command,awk,awk)
 	$(call check_command,docker-compose,docker-compose)
+	$(call check_command,perl,perl)
 	$(call log_success,All requirements are met.)
 
 env-setup:
@@ -172,7 +173,7 @@ up-n8n: up-traefik
 	  $(call log_error,ENVIRONMENT must be set to 'local' in $(N8N_PATH)/.env); \
 	  exit 1; \
 	}
-	@docker compose -f $(N8N_PATH)//docker-compose.yml up -d
+	@docker compose -f $(N8N_PATH)/docker-compose.yml up -d
 	$(call log_success,Development environment for N8N started successfully. Remember to add n8n.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,N8N is running on port 5678. You can access it at http://n8n.mlorentedev.test)
 
@@ -221,7 +222,18 @@ up-api: up-traefik
 	$(call log_success,Development environment for API started successfully. Remember to add api.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,API is running on port 8080. You can access it at http://api.mlorentedev.test/api)
 
-up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-monitoring
+up-wiki:  wiki-sync up-traefik
+	$(call log_info,Starting local development environment for WIKI...)
+	@grep -qxF 'ENVIRONMENT=local' $(WIKI_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(WIKI_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(WIKI_PATH)/docker-compose.yml build --no-cache
+	@docker compose -f $(WIKI_PATH)/docker-compose.yml up -d
+	$(call log_success,Development environment for WIKI started successfully. Remember to add wiki.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,WIKI is running on port 4567. You can access it at http://wiki.mlorentedev.test)
+
+up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-monitoring up-wiki
 
 ##################################################################################################
 # Cleanup commands
@@ -267,7 +279,12 @@ down-api:
 	-@docker compose -f $(API_PATH)/docker-compose.dev.yml down --remove-orphans
 	$(call log_success,API resources cleaned.)
 
-down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx down-portainer
+down-wiki:
+	$(call log_info,Cleaning WIKI resources...)
+	-@docker compose -f $(WIKI_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,WIKI resources cleaned.)
+
+down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx down-portainer down-wiki
 	@docker volume prune -f
 	$(call log_success,Local resources cleaned.)
 
@@ -454,6 +471,10 @@ setup-secrets:
 list-secrets:
 	$(call log_info,Listing GitHub secrets...)
 	@gh secret list
+
+wiki-sync:
+	$(call log_info,Sync README -> docs and build multiversion site...)
+	@$(SCRIPTS_PATH)/wiki.sh sync
 
 ###########################################################################################
 # Pipeline testing commands

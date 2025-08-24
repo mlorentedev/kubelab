@@ -1,0 +1,17 @@
+http:
+  routers:
+    {{APP_WIKI_NAME}}:
+      rule: "Host(`{{APP_WIKI_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: {{APP_WIKI_NAME}}
+      middlewares:
+        - secure-headers@file
+        - rate-limit@file
+        - error-pages
+
+  services:
+    {{APP_WIKI_NAME}}:
+      loadBalancer:
+        servers:
+          - url: "http://{{APP_WIKI_NAME}}:{{APP_WIKI_PORT}}"

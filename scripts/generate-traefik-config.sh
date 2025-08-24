@@ -10,6 +10,7 @@ DYNAMIC_CONF_DIR="$TRAEFIK_DIR/dynamic"
 
 # Load utility functions if utils.sh exists
 [ -f "$SCRIPT_DIR/utils.sh" ] && source "$SCRIPT_DIR/utils.sh"
+[ -f "$SCRIPT_DIR/replace-placeholders.sh" ] && source "$SCRIPT_DIR/replace-placeholders.sh"
 
 # Load environment variables from .env file if it exists
 env_file="$TRAEFIK_DIR/.env"
