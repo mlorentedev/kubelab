@@ -1,5 +1,14 @@
 # Sitio Web Personal
 
+<div align="center">
+
+![Astro](https://img.shields.io/badge/Astro-5.5.2-FF5D01?style=flat&logo=astro&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-06B6D4?style=flat&logo=tailwind-css&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+
+</div>
+
 Sitio web personal moderno y responsivo construido con framework Astro, presentando proyectos de portafolio, recursos e información profesional para mlorente.dev.
 
 ## 🏗️ Arquitectura

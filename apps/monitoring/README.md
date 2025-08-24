@@ -1,5 +1,14 @@
 # Stack de Monitoreo
 
+<div align="center">
+
+![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat&logo=grafana&logoColor=white)
+![Loki](https://img.shields.io/badge/Loki-F46800?style=flat&logo=grafana&logoColor=white)
+![Vector](https://img.shields.io/badge/Vector-02C39A?style=flat&logo=vector&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+
+</div>
+
 Solución integral de monitoreo y observabilidad utilizando Grafana, Loki, Vector y Uptime Kuma para métricas del sistema, agregación de logs y monitoreo de disponibilidad.
 
 ## 🏗️ Arquitectura

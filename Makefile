@@ -231,7 +231,7 @@ up-wiki:  wiki-sync up-traefik
 	@docker compose -f $(WIKI_PATH)/docker-compose.yml build --no-cache
 	@docker compose -f $(WIKI_PATH)/docker-compose.yml up -d
 	$(call log_success,Development environment for WIKI started successfully. Remember to add wiki.mlorentedev.test to your /etc/hosts file.)
-	$(call log_success,WIKI is running on port 4567. You can access it at http://wiki.mlorentedev.test)
+	$(call log_success,WIKI is running on port 80. You can access it at http://wiki.mlorentedev.test)
 
 up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-monitoring up-wiki
 

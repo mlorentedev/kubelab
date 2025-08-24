@@ -15,15 +15,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: blue grey
-      accent: deep orange
+      primary: teal
+      accent: cyan
       toggle:
         icon: material/brightness-7
         name: Cambiar a modo oscuro
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: blue grey
-      accent: deep orange
+      primary: teal
+      accent: cyan
       toggle:
         icon: material/brightness-4
         name: Cambiar a modo claro
@@ -53,13 +53,13 @@ theme:
 extra_javascript:
   - assets/branch-data.js
   - assets/branch-switcher.js
-  - assets/professional.js
+  - assets/navigation.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 extra_css:
   - assets/branch-switcher.css
-  - assets/extra.css
+  - assets/minimal.css
 
 extra:
   homepage: ${SITE_URL}
@@ -121,11 +121,17 @@ plugins:
   - enumerate-headings:
       toc_depth: 4
       strict: false
-      increment_across_pages: false
+      increment_across_pages: true
       include:
-        - "*.md"
+        - "apps/*.md"
+        - "apps/**/*.md"
+        - "infra/*.md"
+        - "infra/**/*.md"
+        - "guides/*.md"
+        - "guides/**/*.md"
       exclude:
         - index.md
+        - "guides/WIKI/*.md"
   - section-index
 
 markdown_extensions:

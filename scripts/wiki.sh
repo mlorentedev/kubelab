@@ -44,7 +44,7 @@ collect_readmes() {
   local infra_dir="${INFRA_DIR:-infra}"
   local infra_dst_dir="${INFRA_DOCS_DIR:-apps/wiki/docs/infra}"
   local general_dir="${GENERAL_DIR:-docs}"
-  local general_dst_dir="${GENERAL_DOCS_DIR:-apps/wiki/docs/general}"
+  local general_dst_dir="${GENERAL_DOCS_DIR:-apps/wiki/docs/guides}"
   
   mkdir -p "$dst_dir" "$infra_dst_dir" "$general_dst_dir"
 
@@ -187,8 +187,10 @@ build_one_branch_site() {
     collect_readmes
 
     mkdir -p "${DOCS_DIR}/assets"
-    cp -f "${ORIG_ROOT}/${DOCS_DIR}/assets/branch-switcher.js"  "${DOCS_DIR}/assets/" || true
-    cp -f "${ORIG_ROOT}/${DOCS_DIR}/assets/branch-switcher.css" "${DOCS_DIR}/assets/" || true
+    # Copy all assets from the original location
+    if [ -d "${ORIG_ROOT}/${DOCS_DIR}/assets" ]; then
+      cp -rf "${ORIG_ROOT}/${DOCS_DIR}/assets/"* "${DOCS_DIR}/assets/" || true
+    fi
     
     # Copy overrides directory if it exists
     if [ -d "${ORIG_ROOT}/${DOCS_DIR}/overrides" ]; then

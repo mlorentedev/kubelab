@@ -2,4 +2,4 @@ nav:
   - index.md
   - "1. Aplicaciones": apps
   - "2. Infraestructura": infra  
-  - "3. General": general
+  - "3. Guías": guides

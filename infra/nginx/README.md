@@ -1,5 +1,18 @@
 # Nginx - Servidor Web Estático
 
+<div align="center">
+
+![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
+![Alpine Linux](https://img.shields.io/badge/Alpine_Linux-0D597F?style=for-the-badge&logo=alpine-linux&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Static Content](https://img.shields.io/badge/Static_Content-008099?style=for-the-badge)
+
+![Status](https://img.shields.io/badge/Status-Active-008099?style=flat-square)
+![Port](https://img.shields.io/badge/Port-80-blue?style=flat-square)
+![Performance](https://img.shields.io/badge/Performance-High-green?style=flat-square)
+
+</div>
+
 Servidor web ligero y eficiente para servir contenido estático, páginas de error personalizadas y actuar como backend para el proxy reverso Traefik.
 
 ## 🏗️ Arquitectura
