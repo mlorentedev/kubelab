@@ -1,5 +1,14 @@
 # Blog Personal
 
+<div align="center">
+
+![Jekyll](https://img.shields.io/badge/Jekyll-4.3.4-CC0000?style=flat&logo=jekyll&logoColor=white)
+![Ruby](https://img.shields.io/badge/Ruby-CC342D?style=flat&logo=ruby&logoColor=white)
+![Bootstrap](https://img.shields.io/badge/Bootstrap-7952B3?style=flat&logo=bootstrap&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+
+</div>
+
 Blog personal basado en Jekyll para mlorente.dev, presentando contenido sobre DevOps, SRE e ingeniería de software.
 
 ## 🏗️ Arquitectura

@@ -1,5 +1,14 @@
 # Traefik - Proxy Reverso
 
+<div align="center">
+
+![Traefik](https://img.shields.io/badge/Traefik-v3.0-24A1C1?style=flat&logo=traefik&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![SSL](https://img.shields.io/badge/Let's_Encrypt-003A70?style=flat&logo=letsencrypt&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Production-008099?style=flat)
+
+</div>
+
 Proxy reverso moderno y load balancer que facilita el despliegue de microservicios con descubrimiento automático de servicios, terminación TLS y enrutamiento dinámico.
 
 ## 🏗️ Arquitectura

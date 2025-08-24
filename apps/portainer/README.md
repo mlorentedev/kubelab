@@ -1,5 +1,18 @@
 # Portainer - Gestión Docker
 
+<div align="center">
+
+![Portainer](https://img.shields.io/badge/Portainer-13BEF9?style=for-the-badge&logo=portainer&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Web UI](https://img.shields.io/badge/Web_UI-008099?style=for-the-badge&logo=web&logoColor=white)
+![Management](https://img.shields.io/badge/Management-Container-008099?style=for-the-badge)
+
+![Status](https://img.shields.io/badge/Status-Active-008099?style=flat-square)
+![Port](https://img.shields.io/badge/Port-9000-blue?style=flat-square)
+![Access](https://img.shields.io/badge/Access-Docker_Socket-green?style=flat-square)
+
+</div>
+
 Interfaz web para gestión de Docker que proporciona administración completa de contenedores, imágenes, redes y volúmenes con una GUI intuitiva para entornos Docker.
 
 ## 🏗️ Arquitectura

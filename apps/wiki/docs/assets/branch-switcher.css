@@ -1,107 +1,114 @@
 .branch-switcher { position: relative; margin-left: .5rem; }
 .bs-btn {
   display: inline-flex; align-items: center; justify-content: space-between;
-  padding: .5rem .75rem; border: 1px solid var(--md-primary-fg-color--light);
+  padding: .5rem .75rem; border: none;
   border-radius: 8px; background: var(--md-default-bg-color);
-  color: var(--md-default-fg-color); cursor: pointer; font: inherit; line-height: 1;
-  width: 140px; /* Strict fixed width */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  color: var(--md-default-fg-color--light); cursor: pointer; font: inherit; line-height: 1.2;
+  min-width: 80px; max-width: 110px;
+  box-sizing: border-box;
+  flex-shrink: 0;
   transition: all 0.2s ease;
+  font-size: 0.8rem; font-weight: 400;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 .bs-btn:hover { 
   background: var(--md-accent-fg-color--transparent);
-  border-color: var(--md-accent-fg-color);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  color: var(--md-accent-fg-color);
   transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 .bs-label { 
-  font-weight: 500; 
-  font-size: 0.85rem;
   overflow: hidden; 
   text-overflow: ellipsis; 
   white-space: nowrap;
-  flex-grow: 1;
+  flex: 1;
+  min-width: 0;
 }
 .bs-caret { 
-  opacity: .75; 
-  margin-left: .5rem;
+  opacity: 0.6; 
+  margin-left: .4rem;
   flex-shrink: 0;
+  font-size: 0.7rem;
 }
 
 .bs-menu {
   position: absolute; right: 0; top: calc(100% + .5rem);
-  min-width: 160px; background: var(--md-default-bg-color);
-  border: 1px solid var(--md-primary-fg-color--light);
+  min-width: 120px; max-width: 150px;
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
   border-radius: 8px; 
-  box-shadow: 0 8px 32px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.1);
   padding: .5rem; display: none; z-index: 1000;
-  backdrop-filter: blur(10px);
 }
 .branch-switcher.open .bs-menu { 
   display: block; 
-  animation: fadeInScale 0.2s ease-out;
+  animation: fadeIn 0.15s ease-out;
 }
 
-@keyframes fadeInScale {
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(-5px);
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
   }
 }
 
 .bs-item {
-  width: 100%; text-align: left; padding: .75rem .75rem; border: 0; background: transparent;
+  width: 100%; text-align: left; padding: .6rem .75rem; border: 0; background: transparent;
   color: var(--md-default-fg-color); border-radius: 6px; cursor: pointer;
-  font-size: 0.85rem; font-weight: 500;
+  font-size: 0.8rem; font-weight: 400;
   transition: all 0.15s ease;
-  display: flex; align-items: center;
+  display: block;
 }
 .bs-item:hover, .bs-item:focus { 
   background: var(--md-accent-fg-color--transparent);
   color: var(--md-accent-fg-color);
-  transform: translateX(2px);
   outline: none; 
 }
 .bs-item.is-current { 
-  font-weight: 600; 
+  font-weight: 500; 
   color: var(--md-accent-fg-color);
   background: var(--md-accent-fg-color--transparent);
 }
 .bs-item.is-current::after {
   content: "✓";
   margin-left: auto;
+  float: right;
   font-weight: bold;
+  color: var(--md-accent-fg-color);
+  font-size: 0.75rem;
 }
 
 /* Mobile Optimizations */
 @media (max-width: 768px) {
   .branch-switcher {
     margin-left: 0;
-    margin-right: .5rem;
+    margin-right: .4rem;
   }
   .bs-btn { 
-    width: 120px; /* Fixed width for mobile */
-    padding: .4rem .6rem; 
+    min-width: 75px;
+    max-width: 100px;
+    padding: .35rem .5rem; 
   }
   .bs-label { 
-    font-size: 0.8rem;
+    font-size: 0.75rem;
   }
   .bs-menu {
-    right: -20px;
-    min-width: 140px;
+    right: 0;
+    min-width: 100px;
   }
 }
 
 @media (max-width: 480px) {
   .bs-btn { 
-    width: 100px; /* Fixed width for small mobile */
-    padding: .35rem .5rem; 
+    min-width: 65px;
+    max-width: 85px;
+    padding: .3rem .4rem; 
   }
   .bs-label { 
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 }

@@ -1,5 +1,17 @@
 # n8n - Automatización de Flujos de Trabajo
 
+<div align="center">
+
+![n8n](https://img.shields.io/badge/n8n-EA4B71?style=for-the-badge&logo=n8n&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Active-008099?style=for-the-badge)
+
+![Workflows](https://img.shields.io/badge/Workflows-12-blue?style=flat-square)
+![Automation](https://img.shields.io/badge/Automation-Enabled-brightgreen?style=flat-square)
+
+</div>
+
 Plataforma de automatización de flujos de trabajo auto-alojada para conectar APIs, servicios y bases de datos con diseño visual de flujos de trabajo y potentes capacidades de automatización.
 
 ## 🏗️ Arquitectura

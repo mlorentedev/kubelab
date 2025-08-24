@@ -1,5 +1,17 @@
 # Ansible - Automatización de Despliegue
 
+<div align="center">
+
+![Ansible](https://img.shields.io/badge/Ansible-2.9+-EE0000?style=for-the-badge&logo=ansible&logoColor=white)
+![YAML](https://img.shields.io/badge/YAML-CB171E?style=for-the-badge&logo=yaml&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![SSH](https://img.shields.io/badge/SSH-4D4D4D?style=for-the-badge&logo=ssh&logoColor=white)
+
+![Status](https://img.shields.io/badge/Status-Production-008099?style=flat-square)
+![Playbooks](https://img.shields.io/badge/Playbooks-5-blue?style=flat-square)
+
+</div>
+
 Herramientas de automatización y orquestación para el despliegue de aplicaciones en entornos de producción usando Ansible.
 
 ## 🏗️ Arquitectura

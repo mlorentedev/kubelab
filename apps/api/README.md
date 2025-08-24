@@ -1,5 +1,14 @@
 # Servicio API Backend
 
+<div align="center">
+
+![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go&logoColor=white)
+![Gin](https://img.shields.io/badge/Gin-008000?style=flat&logo=gin&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Active-008099?style=flat)
+
+</div>
+
 Servicio API REST basado en Go para la plataforma mlorente.dev, gestionando suscripciones, lead magnets y lógica de negocio.
 
 ## 🏗️ Arquitectura
