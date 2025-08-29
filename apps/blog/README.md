@@ -1,4 +1,4 @@
-# Blog Personal
+# Mi Blog Técnico con Jekyll
 
 <div align="center">
 
@@ -9,176 +9,148 @@
 
 </div>
 
-Blog personal basado en Jekyll para mlorente.dev, presentando contenido sobre DevOps, SRE e ingeniería de software.
+Este es mi blog personal donde escribo sobre DevOps, SRE, desarrollo y todas esas cosas que me van gustando por el camino. Lo hago con Jekyll porque me gusta escribir en markdown y que se genere todo estático.
 
-## 🏗️ Arquitectura
+## 🤔 Por qué elegí Jekyll
 
-- **Generador de Sitio Estático**: Jekyll 4.3.4
-- **Tema**: Beautiful Jekyll (personalizado)
-- **Estilos**: Bootstrap + CSS personalizado
-- **Despliegue**: Docker + Nginx
-- **Contenido**: Markdown con frontmatter YAML
+- **Jekyll 4.3.4** - Es rápido, estable y me deja escribir en markdown puro sin complicaciones
+- **Beautiful Jekyll** - Tema que personalicé porque me gusta cómo se ve y es muy responsive
+- **Bootstrap** - Para no reinventar la rueda con los estilos y que se adapte bien a móviles
+- **Generación estática** - Súper rápido de cargar y fácil de desplegar donde sea
+- **Markdown** - Escribo en markdown y me olvido del HTML
 
-## 📁 Estructura del Proyecto
+## 📁 Cómo está organizado
 
 ```
 jekyll-site/
-├── _config.yml              # Configuración de Jekyll
+├── _config.yml              # Configuración principal del blog
 ├── _data/
-│   └── ui-text.yml          # Texto de interfaz y traducciones
-├── _includes/               # Componentes de plantilla reutilizables
-│   ├── analytics/           # Seguimiento de analíticas
-│   ├── comments/            # Sistemas de comentarios
-│   ├── footer.html          # Pie de página del sitio
-│   ├── header.html          # Cabecera del sitio
-│   ├── nav.html            # Navegación
-│   └── ...
+│   └── ui-text.yml          # Textos de la interfaz en español
+├── _includes/               # Componentes reutilizables
+│   ├── footer.html          # El pie de página
+│   ├── header.html          # La cabecera
+│   └── nav.html            # La navegación
 ├── _layouts/               # Plantillas de página
-│   ├── base.html           # Plantilla base
-│   ├── default.html        # Diseño por defecto
-│   ├── home.html           # Diseño de página de inicio
-│   ├── page.html           # Páginas estáticas
-│   └── post.html           # Diseño de entrada de blog
-├── _posts/                 # Entradas del blog (markdown)
+│   ├── default.html        # Layout principal
+│   ├── post.html           # Para las entradas del blog
+│   └── page.html           # Para páginas estáticas
+├── _posts/                 # Mis artículos (markdown)
 │   ├── 2024-02-18-the-harmony-of-devops-and-sre.md
 │   ├── 2024-03-10-the-magic-of-the-cloud.md
 │   └── ...
-├── _site/                  # Sitio estático generado (ignorado)
-├── assets/                 # Recursos estáticos
-│   ├── css/               # Hojas de estilo
-│   ├── img/               # Imágenes y medios
-│   └── js/                # Archivos JavaScript
+├── assets/                 # Archivos estáticos
+│   ├── css/               # Mis estilos personalizados
+│   ├── img/               # Imágenes y media
+│   └── js/                # JavaScript si hace falta
 ├── aboutme.html           # Página sobre mí
-├── tags.html              # Lista de etiquetas
-├── Gemfile                # Dependencias de Ruby
-└── Gemfile.lock          # Dependencias bloqueadas
+└── tags.html              # Lista de todas las etiquetas
 ```
 
-## 🚀 Características
+## 🚀 Lo que más me gusta del blog
 
-### Características de Contenido
-- **Entradas Técnicas del Blog**: Temas sobre DevOps, SRE, Linux, Cloud
-- **Resaltado de Sintaxis**: Bloques de código con soporte de idiomas
-- **Soporte Matemático**: Renderizado LaTeX para contenido técnico
-- **Galería de Imágenes**: Imágenes responsivas con carga diferida
-- **Sistema de Etiquetas**: Categorización y filtrado de contenido
-- **Búsqueda**: Funcionalidad de búsqueda del lado del cliente
+### Para escribir
 
-### Características de Diseño
-- **Diseño Responsivo**: Diseño Bootstrap mobile-first
-- **Tema Oscuro/Claro**: Soporte de preferencias del usuario
-- **Carga Rápida**: Recursos optimizados y carga diferida
-- **Optimizado para SEO**: Meta tags, datos estructurados, sitemap
-- **Compartir en Redes**: Botones de compartir integrados
+- **Markdown puro** - Escribo en markdown y se ve perfecto
+- **Sintaxis highlighting** - Los bloques de código se ven geniales
+- **MathJax** - Para cuando necesito escribir fórmulas o cosas matemáticas
+- **Imágenes responsive** - Las imágenes se adaptan automáticamente
+- **Sistema de etiquetas** - Para organizar los posts por temas
+- **Búsqueda** - Los lectores pueden buscar contenido
 
-### Analíticas y Compromiso
-- **Google Analytics**: Seguimiento de tráfico y comportamiento del usuario
-- **Cloudflare Analytics**: Monitoreo de rendimiento
-- **Sistema de Comentarios**: Múltiples proveedores (Disqus, Giscus)
-- **Integración de Newsletter**: Formularios de suscripción vía API
-- **Tiempo de Lectura**: Tiempo estimado de lectura para las entradas
+### Para los lectores
 
-## 🔧 Configuración
+- **Carga súper rápida** - Es estático, no puede ir más rápido
+- **Responsive al 100%** - Se ve perfecto en móvil, tablet y desktop
+- **Tema oscuro/claro** - Porque no todos aguantamos lo mismo
+- **Compartir en redes** - Botones para compartir en redes sociales
+- **Tiempo de lectura** - Para saber cuánto van a tardar en leer
 
-### Configuración del Sitio (`_config.yml`)
+## 🔧 Configuración principal
 
 ```yaml
-# Información Básica
+# _config.yml
 title: Manu Lorente
 author: Manuel Lorente
 url: "https://mlorente.dev"
-description: "Blog personal sobre DevOps, SRE e ingeniería de software"
+description: "Mi blog personal sobre DevOps, SRE y desarrollo"
 
-# Navegación
+# Navegación principal
 navbar-links:
   Blog: "/"
   Sobre mí: "aboutme"
 
-# Enlaces Sociales
+# Mis redes sociales
 social-network-links:
   github: mlorentedev
   linkedin: manuel-lorente-alman
   email: info@mlorente.dev
 
-# Características
-rss-description: "Perspectivas sobre DevOps y SRE"
+# Para el feed RSS
+rss-description: "Mis reflexiones sobre DevOps y SRE"
 excerpt_length: 50
 ```
 
-### Variables de Entorno
+## 🐳 Cómo lo ejecuto
+
+### En desarrollo
 
 ```bash
-# Configuración de Build
-JEKYLL_ENV=production
-PAGES_REPO_NWO=username/repository
-```
-
-## 🐳 Despliegue con Docker
-
-### Desarrollo
-```bash
-# Construir y servir con recarga en vivo
+# Con hot reload que me encanta
 docker-compose -f docker-compose.dev.yml up --build
 
-# Acceder en http://localhost:4000
+# Y lo veo en http://localhost:4000
 ```
 
-### Producción
+### En producción
+
 ```bash
-# Construir y desplegar
+# Despliegue completo
 docker-compose -f docker-compose.prod.yml up -d
 
-# Ver logs
+# Ver qué tal va
 docker-compose logs -f blog
 ```
 
-## 🛠️ Desarrollo Local
+## 🛠️ Desarrollo local
 
-### Prerrequisitos
-- Ruby 3.0+ y Bundler
-- Node.js (para procesamiento de recursos)
-- Docker (opcional)
-
-### Configuración
 ```bash
-# Navegar al directorio de Jekyll
+# Me voy al directorio de Jekyll
 cd apps/blog/jekyll-site
 
-# Instalar dependencias de Ruby
+# Instalo las gemas de Ruby
 bundle install
 
-# Servir localmente con recarga en vivo
+# Y lo arranco con live reload
 bundle exec jekyll serve --livereload
 
-# Acceder en http://localhost:4000
+# Se abre en http://localhost:4000
 ```
 
-### Comandos de Desarrollo
+### Comandos que uso
+
 ```bash
-# Construir el sitio
+# Build del sitio
 bundle exec jekyll build
 
 # Servir con borradores
 bundle exec jekyll serve --drafts
 
-# Limpiar archivos de build
+# Limpiar archivos temporales
 bundle exec jekyll clean
 
-# Verificar problemas
+# Verificar si hay problemas
 bundle exec jekyll doctor
 ```
 
-## ✍️ Creación de Contenido
+## ✍️ Cómo escribo un post
 
-### Escribir Entradas del Blog
-
-Crear nuevas entradas en `_posts/` con la convención de nombres: `YYYY-MM-DD-titulo.md`
+Creo un archivo en `_posts/` con el formato `YYYY-MM-DD-titulo.md`:
 
 ```yaml
 ---
 layout: post
-title: "Título de tu Entrada"
-subtitle: "Subtítulo opcional"
+title: "Título del Post"
+subtitle: "Un subtítulo si me apetece"
 date: 2024-01-15
 author: "Manuel Lorente"
 tags: [devops, sre, tutorial]
@@ -186,33 +158,36 @@ cover-img: /assets/img/cover.jpg
 thumbnail-img: /assets/img/thumb.jpg
 share-img: /assets/img/share.jpg
 readtime: true
+comments: true
 ---
 
-Tu contenido markdown aquí...
+Y aquí escribo todo el contenido en markdown...
 ```
 
-### Opciones de Frontmatter
+### Opciones que uso en el frontmatter
 
 ```yaml
-# Requerido
+# Obligatorio
 layout: post
-title: "Título de la Entrada"
+title: "Título del Post"
 date: 2024-01-15
 
-# SEO y Social
-subtitle: "Subtítulo de la entrada"
-meta-description: "Descripción personalizada para SEO"
+# SEO y redes sociales
+subtitle: "Subtítulo opcional"
+meta-description: "Descripción custom para Google"
 share-img: "/assets/img/share.jpg"
 
 # Visual
 cover-img: "/assets/img/cover.jpg"
 thumbnail-img: "/assets/img/thumb.jpg"
 
-# Contenido
-tags: [etiqueta1, etiqueta2, etiqueta3]
+# Organización
+tags: [tag1, tag2, tag3]
 categories: [categoria]
-author: "Nombre del Autor"
+author: "Mi nombre"
 readtime: true
+
+# Si es código open source
 gh-repo: usuario/repo
 gh-badge: [star, fork, follow]
 
@@ -220,87 +195,87 @@ gh-badge: [star, fork, follow]
 comments: true
 ```
 
-### Directrices de Contenido
+## 📝 Lo que más uso cuando escribo
 
-1. **Precisión Técnica**: Verificar todos los ejemplos de código y comandos
-2. **Optimización SEO**: Usar títulos descriptivos y meta descripciones
-3. **Atractivo Visual**: Incluir imágenes y diagramas relevantes
-4. **Calidad del Código**: Usar resaltado de sintaxis apropiado
-5. **Accesibilidad**: Incluir texto alt para imágenes
+### Bloques de código
 
-## 📝 Características de Escritura
-
-### Bloques de Código
 ```bash
-# Usar bloques de código delimitados con idioma
+# Siempre especifico el lenguaje
 sudo systemctl start docker
 ```
 
-### Expresiones Matemáticas
-Usar sintaxis LaTeX para expresiones matemáticas:
+### Expresiones matemáticas
+
+Para cuando necesito explicar algo con matemáticas:
+
 ```latex
 $$E = mc^2$$
 ```
 
-### Cajas de Notificación
+### Cajas de aviso
+
 ```markdown
 {: .box-note}
-**Nota:** Esta es una caja de notificación.
+**Nota:** Esto es importante que lo sepas.
 
-{: .box-warning}
-**Advertencia:** Esta es una caja de advertencia.
+{: .box-warning}  
+**Cuidado:** Esto puede romper cosas.
 
 {: .box-error}
-**Error:** Esta es una caja de error.
+**Error:** Algo ha ido mal.
 
 {: .box-success}
-**Éxito:** Esta es una caja de éxito.
+**Genial:** Todo ha funcionado.
 ```
 
-### Galerías de Imágenes
+### Imágenes centradas
+
 ```markdown
 ![Descripción](/assets/img/image.jpg){: .mx-auto.d-block :}
 ```
 
-## 🔍 SEO y Analíticas
+## 🔍 SEO y analytics
 
-### Características SEO
-- **Datos Estructurados**: JSON-LD para artículos
-- **Open Graph**: Vistas previas en redes sociales
-- **Twitter Cards**: Metadatos específicos de Twitter
-- **Sitemap**: Generación automática de sitemap XML
-- **Feed RSS**: Generación automática de feed
+Me gusta saber quién lee el blog:
 
-### Integración de Analíticas
-- **Google Analytics 4**: Seguimiento de comportamiento del usuario
-- **Cloudflare Analytics**: Métricas de rendimiento
-- **Tiempo de Lectura**: Métricas de compromiso
-- **Compartir Social**: Seguimiento del alcance del contenido
+- **Datos estructurados** - Para que Google entienda mejor los artículos
+- **Open Graph** - Para que se vean bien cuando se comparten en redes
+- **Twitter Cards** - Para que quede chulo en Twitter
+- **Sitemap automático** - Se genera solo
+- **Feed RSS** - Para los que siguen blogs clásicamente
 
-## 🚀 Optimización de Rendimiento
+### Analytics que uso
 
-### Optimizaciones de Build
-- **Compresión de Imágenes**: Conversión automática a WebP
-- **Minificación CSS**: Hojas de estilo comprimidas
-- **Caché de Recursos**: Caché del navegador a largo plazo
-- **Carga Diferida**: Carga diferida de imágenes
+- **Google Analytics 4** - Para saber de dónde viene la gente
+- **Cloudflare Analytics** - Métricas de rendimiento
+- **Tiempo de lectura** - Para ver el engagement
+- **Compartir en redes** - Para ver qué se comparte más
 
-### Optimizaciones de Despliegue
-- **Hosting Estático**: HTML pre-generado
-- **Integración CDN**: Entrega global de contenido
-- **Compresión Gzip**: Tamaños de transferencia reducidos
-- **HTTP/2**: Conexiones multiplexadas
+## 🚀 Optimización que implementé
 
-## 🎨 Personalización
+### Build optimizado
 
-### Personalización del Tema
+- **Compresión de imágenes** - Se convierten automáticamente a WebP
+- **CSS minificado** - Todo comprimido para que cargue rápido
+- **Caché inteligente** - Los recursos estáticos se cachean bien
+- **Lazy loading** - Las imágenes cargan cuando las necesitas
+
+### Hosting
+
+- **Hosting estático** - Todo HTML pre-generado
+- **CDN** - Se sirve desde múltiples ubicaciones
+- **Compresión Gzip** - Todo comprimido
+- **HTTP/2** - Protocolo moderno
+
+## 🎨 Personalización del tema
+
 ```scss
-// Variables personalizadas en _sass/main.scss
+// Variables personalizadas
 $primary-color: #0085a1;
 $navbar-border-col: #eaeaea;
 $footer-col: #404040;
 
-// Componentes personalizados
+// Componentes custom que añadí
 .custom-box {
   border-left: 4px solid $primary-color;
   padding: 1rem;
@@ -308,38 +283,47 @@ $footer-col: #404040;
 }
 ```
 
-### Modificaciones de Diseño
-- Editar plantillas en `_layouts/`
-- Añadir includes en `_includes/`
-- Modificar navegación en `_data/navigation.yml`
-- Actualizar estilos en `assets/css/`
+Para personalizar más:
 
-## 🔗 Servicios Relacionados
+- **Layouts** en `_layouts/` - Para cambiar la estructura
+- **Includes** en `_includes/` - Para añadir componentes
+- **Navegación** en `_data/navigation.yml` - Para el menú
+- **Estilos** en `assets/css/` - Para los colores y tipografías
 
-- **Frontend Web**: `apps/web` - Sitio web principal
-- **Backend API**: `apps/api` - Suscripciones al newsletter
-- **Infraestructura**: `infra/` - Hosting y despliegue
+## 📈 De qué escribo
 
-## 📈 Estrategia de Contenido
+### Temas que me van
 
-### Temas Cubiertos
-- **Ingeniería DevOps**: CI/CD, automatización, herramientas
-- **Ingeniería de Confiabilidad de Sitio**: Monitoreo, respuesta a incidentes
-- **Computación en la Nube**: AWS, contenedorización, orquestación
-- **Sistemas Linux**: Administración, resolución de problemas
-- **Ingeniería de Software**: Mejores prácticas, arquitectura
+- **DevOps** - CI/CD, automatización, herramientas que uso
+- **SRE** - Monitoreo, respuesta a incidentes, reliability
+- **Cloud** - AWS, containers, orquestación  
+- **Linux** - Administración, troubleshooting, scripts
+- **Desarrollo** - Mejores prácticas, arquitectura, lo que voy aprendiendo
 
-### Horario de Publicación
-- **Entradas Regulares**: 2-3 veces por mes
-- **Tutoriales Técnicos**: Guías en profundidad
-- **Comentarios de la Industria**: Análisis de tendencias
-- **Proyectos Personales**: Homelab y experimentos
+### Frecuencia de posts
 
-## 🤝 Contribuir
+- **Posts regulares** - Intento escribir 2-3 veces al mes
+- **Tutoriales técnicos** - Guías paso a paso cuando aprendo algo nuevo
+- **Reflexiones** - Análisis de tendencias o cosas que me llaman la atención
+- **Proyectos personales** - Mi homelab y experimentos
 
-1. Hacer fork del repositorio
-2. Crear una rama de característica
-3. Escribir tu contenido siguiendo las directrices
-4. Probar localmente con Jekyll
-5. Enviar una pull request
-6. Seguir el proceso de revisión
+## 🤝 Si quieres contribuir
+
+1. Fork del repositorio
+2. Crea una rama para tu contribución
+3. Escribe siguiendo el estilo del blog
+4. Pruébalo localmente con Jekyll
+5. Envía un pull request
+6. Te reviso el contenido y lo publicamos
+
+### Directrices de escritura
+
+- **Precisión técnica** - Todo el código y comandos tienen que funcionar
+- **SEO friendly** - Títulos descriptivos y meta descripciones que tengan sentido
+- **Imágenes** - Siempre con texto alternativo para accesibilidad
+- **Código limpio** - Syntax highlighting apropiado
+- **Accesible** - Que se pueda leer bien en cualquier dispositivo
+
+---
+
+Este blog es mi forma de documentar lo que voy aprendiendo y compartirlo con la comunidad. Si algo te resulta útil o tienes alguna sugerencia, siempre puedes escribirme.

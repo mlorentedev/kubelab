@@ -191,6 +191,11 @@ replace_placeholders() {
     [ -n "$APP_WIKI_NAME" ] && perl -i -pe "s#\{\{APP_WIKI_NAME\}\}#$APP_WIKI_NAME#g" "$tmpfile"
     [ -n "$APP_WIKI_PORT" ] && perl -i -pe "s#\{\{APP_WIKI_PORT\}\}#$APP_WIKI_PORT#g" "$tmpfile"
     [ -n "$APP_WIKI_HOST" ] && perl -i -pe "s#\{\{APP_WIKI_HOST\}\}#$APP_WIKI_HOST#g" "$tmpfile"
+    [ -n "$APP_MINIO_NAME" ] && perl -i -pe "s#\{\{APP_MINIO_NAME\}\}#$APP_MINIO_NAME#g" "$tmpfile"
+    [ -n "$APP_MINIO_API_HOST" ] && perl -i -pe "s#\{\{APP_MINIO_API_HOST\}\}#$APP_MINIO_API_HOST#g" "$tmpfile"
+    [ -n "$APP_MINIO_API_PORT" ] && perl -i -pe "s#\{\{APP_MINIO_API_PORT\}\}#$APP_MINIO_API_PORT#g" "$tmpfile"
+    [ -n "$APP_MINIO_DASHBOARD_HOST" ] && perl -i -pe "s#\{\{APP_MINIO_DASHBOARD_HOST\}\}#$APP_MINIO_DASHBOARD_HOST#g" "$tmpfile"
+    [ -n "$APP_MINIO_DASHBOARD_PORT" ] && perl -i -pe "s#\{\{APP_MINIO_DASHBOARD_PORT\}\}#$APP_MINIO_DASHBOARD_PORT#g" "$tmpfile"
 
     # Server variables
     [ -n "$DNS_PROVIDER" ] && perl -i -pe "s#\{\{DNS_PROVIDER\}\}#$DNS_PROVIDER#g" "$tmpfile"

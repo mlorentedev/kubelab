@@ -35,7 +35,6 @@ theme:
     - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
-    - navigation.path
     - navigation.indexes
     - navigation.top
     - navigation.footer
@@ -118,20 +117,6 @@ plugins:
       background: none
       shadow: true
       manual: false
-  - enumerate-headings:
-      toc_depth: 4
-      strict: false
-      increment_across_pages: true
-      include:
-        - "apps/*.md"
-        - "apps/**/*.md"
-        - "infra/*.md"
-        - "infra/**/*.md"
-        - "guides/*.md"
-        - "guides/**/*.md"
-      exclude:
-        - index.md
-        - "guides/WIKI/*.md"
   - section-index
 
 markdown_extensions:
