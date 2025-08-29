@@ -1,20 +1,4 @@
 services:
-  grafana:
-    image: grafana/grafana-oss
-    container_name: grafana
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      - GF_SECURITY_ADMIN_USER=${ADMIN_USER}
-      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - loki
-      - vector
-    networks:
-      - proxy
-
   loki:
     image: grafana/loki:latest
     container_name: loki
@@ -37,18 +21,7 @@ services:
     networks:
       - proxy
 
-  uptime-kuma:
-    image: louislam/uptime-kuma
-    container_name: uptime-kuma
-    restart: unless-stopped
-    volumes:
-      - uptime_kuma:/app/data
-    networks:
-      - proxy
-
 volumes:
-  grafana_data:
-  uptime_kuma:
   loki_data:
 
 networks:

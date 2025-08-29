@@ -5,14 +5,14 @@
 | Categoría | Documento | Descripción | Tiempo de lectura |
 |-----------|-----------|-------------|------------------|
 | ⚡ **Referencia Rápida** | [HOW-TO](../HOW-TO/) | Comandos y tareas comunes | 2 min |
-| 🏗️ **Arquitectura** | [ADR](../ADR/) | Decisiones arquitecturales (10 ADRs) | 15 min |
+| 🏗️ **Arquitectura** | [ADR](../ARCHITECTURE-AND-DECISIONS/) | Decisiones arquitecturales (10 ADRs) | 15 min |
 | 📋 **Versionado** | [VERSIONING](../VERSIONING/) | Estrategia de versionado por ramas | 10 min |
 | 🐛 **Resolución Problemas** | [TROUBLESHOOTING](../TROUBLESHOOTING/) | Debug y solución de problemas | 20 min |
 | 🚀 **Despliegue Avanzado** | [DEPLOYMENT](../DEPLOYMENT/) | Configuración servidores y despliegues | 30 min |
 | ⚙️ **Internos CI/CD** | [CI-CD](../CI-CD/) | Funcionamiento interno workflows | 25 min |
 | 👥 **Contribución** | [CONTRIBUTING](../CONTRIBUTING/) | Guías de desarrollo y código | 20 min |
 | 🎯 **CubeLab Project** | [CUBELAB](../CUBELAB/) | Documentación específica del proyecto CubeLab | 10 min |
-| 🏛️ **Arquitectura General** | [ARCHITECTURE](../ARCHITECTURE/) | Visión general del sistema | 15 min |
+| 🏛️ **Arquitectura General** | [ARCHITECTURE](../ARCHITECTURE-AND-DECISIONS/) | Visión general del sistema | 15 min |
 
 ---
 
@@ -44,12 +44,12 @@
 
 | Aspecto | Documento | Sección clave |
 |---------|-----------|---------------|
-| Arquitectura general | [ADR → Visión general](../ADR/index.md#índice-de-decisiones) | 10 decisiones fundamentales |
+| Arquitectura general | [ADR → Visión general](../ARCHITECTURE-AND-DECISIONS/index.md#índice-de-decisiones) | 10 decisiones fundamentales |
 | Versionado de imágenes | [VERSIONING → Estrategias](../VERSIONING/index.md#estrategia-de-versionado-por-rama) | Patrones por rama |
 | Pipeline CI/CD | [CI-CD → Arquitectura](../CI-CD/index.md#arquitectura-de-workflows) | Diagramas y flujos |
-| Configuración Docker | [ADR-002](../ADR/index.md#adr-002-docker-containerization) | Decisión containerización |
-| Por qué Traefik | [ADR-003](../ADR/index.md#adr-003-traefik-reverse-proxy) | Comparativa vs Nginx |
-| Por qué Ansible | [ADR-007](../ADR/index.md#adr-007-ansible-para-despliegues) | Vs otras herramientas |
+| Configuración Docker | [ADR-002](../ARCHITECTURE-AND-DECISIONS/index.md#adr-002-docker-containerization) | Decisión containerización |
+| Por qué Traefik | [ADR-003](../ARCHITECTURE-AND-DECISIONS/index.md#adr-003-traefik-reverse-proxy) | Comparativa vs Nginx |
+| Por qué Ansible | [ADR-007](../ARCHITECTURE-AND-DECISIONS/index.md#adr-007-ansible-para-despliegues) | Vs otras herramientas |
 
 ### 👥 "Quiero contribuir"
 
@@ -94,7 +94,7 @@
 
 ### 🔧 **DevOps/SRE**
 
-1. [ADR](../ADR/) - Entender decisiones arquitecturales
+1. [ADR](../ARCHITECTURE-AND-DECISIONS/) - Entender decisiones arquitecturales
 2. [CI-CD](../CI-CD/) - Funcionamiento completo pipeline
 3. [DEPLOYMENT](../DEPLOYMENT/) - Configuración servidores
 4. [TROUBLESHOOTING](../TROUBLESHOOTING/) - Debug producción
@@ -104,8 +104,8 @@
 
 ### 🎯 **Product Owner/Manager**
 
-1. [ARCHITECTURE](../ARCHITECTURE/) - Visión general del proyecto
-2. [ADR](../ADR/) - Decisiones de negocio y técnicas
+1. [ARCHITECTURE](../ARCHITECTURE-AND-DECISIONS/) - Visión general del proyecto
+2. [ADR](../ARCHITECTURE-AND-DECISIONS/) - Decisiones de negocio y técnicas
 3. [VERSIONING](../VERSIONING/) - Estrategia de releases
 4. [DEPLOYMENT](../DEPLOYMENT/) - Capacidades de despliegue
 
@@ -117,36 +117,36 @@
 
 ### Docker & Contenedores
 
-- [ADR-002: Containerización](../ADR/index.md#adr-002-docker-containerization) - Por qué Docker
+- [ADR-002: Containerización](../ARCHITECTURE-AND-DECISIONS/index.md#adr-002-docker-containerization) - Por qué Docker
 - [HOW-TO: Docker](../HOW-TO/index.md#-docker) - Comandos útiles
 - [TROUBLESHOOTING: Docker](../TROUBLESHOOTING/index.md#docker-y-docker-compose) - Problemas comunes
 - [CONTRIBUTING: Docker](../CONTRIBUTING/index.md#docker-y-contenedores) - Mejores prácticas
 
 ### CI/CD & GitHub Actions
 
-- [ADR-004: GitHub Actions](../ADR/index.md#adr-004-github-actions-para-cicd) - Decisión original
+- [ADR-004: GitHub Actions](../ARCHITECTURE-AND-DECISIONS/index.md#adr-004-github-actions-para-cicd) - Decisión original
 - [CI-CD: Internos](../CI-CD/) - Funcionamiento completo (1,388 líneas)
 - [HOW-TO: CI/CD](../HOW-TO/index.md#-cicd) - Comandos rápidos
 - [TROUBLESHOOTING: CI/CD](../TROUBLESHOOTING/index.md#problemas-de-cicd) - Debug workflows
 
 ### Versionado & Releases
 
-- [ADR-009: Semantic Versioning](../ADR/index.md#adr-009-versionado-semántico-automático) - Estrategia
+- [ADR-009: Semantic Versioning](../ARCHITECTURE-AND-DECISIONS/index.md#adr-009-versionado-semántico-automático) - Estrategia
 - [VERSIONING: Completo](../VERSIONING/) - Patrones por rama
 - [CI-CD: Version Calculation](../CI-CD/index.md#cálculo-complejo-de-versión-390-líneas) - Implementación
 - [HOW-TO: Debug Versioning](../HOW-TO/index.md#debug-version-calculation) - Comandos debug
 
 ### Despliegue & Operaciones  
 
-- [ADR-006: CD Manual](../ADR/index.md#adr-006-estrategia-de-cd-manual) - Por qué manual
-- [ADR-007: Ansible](../ADR/index.md#adr-007-ansible-para-despliegues) - Herramienta elegida
+- [ADR-006: CD Manual](../ARCHITECTURE-AND-DECISIONS/index.md#adr-006-estrategia-de-cd-manual) - Por qué manual
+- [ADR-007: Ansible](../ARCHITECTURE-AND-DECISIONS/index.md#adr-007-ansible-para-despliegues) - Herramienta elegida
 - [DEPLOYMENT: Avanzado](../DEPLOYMENT/) - Configuración completa servidores
 - [HOW-TO: Deploy](../HOW-TO/index.md#-despliegue) - Comandos rápidos
 - [TROUBLESHOOTING: Deploy](../TROUBLESHOOTING/index.md#problemas-de-despliegue) - Problemas comunes
 
 ### Networking & DNS
 
-- [ADR-003: Traefik](../ADR/index.md#adr-003-traefik-reverse-proxy) - Por qué Traefik vs Nginx
+- [ADR-003: Traefik](../ARCHITECTURE-AND-DECISIONS/index.md#adr-003-traefik-reverse-proxy) - Por qué Traefik vs Nginx
 - [HOW-TO: DNS](../HOW-TO/index.md#-dns-y-dominios) - Comandos útiles
 - [TROUBLESHOOTING: DNS](../TROUBLESHOOTING/index.md#problemas-de-dns-y-conectividad) - Debug DNS
 - [DEPLOYMENT: Network](../DEPLOYMENT/index.md#configuración-de-red) - Puertos y firewall
@@ -158,8 +158,8 @@
 ### Scenario 1: "Nuevo desarrollador se une al equipo"
 
 **Ruta de lectura**: ⏱️ ~30 minutos
-1. [ARCHITECTURE](../ARCHITECTURE/) - Entender el proyecto (5 min)
-2. [ADR](../ADR/) - Por qué tomamos estas decisiones (10 min)  
+1. [ARCHITECTURE](../ARCHITECTURE-AND-DECISIONS/) - Entender el proyecto (5 min)
+2. [ADR](../ARCHITECTURE-AND-DECISIONS/) - Por qué tomamos estas decisiones (10 min)  
 3. [CONTRIBUTING](../CONTRIBUTING/) - Cómo trabajamos (10 min)
 4. [HOW-TO](../HOW-TO/) - Comandos básicos (5 min)
 
@@ -221,21 +221,21 @@ curl -f https://mlorente.dev/health
 ## 🔍 Índice de Búsqueda por Palabras Clave
 
 ### A-C
-- **Ansible**: [ADR-007](../ADR/index.md#adr-007-ansible-para-despliegues), [DEPLOYMENT](../DEPLOYMENT/)
+- **Ansible**: [ADR-007](../ARCHITECTURE-AND-DECISIONS/index.md#adr-007-ansible-para-despliegues), [DEPLOYMENT](../DEPLOYMENT/)
 - **API**: [CONTRIBUTING: Go](../CONTRIBUTING/index.md#para-go-api), [HOW-TO: Debug](../HOW-TO/index.md#-debugging)
-- **Architecture**: [ADR](../ADR/), [ARCHITECTURE](../ARCHITECTURE/)
+- **Architecture**: [ADR](../ARCHITECTURE-AND-DECISIONS/)
 - **Backup**: [DEPLOYMENT: Backup](../DEPLOYMENT/index.md#copias-de-seguridad-y-recuperación-ante-desastres)
 - **Blog**: [CONTRIBUTING: Ruby](../CONTRIBUTING/index.md#para-ruby-blog-jekyll), [TROUBLESHOOTING: Jekyll](../TROUBLESHOOTING/index.md#blog-jekyll)
-- **CI/CD**: [CI-CD](../CI-CD/), [ADR-004](../ADR/index.md#adr-004-github-actions-para-cicd)
-- **Containers**: [ADR-002](../ADR/index.md#adr-002-docker-containerization), [HOW-TO: Docker](../HOW-TO/index.md#-docker)
+- **CI/CD**: [CI-CD](../CI-CD/), [ADR-004](../ARCHITECTURE-AND-DECISIONS/index.md#adr-004-github-actions-para-cicd)
+- **Containers**: [ADR-002](../ARCHITECTURE-AND-DECISIONS/index.md#adr-002-docker-containerization), [HOW-TO: Docker](../HOW-TO/index.md#-docker)
 
 ### D-M
 - **Deployment**: [DEPLOYMENT](../DEPLOYMENT/), [HOW-TO: Deploy](../HOW-TO/index.md#-despliegue)
 - **DNS**: [HOW-TO: DNS](../HOW-TO/index.md#-dns-y-dominios), [TROUBLESHOOTING: DNS](../TROUBLESHOOTING/index.md#problemas-de-dns-y-conectividad)
 - **Docker**: [HOW-TO: Docker](../HOW-TO/index.md#-docker), [TROUBLESHOOTING: Docker](../TROUBLESHOOTING/index.md#docker-y-docker-compose)
 - **Environment**: [HOW-TO: Variables](../HOW-TO/index.md#-secretos-y-variables)
-- **GitHub Actions**: [CI-CD](../CI-CD/), [ADR-004](../ADR/index.md#adr-004-github-actions-para-cicd)
-- **Makefile**: [ADR-010](../ADR/index.md#adr-010-makefile-como-interfaz-unificada), [HOW-TO: Comandos](../HOW-TO/index.md#comandos-makefile)
+- **GitHub Actions**: [CI-CD](../CI-CD/), [ADR-004](../ARCHITECTURE-AND-DECISIONS/index.md#adr-004-github-actions-para-cicd)
+- **Makefile**: [ADR-010](../ARCHITECTURE-AND-DECISIONS/index.md#adr-010-makefile-como-interfaz-unificada), [HOW-TO: Comandos](../HOW-TO/index.md#comandos-makefile)
 - **Monitoring**: [HOW-TO: Monitoring](../HOW-TO/index.md#-monitorización), [DEPLOYMENT: Monitoring](../DEPLOYMENT/index.md#monitorización-y-verificaciones-de-salud)
 
 ### N-Z
@@ -245,9 +245,9 @@ curl -f https://mlorente.dev/health
 - **SSL/TLS**: [HOW-TO: DNS](../HOW-TO/index.md#verificar-certificados-ssl), [TROUBLESHOOTING: SSL](../TROUBLESHOOTING/index.md#ssltls-errors)
 - **Staging**: [DEPLOYMENT: Staging](../DEPLOYMENT/index.md#entorno-de-staging)
 - **Testing**: [CONTRIBUTING: Tests](../CONTRIBUTING/index.md#pruebas)
-- **Traefik**: [ADR-003](../ADR/index.md#adr-003-traefik-reverse-proxy), [TROUBLESHOOTING: Traefik](../TROUBLESHOOTING/index.md#problemas-de-traefik)
+- **Traefik**: [ADR-003](../ARCHITECTURE-AND-DECISIONS/index.md#adr-003-traefik-reverse-proxy), [TROUBLESHOOTING: Traefik](../TROUBLESHOOTING/index.md#problemas-de-traefik)
 - **Troubleshooting**: [TROUBLESHOOTING](../TROUBLESHOOTING/)
-- **Versioning**: [VERSIONING](../VERSIONING/), [ADR-009](../ADR/index.md#adr-009-versionado-semántico-automático)
+- **Versioning**: [VERSIONING](../VERSIONING/), [ADR-009](../ARCHITECTURE-AND-DECISIONS/index.md#adr-009-versionado-semántico-automático)
 
 ---
 
@@ -266,7 +266,7 @@ curl -f https://mlorente.dev/health
 ### 📚 Referencias
 - [Conventional Commits](../CONTRIBUTING/index.md#mensajes-de-commit-según-conventional-commits)
 - [Docker best practices](../CONTRIBUTING/index.md#mejores-prácticas-para-dockerfile)
-- [Semantic Versioning](../ADR/index.md#adr-009-versionado-semántico-automático)
+- [Semantic Versioning](../ARCHITECTURE-AND-DECISIONS/index.md#adr-009-versionado-semántico-automático)
 
 ---
 

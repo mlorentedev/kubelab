@@ -1,0 +1,39 @@
+http:
+  routers:
+    {{APP_MINIO_NAME}}-api:
+      rule: "Host(`{{APP_MINIO_API_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: {{APP_MINIO_NAME}}-api
+      middlewares:
+        - secure-headers@file
+        - rate-limit@file
+        - error-pages
+
+    {{APP_MINIO_NAME}}-dashboard:
+      rule: "Host(`{{APP_MINIO_DASHBOARD_HOST}}`)"
+      entryPoints:
+        - {{TRAEFIK_ENTRYPOINT}}
+      service: {{APP_MINIO_NAME}}-dashboard
+      middlewares:
+        - minio-headers
+        - rate-limit@file
+        - error-pages
+
+  middlewares:
+    minio-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "http"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+
+  services:
+    {{APP_MINIO_NAME}}-api:
+      loadBalancer:
+        servers:
+          - url: "http://{{APP_MINIO_NAME}}:{{APP_MINIO_API_PORT}}"
+    {{APP_MINIO_NAME}}-dashboard:
+      loadBalancer:
+        servers:
+          - url: "http://{{APP_MINIO_NAME}}:{{APP_MINIO_DASHBOARD_PORT}}"

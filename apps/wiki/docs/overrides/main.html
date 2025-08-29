@@ -1,75 +1,11 @@
 {% extends "base.html" %}
 
-{# Banner global opcional #}
-{% block announce %}
-  <a id="announce-link" href="#" style="font-weight:600">
-    📚 Documentación – usa el conmutador de ramas del header para cambiar de versión
-  </a>
-{% endblock %}
 
-{# Hero solo en la portada #}
-{% block hero %}
-  {% if page and page.is_homepage %}
-  <section class="hero-section" style="background: var(--md-primary-fg-color); padding: 2rem 0; color: white; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
-    <div class="md-grid md-typeset" style="max-width: 600px; margin: 0 auto; padding: 0 1rem;">
-      <h1 style="margin: 0 0 1rem 0; font-size: 1.8rem; font-weight: 600;">Wiki</h1>
-      <p style="font-size: 1rem; opacity: 0.85; margin-bottom: 1.5rem; line-height: 1.4;">
-        Documentación técnica del ecosistema <strong>mlorente.dev</strong>
-      </p>
-      <div id="hero-navigation" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-        <a href="#" data-section="apps"
-           style="background: rgba(255,255,255,0.15); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none; font-weight: 500; transition: all 0.2s ease; display: inline-block; font-size: 0.85rem;"
-           onmouseover="this.style.background='rgba(255,255,255,0.25)'"
-           onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-          📱 Apps
-        </a>
-        <a href="#" data-section="infra"
-           style="background: rgba(255,255,255,0.15); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none; font-weight: 500; transition: all 0.2s ease; display: inline-block; font-size: 0.85rem;"
-           onmouseover="this.style.background='rgba(255,255,255,0.25)'"
-           onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-          🔧 Infra
-        </a>
-        <a href="#" data-section="guides"
-           style="background: rgba(255,255,255,0.15); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none; font-weight: 500; transition: all 0.2s ease; display: inline-block; font-size: 0.85rem;"
-           onmouseover="this.style.background='rgba(255,255,255,0.25)'"
-           onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-          📖 Guías
-        </a>
-      </div>
-    </div>
-  </section>
-  {% endif %}
+{# Cleaner header without redundant navigation #}
+{% block header %}
+  {{ super() }}
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Wait for branch data to be available
-    function updateDynamicLinks() {
-      var currentBranch = window.__CURRENT_BRANCH__ || 'develop';
-      
-      // Update hero navigation links
-      var heroLinks = document.querySelectorAll('#hero-navigation a[data-section]');
-      heroLinks.forEach(function(link) {
-        var section = link.getAttribute('data-section');
-        link.href = '/' + currentBranch + '/' + section + '/';
-      });
-      
-      // Update announce banner link
-      var announceLink = document.getElementById('announce-link');
-      if (announceLink) {
-        announceLink.href = '/' + currentBranch + '/';
-      }
-    }
-    
-    // Update immediately if data is available
-    if (window.__CURRENT_BRANCH__) {
-      updateDynamicLinks();
-    } else {
-      // Wait a bit for branch data to load
-      setTimeout(updateDynamicLinks, 100);
-    }
-  });
-  </script>
 {% endblock %}

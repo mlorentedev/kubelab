@@ -108,300 +108,139 @@ jobs:
           APP="${{ inputs.app }}"
           BRANCH_TYPE="${{ steps.branch_detection.outputs.branch_type }}"
           VERSION_STRATEGY="${{ steps.branch_detection.outputs.version_strategy }}"
-          USE_SEMVER="${{ steps.branch_detection.outputs.use_semver }}"
 
           echo "Calculating Docker version for app: $APP"
-          echo "Branch type: $BRANCH_TYPE"
-          echo "Version strategy: $VERSION_STRATEGY"
+          echo "Strategy: $VERSION_STRATEGY"
 
-          # Get last app-specific tag instead of global tag
-          LAST_APP_TAG=$(git tag -l "${APP}-v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "")
+          # Get current stable version
+          get_current_version() {
+            local app=$1
+            local last_tag=$(git tag -l "${app}-v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1)
+            if [ -z "$last_tag" ]; then
+              echo "0.0.0"
+            else
+              echo "$last_tag" | sed "s/${app}-v//"
+            fi
+          }
+
+          # Analyze commits and determine bump type
+          analyze_commits() {
+            local app=$1
+            local base_ref=$2
+            
+            if [ -n "$base_ref" ]; then
+              local commits=$(git log ${base_ref}..HEAD --oneline -- apps/${app}/ 2>/dev/null || echo "")
+            else
+              local commits=$(git log --oneline -- apps/${app}/ 2>/dev/null || echo "")
+            fi
+            
+            # Skip if no app changes
+            if [ -z "$(echo "$commits" | grep -v '^$')" ]; then
+              echo "skip"
+              return
+            fi
+            
+            # Determine bump type
+            if echo "$commits" | grep -q "BREAKING CHANGE\|!:"; then
+              echo "major"
+            elif echo "$commits" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
+              echo "minor"
+            else
+              echo "patch"
+            fi
+          }
+
+          # Calculate next version
+          bump_version() {
+            local current=$1
+            local bump_type=$2
+            
+            if [ "$current" = "0.0.0" ]; then
+              case "$bump_type" in
+                major) echo "1.0.0" ;;
+                minor) echo "0.1.0" ;;
+                *) echo "0.0.1" ;;
+              esac
+              return
+            fi
+            
+            IFS='.' read -ra parts <<< "$current"
+            local major=${parts[0]:-0}
+            local minor=${parts[1]:-0}
+            local patch=${parts[2]:-0}
+            
+            case "$bump_type" in
+              major)
+                echo "$((major + 1)).0.0"
+                ;;
+              minor)
+                echo "${major}.$((minor + 1)).0"
+                ;;
+              patch)
+                echo "${major}.${minor}.$((patch + 1))"
+                ;;
+            esac
+          }
+
+          # Count commits for prerelease numbers
+          count_commits() {
+            local app=$1
+            local base_ref=$2
+            local count=$(git rev-list --count HEAD ^${base_ref} -- apps/${app}/ 2>/dev/null || echo "1")
+            [ "$count" -eq 0 ] && count=1
+            echo "$count"
+          }
+
+          # Main version calculation
+          CURRENT_VERSION=$(get_current_version "$APP")
           
-          if [ -z "$LAST_APP_TAG" ]; then
-            echo "No previous stable version found for $APP, starting from 0.0.0"
-            CURRENT_VERSION="0.0.0"
-          else
-            echo "Using app-specific tag as reference: $LAST_APP_TAG"
-            CURRENT_VERSION=$(echo "$LAST_APP_TAG" | sed "s/${APP}-v//")
+          case "$VERSION_STRATEGY" in
+            alpha)
+              BASE_REF=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~10")
+              BUMP_TYPE=$(analyze_commits "$APP" "$BASE_REF")
+              ;;
+            beta)
+              BASE_REF=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || echo "HEAD~10")
+              BUMP_TYPE="patch"  # Hotfixes are always patches
+              ;;
+            rc|stable)
+              LAST_TAG=$(git tag -l "${APP}-v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1)
+              BASE_REF="$LAST_TAG"
+              BUMP_TYPE=$(analyze_commits "$APP" "$BASE_REF")
+              ;;
+          esac
+
+          # Skip if no changes
+          if [ "$BUMP_TYPE" = "skip" ]; then
+            echo "version=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice::No changes detected for $APP"
+            exit 0
           fi
 
+          # Calculate base version
+          BASE_VERSION=$(bump_version "$CURRENT_VERSION" "$BUMP_TYPE")
+          
+          # Apply strategy suffix
           case "$VERSION_STRATEGY" in
-            "alpha")
-              # Feature branches: Calculate next version and use as alpha base
-              # Analyze commits in this feature branch to determine bump type
-              MERGE_BASE=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
-              if [ -n "$MERGE_BASE" ]; then
-                COMMITS=$(git log ${MERGE_BASE}..HEAD --oneline -- apps/${APP}/)
-              else
-                # Fallback to last 10 commits for this app
-                COMMITS=$(git log -10 --oneline -- apps/${APP}/)
-              fi
-
-              echo "Analyzing feature commits for $APP:"
-              echo "$COMMITS"
-
-              # Skip if no changes to this app
-              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
-                echo "::notice::No changes detected for $APP in this feature branch"
-                echo "version=skip" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-
-              # Determine bump type for feature
-              if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
-                BUMP_TYPE="major"
-                echo "::notice::Feature: Breaking change detected - MAJOR bump"
-              elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
-                BUMP_TYPE="minor"
-                echo "::notice::Feature: Feature detected - MINOR bump"
-              else
-                BUMP_TYPE="patch"
-                echo "::notice::Feature: Feature/fix detected - PATCH bump"
-              fi
-
-              # Calculate next base version
-              if [ "$CURRENT_VERSION" = "0.0.0" ]; then
-                case "$BUMP_TYPE" in
-                  major) BASE_VERSION="1.0.0" ;;
-                  minor) BASE_VERSION="0.1.0" ;;
-                  *) BASE_VERSION="0.0.1" ;;
-                esac
-              else
-                IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-                MAJOR=${VERSION_PARTS[0]:-0}
-                MINOR=${VERSION_PARTS[1]:-0}
-                PATCH=${VERSION_PARTS[2]:-0}
-
-                case "$BUMP_TYPE" in
-                  major)
-                    MAJOR=$((MAJOR + 1))
-                    MINOR=0
-                    PATCH=0
-                    ;;
-                  minor)
-                    MINOR=$((MINOR + 1))
-                    PATCH=0
-                    ;;
-                  *)
-                    PATCH=$((PATCH + 1))
-                    ;;
-                esac
-                BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-              fi
-
-              # Generate incremental alpha number by counting commits in this branch
-              # Count commits since branching from develop
-              MERGE_BASE=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~10")
-              ALPHA_NUMBER=$(git rev-list --count HEAD ^${MERGE_BASE} -- apps/${APP}/ 2>/dev/null || echo "1")
-
-              # Ensure minimum of 1
-              if [ "$ALPHA_NUMBER" -eq 0 ]; then
-                ALPHA_NUMBER=1
-              fi
-
-              DOCKER_VERSION="${BASE_VERSION}-alpha.${ALPHA_NUMBER}"
-              echo "::notice::Generated Docker alpha version: $DOCKER_VERSION (base: $BASE_VERSION, commits: ${ALPHA_NUMBER})"
+            alpha)
+              NUMBER=$(count_commits "$APP" "$BASE_REF")
+              DOCKER_VERSION="${BASE_VERSION}-alpha.${NUMBER}"
               ;;
-
-            "beta")
-              # Hotfix branches: Similar logic but for beta
-              # Analyze commits in this hotfix branch
-              MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/develop 2>/dev/null || echo "")
-              if [ -n "$MERGE_BASE" ]; then
-                COMMITS=$(git log ${MERGE_BASE}..HEAD --oneline -- apps/${APP}/)
-              else
-                COMMITS=$(git log -10 --oneline -- apps/${APP}/)
-              fi
-
-              echo "Analyzing hotfix commits for $APP:"
-              echo "$COMMITS"
-
-              # Skip if no changes to this app
-              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
-                echo "::notice::No changes detected for $APP in this hotfix branch"
-                echo "version=skip" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-
-              BUMP_TYPE="patch"
-              echo "::notice::Hotfix: FORCED patch bump (hotfixes should not add features or breaking changes)"
-
-              # Calculate next base version
-              if [ "$CURRENT_VERSION" = "0.0.0" ]; then
-                BASE_VERSION="0.0.1"
-              else
-                IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-                MAJOR=${VERSION_PARTS[0]:-0}
-                MINOR=${VERSION_PARTS[1]:-0}
-                PATCH=${VERSION_PARTS[2]:-0}
-                PATCH=$((PATCH + 1))
-                BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-              fi
-
-              # Generate incremental beta number by counting commits in this branch
-              # Count commits since branching from main
-              MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || echo "HEAD~10")
-              BETA_NUMBER=$(git rev-list --count HEAD ^${MERGE_BASE} -- apps/${APP}/ 2>/dev/null || echo "1")
-
-              # Ensure minimum of 1
-              if [ "$BETA_NUMBER" -eq 0 ]; then
-                BETA_NUMBER=1
-              fi
-
-              DOCKER_VERSION="${BASE_VERSION}-beta.${BETA_NUMBER}"
-              echo "::notice::Generated Docker beta version: $DOCKER_VERSION (base: $BASE_VERSION, commits: ${BETA_NUMBER})"
+            beta)
+              NUMBER=$(count_commits "$APP" "$BASE_REF")
+              DOCKER_VERSION="${BASE_VERSION}-beta.${NUMBER}"
               ;;
-
-            "rc")
-              # Develop branch: Calculate SEMVER and create RC
-              # Analyze commits since last stable app version
-              if [ -n "$LAST_APP_TAG" ]; then
-                COMMITS=$(git log ${LAST_APP_TAG}..HEAD --oneline -- apps/${APP}/)
-              else
-                COMMITS=$(git log --oneline -- apps/${APP}/)
-              fi
-
-              echo "Analyzing commits for $APP since $LAST_APP_TAG:"
-              echo "$COMMITS"
-
-              # Skip if no changes to this app
-              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
-                echo "::notice::No changes detected for $APP since last stable version"
-                echo "version=skip" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-
-              # Determine SEMVER bump
-              if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
-                BUMP_TYPE="major"
-                echo "::notice::SEMVER: Breaking change detected - MAJOR bump"
-              elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
-                BUMP_TYPE="minor"
-                echo "::notice::SEMVER: Feature detected - MINOR bump"
-              else
-                BUMP_TYPE="patch"
-                echo "::notice::SEMVER: Patch/fix detected - PATCH bump"
-              fi
-
-              # Calculate new base version
-              if [ "$CURRENT_VERSION" = "0.0.0" ]; then
-                case "$BUMP_TYPE" in
-                  major) BASE_VERSION="1.0.0" ;;
-                  minor) BASE_VERSION="0.1.0" ;;
-                  *) BASE_VERSION="0.0.1" ;;
-                esac
-              else
-                IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-                MAJOR=${VERSION_PARTS[0]:-0}
-                MINOR=${VERSION_PARTS[1]:-0}
-                PATCH=${VERSION_PARTS[2]:-0}
-
-                case "$BUMP_TYPE" in
-                  major)
-                    MAJOR=$((MAJOR + 1))
-                    MINOR=0
-                    PATCH=0
-                    ;;
-                  minor)
-                    MINOR=$((MINOR + 1))
-                    PATCH=0
-                    ;;
-                  *)
-                    PATCH=$((PATCH + 1))
-                    ;;
-                esac
-                BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-              fi
-
-              # Generate incremental RC number by counting relevant commits since last stable
-              # Count commits that affected this app since last stable app tag
-              if [ -n "$LAST_APP_TAG" ]; then
-                RC_NUMBER=$(git rev-list --count ${LAST_APP_TAG}..HEAD -- apps/${APP}/ 2>/dev/null || echo "1")
-              else
-                RC_NUMBER=$(git rev-list --count HEAD -- apps/${APP}/ 2>/dev/null || echo "1")
-              fi
-
-              # Ensure minimum of 1
-              if [ "$RC_NUMBER" -eq 0 ]; then
-                RC_NUMBER=1
-              fi
-
-              DOCKER_VERSION="${BASE_VERSION}-rc.${RC_NUMBER}"
-              echo "::notice::Generated Docker RC version: $DOCKER_VERSION (base: $BASE_VERSION, commits: ${RC_NUMBER})"
+            rc)
+              NUMBER=$(count_commits "$APP" "$BASE_REF")
+              DOCKER_VERSION="${BASE_VERSION}-rc.${NUMBER}"
               ;;
-
-            "stable")
-              # Master branch: Use semantic version directly (no prerelease suffix)
-              # Analyze commits since last stable app version
-              if [ -n "$LAST_APP_TAG" ]; then
-                COMMITS=$(git log ${LAST_APP_TAG}..HEAD --oneline -- apps/${APP}/)
-              else
-                COMMITS=$(git log --oneline -- apps/${APP}/)
-              fi
-
-              echo "Analyzing commits for $APP since $LAST_APP_TAG:"
-              echo "$COMMITS"
-
-              # Skip if no changes to this app
-              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
-                echo "::notice::No changes detected for $APP since last stable version"
-                echo "version=skip" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-
-              # Determine SEMVER bump
-              if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
-                BUMP_TYPE="major"
-                echo "::notice::SEMVER: Breaking change detected - MAJOR bump"
-              elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
-                BUMP_TYPE="minor"
-                echo "::notice::SEMVER: Feature detected - MINOR bump"
-              else
-                BUMP_TYPE="patch"
-                echo "::notice::SEMVER: Patch/fix detected - PATCH bump"
-              fi
-
-              # Calculate final stable version
-              if [ "$CURRENT_VERSION" = "0.0.0" ]; then
-                case "$BUMP_TYPE" in
-                  major) DOCKER_VERSION="1.0.0" ;;
-                  minor) DOCKER_VERSION="0.1.0" ;;
-                  *) DOCKER_VERSION="0.0.1" ;;
-                esac
-              else
-                IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-                MAJOR=${VERSION_PARTS[0]:-0}
-                MINOR=${VERSION_PARTS[1]:-0}
-                PATCH=${VERSION_PARTS[2]:-0}
-
-                case "$BUMP_TYPE" in
-                  major)
-                    MAJOR=$((MAJOR + 1))
-                    MINOR=0
-                    PATCH=0
-                    ;;
-                  minor)
-                    MINOR=$((MINOR + 1))
-                    PATCH=0
-                    ;;
-                  *)
-                    PATCH=$((PATCH + 1))
-                    ;;
-                esac
-                DOCKER_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-              fi
-
-              echo "::notice::Generated Docker stable version: $DOCKER_VERSION"
-              ;;
-
-            *)
-              echo "::error::Unknown version strategy: $VERSION_STRATEGY"
-              exit 1
+            stable)
+              DOCKER_VERSION="$BASE_VERSION"
               ;;
           esac
 
           echo "version=$DOCKER_VERSION" >> "$GITHUB_OUTPUT"
-          echo "::notice::Final Docker version for $APP: $DOCKER_VERSION"
+          echo "::notice::Generated version for $APP: $DOCKER_VERSION (base: $BASE_VERSION, type: $BUMP_TYPE)"
 
       # Blog Jekyll site validation
       - name: Set up Ruby

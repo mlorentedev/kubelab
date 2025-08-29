@@ -28,8 +28,8 @@ define check_command
 endef
 
 .PHONY: help check env-setup install-deps install-ansible create-network \
-		up-traefik up-n8n up-monitoring up-blog up-web up-api up \
-		setup deploy status down down-traefik down-n8n down-monitoring down-web down-blog down-api down \
+		up-traefik up-n8n up-grafana up-loki up-uptime up-blog up-web up-api up-wiki up-minio up \
+		setup deploy status down down-traefik down-n8n down-grafana down-loki down-uptime down-web down-blog down-api down-wiki down-minio down \
 		generate-config generate-traefik-credentials generate-traefik-config generate-ansible-config copy-certificates create-env-example setup-secrets list-secrets \
 		validate-yaml lint-workflows \
 		setup-buildx docker-login push-app push-app-tag push-all push-all-tag \
@@ -43,12 +43,6 @@ help:
 	@echo "  make install-ruby         			- Install Ruby and Bundler dependencies for BLOG"
 	@echo "  make install-ansible      			- Install Ansible and dependencies"
 	@echo "  make create-network       			- Create Docker network if it does not exist"
-	$(call log_info,Development commands:)
-	@echo "  make dev-web             			- Start local development environment for WEB"
-	@echo "  make dev-api             			- Start local development environment for API"
-	@echo "  make dev-blog            			- Start local development environment for BLOG"
-	@echo "  make dev-traefik         			- Start local development environment for Traefik"
-	@echo "  make dev                 			- Start all local development environments"
 	$(call log_info,Docker build and push commands:)
 	@echo "  make docker-login         			- Login to Docker registry"
 	@echo "  make push-app APP=<app>   			- Build and push specific app"
@@ -177,16 +171,34 @@ up-n8n: up-traefik
 	$(call log_success,Development environment for N8N started successfully. Remember to add n8n.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,N8N is running on port 5678. You can access it at http://n8n.mlorentedev.test)
 
-up-monitoring: up-traefik
-	$(call log_info,Starting Monitoring stack...)
-	@grep -qxF 'ENVIRONMENT=local' $(MONITORING_PATH)/.env || { \
-	  $(call log_error,ENVIRONMENT must be set to 'local' in $(MONITORING_PATH)/.env); \
+up-grafana: up-traefik
+	$(call log_info,Starting Grafana...)
+	@grep -qxF 'ENVIRONMENT=local' $(GRAFANA_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(GRAFANA_PATH)/.env); \
 	  exit 1; \
 	}
-	@docker compose -f $(MONITORING_PATH)/docker-compose.yml up -d 
-	$(call log_success,Development environment for Monitoring started successfully. Remember to add grafana.mlorentedev.test, loki.mlorentedev.test and status.mlorentedev.test to your /etc/hosts file.)
+	@docker compose -f $(GRAFANA_PATH)/docker-compose.yml up -d
+	$(call log_success,Development environment for Grafana started successfully. Remember to add grafana.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,Grafana is running on port 3000. You can access it at http://grafana.mlorentedev.test)
+
+up-loki: up-traefik
+	$(call log_info,Starting Loki...)
+	@grep -qxF 'ENVIRONMENT=local' $(LOKI_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(LOKI_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(LOKI_PATH)/docker-compose.yml up -d
+	$(call log_success,Development environment for Loki started successfully. Remember to add loki.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,Loki is running on port 3100. You can access it at http://loki.mlorentedev.test)
+
+up-uptime: up-traefik
+	$(call log_info,Starting Uptime Kuma...)
+	@grep -qxF 'ENVIRONMENT=local' $(UPTIME_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(UPTIME_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(UPTIME_PATH)/docker-compose.yml up -d
+	$(call log_success,Development environment for Uptime Kuma started successfully. Remember to add uptime.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,Status page is running on port 8000. You can access it at http://status.mlorentedev.test)
 
 up-blog: up-traefik
@@ -233,7 +245,18 @@ up-wiki:  wiki-sync up-traefik
 	$(call log_success,Development environment for WIKI started successfully. Remember to add wiki.mlorentedev.test to your /etc/hosts file.)
 	$(call log_success,WIKI is running on port 80. You can access it at http://wiki.mlorentedev.test)
 
-up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-monitoring up-wiki
+up-minio: up-traefik
+	$(call log_info,Starting MinIO...)
+	@grep -qxF 'ENVIRONMENT=local' $(MINIO_PATH)/.env || { \
+	  $(call log_error,ENVIRONMENT must be set to 'local' in $(MINIO_PATH)/.env); \
+	  exit 1; \
+	}
+	@docker compose -f $(MINIO_PATH)/docker-compose.yml up -d
+	$(call log_success,MinIO started successfully. Remember to add minio.mlorentedev.test to your /etc/hosts file.)
+	$(call log_success,MinIO is running on port 9000. API is accessible at http://api.minio.mlorentedev.test)
+	$(call log_success,MinIO dashboard is running on port 9001. You can access it at http://minio.mlorentedev.test)
+
+up: check up-traefik up-portainer up-nginx up-blog up-api up-web up-n8n up-loki up-uptime up-grafana up-wiki up-minio
 
 ##################################################################################################
 # Cleanup commands
@@ -259,10 +282,20 @@ down-n8n:
 	-@docker compose -f $(N8N_PATH)/docker-compose.yml down --remove-orphans
 	$(call log_success,N8N resources cleaned.)
 
-down-monitoring:
-	$(call log_info,Cleaning Monitoring resources...)
-	-@docker compose -f $(MONITORING_PATH)/docker-compose.yml down --remove-orphans
-	$(call log_success,Monitoring resources cleaned.)
+down-grafana:
+	$(call log_info,Cleaning Grafana resources...)
+	-@docker compose -f $(GRAFANA_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Grafana resources cleaned.)
+
+down-loki:
+	$(call log_info,Cleaning Loki resources...)
+	-@docker compose -f $(LOKI_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Loki resources cleaned.)
+
+down-uptime:
+	$(call log_info,Cleaning Uptime Kuma resources...)
+	-@docker compose -f $(UPTIME_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,Uptime Kuma resources cleaned.)
 
 down-web:
 	$(call log_info,Cleaning WEB resources...)
@@ -284,7 +317,12 @@ down-wiki:
 	-@docker compose -f $(WIKI_PATH)/docker-compose.yml down --remove-orphans
 	$(call log_success,WIKI resources cleaned.)
 
-down: down-traefik down-web down-blog down-api down-n8n down-monitoring down-nginx down-portainer down-wiki
+down-minio:
+	$(call log_info,Cleaning MinIO resources...)
+	-@docker compose -f $(MINIO_PATH)/docker-compose.yml down --remove-orphans
+	$(call log_success,MinIO resources cleaned.)
+
+down: down-traefik down-web down-blog down-api down-n8n down-grafana down-loki down-uptime down-nginx down-portainer down-wiki down-minio
 	@docker volume prune -f
 	$(call log_success,Local resources cleaned.)
 
@@ -454,6 +492,8 @@ create-env-example:
 	@$(SCRIPTS_PATH)/create-env-example.sh $(ANSIBLE_PATH)/.env $(ANSIBLE_PATH)/.env.example
 	@$(SCRIPTS_PATH)/create-env-example.sh $(PORTAINER_PATH)/.env $(PORTAINER_PATH)/.env.example
 	@$(SCRIPTS_PATH)/create-env-example.sh $(NGINX_PATH)/.env $(NGINX_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(WIKI_PATH)/.env $(WIKI_PATH)/.env.example
+	@$(SCRIPTS_PATH)/create-env-example.sh $(MINIO_PATH)/.env $(MINIO_PATH)/.env.example
 	@$(SCRIPTS_PATH)/create-env-example.sh .env .env.example
 	$(call log_success,.env.example files created successfully.)
 

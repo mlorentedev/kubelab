@@ -6,6 +6,7 @@ http:
         - {{TRAEFIK_ENTRYPOINT}}
       service: {{APP_UPTIME_KUMA_NAME}}
       middlewares:
+        - auth@file
         - secure-headers@file
         - rate-limit@file
         - error-pages
