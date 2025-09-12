@@ -4,19 +4,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes configura todas las rutas de la API
+// SetupRoutes configures all API routes
 func SetupRoutes(r *gin.Engine) {
 
 	// Health check routes
 	RegisterHealthCheckRoutes(r)
 
-	// Grupo API
+	// API Group
 	api := r.Group("/api")
 	{
-		// Suscripción
+		// Subscription
 		api.POST("/subscribe", SubscribeHandler)
 
-		// Cancelación de suscripción
+		// Subscription cancellation
 		api.POST("/unsubscribe", UnsubscribeHandler)
 
 		// Lead magnet

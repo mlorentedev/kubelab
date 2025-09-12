@@ -20,7 +20,6 @@ baseurl: ''
 
 navbar-links:
   Blog: "/"
-  About me: "aboutme"
 
 ################
 # --- Logo --- #
@@ -49,7 +48,6 @@ social-network-links:
   email: "info@mlorente.dev"
   github: mlorentedev
   twitter: mlorentedev
-  linkedin: manloralm
   youtube: "@mlorentedev"
 
 # If you want your website to generate an RSS feed, provide a description
@@ -98,7 +96,7 @@ subscription: false
 navbar-var-length: false
 
 # The keywords to associate with your website, for SEO purposes
-keywords: "Manuel Lorente Alman,engineer,devops,sre,cloud,programming,kubernetes,java,python,golang,ci,cd,aws,backend,fullstack,colorado,triana,sevilla,denver"
+keywords: "Manuel Lorente Alman,ingeniero,cubelab,homelab,engineer,devops,sre,cloud,programming,kubernetes,java,python,golang,ci,cd,aws,backend,fullstack,colorado,triana,sevilla,denver"
 
 ######################################
 # --- Colours / background image --- #

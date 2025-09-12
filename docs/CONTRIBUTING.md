@@ -1,39 +1,39 @@
-# Flujo de Trabajo y Directrices de Desarrollo
+# Workflow and Development Guidelines
 
-Aunque la documentación de este proyecto se encuentra en español, el código y los mensajes de commit deben escribirse en inglés para mantener la consistencia y facilitar la colaboración internacional.
+Although the documentation of this project is in Spanish, code and commit messages should be written in English to maintain consistency and facilitate international collaboration.
 
-## Convenciones para Nombres de Ramas
+## Branch Naming Conventions
 
-`master`: Código estable para producción  
-`develop`: Desarrollo activo e integración  
-`feature/*`: Ramas de características para nueva funcionalidad  
-`hotfix/*`: Ramas de corrección urgente  
+`master`: Stable code for production  
+`develop`: Active development and integration  
+`feature/*`: Feature branches for new functionality  
+`hotfix/*`: Urgent fix branches  
 
 **Ejemplos:**
 
 ```bash
-# Ejemplo de rama de característica
+# Feature branch example
 git checkout -b feature/add-user-authentication
 
-# Ejemplo de rama de corrección urgente
+# Hotfix branch example
 git checkout -b hotfix/log-in-bug
 ```
 
-## Mensajes de Commit según Conventional Commits
+## Commit Messages According to Conventional Commits
 
-Sigue el estándar [Conventional Commits](https://www.conventionalcommits.org/) para mantener el historial de commits claro y consistente:
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) standard to keep the commit history clear and consistent:
 
-**Formato:** `<tipo>(<ámbito opcional>): <descripción>`
+**Format:** `<type>(<optional scope>): <description>`
 
-**Tipos Permitidos:**
+**Allowed Types:**
 
-- `feat` → Nueva característica  
-- `fix` → Corrección de error  
-- `docs` → Actualización de documentación  
-- `style` → Cambios de estilo de código (formato, sin cambios de lógica)  
-- `refactor` → Reestructuración de código sin cambiar comportamiento  
-- `test` → Añadir o mejorar pruebas  
-- `chore` → Tareas de mantenimiento (ej. actualizaciones de dependencias)  
+- `feat` → New feature  
+- `fix` → Bug fix  
+- `docs` → Documentation update  
+- `style` → Code style changes (formatting, no logic changes)  
+- `refactor` → Code restructuring without changing behavior  
+- `test` → Add or improve tests  
+- `chore` → Maintenance tasks (e.g., dependency updates)  
 
 **Ejemplos:**
 
@@ -47,45 +47,45 @@ git commit -m "test(api): add unit tests for data retrieval"
 git commit -m "chore(deps): update dependency express to v4.17.1"
 ```
 
-## Versionado y Gestión de Versiones
+## Versioning and Version Management
 
-El proyecto sigue el Versionado Semántico a través de mensajes de commit:
+The project follows Semantic Versioning through commit messages:
 
-- **Versión Mayor** incrementa con cambios incompatibles:
-  - Mensajes conteniendo "BREAKING CHANGE:" o "!:"
-  - Ejemplo: `feat!: description of incompatible change`
-- **Versión Menor** incrementa con nuevas características:
-  - Mensajes comenzando con `feat:`  
-  - Ejemplo: `feat: assemble new search functionality`
-- **Versión Parche** incrementa con correcciones/cambios pequeños:  
-  - Mensajes comenzando con `fix:`, `docs:`, `chore:`, `style:`, etc.
-  - Ejemplo: `fix: solve error in contact form`
+- **Major Version** increments with incompatible changes:
+  - Messages containing "BREAKING CHANGE:" or "!:"
+  - Example: `feat!: description of incompatible change`
+- **Minor Version** increments with new features:
+  - Messages starting with `feat:`  
+  - Example: `feat: assemble new search functionality`
+- **Patch Version** increments with fixes/small changes:  
+  - Messages starting with `fix:`, `docs:`, `chore:`, `style:`, etc.
+  - Example: `fix: solve error in contact form`
 
-Puedes forzar un incremento específico usando `#major`, `#minor`, o `#patch` en el cuerpo del mensaje de commit.
+You can force a specific increment using `#major`, `#minor`, or `#patch` in the commit message body.
 
-### Proceso de Pull Request
+### Pull Request Process
 
-1. Crear una rama de característica desde `develop`
-2. Realizar tus cambios
-3. Escribir pruebas para tus cambios
-4. Asegurar que todas las pruebas pasen
-5. Hacer commit con mensajes según conventional commits
-6. Enviar tu rama y abrir un Pull Request a `develop`
-7. Solicitar una revisión de código
-8. Después de la aprobación, fusionar con `develop`
+1. Create a feature branch from `develop`
+2. Make your changes
+3. Write tests for your changes
+4. Ensure all tests pass
+5. Commit with conventional commit messages
+6. Push your branch and open a Pull Request to `develop`
+7. Request a code review
+8. After approval, merge with `develop`
 
-### Qué Evitar
+### What to Avoid
 
-- Nombres de rama vagos
-- Mezclar cambios no relacionados
-- Ignorar pruebas fallidas
-- Forzar push a `master`
+- Vague branch names
+- Mixing unrelated changes
+- Ignoring failed tests
+- Force pushing to `master`
 
-## Guías de Codificación
+## Coding Guidelines
 
-### Estructura del Proyecto
+### Project Structure
 
-Al añadir nuevas características, sigue la estructura existente:
+When adding new features, follow the existing structure:
 
 ```text
 apps/

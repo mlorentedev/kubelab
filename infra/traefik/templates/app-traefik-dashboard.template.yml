@@ -8,5 +8,6 @@ http:
       middlewares:
         - auth@file
         - secure-headers@file
+        - compress@file
         - rate-limit@file
         - error-pages

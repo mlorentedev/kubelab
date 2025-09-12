@@ -1,6 +1,6 @@
 package models
 
-// ResourceRequest representa una solicitud de recurso
+// ResourceRequest represents a resource request
 type ResourceRequest struct {
 	Email      string   `json:"email"`
 	ResourceID string   `json:"resource_id"`
@@ -9,7 +9,7 @@ type ResourceRequest struct {
 	UtmSource  string   `json:"utm_source"`
 }
 
-// ResourceResult representa el resultado de una operación de recurso
+// ResourceResult represents the result of a resource operation
 type ResourceResult struct {
 	HttpCode int    `json:"httpCode"`
 	Success  bool   `json:"success"`
@@ -23,7 +23,7 @@ type ResourceEmailScheduleOptions struct {
 	DelayMinutes int
 }
 
-// ResourceEmailOptions representa opciones para envío de email con recurso
+// ResourceEmailOptions represents options for sending email with resource
 type ResourceEmailOptions struct {
 	Email         string `json:"email"`
 	ResourceID    string `json:"resourceId"`

@@ -8,6 +8,7 @@ http:
       middlewares:
         - secure-headers@file
         - rate-limit@file
+        - compress@file
         - error-pages
 
   services:

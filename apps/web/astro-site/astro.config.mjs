@@ -52,7 +52,9 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       '*.mlorente.dev',
-      '*.mlorentedev.test'
+      '*.mlorentedev.test',
+      'mlorentedev.test',
+      'mlorente.dev',
     ],
   },
   vite: {
