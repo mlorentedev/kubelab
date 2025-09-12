@@ -1,0 +1,155 @@
+site_name: ${SITE_NAME}
+site_url: ${SITE_URL}
+docs_dir: ${DOCS_DIR_REL}
+use_directory_urls: true
+
+theme:
+  name: material
+  language: ${SITE_LANG}
+  custom_dir: docs/overrides
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Cambiar a modo oscuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Cambiar a modo claro
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - header.autohide
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - content.footnote.tooltips
+
+extra_javascript:
+  - assets/branch-data.js
+  - assets/branch-switcher.js
+  - assets/navigation.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+extra_css:
+  - assets/branch-switcher.css
+  - assets/minimal.css
+
+extra:
+  homepage: ${SITE_URL}
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mlorente
+      name: GitHub Profile
+    - icon: fontawesome/brands/linkedin
+      link: https://linkedin.com/in/manulorente
+      name: LinkedIn Profile
+    - icon: fontawesome/solid/globe
+      link: https://mlorente.dev
+      name: Portfolio Website
+  version:
+    provider: mike
+    default: latest
+  status:
+    new: Recently added
+    deprecated: Deprecated
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+      lang: 
+        - es
+        - en
+  - minify:
+      minify_html: true
+      minify_css: true
+      minify_js: true
+      htmlmin_opts:
+        remove_comments: true
+        remove_empty_space: true
+        reduce_boolean_attributes: true
+        remove_optional_attribute_quotes: true
+  - awesome-pages:
+      filename: .pages
+      collapse_single_pages: true
+      strict: false
+  - include-markdown:
+      preserve_includer_indent: true
+      dedent: false
+      trailing_newlines: true
+      comments: true
+  - glightbox:
+      touchNavigation: true
+      loop: false
+      effect: zoom
+      slide_effect: slide
+      width: 100%
+      height: auto
+      zoomable: true
+      draggable: true
+      auto_caption: true
+      caption_position: bottom
+      background: none
+      shadow: true
+      manual: false
+  - section-index
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      permalink_title: Enlace permanente
+  - tables
+  - fenced_code
+  - admonition
+  - footnotes
+  - attr_list
+  - def_list
+  - md_in_html
+  - abbr
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.keys
+  - pymdownx.tasklist:
+      custom_checkbox: true

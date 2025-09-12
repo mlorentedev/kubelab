@@ -6,8 +6,10 @@ http:
         - {{TRAEFIK_ENTRYPOINT}}
       service: {{APP_N8N_NAME}}
       middlewares:
+        - auth@file
         - secure-headers@file
         - rate-limit@file
+        - compress@file
         - error-pages
 
   services:
