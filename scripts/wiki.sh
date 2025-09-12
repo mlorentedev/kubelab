@@ -84,7 +84,6 @@ collect_readmes() {
   done
 
   log_info "Collecting READMEs from ${guides_dir}/ → ${guides_dst_dir}/"
-  
   if [ -d "${PROJECT_ROOT}/${guides_dir}" ]; then
     local found_subdirs=false
     for d in "${PROJECT_ROOT}/${guides_dir}/"*/ ; do
@@ -105,15 +104,13 @@ collect_readmes() {
     done
     
     # If no subdirectories found, try direct .md files and create subdirectories for each
-    if [ "$found_subdirs" = false ]; then
-      for f in "${PROJECT_ROOT}/${guides_dir}/"*.md ; do
-        [ -f "$f" ] || continue
-        local filename="$(basename "$f" .md)"
-        local dd="${PROJECT_ROOT}/${guides_dst_dir}/${filename}"
-        mkdir -p "$dd"
-        iconv -f UTF-8 -t UTF-8 -c "$f" > "${dd}/index.md" 2>/dev/null || cp "$f" "${dd}/index.md"
-      done
-    fi
+    for f in "${PROJECT_ROOT}/${guides_dir}/"*.md ; do
+      [ -f "$f" ] || continue
+      local filename="$(basename "$f" .md)"
+      local dd="${PROJECT_ROOT}/${guides_dst_dir}/${filename}"
+      mkdir -p "$dd"
+      iconv -f UTF-8 -t UTF-8 -c "$f" > "${dd}/index.md" 2>/dev/null || cp "$f" "${dd}/index.md"
+    done
   fi
 
   # Collect scripts documentation from the actual scripts README
@@ -137,6 +134,9 @@ EOF
 Select an app from the sidebar.
 EOF
   fi
+
+  # Fix links to other markdown files to point to directories instead
+  find "${PROJECT_ROOT}/apps/wiki/docs" -name "*.md" -exec sed -i -E 's|\]\(([A-Za-z0-9_-]+)\.md\)|](\1/)|g' {} +
 }
 
 branch_slug() {
@@ -410,8 +410,9 @@ generate_section_index() {
   local slug="$1"         # e.g. hotfix-ci-cd-pipeline-fix
   local section="$2"      # e.g. apps | infra | guides
   local title="$3"        # e.g. Apps | Infra | Guides
-  local base="${SITE_DIR}/${slug}/${section}"
-  
+  local site_dir="${SITE_DIR:-${PROJECT_ROOT}/apps/wiki/site}"  
+  local base="${site_dir}/${slug}/${section}"
+
   # Create the directory if it doesn't exist (fixes missing infra issue)
   mkdir -p "${base}"
 
