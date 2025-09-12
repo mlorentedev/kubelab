@@ -1,6 +1,6 @@
 services:
   blog:
-    image: "${REGISTRY}/${IMAGE_NAME}:${TAG}"
+    image: "${REGISTRY}/${IMAGE_NAME}:dev"
     build:
       context: .
       dockerfile: Dockerfile

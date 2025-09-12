@@ -1,15 +1,16 @@
 ---
 layout: post
-title: The Harmony of DevOps and SRE
+title: Los primeros pasos del cubelab
 date: "2024-02-18"
 categories: 
   - "DevOps"
-  - "Site Reliability Engineering"
+  - "Cubelab"
 tags: 
   - "devops"
-  - "sre"
+  - "cubelab"
 readtime: true
-lang: en
+lang: es
+author: Manu Lorente
 ---
 
 > ⚡️ **TL;DR**  
@@ -34,10 +35,6 @@ In this analogy, DevOps and SRE work hand-in-hand. DevOps brings new ideas to th
 Before the advent of DevOps, the software development landscape was different. It was a time characterized by siloed teams, rigid methodologies, and a reliance on manual processes that often led to sluggish and unreliable software delivery. Do you remember using Filezilla to upload files to a server?
 
 Let’s take a closer look at some of the defining features of traditional software development.
-
-<div align="center">
-  <img src="/assets/img/2024-02-18/waterfall-model.png" alt="Waterfall Model">
-</div>
 
 #### Waterfall Model  
 
@@ -149,5 +146,3 @@ DevOps is set to transform even further as new trends and technologies emerge. O
 Another important trend is the emphasis on **observability and monitoring**, ensuring that applications run smoothly in dynamic environments. DevOps will also extend collaboration across the entire value chain, aligning all stakeholders with business objectives. The concept of **"Everything as Code" (EaC)** will further enhance consistency and automation in managing infrastructure and configurations. Finally, continuous learning and upskilling will be crucial for DevOps professionals to remain relevant in this evolving landscape.
 
 However, the future of DevOps also comes with challenges, such as managing the complexity of new technologies and ensuring robust security. Building a **collaborative culture** will require ongoing investment in training and communication. Despite these hurdles, by harnessing automation, AI, and innovative tools, DevOps teams will drive faster, more secure software releases, leading to enhanced customer experiences and a competitive edge in the digital world.
-
-Thanks to read this post until the end. If you have any questions or feedback, feel free to reach out. See you in the next post! 🚀

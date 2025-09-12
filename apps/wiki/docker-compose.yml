@@ -1,6 +1,6 @@
 services:
   wiki:
-    image: "${REGISTRY}/${IMAGE_NAME}:${TAG}"
+    image: "${REGISTRY}/${IMAGE_NAME}:latest"
     build:
       context: .
       dockerfile: Dockerfile

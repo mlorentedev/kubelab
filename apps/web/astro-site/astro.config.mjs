@@ -53,7 +53,8 @@ export default defineConfig({
       'localhost',
       '*.mlorente.dev',
       '*.mlorentedev.test',
-      'web.mlorentedev.test',
+      'mlorentedev.test',
+      'mlorente.dev',
     ],
   },
   vite: {
