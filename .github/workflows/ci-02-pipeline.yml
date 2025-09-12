@@ -17,6 +17,10 @@ on:
       context:
         description: "Docker build context"
         value: ${{ jobs.app-pipeline.outputs.context }}
+      should_build:
+        description: "Whether the app should be built"
+        value: ${{ jobs.app-pipeline.outputs.should_build }}
+
 
 jobs:
   app-pipeline:
@@ -26,6 +30,7 @@ jobs:
       docker_version: ${{ steps.docker_version.outputs.version }}
       sha_short: ${{ steps.short_sha.outputs.sha }}
       context: ${{ steps.context.outputs.context }}
+      should_build: ${{ steps.changes.outputs.should_build }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,24 +38,24 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Validate app exists and has required files
+      - name: Validate app and detect changes
+        id: changes
         run: |
           APP="${{ inputs.app }}"
           echo "Validating app: $APP"
 
           # Check if app directory exists
           if [ ! -d "apps/$APP" ]; then
-            echo "::error::App directory apps/$APP does not exist"
-            echo "Available apps:"
-            ls -la apps/ || echo "No apps directory found"
-            exit 1
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::App directory apps/$APP does not exist, skipping"
+            exit 0
           fi
 
           # Check if Dockerfile exists
           if [ ! -f "apps/$APP/Dockerfile" ]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
             echo "::error::Dockerfile not found for app $APP"
-            echo "Required file: apps/$APP/Dockerfile"
-            exit 1
+            exit 0
           fi
 
           # Check if docker-compose files exist (at least one should exist)
@@ -63,200 +68,127 @@ jobs:
           echo "- Directory: apps/$APP ✅"
           echo "- Dockerfile: apps/$APP/Dockerfile ✅"
 
-      - name: Detect branch type and versioning strategy
-        id: branch_detection
-        run: |
-          BRANCH_NAME="${{ github.ref_name }}"
-          echo "Current branch: $BRANCH_NAME"
+          # Simple change detection
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # For push events, check if there are changes since last commit
+            if git diff --quiet HEAD~1 HEAD -- apps/$APP/; then
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::No changes detected for $APP, skipping build"
+              exit 0
+            fi
+          fi
 
-          case "$BRANCH_NAME" in
-            feature/*)
-              echo "branch_type=feature" >> "$GITHUB_OUTPUT"
-              echo "version_strategy=alpha" >> "$GITHUB_OUTPUT"
-              echo "use_semver=false" >> "$GITHUB_OUTPUT"
-              echo "::notice::Feature branch detected - will use alpha versioning"
-              ;;
-            hotfix/*)
-              echo "branch_type=hotfix" >> "$GITHUB_OUTPUT"
-              echo "version_strategy=beta" >> "$GITHUB_OUTPUT"
-              echo "use_semver=false" >> "$GITHUB_OUTPUT"
-              echo "::notice::Hotfix branch detected - will use beta versioning"
-              ;;
-            develop)
-              echo "branch_type=develop" >> "$GITHUB_OUTPUT"
-              echo "version_strategy=rc" >> "$GITHUB_OUTPUT"
-              echo "use_semver=true" >> "$GITHUB_OUTPUT"
-              echo "::notice::Develop branch detected - will use SEMVER with RC"
-              ;;
-            master|main)
-              echo "branch_type=main" >> "$GITHUB_OUTPUT"
-              echo "version_strategy=stable" >> "$GITHUB_OUTPUT"
-              echo "use_semver=true" >> "$GITHUB_OUTPUT"
-              echo "::notice::Main branch detected - will create stable version"
-              ;;
-            *)
-              echo "::warning::Unrecognized branch pattern: $BRANCH_NAME - defaulting to patch behavior"
-              echo "branch_type=other" >> "$GITHUB_OUTPUT"
-              echo "version_strategy=patch" >> "$GITHUB_OUTPUT"
-              echo "use_semver=true" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          # If we get here, we should build
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Changes detected for $APP, proceeding with build"
 
       - name: Calculate Docker version for app
         id: docker_version
+        if: steps.changes.outputs.should_build == 'true'
         run: |
           APP="${{ inputs.app }}"
-          BRANCH_TYPE="${{ steps.branch_detection.outputs.branch_type }}"
-          VERSION_STRATEGY="${{ steps.branch_detection.outputs.version_strategy }}"
-
-          echo "Calculating Docker version for app: $APP"
-          echo "Strategy: $VERSION_STRATEGY"
-
-          # Get current stable version
-          get_current_version() {
-            local app=$1
-            local last_tag=$(git tag -l "${app}-v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1)
-            if [ -z "$last_tag" ]; then
-              echo "0.0.0"
-            else
-              echo "$last_tag" | sed "s/${app}-v//"
-            fi
-          }
-
-          # Analyze commits and determine bump type
-          analyze_commits() {
-            local app=$1
-            local base_ref=$2
-            
-            if [ -n "$base_ref" ]; then
-              local commits=$(git log ${base_ref}..HEAD --oneline -- apps/${app}/ 2>/dev/null || echo "")
-            else
-              local commits=$(git log --oneline -- apps/${app}/ 2>/dev/null || echo "")
-            fi
-            
-            # Skip if no app changes
-            if [ -z "$(echo "$commits" | grep -v '^$')" ]; then
-              echo "skip"
-              return
-            fi
-            
-            # Determine bump type
-            if echo "$commits" | grep -q "BREAKING CHANGE\|!:"; then
-              echo "major"
-            elif echo "$commits" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
-              echo "minor"
-            else
-              echo "patch"
-            fi
-          }
-
-          # Calculate next version
-          bump_version() {
-            local current=$1
-            local bump_type=$2
-            
-            if [ "$current" = "0.0.0" ]; then
-              case "$bump_type" in
-                major) echo "1.0.0" ;;
-                minor) echo "0.1.0" ;;
-                *) echo "0.0.1" ;;
-              esac
-              return
-            fi
-            
-            IFS='.' read -ra parts <<< "$current"
-            local major=${parts[0]:-0}
-            local minor=${parts[1]:-0}
-            local patch=${parts[2]:-0}
-            
-            case "$bump_type" in
-              major)
-                echo "$((major + 1)).0.0"
-                ;;
-              minor)
-                echo "${major}.$((minor + 1)).0"
-                ;;
-              patch)
-                echo "${major}.${minor}.$((patch + 1))"
-                ;;
-            esac
-          }
-
-          # Count commits for prerelease numbers
-          count_commits() {
-            local app=$1
-            local base_ref=$2
-            local count=$(git rev-list --count HEAD ^${base_ref} -- apps/${app}/ 2>/dev/null || echo "1")
-            [ "$count" -eq 0 ] && count=1
-            echo "$count"
-          }
-
-          # Main version calculation
-          CURRENT_VERSION=$(get_current_version "$APP")
+          BRANCH="${{ github.ref_name }}"
           
-          case "$VERSION_STRATEGY" in
-            alpha)
-              BASE_REF=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~10")
-              BUMP_TYPE=$(analyze_commits "$APP" "$BASE_REF")
-              ;;
-            beta)
-              BASE_REF=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || echo "HEAD~10")
-              BUMP_TYPE="patch"  # Hotfixes are always patches
-              ;;
-            rc|stable)
-              LAST_TAG=$(git tag -l "${APP}-v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1)
-              BASE_REF="$LAST_TAG"
-              BUMP_TYPE=$(analyze_commits "$APP" "$BASE_REF")
-              ;;
-          esac
-
-          # Skip if no changes
-          if [ "$BUMP_TYPE" = "skip" ]; then
-            echo "version=skip" >> "$GITHUB_OUTPUT"
-            echo "::notice::No changes detected for $APP"
-            exit 0
+          echo "Calculating simplified version for $APP on branch $BRANCH"
+          
+          # Get last stable version (no pre-releases)
+          LAST_STABLE=$(git tag -l "${APP}-v*" --sort=-version:refname | grep -v "pre\|rc" | head -n1)
+          if [ -z "$LAST_STABLE" ]; then
+            BASE_VERSION="0.0.1"
+            echo "No previous stable version found, using $BASE_VERSION"
+          else
+            BASE_VERSION=$(echo "$LAST_STABLE" | sed "s/${APP}-v//")
+            echo "Last stable version: $BASE_VERSION"
           fi
-
-          # Calculate base version
-          BASE_VERSION=$(bump_version "$CURRENT_VERSION" "$BUMP_TYPE")
           
-          # Apply strategy suffix
-          case "$VERSION_STRATEGY" in
-            alpha)
-              NUMBER=$(count_commits "$APP" "$BASE_REF")
-              DOCKER_VERSION="${BASE_VERSION}-alpha.${NUMBER}"
+          # Simplified versioning strategy
+          case "$BRANCH" in
+            master|main)
+              # SEMANTIC VERSIONING ONLY HERE
+              echo "Master branch - analyzing commits for semantic versioning"
+              
+              # Get commits since last stable tag for this app
+              if [ -n "$LAST_STABLE" ]; then
+                COMMITS=$(git log ${LAST_STABLE}..HEAD --oneline -- apps/$APP/ 2>/dev/null || echo "")
+              else
+                COMMITS=$(git log --oneline -- apps/$APP/ 2>/dev/null || echo "")
+              fi
+              
+              echo "Commits to analyze for semantic versioning:"
+              echo "$COMMITS"
+              
+              # Skip if no changes
+              if [ -z "$(echo "$COMMITS" | grep -v '^$')" ]; then
+                echo "version=skip" >> "$GITHUB_OUTPUT"
+                echo "::notice::No changes detected for $APP since last stable release"
+                exit 0
+              fi
+              
+              # Determine semantic version bump
+              if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
+                BUMP="major"
+                echo "::notice::Breaking change detected - MAJOR bump"
+              elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
+                BUMP="minor"
+                echo "::notice::Feature detected - MINOR bump"
+              elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ fix(\(.*\))?:"; then
+                BUMP="patch"
+                echo "::notice::Fix detected - PATCH bump"
+              else
+                BUMP="patch"
+                echo "::notice::Other changes detected - PATCH bump (default)"
+              fi
+              
+              # Calculate new semantic version
+              IFS='.' read -ra parts <<< "$BASE_VERSION"
+              MAJOR=${parts[0]:-0}
+              MINOR=${parts[1]:-0}
+              PATCH=${parts[2]:-0}
+              
+              case "$BUMP" in
+                major) VERSION="$((MAJOR + 1)).0.0" ;;
+                minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+                patch) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+              esac
+              
+              echo "::notice::Semantic version calculated: $VERSION"
               ;;
-            beta)
-              NUMBER=$(count_commits "$APP" "$BASE_REF")
-              DOCKER_VERSION="${BASE_VERSION}-beta.${NUMBER}"
+              
+            develop)
+              # Release candidate with simple commit counter
+              RC_NUM=$(git rev-list --count HEAD ^origin/main -- apps/$APP/ 2>/dev/null || echo "1")
+              [ "$RC_NUM" -eq 0 ] && RC_NUM=1
+              VERSION="${BASE_VERSION}-rc.${RC_NUM}"
+              echo "::notice::Develop branch - RC version: $VERSION"
               ;;
-            rc)
-              NUMBER=$(count_commits "$APP" "$BASE_REF")
-              DOCKER_VERSION="${BASE_VERSION}-rc.${NUMBER}"
-              ;;
-            stable)
-              DOCKER_VERSION="$BASE_VERSION"
+              
+            *)
+              # Everything else: unified pre-release (feature, hotfix, etc.)
+              PRE_NUM=$(git rev-list --count HEAD ^origin/develop -- apps/$APP/ 2>/dev/null || echo "1")
+              [ "$PRE_NUM" -eq 0 ] && PRE_NUM=1
+              VERSION="${BASE_VERSION}-pre.${PRE_NUM}"
+              echo "::notice::Feature/hotfix branch - pre-release version: $VERSION"
               ;;
           esac
-
-          echo "version=$DOCKER_VERSION" >> "$GITHUB_OUTPUT"
-          echo "::notice::Generated version for $APP: $DOCKER_VERSION (base: $BASE_VERSION, type: $BUMP_TYPE)"
+          
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::Generated version for $APP: $VERSION"
 
       # Blog Jekyll site validation
       - name: Set up Ruby
-        if: ${{ inputs.app == 'blog' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'blog'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
           working-directory: './apps/blog/jekyll-site'
 
       - name: Install dependencies
-        if: ${{ inputs.app == 'blog' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'blog'
         working-directory: './apps/blog/jekyll-site'
         run: bundle install
 
       - name: Build Jekyll site
-        if: ${{ inputs.app == 'blog' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'blog'
         working-directory: './apps/blog/jekyll-site'
         env:
           JEKYLL_ENV: production
@@ -264,20 +196,20 @@ jobs:
 
       # API
       - name: Set up Go (for api)
-        if: ${{ inputs.app == 'api' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
         uses: actions/setup-go@v5
         with:
           go-version: 1.21
           cache-dependency-path: './apps/api/src/go.sum'
 
       - name: Build API binary
-        if: ${{ inputs.app == 'api' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
         working-directory: ./apps/api/src
         run: go build -o api-binary ./cmd/server
 
       # Web
       - name: Set up Node.js (for web)
-        if: ${{ inputs.app == 'web' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -285,24 +217,24 @@ jobs:
           cache-dependency-path: './apps/web/astro-site/package-lock.json'
 
       - name: Install dependencies (web)
-        if: ${{ inputs.app == 'web' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
         working-directory: './apps/web/astro-site'
         run: npm ci
 
       - name: Build Astro site
-        if: ${{ inputs.app == 'web' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
         working-directory: './apps/web/astro-site'
         run: npm run build
 
       # Wiki
       - name: Set up Python (for wiki)
-        if: ${{ inputs.app == 'wiki' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
       - name: Install MkDocs + Material
-        if: ${{ inputs.app == 'wiki' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
         run: |
           pip install --upgrade pip
           pip install \
@@ -317,11 +249,11 @@ jobs:
           mkdocs-section-index
 
       - name: Install zsh
-        if: ${{ inputs.app == 'wiki' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
         run: sudo apt-get update && sudo apt-get install -y zsh
       
       - name: Build wiki multiversion site
-        if: ${{ inputs.app == 'wiki' }}
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
         run: zsh scripts/wiki.sh sync
 
       - name: Determine Docker context
@@ -347,24 +279,34 @@ jobs:
           esac
 
       - name: Log versioning decision
+        if: steps.changes.outputs.should_build == 'true'
         run: |
           echo "## Docker Versioning Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **App**: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch Type**: ${{ steps.branch_detection.outputs.branch_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Strategy**: ${{ steps.branch_detection.outputs.version_strategy }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Use SEMVER**: ${{ steps.branch_detection.outputs.use_semver }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Docker Version**: ${{ steps.docker_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit SHA**: ${GITHUB_SHA::7}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Note**: This workflow calculates Docker image versions only. GitHub tags are managed by the global release workflow." >> $GITHUB_STEP_SUMMARY
 
-      - name: Create app-specific tag
-        if: steps.docker_version.outputs.version != 'skip' && (steps.branch_detection.outputs.version_strategy == 'stable' || steps.branch_detection.outputs.version_strategy == 'rc')
+          case "${{ github.ref_name }}" in
+            master|main)
+              echo "**Strategy**: Semantic versioning (stable release)" >> $GITHUB_STEP_SUMMARY
+              echo "- Analyzed conventional commits for version bump" >> $GITHUB_STEP_SUMMARY
+              ;;
+            develop)
+              echo "**Strategy**: Release candidate with commit counter" >> $GITHUB_STEP_SUMMARY
+              ;;
+            *)
+              echo "**Strategy**: Pre-release with commit counter" >> $GITHUB_STEP_SUMMARY
+              echo "- Unified approach for all feature/hotfix branches" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
+          
+      - name: Create git tag for stable releases
+        if: steps.changes.outputs.should_build == 'true' && steps.docker_version.outputs.version != 'skip' && (github.ref_name == 'master' || github.ref_name == 'main')
         run: |
           APP="${{ inputs.app }}"
           VERSION="${{ steps.docker_version.outputs.version }}"
-          STRATEGY="${{ steps.branch_detection.outputs.version_strategy }}"
           
           APP_TAG="${APP}-v${VERSION}"
           
@@ -374,24 +316,23 @@ jobs:
           
           # Check if tag already exists
           if git rev-parse "refs/tags/$APP_TAG" >/dev/null 2>&1; then
-            echo "::error::App tag $APP_TAG already exists!"
-            exit 1
+            echo "::warning::App tag $APP_TAG already exists, skipping tag creation"
+          else
+            # Create and push app-specific tag for stable releases only
+            git tag -a "$APP_TAG" -m "Release $APP v$VERSION"
+            git push origin "$APP_TAG"
+            echo "::notice::Successfully created stable release tag: $APP_TAG"
           fi
-          
-          # Create and push app-specific tag
-          git tag "$APP_TAG"
-          git push origin "$APP_TAG"
-          
-          echo "::notice::Successfully created app tag: $APP_TAG"
 
       - name: Extract short SHA
         id: short_sha
+        if: steps.changes.outputs.should_build == 'true'
         run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
   call-publish:
     name: Build and Push Docker Image for ${{ inputs.app }}
     needs: app-pipeline
-    if: needs.app-pipeline.outputs.docker_version != 'skip'
+    if: needs.app-pipeline.outputs.should_build == 'true' && needs.app-pipeline.outputs.docker_version != 'skip'
     uses: ./.github/workflows/ci-03-publish.yml
     with:
       app: ${{ inputs.app }}

@@ -39,14 +39,14 @@ jobs:
       - name: Verify required files exist
         run: |
           # Check if required Docker files exist
-          for app in api blog web; do
+          for app in api blog web wiki; do
             if [ ! -f "apps/$app/Dockerfile" ]; then
               echo "Missing Dockerfile for $app"
               exit 1
             fi
           done
           # Check if .env.example files exist
-          for app in api blog web monitoring n8n portainer; do
+          for app in api blog grafana loki minio n8n portainer uptime web wiki; do
             if [ ! -f "apps/$app/.env.example" ]; then
               echo "Missing .env.example for $app"
               exit 1

@@ -1,12 +1,12 @@
 # CubeLab
 
-Este repositorio contiene la configuración y documentación de un cubelab diseñado para emular un entorno de nube, utilizando hardware de bajo costo y software optimizado. El objetivo es crear un entorno de pruebas para servicios en la nube, con un enfoque en la eficiencia energética y el uso de recursos.
+This repository contains the configuration and documentation for a cubelab designed to emulate a cloud environment, using low-cost hardware and optimized software. The goal is to create a testing environment for cloud services, with a focus on energy efficiency and resource usage.
 
 ## Hardware
 
-El coste total del cubelab es de aproximadamente $700 USD, incluyendo adaptadores de corriente, cables y almacenamiento. A continuación se detalla la configuración del hardware:
+The total cost of the cubelab is approximately $700 USD, including power adapters, cables, and storage. The hardware configuration is detailed below:
 
-| Dispositivo                | Almacenamiento | CPU/GPU                                   | Precio |
+| Device                | Storage | CPU/GPU                                   | Price |
 |-------------------------|----------------|-------------------------------------------|--------|
 | MiniPC Acemagic         | 256GB SSD       | 12th Alder Lake N100 Intel 12GB-LPDDR4 | $150   |
 | Raspberry Pi 4-B       | 32GB SD        | 64-bit Quad-Core ARM A72 8GB-LPDDR4     | $100   |
@@ -14,11 +14,11 @@ El coste total del cubelab es de aproximadamente $700 USD, incluyendo adaptadore
 | Jetson Nano P3450      | 128GB SD       | 64-bit Quad-core 128-Core GPU ARM A57 4GB-LPDDR4 | $200   |
 | TP-Link TLSD10059      | 5 ports        | 1GigE                                     | $25    |
 
-Este cubelab está compuesto por un MiniPC ACEMAGICIAN, un Raspberry Pi 4-B y dos Jetson Nano P3450, conectados a un switch TP-Link TLSD10059. El MiniPC actúa como nodo master y control plane, el Raspberry Pi como puerta de enlace y nodo de borde, mientras que los Jetson Nano funcionan como nodos de trabajo.  
+This cubelab consists of an ACEMAGICIAN MiniPC, a Raspberry Pi 4-B, and two Jetson Nano P3450 devices, connected through a TP-Link TLSD10059 switch. The MiniPC acts as the master node and control plane, the Raspberry Pi serves as the gateway and edge node, while the Jetson Nano devices function as worker nodes.
 
-El consumo energético estimado para el cubelab es de aproximadamente 64.8 kWh al mes, lo que equivale a un coste aproximado de $13 USD, considerando un precio de $0.2 USD por kWh. Esto suponiendo un uso continuo de 24 horas al día, 7 días a la semana.
+The estimated energy consumption for the cubelab is approximately 64.8 kWh per month, which equals an approximate cost of $13 USD, considering a price of $0.2 USD per kWh. This assumes continuous usage 24 hours a day, 7 days a week.
 
-| Dispositivo                | Consumo (W)    | Consumo mensual (kWh) | Costo mensual (USD) |
+| Device                | Consumption (W)    | Monthly consumption (kWh) | Monthly cost (USD) |
 |-------------------------|----------------|------------------------|---------------------|
 | MiniPC Acemagic         | 30W            | 21.6 kWh               | $4.32               |
 | Raspberry Pi 4-B       | 15W            | 10.8 kWh               | $2.16               |
@@ -28,156 +28,157 @@ El consumo energético estimado para el cubelab es de aproximadamente 64.8 kWh a
 | **Total**              |                | **64.8 kWh**           | **$12.96**           |
 
 ## Software
-
-| Dispositivo                | Almacenamiento | Rol/Función                     | Software                                      |
+  
+| Device                | Storage | Role/Function                     | Software                                      |
 |-------------------------|----------------|----------------------------------|-----------------------------------------------|
 | MiniPC Acemagician     | 256GB SSD       | Control Plane/Kubernetes Master  | Ubuntu Server 20.04 LTS (x86_64) + k3s      |
 | Raspberry Pi 4-B       | 32GB SD        | API Gateway/Edge Node           | OpenWrt (ARM64)       |
+| Raspberry Pi 3       | 32GB SD        | NAT bridge          | Raspberry Pi OS Lite (ARM64)       |
 | Jetson Nano P3450      | 64GB SD        | Multi-purpose Worker Node      | Ubuntu Server 20.04 LTS (ARM64) + K3s Worker |
-| Jetson Nano P3450      | 128GB SD       | Multi-purpose Worker Node       | BalenaOS (Jetson ARM64) + Docker |
+| Jetson Nano P3450      | 128GB SD       | Ollama Server      | JetPack 4.6.1 (Ubuntu 18.04) |
 
-## Propósitos y Servicios de Cada Nodo
+## Purposes and Services for Each Node
 
-### MiniPC ACEMAGICIAN - Control Plane Principal
+### MiniPC ACEMAGICIAN - Main Control Plane
 
-El MiniPC ACEMAGICIAN actúa como cerebro del CubeLab, aprovechando su mayor potencia de procesamiento, RAM y almacenamiento SSD para ejecutar:
+The ACEMAGICIAN MiniPC acts as the brain of the CubeLab, leveraging its higher processing power, RAM, and SSD storage to run:
 
-- **Plano de Control Kubernetes**:
-  - K3s Control Plane completo (API Server, Scheduler, Controller Manager, etcd)
-  - Gestión centralizada de políticas y seguridad del clúster
-  - Programación inteligente de cargas de trabajo
+- **Kubernetes Control Plane**:
+  - Complete K3s Control Plane (API Server, Scheduler, Controller Manager, etcd)
+  - Centralized cluster policy and security management
+  - Intelligent workload scheduling
 
-- **Monitorización y Observabilidad**:
-  - Stack Prometheus-Grafana-Alertmanager-Loki
-  - Almacenamiento centralizado de métricas y logs
-  - Dashboards personalizados para visualización del estado del clúster
+- **Monitoring and Observability**:
+  - Prometheus-Grafana-Alertmanager-Loki stack
+  - Centralized metrics and logs storage
+  - Custom dashboards for cluster status visualization
 
-- **Almacenamiento Principal**:
-  - PostgreSQL para bases de datos relacionales
-  - MinIO para emulación de servicios S3
-  - Longhorn para gestión de volúmenes persistentes
+- **Primary Storage**:
+  - PostgreSQL for relational databases
+  - MinIO for S3 service emulation
+  - Longhorn for persistent volume management
 
-- **CI/CD y Gestión de Aplicaciones**:
-  - Registry privado de contenedores
-  - Pipelines de integración con Tekton/Jenkins X
-  - ArgoCD y Helm para despliegues GitOps
+- **CI/CD and Application Management**:
+  - Private container registry
+  - Integration pipelines with Tekton/Jenkins X
+  - ArgoCD and Helm for GitOps deployments
 
-- **Emulación de Servicios Cloud Enterprise**:
+- **Enterprise Cloud Services Emulation**:
   - AWS: EKS, RDS, CloudWatch
   - Azure: AKS, SQL Database, Azure Monitor
   - GCP: GKE, Cloud SQL, Cloud Monitoring
 
-### Raspberry Pi 4-B - Gateway y Edge Processing
+### Raspberry Pi 4-B - Gateway and Edge Processing
 
-La Raspberry Pi 4-B funciona como punto de entrada al clúster y procesador de borde:
+The Raspberry Pi 4-B functions as the cluster entry point and edge processor:
 
-- **API Gateway y Routing**:
-  - Kong/Traefik para gestión de tráfico, balanceo y transformación
-  - Políticas de rate limiting y circuit breaking
-  - Logging y análisis de tráfico API
+- **API Gateway and Routing**:
+  - Kong/Traefik for traffic management, load balancing, and transformation
+  - Rate limiting and circuit breaking policies
+  - API traffic logging and analysis
 
-- **Seguridad y Gestión de Identidad**:
-  - Keycloak para autenticación/autorización centralizada
+- **Security and Identity Management**:
+  - Keycloak for centralized authentication/authorization
   - OAuth2/OpenID Connect
-  - Single Sign-On para aplicaciones del clúster
+  - Single Sign-On for cluster applications
 
-- **Portal de Administración**:
-  - Interfaz web unificada para gestión del entorno
-  - Dashboard centralizado con vistas por roles
-  - Consola para despliegue y gestión de aplicaciones
+- **Administration Portal**:
+  - Unified web interface for environment management
+  - Centralized dashboard with role-based views
+  - Console for application deployment and management
 
-- **Edge Computing y Networking**:
-  - Edge Functions para procesamiento local
-  - Cache distribuido tipo CDN
-  - Enrutamiento basado en geolocalización simulada
+- **Edge Computing and Networking**:
+  - Edge Functions for local processing
+  - CDN-like distributed cache
+  - Simulated geolocation-based routing
 
-- **Emulación de Servicios Cloud Edge**:
+- **Cloud Edge Services Emulation**:
   - AWS: API Gateway, CloudFront, IoT Edge
   - Azure: API Management, Front Door, IoT Edge
   - GCP: Apigee, Cloud CDN, Edge TPU
 
-### Jetson Nano #1 - GPU Computing y Análisis de Datos
+### Jetson Nano #1 - GPU Computing and Data Analysis
 
-El primer Jetson Nano se especializa en cargas de trabajo que aprovechan su GPU:
+The first Jetson Nano specializes in workloads that leverage its GPU:
 
-- **Computación GPU y Aceleración Hardware**:
-  - Inferencia de modelos IA/ML con aceleración GPU
-  - Procesamiento de visión computacional
-  - Transcoding multimedia
+- **GPU Computing and Hardware Acceleration**:
+  - AI/ML model inference with GPU acceleration
+  - Computer vision processing
+  - Multimedia transcoding
 
-- **Plataformas de Machine Learning**:
-  - TensorFlow, PyTorch y ONNX Runtime
-  - Jupyter para experimentación
-  - MLflow y Kubeflow para flujos ML
+- **Machine Learning Platforms**:
+  - TensorFlow, PyTorch, and ONNX Runtime
+  - Jupyter for experimentation
+  - MLflow and Kubeflow for ML workflows
 
-- **Procesamiento de Datos e Imágenes**:
-  - Pipelines de procesamiento en tiempo real
-  - APIs de análisis de imágenes y detección de objetos
-  - OCR y generación de embeddings
+- **Data and Image Processing**:
+  - Real-time processing pipelines
+  - Image analysis and object detection APIs
+  - OCR and embedding generation
 
-- **Emulación de Servicios Cloud AI**:
+- **Cloud AI Services Emulation**:
   - AWS: SageMaker, Rekognition, Comprehend
   - Azure: Cognitive Services, Computer Vision
   - GCP: Vertex AI, Vision AI, Natural Language
 
-### Jetson Nano #2 - Servicios Serverless y Datos NoSQL
+### Jetson Nano #2 - Serverless Services and NoSQL Data
 
-El segundo Jetson Nano se configura como especialista en servicios serverless y bases NoSQL:
+The second Jetson Nano is configured as a specialist in serverless services and NoSQL databases:
 
-- **Infraestructura Serverless**:
-  - OpenFaaS/Kubeless para emulación FaaS
-  - Entornos compatibles con Lambda
-  - Triggers basados en eventos
+- **Serverless Infrastructure**:
+  - OpenFaaS/Kubeless for FaaS emulation
+  - Lambda-compatible environments
+  - Event-based triggers
 
-- **Bases de Datos NoSQL**:
-  - MongoDB para documentos JSON
-  - Redis para caché y estructuras en memoria
-  - Cassandra/ScyllaDB para series temporales
+- **NoSQL Databases**:
+  - MongoDB for JSON documents
+  - Redis for cache and in-memory structures
+  - Cassandra/ScyllaDB for time series
 
-- **Sistemas de Mensajería y Eventos**:
-  - RabbitMQ/NATS para comunicación asíncrona
-  - Implementación de colas y sistemas pub/sub
-  - Flujos de eventos tipo Kafka
+- **Messaging and Event Systems**:
+  - RabbitMQ/NATS for asynchronous communication
+  - Queue and pub/sub system implementation
+  - Kafka-like event flows
 
-- **Microservicios y Contenedores**:
-  - Aplicaciones de referencia basadas en microservicios
-  - Patrones API Gateway, Circuit Breaker, Bulkhead
-  - Service Mesh con Linkerd
+- **Microservices and Containers**:
+  - Reference applications based on microservices
+  - API Gateway, Circuit Breaker, Bulkhead patterns
+  - Service Mesh with Linkerd
 
-- **Emulación de Servicios Cloud Serverless**:
+- **Serverless Cloud Services Emulation**:
   - AWS: Lambda, DynamoDB, SQS/SNS, EventBridge
   - Azure: Functions, Cosmos DB, Service Bus
   - GCP: Cloud Functions, Firestore, Pub/Sub
 
-## Acceso
+## Access
 
-Para acceder a los nodos del cubelab, puedes utilizar SSH. Primero hay que descubrir la IP de cada nodo. Para ello, puedes utilizar el siguiente comando en la terminal:
+To access the cubelab nodes, you can use SSH. First, you need to discover the IP address of each node. You can use the following command in the terminal:
 
 ```bash
 sudo nmap -O $(hostname -I | awk '{print $1}' | cut -d. -f1-3).0/24
 ```
 
-Esto te mostrará una lista de dispositivos conectados a la red local, junto con sus direcciones IP. A partir de este punto, podrás identificar la dirección IP de cada uno de los nodos del cubelab (Raspberry Pi 4-B y Jetson Nano P3450). Es interesante mapearlos a una variable de entorno para facilitar su acceso posterior. como por ejemplo en un archivo `.env`:
+This will show you a list of devices connected to the local network, along with their IP addresses. From this point, you can identify the IP address of each cubelab node (Raspberry Pi 4-B and Jetson Nano P3450). It's useful to map them to environment variables to facilitate later access, for example in a `.env` file:
 
 ```bash
 # .env
-RPI_IP=<IP_DEL_RASPBERRY_PI>
-JETSON1_IP=<IP_DEL_JETSON_NANO_1>
-JETSON2_IP=<IP_DEL_JETSON_NANO_2>
-# Acceso a los nodos
+RPI_IP=<RASPBERRY_PI_IP>
+JETSON1_IP=<JETSON_NANO_1_IP>
+JETSON2_IP=<JETSON_NANO_2_IP>
+# Node access
 export RPI_IP
 export JETSON1_IP
 export JETSON2_IP
 ```
 
-Para cargar las variables de entorno, puedes usar el siguiente comando en la terminal:
+To load the environment variables, you can use the following command in the terminal:
 
 ```bash
 source .env
-# O simplemente exportarlas directamente en la terminal
+# Or simply export them directly in the terminal
 ```
 
-Una vez que tengas la dirección IP de cada nodo, puedes acceder a ellos utilizando SSH. Por ejemplo, para acceder al Raspberry Pi 4-B, utiliza el siguiente comando:
+Once you have the IP address of each node, you can access them using SSH. For example, to access the Raspberry Pi 4-B, use the following command:
 
 ```bash
 ssh pi@${RPI_IP}
@@ -185,4 +186,281 @@ ssh ubuntu@${JETSON1_IP}
 ssh ubuntu@${JETSON2_IP}
 ```
 
-Por defecto, la contraseña del usuario `pi` en el Raspberry Pi es `raspberry`. Para los Jetson Nano, el usuario por defecto es `ubuntu` y la contraseña también es `ubuntu`.
+By default, the password for the `pi` user on the Raspberry Pi is `raspberry`. For the Jetson Nano devices, the default user is `ubuntu` and the password is also `ubuntu`.
+
+# Raspberry Pi setup as NAT bridge
+
+Download rpi-imager from the official website: https://www.raspberrypi.com/software/
+
+```bash
+sudo apt update
+sudo apt install rpi-imager
+```
+
+Install OS lite image using rpi-imager since we do not need a desktop environment in the SD card. Do not forget to configure the Wi-Fi and SSH settings as customization options.
+
+If everything is set up correctly, you should be able to boot your Raspberry Pi and access it via SSH.
+
+First we need to check the IP address of the Raspberry Pi. You can do this by logging into your router and looking for connected devices, or by using a network scanning tool like `nmap`.
+
+```bash
+➜  ~ nmap -sn 10.0.0.0/24
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2025-08-30 19:28 MDT
+Nmap scan report for _gateway (10.0.0.1)
+Host is up (0.024s latency).
+Nmap scan report for msi (10.0.0.9)
+Host is up (0.00013s latency).
+Nmap scan report for 10.0.0.54
+Host is up (0.019s latency).
+Nmap scan report for 10.0.0.144
+Host is up (0.020s latency).
+Nmap scan report for 10.0.0.157
+Host is up (0.035s latency).
+Nmap scan report for 10.0.0.201
+Host is up (0.088s latency).
+Nmap done: 256 IP addresses (6 hosts up) scanned in 3.75 seconds
+
+```
+
+Replace `10.0.0.0/24` with your local network range.
+
+or ping directly to the Raspberry Pi's hostname (usually `raspberrypi`):
+
+```bash
+➜  ~ ping raspberrypi.local
+PING raspberrypi.local (10.0.0.157) 56(84) bytes of data.
+64 bytes from 10.0.0.157: icmp_seq=1 ttl=64 time=17.7 ms
+64 bytes from 10.0.0.157: icmp_seq=2 ttl=64 time=15.4 ms
+64 bytes from 10.0.0.157: icmp_seq=3 ttl=64 time=37.6 ms
+64 bytes from 10.0.0.157: icmp_seq=4 ttl=64 time=35.4 ms
+64 bytes from 10.0.0.157: icmp_seq=5 ttl=64 time=18.8 ms
+^C
+--- raspberrypi.local ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4006ms
+rtt min/avg/max/mdev = 15.436/24.967/37.569/9.479 ms
+```
+
+Then you can SSH into the Raspberry Pi using the following command (default password is `raspberry`) and update the password.
+
+```bash
+➜  ~ ssh pi@raspberrypi.local
+The authenticity of host 'raspberrypi.local (10.0.0.157)' can't be established.
+ED25519 key fingerprint is SHA256:TPy0IZb9Q1pSP4Im8fvmoaDlbxNgFqgGAGmv2f373t0.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'raspberrypi.local' (ED25519) to the list of known hosts.
+pi@raspberrypi.local's password: 
+Linux raspberrypi 6.12.25+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.25-1+rpt1 (2025-04-30) aarch64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+
+SSH is enabled and the default password for the 'pi' user has not been changed.
+This is a security risk - please login as the 'pi' user and type 'passwd' to set a new password.
+
+pi@raspberrypi:~ $ passwd
+Changing password for pi.
+(current) UNIX password: raspberry
+New UNIX password: 
+Retype new UNIX password: 
+passwd: password updated successfully
+```
+
+Lets update the system and change the hostname.
+
+```bash
+sudo apt update
+sudo apt upgrade
+sudo hostnamectl set-hostname rpi-nat
+```
+
+Need to change `/etc/hosts` to reflect the new hostname.
+
+```bash
+sudo nano /etc/hosts
+```
+
+Now we need to deactivate useless services.
+
+```bash
+sudo systemctl disable bluetooth hciuart wpa_supplicant
+```
+
+And install network management tools:
+
+```bash
+sudo apt install net-tools iptables iptables-persistent nmap isc-dhcp-server dhcpcd5
+```
+
+And some other useful tools:
+
+```bash
+sudo apt install nano
+```
+
+Now we need to enable the IP forwarding:
+
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1 | sudo tee -a /etc/sysctl.conf
+```
+
+```bash
+sudo sysctl -w net.ipv6.conf.all.forwarding=1 | sudo tee -a /etc/sysctl.conf
+```
+
+Now we need to configure the rpi as gateway/router. First we need to assign a static IP address to the new subnet.
+
+```bash
+pi@rpi-bridge:~ $ sudo ip addr add 192.168.2.1/24 dev eth0
+pi@rpi-bridge:~ $ ip addr show eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether b8:27:eb:68:db:01 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.2.1/24 scope global eth0
+       valid_lft forever preferred_lft forever
+```
+
+Now need to configure the NAT (Network Address Translation) settings.
+
+```bash
+# Flush existing rules
+sudo iptables -F
+sudo iptables -t nat -F
+# Configure the firewall on the Raspberry Pi to allow traffic from the new subnet.
+sudo iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+sudo iptables -A FORWARD -i eth0 -o wlan0 -j ACCEPT
+sudo iptables -A FORWARD -i wlan0 -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+# Make it persistent
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+
+Now lets check everything is working as expected.
+
+```bash
+pi@rpi-bridge:~ $ ip route show
+default via 10.0.0.1 dev wlan0 proto dhcp src 10.0.0.157 metric 3003 
+10.0.0.0/24 dev wlan0 proto dhcp scope link src 10.0.0.157 metric 3003 
+192.168.2.0/24 dev eth0 proto dhcp scope link src 192.168.2.1 metric 1002           
+```
+
+Now enable `dhcpcd`.
+
+```bash
+sudo systemctl start dhcpcd
+```
+
+Now we need to check that Rpi has visibility to the new subnet. And need to get the MAC address of the rpi-staging server.
+
+```bash
+pi@rpi-bridge:~ $ sudo nmap -sn 192.168.2.0/24
+Starting Nmap 7.93 ( https://nmap.org ) at 2025-08-30 21:22 MDT
+Nmap scan report for 192.168.2.10
+Host is up (0.00033s latency).
+MAC Address: E4:5F:01:FD:B0:81 (Raspberry Pi Trading)
+Nmap scan report for 192.168.2.20
+Host is up (0.00073s latency).
+MAC Address: 00:04:4B:E5:5F:28 (Nvidia)
+Nmap scan report for 192.168.2.21
+Host is up (0.00054s latency).
+MAC Address: 00:04:4B:EC:91:DA (Nvidia)
+Nmap scan report for 192.168.2.1
+Host is up.
+Nmap done: 256 IP addresses (4 hosts up) scanned in 4.61 seconds
+
+```
+
+Now we need to configure DHCP with static mappings for the new subnet.
+
+```bash
+sudo nano /etc/dhcp/dhcpd.conf
+```
+
+With this content.
+
+```text
+default-lease-time 600;
+max-lease-time 7200;
+authoritative;
+ddns-update-style none;
+
+# Subnet for eth0
+subnet 192.168.2.0 netmask 255.255.255.0 {
+    range 192.168.2.20 192.168.2.50;  # Dynamic pool for other devices
+    option routers 192.168.2.1;
+    option subnet-mask 255.255.255.0;
+    option broadcast-address 192.168.2.255;
+    option domain-name-servers 8.8.8.8, 8.8.4.4;
+    option domain-name "local";
+
+    # Static address for rpi-staging server     
+    host rpi-staging {
+        hardware ethernet E4:5F:01:FD:B0:81;
+        fixed-address 192.168.2.10;
+        option host-name "rpi-staging";
+    }
+
+    host jetson-1 {
+        hardware ethernet 00:04:4b:e5:5f:28;
+        fixed-address 192.168.2.11;
+        option host-name "jetson-1";
+    }
+
+    host jetson-2 {
+        hardware ethernet 00:04:4b:ec:91:da;
+        fixed-address 192.168.2.12;
+        option host-name "jetson-2";
+    }
+
+    # Future workers                  
+    # host worker-1 {
+    #     hardware ethernet b8:27:eb:yy:yy:yy;
+    #     fixed-address 192.168.2.13;
+    # }
+}
+
+```
+
+Clean leases and restart the DHCP server.
+
+```bash
+sudo rm /var/lib/dhcp/dhcpd.leases
+sudo touch /var/lib/dhcp/dhcpd.leases
+sudo systemctl restart isc-dhcp-server
+```
+
+Check that `/etc/dhcpcd.conf` has the correct settings.
+
+```text
+# Static configuration for eth0 (gateway)
+interface eth0
+static ip_address=192.168.2.1/24
+static domain_name_servers=8.8.8.8 8.8.4.4
+nohook wpa_supplicant
+
+# wlan0 uses DHCP from the router
+interface wlan0
+```
+
+Now we configure the interface.
+
+```bash
+echo 'INTERFACESv4="eth0"' | sudo tee /etc/default/isc-dhcp-server
+sudo systemctl start isc-dhcp-server
+# Check the status and enable
+sudo systemctl status isc-dhcp-server
+sudo systemctl enable isc-dhcp-server
+```
+
+Now we need to configure route in the laptop to the static IP of the Raspberry Pi acting as a gateway.
+
+```bash
+sudo ip route add 192.168.2.0/24 via 10.0.0.157
+# Check
+ip route show | grep 192.168.2
+```
+
+# rpi-staging
+

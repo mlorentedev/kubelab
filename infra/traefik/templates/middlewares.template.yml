@@ -13,6 +13,8 @@ http:
         average: {{RATE_LIMIT_AVERAGE}}
         burst: {{RATE_LIMIT_BURST}}
         period: {{RATE_LIMIT_PERIOD}}
+    compress:
+      compress: {}
     secure-headers:
       headers:
         frameDeny: {{HEADERS_FRAME_DENY}}

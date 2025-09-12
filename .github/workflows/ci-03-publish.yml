@@ -10,7 +10,7 @@ on:
       tag:
         required: true
         type: string
-        description: "Docker version (e.g., 1.3.0-alpha.123, 1.3.0-rc.45, 1.3.0)"
+        description: "Docker version (e.g., 1.3.0-pre.123, 1.3.0-rc.45, 1.3.0)"
       sha:
         required: true
         type: string
@@ -28,6 +28,7 @@ jobs:
       image_tag: ${{ steps.docker_tags.outputs.final_tag }}
       registry_url: ${{ steps.docker_tags.outputs.registry }}
       full_image: ${{ steps.docker_tags.outputs.full_image }}
+      tag_type: ${{ steps.docker_tags.outputs.tag_type }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,7 +46,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Generate Docker tags for new versioning system
+      - name: Generate simplified Docker tags
         id: docker_tags
         run: |
           DOCKER_VERSION="${{ inputs.tag }}"
@@ -56,31 +57,28 @@ jobs:
           echo "Registry: $REGISTRY"
           echo "Branch: $BRANCH_NAME"
 
-          # Determine tag strategy based on version format and branch
+          # Simplified tag strategy - only 3 cases instead of 4
           case "$DOCKER_VERSION" in
-            *-alpha.*)
-              # Feature branch: 1.3.0-alpha.123
+            *-pre.*)
+              # Feature/hotfix branches: 1.3.0-pre.123 (unified pre-release)
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
-              echo "::notice::Alpha version detected: $FINAL_TAG"
-              ;;
-            *-beta.*)
-              # Hotfix branch: 1.2.6-beta.45
-              FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
-              echo "::notice::Beta version detected: $FINAL_TAG"
+              TAG_TYPE="pre-release"
+              echo "::notice::Pre-release version detected: $FINAL_TAG"
               ;;
             *-rc.*)
               # Develop branch: 1.3.0-rc.123
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
+              TAG_TYPE="release-candidate"
               echo "::notice::RC version detected: $FINAL_TAG"
               ;;
             *)
-              # Master branch: 1.3.0 (stable)
+              # Master branch: 1.3.0 (stable) - gets latest tag
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:latest"
-              echo "::notice::Stable version detected: $FINAL_TAG"
+              TAG_TYPE="stable"
+              echo "::notice::Stable version detected: $FINAL_TAG (with latest tag)"
               ;;
           esac
 
@@ -89,6 +87,7 @@ jobs:
           echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
           echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
           echo "full_image=${REGISTRY}:${FINAL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag_type=${TAG_TYPE}" >> "$GITHUB_OUTPUT"
 
           echo "::notice::Final Docker tags: $DOCKER_TAGS"
 
@@ -106,6 +105,7 @@ jobs:
             BUILD_ENV=production
             VERSION=${{ inputs.tag }}
             COMMIT_SHA=${{ inputs.sha }}
+            TAG_TYPE=${{ steps.docker_tags.outputs.tag_type }}
           labels: |
             org.opencontainers.image.title=${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}
             org.opencontainers.image.description=${{ inputs.app }} service for ${{ env.REGISTRY_PREFIX }}.dev
@@ -113,18 +113,37 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ inputs.tag }}
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
 
       - name: Log build success
         run: |
           echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **App**: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag Type**: ${{ steps.docker_tags.outputs.tag_type }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: ${{ steps.docker_tags.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
           echo "- **All Tags**: ${{ steps.docker_tags.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Primary Image**: ${{ steps.docker_tags.outputs.full_image }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add strategy explanation
+          case "${{ steps.docker_tags.outputs.tag_type }}" in
+            "pre-release")
+              echo "**Strategy**: Unified pre-release for feature/hotfix branches" >> $GITHUB_STEP_SUMMARY
+              echo "- No distinction between feature and hotfix anymore" >> $GITHUB_STEP_SUMMARY
+              ;;
+            "release-candidate")
+              echo "**Strategy**: Release candidate from develop branch" >> $GITHUB_STEP_SUMMARY
+              echo "- Ready for staging/testing environments" >> $GITHUB_STEP_SUMMARY
+              ;;
+            "stable")
+              echo "**Strategy**: Stable release from master with semantic versioning" >> $GITHUB_STEP_SUMMARY
+              echo "- Also tagged as 'latest' for production use" >> $GITHUB_STEP_SUMMARY
+              echo "- Git tag created: ${{ inputs.app }}-v${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
 
   notify-build-completion:
     name: Notify Build Completion
@@ -140,6 +159,7 @@ jobs:
             "type": "docker_build_completed",
             "app": "${{ inputs.app }}",
             "docker_version": "${{ inputs.tag }}",
+            "tag_type": "${{ needs.docker-build-push.outputs.tag_type }}",
             "full_image": "${{ needs.docker-build-push.outputs.full_image }}",
             "registry": "${{ needs.docker-build-push.outputs.registry_url }}",
             "all_tags": "${{ needs.docker-build-push.outputs.image_tag }}",
@@ -148,7 +168,9 @@ jobs:
             "context": "${{ inputs.context }}",
             "status": "success",
             "timestamp": "${{ github.event.head_commit.timestamp }}",
-            "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "simplified_strategy": true,
+            "versioning_approach": "unified_prerelease"
           }
           EOF
           )

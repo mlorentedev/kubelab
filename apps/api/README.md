@@ -1,4 +1,4 @@
-# Mi API Backend en Go
+# My Go Backend API
 
 <div align="center">
 
@@ -9,38 +9,38 @@
 
 </div>
 
-Esta es mi API REST en Go que maneja toda la lógica de negocio de [mlorente.dev](https://mlorente.dev). Se encarga de las suscripciones al newsletter, los lead magnets y otras cositas que necesita el frontend.
+This is my Go REST API that handles all the business logic for [mlorente.dev](https://mlorente.dev). It handles newsletter subscriptions, lead magnets, and other things the frontend needs.
 
-## ⚙️ Qué tecnologías uso
+## ⚙️ Technologies I use
 
-- **Go 1.23+** - Porque es rápido y me gusta su simplicidad
-- **Gin** - Framework web que va como un tiro
-- **Beehiiv API** - Para gestionar las suscripciones del newsletter
-- **Zerolog** - Logging estructurado que me facilita el debug
-- **Docker** - Todo containerizado para desplegar fácil
+- **Go 1.23+** - Because it's fast and I like its simplicity
+- **Gin** - Web framework that works great
+- **Beehiiv API** - To manage newsletter subscriptions
+- **Zerolog** - Structured logging that makes debugging easier
+- **Docker** - Everything containerized for easy deployment
 
-## 📁 Cómo está organizado
+## 📁 How it's organized
 
 ```
 src/
-├── cmd/server/main.go          # Punto de entrada - aquí arranca todo
+├── cmd/server/main.go          # Entry point - where everything starts
 ├── internal/
-│   ├── api/                    # Todos los endpoints
-│   │   ├── healthchecks.go     # Para saber si está vivo
-│   │   ├── lead_magnet.go      # Lead magnets del blog
-│   │   ├── middleware.go       # CORS y otras cosas
-│   │   ├── subscribe.go        # Suscripciones al newsletter
-│   │   └── unsubscribe.go      # Por si alguien se quiere ir
-│   ├── models/                 # Estructuras de datos
-│   └── services/               # La lógica de negocio
-│       ├── beehiiv.go          # Integración con Beehiiv
-│       ├── email.go            # Todo lo de emails
-│       └── subscription.go     # Gestión de suscripciones
-├── pkg/                        # Código reutilizable
-│   ├── config/env.go           # Variables de entorno
-│   └── logger/logger.go        # Configuración del logging
-├── go.mod & go.sum             # Dependencias
-└── Dockerfile                  # Para containerizar
+│   ├── api/                    # All endpoints
+│   │   ├── healthchecks.go     # To know if it's alive
+│   │   ├── lead_magnet.go      # Blog lead magnets
+│   │   ├── middleware.go       # CORS and other things
+│   │   ├── subscribe.go        # Newsletter subscriptions
+│   │   └── unsubscribe.go      # In case someone wants to leave
+│   ├── models/                 # Data structures
+│   └── services/               # Business logic
+│       ├── beehiiv.go          # Beehiiv integration
+│       ├── email.go            # Everything email-related
+│       └── subscription.go     # Subscription management
+├── pkg/                        # Reusable code
+│   ├── config/env.go           # Environment variables
+│   └── logger/logger.go        # Logging configuration
+├── go.mod & go.sum             # Dependencies
+└── Dockerfile                  # For containerization
 ```
 
 ## 🎯 Endpoints disponibles
