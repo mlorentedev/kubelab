@@ -93,7 +93,7 @@ jobs:
 
       - name: Download generated site for wiki
         if: inputs.app == 'wiki'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: wiki-site
           path: ./apps/wiki/site
