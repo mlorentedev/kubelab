@@ -255,6 +255,13 @@ jobs:
       - name: Build wiki multiversion site
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
         run: zsh scripts/wiki.sh sync
+      
+      - name: Upload generated site for wiki
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
+        uses: actions/upload-artifact@v3
+        with:
+          name: wiki-site
+          path: apps/wiki/site
 
       - name: Determine Docker context
         id: context
