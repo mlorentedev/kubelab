@@ -132,9 +132,9 @@ EOF
   local landing="${PROJECT_ROOT}/${DOCS_DIR:-apps/wiki/docs}/index.md"
   if [ ! -f "$landing" ]; then
     cat > "$landing" <<'EOF'
-# Documentación de las apps
+# Apps Documentation
 
-Selecciona una app en la barra lateral.
+Select an app from the sidebar.
 EOF
   fi
 }
@@ -167,7 +167,7 @@ build_one_branch_site() {
 
   local commit; commit="$(remote_branch_commit "$branch")"
   if [ -z "$commit" ]; then
-    echo "[WARN] Rama remota no encontrada: origin/${branch}. Me la salto."
+    echo "[WARN] Remote branch not found: origin/${branch}. Skipping."
     rm -rf "${tmpdir}"
     return 0
   fi
@@ -302,16 +302,16 @@ get_section_description() {
   local section="$1"
   case "$section" in
     apps)
-      echo "Descubre todas las aplicaciones del ecosistema mlorente.dev. Aquí encontrarás desde APIs robustas desarrolladas en Go hasta interfaces de usuario modernas en React, pasando por blogs dinámicos en Jekyll y herramientas de automatización avanzadas. Cada aplicación está diseñada con los más altos estándares de calidad y documentada en detalle para facilitar su comprensión y mantenimiento."
+      echo "Discover all applications in the mlorente.dev ecosystem. Here you'll find everything from robust APIs developed in Go to modern React user interfaces, dynamic Jekyll blogs, and advanced automation tools. Each application is designed with the highest quality standards and thoroughly documented for easy understanding and maintenance."
       ;;
     infra)
-      echo "Explora la infraestructura que sustenta el ecosistema mlorente.dev. Esta sección incluye configuraciones de proxies reversos con Traefik, servidores web optimizados con Nginx, y herramientas de automatización de despliegues con Ansible. Todo está containerizado with Docker y orquestado para garantizar alta disponibilidad, escalabilidad y facilidad de mantenimiento en entornos de producción."
+      echo "Explore the infrastructure that supports the mlorente.dev ecosystem. This section includes reverse proxy configurations with Traefik, optimized web servers with Nginx, and deployment automation tools with Ansible. Everything is containerized with Docker and orchestrated to ensure high availability, scalability, and easy maintenance in production environments."
       ;;
     scripts)
-      echo "Conoce todos los scripts de automatización y utilidades del proyecto. Incluye herramientas para configuración de entornos, generación automática de configuraciones, scripts de CI/CD, y utilidades de desarrollo. Todos los scripts están documentados con ejemplos de uso y siguen las mejores prácticas de shell scripting para garantizar su fiabilidad y mantenibilidad."
+      echo "Learn about all automation scripts and project utilities. Includes tools for environment configuration, automatic configuration generation, CI/CD scripts, and development utilities. All scripts are documented with usage examples and follow shell scripting best practices to ensure reliability and maintainability."
       ;;
     guides)
-      echo "Accede a documentación técnica comprensiva que abarca desde guías de inicio rápido hasta documentación arquitectónica avanzada. Incluye registros de decisiones técnicas, guías de contribución, procedimientos de CI/CD, estrategias de deployment, y solución de problemas. Toda la documentación está escrita en español de España con un enfoque práctico y conversacional para facilitar su comprensión."
+      echo "Access comprehensive technical documentation covering everything from quick start guides to advanced architectural documentation. Includes technical decision records, contribution guides, CI/CD procedures, deployment strategies, and troubleshooting. All documentation is written with a practical and conversational approach for easy understanding."
       ;;
   esac
 }
@@ -320,25 +320,25 @@ get_app_description() {
   local app="$1"
   case "$app" in
     api)
-      echo "API REST desarrollada en Go con arquitectura limpia, que proporciona endpoints seguros y eficientes para el ecosistema. Incluye autenticación JWT, validación robusta, y documentación Swagger automática."
+      echo "REST API developed in Go with clean architecture, providing secure and efficient endpoints for the ecosystem. Includes JWT authentication, robust validation, and automatic Swagger documentation."
       ;;
     blog)
-      echo "Blog personal desarrollado en Jekyll con diseño responsive y optimizado para SEO. Incluye sistema de comentarios, categorización automática, y integración con herramientas de analytics."
+      echo "Personal blog developed in Jekyll with responsive design and SEO optimization. Includes comment system, automatic categorization, and integration with analytics tools."
       ;;
     web)
-      echo "Sitio web principal desarrollado en React con TypeScript, que presenta el portafolio profesional. Incluye animaciones suaves, diseño adaptativo, y integración con sistemas de gestión de contenido."
+      echo "Main website developed in React with TypeScript, showcasing the professional portfolio. Includes smooth animations, adaptive design, and integration with content management systems."
       ;;
     monitoring)
-      echo "Stack completo de monitorización con Prometheus, Grafana, y Alertmanager. Proporciona métricas en tiempo real, dashboards personalizables, y alertas automáticas para garantizar la salud del sistema."
+      echo "Complete monitoring stack with Prometheus, Grafana, and Alertmanager. Provides real-time metrics, customizable dashboards, and automatic alerts to ensure system health."
       ;;
     n8n)
-      echo "Herramienta de automatización de workflows que permite crear procesos automatizados sin código. Integra múltiples servicios y APIs para optimizar tareas repetitivas y mejorar la productividad."
+      echo "Workflow automation tool that allows creating automated processes without code. Integrates multiple services and APIs to optimize repetitive tasks and improve productivity."
       ;;
     portainer)
-      echo "Interfaz web intuitiva para la gestión de contenedores Docker. Facilita la administración visual de contenedores, volúmenes, redes, y stacks completos sin necesidad de línea de comandos."
+      echo "Intuitive web interface for Docker container management. Facilitates visual administration of containers, volumes, networks, and complete stacks without command line needs."
       ;;
     wiki)
-      echo "Sistema de documentación técnica desarrollado con MkDocs y Material Theme. Proporciona documentación versionada, búsqueda avanzada, y navegación intuitiva para todo el ecosistema."
+      echo "Technical documentation system developed with MkDocs and Material Theme. Provides versioned documentation, advanced search, and intuitive navigation for the entire ecosystem."
       ;;
   esac
 }
@@ -347,13 +347,13 @@ get_infra_description() {
   local infra="$1"
   case "$infra" in
     traefik)
-      echo "Proxy reverso moderno y automático que gestiona el enrutamiento de tráfico, certificados SSL automáticos con Let's Encrypt, y balanceador de carga. Configurado para auto-descubrimiento de servicios Docker."
+      echo "Modern automatic reverse proxy that manages traffic routing, automatic SSL certificates with Let's Encrypt, and load balancing. Configured for Docker service auto-discovery."
       ;;
     nginx)
-      echo "Servidor web de alto rendimiento configurado como proxy reverso y servidor de contenido estático. Incluye optimizaciones de cache, compresión gzip, y configuraciones de seguridad avanzadas."
+      echo "High-performance web server configured as reverse proxy and static content server. Includes cache optimizations, gzip compression, and advanced security configurations."
       ;;
     ansible)
-      echo "Herramienta de automatización de infraestructura que gestiona deployments, configuraciones de servidor, y tareas de mantenimiento. Incluye playbooks para diferentes entornos y roles reutilizables."
+      echo "Infrastructure automation tool that manages deployments, server configurations, and maintenance tasks. Includes playbooks for different environments and reusable roles."
       ;;
   esac
 }
@@ -362,10 +362,10 @@ get_script_description() {
   local script="$1"
   case "$script" in
     index)
-      echo "Documentación completa de todos los scripts de automatización del proyecto. Incluye herramientas para configuración de entornos, generación de configuraciones, scripts de CI/CD, y utilidades de desarrollo con ejemplos de uso detallados."
+      echo "Complete documentation of all project automation scripts. Includes tools for environment configuration, configuration generation, CI/CD scripts, and development utilities with detailed usage examples."
       ;;
     *)
-      echo "Scripts y herramientas de automatización para el desarrollo, configuración, y mantenimiento del proyecto. Incluye utilidades para gestión de entornos y generación de configuraciones."
+      echo "Automation scripts and tools for project development, configuration, and maintenance. Includes utilities for environment management and configuration generation."
       ;;
   esac
 }
@@ -374,34 +374,34 @@ get_guide_description() {
   local guide="$1"
   case "$guide" in
     "ARCHITECTURE-AND-DECISIONS"|"ADR"|"ARCHITECTURE")
-      echo "Registros de decisiones arquitectónicas que documentan las decisiones técnicas importantes del proyecto. Explica el contexto, las opciones consideradas, y las razones detrás de cada decisión tecnológica."
+      echo "Architectural decision records documenting important technical decisions of the project. Explains the context, options considered, and reasons behind each technological decision."
       ;;
     "CI-CD")
-      echo "Documentación completa del pipeline de CI/CD con GitHub Actions. Incluye workflows automatizados, estrategias de testing, deployment automático, y gestión de versiones semánticas."
+      echo "Complete CI/CD pipeline documentation with GitHub Actions. Includes automated workflows, testing strategies, automatic deployment, and semantic version management."
       ;;
     "CONTRIBUTING")
-      echo "Guía completa para contribuidores que explica el flujo de trabajo, convenciones de código, proceso de pull requests, y mejores prácticas para mantener la calidad del proyecto."
+      echo "Complete guide for contributors explaining the workflow, code conventions, pull request process, and best practices to maintain project quality."
       ;;
     "DEPLOYMENT")
-      echo "Guía avanzada de despliegue que cubre configuración de servidores, procedimientos de deployment, rollbacks de emergencia, y configuraciones específicas para diferentes entornos."
+      echo "Advanced deployment guide covering server configuration, deployment procedures, emergency rollbacks, and specific configurations for different environments."
       ;;
     "HOW-TO")
-      echo "Guía de referencia rápida con comandos, procedimientos paso a paso, y soluciones a problemas comunes. Ideal para consultas rápidas durante el desarrollo y mantenimiento."
+      echo "Quick reference guide with commands, step-by-step procedures, and solutions to common problems. Ideal for quick queries during development and maintenance."
       ;;
     "TROUBLESHOOTING")
-      echo "Guía de resolución de problemas que cubre los errores más comunes, sus causas, y soluciones paso a paso. Incluye debugging de containers, problemas de red, y errores de configuración."
+      echo "Troubleshooting guide covering the most common errors, their causes, and step-by-step solutions. Includes container debugging, network issues, and configuration errors."
       ;;
     "VERSIONING")
-      echo "Estrategia de versionado semántico automático que explica cómo se calculan las versiones, el etiquetado de releases, y la gestión de imágenes Docker en diferentes entornos."
+      echo "Automatic semantic versioning strategy explaining how versions are calculated, release tagging, and Docker image management in different environments."
       ;;
     "WIKI")
-      echo "Documentación sobre el propio sistema de wiki, incluyendo su arquitectura, sistema de generación, configuración, y cómo contribuir a la documentación técnica del proyecto."
+      echo "Documentation about the wiki system itself, including its architecture, generation system, configuration, and how to contribute to the project's technical documentation."
       ;;
     "CUBELAB")
-      echo "Documentación sobre el entorno de laboratorio CubeLab, incluyendo su configuración, herramientas disponibles, y cómo utilizarlo para experimentación y desarrollo."
+      echo "Documentation about the CubeLab laboratory environment, including its configuration, available tools, and how to use it for experimentation and development."
       ;;
     "SCRIPTS")
-      echo "Documentación completa de todos los scripts y herramientas del proyecto. Incluye generadores de configuración, scripts de automatización, utilidades de desarrollo, y herramientas para CI/CD."
+      echo "Complete documentation of all project scripts and tools. Includes configuration generators, automation scripts, development utilities, and CI/CD tools."
       ;;
   esac
 }
@@ -508,15 +508,15 @@ generate_section_index() {
         # Fallback to regular empty message if MkDocs didn't build the scripts page
         content="<div class=\"no-content-message\">
           <div class=\"icon\">📭</div>
-          <h3>No hay contenido disponible</h3>
-          <p>Esta sección estará disponible próximamente con documentación y recursos adicionales.</p>
+          <h3>No content available</h3>
+          <p>This section will be available soon with documentation and additional resources.</p>
         </div>"
       fi
     else
       content="<div class=\"no-content-message\">
         <div class=\"icon\">📭</div>
-        <h3>No hay contenido disponible</h3>
-        <p>Esta sección estará disponible próximamente con documentación y recursos adicionales.</p>
+        <h3>No content available</h3>
+        <p>This section will be available soon with documentation and additional resources.</p>
       </div>"
     fi
   fi

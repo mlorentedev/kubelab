@@ -46,58 +46,63 @@ jobs:
     name: Validate Version Consistency
     runs-on: ubuntu-latest
     outputs:
-      base_version: ${{ steps.validate.outputs.base_version }}
+      has_changes: ${{ steps.validate.outputs.has_changes }}
+      version_summary: ${{ steps.validate.outputs.version_summary }}
     steps:
       - name: Validate Docker versions format
         id: validate
         run: |
           # Collect non-empty and non-skip Docker versions
           versions=()
-          valid_versions=()
+          changed_apps=()
           
           # Check each app version
           if [ -n "${{ inputs.blog_docker_version }}" ] && [ "${{ inputs.blog_docker_version }}" != "skip" ]; then
             versions+=("blog:${{ inputs.blog_docker_version }}")
-            valid_versions+=("${{ inputs.blog_docker_version }}")
+            changed_apps+=("blog")
           fi
           
           if [ -n "${{ inputs.api_docker_version }}" ] && [ "${{ inputs.api_docker_version }}" != "skip" ]; then
             versions+=("api:${{ inputs.api_docker_version }}")
-            valid_versions+=("${{ inputs.api_docker_version }}")
+            changed_apps+=("api")
           fi
           
           if [ -n "${{ inputs.web_docker_version }}" ] && [ "${{ inputs.web_docker_version }}" != "skip" ]; then
             versions+=("web:${{ inputs.web_docker_version }}")
-            valid_versions+=("${{ inputs.web_docker_version }}")
+            changed_apps+=("web")
           fi
 
           if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
             versions+=("wiki:${{ inputs.wiki_docker_version }}")
-            valid_versions+=("${{ inputs.wiki_docker_version }}")
+            changed_apps+=("wiki")
           fi
 
           if [ ${#valid_versions[@]} -eq 0 ]; then
-            echo "::error::No valid Docker versions provided (all apps skipped)"
-            exit 1
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No app changes detected - no global release needed"
+            exit 0
           fi
 
-          echo "::notice::Apps with version changes:"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Apps with version changes (${#changed_apps[@]} total):"
           for version in "${versions[@]}"; do
             echo "  - $version"
           done
 
-          # For independent versioning, we don't need base version validation
-          # Each app can have its own version
-          echo "base_version=independent" >> $GITHUB_OUTPUT
-          echo "::notice::Independent app versioning - no base version validation needed"
+          # Create version summary for outputs
+          VERSION_SUMMARY=$(printf "%s," "${changed_apps[@]}")
+          VERSION_SUMMARY=${VERSION_SUMMARY%,}  # Remove trailing comma
+          echo "version_summary=${VERSION_SUMMARY}" >> "$GITHUB_OUTPUT"
 
   create-global-release:
     name: Create Global Release
     runs-on: ubuntu-latest
     needs: validate-versions
+    if: needs.validate-versions.outputs.has_changes == 'true'
     outputs:
       global_version: ${{ steps.create_global_tag.outputs.new_version }}
       release_created: ${{ steps.create_global_tag.outputs.tag_created }}
+      strategy: ${{ steps.release_strategy.outputs.strategy }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -118,17 +123,17 @@ jobs:
 
           case "$BRANCH_NAME" in
             feature/*|hotfix/*)
-              echo "::notice::Feature/Hotfix branch - No global release will be created"
+              echo "::notice::Feature/Hotfix branch - No global release (only app-level pre-releases)"
               echo "create_release=false" >> "$GITHUB_OUTPUT"
               echo "strategy=skip" >> "$GITHUB_OUTPUT"
               ;;
             develop)
-              echo "::notice::Develop branch - Will create prerelease"
+              echo "::notice::Develop branch - Will create global RC"
               echo "create_release=true" >> "$GITHUB_OUTPUT"
-              echo "strategy=prerelease" >> "$GITHUB_OUTPUT"
+              echo "strategy=rc" >> "$GITHUB_OUTPUT"
               ;;
             master|main)
-              echo "::notice::Main branch - Will create stable release"
+              echo "::notice::Main branch - Will create stable global release"
               echo "create_release=true" >> "$GITHUB_OUTPUT"
               echo "strategy=stable" >> "$GITHUB_OUTPUT"
               ;;
@@ -146,35 +151,34 @@ jobs:
           STRATEGY="${{ steps.release_strategy.outputs.strategy }}"
 
           case "$STRATEGY" in
-            "prerelease")
-              # Develop branch: Calculate SEMVER and create RC
-              LAST_GLOBAL=$(git tag -l "v*" --sort=-version:refname | grep -v "rc\|alpha\|beta" | head -n1 || echo "v0.0.0")
-              echo "Last stable global version: $LAST_GLOBAL"
+            "rc")
+              # Develop branch: Simple RC versioning
+              LAST_STABLE=$(git tag -l "v*" --sort=-version:refname | grep -v "rc\|pre" | head -n1 || echo "v0.0.0")
+              echo "Last stable global version: $LAST_STABLE"
 
-              # For global release, analyze commits from all changed apps
-              if [ "$LAST_GLOBAL" != "v0.0.0" ]; then
-                GLOBAL_COMMITS=$(git log ${LAST_GLOBAL}..HEAD --oneline)
+              # Simple semantic analysis for global project
+              if [ "$LAST_STABLE" != "v0.0.0" ]; then
+                GLOBAL_COMMITS=$(git log ${LAST_STABLE}..HEAD --oneline)
               else
                 GLOBAL_COMMITS=$(git log --oneline)
               fi
 
-              echo "Analyzing global commits since $LAST_GLOBAL:"
+              echo "Analyzing global commits since $LAST_STABLE:"
               echo "$GLOBAL_COMMITS"
 
-              # Determine SEMVER bump for global project
+              # Simplified SEMVER bump logic
               if echo "$GLOBAL_COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
                 BUMP_TYPE="major"
-                echo "::notice::Global SEMVER: Breaking change detected - MAJOR bump"
               elif echo "$GLOBAL_COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.*\))?:"; then
                 BUMP_TYPE="minor"
-                echo "::notice::Global SEMVER: Feature detected - MINOR bump"
               else
                 BUMP_TYPE="patch"
-                echo "::notice::Global SEMVER: Patch/fix detected - PATCH bump"
               fi
 
-              # Calculate new base version for global project
-              CURRENT_VERSION=$(echo "$LAST_GLOBAL" | sed "s/v//")
+              echo "::notice::Global SEMVER bump type: $BUMP_TYPE"
+
+              # Calculate new base version
+              CURRENT_VERSION=$(echo "$LAST_STABLE" | sed "s/v//")
               if [ "$CURRENT_VERSION" = "0.0.0" ]; then
                 case "$BUMP_TYPE" in
                   major) GLOBAL_BASE="1.0.0" ;;
@@ -182,64 +186,34 @@ jobs:
                   *) GLOBAL_BASE="0.0.1" ;;
                 esac
               else
-                IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-                MAJOR=${VERSION_PARTS[0]:-0}
-                MINOR=${VERSION_PARTS[1]:-0}
-                PATCH=${VERSION_PARTS[2]:-0}
+                IFS='.' read -ra parts <<< "$CURRENT_VERSION"
+                MAJOR=${parts[0]:-0}
+                MINOR=${parts[1]:-0}
+                PATCH=${parts[2]:-0}
 
                 case "$BUMP_TYPE" in
-                  major)
-                    MAJOR=$((MAJOR + 1))
-                    MINOR=0
-                    PATCH=0
-                    ;;
-                  minor)
-                    MINOR=$((MINOR + 1))
-                    PATCH=0
-                    ;;
-                  *)
-                    PATCH=$((PATCH + 1))
-                    ;;
+                  major) GLOBAL_BASE="$((MAJOR + 1)).0.0" ;;
+                  minor) GLOBAL_BASE="${MAJOR}.$((MINOR + 1)).0" ;;
+                  patch) GLOBAL_BASE="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
                 esac
-                GLOBAL_BASE="${MAJOR}.${MINOR}.${PATCH}"
               fi
 
-              # Find next RC number for global project
-              RC_TAGS=$(git tag -l "v${GLOBAL_BASE}-rc.*" --sort=-version:refname)
+              # Simple RC counter
+              RC_NUM=$(git rev-list --count HEAD ^origin/main 2>/dev/null || echo "1")
+              [ "$RC_NUM" -eq 0 ] && RC_NUM=1
 
-              if [ -z "$RC_TAGS" ]; then
-                RC_NUMBER=1
-                echo "::notice::No existing global RC tags found for v${GLOBAL_BASE}, starting with RC.1"
-              else
-                # Get the highest RC number for this base version
-                LATEST_RC=$(echo "$RC_TAGS" | head -n1)
-                echo "::notice::Found existing global RC tags for v${GLOBAL_BASE}, latest: $LATEST_RC"
-
-                # Extract RC number more safely
-                RC_NUMBER=$(echo "$LATEST_RC" | grep -o 'rc\.[0-9]*$' | cut -d'.' -f2)
-
-                # Validate extracted number and increment
-                if [[ "$RC_NUMBER" =~ ^[0-9]+$ ]]; then
-                  RC_NUMBER=$((RC_NUMBER + 1))
-                else
-                  echo "::warning::Could not parse RC number from $LATEST_RC, defaulting to 1"
-                  RC_NUMBER=1
-                fi
-              fi
-
-              NEW_VERSION="v${GLOBAL_BASE}-rc.${RC_NUMBER}"
-              echo "::notice::Generated global RC version: $NEW_VERSION (base: $GLOBAL_BASE)"
+              NEW_VERSION="v${GLOBAL_BASE}-rc.${RC_NUM}"
+              echo "::notice::Generated global RC: $NEW_VERSION"
               ;;
 
             "stable")
-              # Master branch: Promote latest RC to stable (or create first stable)
-              LATEST_GLOBAL_RC=$(git tag -l "v*-rc.*" --sort=-version:refname | head -n1)
+              # Master branch: Find latest RC and promote, or create first stable
+              LATEST_RC=$(git tag -l "v*-rc.*" --sort=-version:refname | head -n1)
 
-              if [ -z "$LATEST_GLOBAL_RC" ]; then
-                # No RC found - create first stable release
-                echo "::warning::No global RC version found. Creating first stable release."
-
-                # Analyze commits to determine first version
+              if [ -z "$LATEST_RC" ]; then
+                echo "::warning::No RC found, creating first stable release"
+                
+                # Analyze all commits for first stable version
                 GLOBAL_COMMITS=$(git log --oneline)
                 if echo "$GLOBAL_COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
                   NEW_VERSION="v1.0.0"
@@ -248,20 +222,14 @@ jobs:
                 else
                   NEW_VERSION="v0.0.1"
                 fi
-
-                echo "::notice::Creating first global stable release: $NEW_VERSION"
+                
+                echo "::notice::Creating first stable release: $NEW_VERSION"
               else
-                # Standard RC promotion
-                GLOBAL_BASE=$(echo "$LATEST_GLOBAL_RC" | sed "s/v//" | sed "s/-rc\..*//")
+                # Promote RC to stable (remove -rc.X suffix)
+                GLOBAL_BASE=$(echo "$LATEST_RC" | sed "s/v//" | sed "s/-rc\..*//")
                 NEW_VERSION="v${GLOBAL_BASE}"
-
-                # Check if stable version already exists
-                if git rev-parse "refs/tags/$NEW_VERSION" >/dev/null 2>&1; then
-                  echo "::error::Global stable version $NEW_VERSION already exists!"
-                  exit 1
-                fi
-
-                echo "::notice::Promoting global RC to stable: $LATEST_GLOBAL_RC → $NEW_VERSION"
+                
+                echo "::notice::Promoting RC to stable: $LATEST_RC → $NEW_VERSION"
               fi
               ;;
 
@@ -278,7 +246,7 @@ jobs:
           fi
 
           # Create and push global tag
-          git tag "$NEW_VERSION"
+          git tag -a "$NEW_VERSION" -m "Global release $NEW_VERSION with apps: ${{ needs.validate-versions.outputs.version_summary }}"
           git push origin "$NEW_VERSION"
 
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
@@ -289,22 +257,14 @@ jobs:
         if: steps.release_strategy.outputs.create_release == 'true'
         run: |
           mkdir -p deployment
-          # Copy infrastructure and scripts
-          if [ -d "scripts" ]; then
-            cp -r scripts deployment/
-          fi
-          if [ -d "infra" ]; then
-            cp -r infra deployment/
-          fi
-          if [ -f "Makefile" ]; then
-            cp Makefile deployment/
-          fi
-          if [ -f "README.md" ]; then
-            cp README.md deployment/
-          fi
-          if [ -f ".env.example" ]; then
-            cp .env.example deployment/
-          fi
+
+          # Copy essential files only
+          [ -d "scripts" ] && cp -r scripts deployment/
+          [ -d "infra" ] && cp -r infra deployment/
+          [ -f "Makefile" ] && cp Makefile deployment/
+          [ -f "README.md" ] && cp README.md deployment/
+          [ -f ".env.example" ] && cp .env.example deployment/
+
           for app in apps/*; do
             if [ -d "$app" ]; then
               name=$(basename "$app")
@@ -317,50 +277,60 @@ jobs:
           # Create version manifest with Docker versions
           {
             echo "# Global Release ${{ steps.create_global_tag.outputs.new_version }}"
-            echo "## Changed Applications"
-            echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- /'
             echo ""
-            echo "## Docker Image Versions (Independent Versioning)"
-            echo "This release includes the following app versions:"
+            echo "**Strategy**: ${{ steps.release_strategy.outputs.strategy }} (simplified versioning)"
+            echo "**Changed Apps**: ${{ needs.validate-versions.outputs.version_summary }}"
             echo ""
-            # Add Docker versions for changed apps
+            echo "## Docker Images with Simplified Versioning"
+            
+            # Show all apps with their status
             if [ -n "${{ inputs.blog_docker_version }}" ] && [ "${{ inputs.blog_docker_version }}" != "skip" ]; then
-              echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-blog:${{ inputs.blog_docker_version }}\` (SHA: ${{ inputs.blog_sha }}) ✅ **Updated**"
+              TAG_TYPE=$(echo "${{ inputs.blog_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-blog:${{ inputs.blog_docker_version }}\` ($TAG_TYPE) ✅"
             else
-              echo "- **blog**: No changes - using previous version"
+              echo "- **blog**: No changes"
             fi
+            
             if [ -n "${{ inputs.api_docker_version }}" ] && [ "${{ inputs.api_docker_version }}" != "skip" ]; then
-              echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-api:${{ inputs.api_docker_version }}\` (SHA: ${{ inputs.api_sha }}) ✅ **Updated**"
+              TAG_TYPE=$(echo "${{ inputs.api_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-api:${{ inputs.api_docker_version }}\` ($TAG_TYPE) ✅"
             else
-              echo "- **api**: No changes - using previous version"
+              echo "- **api**: No changes"
             fi
+            
             if [ -n "${{ inputs.web_docker_version }}" ] && [ "${{ inputs.web_docker_version }}" != "skip" ]; then
-              echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-web:${{ inputs.web_docker_version }}\` (SHA: ${{ inputs.web_sha }}) ✅ **Updated**"
+              TAG_TYPE=$(echo "${{ inputs.web_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-web:${{ inputs.web_docker_version }}\` ($TAG_TYPE) ✅"
             else
-              echo "- **web**: No changes - using previous version"
+              echo "- **web**: No changes"
             fi
+            
             if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
-              echo "- **wiki**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-wiki:${{ inputs.wiki_docker_version }}\` (SHA: ${{ inputs.wiki_sha }}) ✅ **Updated**"
+              TAG_TYPE=$(echo "${{ inputs.wiki_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **wiki**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-wiki:${{ inputs.wiki_docker_version }}\` ($TAG_TYPE) ✅"
             else
-              echo "- **wiki**: No changes - using previous version"
+              echo "- **wiki**: No changes"
             fi
+            
             echo ""
-            echo "## Deployment Instructions"
-            echo "1. Extract this bundle to your deployment environment"
-            echo "2. Review the VERSION_MANIFEST.md for changed components"
-            echo "3. Update your docker-compose files with the new image tags above"
-            echo "4. Run deployment scripts from the scripts/ directory"
+            echo "## Versioning Strategy Summary"
+            echo "- **Pre-releases** (\`-pre.X\`): Feature and hotfix branches (unified)"
+            echo "- **Release Candidates** (\`-rc.X\`): Develop branch"
+            echo "- **Stable** (no suffix): Master branch with semantic versioning"
             echo ""
-            echo "## Global Project Version"
-            echo "- **Project Version**: ${{ steps.create_global_tag.outputs.new_version }}"
-            echo "- **Branch**: ${{ github.ref_name }}"
-            echo "- **Commit**: ${{ github.sha }}"
+            echo "## Deployment"
+            echo "1. Extract bundle to deployment environment"
+            echo "2. Update docker-compose files with new image tags"
+            echo "3. Run: \`make deploy ENV=<environment>\`"
+            echo ""
+            echo "**Global Version**: ${{ steps.create_global_tag.outputs.new_version }}"
+            echo "**Branch**: ${{ github.ref_name }}"
+            echo "**Commit**: ${{ github.sha }}"
           } > deployment/VERSION_MANIFEST.md
 
           # Create deployment bundle
           cd deployment
           zip -r ../global-release-${{ steps.create_global_tag.outputs.new_version }}.zip .
-          ls -la ../global-release-${{ steps.create_global_tag.outputs.new_version }}.zip
 
       - name: Upload global deployment artifacts
         if: steps.release_strategy.outputs.create_release == 'true'
@@ -377,42 +347,51 @@ jobs:
           {
             echo "# Global Release ${{ steps.create_global_tag.outputs.new_version }}"
             echo ""
+            echo "## Simplified Versioning Strategy"
+            case "${{ steps.release_strategy.outputs.strategy }}" in
+              "rc")
+                echo "This is a **Release Candidate** from the develop branch."
+                ;;
+              "stable")
+                echo "This is a **Stable Release** from the master branch with semantic versioning."
+                ;;
+            esac
+            echo ""
             echo "## Changed Applications"
             echo '${{ inputs.changed_apps }}' | jq -r '.[]' | sed 's/^/- **/' | sed 's/$/**: Updated/'
             echo ""
-            echo "## Docker Images (Independent Versioning)"
+            echo "## Docker Images"
+            
+            # Show updated apps with their version types
             if [ -n "${{ inputs.blog_docker_version }}" ] && [ "${{ inputs.blog_docker_version }}" != "skip" ]; then
-              echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-blog:${{ inputs.blog_docker_version }}\` ✅ Updated"
-            else
-              echo "- **blog**: No changes (using previous version)"
+              TAG_TYPE=$(echo "${{ inputs.blog_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **blog**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-blog:${{ inputs.blog_docker_version }}\` (\`$TAG_TYPE\`)"
             fi
             if [ -n "${{ inputs.api_docker_version }}" ] && [ "${{ inputs.api_docker_version }}" != "skip" ]; then
-              echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-api:${{ inputs.api_docker_version }}\` ✅ Updated"
-            else
-              echo "- **api**: No changes (using previous version)"
+              TAG_TYPE=$(echo "${{ inputs.api_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **api**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-api:${{ inputs.api_docker_version }}\` (\`$TAG_TYPE\`)"
             fi
             if [ -n "${{ inputs.web_docker_version }}" ] && [ "${{ inputs.web_docker_version }}" != "skip" ]; then
-              echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-web:${{ inputs.web_docker_version }}\` ✅ Updated"
-            else
-              echo "- **web**: No changes (using previous version)"
+              TAG_TYPE=$(echo "${{ inputs.web_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **web**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-web:${{ inputs.web_docker_version }}\` (\`$TAG_TYPE\`)"
             fi
             if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
-              echo "- **wiki**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-wiki:${{ inputs.wiki_docker_version }}\` ✅ Updated"
-            else
-              echo "- **wiki**: No changes (using previous version)"
+              TAG_TYPE=$(echo "${{ inputs.wiki_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+              echo "- **wiki**: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.REGISTRY_PREFIX || 'mlorente' }}-wiki:${{ inputs.wiki_docker_version }}\` (\`$TAG_TYPE\`)"
             fi
+            
             echo ""
             echo "## What's Included"
-            echo "- Complete deployment bundle with all applications"
+            echo "- Complete deployment bundle"
             echo "- Infrastructure configuration"
-            echo "- Deployment scripts"
-            echo "- Version manifest with detailed component information"
+            echo "- Deployment scripts and Makefile"
+            echo "- Simplified version manifest"
             echo ""
             echo "## Deployment"
-            echo "Download the \`global-release-${{ steps.create_global_tag.outputs.new_version }}.zip\` asset and follow the instructions in VERSION_MANIFEST.md"
+            echo "Download the deployment bundle and follow VERSION_MANIFEST.md instructions."
           } > release_notes.md
 
-          # Set output for use in release
+          # Set output for GitHub release
           {
             echo 'RELEASE_NOTES<<EOF'
             cat release_notes.md
@@ -429,7 +408,7 @@ jobs:
           artifacts: global-release-${{ steps.create_global_tag.outputs.new_version }}.zip
           generateReleaseNotes: true
           allowUpdates: true
-          prerelease: ${{ steps.release_strategy.outputs.strategy == 'prerelease' }}
+          prerelease: ${{ steps.release_strategy.outputs.strategy == 'rc' }}
           makeLatest: ${{ steps.release_strategy.outputs.strategy == 'stable' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -449,6 +428,7 @@ jobs:
               "web": "${{ inputs.web_docker_version }}",
               "wiki": "${{ inputs.wiki_docker_version }}"
             },
+            "versioning_approach": "simplified_unified",
             "branch": "${{ github.ref_name }}",
             "status": "success",
             "timestamp": "${{ github.event.head_commit.timestamp }}",
@@ -502,24 +482,24 @@ jobs:
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Apps & Independent Versions" >> $GITHUB_STEP_SUMMARY
+          echo "### Simplified App Versioning" >> $GITHUB_STEP_SUMMARY
+          echo "**Changed Apps**: ${{ needs.validate-versions.outputs.version_summary }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show version types
           if [ -n "${{ inputs.blog_docker_version }}" ] && [ "${{ inputs.blog_docker_version }}" != "skip" ]; then
-            echo "- **blog**: ${{ inputs.blog_docker_version }} ✅ Updated" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **blog**: No changes" >> $GITHUB_STEP_SUMMARY
+            TAG_TYPE=$(echo "${{ inputs.blog_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+            echo "- **blog**: ${{ inputs.blog_docker_version }} (\`$TAG_TYPE\`)" >> $GITHUB_STEP_SUMMARY
           fi
           if [ -n "${{ inputs.api_docker_version }}" ] && [ "${{ inputs.api_docker_version }}" != "skip" ]; then
-            echo "- **api**: ${{ inputs.api_docker_version }} ✅ Updated" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **api**: No changes" >> $GITHUB_STEP_SUMMARY
+            TAG_TYPE=$(echo "${{ inputs.api_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+            echo "- **api**: ${{ inputs.api_docker_version }} (\`$TAG_TYPE\`)" >> $GITHUB_STEP_SUMMARY
           fi
           if [ -n "${{ inputs.web_docker_version }}" ] && [ "${{ inputs.web_docker_version }}" != "skip" ]; then
-            echo "- **web**: ${{ inputs.web_docker_version }} ✅ Updated" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **web**: No changes" >> $GITHUB_STEP_SUMMARY
+            TAG_TYPE=$(echo "${{ inputs.web_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+            echo "- **web**: ${{ inputs.web_docker_version }} (\`$TAG_TYPE\`)" >> $GITHUB_STEP_SUMMARY
           fi
           if [ -n "${{ inputs.wiki_docker_version }}" ] && [ "${{ inputs.wiki_docker_version }}" != "skip" ]; then
-            echo "- **wiki**: ${{ inputs.wiki_docker_version }} ✅ Updated" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **wiki**: No changes" >> $GITHUB_STEP_SUMMARY
+            TAG_TYPE=$(echo "${{ inputs.wiki_docker_version }}" | grep -o "\(pre\|rc\)" || echo "stable")
+            echo "- **wiki**: ${{ inputs.wiki_docker_version }} (\`$TAG_TYPE\`)" >> $GITHUB_STEP_SUMMARY
           fi

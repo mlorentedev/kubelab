@@ -1,4 +1,4 @@
-# Mi Web Personal con Astro
+# My Personal Website with Astro
 
 <div align="center">
 
@@ -9,35 +9,35 @@
 
 </div>
 
-Esta es mi web personal donde tengo mi portafolio, algunos recursos descargables y toda la información sobre lo que hago. La he hecho con Astro porque me gusta cómo maneja el SSR y lo rápida que es.
+This is my personal website where I have my portfolio, some downloadable resources, and all the information about what I do. I built it with Astro because I like how it handles SSR and how fast it is.
 
-## 🤔 Por qué elegí estas tecnologías
+## 🤔 Why I chose these technologies
 
-- **Astro 5.5.2** - Es súper rápido y me permite mezclar SSR y SSG como quiero. Además no se carga de JavaScript innecesario
-- **TypeScript** - Porque los tipos me ahorran dolores de cabeza. Me gusta poder refactorizar con confianza
-- **Tailwind CSS** - Una vez que te acostumbras, no hay vuelta atrás. Prototipo súper rápido
-- **MDX** - Para crear contenido dinámico mezclando markdown con componentes. Muy cómodo para el portafolio
+- **Astro 5.5.2** - It's super fast and lets me mix SSR and SSG as I want. Plus it doesn't load unnecessary JavaScript
+- **TypeScript** - Because types save me headaches. I like being able to refactor with confidence
+- **Tailwind CSS** - Once you get used to it, there's no going back. Super fast prototyping
+- **MDX** - To create dynamic content mixing markdown with components. Very convenient for the portfolio
 
-## 📁 Cómo está organizado todo
+## 📁 How everything is organized
 
 ```
 astro-site/
-├── astro.config.mjs          # Configuración principal de Astro
-├── package.json              # Las dependencias de siempre
-├── tailwind.config.mjs       # Mis colores y configuración custom
-├── public/                   # Cosas estáticas (favicon, imágenes, etc.)
+├── astro.config.mjs          # Main Astro configuration
+├── package.json              # The usual dependencies
+├── tailwind.config.mjs       # My colors and custom config
+├── public/                   # Static assets (favicon, images, etc.)
 ├── src/
-│   ├── components/           # Componentes reutilizables
-│   │   ├── forms/           # Formularios de contacto y suscripción
-│   │   ├── sections/        # Secciones grandes de las páginas
-│   │   └── ui/             # Botones, cards, etc.
-│   ├── content/            # Contenido en MDX
-│   │   ├── projects/       # Mis proyectos del portafolio
-│   │   └── resources/      # Recursos descargables
-│   ├── layouts/            # Plantillas de página
-│   ├── pages/              # Las rutas de la web
-│   └── styles/             # Estilos globales
-└── Dockerfile              # Para containerizar todo
+│   ├── components/           # Reusable components
+│   │   ├── forms/           # Contact and subscription forms
+│   │   ├── sections/        # Large page sections
+│   │   └── ui/             # Buttons, cards, etc.
+│   ├── content/            # MDX content
+│   │   ├── projects/       # My portfolio projects
+│   │   └── resources/      # Downloadable resources
+│   ├── layouts/            # Page templates
+│   ├── pages/              # Website routes
+│   └── styles/             # Global styles
+└── Dockerfile              # To containerize everything
 ```
 
 ## 🚀 Lo que hace especial mi web

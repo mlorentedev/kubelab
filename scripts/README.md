@@ -1,165 +1,165 @@
-# Scripts y Herramientas del Proyecto
+# Project Scripts and Tools
 
-¡Hola! Aquí tienes todos los scripts que me ayudan a mantener este proyecto funcionando sin quebraderos de cabeza. Son mis pequeños ayudantes automatizados que se encargan de las tareas pesadas.
+Hey there! Here you'll find all the scripts that help me keep this project running without headaches. They're my little automated helpers that take care of the heavy lifting.
 
-## 🛠️ Lo que encontrarás aquí
+## What you'll find here
 
-### **wiki.sh** - El generador de documentación
+### **wiki.sh** - The documentation generator
 
-Mi script favorito para generar la wiki automáticamente. Recoge todo el contenido markdown del monorepo y lo organiza de forma bonita.
+My favorite script for automatically generating the wiki. It collects all the markdown content from the monorepo and organizes it nicely.
 
-**¿Qué hace?**
+**What does it do?**
 
-- Recopila todos los README y documentos markdown
-- Los organiza por secciones (apps, infra, guías)
-- Genera índices automáticamente con numeración secuencial
-- Crea el sitio estático con MkDocs Material
+- Collects all README and markdown documents
+- Organizes them by sections (apps, infra, guides)
+- Automatically generates indices with sequential numbering
+- Creates the static site with MkDocs Material
 
-**Cómo usarlo:**
+**How to use it:**
 
 ```bash
-# Generar la wiki completa
+# Generate the complete wiki
 ./scripts/wiki.sh build-all
 
-# Solo una rama específica
-./scripts/wiki.sh build-one mi-rama
+# Just a specific branch
+./scripts/wiki.sh build-one my-branch
 
-# Limpiar todo y empezar de cero
+# Clean everything and start fresh
 ./scripts/wiki.sh clean
 ```
 
-### **utils.sh** - Funciones comunes
+### **utils.sh** - Common functions
 
-El cerebro compartido de todos los demás scripts. Aquí tengo funciones útiles que uso en varios sitios.
+The shared brain of all the other scripts. Here I have useful functions that I use in various places.
 
-**Incluye:**
+**Includes:**
 
-- Funciones de logging con colores bonitos
-- Carga de variables de entorno
-- Validaciones comunes
-- Utilidades para manejar archivos
+- Logging functions with pretty colors
+- Environment variable loading
+- Common validations
+- File handling utilities
 
-### **env-setup.sh** - Configuración inicial
+### **env-setup.sh** - Initial setup
 
-Te prepara todo el entorno de desarrollo de una tacada. Perfecto para cuando empiezas desde cero.
+Sets up your entire development environment in one go. Perfect for when you're starting from scratch.
 
-**Instala:**
+**Installs:**
 
-- Node.js y npm
-- Ruby y Bundler para Jekyll
-- Go para la API
-- Docker y Docker Compose
-- Otras herramientas necesarias
+- Node.js and npm
+- Ruby and Bundler for Jekyll
+- Go for the API
+- Docker and Docker Compose
+- Other necessary tools
 
 ```bash
 ./scripts/env-setup.sh
 ```
 
-### **generate-traefik-config.sh** - Configuración de Traefik
+### **generate-traefik-config.sh** - Traefik configuration
 
-Genera toda la configuración de Traefik basándose en plantillas. Muy útil cuando añado nuevos servicios.
+Generates all Traefik configuration based on templates. Very useful when I add new services.
 
-**Genera:**
+**Generates:**
 
-- Configuración dinámica
-- Certificados SSL
-- Rutas y middleware
-- Configuración específica por entorno
+- Dynamic configuration
+- SSL certificates
+- Routes and middleware
+- Environment-specific configuration
 
-### **generate-ansible-config.sh** - Configuración de Ansible
+### **generate-ansible-config.sh** - Ansible configuration
 
-Crea los inventarios y configuraciones de Ansible para los despliegues.
+Creates Ansible inventories and configurations for deployments.
 
-**Genera:**
+**Generates:**
 
-- Inventarios por entorno
-- Variables de grupo
-- Configuraciones específicas de servidor
+- Inventories per environment
+- Group variables
+- Server-specific configurations
 
-### **setup-gh-secrets.sh** - Secretos de GitHub
+### **setup-gh-secrets.sh** - GitHub secrets
 
-Sincroniza las variables del archivo `.env` con los secretos de GitHub Actions. Muy cómodo para CI/CD.
+Syncs variables from the `.env` file with GitHub Actions secrets. Very handy for CI/CD.
 
 ```bash
 ./scripts/setup-gh-secrets.sh production
 ```
 
-### **create-env-example.sh** - Ejemplos de configuración
+### **create-env-example.sh** - Configuration examples
 
-Genera archivos `.env.example` basándose en los `.env` reales, pero sin los valores sensibles.
+Generates `.env.example` files based on the real `.env` files, but without the sensitive values.
 
-### **generate-traefik-credentials.sh** - Credenciales de Traefik
+### **generate-traefik-credentials.sh** - Traefik credentials
 
-Genera las credenciales básicas para acceder al dashboard de Traefik de forma segura.
+Generates basic credentials to securely access the Traefik dashboard.
 
-### **replace-placeholders.sh** - Reemplazar placeholders
+### **replace-placeholders.sh** - Replace placeholders
 
-Utilidad para sustituir placeholders en archivos de configuración. La uso en varios scripts.
+Utility to substitute placeholders in configuration files. I use it in several scripts.
 
-## 🚀 Cómo usar los scripts
+## 🚀 How to use the scripts
 
-### Preparar el entorno (primera vez)
+### Prepare the environment (first time)
 
 ```bash
-# Instalar todas las herramientas necesarias
+# Install all necessary tools
 ./scripts/env-setup.sh
 
-# Generar configuraciones iniciales
+# Generate initial configurations
 ./scripts/generate-traefik-config.sh
 ./scripts/generate-ansible-config.sh
 ```
 
-### Generar documentación
+### Generate documentation
 
 ```bash
-# Wiki completa
+# Complete wiki
 ./scripts/wiki.sh build-all
 
-# Solo una rama específica
+# Just a specific branch
 ./scripts/wiki.sh build-one develop
 ```
 
-### Configurar CI/CD
+### Set up CI/CD
 
 ```bash
-# Subir secretos a GitHub
+# Upload secrets to GitHub
 ./scripts/setup-gh-secrets.sh production
 
-# Crear archivos de ejemplo
+# Create example files
 ./scripts/create-env-example.sh
 ```
 
-## 💡 Tips y trucos
+## 💡 Tips and tricks
 
-**Para desarrolladores:**
+**For developers:**
 
-- Todos los scripts usan `set -euo pipefail` para ser más robustos
-- Cargan variables de entorno automáticamente
-- Tienen logging con colores para facilitar el debug
-- Están documentados internamente con comentarios
+- All scripts use `set -euo pipefail` to be more robust
+- They load environment variables automatically
+- They have colored logging to make debugging easier
+- They're internally documented with comments
 
-**Para usuarios:**
+**For users:**
 
-- Si un script falla, revisa que tienes todas las variables de entorno configuradas
-- Los logs en colores te ayudan a entender qué está pasando
-- Puedes ejecutar `./script.sh --help` en la mayoría para ver opciones
+- If a script fails, check that you have all environment variables configured
+- Colored logs help you understand what's happening
+- You can run `./script.sh --help` on most of them to see options
 
-## 🔧 Dependencias
+## 🔧 Dependencies
 
-La mayoría de scripts necesitan:
+Most scripts need:
 
-- **zsh** - Shell por defecto
-- **Docker** y **Docker Compose**
-- **jq** - Para procesar JSON
-- **gh CLI** - Para interactuar con GitHub (opcional)
+- **zsh** - Default shell
+- **Docker** and **Docker Compose**
+- **jq** - For processing JSON
+- **gh CLI** - To interact with GitHub (optional)
 
-## 📝 Notas importantes
+## 📝 Important notes
 
-- **Siempre revisa las variables de entorno** antes de ejecutar scripts
-- **Los scripts modifican archivos** - haz backup si es crítico
-- **Algunos requieren permisos** de administrador para instalar paquetes
-- **Están optimizados para Ubuntu/Debian** pero deberían funcionar en otras distribuciones
+- **Always check environment variables** before running scripts
+- **Scripts modify files** - make backups if it's critical
+- **Some require administrator permissions** to install packages
+- **They're optimized for Ubuntu/Debian** but should work on other distributions
 
 ---
 
-> **Pro tip:** Si vas a modificar algún script, échale un vistazo a `utils.sh` primero. Probablemente ya tengo una función que hace lo que necesitas.
+> **Pro tip:** If you're going to modify any script, take a look at `utils.sh` first. I probably already have a function that does what you need.

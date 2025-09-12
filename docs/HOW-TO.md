@@ -1,56 +1,56 @@
-# Guías How-To - Referencia Rápida
+# How-To Guides - Quick Reference
 
-## Índice de Tareas Comunes
+## Common Tasks Index
 
-- [🚀 Despliegue](#-despliegue)
-- [🔧 Desarrollo Local](#-desarrollo-local)
+- [🚀 Deployment](#-deployment)
+- [🔧 Local Development](#-local-development)
 - [🐛 Debugging](#-debugging)
 - [📦 CI/CD](#-cicd)
-- [🔐 Secretos y Variables](#-secretos-y-variables)
-- [🌐 DNS y Dominios](#-dns-y-dominios)
+- [🔐 Secrets and Variables](#-secrets-and-variables)
+- [🌐 DNS and Domains](#-dns-and-domains)
 - [🐳 Docker](#-docker)
-- [📊 Monitorización](#-monitorización)
+- [📊 Monitoring](#-monitoring)
 - [🤖 Automation](#-automation)
 
 ---
 
-## 🚀 Despliegue
+## 🚀 Deployment
 
-### Desplegar nueva versión a staging
+### Deploy new version to staging
 
 ```bash
-# 1. Descargar release
+# 1. Download release
 wget https://github.com/mlorente/mlorente.dev/releases/download/v1.2.0-rc.5/global-release-v1.2.0-rc.5.zip
 unzip global-release-v1.2.0-rc.5.zip
 
-# 2. Desplegar
+# 2. Deploy
 cd deployment
 make deploy ENV=staging RELEASE_VERSION=v1.2.0-rc.5
 
-# 3. Verificar
+# 3. Verify
 curl -I https://staging.mlorente.dev
 ```
 
-### Rollback de emergencia
+### Emergency rollback
 
 ```bash
-# Rollback automático
+# Automatic rollback
 make emergency-rollback ENV=production
 
-# Rollback manual
+# Manual rollback
 make deploy ENV=production RELEASE_VERSION=v1.1.0
 ```
 
-### Verificar estado del despliegue
+### Verify deployment status
 
 ```bash
-# Estado de contenedores
+# Container status
 make status ENV=production
 
-# Logs en tiempo real
+# Real-time logs
 make logs ENV=production
 
-# Verificar salud de endpoints
+# Verify endpoint health
 curl -f https://mlorente.dev/health
 curl -f https://api.mlorente.dev/health
 curl -f https://blog.mlorente.dev
@@ -58,39 +58,39 @@ curl -f https://blog.mlorente.dev
 
 ---
 
-## 🔧 Desarrollo Local
+## 🔧 Local Development
 
-### Levantar entorno completo
+### Start complete environment
 
 ```bash
-# Setup inicial (solo primera vez)
+# Initial setup (first time only)
 make env-setup
 make create-network
 
-# Levantar todo
+# Start everything
 make up
 
-# URLs locales
+# Local URLs
 # http://site.mlorentedev.test
 # http://blog.mlorentedev.test
 # http://api.mlorentedev.test
 # http://traefik.mlorentedev.test:8080
 ```
 
-### Levantar solo una app
+### Start only one app
 
 ```bash
-# Solo web
+# Web only
 make up-web
 
-# Solo blog
+# Blog only
 make up-blog
 
-# Solo API
+# API only
 make up-api
 ```
 
-### Reconstruir desde cero
+### Rebuild from scratch
 
 ```bash
 make down
@@ -98,13 +98,13 @@ docker system prune -af --volumes
 make up --force-recreate
 ```
 
-### Añadir nuevo dominio local
+### Add new local domain
 
 ```bash
-# Añadir a /etc/hosts
+# Add to /etc/hosts
 echo "127.0.0.1 nueva-app.mlorentedev.test" | sudo tee -a /etc/hosts
 
-# O configurar dnsmasq
+# Or configure dnsmasq
 echo "address=/.mlorentedev.test/127.0.0.1" | sudo tee /etc/dnsmasq.d/mlorente
 sudo systemctl restart dnsmasq
 ```
@@ -113,52 +113,52 @@ sudo systemctl restart dnsmasq
 
 ## 🐛 Debugging
 
-### Ver logs de una app específica
+### View logs of a specific app
 
 ```bash
-# Logs de API
+# API logs
 docker logs $(docker ps -q -f name=api) -f
 
-# Logs de Traefik
+# Traefik logs
 docker logs $(docker ps -q -f name=traefik) -f
 
-# Logs con timestamp
+# Logs with timestamp
 docker logs $(docker ps -q -f name=web) -f -t
 ```
 
-### Entrar en contenedor para debug
+### Enter container for debugging
 
 ```bash
-# Entrar en API
+# Enter API
 docker exec -it $(docker ps -q -f name=api) sh
 
-# Entrar en contenedor web
+# Enter web container
 docker exec -it $(docker ps -q -f name=web) sh
 
-# Ejecutar comando específico
+# Execute specific command
 docker exec $(docker ps -q -f name=api) ps aux
 ```
 
-### Verificar conectividad entre contenedores
+### Verify connectivity between containers
 
 ```bash
-# Desde web a API
+# From web to API
 docker exec $(docker ps -q -f name=web) wget -qO- http://api:8080/health
 
-# Desde API a blog
+# From API to blog
 docker exec $(docker ps -q -f name=api) curl -I http://blog:4000
 ```
 
-### Problemas de DNS local
+### Local DNS problems
 
 ```bash
-# Verificar resolución DNS
+# Verify DNS resolution
 nslookup site.mlorentedev.test
 
-# Probar conectividad directa
+# Test direct connectivity
 curl -H "Host: site.mlorentedev.test" http://localhost
 
-# Limpiar DNS cache
+# Clear DNS cache
 sudo systemctl flush-dns  # macOS: sudo dscacheutil -flushcache
 ```
 
@@ -166,87 +166,87 @@ sudo systemctl flush-dns  # macOS: sudo dscacheutil -flushcache
 
 ## 📦 CI/CD
 
-### Triggear build manual
+### Trigger manual build
 
 ```bash
-# Desde GitHub CLI
+# From GitHub CLI
 gh workflow run "CI Pipeline" --ref develop
 
-# Ver estado de workflows
+# View workflow status
 gh run list --limit 10
 
-# Ver logs de run específico
+# View specific run logs
 gh run view <run-id> --log
 ```
 
-### Verificar qué apps cambiarían
+### Verify which apps would change
 
 ```bash
-# Ver archivos cambiados desde último commit
+# See files changed since last commit
 git diff --name-only HEAD~1
 
-# Filtrar por apps
+# Filter by apps
 git diff --name-only HEAD~1 | grep -E "(apps/blog|apps/api|apps/web)"
 
-# Simular detección de cambios
-dorny/paths-filter@v3  # usar action localmente
+# Simulate change detection
+dorny/paths-filter@v3  # use action locally
 ```
 
 ### Debug version calculation
 
 ```bash
-# Ver último tag
+# View latest tag
 git tag --sort=-version:refname | head -5
 
-# Ver commits desde último tag
+# View commits since last tag
 git log $(git tag --sort=-version:refname | head -1)..HEAD --oneline
 
-# Simular cálculo de versión
+# Simulate version calculation
 ./scripts/calculate-version.sh develop
 ```
 
-### Re-ejecutar job fallido
+### Re-run failed job
 
 ```bash
-# Re-run específico
+# Specific re-run
 gh run rerun <run-id>
 
-# Re-run solo jobs fallidos
+# Re-run failed jobs only
 gh run rerun <run-id> --failed
 ```
 
 ---
 
-## 🔐 Secretos y Variables
+## 🔐 Secrets and Variables
 
-### Listar secretos configurados
+### List configured secrets
 
 ```bash
-# Ver secretos (valores ocultos)
+# View secrets (hidden values)
 gh secret list
 
-# Ver variables del repo
+# View repo variables
 gh variable list
 ```
 
-### Actualizar secret
+### Update secret
 
 ```bash
-# Actualizar secret individual
+# Update individual secret
 gh secret set DOCKERHUB_TOKEN
 
-# Desde archivo
+# From file
 gh secret set DOCKERHUB_TOKEN < token.txt
 
-# Para múltiples environments
+# For multiple environments
 gh secret set API_KEY --env production
 gh secret set API_KEY --env staging
 ```
 
-### Sincronizar .env con GitHub Secrets
+### Sync .env with GitHub Secrets
 
 ```bash
-# Script automático (si existe)
+# Automatic script (if exists)
 make setup-secrets
 
 # Manual
@@ -254,7 +254,7 @@ gh secret set DOCKERHUB_USERNAME --body "$(grep DOCKERHUB_USERNAME .env | cut -d
 gh secret set N8N_WEBHOOK_URL --body "$(grep N8N_WEBHOOK_URL .env | cut -d'=' -f2)"
 ```
 
-### Verificar variables en runtime
+### Verify variables at runtime
 
 ```bash
 # En GitHub Actions (debug step)
@@ -267,42 +267,42 @@ gh secret set N8N_WEBHOOK_URL --body "$(grep N8N_WEBHOOK_URL .env | cut -d'=' -f
 
 ---
 
-## 🌐 DNS y Dominios
+## 🌐 DNS and Domains
 
-### Verificar configuración DNS
+### Verify DNS configuration
 
 ```bash
-# Verificar records A
+# Verify A records
 dig mlorente.dev A
 dig blog.mlorente.dev A
 dig api.mlorente.dev A
 
-# Verificar propagación DNS
+# Verify DNS propagation
 nslookup mlorente.dev 8.8.8.8
 nslookup mlorente.dev 1.1.1.1
 ```
 
-### Verificar certificados SSL
+### Verify SSL certificates
 
 ```bash
-# Verificar certificado
+# Verify certificate
 openssl s_client -connect mlorente.dev:443 -servername mlorente.dev
 
-# Ver fechas de expiración
+# View expiration dates
 echo | openssl s_client -connect mlorente.dev:443 2>/dev/null | openssl x509 -noout -dates
 
-# Verificar cadena completa
+# Verify complete chain
 curl -vvI https://mlorente.dev 2>&1 | grep -E "(SSL|TLS|certificate)"
 ```
 
-### Regenerar certificados Traefik
+### Regenerate Traefik certificates
 
 ```bash
-# En el servidor
+# On the server
 docker exec $(docker ps -q -f name=traefik) rm /acme.json
 docker restart $(docker ps -q -f name=traefik)
 
-# Verificar logs de renovación
+# Verify renewal logs
 docker logs $(docker ps -q -f name=traefik) | grep -i acme
 ```
 
@@ -310,23 +310,23 @@ docker logs $(docker ps -q -f name=traefik) | grep -i acme
 
 ## 🐳 Docker
 
-### Limpiar sistema Docker
+### Clean Docker system
 
 ```bash
-# Limpiar imágenes no utilizadas
+# Clean unused images
 docker system prune -f
 
-# Limpiar todo (imágenes, volúmenes, networks)
+# Clean everything (images, volumes, networks)
 docker system prune -af --volumes
 
-# Limpiar solo imágenes colgantes
+# Clean only dangling images
 docker image prune -f
 ```
 
-### Inspeccionar recursos Docker
+### Inspect Docker resources
 
 ```bash
-# Ver uso de recursos
+# View resource usage
 docker stats --no-stream
 
 # Ver imágenes por tamaño
@@ -362,9 +362,9 @@ docker inspect $(docker ps -q -f name=web) | jq '.[0].State.Health'
 
 ---
 
-## 📊 Monitorización
+## 📊 Monitoring
 
-### Verificar métricas de rendimiento
+### Verify performance metrics
 
 ```bash
 # CPU y memoria por contenedor
@@ -378,7 +378,7 @@ du -sh /var/lib/docker/
 docker exec $(docker ps -q -f name=api) ps aux
 ```
 
-### Logs de acceso Traefik
+### Traefik access logs
 
 ```bash
 # Ver últimos accesos
@@ -391,7 +391,7 @@ docker logs $(docker ps -q -f name=traefik) | grep -E "(4[0-9]{2}|5[0-9]{2})"
 docker logs $(docker ps -q -f name=traefik) -f
 ```
 
-### Endpoints de salud
+### Health endpoints
 
 ```bash
 # Script de verificación rápida
@@ -414,7 +414,7 @@ check_endpoints() {
 check_endpoints
 ```
 
-### Alertas básicas
+### Basic alerts
 
 ```bash
 # Script de monitoreo simple
@@ -433,9 +433,9 @@ done
 
 ---
 
-## ⚡ Scripts de Utilidad
+## ⚡ Utility Scripts
 
-### Script all-in-one para desarrollo
+### All-in-one development script
 
 ```bash
 #!/bin/bash
@@ -462,7 +462,7 @@ curl -I http://api.mlorentedev.test && echo "✅ API OK"
 echo "✨ Development environment ready!"
 ```
 
-### Script de deploy rápido
+### Quick deploy script
 
 ```bash
 #!/bin/bash
@@ -492,9 +492,9 @@ echo "✅ Deployment complete!"
 
 ---
 
-## 🔍 Búsqueda Rápida
+## 🔍 Quick Search
 
-### Por síntoma
+### By symptom
 
 | Síntoma | Comando | Referencia |
 |---------|---------|------------|
@@ -505,7 +505,7 @@ echo "✅ Deployment complete!"
 | "Build failing" | `gh run view <run-id> --log` | [CI/CD](#-cicd) |
 | "SSL certificate error" | `curl -vvI https://domain.com` | [DNS](#-dns-y-dominios) |
 
-### Por tarea
+### By task
 
 | Tarea | Comando | Tiempo estimado |
 |-------|---------|----------------|
@@ -519,7 +519,7 @@ echo "✅ Deployment complete!"
 
 ## 🤖 Automation
 
-### Política general
+### General policy
 
 - Todas las salidas se generan en `docs/AUTOMATION/`  
 - Subcarpetas: `reports/`, `indexes/`, `changelogs/`, `adrs/`, `digests/`, `security/`  
@@ -528,7 +528,7 @@ echo "✅ Deployment complete!"
 - Usar Conventional Commits (`docs:`, `chore:`, `fix:`, `ci:`, `feat:`).  
 - Idempotencia: sin cambios, diff vacío.  
 
-### Tareas comunes
+### Common tasks
 
 ```bash
 # Normalizar READMEs
@@ -544,7 +544,7 @@ Task: Generate CHANGELOG from Conventional Commits since last tag.
 Output: docs/AUTOMATION/changelogs/CHANGELOG-<date>.md
 ```
 
-### Auditorías
+### Audits
 
 ```bash
 # Deriva de .env
@@ -560,7 +560,7 @@ Task: Audit traefik labels for TLS, routers, entrypoints, duplicates.
 Output: docs/AUTOMATION/reports/traefik-audit.md
 ```
 
-### Scripts de mantenimiento
+### Maintenance scripts
 
 ```bash
 # Inventario Docker
@@ -576,7 +576,7 @@ Task: Validate Ansible playbooks syntax and variables.
 Output: docs/AUTOMATION/reports/ansible-health.md
 ```
 
-### Seguridad
+### Security
 
 ```bash
 # Escaneo secretos
@@ -592,7 +592,7 @@ Task: Audit GitHub Actions workflows (permissions, tags, cache).
 Output: docs/AUTOMATION/reports/ci-audit.md
 ```
 
-### Resúmenes y ADRs
+### Summaries and ADRs
 
 ```bash
 # Weekly Ops Digest
@@ -606,4 +606,4 @@ Output: docs/AUTOMATION/adrs/ADR-<n>-<slug>.md
 
 ---
 
-*💡 **Tip**: Marca esta página en tu navegador para acceso rápido durante desarrollo y operaciones.*
+*💡 **Tip**: Bookmark this page in your browser for quick access during development and operations.*
