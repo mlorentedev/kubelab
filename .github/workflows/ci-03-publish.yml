@@ -91,6 +91,13 @@ jobs:
 
           echo "::notice::Final Docker tags: $DOCKER_TAGS"
 
+      - name: Download generated site for wiki
+        if: inputs.app == 'wiki'
+        uses: actions/download-artifact@v3
+        with:
+          name: wiki-site
+          path: ./apps/wiki/site
+
       - name: Build and Push Image
         uses: docker/build-push-action@v6
         with:
