@@ -6,7 +6,6 @@ http:
         - {{TRAEFIK_ENTRYPOINT}}
       service: {{APP_WEB_NAME}}
       middlewares:
-        - auth@file
         - secure-headers@file
         - rate-limit@file
         - compress@file
