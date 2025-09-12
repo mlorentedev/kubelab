@@ -1,6 +1,7 @@
 ---
 title: mlorente.dev - Documentación Técnica
-description: Centro de documentación técnica y guías del ecosistema mlorente.dev
+description: Centro de documentación técnica y guías de la plataforma mlorente.dev. Encuentra información sobre aplicaciones, infraestructura, scripts y más.
+slug: /
 hide:
   - toc
 ---
