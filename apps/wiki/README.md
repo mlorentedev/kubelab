@@ -1,93 +1,74 @@
-# Wiki de Documentación
+# 1.4 Wiki - Documentation Platform
 
-<div align="center">
+Technical documentation service built with MkDocs to provide a centralized knowledge base, technical guides, and project documentation for the mlorente.dev ecosystem.
 
-![MkDocs](https://img.shields.io/badge/MkDocs-Material-526CFE?style=for-the-badge&logo=mkdocs&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Live-008099?style=for-the-badge)
+## What it is
 
-![Documentation](https://img.shields.io/badge/Docs-Complete-brightgreen?style=flat-square)
-![Pages](https://img.shields.io/badge/Pages-20+-blue?style=flat-square)
-![Single_Branch](https://img.shields.io/badge/Single--Branch-Simplified-008099?style=flat-square)
+This is the documentation hub for the entire mlorente.dev project. It collects and organizes all documentation from across the monorepo into a single, searchable knowledge base. I built it with MkDocs Material because it creates beautiful, fast documentation sites and handles markdown perfectly.
 
-</div>
+The wiki automatically syncs documentation from all apps and infrastructure components, making it easy to find guides, architectural decisions, troubleshooting steps, and API documentation in one place.
 
-Servicio de documentación técnica basado en MkDocs para proporcionar una base de conocimientos centralizada, guías técnicas y documentación de proyectos para el ecosistema mlorente.dev.
+## Tech stack
 
-## 🏗️ Arquitectura
+- **Generator**: MkDocs with Material Design theme
+- **Content**: Markdown with advanced extensions
+- **Search**: Integrated search index
+- **Deployment**: Docker with Nginx for static content serving
+- **Synchronization**: Simple sync with current branch
 
-- **Generador**: MkDocs con tema Material Design
-- **Contenido**: Markdown con extensiones avanzadas
-- **Búsqueda**: Índice de búsqueda integrado
-- **Despliegue**: Docker con Nginx para servir contenido estático
-- **Sincronización**: Sincronización simple con la rama actual
-
-## 🗂️ Estructura del Proyecto
+## Project structure
 
 ```text
 apps/wiki/
-├── README.md              # Esta documentación
-├── docker-compose.yml     # Configuración del servicio
-├── mkdocs.yml            # Configuración de MkDocs
-├── mkdocs.yml.tmpl       # Plantilla de configuración
-├── nginx.conf            # Configuración de Nginx
-├── Dockerfile            # Imagen personalizada de MkDocs
-├── site/                 # Sitio generado (ignorado en Git)
-└── docs/                 # Contenido de documentación
-    ├── index.md          # Página de inicio
-    ├── guides/           # Guías técnicas
-    ├── projects/         # Documentación de proyectos
-    ├── reference/        # Material de referencia
-    └── assets/           # Imágenes y recursos
+├── README.md              # This documentation
+├── docker-compose.yml     # Service configuration
+├── mkdocs.yml            # MkDocs configuration
+├── mkdocs.yml.tmpl       # Configuration template
+├── nginx.conf            # Nginx configuration
+├── Dockerfile            # Custom MkDocs image
+├── site/                 # Generated site (ignored in Git)
+└── docs/                 # Documentation content
+    ├── index.md          # Landing page
+    ├── apps/             # Application documentation
+    ├── infra/            # Infrastructure guides
+    ├── scripts/          # Scripts documentation
+    ├── guides/           # Technical guides
+    └── assets/           # Images and resources
 ```
 
-## 📚 Características
+## Key features
 
-### Características de Documentación
+### Documentation features
+- **Advanced markdown** - Support for tables, diagrams, and extensions
+- **Structured navigation** - Nested menus and breadcrumbs
+- **Integrated search** - Real-time content search
+- **Syntax highlighting** - Code highlighting for multiple languages
+- **Diagrams** - Support for Mermaid and other diagram formats
 
-- **Markdown Avanzado**: Soporte para tablas, diagramas y extensiones
-- **Navegaci�n Estructurada**: Men�s anidados y breadcrumbs
-- **B�squeda Integrada**: B�squeda en tiempo real del contenido
-- **Syntax Highlighting**: Resaltado de c�digo para m�ltiples lenguajes
-- **Diagramas**: Soporte para Mermaid y otros formatos de diagramas
+### Technical features
+- **Material theme** - Modern and responsive interface
+- **Consistent theming** - Unified teal color scheme
+- **SEO optimization** - Optimized meta tags and structure
+- **Smart navigation** - Intelligent navigation links
+- **Responsive design** - Optimized for mobile and tablets
 
-### Caracter�sticas T�cnicas
+## Configuration
 
-- **Tema Material**: Interface moderna y responsiva
-- **Modo Oscuro**: Cambio autom�tico/manual entre temas
-- **Optimizaci�n SEO**: Meta tags y estructura optimizada
-- **Navegaci�n R�pida**: Enlaces de navegaci�n inteligentes
-- **Responsive Design**: Optimizado para m�viles y tablets
-
-## ⚙️ Configuración
-
-### Configuración MkDocs (`mkdocs.yml`)
+### MkDocs configuration (`mkdocs.yml`)
 
 ```yaml
-site_name: Wiki Técnica - mlorente.dev
+site_name: mlorente.dev
 site_url: https://wiki.mlorente.dev
-site_description: Base de conocimientos técnica y documentación de proyectos
+site_description: Technical knowledge base and project documentation
 
-# Configuraci�n del tema
+# Theme configuration
 theme:
   name: material
-  language: es
+  language: en
   palette:
-    # Modo claro
     - scheme: default
-      primary: blue
-      accent: blue
-      toggle:
-        icon: material/brightness-7
-        name: Cambiar a modo oscuro
-    # Modo oscuro
-    - scheme: slate
-      primary: blue
-      accent: blue
-      toggle:
-        icon: material/brightness-4
-        name: Cambiar a modo claro
+      primary: teal
+      accent: teal
 
   features:
     - navigation.tabs
@@ -99,24 +80,29 @@ theme:
     - search.highlight
     - content.code.annotate
 
-# Estructura de navegaci�n
+# Navigation structure
 nav:
-  - Inicio: index.md
-  - Gu�as T�cnicas:
+  - Home: index.md
+  - Applications:
+    - apps/index.md
+    - API: apps/api.md
+    - Web: apps/web.md
+    - Blog: apps/blog.md
+    - Wiki: apps/wiki.md
+  - Infrastructure:
+    - infra/index.md
+    - Traefik: infra/traefik.md
+    - Monitoring: infra/monitoring.md
+  - Scripts:
+    - scripts/index.md
+  - Guides:
     - guides/index.md
-    - DevOps: guides/devops.md
-    - SRE: guides/sre.md
-    - Docker: guides/docker.md
-  - Proyectos:
-    - projects/index.md
-    - mlorente.dev: projects/mlorente-dev.md
-    - Infraestructura: projects/infrastructure.md
-  - Referencia:
-    - reference/index.md
-    - APIs: reference/apis.md
-    - Comandos: reference/commands.md
+    - Architecture: guides/ARCHITECTURE-AND-DECISIONS.md
+    - CI/CD: guides/CI-CD.md
+    - Deployment: guides/DEPLOYMENT.md
+    - Troubleshooting: guides/TROUBLESHOOTING.md
 
-# Extensiones de Markdown
+# Markdown extensions
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -138,68 +124,73 @@ markdown_extensions:
 # Plugins
 plugins:
   - search:
-      lang: es
-  - git-revision-date-localized:
-      type: date
-      locale: es
+      lang: en
 ```
 
-### Variables de Entorno
+### Environment variables
 
 ```bash
-# Configuraci�n del contenedor
+# Container configuration
 CONTAINER_NAME=wiki
 IMAGE_NAME=mlorente-wiki
 PORT=8080
 
-# Configuraci�n de MkDocs
-SITE_NAME="Wiki - mlorente.dev"
+# MkDocs configuration
+SITE_NAME="mlorente.dev"
 SITE_URL="https://wiki.mlorente.dev"
-SITE_LANG="es"
+SITE_LANG="en"
 ```
 
-## Despliegue
+## Running the wiki
 
-### Desarrollo Local
+### Development mode
 ```bash
-# Construir y ejecutar con recarga en vivo
-docker-compose -f docker-compose.dev.yml up --build
+# Build and run with live reload
+make up-wiki
 
-# Acceder en http://localhost:8080
+# Access at http://wiki.mlorentedev.test
 ```
 
-### Producci�n
+### Local development
 ```bash
-# Desplegar con configuraci�n de producci�n
-docker-compose -f docker-compose.prod.yml up -d
+# Navigate to wiki directory
+cd apps/wiki
 
-# Verificar estado
-docker logs -f wiki
-```
-
-### Build Manual
-```bash
-# Instalar MkDocs localmente
+# Install MkDocs locally
 pip install mkdocs-material
 
-# Servir localmente
+# Generate documentation
+make wiki-sync
+
+# Serve locally
 mkdocs serve
 
-# Construir sitio est�tico
-mkdocs build
-
-# Desplegar (si est� configurado)
-mkdocs gh-deploy
+# Access at http://localhost:8000
 ```
 
-## 📄 Creaci�n de Contenido
+### Available commands
+```bash
+# Build static site
+mkdocs build
 
-### Estructura de Documentos
+# Generate documentation
+scripts/generate-wiki.sh build
+
+# Collect documentation
+scripts/generate-wiki.sh collect
+
+# Generate MkDocs config
+scripts/generate-wiki.sh config
+```
+
+## Content creation
+
+### Document structure
 
 ```markdown
 ---
-title: "T�tulo de la P�gina"
-description: "Descripci�n para SEO"
+title: "Page Title"
+description: "SEO description"
 tags:
   - devops
   - tutorial
@@ -208,125 +199,125 @@ authors:
   - Manuel Lorente
 ---
 
-# T�tulo de la P�gina
+# Page Title
 
-Introducci�n al contenido...
+Introduction to the content...
 
-## Secci�n Principal
+## Main Section
 
-Contenido de la secci�n...
+Section content...
 
-### Subsecci�n
+### Subsection
 
-Contenido detallado...
+Detailed content...
 
-!!! note "Nota Importante"
-    Esta es una nota destacada para informaci�n importante.
+!!! note "Important Note"
+    This is a highlighted note for important information.
 
-!!! warning "Advertencia"
-    Esta es una advertencia sobre algo cr�tico.
+!!! warning "Warning"
+    This is a warning about something critical.
 
 ```
 
-### Elementos Avanzados
+### Advanced elements
 
-#### Diagramas Mermaid
+#### Mermaid diagrams
 ```mermaid
 graph TD
-    A[Usuario] --> B[Aplicaci�n Web]
+    A[User] --> B[Web Application]
     B --> C[API Backend]
-    C --> D[Base de Datos]
+    C --> D[Database]
     B --> E[CDN]
 ```
 
-#### Bloques de C�digo
-```bash title="Comando de ejemplo"
-# Ejemplo de comando con t�tulo
+#### Code blocks
+```bash title="Example command"
+# Example command with title
 docker-compose up -d
 ```
 
-#### Tablas de Referencia
-| Comando | Descripci�n | Ejemplo |
+#### Reference tables
+| Command | Description | Example |
 |---------|-------------|---------|
-| `ls` | Listar archivos | `ls -la` |
-| `cd` | Cambiar directorio | `cd /home` |
-| `pwd` | Directorio actual | `pwd` |
+| `ls` | List files | `ls -la` |
+| `cd` | Change directory | `cd /home` |
+| `pwd` | Current directory | `pwd` |
 
-#### Cajas de Informaci�n
-!!! tip "Consejo"
-    Usa este formato para consejos �tiles.
+#### Information boxes
+!!! tip "Tip"
+    Use this format for useful tips.
 
-!!! info "Informaci�n"
-    Informaci�n adicional relevante.
+!!! info "Information"
+    Additional relevant information.
 
-!!! warning "Advertencia"
-    Informaci�n cr�tica que requiere atenci�n.
+!!! warning "Warning"
+    Critical information requiring attention.
 
-!!! danger "Peligro"
-    Advertencias sobre acciones peligrosas.
+!!! danger "Danger"
+    Warnings about dangerous actions.
 
-## 🗂️ Organizaci�n del Contenido
+## Content organization
 
-### Categor�as de Documentaci�n
+### Documentation categories
 
-#### Gu�as T�cnicas (`guides/`)
+#### Applications (`apps/`)
+- **API**: Backend service documentation
+- **Web**: Frontend application guides
+- **Blog**: Technical writing platform
+- **Wiki**: This documentation system
 
-- **DevOps**: Pr�cticas de desarrollo y operaciones
-- **SRE**: Ingenier�a de confiabilidad de sitios
-- **Containers**: Docker, Kubernetes, orquestaci�n
-- **CI/CD**: Pipelines de integraci�n continua
-- **Monitoreo**: Observabilidad y alertas
+#### Infrastructure (`infra/`)
+- **Traefik**: Reverse proxy configuration
+- **Monitoring**: Observability and alerting
+- **Networking**: Network setup and routing
+- **Deployment**: Server configuration
 
-#### Documentaci�n de Proyectos (`projects/`)
+#### Scripts (`scripts/`)
+- **Automation**: Build and deployment scripts
+- **Utilities**: Development tools
+- **Maintenance**: System maintenance scripts
 
-- **mlorente.dev**: Documentaci�n del monorepo
-- **Infraestructura**: Configuraci�n de servidores
-- **APIs**: Documentaci�n de servicios
-- **Aplicaciones**: Documentaci�n espec�fica por app
+#### Guides (`guides/`)
+- **Architecture**: System design and decisions
+- **CI/CD**: Pipeline documentation
+- **Deployment**: Deployment procedures
+- **Troubleshooting**: Problem-solving guides
+- **Contributing**: Development guidelines
 
-#### Material de Referencia (`reference/`)
+### Writing guidelines
 
-- **Comandos**: Referencia r�pida de comandos
-- **APIs**: Especificaciones de APIs
-- **Configuraciones**: Archivos de configuraci�n tipo
-- **Troubleshooting**: Soluci�n de problemas comunes
+1. **Clarity**: Use clear and direct language
+2. **Structure**: Organize with logical headings
+3. **Examples**: Include practical examples and code
+4. **Updates**: Keep content current
+5. **References**: Link to relevant external resources
 
-### Directrices de Escritura
+## Search features
 
-1. **Claridad**: Usar lenguaje claro y directo
-2. **Estructura**: Organizar con encabezados l�gicos
-3. **Ejemplos**: Incluir ejemplos pr�cticos y c�digo
-4. **Actualizaci�n**: Mantener contenido actualizado
-5. **Referencias**: Enlaces a recursos externos relevantes
+### Advanced search
+- **Full search**: Complete content indexing
+- **Suggestions**: Automatic term completion
+- **Highlighting**: Highlighted terms in results
+- **Filters**: Search by section or category
 
-## 🔍 Características de Búsqueda
+### SEO optimization
+- **Meta tags**: Optimized titles and descriptions
+- **Clean URLs**: Readable and descriptive URLs
+- **Structure**: Proper hierarchical headings
+- **Sitemap**: Automatic site map generation
 
-### Búsqueda Avanzada
+## Theme customization
 
-- **Búsqueda Completa**: Indexación de todo el contenido
-- **Sugerencias**: Completado automático de términos
-- **Resaltado**: Términos resaltados en resultados
-- **Filtros**: Búsqueda por sección o categoría
-
-### Optimización SEO
-
-- **Meta Tags**: Títulos y descripciones optimizados
-- **URLs Limpias**: URLs legibles y descriptivas
-- **Estructura**: Encabezados jerárquicos apropiados
-- **Sitemap**: Mapa del sitio automático
-
-## 🎨 Personalización del Tema
-
-### Variables de Color
+### Color variables
 ```css
 :root {
-  --md-primary-fg-color: #1976d2;
-  --md-primary-fg-color--light: #42a5f5;
-  --md-primary-fg-color--dark: #1565c0;
+  --md-primary-fg-color: #008099;
+  --md-primary-fg-color--light: #26a69a;
+  --md-primary-fg-color--dark: #00695c;
 }
 ```
 
-### CSS Personalizado
+### Custom CSS
 ```css
 /* docs/stylesheets/extra.css */
 .md-header {
@@ -338,62 +329,65 @@ docker-compose up -d
 }
 ```
 
-## 🔄 Sincronización y Updates
+## Documentation sync
 
-### Git Sync Automático
+### Automatic collection
+- **Source**: Collects from entire monorepo
+- **Apps**: Application-specific documentation
+- **Infrastructure**: Server and deployment docs
+- **Guides**: Technical and procedural guides
+- **Scripts**: Automation documentation
 
-- **Intervalo**: Cada 60 segundos
-- **Rama**: main (configurable)
-- **Conflictos**: Resolución automática (remote wins)
-- **Logs**: Registro de cambios y errores
+### Update workflow
+1. **Edit**: Modify markdown files anywhere in monorepo
+2. **Generate**: Run `make wiki-sync` to collect documentation
+3. **Build**: MkDocs regenerates the site
+4. **Serve**: Updated content served automatically
 
-### Workflow de Actualización
+## Analytics
 
-1. **Editar**: Modificar archivos markdown
-2. **Commit**: Subir cambios al repositorio
-3. **Sync**: Git-sync detecta cambios
-4. **Build**: MkDocs regenera el sitio
-5. **Serve**: Nginx sirve el contenido actualizado
+### Usage metrics
+- **Most visited pages**
+- **Popular search terms**
+- **Time on page**
+- **Bounce rate**
 
-## 📊 Métricas y Analíticas
-
-### Métricas de Uso
-
-- **Páginas más visitadas**
-- **Términos de búsqueda populares**
-- **Tiempo en página**
-- **Tasa de rebote**
-
-### Integración con Analytics
-```html
-<!-- En mkdocs.yml -->
+### Analytics integration
+```yaml
+# In mkdocs.yml
 google_analytics:
   - 'G-XXXXXXXXXX'
   - 'auto'
 ```
 
-## Contribuir
+## Contributing
 
-### Proceso de Contribución
+### Contribution process
+1. **Fork** the content repository
+2. **Branch** for new documentation
+3. **Write** following the guidelines
+4. **Test** locally with MkDocs
+5. **Pull Request** with clear description
+6. **Review** and merge content
 
-1. **Fork** del repositorio de contenido
-2. **Branch** para nueva documentación
-3. **Escribir** siguiendo las directrices
-4. **Probar** localmente con MkDocs
-5. **Pull Request** con descripción clara
-6. **Review** y merge del contenido
+### Quality standards
+- Correct spelling and grammar
+- Tested and functional code
+- Valid and updated links
+- Optimized images with alt text
+- Consistent structure with existing content
 
-### Estándares de Calidad
+## Related services
 
-- Ortografía y gramática correctas
-- Código probado y funcional
-- Enlaces válidos y actualizados
-- Imágenes optimizadas y con texto alternativo  
-- Estructura coherente con el resto
+- **Web Frontend**: `apps/web` - Main landing page
+- **Blog**: `apps/blog` - Technical content and tutorials
+- **API Backend**: `apps/api` - API documentation
+- **Infrastructure**: `infra/` - Deployment documentation
 
-## Servicios Relacionados
+## Local development URLs
 
-- **Web Frontend**: `apps/web` - Landing page principal
-- **Blog**: `apps/blog` - Contenido t�cnico y tutoriales
-- **API Backend**: `apps/api` - Documentaci�n de APIs
-- **Infraestructura**: `infra/` - Documentaci�n de despliegue
+When running locally with `make up-wiki`:
+- Wiki: http://wiki.mlorentedev.test
+- Development server: http://localhost:8000
+
+Add `127.0.0.1 wiki.mlorentedev.test` to your `/etc/hosts` file for local domain access.

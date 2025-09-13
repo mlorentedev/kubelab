@@ -46,7 +46,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Generate simplified Docker tags
+      - name: Generate Docker tags
         id: docker_tags
         run: |
           DOCKER_VERSION="${{ inputs.tag }}"
@@ -57,36 +57,24 @@ jobs:
           echo "Registry: $REGISTRY"
           echo "Branch: $BRANCH_NAME"
 
-          # Simplified tag strategy
           case "$DOCKER_VERSION" in
-            *-pre.*)
-              # Feature/hotfix branches: 1.3.0-pre.123 (unified pre-release)
+            *-dev.*)
               FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
               TAG_TYPE="pre-release"
-              echo "::notice::Pre-release version detected: $FINAL_TAG"
               ;;
             *-rc.*)
-              # Develop branch: 1.3.0-rc.123
               FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
               TAG_TYPE="release-candidate"
-              echo "::notice::RC version detected: $FINAL_TAG"
               ;;
             *)
-              # Master branch: 1.3.0 (stable) - gets latest tag
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:latest"
               TAG_TYPE="stable"
-              echo "::notice::Stable version detected: $FINAL_TAG (with latest tag)"
               ;;
           esac
 
-          if [[ "$BRANCH_NAME" != "main" && "$BRANCH_NAME" != "master" ]]; then
-            DOCKER_TAGS="${DOCKER_TAGS},${REGISTRY}:dev"
-          fi
-
-          # Set outputs
           echo "tags=${DOCKER_TAGS}" >> "$GITHUB_OUTPUT"
           echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
           echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
@@ -125,35 +113,17 @@ jobs:
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
 
-      - name: Log build success
+      - name: Log build summary
         run: |
           echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **App**: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tag Type**: ${{ steps.docker_tags.outputs.tag_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Registry**: ${{ steps.docker_tags.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **All Tags**: ${{ steps.docker_tags.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Primary Image**: ${{ steps.docker_tags.outputs.full_image }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Add strategy explanation
-          case "${{ steps.docker_tags.outputs.tag_type }}" in
-            "pre-release")
-              echo "**Strategy**: Unified pre-release for feature/hotfix branches" >> $GITHUB_STEP_SUMMARY
-              echo "- No distinction between feature and hotfix anymore" >> $GITHUB_STEP_SUMMARY
-              ;;
-            "release-candidate")
-              echo "**Strategy**: Release candidate from develop branch" >> $GITHUB_STEP_SUMMARY
-              echo "- Ready for staging/testing environments" >> $GITHUB_STEP_SUMMARY
-              ;;
-            "stable")
-              echo "**Strategy**: Stable release from master with semantic versioning" >> $GITHUB_STEP_SUMMARY
-              echo "- Also tagged as 'latest' for production use" >> $GITHUB_STEP_SUMMARY
-              echo "- Git tag created: ${{ inputs.app }}-v${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
-              ;;
-          esac
+          echo "- App: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag Type: ${{ steps.docker_tags.outputs.tag_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Registry: ${{ steps.docker_tags.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
+          echo "- All Tags: ${{ steps.docker_tags.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Primary Image: ${{ steps.docker_tags.outputs.full_image }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit SHA: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
 
   notify-build-completion:
     name: Notify Build Completion
