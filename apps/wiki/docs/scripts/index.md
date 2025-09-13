@@ -1,6 +1,6 @@
-# Project Scripts and Tools
+# 3. Scripts - Automation Tools
 
-Hey there! Here you'll find all the scripts that help me keep this project running without headaches. They're my little automated helpers that take care of the heavy lifting.
+Here you'll find all the scripts that help me keep this project running without headaches. They're my little automated helpers that take care of the heavy lifting.
 
 ## What you'll find here
 

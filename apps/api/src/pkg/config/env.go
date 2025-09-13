@@ -78,6 +78,7 @@ func getPossibleEnvPaths() []string {
 		filepath.Join(baseDir, ".env"),
 		filepath.Join(baseDir, "..", ".env"),
 		"/app/.env",
+		"/app/.env.prod",
 	}
 }
 
