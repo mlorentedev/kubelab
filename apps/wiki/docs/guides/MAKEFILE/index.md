@@ -1,4 +1,4 @@
-# 4.0 Makefile - Command Reference
+# 4.10 Makefile - Command Reference
 
 The Makefile is the heart of this project's automation. It provides a unified interface for all common operations, from development to deployment. Every command you need to work with mlorente.dev is available through make.
 
