@@ -1,775 +1,317 @@
-# Architecture and Decision Records
+# 4.1 Architecture and Decision Records
 
-## Overview
+This document captures the architectural decisions made for the mlorente.dev project. These decisions help understand why the system is built this way and provide context for future changes.
 
-This document combines the system architecture and architectural decision records (ADRs) of the mlorente.dev project. Each section captures the context, decision, and consequences of significant architectural decisions, providing a comprehensive view of the system.
-
----
-
-## Architectural Decisions Index
+## Decision Records Index
 
 | ADR | Title | Status | Date | Impact |
 |-----|--------|--------|-------|---------|
-| [ADR-001](#adr-001-monorepo-structure) | Monorepo Structure | ✅ Accepted | 2024-01 | 🔥 High |
-| [ADR-002](#adr-002-docker-containerization) | Docker Containerization | ✅ Accepted | 2024-01 | 🔥 High |
-| [ADR-003](#adr-003-traefik-as-reverse-proxy) | Traefik as Reverse Proxy | ✅ Accepted | 2024-02 | 🔥 High |
-| [ADR-004](#adr-004-github-actions-for-cicd) | GitHub Actions for CI/CD | ✅ Accepted | 2024-02 | 🔥 High |
-| [ADR-005](#adr-005-multi-architecture-builds) | Multi-Architecture Builds | ✅ Accepted | 2024-03 | 🔄 Medium |
-| [ADR-006](#adr-006-manual-cd-strategy) | Manual CD Strategy | ✅ Accepted | 2024-03 | 🔄 Medium |
-| [ADR-007](#adr-007-ansible-for-deployments) | Ansible for Deployments | ✅ Accepted | 2024-04 | 🔥 High |
-| [ADR-008](#adr-008-selective-app-builds) | Selective App Builds | ✅ Accepted | 2024-04 | 🔄 Medium |
-| [ADR-009](#adr-009-automatic-semantic-versioning) | Automatic Semantic Versioning | ✅ Accepted | 2024-05 | 🔄 Medium |
-| [ADR-010](#adr-010-makefile-as-unified-interface) | Makefile as Unified Interface | ✅ Accepted | 2024-05 | 💡 Low |
-| [ADR-011](#adr-011-go-for-backend-api) | Go for Backend API | ✅ Accepted | 2024-02 | 🔥 High |
-| [ADR-012](#adr-012-jekyll-for-blog-platform) | Jekyll for Blog Platform | ✅ Accepted | 2024-03 | 🔄 Medium |
-| [ADR-013](#adr-013-astro-for-frontend-application) | Astro for Frontend Application | ✅ Accepted | 2024-03 | 🔄 Medium |
-| [ADR-014](#adr-014-n8n-webhook-notifications) | n8n Webhook Notifications | ✅ Accepted | 2024-07 | 💡 Low |
-
----
+| ADR-001 | Monorepo Structure | Accepted | 2024-01 | High |
+| ADR-002 | Docker Containerization | Accepted | 2024-01 | High |
+| ADR-003 | Traefik as Reverse Proxy | Accepted | 2024-02 | High |
+| ADR-004 | GitHub Actions for CI/CD | Accepted | 2024-02 | High |
+| ADR-005 | Multi-Architecture Builds | Accepted | 2024-03 | Medium |
+| ADR-006 | Manual CD Strategy | Accepted | 2024-03 | Medium |
+| ADR-007 | Ansible for Deployments | Accepted | 2024-04 | High |
+| ADR-008 | Selective App Builds | Accepted | 2024-04 | Medium |
+| ADR-009 | Automatic Semantic Versioning | Accepted | 2024-05 | Medium |
+| ADR-010 | Makefile as Unified Interface | Accepted | 2024-05 | Low |
 
 ## Current Technology Stack
 
 ### Frontend
 - **Web App:** Astro + TypeScript + Tailwind CSS
 - **Blog:** Jekyll + Beautiful Jekyll theme
-- **Reverse Proxy:** Traefik con SSL automático
+- **Reverse Proxy:** Traefik with automatic SSL
 
 ### Backend
-- **API:** Go 1.21 con librería estándar
-- **Base de Datos:** Almacenamiento basado en archivos
+- **API:** Go 1.21 with standard library
+- **Database:** File-based storage
+- **Authentication:** JWT tokens
 
-### Infraestructura
-- **Contenerización:** Docker + Docker Compose
-- **Orquestación:** Ansible playbooks
-- **CI/CD:** GitHub Actions (6 workflows, 1,388+ líneas)
-- **Registry:** Docker Hub con builds multi-arch
+### Infrastructure
+- **Containerization:** Docker + Docker Compose
+- **Orchestration:** Ansible playbooks
+- **CI/CD:** GitHub Actions (6 workflows, 1,388+ lines)
+- **Registry:** Docker Hub with multi-arch builds
 
-### Operaciones
-- **Monitorización:** Vector + Prometheus + Grafana
-- **Automatización:** n8n para workflows
-- **Gestión:** Portainer para supervisión
-
-### Desarrollo
-- **Repositorio:** Monorepo con builds selectivos
-- **Versionado:** Semántico con sufijos por rama
-- **Despliegue:** CD manual con CI automatizado
-- **Interfaz:** Makefile unificado
-
----
+### Operations
+- **Monitoring:** Vector + Prometheus + Grafana
+- **Automation:** n8n for workflows
+- **Management:** Portainer for container supervision
+- **Networking:** Traefik for routing and SSL
 
 ## ADR-001: Monorepo Structure
 
-**Status**: ✅ Accepted  
-**Date**: 2024-01-15  
-**Context**: Management of multiple related applications in the mlorente.dev ecosystem
+**Status:** Accepted  
+**Date:** 2024-01  
+**Decision Makers:** mlorente
 
-### Problem
-
-The ecosystem requires multiple applications (web, blog, API, infrastructure) that share configurations, deployment processes, and lifecycle. Decision between monorepo vs multiple repositories.
+### Context
+The project includes multiple applications (web, blog, API, wiki) and infrastructure components. We needed to decide between a monorepo or separate repositories.
 
 ### Decision
+We chose a monorepo structure with all applications and infrastructure in a single repository.
+
+### Reasons
+- Simplified dependency management across services
+- Easier to maintain consistent tooling and CI/CD
+- Better visibility of changes across the entire system
+- Simplified deployment coordination
+
+### Consequences
+**Positive:**
+- Single source of truth for all project code
+- Easier to implement cross-cutting changes
+- Simplified CI/CD pipeline setup
+
+**Negative:**
+- Larger repository size
+- Need careful CI/CD optimization to avoid building all apps on every change
+
+## ADR-002: Docker Containerization
 
-**Chosen option**: Monorepo with organized structure and selective builds.
+**Status:** Accepted  
+**Date:** 2024-01  
+**Decision Makers:** mlorente
+
+### Context
+Applications needed to be packaged for consistent deployment across development and production environments.
+
+### Decision
+All applications are containerized using Docker with multi-stage builds.
+
+### Reasons
+- Consistent runtime environment across all stages
+- Simplified deployment process
+- Better resource isolation
+- Easy local development setup
 
-**Adopted structure**:
-```
-├── apps/                 # Aplicaciones principales
-│   ├── web/             # Frontend Astro
-│   ├── blog/            # Blog Jekyll  
-│   ├── api/             # API Go
-│   ├── monitoring/      # Stack de monitorización
-│   └── wiki/            # Documentación técnica
-├── infra/               # Infraestructura como código
-├── .github/workflows/   # Pipelines CI/CD compartidos
-└── Makefile            # Interfaz unificada
-```
-
-### Consecuencias
-
-**Positivas**:
-- Versionado coordinado entre aplicaciones
-- CI/CD simplificado con builds selectivos (70% reducción en builds innecesarios)
-- Configuración compartida (Traefik, Docker networks)
-- Refactoring cross-app más fácil
-- Tooling unificado (Makefile, scripts)
-
-**Negativas**:
-- Repo más grande (~50MB con assets)
-- Acoplamiento potencial entre apps
-- Lógica compleja de detección de cambios
-
-**Implementación**:
-- `dorny/paths-filter@v3` para detección de cambios
-- Apps construidas en paralelo según cambios detectados
-
----
-
-## ADR-002: Containerización con Docker
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-01-20  
-**Contexto**: Entornos consistentes y despliegue portable para múltiples tech stacks
-
-### Problema
-
-Las aplicaciones usan diferentes tecnologías (Go, Node.js, Ruby) que requieren configuraciones específicas. Necesidad de portabilidad entre desarrollo, staging y producción.
-
-### Decisión
+### Consequences
+**Positive:**
+- Eliminated "works on my machine" problems
+- Simplified production deployment
+- Better resource management
 
-**Opción elegida**: Docker containers con multi-stage builds optimizados.
+**Negative:**
+- Additional complexity in development setup
+- Need Docker knowledge for contributors
+
+## ADR-003: Traefik as Reverse Proxy
 
-**Implementación**:
-```dockerfile
-# Ejemplo Dockerfile optimizado
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
+**Status:** Accepted  
+**Date:** 2024-02  
+**Decision Makers:** mlorente
+
+### Context
+Multiple services needed to be exposed through a single entry point with SSL termination.
+
+### Decision
+Use Traefik as the reverse proxy instead of Nginx or other alternatives.
+
+### Reasons
+- Automatic service discovery
+- Automatic SSL certificate management with Let's Encrypt
+- Better Docker integration
+- Built-in load balancing
 
-FROM node:20-alpine AS runner
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S astro -u 1001
-COPY --from=builder --chown=astro:nodejs /app/node_modules ./node_modules
-USER astro
-```
-
-### Consecuencias
-
-**Positivas**:
-- Paridad dev/prod garantizada
-- Aislamiento de dependencias
-- Builds reproducibles
-- Escalado horizontal simplificado
-- Imágenes optimizadas con multi-stage
-
-**Negativas**:
-- Overhead de recursos
-- Complejidad adicional en debugging local
-
-**Mitigaciones**:
-- Docker Compose para desarrollo local
-- Health checks en todos los contenedores
-- Volúmenes para hot reload en desarrollo
-
----
-
-## ADR-003: Traefik como Reverse Proxy
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-02-10  
-**Contexto**: Routing inteligente, SSL automático y descubrimiento de servicios
-
-### Problema
-
-Múltiples aplicaciones necesitan exposición en diferentes subdominios con SSL automático y routing dinámico basado en labels de Docker.
-
-### Decisión
+### Consequences
+**Positive:**
+- Zero-downtime SSL certificate renewal
+- Automatic routing based on Docker labels
+- Excellent monitoring and metrics
 
-**Opción elegida**: Traefik v3 con auto-discovery de Docker y Let's Encrypt.
+**Negative:**
+- Learning curve for Traefik-specific configuration
+- Dependency on Traefik for all traffic
+
+## ADR-004: GitHub Actions for CI/CD
 
-**Configuración clave**:
-```yaml
-# traefik.yml
-providers:
-  docker:
-    exposedByDefault: false
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: admin@mlorente.dev
-      storage: /acme.json
-      httpChallenge:
-        entryPoint: web
-
-# Ejemplo configuración de servicio
-labels:
-  - "traefik.enable=true"
-  - "traefik.http.routers.web.rule=Host(`mlorente.dev`)"
-  - "traefik.http.routers.web.tls.certresolver=letsencrypt"
-```
-
-### Consecuencias
-
-**Positivas**:
-- SSL automático con renovación
-- Auto-discovery de servicios
-- Configuración vía labels Docker
-- Dashboard integrado
-- Métricas Prometheus built-in
-- Actualizaciones de configuración sin reinicios
-
-**Negativas**:
-- Curva de aprendizaje específica
-- Dependencia crítica adicional
-- Más complejo que Nginx para casos simples
-
-**Alternativas descartadas**: Nginx (configuración manual), HAProxy (setup complejo), Caddy (menos soporte ecosistema)
-
----
-
-## ADR-004: GitHub Actions para CI/CD
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-02-25  
-**Contexto**: Automatización CI/CD nativa con GitHub para builds paralelos
+**Status:** Accepted  
+**Date:** 2024-02  
+**Decision Makers:** mlorente
+
+### Context
+The project needed automated testing, building, and deployment pipelines.
+
+### Decision
+Use GitHub Actions for all CI/CD processes instead of Jenkins, GitLab CI, or other solutions.
+
+### Reasons
+- Native integration with GitHub repository
+- No additional infrastructure to maintain
+- Rich ecosystem of pre-built actions
+- Good performance and reliability
 
-### Problema
+### Consequences
+**Positive:**
+- Simplified setup and maintenance
+- Excellent integration with pull requests
+- Free for public repositories
 
-Requerimiento de CI/CD automatizado con buena integración GitHub, soporte builds paralelos, y relación coste/beneficio favorable.
+**Negative:**
+- Vendor lock-in to GitHub
+- Limited customization compared to self-hosted solutions
 
-### Decisión
-
-**Opción elegida**: GitHub Actions con workflows modulares (6 workflows, 1,388+ líneas).
-
-**Arquitectura adoptada**:
-```mermaid
-graph LR
-    A[Dispatcher] --> B[Pipeline Blog]
-    A --> C[Pipeline API]  
-    A --> D[Pipeline Web]
-    A --> E[Pipeline Wiki]
-    B --> F[Publisher]
-    C --> F
-    D --> F
-    E --> F
-    F --> G[Release Manager]
-```
-
-### Consecuencias
-
-**Positivas**:
-- Integración nativa con GitHub
-- Secrets management incluido
-- Matrix builds para paralelización
-- Marketplace extenso de actions
-- Pricing generoso para proyectos pequeños
-
-**Negativas**:
-- Vendor lock-in con GitHub
-- Limitaciones runners públicos
-- Debugging menos directo que soluciones self-hosted
-
-**Implementación**:
-- Workflows reutilizables y modulares
-- Caching extensivo para optimización
-- Builds condicionales basados en cambios de rutas
+## ADR-005: Multi-Architecture Builds
 
----
+**Status:** Accepted  
+**Date:** 2024-03  
+**Decision Makers:** mlorente
 
-## ADR-005: Builds Multi-Arquitectura
+### Context
+Applications needed to run on both AMD64 and ARM64 architectures for broader compatibility.
 
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-03-10  
-**Contexto**: Soporte para servidores AMD64 y ARM64 (Apple Silicon, AWS Graviton)
+### Decision
+Build Docker images for both AMD64 and ARM64 architectures using Docker Buildx.
 
-### Problema
+### Reasons
+- Support for Apple Silicon development machines
+- Future-proofing for ARM-based server deployments
+- Better development experience for all team members
 
-Necesidad de soportar tanto servidores x86_64 tradicionales como ARM64. Los builds single-arch limitan opciones de deployment.
-
-### Decisión
-
-**Opción elegida**: Builds multi-arquitectura usando Docker Buildx.
-
-**Implementación**:
-```yaml
-- name: Build and Push Image
-  uses: docker/build-push-action@v6
-  with:
-    platforms: linux/amd64,linux/arm64
-    push: true
-    cache-from: type=gha
-    cache-to: type=gha,mode=max
-```
-
-### Consecuencias
-
-**Positivas**:
-- Flexibilidad en elección de hardware
-- Mejor rendimiento en ARM64 nativo
-- Preparación para adopción ARM en cloud
-- Menor coste en proveedores ARM64
-
-**Negativas**:
-- Builds 40% más lentos (2x procesos)
-- Mayor complejidad en troubleshooting
-- Consumo adicional espacio registry
-
-**Mitigaciones**:
-- Caching agresivo GitHub Actions
-- Tests específicos por arquitectura
-
----
-
-## ADR-006: Estrategia de CD Manual
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-03-20  
-**Contexto**: Balance entre automatización y control en despliegues de producción
-
-### Problema
-
-Decisión sobre nivel de automatización en despliegues: full automation vs control manual de cuándo y qué se despliega a producción.
-
-### Decisión
+### Consequences
+**Positive:**
+- Universal compatibility
+- Better developer experience
+- Prepared for ARM server migration
 
-**Opción elegida**: CD Semi-Automático con bundles de release.
-
-**Flujo implementado**:
-```
-develop → Auto-build → Auto-release RC
-master → Auto-build → Auto-release estable  
-deploy → Manual trigger → Ansible → Production
-```
-
-### Consecuencias
-
-**Positivas**:
-- Control total sobre timing de despliegues
-- Ventana de validación antes de producción  
-- Bundles self-contained para rollbacks rápidos
-- Revisión manual reduce riesgo
-- Capacidad de agrupar múltiples cambios
-
-**Negativas**:
-- Tiempo a producción más lento
-- Requiere intervención manual
-- Potencial retraso en hot-fixes
-
-**Implementación**:
-```bash
-# Proceso de despliegue simplificado
-make deploy ENV=production RELEASE_VERSION=v1.2.0
-```
-
----
-
-## ADR-007: Ansible para Despliegues
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-04-05  
-**Contexto**: Gestión automatizada de configuración de servidores
-
-### Problema
-
-Necesidad de automatizar configuración de servidores, despliegues y gestión de configuración de forma idempotente y repetible.
-
-### Decisión
-
-**Opción elegida**: Ansible con playbooks específicos por tarea y entornos.
-
-**Estructura adoptada**:
-```
-infra/ansible/
-├── playbooks/
-│   ├── bootstrap.yml    # Server initial setup
-│   ├── deploy.yml       # Application deployment  
-│   └── rollback.yml     # Rollback procedures
-├── roles/
-│   ├── docker/         # Docker installation
-│   ├── traefik/        # Traefik configuration
-│   └── apps/           # Application deployment
-└── inventories/
-    ├── production/
-    └── staging/
-```
-
-### Consecuencias
-
-**Positivas**:
-- Despliegues idempotentes (seguro re-ejecutar)
-- Configuración declarativa YAML
-- Agentless (solo SSH)
-- Inventarios multi-entorno
-- Reutilización vía roles
-- Excelente integración con Docker
-
-**Negativas**:
-- Curva de aprendizaje YAML/Jinja2
-- Debugging más complejo que bash
-- Dependencia Python en máquina control
-
-**Implementación**:
-```bash
-# Despliegues específicos por entorno
-make deploy ENV=production  # Usa inventario production
-make deploy ENV=staging     # Usa inventario staging
-```
-
----
-
-## ADR-008: Construcción Selectiva de Apps
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-04-15  
-**Contexto**: Optimización de tiempos CI para monorepo
-
-### Problema
-
-En monorepo, cambios pequeños disparan builds de todas las aplicaciones, resultando en tiempos CI lentos y uso innecesario de recursos.
-
-### Decisión
-
-**Opción elegida**: Path-based detection con dorny/paths-filter.
-
-**Implementación**:
-```yaml
-- uses: dorny/paths-filter@v3
-  id: filter
-  with:
-    filters: |
-      blog:
-        - 'apps/blog/**'
-        - 'apps/blog/Dockerfile'
-      api:
-        - 'apps/api/**'
-        - 'apps/api/Dockerfile'
-      web:
-        - 'apps/web/**'
-        - 'apps/web/Dockerfile'
-      wiki:
-        - 'apps/wiki/**'
-```
-
-### Consecuencias
-
-**Positivas**:
-- 70% reducción en builds innecesarios
-- Tiempos de CI significativamente más rápidos
-- Menor consumo recursos GitHub Actions
-- Feedback más rápido en PRs
-
-**Negativas**:
-- Complejidad adicional en workflow logic
-- Posibles false negatives en detección
-- Dependencias implícitas no detectadas
-
-**Mitigaciones**:
-- Patterns comprehensivos incluyendo Dockerfiles
-- Override manual para forzar builds completos
-
----
-
-## ADR-009: Versionado Semántico Automático
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-05-01  
-**Contexto**: Automatización de gestión de versiones basada en commits
-
-### Problema
-
-Gestión manual de versiones propensa a errores. Necesidad de versionado consistente y automático basado en el impacto de los cambios.
-
-### Decisión
+**Negative:**
+- Longer build times
+- Increased complexity in CI/CD
 
-**Opción elegida**: Conventional Commits con lógica custom de semantic versioning.
+## ADR-006: Manual CD Strategy
 
-**Reglas implementadas**:
-```bash
-feat: → MINOR bump
-fix: → PATCH bump  
-feat!: → MAJOR bump
-BREAKING CHANGE: → MAJOR bump
-docs:, style:, chore: → PATCH bump
-```
+**Status:** Accepted  
+**Date:** 2024-03  
+**Decision Makers:** mlorente
 
-**Estrategia por rama**:
-- `feature/*` → `1.2.3-alpha.N`
-- `hotfix/*` → `1.2.3-beta.N`
-- `develop` → `1.2.3-rc.N`
-- `master` → `1.2.3` + `latest`
+### Context
+We needed to decide between automatic deployment to production or manual deployment.
 
-### Consecuencias
+### Decision
+Images are built automatically, but deployment to production is manual.
 
-**Positivas**:
-- Versionado predictible y automático
-- Semantic versioning proper
-- Historial claro de cambios  
-- Integración con release management
-- Rollbacks precisos a versiones específicas
+### Reasons
+- Better control over production deployments
+- Ability to coordinate deployments with maintenance windows
+- Reduced risk of problematic automatic deployments
 
-**Negativas**:
-- Requiere disciplina en commit messages
-- Lógica compleja de cálculo (390+ líneas bash)
-- Posibles versiones no deseadas
+### Consequences
+**Positive:**
+- Full control over when changes go live
+- Ability to batch multiple changes
+- Reduced risk of production issues
 
-**Implementación**:
-- Validación conventional commits en CI
-- Cálculo automático desde mensajes commit
+**Negative:**
+- Requires manual intervention for deployments
+- Potential for delayed releases
 
----
+## ADR-007: Ansible for Deployments
 
-## ADR-010: Makefile como Interfaz Unificada
+**Status:** Accepted  
+**Date:** 2024-04  
+**Decision Makers:** mlorente
 
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-05-10  
-**Contexto**: Simplificación de comandos de desarrollo y operaciones
+### Context
+Production deployments needed to be automated and repeatable.
 
-### Problema
+### Decision
+Use Ansible for server configuration and application deployment.
 
-Múltiples herramientas (Docker Compose, Ansible, scripts) con comandos complejos y difíciles de recordar.
+### Reasons
+- Idempotent operations
+- Good Docker integration
+- Readable YAML configuration
+- Strong community support
 
-### Decisión
+### Consequences
+**Positive:**
+- Consistent server configurations
+- Automated deployment process
+- Easy to version control deployment procedures
 
-**Opción elegida**: Makefile con targets bien organizados y autodocumentación.
+**Negative:**
+- Additional tool to learn and maintain
+- SSH dependency for remote execution
 
-**Estructura adoptada**:
-```makefile
-# Development
-up: ## Start all services
-down: ## Stop all services
-logs: ## View logs
+## ADR-008: Selective App Builds
 
-# Build & Deploy  
-push-all: ## Build and push all apps
-deploy: ## Deploy to environment
-status: ## Check deployment status
+**Status:** Accepted  
+**Date:** 2024-04  
+**Decision Makers:** mlorente
 
-# Utilities
-check: ## Verify prerequisites
-install-precommit-hooks: ## Install development tools
-help: ## Show this help
-```
+### Context
+Building all applications on every change was wasteful and slow.
 
-### Consecuencias
+### Decision
+Implement selective building based on changed files and directories.
 
-**Positivas**:
-- Interfaz única y consistente
-- Autodocumentación con `make help`
-- Funciona en cualquier sistema Unix
-- Fácil onboarding nuevos desarrolladores
-- Composición de comandos complejos
+### Reasons
+- Faster CI/CD pipeline execution
+- Reduced resource usage
+- Better developer experience
 
-**Negativas**:
-- Sintaxis Make puede ser arcana
-- No funciona nativamente en Windows
+### Consequences
+**Positive:**
+- Significantly faster build times
+- Reduced CI/CD costs
+- More responsive development workflow
 
-**Mitigaciones**:
-- Documentación exhaustiva con help
-- WSL recomendado para Windows
+**Negative:**
+- Complex change detection logic
+- Risk of missing dependencies between apps
 
----
+## ADR-009: Automatic Semantic Versioning
 
-## ADR-011: Go para Backend API
+**Status:** Accepted  
+**Date:** 2024-05  
+**Decision Makers:** mlorente
 
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-02-10  
-**Contexto**: Backend API para gestión de suscripciones y lógica de negocio
+### Context
+Manual versioning was error-prone and inconsistent across applications.
 
-### Problema
+### Decision
+Implement automatic semantic versioning based on conventional commits.
 
-Elección de lenguaje para backend API que afecta rendimiento, mantenibilidad y estrategia de despliegue.
+### Reasons
+- Consistent versioning across all applications
+- Automatic changelog generation
+- Clear communication of change impact
 
-### Decisión
+### Consequences
+**Positive:**
+- Consistent version numbering
+- Automatic documentation of changes
+- Clear breaking change communication
 
-**Opción elegida**: Go 1.21 con dependencias mínimas y enfoque en librería estándar.
+**Negative:**
+- Requires discipline in commit message formatting
+- Complex version calculation logic
 
-### Consecuencias
+## ADR-010: Makefile as Unified Interface
 
-**Positivas**:
-- Excelente rendimiento y bajo uso memoria
-- Despliegue de binario único (perfecto para contenedores)
-- Librería estándar robusta reduce dependencias
-- Ciclos rápidos compilación y testing
-- Excelente soporte concurrencia
+**Status:** Accepted  
+**Date:** 2024-05  
+**Decision Makers:** mlorente
 
-**Negativas**:
-- Más verboso que lenguajes interpretados
-- Ecosistema más pequeño vs Node.js/Python
-- Curva de aprendizaje para equipo
+### Context
+Multiple tools and scripts needed a unified interface for common operations.
 
-**Implementación**:
-- Router HTTP con librería estándar
-- Dependencias mínimas (solo logging y config)
-- Hot reload con `air` en desarrollo
-- Multi-stage builds para imágenes pequeñas
+### Decision
+Use a Makefile to provide a consistent interface for all common operations.
 
----
+### Reasons
+- Universal availability of make
+- Simple syntax for common operations
+- Self-documenting through help target
 
-## ADR-012: Jekyll para Plataforma de Blog
+### Consequences
+**Positive:**
+- Consistent command interface
+- Easy onboarding for new developers
+- Self-documenting operations
 
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-03-01  
-**Contexto**: Plataforma de blog para contenido técnico con SEO y rendimiento
-
-### Decisión
-
-**Opción elegida**: Jekyll con Beautiful Jekyll theme, desplegado como aplicación contenerizada.
-
-### Consecuencias
-
-**Positivas**:
-- Excelente rendimiento (archivos estáticos)
-- Fuertes capacidades SEO
-- Gran ecosistema de temas y plugins
-- Perfecto para contenido técnico con syntax highlighting
-- Integración natural con Git workflow
-
-**Negativas**:
-- Stack dependencias Ruby
-- Builds más lentos con muchos posts
-- Menos funcionalidad dinámica
-
-**Implementación**:
-- Beautiful Jekyll theme para diseño profesional
-- Contenedor Docker para builds consistentes
-- Integración CI/CD para rebuilds automáticos
-
----
-
-## ADR-013: Astro para Aplicación Frontend
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-03-20  
-**Contexto**: Sitio web principal con rendimiento excelente y SEO
-
-### Decisión
-
-**Opción elegida**: Astro con hidratación selectiva y arquitectura islands.
-
-### Consecuencias
-
-**Positivas**:
-- Excelente rendimiento con JavaScript mínimo
-- Grandes puntuaciones SEO y Core Web Vitals
-- Component islands permiten interactividad selectiva
-- Experiencia desarrollo moderna con TypeScript
-- Generación de sitio estático por defecto
-
-**Negativas**:
-- Framework más nuevo con ecosistema en evolución
-- Curva aprendizaje para arquitectura islands
-- Limitaciones para apps altamente interactivas
-
-**Implementación**:
-- TypeScript para type safety
-- Tailwind CSS para styling
-- Arquitectura basada en componentes .astro
-- JavaScript mínimo del lado cliente
-
----
-
-## ADR-014: Notificaciones Webhook n8n
-
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-07-15  
-**Contexto**: Visibilidad en pipeline CI/CD y eventos de despliegue
-
-### Decisión
-
-**Opción elegida**: Notificaciones webhook a workflows n8n para procesamiento flexible.
-
-**Implementación**:
-```json
-{
-  "type": "docker_build_completed",
-  "app": "blog",
-  "docker_version": "1.2.0-rc.5",
-  "status": "success",
-  "timestamp": "2024-07-15T10:30:00Z"
-}
-```
-
-### Consecuencias
-
-**Positivas**:
-- Control completo sobre lógica notificaciones
-- Extensible para automatizaciones futuras
-- Datos estructurados para analytics
-- Auto-hospedado, sin dependencias externas
-
-**Negativas**:
-- Complejidad adicional pipeline CI/CD
-- Dependencia que infraestructura n8n esté activa
-
----
-
-## Timeline de Evolución Arquitectónica
-
-```mermaid
-gantt
-    title Timeline de Decisiones Arquitectónicas
-    dateFormat  YYYY-MM-DD
-    section Fundación
-    Monorepo Structure     :done, adr1, 2024-01-15, 1d
-    Docker Containerization :done, adr2, 2024-01-20, 1d
-    
-    section Infraestructura  
-    Traefik Proxy         :done, adr3, 2024-02-10, 1d
-    GitHub Actions CI/CD  :done, adr4, 2024-02-25, 1d
-    Multi-arch Builds     :done, adr5, 2024-03-10, 1d
-    Manual CD Strategy    :done, adr6, 2024-03-20, 1d
-    Ansible Deployment    :done, adr7, 2024-04-05, 1d
-    
-    section Aplicaciones
-    Go API Backend        :done, adr11, 2024-02-10, 1d
-    Jekyll Blog           :done, adr12, 2024-03-01, 1d
-    Astro Frontend        :done, adr13, 2024-03-20, 1d
-    
-    section Optimizaciones
-    Selective Builds      :done, adr8, 2024-04-15, 1d
-    Semantic Versioning   :done, adr9, 2024-05-01, 1d
-    Makefile Interface    :done, adr10, 2024-05-10, 1d
-    n8n Notifications     :done, adr14, 2024-07-15, 1d
-```
-
----
-
-## Métricas y Estado Actual
-
-| Métrica | Valor | Notas |
-|---------|-------|-------|
-| **Total ADRs** | 14 | Decisiones documentadas |
-| **Estado Aceptado** | 14 (100%) | Todas implementadas |
-| **Cobertura Arquitectural** | Completa | Todas las decisiones clave documentadas |
-| **Complejidad CI/CD** | 1,388+ líneas | 6 workflows en GitHub Actions |
-| **Apps en Monorepo** | 5 | web, blog, api, monitoring, wiki |
-| **Reducción Builds** | 70% | Gracias a construcción selectiva |
-| **Arquitecturas Soportadas** | 2 | linux/amd64, linux/arm64 |
-| **Última Actualización** | Diciembre 2024 | Mantenido activamente |
-
----
-
-## Template para Nuevos ADRs
-
-```markdown
-## ADR-XXX: [Título de la Decisión]
-
-**Estado**: 🔄 Propuesto | ✅ Aceptado | ❌ Rechazado | 📚 Deprecated  
-**Fecha**: YYYY-MM-DD  
-**Contexto**: [Situación que requiere la decisión]
-**Impacto**: 🔥 Alto | 🔄 Medio | 💡 Bajo
-
-### Problema
-[Descripción del problema que se intenta resolver]
-
-### Opciones Consideradas
-1. **Opción A**: [Descripción]
-2. **Opción B**: [Descripción]
-3. **Opción C**: [Descripción]
-
-### Decisión
-**Opción elegida**: [Opción seleccionada]
-
-[Justificación de la decisión]
-
-### Consecuencias
-
-**Positivas**:
-- [Beneficio 1]
-- [Beneficio 2]
-
-**Negativas**:
-- [Desventaja 1]
-- [Desventaja 2]
-
-**Mitigaciones**:
-- [Cómo mitigar desventaja 1]
-- [Cómo mitigar desventaja 2]
-
-### Implementación
-[Detalles técnicos relevantes, código, configuraciones]
-```
-
----
-
-*💡 **Nota**: Este documento unifica las anteriores arquitecturas ADR.md y ARCHITECTURE.md eliminando redundancias. Cuando tomes una nueva decisión arquitectural significativa, añádela siguiendo el template. Mantiene la documentación actualizada y ayuda a futuros desarrolladores a entender el "por qué" detrás del diseño actual.*
+**Negative:**
+- Make syntax limitations
+- Platform-specific behavior differences

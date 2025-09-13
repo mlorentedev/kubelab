@@ -1,135 +1,117 @@
-# My Go Backend API
+# 1.1 API - Go Backend Service
 
-<div align="center">
+The REST API that powers [mlorente.dev](https://mlorente.dev). Built with Go, it handles newsletter subscriptions, lead magnets, and other backend services.
 
-![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go&logoColor=white)
-![Gin](https://img.shields.io/badge/Gin-008000?style=flat&logo=gin&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Active-008099?style=flat)
+## What it does
 
-</div>
+This API serves as the backend for my personal website. It's pretty straightforward - it handles newsletter subscriptions through Beehiiv, manages lead magnet downloads, and provides health check endpoints for monitoring.
 
-This is my Go REST API that handles all the business logic for [mlorente.dev](https://mlorente.dev). It handles newsletter subscriptions, lead magnets, and other things the frontend needs.
+## Tech stack
 
-## ⚙️ Technologies I use
+- **Go 1.21+** - Fast, simple, gets the job done
+- **Gin** - Lightweight web framework
+- **Beehiiv API** - Newsletter management
+- **Zerolog** - Structured logging
+- **Docker** - Containerized for easy deployment
 
-- **Go 1.23+** - Because it's fast and I like its simplicity
-- **Gin** - Web framework that works great
-- **Beehiiv API** - To manage newsletter subscriptions
-- **Zerolog** - Structured logging that makes debugging easier
-- **Docker** - Everything containerized for easy deployment
-
-## 📁 How it's organized
+## Project structure
 
 ```
 src/
-├── cmd/server/main.go          # Entry point - where everything starts
+├── cmd/server/main.go          # Application entry point
 ├── internal/
-│   ├── api/                    # All endpoints
-│   │   ├── healthchecks.go     # To know if it's alive
-│   │   ├── lead_magnet.go      # Blog lead magnets
-│   │   ├── middleware.go       # CORS and other things
+│   ├── api/                    # HTTP endpoints
+│   │   ├── healthchecks.go     # Health check endpoints
+│   │   ├── lead_magnet.go      # Lead magnet handling
+│   │   ├── middleware.go       # CORS and other middleware
 │   │   ├── subscribe.go        # Newsletter subscriptions
-│   │   └── unsubscribe.go      # In case someone wants to leave
+│   │   └── unsubscribe.go      # Unsubscription handling
 │   ├── models/                 # Data structures
 │   └── services/               # Business logic
 │       ├── beehiiv.go          # Beehiiv integration
-│       ├── email.go            # Everything email-related
-│       └── subscription.go     # Subscription management
-├── pkg/                        # Reusable code
-│   ├── config/env.go           # Environment variables
-│   └── logger/logger.go        # Logging configuration
-├── go.mod & go.sum             # Dependencies
-└── Dockerfile                  # For containerization
+│       ├── email.go            # Email services
+│       └── subscription.go     # Subscription logic
+├── pkg/                        # Shared packages
+│   ├── config/env.go           # Environment configuration
+│   └── logger/logger.go        # Logging setup
+└── Dockerfile                  # Container definition
 ```
 
-## 🎯 Endpoints disponibles
+## Available endpoints
 
-### ¿Está viva la API?
-- `GET /health` - Check básico
-- `GET /healthz` - Para Kubernetes
-- `GET /ready` - Para saber si está lista
+### Health checks
+- `GET /health` - Basic health check
+- `GET /healthz` - Kubernetes-style health check
+- `GET /ready` - Readiness probe
 
-### Newsletter y lead magnets
-- `POST /api/subscribe` - Suscribirse al newsletter
-- `POST /api/unsubscribe` - Cancelar suscripción
-- `POST /api/lead-magnet` - Descargar recursos gratuitos
+### Newsletter and lead magnets
+- `POST /api/subscribe` - Subscribe to newsletter
+- `POST /api/unsubscribe` - Unsubscribe from newsletter
+- `POST /api/lead-magnet` - Download free resources
 
-## 🔧 Configuración
+## Configuration
 
-### Variables que necesitas
+### Environment variables
 
 ```bash
-# Configuración básica
+# Basic configuration
 PORT=8080
 LOG_LEVEL=info
 GIN_MODE=release
 
-# Para conectar con Beehiiv
-BEEHIIV_API_KEY=tu_clave_aqui
-BEEHIIV_PUBLICATION_ID=tu_id_aqui
+# Beehiiv integration
+BEEHIIV_API_KEY=your_api_key_here
+BEEHIIV_PUBLICATION_ID=your_publication_id
 
-# CORS (importante para el frontend)
+# CORS configuration
 ALLOWED_ORIGINS=https://mlorente.dev,https://www.mlorente.dev
 ```
 
-### Para Docker
+## Running the API
+
+### Development mode
 
 ```bash
-# Configuración del contenedor
-REGISTRY=docker.io/mlorentedev
-IMAGE_NAME=mlorente-api
-CONTAINER_NAME=api
-TAG=latest
-PORT=8080
-ENVIRONMENT=production
-```
-
-## 🚀 Cómo ejecutar esto
-
-### En desarrollo (rápido y sucio)
-
-```bash
-# Clona el repo y ve a la carpeta
+# Navigate to the source directory
 cd apps/api/src
 
-# Instala las dependencias
+# Install dependencies
 go mod tidy
 
-# Copia el archivo de ejemplo y configúralo
+# Copy environment file and configure it
 cp ../.env.example ../.env
-# Edita las variables que necesites
+# Edit the variables you need
 
-# ¡A funcionar!
+# Run the server
 go run cmd/server/main.go
 ```
 
-### Con Docker (como en producción)
+### With Docker
 
 ```bash
-# Para desarrollo con hot reload
-docker-compose -f docker-compose.dev.yml up --build
+# Development with hot reload
+make up-api
 
-# Para producción
+# Production mode
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Comandos útiles para desarrollar
+### Development commands
 
 ```bash
-# Formatear el código (Go es muy quisquilloso)
+# Format code
 go fmt ./...
 
-# Ejecutar tests
+# Run tests
 go test ./...
 
-# Con air para hot reload (súper cómodo)
+# Hot reload with air
 air
 ```
 
-## 💡 Ejemplos de uso
+## Usage examples
 
-### Suscribirse al newsletter
+### Subscribe to newsletter
 
 ```bash
 curl -X POST http://localhost:8080/api/subscribe \
@@ -137,7 +119,7 @@ curl -X POST http://localhost:8080/api/subscribe \
   -d '{"email": "user@example.com", "tag": "newsletter"}'
 ```
 
-### Descargar un lead magnet
+### Download lead magnet
 
 ```bash
 curl -X POST http://localhost:8080/api/lead-magnet \
@@ -151,75 +133,81 @@ curl -X POST http://localhost:8080/api/lead-magnet \
   }'
 ```
 
-## 📊 Monitoreo y logs
+## Monitoring and logging
 
-### Logging inteligente
-Uso Zerolog para logs estructurados en JSON. Esto me ayuda mucho para:
+### Structured logging
+Uses Zerolog for JSON structured logging, which helps with:
+- Request tracking with unique IDs
+- Error tracking with stack traces
+- Performance metrics
+- Configurable log levels
 
-- Tracking de cada request con IDs únicos
-- Seguimiento de errores con stack traces
-- Métricas de rendimiento
-- Logs configurables por nivel
+### Health monitoring
+- `/health` - Basic alive check
+- `/healthz` - Kubernetes health check
+- `/ready` - Readiness for traffic
 
-### Health checks
-- `/health` - "¿Estás vivo?"
-- `/healthz` - Para que Kubernetes sepa si funciona
-- `/ready` - Para saber si está listo para recibir tráfico
+### Metrics tracked
+- Response time per endpoint
+- Error rates
+- Subscription conversion rates
+- External service status
 
-### Métricas que rastrea
-- Tiempo de respuesta por endpoint
-- Tasas de error
-- Conversiones de suscripciones
-- Estado de las integraciones externas
+## Security features
 
-## 🔒 Seguridad
+- **CORS configuration** - Only accepts requests from allowed domains
+- **Input validation** - All incoming data is validated
+- **Rate limiting** - Prevents abuse
+- **Security headers** - Standard security headers applied
+- **Environment separation** - Clear dev/staging/production boundaries
 
-No soy paranoico, pero me gusta que las cosas estén seguras:
+## CI/CD integration
 
-- **CORS configurado** - Solo acepta requests de mis dominios
-- **Validación de entrada** - Todo lo que llega se valida
-- **Rate limiting** - Para evitar abusos
-- **Headers de seguridad** - Los estándar de la industria
-- **Entornos separados** - Dev, staging y prod bien diferenciados
+This API is part of the automated pipeline:
+- **Automatic tests** on every pull request
+- **Multi-architecture Docker builds** (AMD64, ARM64)
+- **Independent versioning** using tags like `api-v1.2.3`
+- **Health checks** after each deployment
 
-## 🔄 CI/CD
+Versioning is automatic based on conventional commits.
 
-Esta API forma parte del pipeline automático:
+## Key dependencies
 
-- **Tests automáticos** en cada pull request
-- **Builds multi-arquitectura** con Docker
-- **Versionado independiente** - usa tags como `api-v1.2.3`
-- **Health checks** tras cada despliegue
+### Production
+- **gin-gonic/gin** - Web framework
+- **rs/zerolog** - Structured logging
+- **joho/godotenv** - Environment variable loading
 
-El versionado es automático basándose en los commits convencionales. Muy cómodo.
+### Development
+- **air** - Hot reload for development
+- **golangci-lint** - Code quality checks
 
-## 🛠️ Dependencias principales
+## Contributing
 
-### Las que uso siempre
-- **gin-gonic/gin** - El framework web
-- **rs/zerolog** - Para logs bonitos
-- **joho/godotenv** - Para cargar variables de entorno
+1. **Follow Go conventions** - Use `gofmt` and `golint`
+2. **Add tests** for any new endpoints
+3. **Update documentation** if you change the API
+4. **Use conventional commits** for automatic versioning
+5. **Ensure Docker build works** before pushing
 
-### Para desarrollo
-- **air** - Hot reload que me ahorra tiempo
-- **golangci-lint** - Para que el código esté limpio
+## Connections
 
-## 💡 Tips para contribuir
+This API works with:
+- **Web app** (`apps/web`) - Astro frontend
+- **Blog** (`apps/blog`) - Jekyll blog
+- **Wiki** (`apps/wiki`) - This documentation
+- **Beehiiv** - Newsletter management service
+- **Traefik** - Reverse proxy for routing
 
-1. **Sigue las convenciones de Go** - Usa `gofmt` y `golint`
-2. **Añade tests** para cualquier endpoint nuevo
-3. **Actualiza la documentación** si cambias algo de la API
-4. **Commits convencionales** - para que el versionado automático funcione
-5. **Asegúrate de que el Docker build funciona** antes de hacer push
+## Development notes
 
-## 🔗 Con qué otros servicios se conecta
+Started simple and grew as needed. When adding features, keep it simple - that's what I like most about Go. The codebase is designed to be easy to understand and modify.
 
-- **Frontend** (`apps/web`) - Mi sitio web en Astro
-- **Blog** (`apps/blog`) - El blog en Jekyll
-- **Wiki** (`apps/wiki`) - Esta documentación
-- **Beehiiv** - Para gestionar el newsletter
-- **Traefik** - Proxy reverso que dirige el tráfico
+## Local development URLs
 
----
+When running locally with `make up-api`:
+- API: http://api.mlorentedev.test
+- Health: http://api.mlorentedev.test/health
+- Docs: Check the endpoints section above
 
-> **Nota personal:** Esta API la empecé simple y ha ido creciendo con las necesidades. Si vas a añadir algo, mantenla simple - que es lo que más me gusta de Go.
+Add `127.0.0.1 api.mlorentedev.test` to your `/etc/hosts` file.

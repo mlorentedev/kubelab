@@ -1,129 +1,79 @@
-# Traefik - Proxy Reverso
+# 2.1 Traefik - Reverse Proxy
 
-<div align="center">
+Modern reverse proxy and load balancer that simplifies microservice deployment with automatic service discovery, TLS termination, and dynamic routing.
 
-![Traefik](https://img.shields.io/badge/Traefik-v3.0-24A1C1?style=flat&logo=traefik&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
-![SSL](https://img.shields.io/badge/Let's_Encrypt-003A70?style=flat&logo=letsencrypt&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Production-008099?style=flat)
+## What it is
 
-</div>
+Traefik handles all incoming traffic to the mlorente.dev ecosystem. It automatically discovers services through Docker labels, manages SSL certificates with Let's Encrypt, and routes requests to the appropriate applications. I chose Traefik because it eliminates the need for manual configuration - just label your containers and it figures out the rest.
 
-Proxy reverso moderno y load balancer que facilita el despliegue de microservicios con descubrimiento automático de servicios, terminación TLS y enrutamiento dinámico.
+## Tech stack
 
-## 🏗️ Arquitectura
+- **Traefik v3.0** - Modern reverse proxy with HTTP/3 support
+- **Let's Encrypt** - Automatic SSL certificate management
+- **Docker integration** - Service discovery via Docker labels
+- **Dynamic configuration** - Hot reload without restarts
 
-- **Versión**: Traefik v3.0 con soporte completo HTTP/3
-- **Descubrimiento**: Automático vía Docker labels y archivos de configuración
-- **TLS**: Terminación SSL/TLS automática con Let's Encrypt
-- **Configuración**: Híbrida con archivos estáticos y dinámicos
-- **Red**: Red Docker externa compartida para todos los servicios
-
-## 📁 Estructura del Proyecto
+## Project structure
 
 ```
 infra/traefik/
-├── README.md              # Esta documentación
-├── docker-compose.yml     # Configuración del servicio Traefik
-├── traefik.yml           # Configuración estática principal
-├── .env                  # Variables de entorno (no en repositorio)
-├── certs/                # Certificados SSL/TLS
-│   └── acme.json         # Certificados Let's Encrypt
-├── dynamic/              # Configuraciones dinámicas activas
-│   ├── middlewares.yml   # Middlewares globales
-│   ├── tls.yml          # Configuración TLS global
-│   ├── app-*.yml        # Configuraciones por aplicación
-│   └── nginx.yml        # Configuración servidor estático
-├── templates/           # Plantillas de configuración
-│   ├── *.template.yml   # Plantillas para nuevos servicios
-│   └── traefik.*.template.yml # Plantillas HTTP/HTTPS
-└── logs/               # Logs de acceso y error
+├── README.md              # This documentation
+├── docker-compose.yml     # Traefik service configuration
+├── traefik.yml           # Static configuration
+├── .env                  # Environment variables
+├── certs/                # SSL certificates
+│   └── acme.json         # Let's Encrypt certificates
+├── dynamic/              # Dynamic configurations
+│   ├── middlewares.yml   # Global middlewares
+│   └── tls.yml          # TLS configuration
+└── logs/                # Access and error logs
 ```
 
-## 🚀 Características
+## Key features
 
-### Proxy Reverso Avanzado
+### Service discovery
+- **Docker labels** - Automatic service detection
+- **File provider** - Static configuration files
+- **Hot reload** - Configuration updates without restart
 
-- **Enrutamiento Inteligente**: Enrutamiento basado en dominio, path, headers y query params
-- **Load Balancing**: Múltiples algoritmos de balanceado de carga
-- **Health Checks**: Verificación de salud automática de backends
-- **Circuit Breaker**: Protección contra cascading failures
-- **Retry Logic**: Reintentos automáticos con backoff exponencial
-- **Sticky Sessions**: Sesiones pegajosas para aplicaciones stateful
+### SSL management
+- **Let's Encrypt** - Automatic certificate generation and renewal
+- **HTTP to HTTPS** - Automatic redirects
+- **Modern TLS** - TLS 1.2+ with secure cipher suites
 
-### Gestión TLS Automática
+### Load balancing
+- **Health checks** - Automatic backend monitoring
+- **Multiple algorithms** - Round robin, weighted, sticky sessions
+- **Circuit breaker** - Fault tolerance and cascade protection
 
-- **Let's Encrypt**: Obtención y renovación automática de certificados
-- **ACME Protocol**: Soporte completo para desafíos HTTP-01 y TLS-ALPN-01
-- **Wildcard Certificates**: Certificados comodín con desafío DNS-01
-- **Custom CA**: Soporte para autoridades certificadoras personalizadas
-- **TLS Termination**: Terminación SSL en el proxy con re-encryption opcional
-- **HSTS**: HTTP Strict Transport Security automático
+## Configuration
 
-### Descubrimiento de Servicios
-
-- **Docker Integration**: Descubrimiento automático vía labels Docker
-- **File Provider**: Configuración vía archivos YAML/TOML
-- **Consul/Etcd**: Integración con service discovery externos
-- **API Provider**: Configuración vía API REST
-- **Hot Reload**: Recarga de configuración sin reinicio
-- **Multi-provider**: Múltiples fuentes de configuración simultáneas
-
-### Monitoreo y Observabilidad
-
-- **Dashboard Web**: Interfaz gráfica de administración
-- **Métricas Prometheus**: Exportación nativa de métricas
-- **Access Logs**: Logs de acceso detallados en múltiples formatos
-- **Tracing**: Integración con Jaeger, Zipkin, DataDog
-- **API REST**: API completa para gestión y monitoreo
-- **Health Endpoints**: Endpoints de salud y readiness
-
-### Middlewares Avanzados
-
-- **Autenticación**: BasicAuth, DigestAuth, ForwardAuth, OAuth
-- **Rate Limiting**: Limitación de velocidad por IP, usuario, endpoint
-- **Request/Response Modification**: Transformación de headers y body
-- **Compression**: Compresión Gzip automática
-- **CORS**: Cross-Origin Resource Sharing configurable
-- **Security Headers**: Headers de seguridad automáticos
-
-## 🔧 Configuración
-
-### Variables de Entorno
-
-Crea un archivo `.env` con la siguiente configuración:
+### Environment variables
 
 ```bash
-# Configuración General
-TRAEFIK_DOMAIN=tudominio.com
-TRAEFIK_SUBDOMAIN=traefik
-TRAEFIK_EMAIL=admin@tudominio.com
+# Basic configuration
+TRAEFIK_DOMAIN=mlorente.dev
+TRAEFIK_EMAIL=admin@mlorente.dev
+LETS_ENCRYPT_EMAIL=letsencrypt@mlorente.dev
 
-# Let's Encrypt Configuration
-LETS_ENCRYPT_EMAIL=letsencrypt@tudominio.com
+# Let's Encrypt server
 ACME_CA_SERVER=https://acme-v02.api.letsencrypt.org/directory
-# Para testing: https://acme-staging-v02.api.letsencrypt.org/directory
 
-# Dashboard Security
-TRAEFIK_DASHBOARD_AUTH=admin:$2y$10$ejemplo_hash_bcrypt
+# Dashboard security
+TRAEFIK_DASHBOARD_AUTH=admin:$2y$10$hashed_password
 
-# Logging Configuration
+# Logging
 LOG_LEVEL=INFO
 ACCESS_LOG_FORMAT=json
 
-# Network Configuration
+# Docker network
 DOCKER_NETWORK=proxy
-DOCKER_SOCKET=/var/run/docker.sock
-
-# Optional: External Provider Settings
-CONSUL_ENDPOINTS=consul:8500
-ETCD_ENDPOINTS=etcd:2379
 ```
 
-### Configuración Estática (traefik.yml)
+### Static configuration (traefik.yml)
 
 ```yaml
-# Configuración principal Traefik
+# API and dashboard
 api:
   dashboard: true
   debug: false
@@ -131,7 +81,7 @@ api:
 # Health check endpoint
 ping: {}
 
-# Logging configuration
+# Logging
 log:
   level: INFO
   filePath: /logs/traefik.log
@@ -140,7 +90,7 @@ accessLog:
   filePath: /logs/access.log
   format: json
 
-# Entry points (puertos de entrada)
+# Entry points
 entryPoints:
   web:
     address: ":80"
@@ -164,7 +114,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: letsencrypt@tudominio.com
+      email: letsencrypt@mlorente.dev
       storage: /letsencrypt/acme.json
       httpChallenge:
         entryPoint: web
@@ -181,632 +131,208 @@ providers:
     directory: "/etc/traefik/dynamic"
     watch: true
 
-# Global configuration
+# Global settings
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
 ```
 
-### Configuración Dinámica
+## Running Traefik
 
-#### Middlewares Globales (dynamic/middlewares.yml)
+### Development setup
+
+```bash
+# Create network
+docker network create proxy
+
+# Create directories
+mkdir -p certs logs dynamic
+
+# Set certificate permissions
+touch certs/acme.json
+chmod 600 certs/acme.json
+
+# Start Traefik
+make up-traefik
+
+# Access dashboard
+open http://traefik.mlorentedev.test
+```
+
+### Production deployment
+
+```bash
+# Configure production environment
+cp .env.example .env
+# Edit .env with production values
+
+# Generate basic auth password
+htpasswd -nb admin your-secure-password
+
+# Deploy
+docker-compose up -d
+
+# Monitor logs
+docker-compose logs -f traefik
+```
+
+## Service configuration
+
+### Basic service with HTTPS
+
+```yaml
+services:
+  app:
+    image: nginx:alpine
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`app.mlorente.dev`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls=true"
+      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app.loadbalancer.server.port=80"
+
+networks:
+  proxy:
+    external: true
+```
+
+### API service with middlewares
+
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.api.rule=Host(`api.mlorente.dev`)"
+  - "traefik.http.routers.api.entrypoints=websecure"
+  - "traefik.http.routers.api.tls=true"
+  - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+  - "traefik.http.routers.api.middlewares=api-cors,api-ratelimit"
+  - "traefik.http.services.api.loadbalancer.server.port=8080"
+  
+  # CORS middleware
+  - "traefik.http.middlewares.api-cors.headers.accesscontrolalloworiginlist=https://mlorente.dev"
+  - "traefik.http.middlewares.api-cors.headers.accesscontrolallowheaders=Content-Type,Authorization"
+  
+  # Rate limiting
+  - "traefik.http.middlewares.api-ratelimit.ratelimit.average=100"
+  - "traefik.http.middlewares.api-ratelimit.ratelimit.period=60s"
+```
+
+## Middlewares
+
+### Security headers (dynamic/middlewares.yml)
 
 ```yaml
 http:
   middlewares:
-    # Security headers middleware
     secure-headers:
       headers:
-        accessControlAllowMethods:
-          - GET
-          - OPTIONS
-          - PUT
-          - POST
-          - DELETE
-        accessControlMaxAge: 100
-        hostsProxyHeaders:
-          - "X-Forwarded-Host"
-        referrerPolicy: "same-origin"
-        customRequestHeaders:
-          X-Forwarded-Proto: "https"
         customResponseHeaders:
           X-Frame-Options: "DENY"
           X-Content-Type-Options: "nosniff"
           X-XSS-Protection: "1; mode=block"
           Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+          Referrer-Policy: "strict-origin-when-cross-origin"
 
-    # Rate limiting
+    gzip-compress:
+      compress: {}
+
     rate-limit:
       rateLimit:
         burst: 100
         period: 10s
-
-    # Basic authentication
-    auth-basic:
-      basicAuth:
-        users:
-          - "admin:$2y$10$tu_hash_bcrypt_aqui"
-
-    # Compression
-    gzip-compress:
-      compress: {}
-
-    # CORS headers
-    cors-headers:
-      headers:
-        accessControlAllowOriginList:
-          - "https://tudominio.com"
-          - "https://*.tudominio.com"
-        accessControlAllowHeaders:
-          - "Content-Type"
-          - "Authorization"
-        accessControlAllowMethods:
-          - "GET"
-          - "POST"
-          - "PUT"
-          - "DELETE"
-          - "OPTIONS"
 ```
 
-#### Configuración TLS (dynamic/tls.yml)
+## Monitoring
 
-```yaml
-tls:
-  options:
-    modern:
-      minVersion: "VersionTLS12"
-      maxVersion: "VersionTLS13"
-      cipherSuites:
-        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
-        - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
-        - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
-      curvePreferences:
-        - "CurveP521"
-        - "CurveP384"
-      sniStrict: true
+### Dashboard access
 
-    intermediate:
-      minVersion: "VersionTLS10"
-      cipherSuites:
-        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
-        - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+- **URL**: https://traefik.mlorente.dev
+- **Authentication**: Basic auth (configured in .env)
+- **Features**: Real-time service status, traffic metrics, configuration overview
 
-  stores:
-    default:
-      defaultCertificate:
-        certFile: /certs/default.crt
-        keyFile: /certs/default.key
-```
-
-## 🐳 Despliegue Docker
-
-### Configuración del Servicio
-
-```yaml
-services:
-  traefik:
-    image: traefik:v3.0
-    container_name: traefik
-    restart: always
-    ports:
-      - "80:80"     # HTTP
-      - "443:443"   # HTTPS
-      - "8080:8080" # Dashboard
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./traefik.yml:/etc/traefik/traefik.yml:ro"
-      - "./dynamic:/etc/traefik/dynamic:ro"
-      - "./certs:/certs"
-      - "./logs:/logs"
-    environment:
-      - "TRAEFIK_LOG_LEVEL=${LOG_LEVEL:-INFO}"
-    networks:
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.${TRAEFIK_DOMAIN}`)"
-      - "traefik.http.routers.dashboard.tls=true"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.dashboard.middlewares=auth-basic@file"
-
-networks:
-  proxy:
-    external: true
-```
-
-### Configuración de Red
+### Health checks
 
 ```bash
-# Crear red externa compartida
-docker network create proxy
+# Basic health check
+curl -f http://localhost:8080/ping
 
-# Verificar red
-docker network ls | grep proxy
+# API status
+curl -s http://localhost:8080/api/version
+
+# Service status
+curl -s http://localhost:8080/api/http/services | jq
+
+# Check SSL certificate
+curl -I https://mlorente.dev
+```
+
+### Logs
+
+```bash
+# Follow logs
+docker-compose logs -f traefik
+
+# Access logs
+tail -f logs/access.log
+
+# Error logs
+tail -f logs/traefik.log
+```
+
+## Troubleshooting
+
+### Common issues
+
+**Service not accessible:**
+1. Check if service is in proxy network
+2. Verify Docker labels are correct
+3. Check Traefik logs for errors
+4. Ensure domain DNS points to server
+
+**SSL certificate issues:**
+1. Verify Let's Encrypt rate limits
+2. Check domain ownership
+3. Review ACME challenge logs
+4. Ensure ports 80/443 are accessible
+
+**Dashboard not loading:**
+1. Verify basic auth credentials
+2. Check Traefik container is running
+3. Ensure port 8080 is accessible
+4. Review dashboard router configuration
+
+### Debug commands
+
+```bash
+# Check Traefik configuration
+docker-compose exec traefik traefik config
+
+# Test service connectivity
+docker-compose exec traefik ping app
+
+# Validate certificates
+openssl s_client -connect mlorente.dev:443 -servername mlorente.dev
+
+# Check network connectivity
 docker network inspect proxy
 ```
 
-### Despliegue de Desarrollo
+## Local development URLs
 
-```bash
-# Crear estructura de directorios
-mkdir -p certs logs dynamic templates
+When running locally with `make up-traefik`:
+- Dashboard: http://traefik.mlorentedev.test
+- API: http://localhost:8080/api/
+- Ping: http://localhost:8080/ping
 
-# Configurar permisos para certificados
-touch certs/acme.json
-chmod 600 certs/acme.json
+Add `127.0.0.1 traefik.mlorentedev.test` to your `/etc/hosts` file for local domain access.
 
-# Crear archivo de entorno
-cat > .env << EOF
-TRAEFIK_DOMAIN=localhost
-TRAEFIK_EMAIL=admin@localhost
-LETS_ENCRYPT_EMAIL=test@localhost
-ACME_CA_SERVER=https://acme-staging-v02.api.letsencrypt.org/directory
-LOG_LEVEL=DEBUG
-EOF
+## Security considerations
 
-# Iniciar Traefik
-docker-compose up -d
-
-# Verificar logs
-docker-compose logs -f traefik
-
-# Acceder al dashboard
-open http://localhost:8080
-```
-
-### Despliegue de Producción
-
-```bash
-# Configurar variables de producción
-cat > .env << EOF
-TRAEFIK_DOMAIN=tudominio.com
-TRAEFIK_EMAIL=admin@tudominio.com
-LETS_ENCRYPT_EMAIL=letsencrypt@tudominio.com
-ACME_CA_SERVER=https://acme-v02.api.letsencrypt.org/directory
-LOG_LEVEL=INFO
-EOF
-
-# Generar hash para autenticación básica
-htpasswd -nb admin tu-contraseña-segura
-
-# Configurar certificados
-chmod 600 certs/acme.json
-
-# Desplegar en producción
-docker-compose up -d
-
-# Monitorear despliegue
-docker-compose logs -f traefik
-```
-
-## 🛠️ Configuración de Aplicaciones
-
-### Configuración vía Docker Labels
-
-```yaml
-# Ejemplo: Aplicación web con HTTPS automático
-services:
-  web:
-    image: nginx:alpine
-    container_name: mi-web
-    networks:
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.web.rule=Host(`www.tudominio.com`)"
-      - "traefik.http.routers.web.entrypoints=websecure"
-      - "traefik.http.routers.web.tls=true"
-      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.web.middlewares=secure-headers@file,gzip-compress@file"
-      - "traefik.http.services.web.loadbalancer.server.port=80"
-
-networks:
-  proxy:
-    external: true
-```
-
-### Configuración vía Archivos
-
-```yaml
-# dynamic/app-ejemplo.yml
-http:
-  routers:
-    app-ejemplo:
-      rule: "Host(`app.tudominio.com`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      middlewares:
-        - secure-headers@file
-        - rate-limit@file
-      service: app-ejemplo-service
-
-  services:
-    app-ejemplo-service:
-      loadBalancer:
-        servers:
-          - url: "http://app:3000"
-        healthCheck:
-          path: "/health"
-          interval: "30s"
-          timeout: "10s"
-```
-
-### Configuración Multi-dominio
-
-```yaml
-# Múltiples dominios para la misma aplicación
-labels:
-  - "traefik.enable=true"
-  
-  # Router principal
-  - "traefik.http.routers.web.rule=Host(`tudominio.com`,`www.tudominio.com`)"
-  - "traefik.http.routers.web.entrypoints=websecure"
-  - "traefik.http.routers.web.tls=true"
-  - "traefik.http.routers.web.tls.certresolver=letsencrypt"
-  
-  # Redirect www a dominio principal
-  - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.(.+)"
-  - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://$${1}"
-  - "traefik.http.middlewares.www-redirect.redirectregex.permanent=true"
-  
-  - "traefik.http.routers.web.middlewares=www-redirect@docker"
-```
-
-## 🔍 Monitoreo y Troubleshooting
-
-### Dashboard Web
-
-Accede al dashboard en: `https://traefik.tudominio.com`
-
-El dashboard proporciona:
-- Vista en tiempo real de todos los servicios
-- Estado de health checks
-- Métricas de tráfico
-- Configuración activa
-- Logs en tiempo real
-
-### Logs y Debugging
-
-```bash
-# Ver logs en tiempo real
-docker-compose logs -f traefik
-
-# Logs con nivel DEBUG
-docker-compose exec traefik traefik --log.level=DEBUG
-
-# Verificar configuración
-docker-compose exec traefik traefik config
-
-# Verificar conectividad
-docker-compose exec traefik ping -c 3 google.com
-
-# Estado de servicios
-curl -s http://localhost:8080/api/http/services | jq
-curl -s http://localhost:8080/api/http/routers | jq
-```
-
-### Métricas Prometheus
-
-```yaml
-# Habilitar métricas en traefik.yml
-metrics:
-  prometheus:
-    addEntryPointsLabels: true
-    addServicesLabels: true
-    buckets:
-      - 0.1
-      - 0.3
-      - 1.2
-      - 5.0
-
-# Endpoint de métricas: http://traefik:8080/metrics
-```
-
-### Health Checks
-
-```bash
-# Health check básico
-curl -f http://localhost:8080/ping
-
-# API health
-curl -f http://localhost:8080/api/version
-
-# Verificar certificados
-curl -I https://tudominio.com
-
-# Verificar headers de seguridad
-curl -I https://tudominio.com | grep -i security
-```
-
-## 🚀 Características Avanzadas
-
-### Load Balancing Avanzado
-
-```yaml
-# Configuración de load balancing
-http:
-  services:
-    api-loadbalancer:
-      loadBalancer:
-        servers:
-          - url: "http://api1:3000"
-          - url: "http://api2:3000"
-          - url: "http://api3:3000"
-        sticky:
-          cookie:
-            name: "traefik-sticky"
-            secure: true
-            httpOnly: true
-        healthCheck:
-          path: "/health"
-          interval: "10s"
-          timeout: "5s"
-          retries: 3
-```
-
-### Circuit Breaker
-
-```yaml
-# Protección contra fallos en cascada
-http:
-  middlewares:
-    circuit-breaker:
-      circuitBreaker:
-        expression: "NetworkErrorRatio() > 0.3 || ResponseCodeRatio(500, 600, 0, 600) > 0.3"
-        checkPeriod: "10s"
-        fallbackDuration: "30s"
-        recoveryDuration: "10s"
-```
-
-### Rate Limiting Avanzado
-
-```yaml
-# Rate limiting por IP y usuario
-http:
-  middlewares:
-    rate-limit-advanced:
-      rateLimit:
-        average: 100
-        period: "60s"
-        burst: 200
-        sourceCriterion:
-          ipStrategy:
-            depth: 2
-            excludedIPs:
-              - "127.0.0.1/32"
-              - "192.168.1.0/24"
-```
-
-### Autenticación Forward Auth
-
-```yaml
-# Autenticación externa
-http:
-  middlewares:
-    oauth-auth:
-      forwardAuth:
-        address: "https://auth.tudominio.com/verify"
-        authResponseHeaders:
-          - "X-Auth-User"
-          - "X-Auth-Groups"
-        authRequestHeaders:
-          - "Authorization"
-        trustForwardHeader: true
-```
-
-## 🔐 Seguridad
-
-### Certificados SSL/TLS
-
-```bash
-# Verificar certificados Let's Encrypt
-docker-compose exec traefik cat /letsencrypt/acme.json | jq
-
-# Renovación manual (normalmente automática)
-docker-compose exec traefik traefik acme renew
-
-# Backup de certificados
-cp certs/acme.json certs/acme.json.backup.$(date +%Y%m%d)
-```
-
-### Hardening de Seguridad
-
-```yaml
-# Configuración segura en traefik.yml
-global:
-  checkNewVersion: false
-  sendAnonymousUsage: false
-
-api:
-  dashboard: true
-  insecure: false
-
-# Headers de seguridad globales
-http:
-  middlewares:
-    security-headers:
-      headers:
-        frameDeny: true
-        contentTypeNosniff: true
-        browserXssFilter: true
-        referrerPolicy: "strict-origin-when-cross-origin"
-        customRequestHeaders:
-          X-Forwarded-Proto: "https"
-        customResponseHeaders:
-          Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
-          Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'"
-```
-
-### Firewall y Restricciones
-
-```yaml
-# Restricción por IP
-http:
-  middlewares:
-    ip-whitelist:
-      ipWhiteList:
-        sourceRange:
-          - "127.0.0.1/32"
-          - "192.168.1.0/24"
-          - "10.0.0.0/8"
-
-    # Bloquear IPs específicas
-    ip-blacklist:
-      ipWhiteList:
-        sourceRange:
-          - "0.0.0.0/0"
-        excludedIPs:
-          - "192.168.1.100/32"
-          - "10.0.0.50/32"
-```
-
-## 🔧 Plantillas y Automatización
-
-### Plantillas de Configuración
-
-```yaml
-# templates/app-template.yml
-http:
-  routers:
-    {{.ServiceName}}:
-      rule: "Host(`{{.Domain}}`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      middlewares:
-        - secure-headers@file
-        - gzip-compress@file
-      service: {{.ServiceName}}-service
-
-  services:
-    {{.ServiceName}}-service:
-      loadBalancer:
-        servers:
-          - url: "http://{{.ServiceName}}:{{.Port}}"
-        healthCheck:
-          path: "/health"
-          interval: "30s"
-```
-
-### Script de Despliegue
-
-```bash
-#!/bin/bash
-# deploy-app.sh
-
-APP_NAME=$1
-DOMAIN=$2
-PORT=${3:-3000}
-
-if [[ -z "$APP_NAME" || -z "$DOMAIN" ]]; then
-    echo "Uso: $0 <app-name> <domain> [port]"
-    exit 1
-fi
-
-# Generar configuración desde plantilla
-sed "s/{{.ServiceName}}/$APP_NAME/g; s/{{.Domain}}/$DOMAIN/g; s/{{.Port}}/$PORT/g" \
-    templates/app-template.yml > dynamic/app-$APP_NAME.yml
-
-echo "Configuración creada para $APP_NAME en $DOMAIN:$PORT"
-echo "Archivo: dynamic/app-$APP_NAME.yml"
-```
-
-### Automatización con Scripts
-
-```bash
-# scripts/backup-certs.sh
-#!/bin/bash
-DATE=$(date +%Y%m%d_%H%M%S)
-tar -czf "backups/traefik-certs-$DATE.tar.gz" certs/
-echo "Certificados respaldados en backups/traefik-certs-$DATE.tar.gz"
-
-# scripts/check-health.sh
-#!/bin/bash
-SERVICES=$(curl -s http://localhost:8080/api/http/services | jq -r '.[] | select(.status != "enabled") | .name')
-if [[ -n "$SERVICES" ]]; then
-    echo "⚠️  Servicios con problemas: $SERVICES"
-    exit 1
-else
-    echo "✅ Todos los servicios están saludables"
-fi
-```
-
-## 📈 Optimización de Rendimiento
-
-### Configuración de Performance
-
-```yaml
-# traefik.yml - Optimizaciones
-entryPoints:
-  web:
-    address: ":80"
-    transport:
-      keepAliveMaxRequests: 100
-      keepAliveMaxTime: "10s"
-
-  websecure:
-    address: ":443"
-    transport:
-      keepAliveMaxRequests: 100
-      keepAliveMaxTime: "10s"
-    http:
-      tls:
-        options: modern@file
-
-# Connection pooling
-serversTransport:
-  maxIdleConnsPerHost: 50
-  dialTimeout: "30s"
-  responseHeaderTimeout: "0s"
-  idleConnTimeout: "90s"
-```
-
-### Caching y Compresión
-
-```yaml
-# Middleware de compresión optimizada
-http:
-  middlewares:
-    compression:
-      compress:
-        excludedContentTypes:
-          - "text/event-stream"
-          - "application/grpc"
-        minResponseBodyBytes: 1024
-
-    # Cache headers
-    cache-headers:
-      headers:
-        customResponseHeaders:
-          Cache-Control: "public, max-age=3600"
-          Vary: "Accept-Encoding"
-```
-
-## 🤝 Contribución
-
-1. Hacer fork del repositorio
-2. Crear una rama de feature
-3. Añadir configuraciones en `dynamic/` o `templates/`
-4. Probar configuraciones localmente
-5. Documentar cambios en este README
-6. Enviar pull request
-
-### Guías de Configuración
-
-- Usar plantillas para configuraciones repetitivas
-- Documentar todos los middlewares personalizados
-- Probar certificados SSL antes del despliegue
-- Seguir principios de configuración inmutable
-- Mantener backups regulares de certificados
-
-## 📝 Notas de Desarrollo
-
-- **Descubrimiento Automático**: Traefik detecta servicios vía labels Docker
-- **Recarga en Caliente**: Cambios de configuración sin reinicio
-- **Gestión de Certificados**: Renovación automática Let's Encrypt
-- **Monitoreo Integrado**: Dashboard web y métricas Prometheus
-- **Seguridad por Defecto**: Headers de seguridad y TLS moderno
-- **Escalabilidad**: Soporte para múltiples backends y load balancing
+- **Dashboard protection**: Always use basic auth or IP restrictions
+- **Certificate storage**: Secure acme.json file permissions (600)
+- **Network isolation**: Use dedicated Docker network for services
+- **Log monitoring**: Monitor access logs for suspicious activity
+- **Regular updates**: Keep Traefik updated to latest stable version

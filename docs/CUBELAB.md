@@ -1,4 +1,4 @@
-# CubeLab
+# 4.8 CubeLab
 
 This repository contains the configuration and documentation for a cubelab designed to emulate a cloud environment, using low-cost hardware and optimized software. The goal is to create a testing environment for cloud services, with a focus on energy efficiency and resource usage.
 
