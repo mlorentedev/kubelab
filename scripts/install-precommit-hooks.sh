@@ -14,6 +14,6 @@ if ! command -v pre-commit &> /dev/null; then
 fi
 
 # Install pre-commit hooks
-pre-commit install --hook-type commit-msg
+pre-commit install
 
 log_success "Pre-commit hooks installed successfully."
