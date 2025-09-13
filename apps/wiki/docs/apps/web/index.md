@@ -1,191 +1,184 @@
-# My Personal Website with Astro
+# 1.2 Web - Frontend Portfolio
 
-<div align="center">
+The main frontend website for [mlorente.dev](https://mlorente.dev) - my personal portfolio and landing page. Built with Astro for maximum performance and developer experience.
 
-![Astro](https://img.shields.io/badge/Astro-5.5.2-FF5D01?style=flat&logo=astro&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
-![Tailwind](https://img.shields.io/badge/Tailwind-06B6D4?style=flat&logo=tailwind-css&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+## What it is
 
-</div>
+This is my personal website where I showcase my portfolio, share downloadable resources, and provide information about what I do. I chose Astro because it handles SSR and SSG perfectly, it's fast, and doesn't ship unnecessary JavaScript to users.
 
-This is my personal website where I have my portfolio, some downloadable resources, and all the information about what I do. I built it with Astro because I like how it handles SSR and how fast it is.
+The site includes my portfolio projects, lead magnets like DevOps checklists, newsletter signup forms, and contact information - all integrated with my Go API backend.
 
-## 🤔 Why I chose these technologies
+## Tech stack
 
-- **Astro 5.5.2** - It's super fast and lets me mix SSR and SSG as I want. Plus it doesn't load unnecessary JavaScript
-- **TypeScript** - Because types save me headaches. I like being able to refactor with confidence
-- **Tailwind CSS** - Once you get used to it, there's no going back. Super fast prototyping
-- **MDX** - To create dynamic content mixing markdown with components. Very convenient for the portfolio
+- **Astro 5.5.2** - Modern meta-framework for content-focused sites
+- **TypeScript** - Static typing for better development experience  
+- **Tailwind CSS** - Utility-first CSS framework for rapid styling
+- **MDX** - Markdown with JSX for dynamic content creation
+- **Docker** - Containerized for consistent deployment
 
-## 📁 How everything is organized
+## Project structure
 
 ```
 astro-site/
-├── astro.config.mjs          # Main Astro configuration
-├── package.json              # The usual dependencies
-├── tailwind.config.mjs       # My colors and custom config
-├── public/                   # Static assets (favicon, images, etc.)
+├── astro.config.mjs          # Astro configuration
+├── package.json              # Dependencies and scripts
+├── tailwind.config.mjs       # Tailwind customization
+├── public/                   # Static assets
 ├── src/
-│   ├── components/           # Reusable components
+│   ├── components/           # Reusable UI components
 │   │   ├── forms/           # Contact and subscription forms
-│   │   ├── sections/        # Large page sections
-│   │   └── ui/             # Buttons, cards, etc.
-│   ├── content/            # MDX content
-│   │   ├── projects/       # My portfolio projects
+│   │   ├── sections/        # Page sections
+│   │   └── ui/             # Base UI components
+│   ├── content/            # Content collections
+│   │   ├── projects/       # Portfolio projects
 │   │   └── resources/      # Downloadable resources
-│   ├── layouts/            # Page templates
-│   ├── pages/              # Website routes
+│   ├── layouts/            # Page layouts
+│   ├── pages/              # Routes and pages
 │   └── styles/             # Global styles
-└── Dockerfile              # To containerize everything
+└── Dockerfile              # Container definition
 ```
 
-## 🚀 Lo que hace especial mi web
+## Key features
 
-### Para los visitantes
+### For visitors
+- **Lightning fast loading** - Thanks to Astro's partial hydration
+- **Interactive portfolio** - Projects with demos and GitHub links
+- **Free resources** - Lead magnets with integrated download forms
+- **Newsletter signup** - Connected to my API for subscriptions
+- **Fully responsive** - Works great on mobile, tablet, and desktop
 
-- **Carga súper rápida** - Gracias a Astro y su hidratación parcial
-- **Portfolio interactivo** - Proyectos con imágenes, demos y enlaces a GitHub
-- **Recursos descargables** - Lead magnets como checklists de DevOps (con formulario integrado)
-- **Newsletter** - Formularios conectados a mi API para suscripciones
-- **Responsive** - Se ve bien en móvil, tablet y desktop
+### For development
+- **Full TypeScript** - Type safety across the entire codebase
+- **Content collections** - Projects and resources are typed and validated
+- **Modern architecture** - Astro components without the complexity
+- **Automatic optimization** - Image compression and multiple formats
+- **Smart caching** - Static assets cache efficiently
 
-### Para mí como desarrollador
+## Configuration
 
-- **TypeScript en todo** - Menos bugs, más tranquilidad
-- **Colecciones de contenido** - Los proyectos y recursos están tipados y validados
-- **Componentes de Astro** - Arquitectura moderna sin complicaciones
-- **Optimización automática** - Compresión de imágenes y formatos múltiples
-- **Caché inteligente** - Los recursos estáticos se cachean bien
-
-## 🔧 Variables de entorno
+### Environment variables
 
 ```bash
-# Configuración del servidor
+# Server configuration
 PORT=4321
 HOST=0.0.0.0
 NODE_ENV=production
 
-# Mi API para formularios
+# API integration
 API_BASE_URL=https://api.mlorente.dev
 API_TIMEOUT=5000
 
-# Características que uso
+# Feature flags
 ENABLE_ANALYTICS=true
 ENABLE_NEWSLETTER=true
 ```
 
-## 🐳 Cómo lo ejecuto
+## Running the website
 
-### En desarrollo
-
-```bash
-# Lo arranco con hot reload
-docker-compose -f docker-compose.dev.yml up --build
-
-# Y lo veo en http://localhost:4321
-```
-
-### En producción
+### Development mode
 
 ```bash
-# Despliegue completo
-docker-compose -f docker-compose.prod.yml up -d
-
-# Ver los logs
-docker logs -f web
-```
-
-## 🛠️ Desarrollo local
-
-```bash
-# Me voy al directorio
+# Navigate to the web app
 cd apps/web/astro-site
 
-# Instalo dependencias
+# Install dependencies
 npm install
 
-# Configuro las variables (copio el ejemplo)
+# Copy environment configuration
 cp .env.example .env
 
-# Y arranco el servidor de desarrollo
+# Start development server
 npm run dev
 
-# Se abre en http://localhost:4321
+# Access at http://localhost:4321
 ```
 
-### Comandos que uso a menudo
+### With Docker
 
 ```bash
-# Desarrollo con hot reload
+# Development with hot reload
+make up-web
+
+# Production build
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Available commands
+
+```bash
+# Development with hot reload
 npm run dev
 
-# Build para producción
+# Production build
 npm run build
 
-# Vista previa del build
+# Preview production build
 npm run preview
 
-# Verificar tipos
+# Type checking
 npm run type-check
 
-# Linting y formateo
+# Code quality
 npm run lint
 npm run format
 ```
 
-## ✍️ Cómo añado contenido
+## Adding content
 
-### Nuevo proyecto del portafolio
+### New portfolio project
+
+Create a new MDX file in `src/content/projects/`:
 
 ```markdown
 ---
-title: "Mi Nuevo Proyecto"
-description: "Una descripción corta pero que venda"
+title: "My Awesome Project"
+description: "A brief description that sells the project"
 technologies: ["Astro", "TypeScript", "Tailwind"]
-github: "https://github.com/mlorentedev/proyecto"
-demo: "https://proyecto.mlorente.dev"
-image: "/images/proyectos/proyecto.jpg"
-featured: true  # Para que aparezca en featured
+github: "https://github.com/mlorentedev/project"
+demo: "https://project.mlorente.dev"
+image: "/images/projects/project.jpg"
+featured: true
 date: 2024-01-15
 ---
 
-## De qué va el proyecto
+## What the project does
 
-Aquí explico qué hace, por qué lo hice y cómo está hecho...
+Here I explain what it does, why I built it, and how it works...
 
-### Lo que más me gusta del proyecto
+### What I'm most proud of
 
-- Característica 1
-- Característica 2  
-- Característica 3
+- Key feature 1
+- Key feature 2  
+- Key feature 3
 
-### Los retos técnicos que tuve
+### Technical challenges I solved
 
-Siempre hay algún problema que resolver...
+There's always some interesting problem to tackle...
 ```
 
-### Nuevo recurso descargable
+### New downloadable resource
+
+Create a new MDX file in `src/content/resources/`:
 
 ```markdown
 ---
-title: "Mi Checklist de DevOps"
-description: "Todo lo que necesitas revisar antes de un despliegue"
+title: "DevOps Checklist"
+description: "Everything you need to check before deployment"
 category: "DevOps"
 fileType: "PDF"
 fileSize: "2.3 MB"
 downloadCount: 0
 tags: ["devops", "checklist", "automation"]
 featured: true
-gated: true  # Requiere email para descargar
+gated: true  # Requires email for download
 ---
 
-Descripción de lo que se van a descargar y por qué les va a ser útil...
+Description of what they'll download and why it's useful...
 ```
 
-## 🎨 Mi sistema de diseño
+## Design system
 
-Uso Tailwind con algunas personalizaciones que me gustan:
+I use Tailwind with custom configurations:
 
 ```javascript
 // tailwind.config.mjs
@@ -207,7 +200,7 @@ module.exports = {
 }
 ```
 
-### Componentes que reutilizo
+### Reusable components
 
 ```astro
 ---
@@ -236,88 +229,87 @@ const { variant = 'primary', size = 'md' } = Astro.props;
 </button>
 ```
 
-## 📊 Analytics y seguimiento
+## Analytics and tracking
 
-Me gusta saber qué pasa en mi web, así que tengo:
+The website includes comprehensive tracking:
 
-- **Google Analytics** - Para ver el tráfico y comportamiento
-- **Seguimiento de formularios** - Para saber qué recursos se descargan más
-- **Métricas de conversión** - Newsletter y lead magnets
-- **Core Web Vitals** - Para asegurarme de que va rápida
+- **Google Analytics** - Traffic and user behavior analysis
+- **Form tracking** - Download and conversion metrics
+- **Newsletter metrics** - Subscription rates and sources
+- **Core Web Vitals** - Performance monitoring
 
-## 🔒 Seguridad
+## Security measures
 
-No es paranoia, es precaución:
+- **Server-side validation** - All forms validate through the API
+- **Security headers** - CSP, HSTS, and other protection headers
+- **Rate limiting** - Prevents form spam and abuse
+- **Input sanitization** - All user input is cleaned and validated
 
-- **Validación en servidor** - Los formularios se validan también en la API
-- **Headers de seguridad** - CSP, HSTS y compañía
-- **Rate limiting** - Para evitar spam en los formularios
-- **Sanitización** - Todo lo que viene del usuario se limpia
+## SEO optimization
 
-## 🚀 SEO que funciona
+- **Dynamic meta tags** - Each page has unique titles and descriptions
+- **Structured data** - JSON-LD for better search engine understanding
+- **Automatic sitemap** - Generated during build process
+- **Canonical URLs** - Prevents duplicate content issues
+- **Image alt text** - Accessibility and SEO compliance
 
-- **Meta tags dinámicos** - Cada página tiene su título y descripción únicos
-- **Datos estructurados** - JSON-LD para que Google me entienda mejor
-- **Sitemap automático** - Se genera solo cuando hago build
-- **URLs canónicas** - Sin contenido duplicado
-- **Alt text en imágenes** - Accesibilidad y SEO
+## API integration
 
-## 🔗 Integración con mi API
-
-Los formularios se conectan con mi API de Go:
+Forms connect to my Go API backend:
 
 ```typescript
-// Suscripción al newsletter
+// Newsletter subscription
 POST /api/subscribe
 {
-  "email": "usuario@ejemplo.com",
-  "tags": ["newsletter", "web"]
+  "email": "user@example.com",
+  "tags": ["newsletter", "website"]
 }
 
-// Descargar recursos
+// Resource download
 POST /api/lead-magnet  
 {
-  "email": "usuario@ejemplo.com",
+  "email": "user@example.com",
   "resource_id": "devops-checklist",
   "utm_source": "website"
 }
 
-// Formulario de contacto
+// Contact form
 POST /api/contact
 {
-  "name": "Nombre",
-  "email": "email@ejemplo.com", 
-  "message": "El mensaje"
+  "name": "Name",
+  "email": "email@example.com", 
+  "message": "The message"
 }
 ```
 
-## 🤝 Si quieres contribuir
+## Contributing
 
-1. Fork del repo
-2. Haz tus cambios siguiendo las convenciones de TypeScript/Astro
-3. Pruébalo todo localmente
-4. Actualiza la documentación si añades algo nuevo
-5. Asegúrate de que el build de Docker funciona
-6. Envía el PR
+1. Fork the repository
+2. Make changes following TypeScript/Astro conventions
+3. Test everything locally
+4. Update documentation for new features
+5. Ensure Docker build works
+6. Submit pull request
 
-## 📦 Las dependencias principales
+## Key dependencies
 
-### Framework y core
+### Core framework
+- **@astrojs/node** - Node.js adapter for server-side rendering
+- **astro** - The meta-framework itself
+- **typescript** - Static type checking
 
-- **@astrojs/node** - Para el servidor Node.js
-- **astro** - El framework que mola
-- **typescript** - Para no volverme loco con los tipos
+### Styling and UI
+- **@astrojs/tailwind** - Tailwind CSS integration
+- **tailwindcss** - Utility-first CSS framework
 
-### Estilos y UI
+### Content management
+- **@astrojs/mdx** - MDX support for dynamic content
+- **zod** - Runtime type validation for content collections
 
-- **@astrojs/tailwind** - Integración con Tailwind
-- **tailwindcss** - El CSS utility-first que me encanta
+## Local development URLs
 
-### Contenido
+When running locally with `make up-web`:
+- Website: http://mlorentedev.test
+- Development server: http://localhost:4321
 
-- **@astrojs/mdx** - Para el contenido dinámico
-- **zod** - Validación de esquemas que funciona de verdad
-
----
-
-Esta web es el escaparate de lo que hago y me gusta tenerla siempre actualizada y funcionando bien. Si tienes preguntas o sugerencias, no dudes en escribirme.
+Add `127.0.0.1 mlorentedev.test` to your `/etc/hosts` file for local domain access.

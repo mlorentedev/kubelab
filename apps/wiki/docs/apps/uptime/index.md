@@ -1,344 +1,84 @@
-# Stack de Monitoreo
+# 1.8 Uptime Kuma - Service Monitoring
 
-<div align="center">
+Self-hosted monitoring tool that tracks website uptime, response times, and sends alerts when services go down. Provides a clean status page for monitoring all mlorente.dev services.
 
-![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat&logo=grafana&logoColor=white)
-![Loki](https://img.shields.io/badge/Loki-F46800?style=flat&logo=grafana&logoColor=white)
-![Vector](https://img.shields.io/badge/Vector-02C39A?style=flat&logo=vector&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+## What it is
 
-</div>
+Uptime Kuma monitors all the services in the mlorente.dev ecosystem and alerts me when something goes wrong. It checks HTTP endpoints, measures response times, and provides a beautiful status page. I use it because it's simple, self-hosted, and gives me peace of mind that my services are running.
 
-Solución integral de monitoreo y observabilidad utilizando Grafana, Loki, Vector y Uptime Kuma para métricas del sistema, agregación de logs y monitoreo de disponibilidad.
+## Tech stack
 
-## 🏗️ Arquitectura
+- **Uptime Kuma** - Modern uptime monitoring solution
+- **SQLite** - Built-in database for monitoring data
+- **Node.js** - JavaScript runtime
+- **Docker** - Containerized deployment
 
-- **Visualización**: Grafana OSS para dashboards y alertas
-- **Almacenamiento de Logs**: Loki para agregación centralizada de logs
-- **Recopilación de Logs**: Vector para procesamiento y enrutamiento eficiente de logs
-- **Monitoreo de Disponibilidad**: Uptime Kuma para seguimiento de disponibilidad de servicios
-- **Despliegue**: Docker Compose con red proxy externa
+## Key features
 
-## 📁 Estructura del Proyecto
+- **Website monitoring** - HTTP/HTTPS endpoint checks
+- **Response time tracking** - Measure and graph response times  
+- **Status pages** - Public status pages for services
+- **Multiple notification channels** - Email, Slack, Discord, webhooks
+- **SSL certificate monitoring** - Track certificate expiration
 
-```
-apps/monitoring/
-├── README.md              # Esta documentación
-├── docker-compose.yml     # Stack multi-servicio de monitoreo
-├── vector.toml            # Configuración de recopilación de logs de Vector
-├── .env                   # Variables de entorno (no en repositorio)
-└── .env.example           # Plantilla de variables de entorno
-```
+## Configuration
 
-## 🚀 Servicios Incluidos
+### Docker Compose setup
 
-### Grafana OSS
-- **Puerto**: 3000
-- **Función**: Visualización de datos y dashboards
-- **Características**:
-  - Dashboards interactivos
-  - Sistema de alertas
-  - Soporte para múltiples fuentes de datos
-  - Plugins y extensiones
-  - Gestión de usuarios y equipos
-
-### Loki
-- **Puerto**: 3100
-- **Función**: Almacenamiento y consulta de logs
-- **Características**:
-  - Agregación de logs multi-tenant
-  - Consultas eficientes con LogQL
-  - Retención configurable de logs
-  - Compresión y indexación optimizada
-  - Integración nativa con Grafana
-
-### Vector
-- **Puerto**: 8686 (API)
-- **Función**: Recopilación, transformación y enrutamiento de logs
-- **Características**:
-  - Recopilación de logs de múltiples fuentes
-  - Transformaciones en tiempo real
-  - Enrutamiento basado en condiciones
-  - Buffers y reintentos
-  - Métricas de observabilidad integradas
-
-### Uptime Kuma
-- **Puerto**: 8000
-- **Función**: Monitoreo de disponibilidad de servicios
-- **Características**:
-  - Verificaciones HTTP/HTTPS/TCP/DNS
-  - Notificaciones multi-canal
-  - Páginas de estado públicas
-  - Monitoreo de SSL/certificados
-  - Dashboard visual de disponibilidad
-
-## 🔧 Configuración
-
-### Variables de Entorno
-
-```bash
-# Configuración de Grafana
-GF_SECURITY_ADMIN_PASSWORD=tu_password_aqui
-GF_USERS_ALLOW_SIGN_UP=false
-GF_SECURITY_ALLOW_EMBEDDING=true
-
-# Configuración de Loki
-LOKI_AUTH_ENABLED=false
-LOKI_RETENTION_PERIOD=744h  # 31 días
-
-# Configuración de Vector
-VECTOR_LOG_LEVEL=info
-VECTOR_API_ENABLED=true
-
-# Configuración de Uptime Kuma
-UPTIME_KUMA_DISABLE_FRAME_SAMEORIGIN=false
-
-# Configuración de Red
-MONITORING_NETWORK=proxy
-```
-
-### Configuración de Vector (`vector.toml`)
-
-```toml
-[api]
-enabled = true
-address = "0.0.0.0:8686"
-
-# Fuentes de datos
-[sources.docker_logs]
-type = "docker_logs"
-include_images = ["mlorente-*"]
-
-[sources.system_logs]
-type = "journald"
-units = ["docker", "nginx", "ssh"]
-
-# Transformaciones
-[transforms.parse_logs]
-type = "remap"
-inputs = ["docker_logs"]
-source = '''
-  parsed = parse_json!(.message)
-  .timestamp = parsed.timestamp
-  .level = parsed.level
-  .service = parsed.service
-'''
-
-# Destinos
-[sinks.loki]
-type = "loki"
-inputs = ["parse_logs", "system_logs"]
-endpoint = "http://loki:3100"
-labels.job = "{{ source_type }}"
-labels.service = "{{ service }}"
-```
-
-## 🐳 Despliegue
-
-### Desarrollo Local
-```bash
-# Iniciar stack completo de monitoreo
-docker-compose up -d
-
-# Verificar estado de servicios
-docker-compose ps
-
-# Ver logs de servicios
-docker-compose logs -f grafana
-docker-compose logs -f loki
-docker-compose logs -f vector
-```
-
-### Acceso a Servicios
-- **Grafana**: http://localhost:3000 (admin/tu_password)
-- **Loki**: http://localhost:3100/ready
-- **Vector API**: http://localhost:8686/health
-- **Uptime Kuma**: http://localhost:8000
-
-### Configuración con Traefik
 ```yaml
-# En entorno con Traefik
 services:
-  grafana:
-    labels:
-      - "traefik.http.routers.grafana.rule=Host(`grafana.mlorentedev.test`)"
-      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
-  
   uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_data:/app/data
+    networks:
+      - proxy
     labels:
-      - "traefik.http.routers.uptime.rule=Host(`status.mlorentedev.test`)"
-      - "traefik.http.services.uptime.loadbalancer.server.port=8000"
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime.rule=Host(`uptime.mlorente.dev`)"
+      - "traefik.http.routers.uptime.entrypoints=websecure"
+      - "traefik.http.routers.uptime.tls=true"
+      - "traefik.http.routers.uptime.tls.certresolver=letsencrypt"
+      - "traefik.http.services.uptime.loadbalancer.server.port=3001"
+
+volumes:
+  uptime_data:
+
+networks:
+  proxy:
+    external: true
 ```
 
-## 📊 Configuración de Dashboards
+## Running Uptime Kuma
 
-### Dashboard de Sistema
-```json
-{
-  "dashboard": {
-    "title": "Sistema - Visión General",
-    "panels": [
-      {
-        "title": "CPU Usage",
-        "targets": [
-          {
-            "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"
-          }
-        ]
-      },
-      {
-        "title": "Memory Usage",
-        "targets": [
-          {
-            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+### Development setup
 
-### Dashboard de Aplicación
-```json
-{
-  "dashboard": {
-    "title": "Aplicaciones - Logs y Métricas",
-    "panels": [
-      {
-        "title": "Logs por Servicio",
-        "targets": [
-          {
-            "expr": "sum by (service) (rate({job=\"docker_logs\"}[5m]))"
-          }
-        ]
-      },
-      {
-        "title": "Errores por Minuto",
-        "targets": [
-          {
-            "expr": "sum by (service) (rate({level=\"error\"}[1m]))"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-## 🔍 Consultas y Alertas
-
-### Consultas LogQL Útiles
-
-```logql
-# Logs de errores en los últimos 5 minutos
-{job="docker_logs"} |= "ERROR" | json | __error__ = ""
-
-# Logs de una aplicación específica
-{service="api"} | json | level="info"
-
-# Tasa de errores por minuto
-sum by (service) (rate({level="error"}[1m]))
-
-# Logs que contienen patrones específicos
-{job="docker_logs"} |~ "failed|error|exception" | json
-```
-
-### Configuración de Alertas
-
-```yaml
-# grafana/provisioning/alerting/rules.yml
-groups:
-  - name: aplicaciones
-    rules:
-      - alert: AltaTaskDeError
-        expr: sum by (service) (rate({level="error"}[5m])) > 0.1
-        for: 2m
-        annotations:
-          summary: "Alta tasa de errores en {{ $labels.service }}"
-          description: "El servicio {{ $labels.service }} tiene {{ $value }} errores por segundo"
-      
-      - alert: ServicioNoDisponible
-        expr: up{job="aplicacion"} == 0
-        for: 1m
-        annotations:
-          summary: "Servicio {{ $labels.instance }} no disponible"
-```
-
-## 🛠️ Mantenimiento
-
-### Limpieza de Logs
 ```bash
-# Limpiar logs antiguos de Loki
-curl -X POST "http://localhost:3100/loki/api/v1/delete" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "{job=\"old_job\"}",
-    "start": "2024-01-01T00:00:00Z",
-    "end": "2024-01-31T23:59:59Z"
-  }'
+# Start Uptime Kuma
+make up-uptime
 
-# Verificar uso de almacenamiento
-docker system df
-docker volume ls
+# Access web interface  
+open http://uptime.mlorentedev.test
+
+# Create admin account on first visit
 ```
 
-### Backup de Configuraciones
-```bash
-# Backup de dashboards de Grafana
-mkdir -p backups/grafana
-docker cp $(docker-compose ps -q grafana):/var/lib/grafana/dashboards ./backups/grafana/
+## Monitored services
 
-# Backup de configuración de Vector
-cp vector.toml backups/vector-$(date +%Y%m%d).toml
-```
+- **Main Website**: https://mlorente.dev
+- **API**: https://api.mlorente.dev/health  
+- **Blog**: https://blog.mlorente.dev
+- **Wiki**: https://wiki.mlorente.dev
+- **Traefik Dashboard**: https://traefik.mlorente.dev
 
-## 📈 Métricas y KPIs
+## Local development URLs
 
-### Métricas de Sistema
-- **CPU**: Utilización por core y promedio
-- **Memoria**: Uso, disponible y swap
-- **Disco**: Espacio usado, IOPS, latencia
-- **Red**: Tráfico entrante/saliente, errores
+When running locally with `make up-uptime`:
+- **Uptime Kuma**: http://uptime.mlorentedev.test
+- **Direct access**: http://localhost:3001
 
-### Métricas de Aplicación
-- **Disponibilidad**: Uptime de servicios
-- **Rendimiento**: Tiempo de respuesta, throughput
-- **Errores**: Tasa de errores, tipos de errores
-- **Logs**: Volumen de logs, niveles de severidad
-
-### Alertas Críticas
-- Servicios no disponibles (> 1 minuto)
-- Uso de CPU > 80% (> 5 minutos)
-- Uso de memoria > 90% (> 2 minutos)
-- Espacio en disco < 10% disponible
-- Tasa de errores > 5% (> 2 minutos)
-
-## 🔗 Integración con Otras Herramientas
-
-### Notificaciones
-- **Slack**: Canales de alertas por severidad
-- **Email**: Notificaciones para admins
-- **Webhook**: Integración con sistemas de tickets
-- **Discord**: Notificaciones para equipo de desarrollo
-
-### Fuentes de Datos Adicionales
-- **Prometheus**: Métricas de aplicaciones
-- **Node Exporter**: Métricas de sistema
-- **cAdvisor**: Métricas de contenedores
-- **Blackbox Exporter**: Monitoreo de endpoints
-
-## 🤝 Contribuir
-
-1. Añadir nuevas fuentes de datos a Vector
-2. Crear dashboards específicos por servicio
-3. Configurar alertas apropiadas por criticidad
-4. Documentar consultas LogQL útiles
-5. Optimizar retención y almacenamiento de logs
-
-## 🔗 Servicios Relacionados
-
-- **Web Frontend**: `apps/web` - Métricas de sitio web
-- **API Backend**: `apps/api` - Logs y métricas de API
-- **Blog**: `apps/blog` - Monitoreo de contenido estático
-- **Infraestructura**: `infra/traefik` - Métricas de proxy reverso
+Add `127.0.0.1 uptime.mlorentedev.test` to your `/etc/hosts` file.

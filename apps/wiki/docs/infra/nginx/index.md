@@ -1,169 +1,208 @@
-# Nginx - Servidor Web Estático
+# 2.2 Nginx - Static Web Server
 
-<div align="center">
+Lightweight and efficient web server for serving static content, custom error pages, and acting as a backend for the Traefik reverse proxy.
 
-![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
-![Alpine Linux](https://img.shields.io/badge/Alpine_Linux-0D597F?style=for-the-badge&logo=alpine-linux&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Static Content](https://img.shields.io/badge/Static_Content-008099?style=for-the-badge)
+## What it is
 
-![Status](https://img.shields.io/badge/Status-Active-008099?style=flat-square)
-![Port](https://img.shields.io/badge/Port-80-blue?style=flat-square)
-![Performance](https://img.shields.io/badge/Performance-High-green?style=flat-square)
+This Nginx service handles static content delivery and provides custom error pages for the mlorente.dev ecosystem. It serves as a fallback backend behind Traefik, delivering maintenance pages, error responses, and any static assets that don't belong to specific applications. I use it because it's incredibly efficient at serving static files and has minimal resource usage.
 
-</div>
+## Tech stack
 
-Servidor web ligero y eficiente para servir contenido estático, páginas de error personalizadas y actuar como backend para el proxy reverso Traefik.
+- **Nginx Alpine** - Lightweight Docker image optimized for size
+- **Static content** - HTML, CSS, JS, and media files
+- **Custom error pages** - Branded 404, 500, maintenance pages
+- **High performance** - Optimized for concurrent connections
 
-## 🏗️ Arquitectura
-
-- **Imagen Base**: nginx:alpine (optimizada para tamaño reducido)
-- **Propósito**: Servidor de contenido estático y páginas de error
-- **Integración**: Backend para Traefik con red Docker compartida
-- **Configuración**: Volúmenes montados para contenido personalizable
-- **Performance**: Optimizado para alta concurrencia y bajo uso de memoria
-
-## 📁 Estructura del Proyecto
+## Project structure
 
 ```
 infra/nginx/
-├── README.md              # Esta documentación
-├── docker-compose.yml     # Configuración del servicio
-└── errors/               # Páginas de error personalizadas
-    └── 404.html          # Página de error 404 personalizada
+├── README.md              # This documentation
+├── docker-compose.yml     # Nginx service configuration
+├── nginx.conf            # Main Nginx configuration
+├── conf.d/               # Additional configuration files
+│   ├── default.conf      # Default server configuration
+│   └── gzip.conf        # Compression settings
+├── html/                 # Static content
+│   ├── index.html       # Default landing page
+│   ├── 404.html         # Custom 404 error page
+│   ├── 500.html         # Server error page
+│   ├── maintenance.html # Maintenance mode page
+│   └── assets/          # CSS, JS, images
+└── logs/                # Access and error logs
 ```
 
-## 🚀 Características
+## Key features
 
-### Servidor Web Ligero
+### Static content serving
+- **High performance** - Optimized for serving static files
+- **Compression** - Gzip compression for all text content
+- **Caching** - Proper cache headers for static assets
+- **Security headers** - Basic security headers for protection
 
-- **Alto Rendimiento**: Nginx optimizado para servir contenido estático
-- **Baja Latencia**: Respuesta rápida para archivos estáticos
-- **Concurrencia**: Manejo eficiente de múltiples conexiones simultáneas
-- **Compresión**: Compresión Gzip automática para archivos de texto
-- **Caché**: Headers de caché optimizados para recursos estáticos
+### Error handling
+- **Custom error pages** - Branded 404, 500, and maintenance pages
+- **Graceful fallbacks** - Clean error responses when services are down
+- **Maintenance mode** - Easy maintenance page activation
 
-### Páginas de Error Personalizadas
+### Integration
+- **Traefik backend** - Seamless integration with reverse proxy
+- **Docker networking** - Shared network with other services
+- **Hot reload** - Configuration changes without restart
 
-- **404 Personalizado**: Página de error no encontrado con diseño custom
-- **Branding**: Páginas de error alineadas con la identidad visual
-- **Multiidioma**: Soporte para páginas de error en español
-- **Responsive**: Diseño adaptable a diferentes dispositivos
-- **SEO Friendly**: Códigos de estado HTTP correctos
+## Configuration
 
-### Integración con Traefik
+### Basic Nginx configuration (nginx.conf)
 
-- **Red Compartida**: Comunicación directa con Traefik via red `proxy`
-- **Auto-descubrimiento**: Sin necesidad de configuración manual
-- **SSL Passthrough**: Traefik maneja la terminación SSL
-- **Load Balancing**: Capacidad de múltiples instancias
-- **Health Checks**: Verificación automática de disponibilidad
+```nginx
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
 
-## 🔧 Configuración
+events {
+    worker_connections 1024;
+    use epoll;
+    multi_accept on;
+}
 
-### Docker Compose
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
 
-```yaml
-services:
-  nginx:
-    image: nginx:alpine
-    container_name: nginx
-    volumes:
-      - ./errors:/usr/share/nginx/html:ro
-    networks:
-      - proxy
+    # Logging format
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
 
-networks:
-  proxy:
-    external: true
+    access_log /var/log/nginx/access.log main;
+
+    # Performance optimizations
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    client_max_body_size 16M;
+
+    # Gzip compression
+    include /etc/nginx/conf.d/gzip.conf;
+    
+    # Server configurations
+    include /etc/nginx/conf.d/*.conf;
+}
 ```
 
-### Configuración de Volúmenes
-
-El directorio `errors/` se monta como volumen de solo lectura:
-
-```bash
-# Estructura de contenido
-errors/
-├── 404.html          # Página de error 404
-├── 500.html          # Página de error 500 (opcional)
-├── 502.html          # Página de error 502 (opcional)
-├── 503.html          # Página de error 503 (opcional)
-├── assets/           # Recursos estáticos (CSS, JS, imágenes)
-│   ├── css/
-│   ├── js/
-│   └── img/
-└── favicon.ico       # Icono del sitio
-```
-
-### Configuración Nginx Personalizada
-
-Para configuración avanzada, crear `nginx.conf`:
+### Default server configuration (conf.d/default.conf)
 
 ```nginx
 server {
     listen 80;
     server_name _;
-    
     root /usr/share/nginx/html;
     index index.html;
-    
-    # Configuración de error pages
-    error_page 404 /404.html;
-    error_page 500 502 503 504 /50x.html;
-    
-    # Configuración de caché para assets
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Static assets caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
+        access_log off;
     }
-    
-    # Compresión Gzip
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-    gzip_min_length 1000;
-    
-    # Security headers
-    add_header X-Frame-Options DENY;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
+
+    # Main content
+    location / {
+        try_files $uri $uri/ =404;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    # Custom error pages
+    error_page 404 /404.html;
+    error_page 500 502 503 504 /500.html;
+
+    location = /404.html {
+        internal;
+    }
+
+    location = /500.html {
+        internal;
+    }
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
 }
 ```
 
-## 🐳 Despliegue Docker
+### Compression settings (conf.d/gzip.conf)
 
-### Despliegue Básico
-
-```bash
-# Navegar al directorio
-cd infra/nginx
-
-# Crear red proxy si no existe
-docker network create proxy
-
-# Iniciar el servicio
-docker-compose up -d
-
-# Verificar que está ejecutándose
-docker-compose ps
+```nginx
+# Gzip compression
+gzip on;
+gzip_vary on;
+gzip_min_length 1024;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_types
+    text/plain
+    text/css
+    text/xml
+    text/javascript
+    application/javascript
+    application/xml+rss
+    application/json
+    application/xml
+    image/svg+xml;
 ```
 
-### Despliegue con Traefik
+## Running Nginx
+
+### Development setup
+
+```bash
+# Start Nginx service
+make up-nginx
+
+# Access static content
+open http://nginx.mlorentedev.test
+
+# Check health endpoint
+curl http://nginx.mlorentedev.test/health
+```
+
+### Docker configuration
 
 ```yaml
-# Configuración completa con labels de Traefik
 services:
   nginx:
     image: nginx:alpine
-    container_name: nginx
+    container_name: static-nginx
+    restart: unless-stopped
     volumes:
-      - ./errors:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./conf.d:/etc/nginx/conf.d:ro
+      - ./html:/usr/share/nginx/html:ro
+      - ./logs:/var/log/nginx
     networks:
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.nginx.rule=Host(`static.tudominio.com`)"
+      - "traefik.http.routers.nginx.rule=Host(`static.mlorente.dev`)"
       - "traefik.http.routers.nginx.entrypoints=websecure"
       - "traefik.http.routers.nginx.tls=true"
       - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
@@ -174,357 +213,234 @@ networks:
     external: true
 ```
 
-### Verificación del Despliegue
+## Error pages
 
-```bash
-# Verificar estado del contenedor
-docker ps | grep nginx
-
-# Ver logs
-docker-compose logs nginx
-
-# Probar conectividad
-curl -I http://localhost
-
-# Verificar página 404
-curl -I http://localhost/pagina-inexistente
-```
-
-## 🛠️ Desarrollo Local
-
-### Setup de Desarrollo
-
-```bash
-# Clonar el repositorio
-cd infra/nginx
-
-# Crear contenido de prueba
-echo "<h1>Servidor Nginx funcionando</h1>" > errors/index.html
-
-# Iniciar en modo desarrollo
-docker-compose up
-
-# Acceder en: http://localhost:80
-```
-
-### Personalización de Páginas de Error
+### Custom 404 page (html/404.html)
 
 ```html
-<!-- errors/404.html -->
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>404 - Página no encontrada</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-align: center;
-            padding: 2rem;
-            margin: 0;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        
-        h1 {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        p {
-            font-size: 1.2rem;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-        }
-        
-        .btn {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            padding: 1rem 2rem;
-            text-decoration: none;
-            border-radius: 50px;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-        
-        .btn:hover {
-            background: rgba(255,255,255,0.3);
-            transform: translateY(-2px);
-        }
-        
-        @media (max-width: 768px) {
-            h1 { font-size: 2.5rem; }
-            p { font-size: 1rem; }
-        }
-    </style>
+    <title>Page Not Found - mlorente.dev</title>
+    <link rel="stylesheet" href="/assets/css/error.css">
 </head>
 <body>
-    <div class="container">
-        <h1>🚫 404</h1>
-        <p>Lo sentimos, la página que buscas no pudo ser encontrada.</p>
-        <a href="/" class="btn">🏠 Volver al inicio</a>
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <div class="error-message">Page Not Found</div>
+        <div class="error-description">
+            The page you're looking for doesn't exist or has been moved.
+        </div>
+        <div class="error-actions">
+            <a href="/" class="btn-primary">Go Home</a>
+            <a href="/blog" class="btn-secondary">Visit Blog</a>
+        </div>
     </div>
 </body>
 </html>
 ```
 
-### Testing de Páginas de Error
-
-```bash
-# Probar diferentes códigos de error
-curl -w "%{http_code}" http://localhost/no-existe
-
-# Verificar headers de respuesta
-curl -I http://localhost/404
-
-# Test de compresión
-curl -H "Accept-Encoding: gzip" -I http://localhost/
-
-# Verificar caché headers
-curl -I http://localhost/style.css
-```
-
-## 🔍 Monitoreo y Logging
-
-### Logs de Nginx
-
-```bash
-# Ver logs en tiempo real
-docker-compose logs -f nginx
-
-# Ver logs de acceso
-docker exec nginx tail -f /var/log/nginx/access.log
-
-# Ver logs de error
-docker exec nginx tail -f /var/log/nginx/error.log
-
-# Logs con formato JSON (si configurado)
-docker exec nginx cat /var/log/nginx/access.log | jq
-```
-
-### Métricas y Monitoreo
-
-```nginx
-# Configuración para métricas básicas
-location /nginx_status {
-    stub_status on;
-    access_log off;
-    allow 127.0.0.1;
-    allow 172.18.0.0/16;  # Red Docker
-    deny all;
-}
-```
-
-### Health Checks
-
-```bash
-# Health check básico
-curl -f http://localhost/
-
-# Health check con timeout
-curl --max-time 5 http://localhost/
-
-# Verificar desde Traefik
-curl -f http://nginx:80/ # Desde dentro de la red Docker
-```
-
-## 🚀 Optimización de Performance
-
-### Configuración de Caché
-
-```nginx
-# Cache de archivos estáticos
-location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-    expires 1y;
-    add_header Cache-Control "public, immutable";
-    access_log off;
-}
-
-# Cache de HTML con validación
-location ~* \.(html|htm)$ {
-    expires 1h;
-    add_header Cache-Control "public, must-revalidate";
-}
-```
-
-### Compresión Optimizada
-
-```nginx
-# Compresión Gzip avanzada
-gzip on;
-gzip_vary on;
-gzip_min_length 1024;
-gzip_types
-    application/atom+xml
-    application/javascript
-    application/json
-    application/rss+xml
-    application/vnd.ms-fontobject
-    application/x-font-ttf
-    application/x-web-app-manifest+json
-    application/xhtml+xml
-    application/xml
-    font/opentype
-    image/svg+xml
-    image/x-icon
-    text/css
-    text/plain
-    text/x-component;
-```
-
-### Límites y Timeouts
-
-```nginx
-# Configuración de rendimiento
-client_max_body_size 10m;
-client_body_timeout 60s;
-client_header_timeout 60s;
-keepalive_timeout 65s;
-send_timeout 60s;
-
-# Worker processes optimización
-worker_processes auto;
-worker_connections 1024;
-```
-
-## 🔐 Seguridad
-
-### Headers de Seguridad
-
-```nginx
-# Headers de seguridad obligatorios
-add_header X-Frame-Options DENY always;
-add_header X-Content-Type-Options nosniff always;
-add_header X-XSS-Protection "1; mode=block" always;
-add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-# Content Security Policy
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" always;
-```
-
-### Configuración SSL (con Traefik)
-
-```nginx
-# Headers para HTTPS (cuando Traefik maneja SSL)
-location / {
-    # Verificar que la conexión sea HTTPS
-    if ($http_x_forwarded_proto != "https") {
-        return 301 https://$server_name$request_uri;
-    }
-    
-    # HSTS Header
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-}
-```
-
-### Rate Limiting
-
-```nginx
-# Rate limiting básico
-http {
-    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-    
-    server {
-        location / {
-            limit_req zone=api burst=20 nodelay;
-        }
-    }
-}
-```
-
-## 🔧 Casos de Uso Comunes
-
-### Servidor de Assets Estáticos
-
-```yaml
-# Para servir assets de aplicaciones
-services:
-  nginx-assets:
-    image: nginx:alpine
-    volumes:
-      - ../web/dist:/usr/share/nginx/html:ro
-      - ./nginx-assets.conf:/etc/nginx/conf.d/default.conf:ro
-    labels:
-      - "traefik.http.routers.assets.rule=Host(`assets.tudominio.com`)"
-```
-
-### Página de Mantenimiento
+### Maintenance page (html/maintenance.html)
 
 ```html
-<!-- maintenance.html -->
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Mantenimiento</title>
-    <meta http-equiv="refresh" content="30">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance - mlorente.dev</title>
+    <link rel="stylesheet" href="/assets/css/maintenance.css">
+    <meta http-equiv="refresh" content="300">
 </head>
 <body>
-    <h1>🔧 Sitio en mantenimiento</h1>
-    <p>Estaremos de vuelta pronto. Esta página se actualiza automáticamente.</p>
+    <div class="maintenance-container">
+        <div class="maintenance-icon">🔧</div>
+        <div class="maintenance-title">Under Maintenance</div>
+        <div class="maintenance-message">
+            We're currently performing scheduled maintenance to improve your experience.
+            Please check back in a few minutes.
+        </div>
+        <div class="maintenance-eta">
+            Estimated completion: <span id="eta">15 minutes</span>
+        </div>
+    </div>
 </body>
 </html>
 ```
 
-### Proxy para APIs Legacy
+## Monitoring
 
-```nginx
-# Proxy para servicios que no usan Docker
-upstream legacy_api {
-    server 192.168.1.50:8000;
-    server 192.168.1.51:8000 backup;
-}
+### Health checks
 
-server {
-    location /api/legacy/ {
-        proxy_pass http://legacy_api/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+```bash
+# Basic health check
+curl -f http://nginx.mlorentedev.test/health
+
+# Check response headers
+curl -I http://nginx.mlorentedev.test/
+
+# Test static assets
+curl -I http://nginx.mlorentedev.test/assets/css/style.css
 ```
 
-## 🤝 Contribución
+### Logs monitoring
 
-1. Fork del repositorio
-2. Crear rama de feature
-3. Añadir páginas en `errors/`
-4. Personalizar configuración Nginx
-5. Probar localmente con Docker
-6. Documentar cambios
-7. Enviar pull request
+```bash
+# Follow access logs
+tail -f logs/access.log
 
-### Guidelines de Desarrollo
+# Follow error logs
+tail -f logs/error.log
 
-- Usar diseño responsive para páginas de error
-- Mantener páginas ligeras y rápidas de cargar
-- Incluir navegación de vuelta al sitio principal
-- Seguir estándares de accesibilidad web
-- Optimizar imágenes y assets
-- Usar semantic HTML5
+# Check log rotation
+ls -la logs/
 
-## 🔗 Servicios Relacionados
+# Parse access logs for analytics
+grep "GET /" logs/access.log | wc -l
+```
 
-- **Traefik**: `infra/traefik` - Proxy reverso que enruta a Nginx
-- **Apps Frontend**: `apps/web`, `apps/blog` - Aplicaciones web principales  
-- **Monitoreo**: `apps/monitoring` - Métricas de Nginx
-- **Ansible**: `infra/ansible` - Automatización de despliegue
+### Performance testing
 
-## 📖 Recursos Adicionales
+```bash
+# Simple load test with curl
+for i in {1..100}; do
+  curl -s -o /dev/null http://nginx.mlorentedev.test/
+done
 
-- [Documentación Oficial de Nginx](https://nginx.org/en/docs/)
-- [Nginx Alpine Docker Image](https://hub.docker.com/_/nginx)
-- [Nginx Security Headers](https://securityheaders.com/)
-- [Nginx Performance Tuning](https://www.nginx.com/blog/tuning-nginx/)
+# Test compression
+curl -H "Accept-Encoding: gzip" -I http://nginx.mlorentedev.test/
+
+# Test caching headers
+curl -I http://nginx.mlorentedev.test/assets/css/style.css
+```
+
+## Maintenance mode
+
+### Enable maintenance mode
+
+```bash
+# Redirect all traffic to maintenance page
+cat > conf.d/maintenance.conf << EOF
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    
+    location / {
+        return 503;
+    }
+    
+    error_page 503 /maintenance.html;
+    location = /maintenance.html {
+        internal;
+    }
+    
+    # Keep health check active
+    location /health {
+        return 200 "maintenance\n";
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+
+# Reload Nginx configuration
+docker-compose exec nginx nginx -s reload
+```
+
+### Disable maintenance mode
+
+```bash
+# Remove maintenance configuration
+rm conf.d/maintenance.conf
+
+# Reload Nginx configuration
+docker-compose exec nginx nginx -s reload
+```
+
+## Security
+
+### Basic security measures
+
+```nginx
+# Hide Nginx version
+server_tokens off;
+
+# Deny access to sensitive files
+location ~ /\.(ht|git|svn) {
+    deny all;
+    access_log off;
+    log_not_found off;
+}
+
+# Limit request size
+client_max_body_size 16M;
+
+# Rate limiting (if needed)
+limit_req_zone $binary_remote_addr zone=static:10m rate=10r/s;
+limit_req zone=static burst=20 nodelay;
+```
+
+### SSL/TLS considerations
+
+Since Nginx runs behind Traefik, SSL is handled at the proxy level:
+- **No direct SSL** - Traefik handles all TLS termination
+- **HTTP only** - Internal communication is unencrypted
+- **Trusted proxy** - Nginx trusts headers from Traefik
+- **Secure cookies** - Set secure flags when behind HTTPS proxy
+
+## Troubleshooting
+
+### Common issues
+
+**Static files not loading:**
+1. Check file permissions in html/ directory
+2. Verify volume mounts in docker-compose.yml
+3. Check Nginx error logs for access issues
+4. Ensure files exist in the correct location
+
+**Configuration errors:**
+1. Test configuration: `docker-compose exec nginx nginx -t`
+2. Check syntax in .conf files
+3. Review error logs for specific issues
+4. Restart container after changes
+
+**Performance issues:**
+1. Monitor connection limits
+2. Check file sizes and compression
+3. Review access patterns in logs
+4. Consider adjusting worker processes
+
+### Debug commands
+
+```bash
+# Test Nginx configuration
+docker-compose exec nginx nginx -t
+
+# Reload configuration
+docker-compose exec nginx nginx -s reload
+
+# Check active connections
+docker-compose exec nginx nginx -s status
+
+# Verify file permissions
+docker-compose exec nginx ls -la /usr/share/nginx/html/
+```
+
+## Local development URLs
+
+When running locally with `make up-nginx`:
+- Static site: http://nginx.mlorentedev.test
+- Health check: http://nginx.mlorentedev.test/health
+- Error pages: http://nginx.mlorentedev.test/404.html
+
+Add `127.0.0.1 nginx.mlorentedev.test` to your `/etc/hosts` file for local domain access.
+
+## Use cases
+
+- **Error page serving** - Custom 404/500 pages for the entire ecosystem
+- **Maintenance pages** - Temporary maintenance notifications
+- **Static assets** - Serving shared CSS, JS, and image files
+- **Landing pages** - Simple static landing or coming soon pages
+- **Health monitoring** - Basic health endpoint for load balancers

@@ -19,7 +19,7 @@ baseurl: ''
 ###############################################
 
 navbar-links:
-  Blog: "/"
+  Posts: "/"
 
 ################
 # --- Logo --- #
@@ -52,7 +52,7 @@ social-network-links:
 
 # If you want your website to generate an RSS feed, provide a description
 # The URL for the feed will be https://<your_website>/feed.xml
-rss-description: Tech blog focused on software, DevOps culture and cloud computing
+rss-description: Blog técnico sobre la construcción en público de mi homelab DevOps
 
 ###########################
 # --- General options --- #
@@ -73,7 +73,7 @@ share-links-active:
 title-on-all-pages: true
 
 # Excerpt word length - Truncate the excerpt of each post on the feed page to the specified number of words
-excerpt_length: 75
+excerpt_length: 120
 
 # Whether or not to show an excerpt for every blog post in the feed page
 feed_show_excerpt: true
@@ -234,7 +234,7 @@ gtag: "G-PLL8SP2YFC"
 ################
 
 # Ruby Date Format to show dates of posts
-date_format: "%B %-d, %Y"
+date_format: "%d-%m-%Y"
 
 # Facebook App ID
 #fb_app_id: ""

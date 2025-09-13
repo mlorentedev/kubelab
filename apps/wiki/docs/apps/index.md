@@ -1,58 +1,58 @@
 ---
-title: Aplicaciones - mlorente.dev
-description: Documentación de todas las aplicaciones del ecosistema mlorente.dev
+title: Applications - mlorente.dev
+description: Documentation for all applications in the mlorente.dev ecosystem
 hide:
   - toc
 ---
 
-# 📱 Aplicaciones
+# 1.0 Applications
 
-**Documentación completa de todas las aplicaciones del ecosistema mlorente.dev**
+**Complete documentation for all applications in the mlorente.dev ecosystem**
 
 ---
 
-## Aplicaciones Disponibles
+## Available Applications
 
 <div class="section-cards">
   <div class="section-card">
-    <h3><a href="api/index.md"><span class="item-number">1.1</span> API</a></h3>
-    <p>API principal del sistema, endpoints REST y GraphQL.</p>
+    <h3><a href="api/"><span class="item-number">1.1</span> API</a></h3>
+    <p>Main system API with REST endpoints and GraphQL support.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Backend</span>
         <span class="card-tag">REST</span>
-        <span class="card-tag">GraphQL</span>
+        <span class="card-tag">Go</span>
       </div>
     </div>
   </div>
   
   <div class="section-card">
-    <h3><a href="web/index.md"><span class="item-number">1.2</span> Web</a></h3>
-    <p>Aplicación web principal, frontend React con Next.js.</p>
+    <h3><a href="web/"><span class="item-number">1.2</span> Web</a></h3>
+    <p>Main web application, frontend built with Astro framework.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Frontend</span>
-        <span class="card-tag">React</span>
-        <span class="card-tag">Next.js</span>
+        <span class="card-tag">Astro</span>
+        <span class="card-tag">TypeScript</span>
       </div>
     </div>
   </div>
   
   <div class="section-card">
-    <h3><a href="blog/index.md"><span class="item-number">1.3</span> Blog</a></h3>
-    <p>Blog personal y técnico con sistema de gestión de contenido.</p>
+    <h3><a href="blog/"><span class="item-number">1.3</span> Blog</a></h3>
+    <p>Personal and technical blog with content management system.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Blog</span>
-        <span class="card-tag">CMS</span>
+        <span class="card-tag">Jekyll</span>
         <span class="card-tag">Markdown</span>
       </div>
     </div>
   </div>
   
   <div class="section-card">
-    <h3><a href="wiki/index.md"><span class="item-number">1.4</span> Wiki</a></h3>
-    <p>Sistema de documentación técnica con MkDocs Material.</p>
+    <h3><a href="wiki/"><span class="item-number">1.4</span> Wiki</a></h3>
+    <p>Technical documentation system built with MkDocs Material.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Docs</span>
@@ -63,8 +63,20 @@ hide:
   </div>
   
   <div class="section-card">
-    <h3><a href="grafana/index.md"><span class="item-number">1.5</span> Monitoring</a></h3>
-    <p>Sistema de monitorización y observabilidad del ecosistema.</p>
+    <h3><a href="portainer/"><span class="item-number">1.5</span> Portainer</a></h3>
+    <p>Visual Docker container management and orchestration interface.</p>
+    <div class="card-footer">
+      <div class="card-tags">
+        <span class="card-tag">Docker</span>
+        <span class="card-tag">Containers</span>
+        <span class="card-tag">Management</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section-card">
+    <h3><a href="grafana/"><span class="item-number">1.6</span> Grafana</a></h3>
+    <p>Monitoring and observability system for the entire ecosystem.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Monitoring</span>
@@ -75,8 +87,8 @@ hide:
   </div>
   
   <div class="section-card">
-    <h3><a href="n8n/index.md"><span class="item-number">1.6</span> N8N</a></h3>
-    <p>Automatización de workflows y procesos empresariales.</p>
+    <h3><a href="n8n/"><span class="item-number">1.7</span> n8n</a></h3>
+    <p>Workflow automation and business process integration platform.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Automation</span>
@@ -87,39 +99,66 @@ hide:
   </div>
   
   <div class="section-card">
-    <h3><a href="portainer/index.md"><span class="item-number">1.7</span> Portainer</a></h3>
-    <p>Gestión visual de containers Docker y orquestación.</p>
+    <h3><a href="uptime/"><span class="item-number">1.8</span> Uptime Kuma</a></h3>
+    <p>Service monitoring and uptime tracking for all applications.</p>
     <div class="card-footer">
       <div class="card-tags">
-        <span class="card-tag">Docker</span>
-        <span class="card-tag">Containers</span>
-        <span class="card-tag">Management</span>
+        <span class="card-tag">Monitoring</span>
+        <span class="card-tag">Uptime</span>
+        <span class="card-tag">Alerts</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section-card">
+    <h3><a href="loki/"><span class="item-number">1.9</span> Loki</a></h3>
+    <p>Log aggregation system for centralized logging across services.</p>
+    <div class="card-footer">
+      <div class="card-tags">
+        <span class="card-tag">Logs</span>
+        <span class="card-tag">Aggregation</span>
+        <span class="card-tag">Search</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section-card">
+    <h3><a href="minio/"><span class="item-number">1.10</span> MinIO</a></h3>
+    <p>Object storage server for files, images, and static assets.</p>
+    <div class="card-footer">
+      <div class="card-tags">
+        <span class="card-tag">Storage</span>
+        <span class="card-tag">S3 Compatible</span>
+        <span class="card-tag">Objects</span>
       </div>
     </div>
   </div>
 </div>
 
-## Arquitectura General
+## General Architecture
 
-Las aplicaciones están diseñadas siguiendo principios de arquitectura limpia y patrones de microservicios:
+Applications are designed following clean architecture principles and microservices patterns:
 
-- **Separación de responsabilidades**: Cada aplicación tiene un propósito específico
-- **Comunicación mediante APIs**: Interfaces bien definidas entre servicios
-- **Escalabilidad horizontal**: Diseño preparado para crecimiento
-- **Observabilidad**: Monitorización y logging centralizados
+- **Separation of concerns**: Each application has a specific purpose
+- **API communication**: Well-defined interfaces between services
+- **Horizontal scalability**: Design prepared for growth
+- **Observability**: Centralized monitoring and logging
 
-## Enlaces Rápidos
+## Quick Links
 
-| Aplicación | Estado | Puerto | Documentación |
+| Application | Status | Port | Documentation |
 |------------|--------|--------|---------------|
-| API | 🟢 Activo | 3000 | [Ver docs](api/index.md) |
-| Web | 🟢 Activo | 3001 | [Ver docs](web/index.md) |
-| Blog | 🟢 Activo | 3002 | [Ver docs](blog/index.md) |
-| Wiki | 🟢 Activo | 3003 | [Ver docs](wiki/index.md) |
-| Monitoring | 🟢 Activo | 3004 | [Ver docs](grafana/index.md) |
-| N8N | 🟢 Activo | 5678 | [Ver docs](n8n/index.md) |
-| Portainer | 🟢 Activo | 9443 | [Ver docs](portainer/index.md) |
+| API | 🟢 Active | 3000 | [View docs](api/) |
+| Web | 🟢 Active | 3001 | [View docs](web/) |
+| Blog | 🟢 Active | 4000 | [View docs](blog/) |
+| Wiki | 🟢 Active | 8000 | [View docs](wiki/) |
+| Portainer | 🟢 Active | 9000 | [View docs](portainer/) |
+| Grafana | 🟢 Active | 3000 | [View docs](grafana/) |
+| n8n | 🟢 Active | 5678 | [View docs](n8n/) |
+| Uptime Kuma | 🟢 Active | 3001 | [View docs](uptime/) |
+| Loki | 🟢 Active | 3100 | [View docs](loki/) |
+| MinIO | 🟢 Active | 9000 | [View docs](minio/) |
 
 ---
 
-💡 **Tip:** Usa la navegación lateral para acceder rápidamente a la documentación específica de cada aplicación.
+💡 **Tip:** Use the sidebar navigation to quickly access specific application documentation.

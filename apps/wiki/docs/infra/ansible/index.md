@@ -1,425 +1,576 @@
-# Ansible - Automatización de Despliegue
+# 2.3 Ansible - Deployment Automation
 
-<div align="center">
+Automation and orchestration tools for deploying applications to production environments using Ansible playbooks and infrastructure as code.
 
-![Ansible](https://img.shields.io/badge/Ansible-2.9+-EE0000?style=for-the-badge&logo=ansible&logoColor=white)
-![YAML](https://img.shields.io/badge/YAML-CB171E?style=for-the-badge&logo=yaml&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![SSH](https://img.shields.io/badge/SSH-4D4D4D?style=for-the-badge&logo=ssh&logoColor=white)
+## What it is
 
-![Status](https://img.shields.io/badge/Status-Production-008099?style=flat-square)
-![Playbooks](https://img.shields.io/badge/Playbooks-5-blue?style=flat-square)
+This Ansible setup handles all server configuration and application deployment for the mlorente.dev project. It configures servers from scratch, deploys Docker applications, manages secrets, and ensures consistent environments across staging and production. I use Ansible because it's agentless, uses simple YAML syntax, and makes deployments repeatable and reliable.
 
-</div>
+## Tech stack
 
-Herramientas de automatización y orquestación para el despliegue de aplicaciones en entornos de producción usando Ansible.
+- **Ansible 2.9+** - Configuration management and deployment automation
+- **YAML playbooks** - Declarative infrastructure configuration
+- **Jinja2 templates** - Dynamic configuration generation
+- **SSH communication** - Agentless remote execution
 
-## 🏗️ Arquitectura
-
-- **Herramienta**: Ansible 2.9+
-- **Inventario**: Dinámico con variables por entorno
-- **Playbooks**: Despliegue automatizado de aplicaciones Docker
-- **Gestión de Configuración**: Variables centralizadas y plantillas
-- **Backup Automático**: Respaldo antes de cada despliegue
-
-## 📁 Estructura del Proyecto
+## Project structure
 
 ```
 infra/ansible/
-├── README.md                    # Esta documentación
-├── inventories/                 # Configuración de inventarios
-│   ├── hosts.yml               # Definición de hosts y grupos
-│   └── group_vars/             # Variables por grupos
-│       └── all.yml             # Variables globales
-├── playbooks/                   # Playbooks de Ansible
-│   ├── deploy.yml              # Despliegue principal de aplicaciones
-│   └── setup.yml               # Configuración inicial del servidor
-└── templates/                   # Plantillas de configuración
-    ├── hosts.template.yml       # Plantilla para hosts
-    └── group_vars/
-        └── all.template.yml     # Plantilla para variables
+├── README.md                    # This documentation
+├── inventories/                 # Server inventories
+│   ├── production/
+│   │   ├── hosts.yml           # Production server list
+│   │   └── group_vars/         # Production-specific variables
+│   └── staging/
+│       ├── hosts.yml           # Staging server list
+│       └── group_vars/         # Staging variables
+├── playbooks/                  # Ansible playbooks
+│   ├── site.yml               # Main deployment playbook
+│   ├── setup.yml              # Server initial setup
+│   ├── deploy.yml             # Application deployment
+│   ├── backup.yml             # Backup procedures
+│   └── rollback.yml           # Rollback procedures
+├── roles/                      # Reusable Ansible roles
+│   ├── docker/                # Docker installation
+│   ├── nginx/                 # Nginx configuration
+│   ├── app-deploy/            # Application deployment
+│   └── monitoring/            # Monitoring setup
+├── templates/                  # Configuration templates
+│   ├── docker-compose.j2      # Dynamic compose files
+│   ├── nginx.conf.j2         # Nginx configuration
+│   └── traefik.yml.j2        # Traefik configuration
+├── vars/                       # Variable files
+│   ├── secrets.yml           # Encrypted secrets (Ansible Vault)
+│   └── common.yml            # Common variables
+└── ansible.cfg               # Ansible configuration
 ```
 
-## 🚀 Características
-
-### Despliegue Automatizado
-
-- **Multi-aplicación**: Despliega todas las aplicaciones del stack
-- **Gestión de Servicios**: Control de Docker Compose por aplicación
-- **Networking**: Configuración automática de redes Docker
-- **Health Checks**: Verificación de salud post-despliegue
-- **Rollback**: Capacidades de rollback en caso de fallo
-
-### Gestión de Configuración
-
-- **Variables Centralizadas**: Configuración unificada por entorno
-- **Plantillas Dinámicas**: Generación de archivos de configuración
-- **Secretos**: Gestión segura de credenciales y API keys
-- **Multi-entorno**: Soporte para desarrollo, staging y producción
-- **Inventario Dinámico**: Configuración flexible de hosts
-
-### Backup y Seguridad
-
-- **Backup Automático**: Respaldo antes de cada despliegue
-- **Timestamping**: Versionado con marcas de tiempo únicas
-- **Validación**: Verificación de configuraciones antes del despliegue
-- **Logs Detallados**: Registro completo de operaciones
-- **Recuperación**: Procedimientos de restauración documentados
-
-## 🔧 Configuración
-
-### Variables de Entorno
-
-Configura las variables en `group_vars/all.yml`:
-
-```yaml
-# Configuración del Dominio
-domain: tudominio.com
-subdomain_prefix: ""
-
-# Rutas de Despliegue
-deploy_path: /opt/apps
-traefik_path: /opt/traefik
-
-# Configuración de Aplicaciones
-apps_to_deploy:
-  - api
-  - blog
-  - web
-  - n8n
-  - monitoring
-  - portainer
-
-# Configuración Docker
-docker_network: proxy
-registry_url: docker.io
-image_prefix: tuorganizacion
-
-# Configuración de Backup
-backup_retention_days: 30
-backup_path: /opt/backups
-
-# Health Check Configuration
-health_check_timeout: 30
-health_check_retries: 3
-```
-
-### Inventario de Hosts
-
-Configura tus servidores en `inventories/hosts.yml`:
-
-```yaml
-all:
-  children:
-    production:
-      hosts:
-        prod-server:
-          ansible_host: 192.168.1.100
-          ansible_user: deploy
-          ansible_ssh_private_key_file: ~/.ssh/id_rsa_deploy
-          domain: mlorente.dev
-          deploy_path: /opt/mlorente-prod
-      vars:
-        env: production
-        ssl_enabled: true
-        
-    development:
-      hosts:
-        dev-server:
-          ansible_host: 192.168.1.101
-          ansible_user: develop
-          domain: dev.mlorente.dev
-          deploy_path: /opt/mlorente-dev
-      vars:
-        env: development
-        ssl_enabled: false
-
-    staging:
-      hosts:
-        stage-server:
-          ansible_host: 192.168.1.102
-          ansible_user: deploy
-          domain: staging.mlorente.dev
-          deploy_path: /opt/mlorente-stage
-      vars:
-        env: staging
-        ssl_enabled: true
-```
-
-## 🚀 Playbooks
-
-### Playbook de Despliegue (deploy.yml)
-
-Funcionalidades principales:
-
-- **Backup Automático**: Crea respaldo con timestamp único
-- **Configuración Traefik**: Despliega proxy reverso y SSL
-- **Despliegue de Apps**: Orquesta el despliegue de todas las aplicaciones
-- **Health Checks**: Verifica que los servicios estén funcionando
-- **Red Docker**: Configura networking entre servicios
-
-### Playbook de Setup (setup.yml)
-
-Configuración inicial del servidor:
-
-- **Dependencias del Sistema**: Instala Docker y herramientas
-- **Usuarios y Permisos**: Configura usuarios de despliegue
-- **Firewall**: Configuración de seguridad básica
-- **Directorios**: Crea estructura de directorios
-- **Servicios Base**: Configura servicios del sistema
-
-## 🛠️ Uso
-
-### Configuración Inicial
-
-```bash
-# Clonar configuraciones desde plantillas
-cp templates/hosts.template.yml inventories/hosts.yml
-cp templates/group_vars/all.template.yml inventories/group_vars/all.yml
-
-# Editar configuración de hosts
-nano inventories/hosts.yml
-
-# Editar variables globales
-nano inventories/group_vars/all.yml
-```
-
-### Setup Inicial del Servidor
-
-```bash
-# Preparar servidor para primera vez
-ansible-playbook -i inventories/hosts.yml playbooks/setup.yml --limit production
-
-# Verificar conectividad
-ansible -i inventories/hosts.yml production -m ping
-
-# Verificar variables
-ansible-playbook -i inventories/hosts.yml playbooks/setup.yml --limit production --check
-```
-
-### Despliegue de Aplicaciones
-
-```bash
-# Despliegue completo en producción
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --limit production
-
-# Despliegue en desarrollo
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --limit development
-
-# Despliegue con verificaciones adicionales
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --limit production --check --diff
-
-# Despliegue verbose para debugging
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --limit production -vvv
-```
-
-### Comandos de Mantenimiento
-
-```bash
-# Verificar estado de servicios
-ansible -i inventories/hosts.yml production -a "docker ps" --become
-
-# Reiniciar servicios específicos
-ansible -i inventories/hosts.yml production -a "docker compose -f /opt/apps/api/docker-compose.yml restart" --become
-
-# Verificar logs
-ansible -i inventories/hosts.yml production -a "docker logs traefik" --become
-
-# Limpiar imágenes no utilizadas
-ansible -i inventories/hosts.yml production -a "docker system prune -f" --become
-```
-
-## 🔍 Monitoreo y Troubleshooting
-
-### Verificación de Estado
-
-```bash
-# Estado de contenedores
-ansible -i inventories/hosts.yml production -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" --become
-
-# Verificar red proxy
-ansible -i inventories/hosts.yml production -m shell -a "docker network inspect proxy" --become
-
-# Verificar servicios de sistema
-ansible -i inventories/hosts.yml production -m service -a "name=docker state=started" --become
-```
-
-### Logs y Debugging
-
-```bash
-# Ver logs de Ansible en tiempo real
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --limit production -vvv
-
-# Verificar configuración sin ejecutar
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --limit production --check --diff
-
-# Ver variables de host específico
-ansible-inventory -i inventories/hosts.yml --host prod-server --yaml
-```
-
-### Troubleshooting Común
-
-```bash
-# Problema: No se puede conectar al host
-ansible -i inventories/hosts.yml production -m ping
-# Solución: Verificar SSH keys y permisos
-
-# Problema: Docker no está instalado
-ansible -i inventories/hosts.yml production -m shell -a "docker --version" --become
-# Solución: Ejecutar playbook setup.yml
-
-# Problema: Servicios no inician
-ansible -i inventories/hosts.yml production -a "docker logs traefik" --become
-# Solución: Verificar configuración y variables
-```
-
-## 🔐 Seguridad
-
-### Gestión de Secretos
-
-```yaml
-# Usar Ansible Vault para secretos
-ansible-vault create inventories/group_vars/all_secrets.yml
-
-# Editar secretos
-ansible-vault edit inventories/group_vars/all_secrets.yml
-
-# Despliegue con vault
-ansible-playbook -i inventories/hosts.yml playbooks/deploy.yml --ask-vault-pass
-```
-
-### Configuración SSH
-
-```bash
-# Generar clave SSH para despliegue
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_deploy
-
-# Copiar clave al servidor
-ssh-copy-id -i ~/.ssh/id_rsa_deploy.pub deploy@servidor.com
-
-# Configurar SSH en ~/.ssh/config
-Host prod-server
-    HostName 192.168.1.100
-    User deploy
-    IdentityFile ~/.ssh/id_rsa_deploy
-    StrictHostKeyChecking no
-```
-
-### Permisos y Usuarios
-
-```yaml
-# En group_vars/all.yml
-deploy_user: deploy
-deploy_group: deploy
-app_permissions: "0755"
-config_permissions: "0644"
-secret_permissions: "0600"
-```
-
-## 📈 Optimización
-
-### Paralelización
-
-```yaml
-# En ansible.cfg
+## Key features
+
+### Server management
+- **Initial setup** - Complete server configuration from Ubuntu base
+- **Docker installation** - Automated Docker and Docker Compose setup
+- **User management** - Deploy user creation and SSH key management
+- **Security hardening** - Basic firewall and security configurations
+
+### Application deployment
+- **Docker deployment** - Deploy applications using Docker Compose
+- **Environment management** - Stage-specific variable handling
+- **Health checks** - Verify deployments after completion
+- **Rollback capability** - Quick rollback to previous versions
+
+### Configuration management
+- **Template rendering** - Dynamic configuration generation
+- **Secret management** - Encrypted secrets with Ansible Vault
+- **Variable hierarchy** - Environment-specific overrides
+- **Idempotent operations** - Safe to run multiple times
+
+## Configuration
+
+### Ansible configuration (ansible.cfg)
+
+```ini
 [defaults]
-forks = 10
 host_key_checking = False
+inventory = inventories/production/hosts.yml
+remote_user = mlorente-deployer
+private_key_file = ~/.ssh/mlorente-deploy
+stdout_callback = yaml
 timeout = 30
-gathering = smart
-fact_caching = memory
 
 [ssh_connection]
 ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 pipelining = True
+control_path = /tmp/ansible-ssh-%%h-%%p-%%r
 ```
 
-### Caché de Facts
+### Production inventory (inventories/production/hosts.yml)
 
 ```yaml
-# Configuración de caché
-fact_caching = jsonfile
-fact_caching_connection = /tmp/facts_cache
-fact_caching_timeout = 86400
+all:
+  children:
+    web_servers:
+      hosts:
+        mlorente-prod-01:
+          ansible_host: 1.2.3.4
+          ansible_user: mlorente-deployer
+          server_role: primary
+          
+    monitoring:
+      hosts:
+        mlorente-monitoring:
+          ansible_host: 5.6.7.8
+          ansible_user: mlorente-deployer
+          server_role: monitoring
+
+  vars:
+    environment: production
+    domain: mlorente.dev
+    docker_network: proxy
+    backup_enabled: true
+    monitoring_enabled: true
 ```
 
-### Estrategias de Despliegue
+### Group variables (inventories/production/group_vars/all.yml)
 
 ```yaml
-# Rolling deployment strategy
-strategy: rolling
-serial: 1
-
-# Parallel deployment
-strategy: free
-```
-
-## 🤝 Contribución
-
-1. Fork del repositorio
-2. Crear rama de feature
-3. Añadir playbooks en `playbooks/`
-4. Documentar variables en `group_vars/`
-5. Probar en entorno de desarrollo
-6. Actualizar documentación
-7. Enviar pull request
-
-### Guías de Desarrollo
-
-- Usar variables en lugar de valores hardcoded
-- Implementar idempotencia en todas las tareas
-- Añadir handlers para servicios que requieren restart
-- Documentar todas las variables en `group_vars/`
-- Usar tags para ejecución selectiva
-- Implementar verificaciones de estado
-
-## 📝 Variables de Configuración
-
-### Variables Obligatorias
-
-```yaml
-# Dominio principal
-domain: tudominio.com
-
-# Ruta base de despliegue
-deploy_path: /opt/apps
-
-# Aplicaciones a desplegar
-apps:
-  - { name: "api", compose: "docker-compose.prod.yml" }
-  - { name: "blog", compose: "docker-compose.prod.yml" }
-  - { name: "web", compose: "docker-compose.prod.yml" }
-```
-
-### Variables Opcionales
-
-```yaml
-# Configuración de backup
+# Environment settings
+environment: production
+domain: mlorente.dev
 backup_retention_days: 30
-backup_dir: "{{ deploy_path }}/backups"
 
-# Health checks
-health_check_timeout: 30
-health_check_urls:
-  - "https://{{ domain }}/health"
-  - "https://api.{{ domain }}/health"
+# Application settings
+apps:
+  - name: api
+    port: 8080
+    replicas: 1
+    env_file: api.env
+  - name: web
+    port: 4321
+    replicas: 1
+    env_file: web.env
+  - name: blog
+    port: 4000
+    replicas: 1
+    env_file: blog.env
+  - name: wiki
+    port: 8000
+    replicas: 1
+    env_file: wiki.env
 
-# Docker configuration
-docker_cleanup: true
-docker_prune: false
-pull_latest: true
+# Docker settings
+docker_compose_version: "2.24.0"
+docker_network: proxy
+docker_data_path: /opt/mlorente-dev
+
+# Backup settings
+backup_enabled: true
+backup_path: /opt/backups
+backup_retention_days: 30
+
+# Monitoring
+monitoring_enabled: true
+log_level: info
 ```
 
-## 🔗 Servicios Relacionados
+## Playbooks
 
-- **Traefik**: `infra/traefik` - Proxy reverso y SSL
-- **Nginx**: `infra/nginx` - Servidor web estático
-- **Apps**: `apps/` - Aplicaciones desplegadas
-- **Monitoreo**: `apps/monitoring` - Stack de observabilidad
+### Main deployment playbook (playbooks/site.yml)
 
-## 📖 Recursos Adicionales
+```yaml
+---
+- name: Deploy mlorente.dev applications
+  hosts: web_servers
+  become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 300
+      tags: ['setup']
 
-- [Documentación de Ansible](https://docs.ansible.com/)
-- [Best Practices de Ansible](https://docs.ansible.com/ansible/latest/user_guide/playbooks_best_practices.html)
-- [Ansible Vault](https://docs.ansible.com/ansible/latest/user_guide/vault.html)
-- [Docker Compose con Ansible](https://docs.ansible.com/ansible/latest/collections/community/docker/docker_compose_module.html)
+  roles:
+    - { role: docker, tags: ['docker', 'setup'] }
+    - { role: app-deploy, tags: ['deploy'] }
+    - { role: monitoring, tags: ['monitoring'], when: monitoring_enabled }
+
+  post_tasks:
+    - name: Verify services are running
+      uri:
+        url: "http://localhost:{{ item.port }}/health"
+        method: GET
+        status_code: 200
+      with_items: "{{ apps }}"
+      tags: ['verify']
+
+    - name: Create deployment log
+      lineinfile:
+        path: /var/log/deployments.log
+        line: "{{ ansible_date_time.iso8601 }} - Deployed {{ apps | length }} applications"
+        create: yes
+      tags: ['logging']
+```
+
+### Server setup playbook (playbooks/setup.yml)
+
+```yaml
+---
+- name: Initial server setup
+  hosts: web_servers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Create deploy user
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker,sudo
+        shell: /bin/bash
+        create_home: yes
+      tags: ['users']
+
+    - name: Setup SSH keys
+      authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ item }}"
+        state: present
+      with_items: "{{ ssh_public_keys }}"
+      tags: ['ssh']
+
+    - name: Configure sudo without password
+      lineinfile:
+        path: /etc/sudoers.d/{{ ansible_user }}
+        line: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL"
+        create: yes
+        mode: '0440'
+      tags: ['sudo']
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - git
+          - curl
+          - htop
+          - vim
+          - ufw
+        state: present
+        update_cache: yes
+      tags: ['packages']
+
+    - name: Configure firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      with_items:
+        - 22    # SSH
+        - 80    # HTTP
+        - 443   # HTTPS
+      tags: ['firewall']
+
+    - name: Enable firewall
+      ufw:
+        state: enabled
+        policy: deny
+      tags: ['firewall']
+```
+
+## Roles
+
+### Application deployment role (roles/app-deploy/tasks/main.yml)
+
+```yaml
+---
+- name: Create application directories
+  file:
+    path: "{{ docker_data_path }}/{{ item.name }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: docker
+    mode: '0755'
+  with_items: "{{ apps }}"
+
+- name: Generate docker-compose files
+  template:
+    src: docker-compose.j2
+    dest: "{{ docker_data_path }}/{{ item.name }}/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: docker
+    mode: '0644'
+  with_items: "{{ apps }}"
+  register: compose_files
+
+- name: Generate environment files
+  template:
+    src: "{{ item.env_file }}.j2"
+    dest: "{{ docker_data_path }}/{{ item.name }}/.env"
+    owner: "{{ ansible_user }}"
+    group: docker
+    mode: '0600'
+  with_items: "{{ apps }}"
+  register: env_files
+
+- name: Pull latest images
+  docker_compose:
+    project_src: "{{ docker_data_path }}/{{ item.name }}"
+    pull: yes
+  with_items: "{{ apps }}"
+
+- name: Deploy applications
+  docker_compose:
+    project_src: "{{ docker_data_path }}/{{ item.name }}"
+    state: present
+    restarted: "{{ compose_files.changed or env_files.changed }}"
+  with_items: "{{ apps }}"
+```
+
+### Docker role (roles/docker/tasks/main.yml)
+
+```yaml
+---
+- name: Install Docker dependencies
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Install Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+    update_cache: yes
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Install Docker Compose
+  pip:
+    name: docker-compose
+    version: "{{ docker_compose_version }}"
+    state: present
+```
+
+## Deployment
+
+### Development/staging deployment
+
+```bash
+# Setup staging server
+ansible-playbook -i inventories/staging/hosts.yml playbooks/setup.yml
+
+# Deploy applications to staging
+ansible-playbook -i inventories/staging/hosts.yml playbooks/site.yml
+
+# Check deployment status
+ansible-playbook -i inventories/staging/hosts.yml playbooks/site.yml --tags verify
+```
+
+### Production deployment
+
+```bash
+# Deploy to production with confirmation
+ansible-playbook -i inventories/production/hosts.yml playbooks/site.yml --check
+
+# Execute deployment
+ansible-playbook -i inventories/production/hosts.yml playbooks/site.yml
+
+# Verify deployment
+ansible-playbook -i inventories/production/hosts.yml playbooks/site.yml --tags verify
+```
+
+### Rollback deployment
+
+```yaml
+# playbooks/rollback.yml
+---
+- name: Rollback to previous version
+  hosts: web_servers
+  become: yes
+  vars_prompt:
+    - name: rollback_version
+      prompt: "Enter version to rollback to"
+      private: no
+
+  tasks:
+    - name: Stop current services
+      docker_compose:
+        project_src: "{{ docker_data_path }}/{{ item.name }}"
+        state: absent
+      with_items: "{{ apps }}"
+
+    - name: Restore previous configuration
+      copy:
+        src: "{{ backup_path }}/{{ rollback_version }}/{{ item.name }}/"
+        dest: "{{ docker_data_path }}/{{ item.name }}/"
+        remote_src: yes
+      with_items: "{{ apps }}"
+
+    - name: Start services with previous version
+      docker_compose:
+        project_src: "{{ docker_data_path }}/{{ item.name }}"
+        state: present
+      with_items: "{{ apps }}"
+```
+
+## Secret management
+
+### Using Ansible Vault
+
+```bash
+# Create encrypted secrets file
+ansible-vault create vars/secrets.yml
+
+# Edit encrypted secrets
+ansible-vault edit vars/secrets.yml
+
+# View encrypted secrets
+ansible-vault view vars/secrets.yml
+
+# Deploy with vault password
+ansible-playbook site.yml --ask-vault-pass
+
+# Use vault password file
+ansible-playbook site.yml --vault-password-file ~/.ansible-vault-pass
+```
+
+### Sample secrets file (vars/secrets.yml)
+
+```yaml
+$ANSIBLE_VAULT;1.1;AES256
+encrypted_content_here_that_contains:
+  database_password: super_secure_password
+  api_secret_key: very_long_random_string
+  ssl_private_key: |
+    -----BEGIN PRIVATE KEY-----
+    encrypted_private_key_content
+    -----END PRIVATE KEY-----
+```
+
+## Monitoring and maintenance
+
+### Health checks
+
+```bash
+# Check all services
+ansible web_servers -m uri -a "url=http://localhost:8080/health"
+
+# Check specific application
+ansible web_servers -m docker_container -a "name=api state=started"
+
+# System status
+ansible web_servers -m setup -a "filter=ansible_mounts"
+```
+
+### Backup operations
+
+```bash
+# Create backup before deployment
+ansible-playbook playbooks/backup.yml
+
+# Restore from backup
+ansible-playbook playbooks/backup.yml --tags restore -e backup_date=2024-01-15
+```
+
+### Log collection
+
+```bash
+# Collect application logs
+ansible web_servers -m fetch -a "src=/opt/mlorente-dev/logs/ dest=./logs/"
+
+# View recent deployment logs
+ansible web_servers -m shell -a "tail -n 50 /var/log/deployments.log"
+```
+
+## Troubleshooting
+
+### Common deployment issues
+
+**Connection failures:**
+```bash
+# Test SSH connectivity
+ansible all -m ping
+
+# Check SSH configuration
+ssh -v mlorente-deployer@server-ip
+```
+
+**Docker issues:**
+```bash
+# Check Docker daemon
+ansible web_servers -m service -a "name=docker state=started"
+
+# Verify Docker permissions
+ansible web_servers -m shell -a "docker ps"
+```
+
+**Application failures:**
+```bash
+# Check application logs
+ansible web_servers -m shell -a "docker logs api"
+
+# Restart specific service
+ansible web_servers -m shell -a "cd /opt/mlorente-dev/api && docker-compose restart"
+```
+
+### Debug commands
+
+```bash
+# Run playbook in check mode
+ansible-playbook site.yml --check --diff
+
+# Run with verbose output
+ansible-playbook site.yml -vvv
+
+# Run specific tags only
+ansible-playbook site.yml --tags "docker,deploy"
+
+# Limit to specific hosts
+ansible-playbook site.yml --limit "mlorente-prod-01"
+```
+
+## Best practices
+
+### Security
+- **SSH keys only** - Never use password authentication
+- **Vault secrets** - Always encrypt sensitive variables
+- **Limited sudo** - Only grant necessary privileges
+- **Firewall rules** - Restrict access to required ports only
+
+### Deployment
+- **Check mode first** - Always run with --check before deployment
+- **Backup before deploy** - Create backups before major changes
+- **Incremental deployment** - Deploy to staging first
+- **Health verification** - Always verify deployment success
+
+### Maintenance
+- **Regular updates** - Keep Ansible and dependencies updated
+- **Documentation** - Document custom variables and procedures
+- **Version control** - Track all playbook changes in git
+- **Testing** - Test playbooks in staging environment
+
+## Local development
+
+For local testing and development:
+
+```bash
+# Install Ansible locally
+pip install ansible
+
+# Lint playbooks
+ansible-lint playbooks/site.yml
+
+# Test on local VM
+vagrant up
+ansible-playbook -i inventories/vagrant/hosts.yml playbooks/site.yml
+```

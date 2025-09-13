@@ -1,22 +1,22 @@
 ---
-title: Guías - mlorente.dev
-description: Guías técnicas, arquitectura, CI/CD, troubleshooting y documentación
+title: Guides - mlorente.dev
+description: Technical guides, architecture, CI/CD, troubleshooting and documentation
 hide:
   - toc
 ---
 
-# 📖 Guías
+# 4.0 Guides
 
-**Guías técnicas completas, arquitectura, CI/CD, troubleshooting y documentación especializada**
+**Complete technical guides, architecture, CI/CD, troubleshooting and specialized documentation**
 
 ---
 
-## Guías Disponibles
+## Available Guides
 
 <div class="section-cards">
   <div class="section-card">
     <h3><a href="HOW-TO/"><span class="item-number">4.1</span> HOW-TO</a></h3>
-    <p>Guías paso a paso para tareas comunes y comandos rápidos.</p>
+    <p>Step-by-step guides for common tasks and quick commands.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Quick Start</span>
@@ -27,8 +27,8 @@ hide:
   </div>
   
   <div class="section-card">
-    <h3><a href="ARCHITECTURE-AND-DECISIONS/"><span class="item-number">4.2</span> Arquitectura y Decisiones</a></h3>
-    <p>Documentación arquitectural y registro de decisiones técnicas.</p>
+    <h3><a href="ARCHITECTURE-AND-DECISIONS/"><span class="item-number">4.2</span> Architecture and Decisions</a></h3>
+    <p>Architectural documentation and technical decision records.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Architecture</span>
@@ -40,7 +40,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="CI-CD/"><span class="item-number">4.3</span> CI/CD</a></h3>
-    <p>Configuración y gestión de pipelines de integración continua.</p>
+    <p>Configuration and management of continuous integration pipelines.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">CI/CD</span>
@@ -52,7 +52,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="DEPLOYMENT/"><span class="item-number">4.4</span> Deployment</a></h3>
-    <p>Guías de despliegue, configuración de entornos y releases.</p>
+    <p>Deployment guides, environment configuration and releases.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Deploy</span>
@@ -64,7 +64,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="TROUBLESHOOTING/"><span class="item-number">4.5</span> Troubleshooting</a></h3>
-    <p>Resolución de problemas comunes y debugging avanzado.</p>
+    <p>Common problem resolution and advanced debugging.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Debug</span>
@@ -76,7 +76,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="CONTRIBUTING/"><span class="item-number">4.6</span> Contributing</a></h3>
-    <p>Guías para contribuir al proyecto y estándares de desarrollo.</p>
+    <p>Guidelines for contributing to the project and development standards.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Guidelines</span>
@@ -88,7 +88,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="VERSIONING/"><span class="item-number">4.7</span> Versioning</a></h3>
-    <p>Estrategias de versionado y gestión de releases del proyecto.</p>
+    <p>Versioning strategies and project release management.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Versioning</span>
@@ -100,7 +100,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="CUBELAB/"><span class="item-number">4.8</span> CubeLab</a></h3>
-    <p>Documentación específica del entorno y laboratorio CubeLab.</p>
+    <p>Specific documentation for the CubeLab environment and laboratory.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">CubeLab</span>
@@ -112,7 +112,7 @@ hide:
   
   <div class="section-card">
     <h3><a href="WIKI/"><span class="item-number">4.9</span> Wiki Management</a></h3>
-    <p>Gestión y mantenimiento de la documentación wiki.</p>
+    <p>Management and maintenance of wiki documentation.</p>
     <div class="card-footer">
       <div class="card-tags">
         <span class="card-tag">Wiki</span>
@@ -123,43 +123,43 @@ hide:
   </div>
 </div>
 
-## Categorías de Guías
+## Guide Categories
 
-### 🚀 Quick Start
-Para comenzar rápidamente con tareas específicas:
-- [HOW-TO](HOW-TO/) - Comandos y procedimientos rápidos
-- [Deployment](DEPLOYMENT/) - Despliegue paso a paso
+### Quick Start
+To get started quickly with specific tasks:
+- [HOW-TO](HOW-TO/) - Commands and quick procedures
+- [Deployment](DEPLOYMENT/) - Step-by-step deployment
 
-### 🏗️ Arquitectura y Diseño
-Para entender la estructura del sistema:
-- [Arquitectura y Decisiones](ARCHITECTURE-AND-DECISIONS/) - ADR y diseño de sistemas
-- [Contributing](CONTRIBUTING/) - Estándares y guidelines
+### Architecture and Design
+To understand the system structure:
+- [Architecture and Decisions](ARCHITECTURE-AND-DECISIONS/) - ADR and system design
+- [Contributing](CONTRIBUTING/) - Standards and guidelines
 
-### 🔧 Operaciones
-Para gestión y mantenimiento:
-- [CI/CD](CI-CD/) - Pipelines y automatización
-- [Troubleshooting](TROUBLESHOOTING/) - Resolución de problemas
-- [Versioning](VERSIONING/) - Gestión de versiones
+### Operations
+For management and maintenance:
+- [CI/CD](CI-CD/) - Pipelines and automation
+- [Troubleshooting](TROUBLESHOOTING/) - Problem resolution
+- [Versioning](VERSIONING/) - Version management
 
-### 🧪 Laboratorio
-Documentación específica del entorno:
-- [CubeLab](CUBELAB/) - Configuraciones del laboratorio
-- [Wiki Management](WIKI/) - Gestión de documentación
+### Laboratory
+Environment-specific documentation:
+- [CubeLab](CUBELAB/) - Laboratory configurations
+- [Wiki Management](WIKI/) - Documentation management
 
-## Acceso Rápido por Necesidad
+## Quick Access by Need
 
-| Necesitas... | Ve a... | Tiempo estimado |
+| You need to... | Go to... | Estimated time |
 |--------------|---------|-----------------|
-| Resolver un error específico | [Troubleshooting](TROUBLESHOOTING/) | 5-15 min |
-| Desplegar una aplicación | [Deployment](DEPLOYMENT/) | 15-30 min |
-| Ejecutar comandos comunes | [HOW-TO](HOW-TO/) | 2-5 min |
-| Entender una decisión técnica | [Arquitectura](ARCHITECTURE-AND-DECISIONS/) | 10-20 min |
-| Configurar CI/CD | [CI/CD](CI-CD/) | 30-60 min |
-| Contribuir al proyecto | [Contributing](CONTRIBUTING/) | 15-30 min |
-| Gestionar versiones | [Versioning](VERSIONING/) | 10-20 min |
-| Configurar entorno lab | [CubeLab](CUBELAB/) | 45-90 min |
-| Actualizar documentación | [Wiki Management](WIKI/) | 10-30 min |
+| Solve a specific error | [Troubleshooting](TROUBLESHOOTING/) | 5-15 min |
+| Deploy an application | [Deployment](DEPLOYMENT/) | 15-30 min |
+| Run common commands | [HOW-TO](HOW-TO/) | 2-5 min |
+| Understand a technical decision | [Architecture](ARCHITECTURE-AND-DECISIONS/) | 10-20 min |
+| Configure CI/CD | [CI/CD](CI-CD/) | 30-60 min |
+| Contribute to the project | [Contributing](CONTRIBUTING/) | 15-30 min |
+| Manage versions | [Versioning](VERSIONING/) | 10-20 min |
+| Configure lab environment | [CubeLab](CUBELAB/) | 45-90 min |
+| Update documentation | [Wiki Management](WIKI/) | 10-30 min |
 
 ---
 
-💡 **Tip:** Las guías están organizadas de lo más básico a lo más avanzado. Si eres nuevo, comienza con [HOW-TO](HOW-TO/) y [Deployment](DEPLOYMENT/).
+💡 **Tip:** Guides are organized from basic to advanced. If you're new, start with [HOW-TO](HOW-TO/) and [Deployment](DEPLOYMENT/).
