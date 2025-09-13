@@ -195,6 +195,35 @@ jobs:
         run: npm run build
 
       # Wiki
+      - name: Set up Python (for wiki)
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install MkDocs + Material
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
+        run: |
+          pip install --upgrade pip
+          pip install \
+          mkdocs mkdocs-material \
+          mkdocs-minify-plugin \
+          mkdocs-redirects \
+          mkdocs-awesome-pages-plugin \
+          mkdocs-include-markdown-plugin \
+          mkdocs-glightbox \
+          mkdocs-enumerate-headings-plugin \
+          mkdocs-macros-plugin \
+          mkdocs-section-index
+
+      - name: Install zsh
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
+        run: sudo apt-get update && sudo apt-get install -y zsh
+      
+      - name: Build wiki multiversion site
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
+        run: zsh scripts/generate-wiki.sh build
+      
       - name: Upload generated site for wiki
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'wiki'
         uses: actions/upload-artifact@v4

@@ -10,32 +10,6 @@ ENV_ROOT="${PROJECT_ROOT}/.env.${ENVIRONMENT:-dev}"
 ENV_APP="${PROJECT_ROOT}/apps/wiki/.env.${ENVIRONMENT:-dev}"
 
 source "$SCRIPT_DIR/utils.sh"
-load_env_file "$ENV_ROOT" || true
-load_env_file "$ENV_APP" || true
-
-# Generate MkDocs configuration from template
-generate_mkdocs_config() {
-  local template_file="${PROJECT_ROOT}/apps/wiki/mkdocs.yml.tmpl"
-  local output_file="${PROJECT_ROOT}/apps/wiki/mkdocs.yml"
-  local temp_file="${output_file}.tmp"
-  
-  [ -f "$template_file" ] || exit_error "Template not found: $template_file"
-
-  # Set default material features if not configured
-  local features="${MATERIAL_FEATURES:-navigation.instant,navigation.tracking,content.code.copy}"
-  local features_yaml=""
-  
-  IFS=',' read -r -A feature_array <<< "$features"
-  for feature in "${feature_array[@]}"; do
-    feature="$(printf '%s' "$feature" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [ -n "$feature" ] && features_yaml+="    - $feature\n"
-  done
-
-  export MATERIAL_FEATURES_YAML="$features_yaml"
-  envsubst < "$template_file" > "$temp_file"
-  mv "$temp_file" "$output_file"
-  log_success "Generated mkdocs.yml"
-}
 
 # Collect README files from different sections of the mono-repo
 collect_documentation() {
@@ -187,10 +161,6 @@ build_site() {
   if [ -d "${PROJECT_ROOT}/apps/wiki/docs/overrides" ]; then
     mkdir -p "${PROJECT_ROOT}/apps/wiki/docs/overrides"
   fi
-
-  # Generate MkDocs configuration
-  export DOCS_DIR_REL="docs"
-  generate_mkdocs_config
 
   # Build the site
   mkdocs build --config-file "${PROJECT_ROOT}/apps/wiki/mkdocs.yml" --site-dir "$site_dir"
