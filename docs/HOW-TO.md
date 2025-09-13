@@ -64,7 +64,7 @@ curl -f https://blog.mlorente.dev
 
 ```bash
 # Initial setup (first time only)
-make env-setup
+make install-precommit-hooks
 make create-network
 
 # Start everything
@@ -447,7 +447,7 @@ echo "🚀 Setting up mlorente.dev development environment..."
 make check
 
 # Setup inicial
-make env-setup
+make install-precommit-hooks
 make create-network
 
 # Levantar servicios
@@ -509,7 +509,7 @@ echo "✅ Deployment complete!"
 
 | Tarea | Comando | Tiempo estimado |
 |-------|---------|----------------|
-| Setup completo local | `make env-setup && make up` | 5-10 min |
+| Setup completo local | `make install-precommit-hooks && make up` | 5-10 min |
 | Deploy a staging | `make deploy ENV=staging` | 2-3 min |
 | Rollback producción | `make emergency-rollback ENV=production` | 1 min |
 | Ver logs aplicación | `make logs APP=api` | Inmediato |

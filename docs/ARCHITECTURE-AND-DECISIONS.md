@@ -526,7 +526,7 @@ status: ## Check deployment status
 
 # Utilities
 check: ## Verify prerequisites
-env-setup: ## Install development tools
+install-precommit-hooks: ## Install development tools
 help: ## Show this help
 ```
 

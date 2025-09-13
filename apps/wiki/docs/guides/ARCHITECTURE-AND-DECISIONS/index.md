@@ -1,33 +1,33 @@
-# Arquitectura y Registros de Decisiones
+# Architecture and Decision Records
 
-## Visión General
+## Overview
 
-Este documento combina la arquitectura del sistema y las decisiones arquitectónicas (ADRs) del proyecto mlorente.dev. Cada sección captura el contexto, decisión y consecuencias de las decisiones arquitectónicas significativas, proporcionando una visión integral del sistema.
+This document combines the system architecture and architectural decision records (ADRs) of the mlorente.dev project. Each section captures the context, decision, and consequences of significant architectural decisions, providing a comprehensive view of the system.
 
 ---
 
-## Índice de Decisiones Arquitectónicas
+## Architectural Decisions Index
 
-| ADR | Título | Estado | Fecha | Impacto |
+| ADR | Title | Status | Date | Impact |
 |-----|--------|--------|-------|---------|
-| [ADR-001](#adr-001-estructura-de-monorepo) | Estructura de Monorepo | ✅ Aceptado | 2024-01 | 🔥 Alto |
-| [ADR-002](#adr-002-containerización-con-docker) | Containerización con Docker | ✅ Aceptado | 2024-01 | 🔥 Alto |
-| [ADR-003](#adr-003-traefik-como-reverse-proxy) | Traefik como Reverse Proxy | ✅ Aceptado | 2024-02 | 🔥 Alto |
-| [ADR-004](#adr-004-github-actions-para-cicd) | GitHub Actions para CI/CD | ✅ Aceptado | 2024-02 | 🔥 Alto |
-| [ADR-005](#adr-005-builds-multi-arquitectura) | Builds Multi-Arquitectura | ✅ Aceptado | 2024-03 | 🔄 Medio |
-| [ADR-006](#adr-006-estrategia-de-cd-manual) | Estrategia de CD Manual | ✅ Aceptado | 2024-03 | 🔄 Medio |
-| [ADR-007](#adr-007-ansible-para-despliegues) | Ansible para Despliegues | ✅ Aceptado | 2024-04 | 🔥 Alto |
-| [ADR-008](#adr-008-construcción-selectiva-de-apps) | Construcción Selectiva de Apps | ✅ Aceptado | 2024-04 | 🔄 Medio |
-| [ADR-009](#adr-009-versionado-semántico-automático) | Versionado Semántico Automático | ✅ Aceptado | 2024-05 | 🔄 Medio |
-| [ADR-010](#adr-010-makefile-como-interfaz-unificada) | Makefile como Interfaz Unificada | ✅ Aceptado | 2024-05 | 💡 Bajo |
-| [ADR-011](#adr-011-go-para-backend-api) | Go para Backend API | ✅ Aceptado | 2024-02 | 🔥 Alto |
-| [ADR-012](#adr-012-jekyll-para-plataforma-de-blog) | Jekyll para Plataforma de Blog | ✅ Aceptado | 2024-03 | 🔄 Medio |
-| [ADR-013](#adr-013-astro-para-aplicación-frontend) | Astro para Aplicación Frontend | ✅ Aceptado | 2024-03 | 🔄 Medio |
-| [ADR-014](#adr-014-notificaciones-webhook-n8n) | Notificaciones Webhook n8n | ✅ Aceptado | 2024-07 | 💡 Bajo |
+| [ADR-001](#adr-001-monorepo-structure) | Monorepo Structure | ✅ Accepted | 2024-01 | 🔥 High |
+| [ADR-002](#adr-002-docker-containerization) | Docker Containerization | ✅ Accepted | 2024-01 | 🔥 High |
+| [ADR-003](#adr-003-traefik-as-reverse-proxy) | Traefik as Reverse Proxy | ✅ Accepted | 2024-02 | 🔥 High |
+| [ADR-004](#adr-004-github-actions-for-cicd) | GitHub Actions for CI/CD | ✅ Accepted | 2024-02 | 🔥 High |
+| [ADR-005](#adr-005-multi-architecture-builds) | Multi-Architecture Builds | ✅ Accepted | 2024-03 | 🔄 Medium |
+| [ADR-006](#adr-006-manual-cd-strategy) | Manual CD Strategy | ✅ Accepted | 2024-03 | 🔄 Medium |
+| [ADR-007](#adr-007-ansible-for-deployments) | Ansible for Deployments | ✅ Accepted | 2024-04 | 🔥 High |
+| [ADR-008](#adr-008-selective-app-builds) | Selective App Builds | ✅ Accepted | 2024-04 | 🔄 Medium |
+| [ADR-009](#adr-009-automatic-semantic-versioning) | Automatic Semantic Versioning | ✅ Accepted | 2024-05 | 🔄 Medium |
+| [ADR-010](#adr-010-makefile-as-unified-interface) | Makefile as Unified Interface | ✅ Accepted | 2024-05 | 💡 Low |
+| [ADR-011](#adr-011-go-for-backend-api) | Go for Backend API | ✅ Accepted | 2024-02 | 🔥 High |
+| [ADR-012](#adr-012-jekyll-for-blog-platform) | Jekyll for Blog Platform | ✅ Accepted | 2024-03 | 🔄 Medium |
+| [ADR-013](#adr-013-astro-for-frontend-application) | Astro for Frontend Application | ✅ Accepted | 2024-03 | 🔄 Medium |
+| [ADR-014](#adr-014-n8n-webhook-notifications) | n8n Webhook Notifications | ✅ Accepted | 2024-07 | 💡 Low |
 
 ---
 
-## Stack Tecnológico Actual
+## Current Technology Stack
 
 ### Frontend
 - **Web App:** Astro + TypeScript + Tailwind CSS
@@ -57,21 +57,21 @@ Este documento combina la arquitectura del sistema y las decisiones arquitectón
 
 ---
 
-## ADR-001: Estructura de Monorepo
+## ADR-001: Monorepo Structure
 
-**Estado**: ✅ Aceptado  
-**Fecha**: 2024-01-15  
-**Contexto**: Gestión de múltiples aplicaciones relacionadas en el ecosistema mlorente.dev
+**Status**: ✅ Accepted  
+**Date**: 2024-01-15  
+**Context**: Management of multiple related applications in the mlorente.dev ecosystem
 
-### Problema
+### Problem
 
-El ecosistema requiere múltiples aplicaciones (web, blog, API, infraestructura) que comparten configuraciones, procesos de despliegue y ciclo de vida. Decisión entre monorepo vs múltiples repositorios.
+The ecosystem requires multiple applications (web, blog, API, infrastructure) that share configurations, deployment processes, and lifecycle. Decision between monorepo vs multiple repositories.
 
-### Decisión
+### Decision
 
-**Opción elegida**: Monorepo con estructura organizada y builds selectivos.
+**Chosen option**: Monorepo with organized structure and selective builds.
 
-**Estructura adoptada**:
+**Adopted structure**:
 ```
 ├── apps/                 # Aplicaciones principales
 │   ├── web/             # Frontend Astro
@@ -526,7 +526,7 @@ status: ## Check deployment status
 
 # Utilities
 check: ## Verify prerequisites
-env-setup: ## Install development tools
+install-precommit-hooks: ## Install development tools
 help: ## Show this help
 ```
 

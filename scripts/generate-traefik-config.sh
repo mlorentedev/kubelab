@@ -13,14 +13,14 @@ DYNAMIC_CONF_DIR="$TRAEFIK_DIR/dynamic"
 [ -f "$SCRIPT_DIR/replace-placeholders.sh" ] && source "$SCRIPT_DIR/replace-placeholders.sh"
 
 # Load environment variables from .env file if it exists
-env_file="$TRAEFIK_DIR/.env"
+env_file="$TRAEFIK_DIR/.env.$ENVIRONMENT"
 [ -f "$env_file" ] && source "$env_file"
 
 # Check if .env is sourced
-required_vars=("TRAEFIK_DASHBOARD" "ACME_EMAIL" "ENVIRONMENT" "TRAEFIK_DASHBOARD_USERS")
+required_vars=("TRAEFIK_DASHBOARD" "ACME_EMAIL" "ENVIRONMENT" "MAIN_AUTHENTICATION_CREDENTIALS")
 if ! verify_required_vars "${required_vars[@]}"; then
-    if [ -z "$TRAEFIK_DASHBOARD_USERS" ]; then
-        log_error "TRAEFIK_DASHBOARD_USERS not found. Please run 'make generate-auth' first."
+    if [ -z "$MAIN_AUTHENTICATION_CREDENTIALS" ]; then
+        log_error "MAIN_AUTHENTICATION_CREDENTIALS not found. Please run 'make generate-credentials' first."
     fi
     exit 1
 fi
@@ -38,7 +38,7 @@ fi
 log_info "Generating main Traefik configuration..."
 
 # Determine which template to use based on DISABLE_HTTPS
-if [ "${ENVIRONMENT}" = "local" ]; then
+if [ "${ENVIRONMENT}" = "dev" ]; then
     MAIN_TEMPLATE="$TEMPLATES_DIR/traefik.http.template.yml"
     log_info "Using HTTP template for Traefik configuration."
 else
@@ -75,10 +75,10 @@ for template_file in "$TEMPLATES_DIR"/*.template.yml; do
             ;;
     esac
 
-    if [ "${ENVIRONMENT}" = "local" ]; then
+    if [ "${ENVIRONMENT}" = "dev" ]; then
         case "$base_name" in
             acme-challenge|tls)
-                log_info "Skipping $base_name configuration in local environment."
+                log_info "Skipping $base_name configuration in dev environment."
                 continue
                 ;;
         esac
@@ -90,7 +90,7 @@ for template_file in "$TEMPLATES_DIR"/*.template.yml; do
     
     # Process the template
     if replace_placeholders "$template_file" "$output_file" "$env_file"; then
-        if [ "${ENVIRONMENT}" = "local" ]; then
+        if [ "${ENVIRONMENT}" = "dev" ]; then
             # Remove any line with 'tls:' or 'certResolver'
             sed -i '/^[[:space:]]*tls:/d' "$output_file"
             sed -i '/^[[:space:]]*certResolver:/d' "$output_file"

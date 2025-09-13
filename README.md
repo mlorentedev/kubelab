@@ -1,242 +1,225 @@
-# My Personal Ecosystem - mlorente.dev
+# mlorente.dev
 
-<div align="center">
+Personal ecosystem monorepo for [mlorente.dev](https://mlorente.dev) - portfolio, blog, API and infrastructure.
 
-![Status](https://img.shields.io/badge/Status-Production-008099?style=flat&logo=rocket&logoColor=white)
-![License](https://img.shields.io/github/license/mlorentedev/mlorente.dev?style=flat&color=008099)
-![CI/CD](https://img.shields.io/github/actions/workflow/status/mlorentedev/mlorente.dev/ci-01-dispatch.yml?style=flat&label=Build&color=008099)
+This is my personal project where I keep everything needed to run mlorente.dev. It's designed as a monorepo that includes everything from the frontend to the infrastructure. I've organized it this way to have everything under control and be able to deploy easily.
 
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
-![Ansible](https://img.shields.io/badge/Ansible-EE0000?style=flat&logo=ansible&logoColor=white)
-![Traefik](https://img.shields.io/badge/Traefik-24A1C1?style=flat&logo=traefik&logoColor=white)
-![Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat&logo=github-actions&logoColor=white)
+## What's included
 
-</div>
-
-Hello! This is my personal project where I have everything I need to keep [mlorente.dev](https://mlorente.dev) running. It's a monorepo that includes everything from the front-end to the infrastructure, including the blog and API. I've organized it this way to have everything under control and be able to deploy easily.
-
-**What does it include?**
-
-* **My personal website** built with **Astro** (`apps/web`) - here you have my portfolio and all info about me
-* **My blog** in **Jekyll** (`apps/blog`) - where I write about technology and development  
-* **The API** in **Go** (`apps/api`) - handles newsletter subscriptions and other things
-* **n8n** for automating repetitive tasks without code
-* **Complete monitoring** with **Prometheus**, **Grafana** and **Vector** - because I like to know what's happening
-* **Portainer** for visual container management
-* **Traefik** and **Nginx** as reverse proxies
-* **Ansible** for automatic deployment
-* **GitHub Actions** for CI/CD - images build themselves
-* **A Makefile** that simplifies my life with commands like `make up`, `make deploy`, etc.
-
-> **Important note:** Images are built and published automatically when I push, but **I prefer to deploy manually** by running `make deploy` on the server. It gives me more control.
-
----
-
-## Table of contents
-
-1. [How everything is organized](#how-everything-is-organized)
-2. [What you need](#what-you-need)
-3. [Quick start](#quick-start)
-4. [Local development](#local-development)
-5. [CI with GitHub Actions](#ci-with-github-actions)
-6. [Deployments](#deployments)
-7. [Useful Makefile commands](#useful-makefile-commands)
-8. [Frequently asked questions](#frequently-asked-questions)
-9. [License](#license)
-
----
-
-## How everything is organized
-
-```text
-.
-├── apps/                  # The applications I use
-│   ├── api/               # Go API (containerized)
-│   ├── blog/              # Static Jekyll blog
-│   ├── web/               # My main website in Astro
-│   ├── n8n/               # Automations with n8n
-│   ├── monitoring/        # Vector, Prometheus, Grafana
-│   └── portainer/         # Visual Docker management
-├── infra/                 # The infrastructure
-│   ├── ansible/           # Deployment playbooks
-│   ├── traefik/           # Proxy configuration
-│   └── nginx/             # Error pages, fallback
-├── scripts/               # Useful scripts for generating configs
-├── .github/workflows/     # CI (builds and publishes) — doesn't deploy
-├── Makefile               # My swiss army knife (dev / build / deploy)
-├── .env.example           # Example variables
-└── docs/                  # Extra documentation
-```
-
----
-
-## What you need
-
-| Tool                       | Version           | What I use it for               |
-| -------------------------- | ----------------- | ------------------------------- |
-| **Docker Engine**          | 24 or higher      | Containers in local and prod    |
-| **Docker Compose v2**      | 2.20 or higher    | Orchestrate services            |
-| **Make**                   | 4.2 or higher     | Simplify commands               |
-| **Git**                    | Whatever you have | Version control                 |
-| **Node 20** and **npm 10** | (if you touch web)| For the frontend                |
-| **Ruby 3.2** and **Bundler**| (if you touch blog)| For Jekyll                     |
-| **Go 21**                  | (if you touch API)| For the backend                 |
-| **Ansible**                | 9 or higher       | Automatic deployments          |
-
-> **Optional:** **gh CLI** for managing GitHub secrets and **jq** for processing JSON.
-
----
+- **Web** (Astro) - Personal portfolio website
+- **Blog** (Jekyll) - Technical writing and articles
+- **API** (Go) - Backend services and REST API
+- **Wiki** (MkDocs) - This documentation you're reading
+- **Infrastructure** - Docker, Traefik, Nginx, monitoring
+- **Automation** - n8n workflows, GitHub Actions, Ansible
 
 ## Quick start
 
 ```bash
-# 1. Clone the repository
-$ git clone git@github.com:mlorente/mlorente.dev.git && cd mlorente.dev
+# Clone and setup
+git clone <repo-url>
+make install-precommit-hooks
 
-# 2. Configure your variables (copy and edit)
-$ cp .env.example .env && $EDITOR .env
+# Start everything locally
+make up
 
-# 3. Install what you need
-$ make env-setup  # installs the necessary tools
+# View logs
+make logs
 
-# 4. Let's get it working!
-$ make up         # Brings up Traefik + all apps
-
-# 5. Now you can access:
-#   http://site.mlorentedev.test (main website)
-#   http://blog.mlorentedev.test (blog)
-#   http://api.mlorentedev.test/api (API)
-#   http://traefik.mlorentedev.test:8080 (Traefik dashboard)
+# Stop everything
+make down
 ```
 
-**Some tips:**
+## Project structure
 
-1. Add `*.mlorentedev.test` to your `/etc/hosts` if you don't have local DNS configured.
-2. Each app has its `.env.example` - copy it if you need specific variables.
-3. Only want to bring up one thing? Use `make up-web`, `make up-blog`, etc.
-
----
-
-## Local development
-
-```mermaid
-graph TD;
-  A[make up-traefik] --> B1[make up-blog];
-  A --> B2[make up-web];
-  A --> B3[make up-api];
-  subgraph Browser
-    C1(site.mlorentedev.test) --> A;
-  end
+```
+mlorente.dev/
+├── apps/                   # Applications
+│   ├── api/               # Go REST API
+│   ├── blog/              # Jekyll blog
+│   ├── web/               # Astro frontend
+│   └── wiki/              # MkDocs documentation
+├── infra/                 # Infrastructure configuration
+│   ├── traefik/           # Reverse proxy
+│   ├── nginx/             # Web server configs
+│   ├── ansible/           # Deployment automation
+│   └── monitoring/        # Grafana, Prometheus, etc.
+├── scripts/               # Automation scripts
+├── docs/                  # Documentation guides
+└── Makefile              # Command automation
 ```
 
-My usual workflow:
+## Requirements
 
-1. **Traefik** comes up first and manages all local domains for me.
-2. Each service rebuilds automatically when I change code (`docker compose ...dev.yml`).
-3. Hot-reload enabled: Astro on port **4321**, Jekyll on **4000**, Go with **air** for automatic reload.
-4. To see logs: `make logs`.
-5. To stop everything: `make down` (or `docker compose down -v` in each folder).
+- Docker & Docker Compose
+- Make
+- Node.js 20+ (for web apps)
+- Go 1.21+ (for API)
+- Ruby 3.3+ (for blog)
+- Python 3.8+ (for deployment)
 
----
+## Available commands
 
-## CI with GitHub Actions
+The Makefile provides all the commands you need to work with this project. Here are the most important ones:
 
-| Phase            | Workflow                                   | What it does                                                                                                                                                  |
-| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dispatcher**   | `ci-01-dispatch.yml`                       | Detects which **apps** have changed and launches builds in parallel                                                                                          |
-| **Build + Push** | `ci-02-pipeline.yml` → `ci-03-publish.yml` | Linters + tests → `docker buildx` **multi-architecture** → push to Docker Hub with tags:<br> `latest`, semver (`vX.Y.Z`), branch (`develop`, `feature/…`) |
-| **Release**      | `ci-04-release.yml`                        | Manual official version (`gh release`) → re-tags images → generates bundle `global-release-vX.Y.Z.zip`                                                      |
+### Setup and installation
 
-**The result:** I have all images ready in the registry, but *they don't deploy automatically*.
+```bash
+make check                     # Check prerequisites
+make install-precommit-hooks   # Set up development tools
+make install-node             # Install Node.js dependencies for web
+make install-ruby             # Install Ruby dependencies for blog
+make install-ansible          # Install deployment tools
+```
 
----
+### Development
 
-## Deployments
+Start individual services:
+```bash
+make up-traefik               # Start reverse proxy (required first)
+make up-api                   # Start Go API
+make up-web                   # Start Astro frontend
+make up-blog                  # Start Jekyll blog
+make up-wiki                  # Start documentation wiki
+make up-n8n                   # Start automation workflows
+make up-grafana               # Start monitoring dashboard
+```
 
-> **Recommendation:** use a dedicated user (like `mlorente-deployer`) with *passwordless sudo* access and **Docker** already installed on the server.
+Start everything at once:
+```bash
+make up                       # Start all services
+make down                     # Stop all services
+```
 
-1. **Prepare the server** (only the first time)
+Each service will be available at its local domain (add these to your `/etc/hosts`):
+- API: http://api.mlorentedev.test
+- Web: http://mlorentedev.test  
+- Blog: http://blog.mlorentedev.test
+- Wiki: http://wiki.mlorentedev.test
+- Traefik: http://traefik.mlorentedev.test
+- Grafana: http://grafana.mlorentedev.test
 
+### Building and publishing
+
+Build Docker images:
+```bash
+make build-image APP=api      # Build specific app image
+make build-all-images         # Build all application images
+```
+
+Publish to registry:
+```bash
+make push-app APP=api         # Push specific app
+make push-all                 # Push all apps
+make push-app-tag APP=api TAG=v1.0.0    # Push with specific tag
+```
+
+### Deployment
+
+```bash
+make setup ENV=production     # Initial server setup
+make deploy ENV=staging       # Deploy to staging
+make deploy ENV=production    # Deploy to production
+make status ENV=production    # Check deployment status
+```
+
+### Utilities
+
+```bash
+make generate-config          # Generate all configuration files
+make wiki-sync               # Generate documentation wiki
+make validate-yaml           # Validate YAML files
+make setup-secrets           # Configure GitHub secrets
+make list-secrets            # List GitHub secrets
+```
+
+## How deployment works
+
+Images are built automatically when you push changes to the repository via GitHub Actions. However, deployment is manual - you run `make deploy ENV=production` when you're ready. This gives you control over when changes go live.
+
+The deployment process:
+1. Code changes trigger GitHub Actions
+2. Actions build and push Docker images
+3. You manually deploy with `make deploy ENV=production`
+4. Ansible handles the deployment to servers
+
+## Local development workflow
+
+1. **First time setup:**
    ```bash
-   make setup ENV=production SSH_HOST=mlorente-deployer@my.server.com
+   git clone <repo-url>
+   make install-precommit-hooks
+   make up
    ```
 
-   This installs packages, creates Docker network, copies base configurations...
-
-2. **Deploy or update**
-
+2. **Daily development:**
    ```bash
-   make deploy ENV=production
+   # Start services you need
+   make up-traefik up-api up-web
+   
+   # Make your changes
+   # Test locally
+   
+   # Stop when done
+   make down
    ```
 
-   Behind the scenes it runs: `ansible-playbook infra/ansible/playbooks/deploy.yml -e env=production`.
-
-3. **Verify everything is working**
-
+3. **Before pushing changes:**
    ```bash
-   make status ENV=production   # docker ps on remote
-   make logs   ENV=production   # see logs in real time
+   make validate-yaml           # Check YAML files
+   git add . && git commit      # Pre-commit hooks will run
+   git push                     # Triggers CI/CD
    ```
 
-4. **Rollback**: everything is versioned with *tags* → you just need to change variables and run `make deploy` again.
+## Environment files
 
----
+Each service uses an `.env` file for configuration. Examples are provided:
+- Copy `.env.example` to `.env` for each service
+- Set `ENVIRONMENT=local` for development
+- Update values as needed for your setup
 
-## Useful Makefile commands
+## Monitoring and debugging
 
-| Category     | Command                              | What it does                      |
-| ------------ | ------------------------------------ | --------------------------------- |
-| Setup        | `make check`                         | Checks you have everything        |
-|              | `make env-setup`                     | Installs Node, Ruby, Go          |
-|              | `make create-network`                | Creates `mlorente_net` network    |
-| Development  | `make up`                            | Brings up Traefik + all apps      |
-|              | `make up-web` / `up-api` / `up-blog` | Just one service                  |
-|              | `make down`                          | Stops everything                  |
-| Build / Push | `make push-app APP=web`              | Builds + multi-arch push          |
-|              | `make push-all`                      | All apps at once                  |
-| Deploy       | `make setup ENV=staging`             | Prepares remote server            |
-|              | `make deploy ENV=staging`            | Deploys images                    |
-| Utilities    | `make generate-config`               | Generates configurations          |
-|              | `make setup-secrets`                 | Syncs `.env` → GitHub             |
+View logs:
+```bash
+make logs                     # All services
+make logs APP=api            # Specific service
+```
 
-> Run `make help` to see the complete list with nice colors.
+Check service health:
+```bash
+make status                  # Local status
+make status ENV=production   # Production status
+```
 
----
+Access monitoring:
+- Traefik dashboard: http://traefik.mlorentedev.test/dashboard
+- Grafana: http://grafana.mlorentedev.test
+- Container management: http://portainer.mlorentedev.test
 
-## 📚 Additional documentation
+## Documentation
 
-If you want to dive deeper, I have all this documentation:
+This wiki contains detailed documentation for all aspects of the project:
 
-- **[⚡ How-To - Quick Reference](docs/HOW-TO.md)** - **Main entry point** - Commands, common tasks and quick navigation
-- **[🏗️ ADRs - Architecture Decisions](docs/ADR.md)** - 10 Architecture Decision Records where I explain the "why" of each decision
-- **[🏷️ Versioning Strategy](docs/VERSIONING.md)** - How Docker images and releases per branch work  
-- **[🚀 Advanced Deployment](docs/DEPLOYMENT.md)** - Advanced server configuration and deployments
-- **[🔧 Troubleshooting](docs/TROUBLESHOOTING.md)** - Solutions to common problems and debugging  
-- **[⚙️ CI/CD Internals](docs/CI-CD.md)** - Internal workings of the workflows
-- **[👥 Contribution Guide](docs/CONTRIBUTING.md)** - Code conventions and development flow
+1. **[Applications](apps/)** - Documentation for each app (API, web, blog, wiki)
+2. **[Infrastructure](infra/)** - Server setup, networking, monitoring
+3. **[Scripts](scripts/)** - Automation scripts and utilities  
+4. **[Guides](guides/)** - Step-by-step guides and troubleshooting
 
----
+## Contributing
 
-## Frequently asked questions
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Set up development: `make install-precommit-hooks && make up`
+4. Make changes and test locally
+5. Submit a pull request
 
-**Do I need Ansible for local development?** 
-Not at all. Only for remote deployments.
-
-**Could deployment be automated too?** 
-Sure, it would be enough to add a job that, after `ci-02-pipeline`, runs `make deploy` with `ansible-playbook` on the runner.
-
-**How do I manage certificates in staging?** 
-Use `make copy-certificates ENV=staging` and add them to your local trust store.
-
-**Can I change the local URL?** 
-Yes, change `DOMAIN_LOCAL` in `.env` and update your `/etc/hosts`.
-
----
+See the [Contributing Guide](guides/CONTRIBUTING/) for detailed guidelines.
 
 ## License
 
-[MIT](LICENSE)
+MIT - see [LICENSE](LICENSE) file for details.
 
 ---
 
-> *"Works on my machine"* no me vale. Con este Makefile y Ansible, los despliegues son **reproducibles** y **predecibles** en cualquier sitio.
+Built with Docker, automated with GitHub Actions, deployed with Ansible.

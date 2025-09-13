@@ -4,7 +4,7 @@ Hey there! Here you'll find all the scripts that help me keep this project runni
 
 ## What you'll find here
 
-### **wiki.sh** - The documentation generator
+### **generate-wiki.sh** - The documentation generator
 
 My favorite script for automatically generating the wiki. It collects all the markdown content from the monorepo and organizes it nicely.
 
@@ -19,13 +19,13 @@ My favorite script for automatically generating the wiki. It collects all the ma
 
 ```bash
 # Generate the complete wiki
-./scripts/wiki.sh build-all
+./scripts/generate-wiki.sh build
 
-# Just a specific branch
-./scripts/wiki.sh build-one my-branch
+# Generate only the configuration
+./scripts/generate-wiki.sh config
 
-# Clean everything and start fresh
-./scripts/wiki.sh clean
+# Show help and available commands
+./scripts/generate-wiki.sh help
 ```
 
 ### **utils.sh** - Common functions
@@ -39,7 +39,7 @@ The shared brain of all the other scripts. Here I have useful functions that I u
 - Common validations
 - File handling utilities
 
-### **env-setup.sh** - Initial setup
+### **install-precommit-hooks.sh** - Initial setup
 
 Sets up your entire development environment in one go. Perfect for when you're starting from scratch.
 
@@ -52,7 +52,7 @@ Sets up your entire development environment in one go. Perfect for when you're s
 - Other necessary tools
 
 ```bash
-./scripts/env-setup.sh
+./scripts/install-precommit-hooks.sh
 ```
 
 ### **generate-traefik-config.sh** - Traefik configuration
@@ -84,13 +84,13 @@ Syncs variables from the `.env` file with GitHub Actions secrets. Very handy for
 ./scripts/setup-gh-secrets.sh production
 ```
 
-### **create-env-example.sh** - Configuration examples
+### **generate-env-example.sh** - Configuration examples
 
 Generates `.env.example` files based on the real `.env` files, but without the sensitive values.
 
-### **generate-traefik-credentials.sh** - Traefik credentials
+### **generate-credentials.sh** - Main authentication credentials
 
-Generates basic credentials to securely access the Traefik dashboard.
+Generates main authentication credentials for Traefik dashboard and other services that need the same user/password.
 
 ### **replace-placeholders.sh** - Replace placeholders
 
@@ -102,7 +102,7 @@ Utility to substitute placeholders in configuration files. I use it in several s
 
 ```bash
 # Install all necessary tools
-./scripts/env-setup.sh
+./scripts/install-precommit-hooks.sh
 
 # Generate initial configurations
 ./scripts/generate-traefik-config.sh
@@ -112,11 +112,11 @@ Utility to substitute placeholders in configuration files. I use it in several s
 ### Generate documentation
 
 ```bash
-# Complete wiki
-./scripts/wiki.sh build-all
+# Generate complete wiki documentation
+./scripts/generate-wiki.sh build
 
-# Just a specific branch
-./scripts/wiki.sh build-one develop
+# Generate only configuration file
+./scripts/generate-wiki.sh config
 ```
 
 ### Set up CI/CD
@@ -126,7 +126,7 @@ Utility to substitute placeholders in configuration files. I use it in several s
 ./scripts/setup-gh-secrets.sh production
 
 # Create example files
-./scripts/create-env-example.sh
+./scripts/generate-env-example.sh
 ```
 
 ## 💡 Tips and tricks

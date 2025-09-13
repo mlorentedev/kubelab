@@ -14,7 +14,7 @@ GROUP_VARS_DIR="$INVENTORY_DIR/group_vars"
 [ -f "$SCRIPT_DIR/replace-placeholders.sh" ] && source "$SCRIPT_DIR/replace-placeholders.sh"
 
 # Load environment variables from .env file if it exists
-env_file="$ANSIBLE_DIR/.env"
+env_file="$ANSIBLE_DIR/.env.prod"
 [ -f "$env_file" ] && source "$env_file"
 
 # Check if .env is sourced

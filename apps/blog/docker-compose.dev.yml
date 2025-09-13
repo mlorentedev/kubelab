@@ -1,6 +1,6 @@
 services:
   blog:
-    image: "${REGISTRY}/${IMAGE_NAME}:dev"
+    image: "${REGISTRY}/${IMAGE_NAME}:${TAG}"
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,7 +9,7 @@ services:
     expose:
       - ${PORT}  
     env_file:
-      - ./.env
+      - ./.env.dev
     volumes:
       - ./jekyll-site:/srv/jekyll
     networks:

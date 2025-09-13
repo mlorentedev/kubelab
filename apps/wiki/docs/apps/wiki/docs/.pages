@@ -1,0 +1,6 @@
+nav:
+  - index.md
+  - "1. Aplicaciones": apps
+  - "2. Infraestructura": infra
+  - "3. Scripts": scripts
+  - "4. Guías": guides

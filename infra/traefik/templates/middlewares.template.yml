@@ -7,7 +7,7 @@ http:
     auth:
       basicAuth:
         users:
-          - '{{TRAEFIK_DASHBOARD_USERS}}'
+          - '{{MAIN_AUTHENTICATION_CREDENTIALS}}'
     rate-limit:
       rateLimit:
         average: {{RATE_LIMIT_AVERAGE}}

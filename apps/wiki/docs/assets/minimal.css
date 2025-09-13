@@ -425,47 +425,6 @@ html {
   }
 }
 
-/* Dark mode support */
-[data-md-color-scheme="slate"] {
-  --color-slate-50: #0f172a;
-  --color-slate-100: #1e293b;
-  --color-slate-200: #334155;
-  --color-slate-300: #475569;
-  --color-slate-400: #64748b;
-  --color-slate-500: #94a3b8;
-  --color-slate-600: #cbd5e1;
-  --color-slate-700: #e2e8f0;
-  --color-slate-800: #f1f5f9;
-  --color-slate-900: #f8fafc;
-  
-  /* Dark mode teal colors */
-  --color-teal-50: #134e4a;
-  --color-teal-100: #115e59;
-  --color-teal-200: #0f766e;
-  --color-teal-300: #0d9488;
-  --color-teal-400: #14b8a6;
-  --color-teal-500: #2dd4bf;
-  --color-teal-600: #5eead4;
-  --color-teal-700: #99f6e4;
-  --color-teal-800: #ccfbf1;
-  --color-teal-900: #f0fdfa;
-  
-  --md-primary-fg-color: var(--color-teal-300);
-  --md-primary-fg-color--light: var(--color-teal-400);
-  --md-primary-fg-color--dark: var(--color-teal-200);
-  --md-accent-fg-color: var(--color-teal-400);
-  --md-accent-fg-color--transparent: rgba(20, 184, 166, 0.15);
-}
-
-[data-md-color-scheme="slate"] .card {
-  background: var(--color-slate-100);
-  border: 1px solid var(--color-slate-200);
-}
-
-[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
-  background: linear-gradient(135deg, var(--color-slate-200), var(--color-slate-300));
-  color: var(--color-slate-800);
-}
 
 /* Animation utilities */
 @keyframes fadeInUp {

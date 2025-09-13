@@ -46,8 +46,8 @@ escape_for_replacement() {
 replace_placeholders() {
     local template="$1"
     local output="$2"
-    local env_file="${3:-$PROJECT_ROOT/.env}"
-    
+    local env_file="${3:-$PROJECT_ROOT/.env.${ENVIRONMENT:-dev}}"
+
     if [ ! -f "$template" ]; then
         log_error "Template not found: $template"
         return 1
@@ -66,7 +66,7 @@ replace_placeholders() {
 
     # Escape special values using our helper function
     local escaped_users=""
-    [ -n "$TRAEFIK_DASHBOARD_USERS" ] && escaped_users=$(escape_for_replacement "$TRAEFIK_DASHBOARD_USERS" "credentials")
+    [ -n "$MAIN_AUTHENTICATION_CREDENTIALS" ] && escaped_users=$(escape_for_replacement "$MAIN_AUTHENTICATION_CREDENTIALS" "credentials")
     
     local escaped_email=""
     [ -n "$ACME_EMAIL" ] && escaped_email=$(escape_for_replacement "$ACME_EMAIL" "email")
@@ -85,7 +85,7 @@ replace_placeholders() {
 
     # Use perl for robust replacements (better than sed for complex patterns)
     # Special values that need escaping
-    [ -n "$escaped_users" ] && perl -i -pe "s#\{\{TRAEFIK_DASHBOARD_USERS\}\}#$escaped_users#g" "$tmpfile"
+    [ -n "$escaped_users" ] && perl -i -pe "s#\{\{MAIN_AUTHENTICATION_CREDENTIALS\}\}#$escaped_users#g" "$tmpfile"
     [ -n "$escaped_email" ] && perl -i -pe "s#\{\{ACME_EMAIL\}\}#$escaped_email#g" "$tmpfile"
     [ -n "$escaped_acme_server" ] && perl -i -pe "s#\{\{ACME_SERVER\}\}#$escaped_acme_server#g" "$tmpfile"
     [ -n "$escaped_domain" ] && perl -i -pe "s#\{\{DOMAIN\}\}#$escaped_domain#g" "$tmpfile"
@@ -212,7 +212,7 @@ process_templates_in_directory() {
     local templates_dir="$1"
     local output_dir="$2"
     local file_pattern="${3:-*.template.yml}"
-    local env_file="${4:-$PROJECT_ROOT/.env}"
+    local env_file="${4:-$PROJECT_ROOT/.env.${ENVIRONMENT:-dev}}"
     
     if [ ! -d "$templates_dir" ]; then
         log_error "Templates directory not found: $templates_dir"
@@ -280,15 +280,15 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         templates_dir="$2"
         output_dir="$3"
         file_pattern="${4:-*.template.yml}"
-        env_file="${5:-$PROJECT_ROOT/.env}"
-        
+        env_file="${5:-$PROJECT_ROOT/.env.${ENVIRONMENT:-dev}}"
+
         process_templates_in_directory "$templates_dir" "$output_dir" "$file_pattern" "$env_file"
     else
         # Single file processing
         template="$1"
         output="$2"
-        env_file="${3:-$PROJECT_ROOT/.env}"
-        
+        env_file="${3:-$PROJECT_ROOT/.env.${ENVIRONMENT:-dev}}"
+
         replace_placeholders "$template" "$output" "$env_file"
     fi
 fi
