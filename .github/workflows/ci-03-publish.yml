@@ -62,16 +62,16 @@ jobs:
             *-pre.*)
               # Feature/hotfix branches: 1.3.0-pre.123 (unified pre-release)
               FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
               TAG_TYPE="pre-release"
-              echo "::notice::Pre-release version detected: $FINAL_TAG (with dev tag)"
+              echo "::notice::Pre-release version detected: $FINAL_TAG"
               ;;
             *-rc.*)
               # Develop branch: 1.3.0-rc.123
               FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
               TAG_TYPE="release-candidate"
-              echo "::notice::RC version detected: $FINAL_TAG (with dev tag)"
+              echo "::notice::RC version detected: $FINAL_TAG"
               ;;
             *)
               # Master branch: 1.3.0 (stable) - gets latest tag
@@ -82,13 +82,16 @@ jobs:
               ;;
           esac
 
+          if [[ "$BRANCH_NAME" != "main" && "$BRANCH_NAME" != "master" ]]; then
+            DOCKER_TAGS="${DOCKER_TAGS},${REGISTRY}:dev"
+          fi
+
           # Set outputs
           echo "tags=${DOCKER_TAGS}" >> "$GITHUB_OUTPUT"
           echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
           echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
           echo "full_image=${REGISTRY}:${FINAL_TAG}" >> "$GITHUB_OUTPUT"
           echo "tag_type=${TAG_TYPE}" >> "$GITHUB_OUTPUT"
-
           echo "::notice::Final Docker tags: $DOCKER_TAGS"
 
       - name: Download generated site for wiki
