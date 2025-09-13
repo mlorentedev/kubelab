@@ -62,6 +62,9 @@ jobs:
             echo "This is not critical but may affect local development"
           fi
 
+          # If we get here, we should build
+          echo "should_build=true" >> "$GITHUB_OUTPUT"          
+
       - name: Calculate Docker version for app
         id: docker_version
         if: steps.changes.outputs.should_build == 'true'
