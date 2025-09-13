@@ -22,7 +22,8 @@ beautiful-jekyll-theme-*.gem
 # Secrets
 .env
 .env.*
-!.env.example
+!.env.dev.example
+!.env.prod.example
 certbot/
 .cache_ggshield
 certs

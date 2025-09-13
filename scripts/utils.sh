@@ -238,15 +238,52 @@ update_env_credentials() {
     
     for env_file in "${env_files[@]}"; do
         if [ -f "$env_file" ]; then
-            if grep -q "TRAEFIK_DASHBOARD_USERS=" "$env_file"; then
+            if grep -q "MAIN_AUTHENTICATION_CREDENTIALS=" "$env_file"; then
                 # Replace existing line - using single quotes to prevent $ expansion
-                sed -i "s|TRAEFIK_DASHBOARD_USERS=.*|TRAEFIK_DASHBOARD_USERS='$credentials'|" "$env_file"
+                sed -i "s|MAIN_AUTHENTICATION_CREDENTIALS=.*|MAIN_AUTHENTICATION_CREDENTIALS='$credentials'|" "$env_file"
                 log_success "Updated credentials in $env_file"
             else
                 # Add new line - using single quotes to prevent $ expansion
-                echo "TRAEFIK_DASHBOARD_USERS='$credentials'" >> "$env_file"
+                echo "MAIN_AUTHENTICATION_CREDENTIALS='$credentials'" >> "$env_file"
                 log_success "Added credentials to $env_file"
             fi
+        else
+            log_warning "File $env_file doesn't exist, skipping."
+        fi
+    done
+}
+
+# Update credentials (user + password) in .env files with configurable variable names
+update_separate_credentials() {
+    local username="$1"            # value for user
+    local password="$2"            # value for password
+    local user_var="$3"            # env var name for username
+    local pass_var="$4"            # env var name for password
+    shift 4
+    local env_files=("$@")
+
+    if [ ${#env_files[@]} -eq 0 ]; then
+        log_error "No environment files specified"
+        return 1
+    fi
+
+    for env_file in "${env_files[@]}"; do
+        if [ -f "$env_file" ]; then
+            # Update user variable
+            if grep -q "^${user_var}=" "$env_file"; then
+                sed -i "s|^${user_var}=.*|${user_var}='${username}'|" "$env_file"
+            else
+                echo "${user_var}='${username}'" >> "$env_file"
+            fi
+
+            # Update password variable
+            if grep -q "^${pass_var}=" "$env_file"; then
+                sed -i "s|^${pass_var}=.*|${pass_var}='${password}'|" "$env_file"
+            else
+                echo "${pass_var}='${password}'" >> "$env_file"
+            fi
+
+            log_success "Updated credentials in $env_file"
         else
             log_warning "File $env_file doesn't exist, skipping."
         fi

@@ -13,20 +13,9 @@ theme:
     text: Inter
     code: JetBrains Mono
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: teal
-      accent: cyan
-      toggle:
-        icon: material/brightness-7
-        name: Cambiar a modo oscuro
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: teal
-      accent: cyan
-      toggle:
-        icon: material/brightness-4
-        name: Cambiar a modo claro
+    scheme: default
+    primary: teal
+    accent: cyan
   features:
     - navigation.instant
     - navigation.instant.prefetch
@@ -50,14 +39,11 @@ theme:
     - content.footnote.tooltips
 
 extra_javascript:
-  - assets/branch-data.js
-  - assets/branch-switcher.js
   - assets/navigation.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 extra_css:
-  - assets/branch-switcher.css
   - assets/minimal.css
 
 extra:

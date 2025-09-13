@@ -33,7 +33,7 @@
 
 | Tarea | Documento | Comando |
 |-------|-----------|---------|
-| Setup inicial completo | [HOW-TO → Setup](../HOW-TO/index.md#setup-inicial) | `make env-setup && make up` |
+| Setup inicial completo | [HOW-TO → Setup](../HOW-TO/index.md#setup-inicial) | `make install-precommit-hooks && make up` |
 | Desplegar a producción | [HOW-TO → Despliegue](../HOW-TO/index.md#-despliegue) | `make deploy ENV=production` |
 | Ver logs de una app | [HOW-TO → Debugging](../HOW-TO/index.md#-debugging) | `make logs APP=api` |
 | Rollback urgente | [HOW-TO → Despliegue](../HOW-TO/index.md#-despliegue) | `make emergency-rollback ENV=production` |
@@ -125,14 +125,14 @@
 ### CI/CD & GitHub Actions
 
 - [ADR-004: GitHub Actions](../ARCHITECTURE-AND-DECISIONS/index.md#adr-004-github-actions-para-cicd) - Decisión original
-- [CI-CD: Internos](../CI-CD/) - Funcionamiento completo (1,388 líneas)
+- [CI-CD: Internos](../CI-CD/index.md) - Funcionamiento completo (1,388 líneas)
 - [HOW-TO: CI/CD](../HOW-TO/index.md#-cicd) - Comandos rápidos
 - [TROUBLESHOOTING: CI/CD](../TROUBLESHOOTING/index.md#problemas-de-cicd) - Debug workflows
 
 ### Versionado & Releases
 
 - [ADR-009: Semantic Versioning](../ARCHITECTURE-AND-DECISIONS/index.md#adr-009-versionado-semántico-automático) - Estrategia
-- [VERSIONING: Completo](../VERSIONING/) - Patrones por rama
+- [VERSIONING: Completo](../VERSIONING/index.md) - Patrones por rama
 - [CI-CD: Version Calculation](../CI-CD/index.md#cálculo-complejo-de-versión-390-líneas) - Implementación
 - [HOW-TO: Debug Versioning](../HOW-TO/index.md#debug-version-calculation) - Comandos debug
 
@@ -140,7 +140,7 @@
 
 - [ADR-006: CD Manual](../ARCHITECTURE-AND-DECISIONS/index.md#adr-006-estrategia-de-cd-manual) - Por qué manual
 - [ADR-007: Ansible](../ARCHITECTURE-AND-DECISIONS/index.md#adr-007-ansible-para-despliegues) - Herramienta elegida
-- [DEPLOYMENT: Avanzado](../DEPLOYMENT/) - Configuración completa servidores
+- [DEPLOYMENT: Avanzado](../DEPLOYMENT/index.md) - Configuración completa servidores
 - [HOW-TO: Deploy](../HOW-TO/index.md#-despliegue) - Comandos rápidos
 - [TROUBLESHOOTING: Deploy](../TROUBLESHOOTING/index.md#problemas-de-despliegue) - Problemas comunes
 
@@ -168,7 +168,7 @@
 
 ```bash
 git clone <repo>
-make env-setup
+make install-precommit-hooks
 make up
 # Leer HOW-TO para comandos diarios
 ```

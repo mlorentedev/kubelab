@@ -1,0 +1,21 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    env_file:
+      - ./.env.dev    
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - proxy
+
+volumes:
+  portainer_data:
+
+networks:
+  proxy:
+    external: true

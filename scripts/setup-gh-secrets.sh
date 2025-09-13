@@ -21,6 +21,8 @@ else
     # Use default paths
     ENV_FILES=(
         "$(dirname "$0")/.env"
+        "$(dirname "$0")/.env.prod"
+        "$(dirname "$0")/.env.dev"
     )
     log_info "Using default environment file paths"
 fi

@@ -1,6 +1,6 @@
 services:
   web:
-    image: "${REGISTRY}/${IMAGE_NAME}:dev"
+    image: "${REGISTRY}/${IMAGE_NAME}:${TAG}"
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,10 +9,10 @@ services:
     expose:
       - ${PORT}  
     env_file:
-      - ./.env
+      - ./.env.dev
     volumes:
       - ./astro-site:/app
-      - .env:/app/.env
+      - .env.dev:/app/.env
     user: "0:0"      
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"] 
     networks:

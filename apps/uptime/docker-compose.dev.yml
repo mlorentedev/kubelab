@@ -1,0 +1,19 @@
+services:
+
+  uptime-kuma:
+    image: louislam/uptime-kuma
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    env_file:
+      - ./.env.dev        
+    volumes:
+      - uptime_kuma:/app/data
+    networks:
+      - proxy
+
+volumes:
+  uptime_kuma:
+
+networks:
+  proxy:
+    external: true

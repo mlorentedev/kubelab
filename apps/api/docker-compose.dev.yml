@@ -9,10 +9,10 @@ services:
     expose:
       - ${PORT}  
     env_file:
-      - ./.env
+      - ./.env.dev
     volumes:
       - ./src:/app/src:cached
-      - .env:/app/.env
+      - .env.dev:/app/.env
     command: ["air", "-c", ".air.toml"]
     networks:
       - proxy

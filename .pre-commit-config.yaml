@@ -6,3 +6,8 @@ repos:
         entry: .github/hooks/validate-commit-msg.sh
         language: script
         stages: [commit-msg]
+      - id: generate-env-example-files
+        name: Generate environment files with placeholders
+        entry: scripts/generate-env-example.sh
+        language: script
+        stages: [pre-commit]
