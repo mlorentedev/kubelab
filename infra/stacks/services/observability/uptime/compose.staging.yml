@@ -1,0 +1,10 @@
+services:
+  uptime-kuma:
+    deploy:
+      resources:
+        limits:
+          cpus: "${RESOURCES_DEFAULT_CPU_LIMIT}"
+          memory: "${RESOURCES_DEFAULT_MEMORY_LIMIT}"
+        reservations:
+          cpus: "${RESOURCES_DEFAULT_CPU_RESERVATION}"
+          memory: "${RESOURCES_DEFAULT_MEMORY_RESERVATION}"

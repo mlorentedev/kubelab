@@ -1,0 +1,34 @@
+services:
+  github-runner:
+    image: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_IMAGE}
+    container_name: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_NAME}
+    restart: ${GLOBAL_RESTART_POLICY}
+    environment:
+      REPO_URL: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_REPO_URL}
+      RUNNER_NAME: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_NAME}
+      ACCESS_TOKEN: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_TOKEN}
+      RUNNER_WORKDIR: /tmp/runner
+      RUNNER_GROUP: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_RUNNER_GROUP}
+      LABELS: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_LABELS}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runner_data:/tmp/runner
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: '${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_RESOURCES_CPU_LIMIT}'
+          memory: '${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_RESOURCES_MEMORY_LIMIT}'
+        reservations:
+          cpus: '${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_RESOURCES_CPU_RESERVATION}'
+          memory: '${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_RESOURCES_MEMORY_RESERVATION}'
+
+volumes:
+  runner_data:
+    name: github_runner_data
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

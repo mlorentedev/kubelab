@@ -32,8 +32,8 @@
               <h2 class="{{ include.type }}-subheading">{{ page.subtitle | strip_html }}</h2>
             {% endif %}
           {% endif %}
-          
-          {% if include.type == "post" %} 
+
+          {% if include.type == "post" %}
             <span class="post-meta">Publicado el {{ page.date | date: date_format }}</span>
             {% if page.last-updated %}
               <span class="post-meta">

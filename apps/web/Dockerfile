@@ -1,10 +1,31 @@
 # ---------- Build Stage ----------
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 # Declare build arguments for multi-arch support
 ARG TARGETPLATFORM
-ARG TARGETOS  
+ARG TARGETOS
 ARG TARGETARCH
+
+# Astro-specific build arguments (passed from docker-compose)
+ARG PUBLIC_ALLOWED_HOSTS
+ARG PUBLIC_SITE_TITLE
+ARG PUBLIC_SITE_DESCRIPTION
+ARG PUBLIC_SITE_DOMAIN
+ARG PUBLIC_SITE_URL
+ARG PUBLIC_SITE_MAIL
+ARG PUBLIC_SITE_AUTHOR
+ARG PUBLIC_SITE_KEYWORDS
+ARG PUBLIC_TWITTER_URL
+ARG PUBLIC_YOUTUBE_URL
+ARG PUBLIC_GITHUB_URL
+ARG PUBLIC_CALENDLY_URL
+ARG PUBLIC_BUY_ME_A_COFFEE_URL
+ARG PUBLIC_GOOGLE_ANALYTICS_ID
+ARG PUBLIC_GOOGLE_TAG_MANAGER_ID
+ARG PUBLIC_ENABLE_HOMELABS
+ARG PUBLIC_ENABLE_BLOG
+ARG PUBLIC_ENABLE_CONTACT
+ARG BACKEND_URL
 
 RUN apk update && apk upgrade --no-cache
 
@@ -13,16 +34,39 @@ WORKDIR /app
 # Configure npm to skip optional dependencies for faster builds
 ENV npm_config_omit=optional
 
+# Make Astro-specific build arguments available as environment variables for the build process
+ENV PUBLIC_ALLOWED_HOSTS=${PUBLIC_ALLOWED_HOSTS}
+ENV PUBLIC_SITE_TITLE=${PUBLIC_SITE_TITLE}
+ENV PUBLIC_SITE_DESCRIPTION=${PUBLIC_SITE_DESCRIPTION}
+ENV PUBLIC_SITE_DOMAIN=${PUBLIC_SITE_DOMAIN}
+ENV PUBLIC_SITE_URL=${PUBLIC_SITE_URL}
+ENV PUBLIC_SITE_MAIL=${PUBLIC_SITE_MAIL}
+ENV PUBLIC_SITE_AUTHOR=${PUBLIC_SITE_AUTHOR}
+ENV PUBLIC_SITE_KEYWORDS=${PUBLIC_SITE_KEYWORDS}
+ENV PUBLIC_TWITTER_URL=${PUBLIC_TWITTER_URL}
+ENV PUBLIC_YOUTUBE_URL=${PUBLIC_YOUTUBE_URL}
+ENV PUBLIC_GITHUB_URL=${PUBLIC_GITHUB_URL}
+ENV PUBLIC_CALENDLY_URL=${PUBLIC_CALENDLY_URL}
+ENV PUBLIC_BUY_ME_A_COFFEE_URL=${PUBLIC_BUY_ME_A_COFFEE_URL}
+ENV PUBLIC_GOOGLE_ANALYTICS_ID=${PUBLIC_GOOGLE_ANALYTICS_ID}
+ENV PUBLIC_GOOGLE_TAG_MANAGER_ID=${PUBLIC_GOOGLE_TAG_MANAGER_ID}
+ENV PUBLIC_ENABLE_HOMELABS=${PUBLIC_ENABLE_HOMELABS}
+ENV PUBLIC_ENABLE_BLOG=${PUBLIC_ENABLE_BLOG}
+ENV PUBLIC_ENABLE_CONTACT=${PUBLIC_ENABLE_CONTACT}
+ENV BACKEND_URL=${BACKEND_URL}
+
 COPY astro-site/package.json astro-site/package-lock.json ./
 
-# Instalar dependencias con caché
+# Install dependencies with cache
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-# Copiar el resto del código fuente
+RUN apk add --no-cache curl
+
+# Copy the rest of the source code
 COPY astro-site/ ./
 
-# Variable de entorno (opcional)
+# Environment variable (optional)
 ARG BUILD_ENV=production
 ENV NODE_ENV=${BUILD_ENV}
 
@@ -38,12 +82,12 @@ RUN --mount=type=cache,target=/root/.npm \
         echo "Warning: Unknown architecture $TARGETARCH, skipping Rollup native binaries" ;; \
     esac
 
-# Construir la aplicación
+# Build the application
 RUN --mount=type=cache,target=/root/.npm npm run build \
- && npm audit --omit=dev --audit-level=high || true 
+ && npm audit --omit=dev --audit-level=high || true
 
-# ---------- Runtime Stage ----------
-FROM node:20-alpine AS runtime
+#---------- Runtime Stage ----------
+FROM node:22-alpine AS runtime
 
 RUN apk update && apk upgrade --no-cache
 
@@ -55,28 +99,27 @@ ENV HOST=0.0.0.0 \
     npm_config_omit=optional \
     ROLLUP_NATIVE_DISABLE=true
 
-# Copiar artefactos desde la etapa de build
+# Copy built files and package files from build stage
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 COPY --from=build /app/package-lock.json ./
 
-# Instalar SOLO dependencias de producción
+#Install ONLY production dependencies
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev && \
     npm cache clean --force
 
-# Crear usuario no-root para seguridad
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S astro -u 1001 && \
+    adduser -S astro -u 1001 -G nodejs && \
     chown -R astro:nodejs /app
 
 USER astro
 
 EXPOSE 4321
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:4321/health || exit 1
 
 # Start the application
 CMD ["node", "./dist/server/entry.mjs"]

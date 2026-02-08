@@ -1,67 +1,67 @@
-# 1.4 Wiki - Documentation Platform
+ . Wiki - Documentation Platform
 
-Technical documentation service built with MkDocs to provide a centralized knowledge base, technical guides, and project documentation for the mlorente.dev ecosystem.
+Technical documentation service built with MkDocs to provide a centralized knowledge base, technical guides, and project documentation for the CubeLab ecosystem.
 
-## What it is
+ What it is
 
-This is the documentation hub for the entire mlorente.dev project. It collects and organizes all documentation from across the monorepo into a single, searchable knowledge base. I built it with MkDocs Material because it creates beautiful, fast documentation sites and handles markdown perfectly.
+This is the documentation hub for the entire CubeLab project. It collects and organizes all documentation from across the monorepo into a single, searchable knowledge base. I built it with MkDocs Material because it creates beautiful, fast documentation sites and handles markdown perfectly.
 
 The wiki automatically syncs documentation from all apps and infrastructure components, making it easy to find guides, architectural decisions, troubleshooting steps, and API documentation in one place.
 
-## Tech stack
+ Tech stack
 
-- **Generator**: MkDocs with Material Design theme
-- **Content**: Markdown with advanced extensions
-- **Search**: Integrated search index
-- **Deployment**: Docker with Nginx for static content serving
-- **Synchronization**: Simple sync with current branch
+- Generator: MkDocs with Material Design theme
+- Content: Markdown with advanced extensions
+- Search: Integrated search index
+- Deployment: Docker with Nginx for static content serving
+- Synchronization: Simple sync with current branch
 
-## Project structure
+ Project structure
 
 ```text
 apps/wiki/
-├── README.md              # This documentation
-├── docker-compose.yml     # Service configuration
-├── mkdocs.yml            # MkDocs configuration
-├── mkdocs.yml.tmpl       # Configuration template
-├── nginx.conf            # Nginx configuration
-├── Dockerfile            # Custom MkDocs image
-├── site/                 # Generated site (ignored in Git)
-└── docs/                 # Documentation content
-    ├── index.md          # Landing page
-    ├── apps/             # Application documentation
-    ├── infra/            # Infrastructure guides
-    ├── scripts/          # Scripts documentation
-    ├── guides/           # Technical guides
-    └── assets/           # Images and resources
+├── README.md               This documentation
+├── docker-compose.yml      Service configuration
+├── mkdocs.yml             MkDocs configuration
+├── mkdocs.yml.tmpl        Configuration template
+├── nginx.conf             Nginx configuration
+├── Dockerfile             Custom MkDocs image
+├── site/                  Generated site (ignored in Git)
+└── docs/                  Documentation content
+    ├── index.md           Landing page
+    ├── apps/              Application documentation
+    ├── infra/             Infrastructure guides
+    ├── scripts/           Scripts documentation
+    ├── guides/            Technical guides
+    └── assets/            Images and resources
 ```
 
-## Key features
+ Key features
 
-### Documentation features
-- **Advanced markdown** - Support for tables, diagrams, and extensions
-- **Structured navigation** - Nested menus and breadcrumbs
-- **Integrated search** - Real-time content search
-- **Syntax highlighting** - Code highlighting for multiple languages
-- **Diagrams** - Support for Mermaid and other diagram formats
+ Documentation features
+- Advanced markdown - Support for tables, diagrams, and extensions
+- Structured navigation - Nested menus and breadcrumbs
+- Integrated search - Real-time content search
+- Syntax highlighting - Code highlighting for multiple languages
+- Diagrams - Support for Mermaid and other diagram formats
 
-### Technical features
-- **Material theme** - Modern and responsive interface
-- **Consistent theming** - Unified teal color scheme
-- **SEO optimization** - Optimized meta tags and structure
-- **Smart navigation** - Intelligent navigation links
-- **Responsive design** - Optimized for mobile and tablets
+ Technical features
+- Material theme - Modern and responsive interface
+- Consistent theming - Unified teal color scheme
+- SEO optimization - Optimized meta tags and structure
+- Smart navigation - Intelligent navigation links
+- Responsive design - Optimized for mobile and tablets
 
-## Configuration
+ Configuration
 
-### MkDocs configuration (`mkdocs.yml`)
+ MkDocs configuration (`mkdocs.yml`)
 
 ```yaml
-site_name: mlorente.dev
-site_url: https://wiki.mlorente.dev
+site_name: CubeLab
+site_url: https://wiki.cubelab.cloud
 site_description: Technical knowledge base and project documentation
 
-# Theme configuration
+ Theme configuration
 theme:
   name: material
   language: en
@@ -80,7 +80,7 @@ theme:
     - search.highlight
     - content.code.annotate
 
-# Navigation structure
+ Navigation structure
 nav:
   - Home: index.md
   - Applications:
@@ -102,7 +102,7 @@ nav:
     - Deployment: guides/DEPLOYMENT.md
     - Troubleshooting: guides/TROUBLESHOOTING.md
 
-# Markdown extensions
+ Markdown extensions
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -121,71 +121,71 @@ markdown_extensions:
   - toc:
       permalink: true
 
-# Plugins
+ Plugins
 plugins:
   - search:
       lang: en
 ```
 
-### Environment variables
+ Environment variables
 
 ```bash
-# Container configuration
+ Container configuration
 CONTAINER_NAME=wiki
 IMAGE_NAME=mlorente-wiki
-PORT=8080
+PORT=
 
-# MkDocs configuration
-SITE_NAME="mlorente.dev"
-SITE_URL="https://wiki.mlorente.dev"
+ MkDocs configuration
+SITE_NAME="CubeLab"
+SITE_URL="https://wiki.cubelab.cloud"
 SITE_LANG="en"
 ```
 
-## Running the wiki
+ Running the wiki
 
-### Development mode
+ Development mode
 ```bash
-# Build and run with live reload
+ Build and run with live reload
 make up-wiki
 
-# Access at http://wiki.mlorentedev.test
+ Access at http://wiki.mlorentedev.test
 ```
 
-### Local development
+ Local development
 ```bash
-# Navigate to wiki directory
+ Navigate to wiki directory
 cd apps/wiki
 
-# Install MkDocs locally
+ Install MkDocs locally
 pip install mkdocs-material
 
-# Generate documentation
+ Generate documentation
 make wiki-sync
 
-# Serve locally
+ Serve locally
 mkdocs serve
 
-# Access at http://localhost:8000
+ Access at http://localhost:
 ```
 
-### Available commands
+ Available commands
 ```bash
-# Build static site
+ Build static site
 mkdocs build
 
-# Generate documentation
+ Generate documentation
 scripts/generate-wiki.sh build
 
-# Collect documentation
+ Collect documentation
 scripts/generate-wiki.sh collect
 
-# Generate MkDocs config
+ Generate MkDocs config
 scripts/generate-wiki.sh config
 ```
 
-## Content creation
+ Content creation
 
-### Document structure
+ Document structure
 
 ```markdown
 ---
@@ -194,20 +194,20 @@ description: "SEO description"
 tags:
   - devops
   - tutorial
-date: 2024-01-15
+date: --
 authors:
   - Manuel Lorente
 ---
 
-# Page Title
+ Page Title
 
 Introduction to the content...
 
-## Main Section
+ Main Section
 
 Section content...
 
-### Subsection
+ Subsection
 
 Detailed content...
 
@@ -219,9 +219,9 @@ Detailed content...
 
 ```
 
-### Advanced elements
+ Advanced elements
 
-#### Mermaid diagrams
+ Mermaid diagrams
 ```mermaid
 graph TD
     A[User] --> B[Web Application]
@@ -230,20 +230,20 @@ graph TD
     B --> E[CDN]
 ```
 
-#### Code blocks
+ Code blocks
 ```bash title="Example command"
-# Example command with title
+ Example command with title
 docker-compose up -d
 ```
 
-#### Reference tables
+ Reference tables
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ls` | List files | `ls -la` |
 | `cd` | Change directory | `cd /home` |
 | `pwd` | Current directory | `pwd` |
 
-#### Information boxes
+ Information boxes
 !!! tip "Tip"
     Use this format for useful tips.
 
@@ -256,70 +256,70 @@ docker-compose up -d
 !!! danger "Danger"
     Warnings about dangerous actions.
 
-## Content organization
+ Content organization
 
-### Documentation categories
+ Documentation categories
 
-#### Applications (`apps/`)
-- **API**: Backend service documentation
-- **Web**: Frontend application guides
-- **Blog**: Technical writing platform
-- **Wiki**: This documentation system
+ Applications (`apps/`)
+- API: Backend service documentation
+- Web: Frontend application guides
+- Blog: Technical writing platform
+- Wiki: This documentation system
 
-#### Infrastructure (`infra/`)
-- **Traefik**: Reverse proxy configuration
-- **Monitoring**: Observability and alerting
-- **Networking**: Network setup and routing
-- **Deployment**: Server configuration
+ Infrastructure (`infra/`)
+- Traefik: Reverse proxy configuration
+- Monitoring: Observability and alerting
+- Networking: Network setup and routing
+- Deployment: Server configuration
 
-#### Scripts (`scripts/`)
-- **Automation**: Build and deployment scripts
-- **Utilities**: Development tools
-- **Maintenance**: System maintenance scripts
+ Scripts (`scripts/`)
+- Automation: Build and deployment scripts
+- Utilities: Development tools
+- Maintenance: System maintenance scripts
 
-#### Guides (`guides/`)
-- **Architecture**: System design and decisions
-- **CI/CD**: Pipeline documentation
-- **Deployment**: Deployment procedures
-- **Troubleshooting**: Problem-solving guides
-- **Contributing**: Development guidelines
+ Guides (`guides/`)
+- Architecture: System design and decisions
+- CI/CD: Pipeline documentation
+- Deployment: Deployment procedures
+- Troubleshooting: Problem-solving guides
+- Contributing: Development guidelines
 
-### Writing guidelines
+ Writing guidelines
 
-1. **Clarity**: Use clear and direct language
-2. **Structure**: Organize with logical headings
-3. **Examples**: Include practical examples and code
-4. **Updates**: Keep content current
-5. **References**: Link to relevant external resources
+. Clarity: Use clear and direct language
+. Structure: Organize with logical headings
+. Examples: Include practical examples and code
+. Updates: Keep content current
+. References: Link to relevant external resources
 
-## Search features
+ Search features
 
-### Advanced search
-- **Full search**: Complete content indexing
-- **Suggestions**: Automatic term completion
-- **Highlighting**: Highlighted terms in results
-- **Filters**: Search by section or category
+ Advanced search
+- Full search: Complete content indexing
+- Suggestions: Automatic term completion
+- Highlighting: Highlighted terms in results
+- Filters: Search by section or category
 
-### SEO optimization
-- **Meta tags**: Optimized titles and descriptions
-- **Clean URLs**: Readable and descriptive URLs
-- **Structure**: Proper hierarchical headings
-- **Sitemap**: Automatic site map generation
+ SEO optimization
+- Meta tags: Optimized titles and descriptions
+- Clean URLs: Readable and descriptive URLs
+- Structure: Proper hierarchical headings
+- Sitemap: Automatic site map generation
 
-## Theme customization
+ Theme customization
 
-### Color variables
+ Color variables
 ```css
 :root {
-  --md-primary-fg-color: #008099;
-  --md-primary-fg-color--light: #26a69a;
-  --md-primary-fg-color--dark: #00695c;
+  --md-primary-fg-color: ;
+  --md-primary-fg-color--light: aa;
+  --md-primary-fg-color--dark: c;
 }
 ```
 
-### Custom CSS
+ Custom CSS
 ```css
-/* docs/stylesheets/extra.css */
+/ docs/stylesheets/extra.css /
 .md-header {
   background-color: var(--md-primary-fg-color);
 }
@@ -329,65 +329,65 @@ docker-compose up -d
 }
 ```
 
-## Documentation sync
+ Documentation sync
 
-### Automatic collection
-- **Source**: Collects from entire monorepo
-- **Apps**: Application-specific documentation
-- **Infrastructure**: Server and deployment docs
-- **Guides**: Technical and procedural guides
-- **Scripts**: Automation documentation
+ Automatic collection
+- Source: Collects from entire monorepo
+- Apps: Application-specific documentation
+- Infrastructure: Server and deployment docs
+- Guides: Technical and procedural guides
+- Scripts: Automation documentation
 
-### Update workflow
-1. **Edit**: Modify markdown files anywhere in monorepo
-2. **Generate**: Run `make wiki-sync` to collect documentation
-3. **Build**: MkDocs regenerates the site
-4. **Serve**: Updated content served automatically
+ Update workflow
+. Edit: Modify markdown files anywhere in monorepo
+. Generate: Run `make wiki-sync` to collect documentation
+. Build: MkDocs regenerates the site
+. Serve: Updated content served automatically
 
-## Analytics
+ Analytics
 
-### Usage metrics
-- **Most visited pages**
-- **Popular search terms**
-- **Time on page**
-- **Bounce rate**
+ Usage metrics
+- Most visited pages
+- Popular search terms
+- Time on page
+- Bounce rate
 
-### Analytics integration
+ Analytics integration
 ```yaml
-# In mkdocs.yml
+ In mkdocs.yml
 google_analytics:
   - 'G-XXXXXXXXXX'
   - 'auto'
 ```
 
-## Contributing
+ Contributing
 
-### Contribution process
-1. **Fork** the content repository
-2. **Branch** for new documentation
-3. **Write** following the guidelines
-4. **Test** locally with MkDocs
-5. **Pull Request** with clear description
-6. **Review** and merge content
+ Contribution process
+. Fork the content repository
+. Branch for new documentation
+. Write following the guidelines
+. Test locally with MkDocs
+. Pull Request with clear description
+. Review and merge content
 
-### Quality standards
+ Quality standards
 - Correct spelling and grammar
 - Tested and functional code
 - Valid and updated links
 - Optimized images with alt text
 - Consistent structure with existing content
 
-## Related services
+ Related services
 
-- **Web Frontend**: `apps/web` - Main landing page
-- **Blog**: `apps/blog` - Technical content and tutorials
-- **API Backend**: `apps/api` - API documentation
-- **Infrastructure**: `infra/` - Deployment documentation
+- Web Frontend: `apps/web` - Main landing page
+- Blog: `apps/blog` - Technical content and tutorials
+- API Backend: `apps/api` - API documentation
+- Infrastructure: `infra/` - Deployment documentation
 
-## Local development URLs
+ Local development URLs
 
 When running locally with `make up-wiki`:
 - Wiki: http://wiki.mlorentedev.test
-- Development server: http://localhost:8000
+- Development server: http://localhost:
 
-Add `127.0.0.1 wiki.mlorentedev.test` to your `/etc/hosts` file for local domain access.
+Add `... wiki.mlorentedev.test` to your `/etc/hosts` file for local domain access.

@@ -1,0 +1,10 @@
+services:
+  traefik:
+    deploy:
+      resources:
+        limits:
+          cpus: "${EDGE_TRAEFIK_CPU_LIMIT}"
+          memory: ${EDGE_TRAEFIK_MEMORY_LIMIT}
+        reservations:
+          cpus: "${EDGE_TRAEFIK_CPU_RESERVATION}"
+          memory: ${EDGE_TRAEFIK_MEMORY_RESERVATION}

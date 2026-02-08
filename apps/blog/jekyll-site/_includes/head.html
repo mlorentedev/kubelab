@@ -1,7 +1,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <link rel="shortcut icon" type="image/png" href="favicon.ico">
+  <link rel="icon" type="image/x-icon" href="{{ '/favicon.ico' | relative_url }}">
   <link rel="canonical" href="{{ site.url }}{{ page.url | relative_url }}" />
 
   {% capture pagetitle %}
@@ -89,7 +89,7 @@
       {% include ext-css.html css=css %}
     {% endfor %}
   {% endif %}
-  
+
   {% if page.css %}
     {% for css in page.css %}
       <link rel="stylesheet" href="{{ css | relative_url }}">
@@ -163,10 +163,7 @@
   <link rel="stylesheet" href="{{ "/assets/css/staticman.css" | relative_url }}">
   {% endif %}
 
-  {% assign favicon_exists = site.static_files | where: "path", "/favicon.ico" | size %}
-  {% if favicon_exists == 1 %}
-  <link rel="icon" href="{{ '/favicon.ico' | relative_url }}" />
-  {% endif %}
+
 
   {% if page.head-extra %}
     {% for file in page.head-extra %}

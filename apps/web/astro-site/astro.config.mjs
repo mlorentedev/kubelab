@@ -3,45 +3,36 @@ import mdx from '@astrojs/mdx';
 import tailwind from '@astrojs/tailwind';
 import sitemap from '@astrojs/sitemap';
 import node from '@astrojs/node';
-import dotenv from 'dotenv';
 
 const loadEnvVariables = () => {
 
-  const localResult = dotenv.config({ path: './.env' });
-  
-  // If running in GitHub Actions, use GitHub Secrets
-  if (process.env.GITHUB_ACTIONS) {
-    return {
-      PUBLIC_SITE_TITLE: process.env.PUBLIC_SITE_TITLE,
-      PUBLIC_SITE_DESCRIPTION: process.env.PUBLIC_SITE_DESCRIPTION,
-      PUBLIC_SITE_DOMAIN: process.env.PUBLIC_SITE_DOMAIN,
-      PUBLIC_SITE_URL: process.env.PUBLIC_SITE_URL,
-      PUBLIC_SITE_MAIL: process.env.PUBLIC_SITE_MAIL,
-      PUBLIC_SITE_AUTHOR: process.env.PUBLIC_SITE_AUTHOR,
-      PUBLIC_SITE_KEYWORDS: process.env.PUBLIC_SITE_KEYWORDS,
-      PUBLIC_TWITTER_URL: process.env.PUBLIC_TWITTER_URL,
-      PUBLIC_YOUTUBE_URL: process.env.PUBLIC_YOUTUBE_URL,
-      PUBLIC_GITHUB_URL: process.env.PUBLIC_GITHUB_URL,
-      PUBLIC_CALENDLY_URL: process.env.PUBLIC_CALENDLY_URL,
-      PUBLIC_GOOGLE_ANALYTICS_ID: process.env.PUBLIC_GOOGLE_ANALYTICS_ID,
-      PUBLIC_ENABLE_HOMELABS: process.env.PUBLIC_ENABLE_HOMELABS === 'true',
-      PUBLIC_ENABLE_BLOG: process.env.PUBLIC_ENABLE_BLOG === 'true',
-      PUBLIC_ENABLE_CONTACT: process.env.PUBLIC_ENABLE_CONTACT === 'true',
-      BACKEND_URL: process.env.BACKEND_URL,
-    };
-  }
-  
-  if (localResult.error && !process.env.GITHUB_ACTIONS) {
-    console.warn('Could not load .env file:', localResult.error);
-  }
-  
-  return localResult.parsed || {};
+  return {
+    PUBLIC_SITE_TITLE: process.env.PUBLIC_SITE_TITLE,
+    PUBLIC_SITE_DESCRIPTION: process.env.PUBLIC_SITE_DESCRIPTION,
+    PUBLIC_SITE_DOMAIN: process.env.PUBLIC_SITE_DOMAIN,
+    PUBLIC_SITE_URL: process.env.PUBLIC_SITE_URL,
+    PUBLIC_SITE_MAIL: process.env.PUBLIC_SITE_MAIL,
+    PUBLIC_SITE_AUTHOR: process.env.PUBLIC_SITE_AUTHOR,
+    PUBLIC_SITE_KEYWORDS: process.env.PUBLIC_SITE_KEYWORDS,
+    PUBLIC_TWITTER_URL: process.env.PUBLIC_TWITTER_URL,
+    PUBLIC_YOUTUBE_URL: process.env.PUBLIC_YOUTUBE_URL,
+    PUBLIC_GITHUB_URL: process.env.PUBLIC_GITHUB_URL,
+    PUBLIC_CALENDLY_URL: process.env.PUBLIC_CALENDLY_URL,
+    PUBLIC_BUY_ME_A_COFFEE_URL: process.env.PUBLIC_BUY_ME_A_COFFEE_URL,
+    PUBLIC_GOOGLE_ANALYTICS_ID: process.env.PUBLIC_GOOGLE_ANALYTICS_ID,
+    PUBLIC_GOOGLE_TAG_MANAGER_ID: process.env.PUBLIC_GOOGLE_TAG_MANAGER_ID,
+    PUBLIC_ENABLE_HOMELABS: process.env.PUBLIC_ENABLE_HOMELABS,
+    PUBLIC_ENABLE_BLOG: process.env.PUBLIC_ENABLE_BLOG,
+    PUBLIC_ENABLE_CONTACT: process.env.PUBLIC_ENABLE_CONTACT,
+    BACKEND_URL: process.env.BACKEND_URL,
+    PUBLIC_ALLOWED_HOSTS: process.env.PUBLIC_ALLOWED_HOSTS,
+  };
 };
 
 const envVars = loadEnvVariables();
 
 export default defineConfig({
-  site: envVars.PUBLIC_SITE_URL || 'https://mlorente.dev',
+  site: envVars.PUBLIC_SITE_URL || 'https://cubelab.cloud',
   publicDir: 'public',
   output: 'server',
   adapter: node({
@@ -49,13 +40,7 @@ export default defineConfig({
   }),
   integrations: [tailwind(), sitemap(), mdx()],
   server: {
-    allowedHosts: [
-      'localhost',
-      '*.mlorente.dev',
-      '*.mlorentedev.test',
-      'mlorentedev.test',
-      'mlorente.dev',
-    ],
+    allowedHosts: (envVars.PUBLIC_ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(h => h),
   },
   vite: {
     define: {
@@ -70,11 +55,14 @@ export default defineConfig({
       'import.meta.env.PUBLIC_YOUTUBE_URL': JSON.stringify(envVars.PUBLIC_YOUTUBE_URL),
       'import.meta.env.PUBLIC_GITHUB_URL': JSON.stringify(envVars.PUBLIC_GITHUB_URL),
       'import.meta.env.PUBLIC_CALENDLY_URL': JSON.stringify(envVars.PUBLIC_CALENDLY_URL),
+      'import.meta.env.PUBLIC_BUY_ME_A_COFFEE_URL': JSON.stringify(envVars.PUBLIC_BUY_ME_A_COFFEE_URL),
       'import.meta.env.PUBLIC_GOOGLE_ANALYTICS_ID': JSON.stringify(envVars.PUBLIC_GOOGLE_ANALYTICS_ID),
-      'import.meta.env.PUBLIC_ENABLE_HOMELABS': envVars.PUBLIC_ENABLE_HOMELABS === 'true',
-      'import.meta.env.PUBLIC_ENABLE_BLOG': envVars.PUBLIC_ENABLE_BLOG === 'true',
-      'import.meta.env.PUBLIC_ENABLE_CONTACT': envVars.PUBLIC_ENABLE_CONTACT === 'true',
+      'import.meta.env.PUBLIC_GOOGLE_TAG_MANAGER_ID': JSON.stringify(envVars.PUBLIC_GOOGLE_TAG_MANAGER_ID),
+      'import.meta.env.PUBLIC_ENABLE_HOMELABS': envVars.PUBLIC_ENABLE_HOMELABS,
+      'import.meta.env.PUBLIC_ENABLE_BLOG': envVars.PUBLIC_ENABLE_BLOG,
+      'import.meta.env.PUBLIC_ENABLE_CONTACT': envVars.PUBLIC_ENABLE_CONTACT,
       'import.meta.env.BACKEND_URL': JSON.stringify(envVars.BACKEND_URL),
+      'import.meta.env.PUBLIC_ALLOWED_HOSTS': JSON.stringify(envVars.PUBLIC_ALLOWED_HOSTS),
     },
     envPrefix: ['PUBLIC_'],
   },

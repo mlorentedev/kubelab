@@ -1,0 +1,166 @@
+# ==========================================================================
+# DEV SETTINGS
+# ==========================================================================
+environment: dev
+
+# ==========================================================================
+# GLOBAL OVERRIDES
+# ==========================================================================
+global:
+  base_domain: cubelab.test
+  restart_policy: always
+
+# ==========================================================================
+# RUNTIME
+# ==========================================================================
+log_level: DEBUG
+debug_mode: true
+
+# ==========================================================================
+# PROTOCOLS & NETWORKING
+# ==========================================================================
+protocol: https
+
+# ==========================================================================
+# SERVICE DISCOVERY (Internal endpoints)
+# ==========================================================================
+endpoints:
+  api: http://api:8080
+  web: http://web:4321
+  blog: http://blog:4000
+  wiki: http://wiki:8000
+
+# ==========================================================================
+# EDGE SETTINGS
+# ==========================================================================
+edge:
+  traefik:
+    domain: traefik.cubelab.test
+    disable_https: false
+    use_local_certs: true  # Use mkcert certificates instead of ACME
+    insecure: false
+    acme_server: https://acme-staging-v02.api.letsencrypt.org/directory
+    headers_ssl_redirect: true
+    rate_limit_average: 200
+    rate_limit_burst: 100
+
+  nginx:
+    domain: errors.cubelab.test
+
+  cloudflared:
+    enabled: false
+
+# ==========================================================================
+# APPS SETTINGS
+# ==========================================================================
+apps:
+  # Platform applications (custom-built)
+  platform:
+    api:
+      domain: api.cubelab.test
+      site_domain: cubelab.test
+      site_url: http://cubelab.test
+      email_secure: false
+
+    web:
+      backend_url: "http://api.cubelab.test"
+      allowed_hosts: "localhost,web,127.0.0.1,.cubelab.test,.mlorentedev.test"
+      domain: web.cubelab.test
+      site_domain: cubelab.test
+      site_url: http://cubelab.test
+      google_analytics_id: ""
+      google_tag_manager_id: ""
+
+    blog:
+      domain: blog.cubelab.test
+      enable_livereload: true
+
+    wiki:
+      domain: wiki.cubelab.test
+      # Nueva sección para configuración de MkDocs (Overrides common.yaml)
+      mkdocs:
+        site_name: CubeLab Wiki (DEV)
+        site_description: Development documentation for mlorente.dev
+        site_author: Manu Lorente
+        site_url: https://wiki.cubelab.test
+        repo_name: mlorentedev/mlorente.dev
+        repo_url: https://github.com/mlorentedev/mlorente.dev
+        edit_uri: https://github.com/mlorentedev/mlorente.dev/edit/dev/apps/wiki/docs/
+        copyright: Copyright &copy; 2025 Manu Lorente - Development
+        logo_path: assets/logo.svg
+        favicon_path: assets/favicon.ico
+
+  # Third-party services
+  services:
+    core:
+      traefik:
+        domain: traefik.cubelab.test
+
+      portainer:
+        domain: portainer.cubelab.test
+
+      n8n:
+        domain: n8n.cubelab.test
+
+    data:
+      minio:
+        domain: minio.cubelab.test
+        console_domain: console.minio.cubelab.test
+
+    observability:
+      grafana:
+        domain: grafana.cubelab.test
+        oauth_allow_sign_up: true
+
+      loki:
+        domain: loki.cubelab.test
+
+      uptime_kuma:
+        domain: status.cubelab.test
+
+    security:
+      authelia:
+        domain: auth.cubelab.test
+        default_domain_root: cubelab.test
+        issuer_domain: cubelab.test
+
+        oidc_clients:
+          - client_id: cubelab-oidc
+            client_name: CubeLab OIDC Client (General)
+            redirect_uris:
+              - https://auth.cubelab.test/oauth2/callback
+              # Redirect de Portainer
+              - https://portainer.cubelab.test/login/oauth/oidc/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+          - client_id: grafana-oidc
+            client_name: Grafana OIDC Client
+            redirect_uris:
+              # Redirect de Grafana
+              - https://grafana.cubelab.test/login/generic_oauth
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+          - client_id: minio-oidc
+            client_name: MinIO OIDC Client
+            redirect_uris:
+              - https://console.minio.cubelab.test/oauth_callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+        # Placeholder, replace with generated secret
+        jwt_secret: "supersecretjwtkeyforauthelia"
+        # Placeholder, replace with generated secret
+        oidc_client_secret: "supersecretoidcclientkey"
+        disable_require_tls: false
+
+    automation:
+      kestra:
+        domain: kestra.cubelab.test

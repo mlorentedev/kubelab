@@ -1,0 +1,83 @@
+---
+- name: Create Traefik directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - "/opt/traefik"
+    - "/opt/traefik/dynamic"
+    - "/opt/traefik/logs"
+    - "/opt/traefik/certs"
+
+- name: Copy Traefik configuration from edge/traefik
+  copy:
+    src: "{{ edge_traefik_local }}/"
+    dest: "/opt/traefik/"
+    mode: '0644'
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  notify: restart traefik
+
+- name: Ensure acme.json exists with correct permissions
+  file:
+    path: "/opt/traefik/certs/acme.json"
+    state: touch
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+
+- name: Check if Traefik is already running
+  shell: docker ps --filter "name=traefik" --format "{% raw %}{{.Names}}{% endraw %}"
+  register: traefik_running
+  changed_when: false
+
+- name: Stop existing Traefik container
+  shell: cd /opt/traefik && docker compose down
+  when: traefik_running.stdout != ""
+  ignore_errors: true
+
+- name: Pull Traefik image
+  shell: cd /opt/traefik && docker compose pull
+  environment:
+    DOMAIN: "{{ domain }}"
+
+- name: Start Traefik
+  shell: cd /opt/traefik && docker compose up -d
+  environment:
+    DOMAIN: "{{ domain }}"
+    ACME_EMAIL: "{{ tls.acme_email }}"
+    ACME_SERVER: "{{ tls.acme_server }}"
+  register: traefik_start
+
+- name: Wait for Traefik to be ready
+  uri:
+    url: "http://localhost:8080/ping"
+    method: GET
+    status_code: 200
+  register: traefik_health
+  retries: 10
+  delay: 5
+  until: traefik_health.status == 200
+
+- name: Verify Traefik dashboard (if enabled)
+  uri:
+    url: "https://{{ domain }}/dashboard/"
+    method: GET
+    status_code: 200
+    validate_certs: no
+  register: traefik_dashboard
+  retries: 5
+  delay: 10
+  ignore_errors: true
+  when: traefik.dashboard_enabled | default(true) | bool
+
+- name: Display Traefik status
+  debug:
+    msg:
+      - "✅ Traefik deployed successfully"
+      - "🔗 Dashboard: https://{{ domain }}/dashboard/"
+      - "🏥 Health: {{ 'OK' if traefik_health.status == 200 else 'Failed' }}"
+      - "📊 Dashboard: {{ 'Accessible' if traefik_dashboard.status == 200 else 'Check configuration' }}"

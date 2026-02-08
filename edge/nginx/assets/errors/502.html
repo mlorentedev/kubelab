@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>502 - Bad Gateway</title>
+    <style>
+        :root {
+            --color-bg: #f8f9fa;
+            --color-text: #0f1219;
+            --color-accent: #2337ff;
+            --color-gray: #60739f;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 6rem;
+            margin: 0;
+            color: var(--color-accent);
+            line-height: 1;
+            font-weight: 700;
+        }
+        h2 {
+            font-size: 2rem;
+            margin: 1rem 0 0.5rem;
+            font-weight: 600;
+        }
+        p {
+            color: var(--color-gray);
+            font-size: 1.125rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background-color: var(--color-text);
+            color: white;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        @media (max-width: 640px) {
+            h1 { font-size: 4rem; }
+            h2 { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>502</h1>
+        <h2>Bad Gateway</h2>
+        <p>El servidor recibió una respuesta inválida.</p>
+        <a href="/" class="btn">Volver al inicio</a>
+    </div>
+</body>
+</html>

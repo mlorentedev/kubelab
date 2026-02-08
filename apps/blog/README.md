@@ -1,135 +1,135 @@
-# 1.3 Blog - Technical Writing Platform
+# Blog - Technical Writing Platform
 
 My personal technical blog where I write about DevOps, SRE, development, and everything I learn along the way. Built with Jekyll because I love writing in markdown and having everything generated as static files.
 
-## What it is
+ What it is
 
 This is my personal blog where I share technical articles, tutorials, and thoughts about DevOps, SRE, cloud technologies, and software development. I chose Jekyll because it lets me write in pure markdown without complications, generates lightning-fast static sites, and gives me full control over the content and presentation.
 
 The blog focuses on practical content - tutorials that actually work, insights from real projects, and sharing what I learn from my homelab experiments and professional work.
 
-## Tech stack
+ Tech stack
 
-- **Jekyll 4.3.4** - Fast, stable, and lets me write in pure markdown
-- **Beautiful Jekyll** - Customized theme that looks great and is fully responsive
-- **Bootstrap** - For responsive design without reinventing the wheel
-- **Static generation** - Super fast loading and easy deployment anywhere
-- **Markdown** - Write content in markdown and forget about HTML
+- Jekyll .. - Fast, stable, and lets me write in pure markdown
+- Beautiful Jekyll - Customized theme that looks great and is fully responsive
+- Bootstrap - For responsive design without reinventing the wheel
+- Static generation - Super fast loading and easy deployment anywhere
+- Markdown - Write content in markdown and forget about HTML
 
-## Project structure
+ Project structure
 
 ```
 jekyll-site/
-├── _config.yml              # Main blog configuration
+├── _config.yml               Main blog configuration
 ├── _data/
-│   └── ui-text.yml          # Interface text localization
-├── _includes/               # Reusable components
-│   ├── footer.html          # Site footer
-│   ├── header.html          # Site header
-│   └── nav.html            # Navigation menu
-├── _layouts/               # Page templates
-│   ├── default.html        # Main layout
-│   ├── post.html           # Blog post template
-│   └── page.html           # Static page template
-├── _posts/                 # Blog articles (markdown)
-│   ├── 2024-02-18-the-harmony-of-devops-and-sre.md
-│   ├── 2024-03-10-the-magic-of-the-cloud.md
+│   └── ui-text.yml           Interface text localization
+├── _includes/                Reusable components
+│   ├── footer.html           Site footer
+│   ├── header.html           Site header
+│   └── nav.html             Navigation menu
+├── _layouts/                Page templates
+│   ├── default.html         Main layout
+│   ├── post.html            Blog post template
+│   └── page.html            Static page template
+├── _posts/                  Blog articles (markdown)
+│   ├── ---the-harmony-of-devops-and-sre.md
+│   ├── ---the-magic-of-the-cloud.md
 │   └── ...
-├── assets/                 # Static assets
-│   ├── css/               # Custom styles
-│   ├── img/               # Images and media
-│   └── js/                # JavaScript if needed
-├── aboutme.html           # About me page
-└── tags.html              # All tags listing
+├── assets/                  Static assets
+│   ├── css/                Custom styles
+│   ├── img/                Images and media
+│   └── js/                 JavaScript if needed
+├── aboutme.html            About me page
+└── tags.html               All tags listing
 ```
 
-## Key features
+ Key features
 
-### For writing
-- **Pure markdown** - Write in markdown and it looks perfect
-- **Syntax highlighting** - Code blocks look great with proper highlighting
-- **MathJax support** - For when I need to write formulas or mathematical expressions
-- **Responsive images** - Images adapt automatically to screen sizes
-- **Tag system** - Organize posts by topics and themes
-- **Search functionality** - Readers can search through content
+ For writing
+- Pure markdown - Write in markdown and it looks perfect
+- Syntax highlighting - Code blocks look great with proper highlighting
+- MathJax support - For when I need to write formulas or mathematical expressions
+- Responsive images - Images adapt automatically to screen sizes
+- Tag system - Organize posts by topics and themes
+- Search functionality - Readers can search through content
 
-### For readers
-- **Lightning fast loading** - Static generation means maximum speed
-- **100% responsive** - Perfect display on mobile, tablet, and desktop
-- **Dark/light theme** - Because not everyone likes the same thing
-- **Social sharing** - Easy sharing buttons for social media
-- **Reading time** - Estimated reading time for each post
+ For readers
+- Lightning fast loading - Static generation means maximum speed
+- % responsive - Perfect display on mobile, tablet, and desktop
+- Dark/light theme - Multiple theme options available
+- Social sharing - Easy sharing buttons for social media
+- Reading time - Estimated reading time for each post
 
-## Configuration
+ Configuration
 
-### Main settings
+ Main settings
 
 ```yaml
-# _config.yml
+ _config.yml
 title: Manu Lorente
 author: Manuel Lorente
-url: "https://mlorente.dev"
+url: "https://cubelab.cloud"
 description: "Personal blog about DevOps, SRE and development"
 
-# Main navigation
+ Main navigation
 navbar-links:
   Blog: "/"
   About: "aboutme"
 
-# Social networks
+ Social networks
 social-network-links:
   github: mlorentedev
   linkedin: manuel-lorente-alman
   email: info@mlorente.dev
 
-# RSS feed
+ RSS feed
 rss-description: "Thoughts on DevOps and SRE"
-excerpt_length: 50
+excerpt_length: 
 ```
 
-## Running the blog
+ Running the blog
 
-### Development mode
+ Development mode
 
 ```bash
-# With hot reload
+ With hot reload
 make up-blog
 
-# Access at http://blog.mlorentedev.test
+ Access at http://blog.mlorentedev.test
 ```
 
-### Local development
+ Local development
 
 ```bash
-# Navigate to Jekyll directory
+ Navigate to Jekyll directory
 cd apps/blog/jekyll-site
 
-# Install Ruby gems
+ Install Ruby gems
 bundle install
 
-# Start with live reload
+ Start with live reload
 bundle exec jekyll serve --livereload
 
-# Access at http://localhost:4000
+ Access at http://localhost:
 ```
 
-### Available commands
+ Available commands
 
 ```bash
-# Build the site
+ Build the site
 bundle exec jekyll build
 
-# Serve with drafts
+ Serve with drafts
 bundle exec jekyll serve --drafts
 
-# Clean temporary files
+ Clean temporary files
 bundle exec jekyll clean
 
-# Check for issues
+ Check for issues
 bundle exec jekyll doctor
 ```
 
-## Writing a blog post
+ Writing a blog post
 
 Create a file in `_posts/` with the format `YYYY-MM-DD-title.md`:
 
@@ -138,7 +138,7 @@ Create a file in `_posts/` with the format `YYYY-MM-DD-title.md`:
 layout: post
 title: "Post Title"
 subtitle: "Optional subtitle"
-date: 2024-01-15
+date: --
 author: "Manuel Lorente"
 tags: [devops, sre, tutorial]
 cover-img: /assets/img/cover.jpg
@@ -151,173 +151,173 @@ comments: true
 Write all the content here in markdown...
 ```
 
-### Frontmatter options
+ Frontmatter options
 
 ```yaml
-# Required
+ Required
 layout: post
 title: "Post Title"
-date: 2024-01-15
+date: --
 
-# SEO and social media
+ SEO and social media
 subtitle: "Optional subtitle"
 meta-description: "Custom description for Google"
 share-img: "/assets/img/share.jpg"
 
-# Visual
+ Visual
 cover-img: "/assets/img/cover.jpg"
 thumbnail-img: "/assets/img/thumb.jpg"
 
-# Organization
-tags: [tag1, tag2, tag3]
+ Organization
+tags: [tag, tag, tag]
 categories: [category]
 author: "Author name"
 readtime: true
 
-# For open source projects
+ For open source projects
 gh-repo: user/repo
 gh-badge: [star, fork, follow]
 
-# Comments
+ Comments
 comments: true
 ```
 
-## Writing features
+ Writing features
 
-### Code blocks
+ Code blocks
 
 ```bash
-# Always specify the language
+ Always specify the language
 sudo systemctl start docker
 ```
 
-### Mathematical expressions
+ Mathematical expressions
 
 For when I need to explain something with mathematics:
 
 ```latex
-$$E = mc^2$$
+$$E = mc^$$
 ```
 
-### Alert boxes
+ Alert boxes
 
 ```markdown
 {: .box-note}
-**Note:** This is important to know.
+Note: This is important to know.
 
 {: .box-warning}  
-**Warning:** This could break things.
+Warning: This could break things.
 
 {: .box-error}
-**Error:** Something went wrong.
+Error: Something went wrong.
 
 {: .box-success}
-**Success:** Everything worked perfectly.
+Success: Everything worked perfectly.
 ```
 
-### Centered images
+ Centered images
 
 ```markdown
 ![Description](/assets/img/image.jpg){: .mx-auto.d-block :}
 ```
 
-## SEO and analytics
+ SEO and analytics
 
 I like to know who reads the blog:
 
-- **Structured data** - So Google better understands the articles
-- **Open Graph** - So posts look good when shared on social media
-- **Twitter Cards** - For nice Twitter sharing previews
-- **Automatic sitemap** - Generated automatically
-- **RSS feed** - For those who follow blogs the classic way
+- Structured data - So Google better understands the articles
+- Open Graph - So posts look good when shared on social media
+- Twitter Cards - For nice Twitter sharing previews
+- Automatic sitemap - Generated automatically
+- RSS feed - For those who follow blogs the classic way
 
-### Analytics I use
+ Analytics I use
 
-- **Google Analytics 4** - To understand where traffic comes from
-- **Cloudflare Analytics** - Performance metrics
-- **Reading time** - To measure engagement
-- **Social sharing** - To see what gets shared most
+- Google Analytics  - To understand where traffic comes from
+- Cloudflare Analytics - Performance metrics
+- Reading time - To measure engagement
+- Social sharing - To see what gets shared most
 
-## Performance optimization
+ Performance optimization
 
-### Build optimization
+ Build optimization
 
-- **Image compression** - Automatically converted to WebP format
-- **Minified CSS** - Everything compressed for fast loading
-- **Smart caching** - Static resources cache efficiently
-- **Lazy loading** - Images load when you need them
+- Image compression - Automatically converted to WebP format
+- Minified CSS - Everything compressed for fast loading
+- Smart caching - Static resources cache efficiently
+- Lazy loading - Images load when you need them
 
-### Hosting
+ Hosting
 
-- **Static hosting** - All HTML pre-generated
-- **CDN** - Served from multiple locations
-- **Gzip compression** - Everything compressed
-- **HTTP/2** - Modern protocol support
+- Static hosting - All HTML pre-generated
+- CDN - Served from multiple locations
+- Gzip compression - Everything compressed
+- HTTP/ - Modern protocol support
 
-## Theme customization
+ Theme customization
 
 ```scss
 // Custom variables
-$primary-color: #0085a1;
-$navbar-border-col: #eaeaea;
-$footer-col: #404040;
+$primary-color: a;
+$navbar-border-col: eaeaea;
+$footer-col: ;
 
 // Custom components I added
 .custom-box {
-  border-left: 4px solid $primary-color;
-  padding: 1rem;
-  margin: 1rem 0;
+  border-left: px solid $primary-color;
+  padding: rem;
+  margin: rem ;
 }
 ```
 
 To customize further:
 
-- **Layouts** in `_layouts/` - To change page structure
-- **Includes** in `_includes/` - To add components
-- **Navigation** in `_data/navigation.yml` - For the menu
-- **Styles** in `assets/css/` - For colors and typography
+- Layouts in `_layouts/` - To change page structure
+- Includes in `_includes/` - To add components
+- Navigation in `_data/navigation.yml` - For the menu
+- Styles in `assets/css/` - For colors and typography
 
-## What I write about
+ What I write about
 
-### Topics I cover
+ Topics I cover
 
-- **DevOps** - CI/CD, automation, tools I use daily
-- **SRE** - Monitoring, incident response, reliability engineering
-- **Cloud** - AWS, containers, orchestration
-- **Linux** - Administration, troubleshooting, scripting
-- **Development** - Best practices, architecture, things I'm learning
+- DevOps - CI/CD, automation, tools I use daily
+- SRE - Monitoring, incident response, reliability engineering
+- Cloud - AWS, containers, orchestration
+- Linux - Administration, troubleshooting, scripting
+- Development - Best practices, architecture, things I'm learning
 
-### Post frequency
+ Post frequency
 
-- **Regular posts** - I try to write 2-3 times per month
-- **Technical tutorials** - Step-by-step guides when I learn something new
-- **Reflections** - Analysis of trends or things that catch my attention
-- **Personal projects** - My homelab and experiments
+- Regular posts - I try to write - times per month
+- Technical tutorials - Step-by-step guides when I learn something new
+- Reflections - Analysis of trends or things that catch my attention
+- Personal projects - My homelab and experiments
 
-## Contributing
+ Contributing
 
-1. Fork the repository
-2. Create a branch for your contribution
-3. Write following the blog's style
-4. Test locally with Jekyll
-5. Submit a pull request
-6. I'll review the content and publish it
+. Fork the repository
+. Create a branch for your contribution
+. Write following the blog's style
+. Test locally with Jekyll
+. Submit a pull request
+. I'll review the content and publish it
 
-### Writing guidelines
+ Writing guidelines
 
-- **Technical accuracy** - All code and commands must work
-- **SEO friendly** - Descriptive titles and meta descriptions
-- **Images** - Always with alt text for accessibility
-- **Clean code** - Proper syntax highlighting
-- **Accessible** - Readable on any device
+- Technical accuracy - All code and commands must work
+- SEO friendly - Descriptive titles and meta descriptions
+- Images - Always with alt text for accessibility
+- Clean code - Proper syntax highlighting
+- Accessible - Readable on any device
 
-## Local development URLs
+ Local development URLs
 
 When running locally with `make up-blog`:
 - Blog: http://blog.mlorentedev.test
-- Development server: http://localhost:4000
+- Development server: http://localhost:
 
-Add `127.0.0.1 blog.mlorentedev.test` to your `/etc/hosts` file.
+Add `... blog.mlorentedev.test` to your `/etc/hosts` file.
 
 ---
 

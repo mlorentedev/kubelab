@@ -1,0 +1,8 @@
+services:
+  api:
+    volumes:
+      - ../../../../apps/api/src:/app/src:cached
+    command: ["air", "-c", ".air.toml"]
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL}
+      - DEBUG_MODE=${DEBUG_MODE}

@@ -1,0 +1,65 @@
+http:
+  routers:
+    {% for app in apps %}
+    {{ app.name }}:
+      rule: "Host(`{{ app.host }}`)"
+      entryPoints:
+        {% if DISABLE_HTTPS == 'true' %}
+        - web
+        {% else %}
+        - {{ TRAEFIK_ENTRYPOINT }}
+        {% endif %}
+      {% if app.is_traefik_dashboard is defined and app.is_traefik_dashboard %}
+      service: api@internal
+      {% else %}
+      service: {{ app.name }}
+      {% endif %}
+      middlewares:
+        - crowdsec@file
+        - secure-headers@file
+        - error-pages@file
+        - rate-limit@file
+        {% if app.enable_compress %}
+        - compress@file
+        {% endif %}
+        {% if app.enable_auth %}
+          {% if app.name == 'authelia' %}
+        # Authelia does not need to protect itself with authelia middleware.
+        # It handles its own auth for its UI.
+          {% elif app.auth_level == 'one_factor' %}
+        - authelia@file
+          {% elif app.auth_level == 'two_factor' %}
+        - authelia-2fa@file
+          {% else %}
+        # Default or fallback for enable_auth=true without specific auth_level
+        - basic-auth@file
+          {% endif %}
+        {% endif %}
+      {% if app.is_traefik_dashboard is defined and app.is_traefik_dashboard %}
+    {{ app.name }}-redirect:
+      rule: "Host(`{{ app.host }}`) && Path(`/dashboard`)"
+      entryPoints:
+        {% if DISABLE_HTTPS == 'true' %}
+        - web
+        {% else %}
+        - {{ TRAEFIK_ENTRYPOINT }}
+        {% endif %}
+      middlewares:
+        - dashboard-redirect@file
+      service: api@internal
+    {% endif %}
+    {% endfor %}
+
+  services:
+    {% for app in apps %}
+    {% if not (app.is_traefik_dashboard is defined and app.is_traefik_dashboard) %}
+    {{ app.name }}:
+      loadBalancer:
+        servers:
+          - url: "http://{{ app.backend_host }}:{{ app.port }}"
+        {% if app.health_path %}
+        healthCheck:
+          path: "{{ app.health_path }}"
+        {% endif %}
+    {% endif %}
+    {% endfor %}

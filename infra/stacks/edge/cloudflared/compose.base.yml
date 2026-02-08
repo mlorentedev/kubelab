@@ -1,0 +1,21 @@
+services:
+  cloudflared:
+    image: ${EDGE_CLOUDFLARED_IMAGE}
+    container_name: ${EDGE_CLOUDFLARED_NAME}
+    restart: ${RESTART_POLICY}
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep cloudflared || exit 1"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+    networks:
+      - default
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

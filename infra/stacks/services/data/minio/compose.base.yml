@@ -1,0 +1,50 @@
+services:
+  minio:
+    image: ${APPS_SERVICES_DATA_MINIO_IMAGE}
+    container_name: ${APPS_SERVICES_DATA_MINIO_NAME}
+    command: server /data --console-address ":${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_CONSOLE}"
+    restart: ${GLOBAL_RESTART_POLICY}
+    ports:
+      - "${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_API}:${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_API}"
+      - "${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_CONSOLE}:${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_CONSOLE}"
+    environment:
+      # Root credentials (still needed for admin tasks/emergency access)
+      MINIO_ROOT_USER: ${APPS_SERVICES_DATA_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${APPS_SERVICES_DATA_MINIO_ROOT_PASSWORD}
+
+      # Server Identity
+      MINIO_SERVER_URL: "https://${APPS_SERVICES_DATA_MINIO_DOMAIN}"
+      MINIO_BROWSER_REDIRECT_URL: "https://${APPS_SERVICES_DATA_MINIO_CONSOLE_DOMAIN}"
+
+      # OIDC Configuration (Authelia)
+      MINIO_IDENTITY_OPENID_CONFIG_URL:
+        "https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/.well-known/openid-configuration"
+      MINIO_IDENTITY_OPENID_CLIENT_ID: "minio-oidc"
+      MINIO_IDENTITY_OPENID_CLIENT_SECRET: ${APPS_SERVICES_DATA_MINIO_OIDC_CLIENT_SECRET}
+      MINIO_IDENTITY_OPENID_DISPLAY_NAME: "SSO Login"
+      MINIO_IDENTITY_OPENID_SCOPES: "openid,profile,email,groups"
+      MINIO_IDENTITY_OPENID_REDIRECT_URI: "https://${APPS_SERVICES_DATA_MINIO_CONSOLE_DOMAIN}/oauth_callback"
+
+    extra_hosts:
+      - "${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}:host-gateway"
+
+    volumes:
+      - ../../../../../infra/config/certs/${ENVIRONMENT}/rootCA.pem:/root/.minio/certs/CAs/rootCA.crt:ro
+      - minio_data:/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_API}/minio/health/live"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+
+volumes:
+  minio_data:
+    name: minio_data
+    external: false
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

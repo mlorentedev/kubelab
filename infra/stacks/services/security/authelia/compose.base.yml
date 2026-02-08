@@ -1,0 +1,59 @@
+services:
+  authelia:
+    container_name: ${APPS_SERVICES_SECURITY_AUTHELIA_NAME}
+    image: ${APPS_SERVICES_SECURITY_AUTHELIA_IMAGE}
+    restart: ${RESTART_POLICY}
+    environment:
+      - TZ=${TIMEZONE}
+      - X_AUTHELIA_CONFIG_FILTERS=template
+      - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${APPS_SERVICES_SECURITY_AUTHELIA_OIDC_HMAC_SECRET}
+      - AUTHELIA_SESSION_SECRET=${APPS_SERVICES_SECURITY_AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${APPS_SERVICES_SECURITY_AUTHELIA_STORAGE_ENCRYPTION_KEY}
+      - AUTHELIA_SERVER_ADDRESS=tcp://0.0.0.0:${APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_PORT}
+      - AUTHELIA_SESSION_REDIS_HOST=${APPS_SERVICES_SECURITY_AUTHELIA_NAME}-redis
+    volumes:
+      - ../../../../config/authelia/generated/${ENVIRONMENT}/configuration.yml:/config/configuration.yml:ro
+      - ../../../../config/authelia/generated/${ENVIRONMENT}/users_database.yml:/config/users_database.yml:ro
+      - ../../../../config/secrets/${ENVIRONMENT}.oidc-jwks.pem:/config/secrets/oidc-jwks.pem:ro
+      - authelia_data:/config/data
+    networks:
+      - default
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - >-
+          http://localhost:${APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_PORT}${APPS_SERVICES_SECURITY_AUTHELIA_HEALTH_PATH}
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+    depends_on:
+      authelia-redis:
+        condition: service_healthy
+
+  authelia-redis:
+    container_name: ${APPS_SERVICES_SECURITY_AUTHELIA_NAME}-redis
+    image: ${APPS_SERVICES_SECURITY_AUTHELIA_REDIS_IMAGE}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  authelia_data:
+  redis_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

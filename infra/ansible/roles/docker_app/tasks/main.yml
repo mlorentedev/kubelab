@@ -1,0 +1,61 @@
+---
+- name: Set application deployment paths
+  set_fact:
+    app_local_path: "{{ apps_local }}/{{ app_name }}"
+    app_remote_path: "{{ apps_remote }}/{{ app_name }}"
+    app_compose_file: "{{ app_local_path }}/docker-compose.{{ environment }}.yml"
+    app_env_file: "{{ app_local_path }}/.env.{{ environment }}"
+
+- name: Display application deployment info
+  debug:
+    msg:
+      - "🚀 Deploying application: {{ app_name }}"
+      - "📂 Local path: {{ app_local_path }}"
+      - "📂 Remote path: {{ app_remote_path }}"
+
+- name: Ensure application directory exists on remote host
+  file:
+    path: "{{ app_remote_path }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Copy application compose and environment files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  loop:
+    - { src: "{{ app_compose_file }}", dest: "{{ app_remote_path }}/docker-compose.yml" }
+    - { src: "{{ app_env_file }}", dest: "{{ app_remote_path }}/.env" }
+  ignore_errors: true
+
+- name: Synchronize additional application files
+  copy:
+    src: "{{ app_local_path }}/"
+    dest: "{{ app_remote_path }}/"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: preserve
+  ignore_errors: true
+
+- name: "Deploy or update {{ app_name }} stack"
+  community.docker.docker_compose:
+    project_src: "{{ app_remote_path }}"
+    pull: yes
+    state: present
+    restarted: yes
+  environment:
+    DOMAIN: "{{ domain }}"
+  register: app_start_result
+
+- name: Wait for application startup
+  pause:
+    seconds: 10
+
+- name: Collect application deployment result
+  set_fact:
+    app_deploy_status: "{{ '✅' if app_start_result is succeeded else '⚠️' }}"

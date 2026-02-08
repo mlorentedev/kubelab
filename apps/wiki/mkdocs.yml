@@ -1,160 +1,123 @@
-site_name: Wiki of mlorente.dev
-site_url: http://wiki.mlorente.dev
-docs_dir: docs
-use_directory_urls: true
+site_name: "CubeLab Wiki (DEV)"
+site_description: "Development documentation for mlorente.dev"
+site_author: "Manu Lorente"
+site_url: "https://wiki.cubelab.test"
 
-nav:
-  - Home: index.md
-  - Applications:
-    - apps/index.md
-    - 1.1 API: apps/api/index.md
-    - 1.2 Web: apps/web/index.md
-    - 1.3 Blog: apps/blog/index.md
-    - 1.4 Wiki: apps/wiki/index.md
-    - 1.5 Portainer: apps/portainer/index.md
-    - 1.6 Grafana: apps/grafana/index.md
-    - 1.7 n8n: apps/n8n/index.md
-    - 1.8 Uptime Kuma: apps/uptime/index.md
-    - 1.9 Loki: apps/loki/index.md
-    - 1.10 MinIO: apps/minio/index.md
-  - Infrastructure:
-    - infra/index.md
-    - 2.1 Traefik: infra/traefik/index.md
-    - 2.2 Nginx: infra/nginx/index.md
-    - 2.3 Ansible: infra/ansible/index.md
-  - Scripts:
-    - scripts/index.md
-  - Guides:
-    - guides/index.md
-    - 4.1 HOW-TO: guides/HOW-TO/index.md
-    - 4.2 Architecture: guides/ARCHITECTURE-AND-DECISIONS/index.md
-    - 4.3 CI/CD: guides/CI-CD/index.md
-    - 4.4 Deployment: guides/DEPLOYMENT/index.md
-    - 4.5 Troubleshooting: guides/TROUBLESHOOTING/index.md
-    - 4.6 Contributing: guides/CONTRIBUTING/index.md
-    - 4.7 Versioning: guides/VERSIONING/index.md
-    - 4.8 CubeLab: guides/CUBELAB/index.md
-    - 4.9 Wiki Management: guides/WIKI/index.md
-    - 4.10 Makefile: guides/MAKEFILE/index.md
+repo_name: "mlorentedev/mlorente.dev"
+repo_url: "https://github.com/mlorentedev/mlorente.dev"
+edit_uri: "https://github.com/mlorentedev/mlorente.dev/edit/dev/apps/wiki/docs/"
+
+# Copyright footer
+copyright: "Copyright &copy; 2025 Manu Lorente - Development"
 
 theme:
-  name: material
-  language: en
-  custom_dir: docs/overrides
-  logo: assets/logo.svg
-  favicon: assets/favicon.svg
-  font:
-    text: Inter
-    code: JetBrains Mono
-  palette:
-    scheme: default
-    primary: teal
-    accent: cyan
-  features:
-    - navigation.instant
-    - navigation.tracking
-    - navigation.sections
-    - navigation.indexes
-    - navigation.top
-    - search.suggest
-    - search.highlight
-    - content.code.copy
-    - content.code.select
+    name: material
+    custom_dir: generated_docs/overrides
 
-extra_javascript:
-  - assets/navigation.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+    # Branding
+    logo: "assets/logo.svg"
+    favicon: "assets/favicon.ico"
 
-extra_css:
-  - assets/minimal.css
+    # Color Palette (Dark/Light toggle)
+    palette:
+      # Dark mode (Default)
+      - scheme: slate
+        primary: indigo
+        accent: indigo
+        toggle:
+          icon: material/brightness-4
+          name: Switch to light mode
+      # Light mode
+      - scheme: default
+        primary: indigo
+        accent: indigo
+        toggle:
+          icon: material/brightness-7
+          name: Switch to dark mode
 
-extra:
-  homepage: http://wiki.mlorentedev.test
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/mlorente
-      name: GitHub Profile
-    - icon: fontawesome/brands/linkedin
-      link: https://linkedin.com/in/manulorente
-      name: LinkedIn Profile
-    - icon: fontawesome/solid/globe
-      link: https://mlorente.dev
-      name: Portfolio Website
-  version:
-    provider: mike
-    default: latest
-  status:
-    new: Recently added
-    deprecated: Deprecated
+    # Typography (Matching Web App)
+    font:
+      text: Roboto
+      code: JetBrains Mono
 
+    # User Interface Features
+    features:
+      - navigation.instant      # SPA-like feeling (no reload)
+      - navigation.tracking     # Update URL on scroll
+      - navigation.tabs         # Top level tabs
+      - navigation.tabs.sticky  # Tabs stay visible
+      - navigation.sections     # Collapsible sections
+      - navigation.expand       # Expand menu
+      - navigation.top          # Back to top button
+      - navigation.path         # Breadcrumbs
+      - navigation.footer       # Next/Prev links
+      - search.suggest          # Search autocomplete
+      - search.highlight        # Highlight search results
+      - search.share            # Share search results
+      - content.code.copy       # Copy code button
+      - content.action.edit     # Edit on GitHub button
+      - content.action.view     # View on GitHub button
+
+# Plugins
 plugins:
-  - search:
-      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
-      lang: 
-        - es
-        - en
-  - minify:
-      minify_html: true
-      minify_css: true
-      minify_js: true
-      htmlmin_opts:
-        remove_comments: true
-        remove_empty_space: true
-        reduce_boolean_attributes: true
-        remove_optional_attribute_quotes: true
-  - include-markdown:
-      preserve_includer_indent: true
-      dedent: false
-      trailing_newlines: true
-      comments: true
-  - glightbox:
-      touchNavigation: true
-      loop: false
-      effect: zoom
-      slide_effect: slide
-      width: 100%
-      height: auto
-      zoomable: true
-      draggable: true
-      auto_caption: true
-      caption_position: bottom
-      background: none
-      shadow: true
-      manual: false
-  - section-index
+  - search
+  # - glightbox:                # Image zooming
+  #     touchNavigation: true
+  #     loop: false
+  #     effect: zoom
+  # - minify:                   # Minify HTML/JS/CSS
+  #     minify_html: true
+  # - git-revision-date-localized:
+  #     enable_creation_date: true
+  #     type: timeago
 
+# Markdown Extensions
 markdown_extensions:
-  - toc:
-      permalink: true
-      permalink_title: Enlace permanente
-  - tables
-  - fenced_code
+  # Standard
+  - abbr
   - admonition
-  - footnotes
   - attr_list
   - def_list
+  - footnotes
+  - meta
   - md_in_html
-  - abbr
-  - pymdownx.details
-  - pymdownx.superfences:
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # Python Markdown Extensions (pymdownx)
+  # - pymdownx.arithmatex:      # Math support (LaTeX)
+  #     generic: true
+  # - pymdownx.betterem:        # Better bold/italic
+  #     smart_enable: all
+  # - pymdownx.caret
+  # - pymdownx.details          # Collapsible details/summaries
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  # - pymdownx.highlight:       # Syntax highlighting
+  #     anchor_linenums: true
+  #     line_spans: __span
+  #     pygments_lang_class: true
+  # - pymdownx.inlinehilite
+  # - pymdownx.keys
+  # - pymdownx.mark
+  # - pymdownx.smartsymbols
+  # - pymdownx.snippets         # Embed files
+  - pymdownx.superfences:     # Mermaid & nested blocks
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.tabbed:
+  - pymdownx.tabbed:          # Tabs
       alternate_style: true
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.betterem
-  - pymdownx.caret
-  - pymdownx.mark
-  - pymdownx.tilde
-  - pymdownx.keys
-  - pymdownx.tasklist:
-      custom_checkbox: true
+  # - pymdownx.tasklist:
+  #     custom_checkbox: true
+  # - pymdownx.tilde
+
+# Extra CSS/JS (Generated/Copied by Toolkit)
+extra_css:
+  - assets/extra.css
+
+extra_javascript:
+  - assets/extra.js

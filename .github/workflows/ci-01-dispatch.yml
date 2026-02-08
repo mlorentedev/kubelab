@@ -31,28 +31,32 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@v3
         with:
-          base: ${{ github.event.before != '0000000000000000000000000000000000000000' && github.event.before || github.sha }}
+          base: >-
+            ${{ github.event.before != '0000000000000000000000000000000000000000'
+            && github.event.before || github.sha }}
           filters: |
             blog:
               - 'apps/blog/jekyll-site/**'
               - 'apps/blog/Dockerfile'
-              - 'apps/blog/docker-compose*.yml'
+              - 'infra/stacks/apps/blog/**'
             api:
               - 'apps/api/src/**'
               - 'apps/api/go.mod'
               - 'apps/api/go.sum'
               - 'apps/api/Dockerfile'
-              - 'apps/api/docker-compose*.yml'
+              - 'infra/stacks/apps/api/**'
             web:
               - 'apps/web/astro-site/**'
               - 'apps/web/Dockerfile'
-              - 'apps/web/docker-compose*.yml'
+              - 'infra/stacks/apps/web/**'
             wiki:
               - 'apps/wiki/**'
               - 'apps/wiki/Dockerfile'
-              - 'apps/wiki/docker-compose*.yml'
+              - 'infra/stacks/apps/wiki/**'
               - 'apps/**/README.md'
               - 'infra/**/README.md'
+              - 'infra/stacks/services/**'
+              - 'edge/**'
               - 'README.md'
 
       - name: Check if any app changed
@@ -63,7 +67,8 @@ jobs:
           WEB_CHANGED: ${{ steps.filter.outputs.web }}
           WIKI_CHANGED: ${{ steps.filter.outputs.wiki }}
         run: |
-          if [[ "$BLOG_CHANGED" == "true" || "$API_CHANGED" == "true" || "$WEB_CHANGED" == "true" || "$WIKI_CHANGED" == "true" ]]; then
+          if [[ "$BLOG_CHANGED" == "true" || "$API_CHANGED" == "true" || \
+                "$WEB_CHANGED" == "true" || "$WIKI_CHANGED" == "true" ]]; then
             echo "any_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "any_changed=false" >> "$GITHUB_OUTPUT"

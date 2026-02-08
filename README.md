@@ -1,225 +1,409 @@
-# mlorente.dev
+ CubeLab
 
-Personal ecosystem monorepo for [mlorente.dev](https://mlorente.dev) - portfolio, blog, API and infrastructure.
+Personal platform monorepo - portfolio, blog, API, and self-hosted services.
 
-This is my personal project where I keep everything needed to run mlorente.dev. It's designed as a monorepo that includes everything from the frontend to the infrastructure. I've organized it this way to have everything under control and be able to deploy easily.
+Live: [cubelab.cloud](https://cubelab.cloud)
 
-## What's included
+ Overview
 
-- **Web** (Astro) - Personal portfolio website
-- **Blog** (Jekyll) - Technical writing and articles
-- **API** (Go) - Backend services and REST API
-- **Wiki** (MkDocs) - This documentation you're reading
-- **Infrastructure** - Docker, Traefik, Nginx, monitoring
-- **Automation** - n8n workflows, GitHub Actions, Ansible
+This monorepo contains everything needed to run the CubeLab platform across three environments:
+- Development (local) - For development and testing
+- Staging (CubeLab homelab) - Pre-production on Raspberry Pi cluster
+- Production (Hetzner VPS) - Live public platform
 
-## Quick start
+ Tech Stack
 
-```bash
-# Clone and setup
-git clone <repo-url>
-make install-precommit-hooks
+- Frontend: Astro + Tailwind CSS + HTMX
+- Backend: Go (REST API)
+- Blog: Jekyll (Ruby)
+- Wiki: MkDocs Material (Python)
+- Infrastructure: Docker Compose, Traefik, Nginx, Ansible, Terraform
+- Automation: Python CLI toolkit (Typer + Rich)
 
-# Start everything locally
-make up
+ Quick Start
 
-# View logs
-make logs
+ Prerequisites
 
-# Stop everything
-make down
-```
+- Docker & Docker Compose (v+)
+- Python .+ with Poetry
+- Make (for shortcuts)
+- Git
 
-## Project structure
-
-```
-mlorente.dev/
-├── apps/                   # Applications
-│   ├── api/               # Go REST API
-│   ├── blog/              # Jekyll blog
-│   ├── web/               # Astro frontend
-│   └── wiki/              # MkDocs documentation
-├── infra/                 # Infrastructure configuration
-│   ├── traefik/           # Reverse proxy
-│   ├── nginx/             # Web server configs
-│   ├── ansible/           # Deployment automation
-│   └── monitoring/        # Grafana, Prometheus, etc.
-├── scripts/               # Automation scripts
-├── docs/                  # Documentation guides
-└── Makefile              # Command automation
-```
-
-## Requirements
-
-- Docker & Docker Compose
-- Make
-- Node.js 20+ (for web apps)
-- Go 1.21+ (for API)
-- Ruby 3.3+ (for blog)
-- Python 3.8+ (for deployment)
-
-## Available commands
-
-The Makefile provides all the commands you need to work with this project. Here are the most important ones:
-
-### Setup and installation
+ Setup
 
 ```bash
-make check                     # Check prerequisites
-make install-precommit-hooks   # Set up development tools
-make install-node             # Install Node.js dependencies for web
-make install-ruby             # Install Ruby dependencies for blog
-make install-ansible          # Install deployment tools
+ Clone repository
+git clone https://github.com/mlorente/cubelab.cloud
+cd cubelab.cloud
+
+ Install Poetry (if not installed)
+curl -sSL https://install.python-poetry.org | python -
+
+ Install toolkit dependencies
+poetry install
+
+ Initialize environment files from examples
+poetry run toolkit tools env-init dev
+
+ Start development stack
+make dev
 ```
 
-### Development
+ Access Services
 
-Start individual services:
+Once running, services are available at:
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Web | http://localhost: | Personal portfolio (Astro) |
+| Blog | http://localhost: | Technical blog (Jekyll) |
+| API | http://localhost: | REST API (Go) |
+| Wiki | http://localhost: | Documentation (MkDocs) |
+| Traefik | http://localhost: | Reverse proxy dashboard |
+
+ Project Structure
+
+```
+cubelab.cloud/
+├── apps/                     Application source code
+│   ├── api/                  Go REST API
+│   ├── blog/                 Jekyll blog
+│   ├── web/                  Astro website
+│   ├── wiki/                 MkDocs documentation
+│   ├── nn/                  nn workflow definitions
+│   └── workers/              Background workers
+│
+├── edge/                     Network edge services
+│   ├── traefik/              Reverse proxy
+│   ├── nginx/                Cache + error pages
+│   └── dns-gateway/          CoreDNS + WireGuard (staging)
+│
+├── infra/
+│   ├── stacks/              Docker Compose deployments
+│   │   ├── apps/            App deployment configs
+│   │   ├── services/        Third-party services (categorized)
+│   │   │   ├── core/        portainer, gitea, vaultwarden
+│   │   │   ├── observability/   grafana, loki, uptime
+│   │   │   ├── data/        docmost, minio
+│   │   │   ├── security/    authelia
+│   │   │   ├── misc/        calcom, immich
+│   │   │   └── ai/          ollama
+│   │   └── edge/            traefik, nginx, dns-gateway
+│   ├── ansible/             Server provisioning
+│   ├── terraform/           DNS management
+│   └── config/              Global configuration
+│
+├── toolkit/                  Python CLI (main tool)
+│   ├── cli/                  Command definitions
+│   ├── core/                 Core functionality
+│   ├── features/             Feature implementations
+│   └── config/               Toolkit configuration
+│
+├── docs/                     Documentation
+│   ├── ARCHITECTURE.md       System architecture
+│   ├── TOOLKIT.md            Toolkit usage guide
+│   ├── HOW-TO.md             Quick command reference
+│   ├── CI-CD.md              CI/CD documentation
+│   └── ...
+│
+├── Makefile                  Development shortcuts
+├── pyproject.toml            Python/Poetry configuration
+└── CONTRIBUTING.md           Contributing guidelines
+```
+
+ Toolkit CLI
+
+The `toolkit` CLI is the primary tool for managing the platform:
+
 ```bash
-make up-traefik               # Start reverse proxy (required first)
-make up-api                   # Start Go API
-make up-web                   # Start Astro frontend
-make up-blog                  # Start Jekyll blog
-make up-wiki                  # Start documentation wiki
-make up-n8n                   # Start automation workflows
-make up-grafana               # Start monitoring dashboard
+ Alias for convenience (add to ~/.bashrc or ~/.zshrc)
+alias tk='poetry run toolkit'
+
+ Apps and services management
+tk services up web               Start web app
+tk services logs api --follow    View API logs
+tk services build blog           Build blog
+tk services down wiki            Stop wiki
+tk services list                 List all services by category
+tk services up grafana           Start Grafana
+tk services logs portainer       View Portainer logs
+
+ Configuration
+tk config generate traefik dev    Generate Traefik configs
+
+ Environment tools
+tk tools env-validate        Validate all .env files
+tk tools env-examples dev    Generate .env..example files
+
+ Deployment
+ENVIRONMENT=staging tk deployment deploy
 ```
 
-Start everything at once:
-```bash
-make up                       # Start all services
-make down                     # Stop all services
-```
+See `docs/TOOLKIT.md` for complete documentation.
 
-Each service will be available at its local domain (add these to your `/etc/hosts`):
-- API: http://api.mlorentedev.test
-- Web: http://mlorentedev.test  
-- Blog: http://blog.mlorentedev.test
-- Wiki: http://wiki.mlorentedev.test
-- Traefik: http://traefik.mlorentedev.test
-- Grafana: http://grafana.mlorentedev.test
+ Environments
 
-### Building and publishing
+ Development (local)
+- Purpose: Local development and testing
+- Access: localhost
+- Services: Basic stack (Traefik HTTP only)
 
-Build Docker images:
-```bash
-make build-image APP=api      # Build specific app image
-make build-all-images         # Build all application images
-```
+ Staging (CubeLab homelab)
+- Infrastructure: Raspberry Pi cluster
+- Access: VPN (WireGuard) + `.staging.cubelab.cloud`
+- Services: Full production-like stack
+- Purpose: Pre-production testing
 
-Publish to registry:
-```bash
-make push-app APP=api         # Push specific app
-make push-all                 # Push all apps
-make push-app-tag APP=api TAG=v1.0.0    # Push with specific tag
-```
+ Production (Hetzner VPS)
+- Infrastructure: Cloud VPS
+- Access: Public `.cubelab.cloud`
+- Services: Full stack with HTTPS
+- Purpose: Live production
 
-### Deployment
+ Development Workflow
 
-```bash
-make setup ENV=production     # Initial server setup
-make deploy ENV=staging       # Deploy to staging
-make deploy ENV=production    # Deploy to production
-make status ENV=production    # Check deployment status
-```
+ Working on Applications
 
-### Utilities
-
-```bash
-make generate-config          # Generate all configuration files
-make wiki-sync               # Generate documentation wiki
-make validate-yaml           # Validate YAML files
-make setup-secrets           # Configure GitHub secrets
-make list-secrets            # List GitHub secrets
-```
-
-## How deployment works
-
-Images are built automatically when you push changes to the repository via GitHub Actions. However, deployment is manual - you run `make deploy ENV=production` when you're ready. This gives you control over when changes go live.
-
-The deployment process:
-1. Code changes trigger GitHub Actions
-2. Actions build and push Docker images
-3. You manually deploy with `make deploy ENV=production`
-4. Ansible handles the deployment to servers
-
-## Local development workflow
-
-1. **First time setup:**
+. Edit source code in `apps/{app-name}/`
+. Copy environment file for Docker build:
    ```bash
-   git clone <repo-url>
-   make install-precommit-hooks
-   make up
+   cp infra/stacks/apps/web/.env.dev apps/web/.env.dev
+   ```
+. Build and test:
+   ```bash
+   tk services build web
+   tk services up web
+   tk services logs web
    ```
 
-2. **Daily development:**
-   ```bash
-   # Start services you need
-   make up-traefik up-api up-web
-   
-   # Make your changes
-   # Test locally
-   
-   # Stop when done
-   make down
-   ```
+ Working on Services
 
-3. **Before pushing changes:**
-   ```bash
-   make validate-yaml           # Check YAML files
-   git add . && git commit      # Pre-commit hooks will run
-   git push                     # Triggers CI/CD
-   ```
-
-## Environment files
-
-Each service uses an `.env` file for configuration. Examples are provided:
-- Copy `.env.example` to `.env` for each service
-- Set `ENVIRONMENT=local` for development
-- Update values as needed for your setup
-
-## Monitoring and debugging
-
-View logs:
 ```bash
-make logs                     # All services
-make logs APP=api            # Specific service
+ Navigate to service
+cd infra/stacks/services/observability/grafana
+
+ Update configuration
+vim compose.dev.yml
+vim .env.dev
+
+ Test
+tk services up grafana
+tk services logs grafana
 ```
 
-Check service health:
+ Working on Toolkit
+
 ```bash
-make status                  # Local status
-make status ENV=production   # Production status
+ Edit Python code
+cd toolkit/
+vim cli/services.py
+
+ Format and type check
+make format
+make type
+
+ Test
+poetry run pytest
 ```
 
-Access monitoring:
-- Traefik dashboard: http://traefik.mlorentedev.test/dashboard
-- Grafana: http://grafana.mlorentedev.test
-- Container management: http://portainer.mlorentedev.test
+ Pre-commit Hooks
 
-## Documentation
+Install pre-commit hooks for automated local validation:
 
-This wiki contains detailed documentation for all aspects of the project:
+```bash
+ Install hooks (first time only)
+poetry run pre-commit install
 
-1. **[Applications](apps/)** - Documentation for each app (API, web, blog, wiki)
-2. **[Infrastructure](infra/)** - Server setup, networking, monitoring
-3. **[Scripts](scripts/)** - Automation scripts and utilities  
-4. **[Guides](guides/)** - Step-by-step guides and troubleshooting
+ Run manually on all files
+poetry run pre-commit run --all-files
+```
 
-## Contributing
+Hooks run automatically before each commit:
+- Secret detection with gitleaks
+- Python linting (black, ruff, mypy)
+- YAML/JSON validation
+- Path consistency checks
+- Environment file protection
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Set up development: `make install-precommit-hooks && make up`
-4. Make changes and test locally
-5. Submit a pull request
+ Deployment
 
-See the [Contributing Guide](guides/CONTRIBUTING/) for detailed guidelines.
+ CI/CD Pipeline
 
-## License
+GitHub Actions automatically:
+. Detects changed applications
+. Runs security scans (secrets, SAST, dependencies)
+. Calculates semantic version
+. Builds multi-arch Docker images
+. Scans images with Trivy
+. Pushes to Docker Hub
+. Creates git tags
 
-MIT - see [LICENSE](LICENSE) file for details.
+See `docs/CI-CD.md` for complete pipeline documentation.
+
+ Manual Deployment
+
+```bash
+ Deploy to staging
+make deploy-staging
+
+ Deploy to production
+make deploy-prod
+
+ Check deployment status
+tk deployment status
+```
+
+ Documentation
+
+| Document | Description |
+|----------|-------------|
+| ARCHITECTURE.md | System architecture and design principles (planned) |
+| TOOLKIT.md | Complete toolkit CLI guide |
+| HOW-TO.md | Quick command reference |
+| CONTRIBUTING.md | How to contribute |
+| CI-CD.md | CI/CD pipeline documentation |
+| CUBELAB.md | Homelab (staging) setup |
+| TROUBLESHOOTING.md | Common issues and solutions |
+| VERSIONING.md | Versioning strategy |
+
+ Makefile Shortcuts
+
+The Makefile provides convenience commands:
+
+```bash
+ Setup
+make setup                   Complete first-time setup
+
+ Development
+make dev                     Start core services (Traefik + apps)
+make up                      Start everything
+make down                    Stop everything
+make logs                    View all logs
+
+ Apps
+make app NAME=web ACTION=up      Start specific app
+make app NAME=api ACTION=logs    View specific app logs
+
+ Validation
+make validate                Validate all configs
+make type                    Run mypy type checking
+make format                  Format Python code
+
+ Deployment
+make deploy-staging          Deploy to staging
+make deploy-prod             Deploy to production
+```
+
+ Testing
+
+```bash
+ Validate environment files
+tk tools env-validate
+
+ Test builds
+tk services build web
+tk services build api
+
+ Run toolkit tests
+poetry run pytest
+
+ Type checking
+make type
+```
+
+ Docker
+
+All applications and services run in Docker containers:
+
+- Multi-stage builds for efficiency
+- Non-root users for security
+- Health checks for reliability
+- Proper networking with Docker networks
+- Volume management for persistence
+
+ Services
+
+ Core
+- Gitea: Self-hosted Git (GitHub alternative)
+- Portainer: Container management UI
+- Vaultwarden: Password manager
+
+ Observability
+- Grafana: Metrics visualization
+- Loki: Log aggregation
+- Uptime Kuma: Uptime monitoring
+
+ Data
+- Docmost: Team documentation
+- MinIO: S-compatible object storage
+
+ Security
+- Authelia: SSO and FA
+
+ Miscellaneous
+- Cal.com: Scheduling
+- Immich: Photo management
+
+ AI
+- Ollama: Local LLM runtime
+
+ Security
+
+ Automated Security Scanning
+
+Pre-commit Hooks (Local):
+- Secret detection with gitleaks
+- Path validation and consistency checks
+- Prevents committing real environment files
+- Python linting and type checking
+
+CI/CD Pipeline:
+- Secret scanning: gitleaks on every build
+- SAST: bandit (Python), gosec (Go)
+- Dependency scanning: pip-audit, govulncheck, npm audit
+- Container scanning: Trivy scans Docker images
+- Results uploaded to GitHub Security tab
+
+ Infrastructure Security
+
+- HTTPS everywhere (Let's Encrypt in staging/prod)
+- Security headers via Traefik middleware
+- HTTP Basic Auth for sensitive dashboards
+- Secrets managed via .env files (gitignored)
+- WireGuard VPN for staging access
+- Environment templates sanitized (secrets → `CHANGE_ME`)
+- Non-root containers with health checks
+- Regular vulnerability scanning in CI/CD
+
+ Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Development setup
+- Code standards
+- Pull request process
+- Testing guidelines
+
+ License
+
+See [LICENSE](LICENSE) for details.
+
+ Author
+
+Manuel Lorente
+- Website: [cubelab.cloud](https://cubelab.cloud)
+- GitHub: [@mlorente](https://github.com/mlorente)
+
+ Acknowledgments
+
+Built with:
+- [Astro](https://astro.build/) - Web framework
+- [Jekyll](https://jekyllrb.com/) - Blog generator
+- [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) - Documentation
+- [Traefik](https://traefik.io/) - Reverse proxy
+- [Docker](https://www.docker.com/) - Containerization
+- [Typer](https://typer.tiangolo.com/) - CLI framework
+- [Rich](https://rich.readthedocs.io/) - Terminal formatting
 
 ---
 
-Built with Docker, automated with GitHub Actions, deployed with Ansible.
+Status: Active Development | Version: See git tags | Updated: November 

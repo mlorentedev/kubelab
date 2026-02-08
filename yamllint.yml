@@ -1,0 +1,13 @@
+extends: default
+
+rules:
+  line-length:
+    max:
+    level: error
+
+  indentation:
+    spaces: consistent   allow tabs but prevent mixing tabs and spaces
+    indent-sequences: true
+
+  trailing-spaces: enable   no trailing spaces
+  new-line-at-end-of-file: enable   file must end with a newline

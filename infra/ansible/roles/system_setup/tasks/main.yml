@@ -1,0 +1,103 @@
+---
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: true
+
+- name: Install essential packages
+  apt:
+    name:
+      - curl
+      - wget
+      - unzip
+      - git
+      - htop
+      - vim
+      - jq
+      - python3-pip
+      - software-properties-common
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Configure UFW firewall
+  block:
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+      become: true
+
+    - name: Configure UFW default policies
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+      become: true
+
+    - name: Allow essential ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '22'   # SSH
+        - '80'   # HTTP
+        - '443'  # HTTPS
+        - '6443' # K3s API (staging only, but won't hurt in prod)
+      become: true
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+      become: true
+      when: firewall_enabled | default(true) | bool
+  tags: [firewall, security]
+
+- name: Install monitoring tools
+  package:
+    name:
+      - htop
+      - iotop
+      - sysstat
+      - net-tools
+      - curl
+      - wget
+      - unzip
+      - jq
+      - ncdu
+    state: present
+
+- name: Setup log rotation for deployment logs
+  copy:
+    content: |
+      {{ deploy_path }}/logs/*.log {
+          daily
+          rotate 30
+          compress
+          delaycompress
+          missingok
+          notifempty
+          sharedscripts
+      }
+    dest: /etc/logrotate.d/mlorente-deployment
+    mode: '0644'
+
+- name: Create deployment user directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - "/home/{{ ansible_user }}/.kube"
+    - "/home/{{ ansible_user }}/.docker"
+  become: true

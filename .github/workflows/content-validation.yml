@@ -3,15 +3,18 @@ name: Validation
 
 on:
   push:
-    branches: [feature/*, hotfix/*]
+    branches: [feature/, hotfix/]
 
 jobs:
   validate-yaml:
     name: Validate YAML files
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install yamllint
         run: pip install yamllint
@@ -23,8 +26,11 @@ jobs:
     name: Validate Makefiles
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Check Makefile syntax
         run: make -n help >/dev/null
@@ -33,22 +39,42 @@ jobs:
     name: Check Prerequisites
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Verify required files exist
         run: |
-          # Check if required Docker files exist
-          for app in api blog web wiki; do
+          # Define app lists as bash arrays
+          APPS_WITH_DOCKERFILES=(api blog web wiki workers)
+          APPS_WITH_COMPOSE=(api blog web wiki workers)
+          ENVIRONMENTS=(dev staging prod)
+
+          # Check if required Dockerfiles exist
+          echo "Validating Dockerfiles..."
+          for app in "${APPS_WITH_DOCKERFILES[@]}"; do
             if [ ! -f "apps/$app/Dockerfile" ]; then
-              echo "Missing Dockerfile for $app"
+              echo "❌ Missing Dockerfile for $app"
               exit 1
             fi
+            echo "✅ apps/$app/Dockerfile"
           done
-          # Check if .env.example files exist
-          for app in api blog grafana loki minio n8n portainer uptime web wiki; do
-            if [ ! -f "apps/$app/.env.example" ]; then
-              echo "Missing .env.example for $app"
-              exit 1
-            fi
+
+          # Check if .env.example files exist for all environments
+          echo ""
+          echo "Validating deployment configs..."
+          for app in "${APPS_WITH_COMPOSE[@]}"; do
+            for env in "${ENVIRONMENTS[@]}"; do
+              env_file="infra/stacks/apps/$app/.env.$env.example"
+              if [ ! -f "$env_file" ]; then
+                echo "❌ Missing $env_file"
+                exit 1
+              fi
+              echo "✅ $env_file"
+            done
           done
+
+          echo ""
+          echo "✅ All prerequisite files validated successfully!"

@@ -1,9 +1,0 @@
-title: Aplicaciones
-nav:
-  - "1. API": api
-  - "2. Blog": blog
-  - "3. Web": web
-  - "4. Wiki": wiki
-  - "5. Monitoring": monitoring
-  - "6. N8N": n8n
-  - "7. Portainer": portainer

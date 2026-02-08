@@ -1,0 +1,4 @@
+services:
+  github-runner:
+    environment:
+      - LOG_LEVEL=debug

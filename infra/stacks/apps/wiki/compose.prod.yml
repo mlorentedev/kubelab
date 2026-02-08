@@ -1,0 +1,7 @@
+services:
+  wiki:
+    build:
+      args:
+        # En producción no montamos volúmenes de código fuente, confiamos en la imagen construida
+        ENVIRONMENT: prod
+    restart: always
