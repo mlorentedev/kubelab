@@ -1,0 +1,52 @@
+ Staging environment overrides for Raspberry Pi Docker Compose
+
+---
+ Infrastructure settings
+infrastructure_type: docker-compose
+use_docker_compose: true
+
+ Performance tuning for Raspberry Pi
+resource_limits:
+  memory_default: {{MEMORY_LIMIT_DEFAULT}}
+  memory_heavy: {{MEMORY_LIMIT_HEAVY}}
+  cpu_default: {{CPU_LIMIT_DEFAULT}}
+  cpu_heavy: {{CPU_LIMIT_HEAVY}}
+
+ DNS gateway integration
+edge_gateway:
+  host: {{EDGE_HOST | default('...')}}
+  wireguard_port:
+  coredns_port:
+
+ Deployment strategy
+deployment_strategy:
+  type: docker_compose
+  compose_override: docker-compose.staging.yml
+
+ Services to deploy in staging
+services_to_deploy: "{{ deployment.staging_services }}"
+
+ Development features
+dev_features:
+  debug_enabled: {{DEBUG_ENABLED}}
+  log_level: {{LOG_LEVEL}}
+  metrics_enabled: true
+  profiling_enabled: true
+
+ Network policies (more permissive for staging)
+network_policies:
+  enabled: false
+  default_deny: false
+
+ Security settings (relaxed for staging)
+security_staging:
+  strict_ssl: false
+  csrf_protection: false
+  rate_limiting_enabled: false
+
+ Backup settings (local only)
+backup_staging:
+  enabled: {{BACKUP_ENABLED}}
+  local_only: true
+  compression: true
+  retention_days:

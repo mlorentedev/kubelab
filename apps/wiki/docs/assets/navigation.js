@@ -1,16 +1,16 @@
-/**
- * Enhanced Navigation and UX for mlorente.dev Wiki
- * Provides smooth navigation, keyboard shortcuts, and mobile optimizations
- */
+/
+  Enhanced Navigation and UX for cubelab.cloud Wiki
+  Provides smooth navigation, keyboard shortcuts, and mobile optimizations
+ /
 
 (function() {
   'use strict';
 
   // Configuration
   const CONFIG = {
-    scrollOffset: 80,
-    animationDuration: 300,
-    mobileBreakpoint: 768
+    scrollOffset: ,
+    animationDuration: ,
+    mobileBreakpoint:
   };
 
   // Utilities
@@ -30,7 +30,7 @@
   // Enhanced scroll behavior
   function enhanceScrolling() {
     // Add smooth scrolling for anchor links
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    document.querySelectorAll('a[href^=""]').forEach(anchor => {
       anchor.addEventListener('click', function(e) {
         e.preventDefault();
         const target = document.querySelector(this.getAttribute('href'));
@@ -59,21 +59,21 @@
       switch(e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          const nextIndex = Math.min(currentIndex + 1, allLinks.length - 1);
+          const nextIndex = Math.min(currentIndex + , allLinks.length - );
           allLinks[nextIndex]?.focus();
           break;
         case 'ArrowUp':
           e.preventDefault();
-          const prevIndex = Math.max(currentIndex - 1, 0);
+          const prevIndex = Math.max(currentIndex - , );
           allLinks[prevIndex]?.focus();
           break;
         case 'Home':
           e.preventDefault();
-          allLinks[0]?.focus();
+          allLinks[]?.focus();
           break;
         case 'End':
           e.preventDefault();
-          allLinks[allLinks.length - 1]?.focus();
+          allLinks[allLinks.length - ]?.focus();
           break;
       }
     });
@@ -95,11 +95,11 @@
         }
       });
     }, {
-      rootMargin: '-20% 0px -80% 0px'
+      rootMargin: '-% px -% px'
     });
 
     // Observe all headings for active navigation updates
-    document.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(heading => {
+    document.querySelectorAll('h, h, h, h, h, h').forEach(heading => {
       if (heading.id) {
         observer.observe(heading);
       }
@@ -116,19 +116,19 @@
 
     if (nav) {
       nav.addEventListener('touchstart', (e) => {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
+        startX = e.touches[].clientX;
+        startY = e.touches[].clientY;
       }, { passive: true });
 
       nav.addEventListener('touchmove', (e) => {
         if (!startX || !startY) return;
 
-        const diffX = e.touches[0].clientX - startX;
-        const diffY = e.touches[0].clientY - startY;
+        const diffX = e.touches[].clientX - startX;
+        const diffY = e.touches[].clientY - startY;
 
         // Horizontal swipe detected
-        if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-          if (diffX > 0) {
+        if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > ) {
+          if (diffX > ) {
             // Swipe right - could expand navigation
             nav.classList.add('md-sidebar--expanded');
           } else {
@@ -145,7 +145,7 @@
     // Optimize viewport for mobile
     const viewport = document.querySelector('meta[name="viewport"]');
     if (viewport) {
-      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+      viewport.setAttribute('content', 'width=device-width, initial-scale=., maximum-scale=., user-scalable=yes');
     }
   }
 
@@ -158,13 +158,13 @@
     const progressBar = document.createElement('div');
     progressBar.style.cssText = `
       position: fixed;
-      top: 0;
-      left: 0;
-      height: 3px;
-      background: linear-gradient(90deg, var(--md-accent-fg-color), var(--md-primary-fg-color));
-      z-index: 9999;
-      transition: width 0.1s ease;
-      width: 0%;
+      top: ;
+      left: ;
+      height: px;
+      background: linear-gradient(deg, var(--md-accent-fg-color), var(--md-primary-fg-color));
+      z-index: ;
+      transition: width .s ease;
+      width: %;
     `;
     document.body.appendChild(progressBar);
 
@@ -172,9 +172,9 @@
     const updateProgress = debounce(() => {
       const scrollTop = window.pageYOffset;
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      const scrollPercent = (scrollTop / docHeight) * 100;
-      progressBar.style.width = Math.min(scrollPercent, 100) + '%';
-    }, 10);
+      const scrollPercent = (scrollTop / docHeight)  ;
+      progressBar.style.width = Math.min(scrollPercent, ) + '%';
+    }, );
 
     window.addEventListener('scroll', updateProgress, { passive: true });
     updateProgress(); // Initial call
@@ -203,21 +203,21 @@
       const hint = document.createElement('div');
       hint.style.cssText = `
         position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: 0.7rem;
+        right: px;
+        top: %;
+        transform: translateY(-%);
+        font-size: .rem;
         color: var(--md-default-fg-color--light);
         pointer-events: none;
-        opacity: 0.7;
+        opacity: .;
       `;
-      hint.textContent = isMobile() ? '🔍' : 'Ctrl+K';
+      hint.textContent = isMobile() ? '' : 'Ctrl+K';
       searchForm.style.position = 'relative';
       searchForm.appendChild(hint);
 
       // Hide hint when typing
       searchInput.addEventListener('input', () => {
-        hint.style.opacity = searchInput.value ? '0' : '0.7';
+        hint.style.opacity = searchInput.value ? '' : '.';
       });
     }
   }
@@ -226,26 +226,26 @@
   function enhanceAccessibility() {
     // Add skip link
     const skipLink = document.createElement('a');
-    skipLink.href = '#main';
+    skipLink.href = 'main';
     skipLink.textContent = 'Ir al contenido principal';
     skipLink.style.cssText = `
       position: absolute;
-      top: -40px;
-      left: 6px;
+      top: -px;
+      left: px;
       background: var(--md-accent-fg-color);
       color: white;
-      padding: 8px;
-      border-radius: 4px;
+      padding: px;
+      border-radius: px;
       text-decoration: none;
-      font-weight: 600;
-      z-index: 10000;
-      transition: top 0.2s ease;
+      font-weight: ;
+      z-index: ;
+      transition: top .s ease;
     `;
     skipLink.addEventListener('focus', () => {
-      skipLink.style.top = '6px';
+      skipLink.style.top = 'px';
     });
     skipLink.addEventListener('blur', () => {
-      skipLink.style.top = '-40px';
+      skipLink.style.top = '-px';
     });
     document.body.insertBefore(skipLink, document.body.firstChild);
 
@@ -261,9 +261,9 @@
       .md-nav__link:focus,
       .md-search__input:focus,
       .md-tabs__link:focus {
-        outline: 2px solid var(--md-accent-fg-color);
-        outline-offset: 2px;
-        border-radius: 4px;
+        outline: px solid var(--md-accent-fg-color);
+        outline-offset: px;
+        border-radius: px;
       }
     `;
     document.head.appendChild(style);
@@ -276,38 +276,38 @@
     button.setAttribute('aria-label', 'Volver arriba');
     button.style.cssText = `
       position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      width: 50px;
-      height: 50px;
+      bottom: rem;
+      right: rem;
+      width: px;
+      height: px;
       background: var(--md-accent-fg-color);
       color: white;
       border: none;
-      border-radius: 50%;
+      border-radius: %;
       cursor: pointer;
-      font-size: 1.2rem;
+      font-size: .rem;
       font-weight: bold;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      z-index: 1000;
+      opacity: ;
+      transform: translateY(px);
+      transition: all .s ease;
+      box-shadow:  px px rgba(,,,.);
+      z-index: ;
     `;
 
     button.addEventListener('click', () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: , behavior: 'smooth' });
     });
 
     // Show/hide based on scroll
     const toggleButton = debounce(() => {
-      if (window.pageYOffset > 300) {
-        button.style.opacity = '1';
-        button.style.transform = 'translateY(0)';
+      if (window.pageYOffset > ) {
+        button.style.opacity = '';
+        button.style.transform = 'translateY()';
       } else {
-        button.style.opacity = '0';
-        button.style.transform = 'translateY(20px)';
+        button.style.opacity = '';
+        button.style.transform = 'translateY(px)';
       }
-    }, 100);
+    }, );
 
     window.addEventListener('scroll', toggleButton, { passive: true });
     document.body.appendChild(button);
@@ -355,7 +355,7 @@
     optimizePerformance();
 
     // Log initialization for debugging
-    console.log('📚 Wiki navigation enhancements loaded');
+    console.log(' Wiki navigation enhancements loaded');
   }
 
   // Wait for DOM to be ready
@@ -367,7 +367,7 @@
 
   // Handle page transitions (for SPA-like behavior)
   window.addEventListener('popstate', () => {
-    setTimeout(init, 100);
+    setTimeout(init, );
   });
 
 })();

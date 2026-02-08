@@ -6,12 +6,12 @@ const twitterUrl = env.RRSS.TWITTER;
 const youtubeUrl = env.RRSS.YOUTUBE;
 ---
 
-<section class="max-w-6xl mx-auto py-4 px-3 sm:px-4 lg:px-6">
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<section class="max-w-xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
     {/* Social Media Card */}
     <div class="bg-white rounded-md shadow overflow-hidden dark:bg-gray-800">
-      <div class="p-4">
-        <div class="flex items-center justify-between mb-3">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-bold text-gray-900 dark:text-white">Mis últimos posts</h2>
           <a
             href={twitterUrl}
@@ -22,13 +22,13 @@ const youtubeUrl = env.RRSS.YOUTUBE;
             @{siteTitle}
           </a>
         </div>
-        <div class="space-y-3">
+        <div class="space-y-4">
           {/* Twitter/X Timeline Embed */}
           <a
             class="twitter-timeline"
-            data-height="300"
+            data-height="400"
             data-theme="light"
-            href={`https://x.com/${siteTitle}}?ref_src=twsrc%5Etfw`}
+            href={`https://x.com/${siteTitle}?ref_src=twsrc%Etfw`}
           >
             Cargando tweets de @{siteTitle}
           </a>
@@ -40,8 +40,8 @@ const youtubeUrl = env.RRSS.YOUTUBE;
 
     {/* YouTube Videos Card */}
     <div class="bg-white rounded-md shadow overflow-hidden dark:bg-gray-800">
-      <div class="p-4">
-        <div class="flex items-center justify-between mb-3">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-bold text-gray-900 dark:text-white">Latest Videos</h2>
           <a
             href={youtubeUrl}
@@ -52,25 +52,25 @@ const youtubeUrl = env.RRSS.YOUTUBE;
             Ver canal de YouTube
           </a>
         </div>
-        <div class="space-y-6">
+        <div class="space-y-4">
           {/* Example structure for three recent videos */}
           {
             [
               {
-                id: 'EXAMPLE1',
+                id: 'EXAMPLE',
                 title: 'Understanding Web Development in 2024',
-                duration: '12:34',
+                duration: '10:30',
               },
             ].map((video) => (
               <div class="group">
-                <div class="relative aspect-w-16 aspect-h-9 mb-1">
+                <div class="relative aspect-w-16 aspect-h-9 mb-2">
                   <img
                     src={`https://i.ytimages.com/vi/${video.id}/maxresdefault.jpg`}
                     alt={video.title}
                     class="rounded-lg object-cover"
                   />
-                  <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity duration-200 rounded-lg" />
-                  <div class="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-sm px-2 py-1 rounded">
+                  <div class="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-50 transition-opacity duration-300 rounded-lg" />
+                  <div class="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-sm px-2 py-1 rounded">
                     {video.duration}
                   </div>
                 </div>

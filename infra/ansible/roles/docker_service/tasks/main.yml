@@ -1,0 +1,87 @@
+---
+- name: Set deployment facts
+  set_fact:
+    service_local_path: "{{ services_local }}/{{ service_name }}"
+    service_remote_path: "{{ services_remote }}/{{ service_name }}"
+    service_port: "{{ app_ports[service_name] | default('80') }}"
+
+- name: Determine service configuration sources
+  set_fact:
+    service_compose_file: "{{ service_local_path }}/docker-compose.{{ environment }}.yml"
+    service_env_file: "{{ service_local_path }}/.env.{{ environment }}"
+
+- name: Display service deployment info
+  debug:
+    msg:
+      - "🚀 Deploying service: {{ service_name }}"
+      - "📂 Local path: {{ service_local_path }}"
+      - "📂 Remote path: {{ service_remote_path }}"
+      - "🔌 Port: {{ service_port }}"
+      - "🏗️  Infrastructure: Docker Compose"
+
+- name: Deploy service with Docker Compose
+  block:
+    - name: Create service directory
+      file:
+        path: "{{ service_remote_path }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy service docker-compose files
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+      loop:
+        - { src: "{{ service_compose_file }}", dest: "{{ service_remote_path }}/docker-compose.yml" }
+        - { src: "{{ service_env_file }}", dest: "{{ service_remote_path }}/.env" }
+      ignore_errors: true
+
+    - name: Copy additional service files
+      copy:
+        src: "{{ service_local_path }}/"
+        dest: "{{ service_remote_path }}/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: preserve
+      ignore_errors: true
+
+    - name: Stop existing service container
+      shell: cd {{ service_remote_path }} && docker compose down
+      ignore_errors: true
+
+    - name: Pull service images
+      shell: cd {{ service_remote_path }} && docker compose pull
+      ignore_errors: true
+
+    - name: Start service container
+      shell: cd {{ service_remote_path }} && docker compose up -d
+      environment:
+        DOMAIN: "{{ domain }}"
+      register: service_start_result
+
+    - name: Wait for service to be ready
+      pause:
+        seconds: 10
+
+- name: Health check service
+  uri:
+    url: "http://localhost:{{ service_port }}{{ health_check.endpoints[service_name] | default('/') }}"
+    method: GET
+    status_code: 200
+    timeout: "{{ health_check.timeout | default(30) }}"
+  register: service_health
+  retries: "{{ health_check.retries | default(5) }}"
+  delay: "{{ health_check.delay | default(10) }}"
+  ignore_errors: true
+
+- name: Display service deployment result
+  debug:
+    msg:
+      - "{{ '✅' if service_health.status == 200 else '❌' }} Service: {{ service_name }}"
+      - "🏥 Health: {{ 'Healthy' if service_health.status == 200 else 'Unhealthy' }}"
+      - "🔗 URL: http://localhost:{{ service_port }}"

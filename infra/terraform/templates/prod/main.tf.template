@@ -1,0 +1,166 @@
+terraform {
+  required_providers {
+    hetznerdns = {
+      source  = "timohirt/hetznerdns"
+      version = "~> ."
+    }
+  }
+}
+
+provider "hetznerdns" {
+  apitoken = var.hetzner_token
+}
+
+variable "hetzner_token" {
+  description = "Hetzner DNS API token"
+  type        = string
+  sensitive   = true
+}
+
+variable "zone_id" {
+  description = "Hetzner DNS zone ID"
+  type        = string
+  default     = "{{HETZNER_ZONE_ID}}"
+}
+
+variable "production_ip" {
+  description = "Production VPS IP address"
+  type        = string
+  default     = "{{PRODUCTION_IP}}"
+}
+
+variable "production_domain" {
+  description = "Production domain name"
+  type        = string
+  default     = "{{PRODUCTION_DOMAIN}}"
+}
+
+variable "dns_ttl" {
+  description = "DNS TTL in seconds"
+  type        = number
+  default     = {{DNS_TTL}}
+}
+
+locals {
+  all_services = jsondecode(file("${path.module}/../services.json")).services
+
+   Filter services that should be deployed in production environment
+  services = [
+    for s in local.all_services : s
+    if contains(s.environments, "prod")
+  ]
+
+   Core domain records
+  core_records = {
+    "@"   = var.production_ip   Root domain (mlorente.dev)
+    "www" = var.production_ip   www subdomain
+  }
+
+   Service records (api.mlorente.dev, blog.mlorente.dev, etc.)
+  service_records = {
+    for s in local.services : s.name => var.production_ip
+  }
+
+   All DNS records combined
+  all_records = merge(local.core_records, local.service_records)
+}
+
+ Core domain records (root, www)
+resource "hetznerdns_record" "core_records" {
+  for_each = local.core_records
+
+  zone_id = var.zone_id
+  name    = each.key
+  type    = "A"
+  value   = each.value
+  ttl     = var.dns_ttl
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+ Service subdomain records
+resource "hetznerdns_record" "service_records" {
+  for_each = local.service_records
+
+  zone_id = var.zone_id
+  name    = each.key
+  type    = "A"
+  value   = each.value
+  ttl     = var.dns_ttl
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+ CAA records for SSL certificate security
+resource "hetznerdns_record" "caa_records" {
+  count = {{DNS_CAA_RECORDS}} ?  :
+
+  zone_id = var.zone_id
+  name    = "@"
+  type    = "CAA"
+  value   = " issue \"letsencrypt.org\""
+  ttl     = var.dns_ttl
+}
+
+ MX record for email (if needed)
+resource "hetznerdns_record" "mx_record" {
+  count = length("{{MX_RECORD_VALUE}}") >  ?  :
+
+  zone_id = var.zone_id
+  name    = "@"
+  type    = "MX"
+  value   = "{{MX_RECORD_VALUE}}"
+  ttl     = var.dns_ttl
+}
+
+ TXT records for domain verification and SPF
+resource "hetznerdns_record" "txt_spf" {
+  count = {{DNS_SPF_ENABLED}} ?  :
+
+  zone_id = var.zone_id
+  name    = "@"
+  type    = "TXT"
+  value   = "v=spf -all"
+  ttl     = var.dns_ttl
+}
+
+ DMARC record
+resource "hetznerdns_record" "txt_dmarc" {
+  count = {{DNS_DMARC_ENABLED}} ?  :
+
+  zone_id = var.zone_id
+  name    = "_dmarc"
+  type    = "TXT"
+  value   = "v=DMARC; p=reject; rua=mailto:dmarc@{{PRODUCTION_DOMAIN}}"
+  ttl     = var.dns_ttl
+}
+
+ Output all created records
+output "dns_records" {
+  description = "All DNS records created"
+  value = {
+    core_records    = { for k, v in hetznerdns_record.core_records : k => v.name }
+    service_records = { for k, v in hetznerdns_record.service_records : k => v.name }
+  }
+}
+
+output "production_urls" {
+  description = "Production service URLs"
+  value = {
+    for k, v in local.all_records : k => k == "@" ? "https://${var.production_domain}" : "https://${k}.${var.production_domain}"
+  }
+}
+
+output "dns_summary" {
+  description = "DNS configuration summary"
+  value = {
+    zone_id        = var.zone_id
+    production_ip  = var.production_ip
+    records_count  = length(local.all_records)
+    ttl           = var.dns_ttl
+  }
+}

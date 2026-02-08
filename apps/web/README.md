@@ -1,131 +1,131 @@
-# 1.2 Web - Frontend Portfolio
+ . Web - Frontend Portfolio
 
-The main frontend website for [mlorente.dev](https://mlorente.dev) - my personal portfolio and landing page. Built with Astro for maximum performance and developer experience.
+The main frontend website for [cubelab.cloud](https://cubelab.cloud) - my personal portfolio and landing page. Built with Astro for maximum performance and developer experience.
 
-## What it is
+ What it is
 
 This is my personal website where I showcase my portfolio, share downloadable resources, and provide information about what I do. I chose Astro because it handles SSR and SSG perfectly, it's fast, and doesn't ship unnecessary JavaScript to users.
 
 The site includes my portfolio projects, lead magnets like DevOps checklists, newsletter signup forms, and contact information - all integrated with my Go API backend.
 
-## Tech stack
+ Tech stack
 
-- **Astro 5.5.2** - Modern meta-framework for content-focused sites
-- **TypeScript** - Static typing for better development experience  
-- **Tailwind CSS** - Utility-first CSS framework for rapid styling
-- **MDX** - Markdown with JSX for dynamic content creation
-- **Docker** - Containerized for consistent deployment
+- Astro .. - Modern meta-framework for content-focused sites
+- TypeScript - Static typing for better development experience  
+- Tailwind CSS - Utility-first CSS framework for rapid styling
+- MDX - Markdown with JSX for dynamic content creation
+- Docker - Containerized for consistent deployment
 
-## Project structure
+ Project structure
 
 ```
 astro-site/
-├── astro.config.mjs          # Astro configuration
-├── package.json              # Dependencies and scripts
-├── tailwind.config.mjs       # Tailwind customization
-├── public/                   # Static assets
+├── astro.config.mjs           Astro configuration
+├── package.json               Dependencies and scripts
+├── tailwind.config.mjs        Tailwind customization
+├── public/                    Static assets
 ├── src/
-│   ├── components/           # Reusable UI components
-│   │   ├── forms/           # Contact and subscription forms
-│   │   ├── sections/        # Page sections
-│   │   └── ui/             # Base UI components
-│   ├── content/            # Content collections
-│   │   ├── projects/       # Portfolio projects
-│   │   └── resources/      # Downloadable resources
-│   ├── layouts/            # Page layouts
-│   ├── pages/              # Routes and pages
-│   └── styles/             # Global styles
-└── Dockerfile              # Container definition
+│   ├── components/            Reusable UI components
+│   │   ├── forms/            Contact and subscription forms
+│   │   ├── sections/         Page sections
+│   │   └── ui/              Base UI components
+│   ├── content/             Content collections
+│   │   ├── projects/        Portfolio projects
+│   │   └── resources/       Downloadable resources
+│   ├── layouts/             Page layouts
+│   ├── pages/               Routes and pages
+│   └── styles/              Global styles
+└── Dockerfile               Container definition
 ```
 
-## Key features
+ Key features
 
-### For visitors
-- **Lightning fast loading** - Thanks to Astro's partial hydration
-- **Interactive portfolio** - Projects with demos and GitHub links
-- **Free resources** - Lead magnets with integrated download forms
-- **Newsletter signup** - Connected to my API for subscriptions
-- **Fully responsive** - Works great on mobile, tablet, and desktop
+ For visitors
+- Lightning fast loading - Thanks to Astro's partial hydration
+- Interactive portfolio - Projects with demos and GitHub links
+- Free resources - Lead magnets with integrated download forms
+- Newsletter signup - Connected to my API for subscriptions
+- Fully responsive - Works great on mobile, tablet, and desktop
 
-### For development
-- **Full TypeScript** - Type safety across the entire codebase
-- **Content collections** - Projects and resources are typed and validated
-- **Modern architecture** - Astro components without the complexity
-- **Automatic optimization** - Image compression and multiple formats
-- **Smart caching** - Static assets cache efficiently
+ For development
+- Full TypeScript - Type safety across the entire codebase
+- Content collections - Projects and resources are typed and validated
+- Modern architecture - Astro components without the complexity
+- Automatic optimization - Image compression and multiple formats
+- Smart caching - Static assets cache efficiently
 
-## Configuration
+ Configuration
 
-### Environment variables
+ Environment variables
 
 ```bash
-# Server configuration
-PORT=4321
-HOST=0.0.0.0
+ Server configuration
+PORT=
+HOST=...
 NODE_ENV=production
 
-# API integration
-API_BASE_URL=https://api.mlorente.dev
-API_TIMEOUT=5000
+ API integration
+API_BASE_URL=https://api.cubelab.cloud
+API_TIMEOUT=
 
-# Feature flags
+ Feature flags
 ENABLE_ANALYTICS=true
 ENABLE_NEWSLETTER=true
 ```
 
-## Running the website
+ Running the website
 
-### Development mode
+ Development mode
 
 ```bash
-# Navigate to the web app
+ Navigate to the web app
 cd apps/web/astro-site
 
-# Install dependencies
+ Install dependencies
 npm install
 
-# Copy environment configuration
+ Copy environment configuration
 cp .env.example .env
 
-# Start development server
+ Start development server
 npm run dev
 
-# Access at http://localhost:4321
+ Access at http://localhost:
 ```
 
-### With Docker
+ With Docker
 
 ```bash
-# Development with hot reload
+ Development with hot reload
 make up-web
 
-# Production build
+ Production build
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Available commands
+ Available commands
 
 ```bash
-# Development with hot reload
+ Development with hot reload
 npm run dev
 
-# Production build
+ Production build
 npm run build
 
-# Preview production build
+ Preview production build
 npm run preview
 
-# Type checking
+ Type checking
 npm run type-check
 
-# Code quality
+ Code quality
 npm run lint
 npm run format
 ```
 
-## Adding content
+ Adding content
 
-### New portfolio project
+ New portfolio project
 
 Create a new MDX file in `src/content/projects/`:
 
@@ -135,28 +135,28 @@ title: "My Awesome Project"
 description: "A brief description that sells the project"
 technologies: ["Astro", "TypeScript", "Tailwind"]
 github: "https://github.com/mlorentedev/project"
-demo: "https://project.mlorente.dev"
+demo: "https://project.cubelab.cloud"
 image: "/images/projects/project.jpg"
 featured: true
-date: 2024-01-15
+date: --
 ---
 
-## What the project does
+ What the project does
 
 Here I explain what it does, why I built it, and how it works...
 
-### What I'm most proud of
+ What I'm most proud of
 
-- Key feature 1
-- Key feature 2  
-- Key feature 3
+- Key feature 
+- Key feature   
+- Key feature 
 
-### Technical challenges I solved
+ Technical challenges I solved
 
 There's always some interesting problem to tackle...
 ```
 
-### New downloadable resource
+ New downloadable resource
 
 Create a new MDX file in `src/content/resources/`:
 
@@ -166,17 +166,17 @@ title: "DevOps Checklist"
 description: "Everything you need to check before deployment"
 category: "DevOps"
 fileType: "PDF"
-fileSize: "2.3 MB"
-downloadCount: 0
+fileSize: ". MB"
+downloadCount: 
 tags: ["devops", "checklist", "automation"]
 featured: true
-gated: true  # Requires email for download
+gated: true   Requires email for download
 ---
 
 Description of what they'll download and why it's useful...
 ```
 
-## Design system
+ Design system
 
 I use Tailwind with custom configurations:
 
@@ -187,9 +187,9 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          500: '#3b82f6',
-          900: '#1e3a8a'
+          : 'effff',
+          : 'bf',
+          : 'eaa'
         }
       },
       fontFamily: {
@@ -200,7 +200,7 @@ module.exports = {
 }
 ```
 
-### Reusable components
+ Reusable components
 
 ```astro
 ---
@@ -217,11 +217,11 @@ const { variant = 'primary', size = 'md' } = Astro.props;
   class:list={[
     'font-semibold rounded-lg transition-colors',
     {
-      'bg-primary-500 text-white hover:bg-primary-600': variant === 'primary',
-      'bg-gray-200 text-gray-900 hover:bg-gray-300': variant === 'secondary',
-      'px-3 py-2 text-sm': size === 'sm',
-      'px-4 py-2': size === 'md',
-      'px-6 py-3 text-lg': size === 'lg'
+      'bg-primary- text-white hover:bg-primary-': variant === 'primary',
+      'bg-gray- text-gray- hover:bg-gray-': variant === 'secondary',
+      'px- py- text-sm': size === 'sm',
+      'px- py-': size === 'md',
+      'px- py- text-lg': size === 'lg'
     }
   ]}
 >
@@ -229,31 +229,31 @@ const { variant = 'primary', size = 'md' } = Astro.props;
 </button>
 ```
 
-## Analytics and tracking
+ Analytics and tracking
 
 The website includes comprehensive tracking:
 
-- **Google Analytics** - Traffic and user behavior analysis
-- **Form tracking** - Download and conversion metrics
-- **Newsletter metrics** - Subscription rates and sources
-- **Core Web Vitals** - Performance monitoring
+- Google Analytics - Traffic and user behavior analysis
+- Form tracking - Download and conversion metrics
+- Newsletter metrics - Subscription rates and sources
+- Core Web Vitals - Performance monitoring
 
-## Security measures
+ Security measures
 
-- **Server-side validation** - All forms validate through the API
-- **Security headers** - CSP, HSTS, and other protection headers
-- **Rate limiting** - Prevents form spam and abuse
-- **Input sanitization** - All user input is cleaned and validated
+- Server-side validation - All forms validate through the API
+- Security headers - CSP, HSTS, and other protection headers
+- Rate limiting - Prevents form spam and abuse
+- Input sanitization - All user input is cleaned and validated
 
-## SEO optimization
+ SEO optimization
 
-- **Dynamic meta tags** - Each page has unique titles and descriptions
-- **Structured data** - JSON-LD for better search engine understanding
-- **Automatic sitemap** - Generated during build process
-- **Canonical URLs** - Prevents duplicate content issues
-- **Image alt text** - Accessibility and SEO compliance
+- Dynamic meta tags - Each page has unique titles and descriptions
+- Structured data - JSON-LD for better search engine understanding
+- Automatic sitemap - Generated during build process
+- Canonical URLs - Prevents duplicate content issues
+- Image alt text - Accessibility and SEO compliance
 
-## API integration
+ API integration
 
 Forms connect to my Go API backend:
 
@@ -282,34 +282,34 @@ POST /api/contact
 }
 ```
 
-## Contributing
+ Contributing
 
-1. Fork the repository
-2. Make changes following TypeScript/Astro conventions
-3. Test everything locally
-4. Update documentation for new features
-5. Ensure Docker build works
-6. Submit pull request
+. Fork the repository
+. Make changes following TypeScript/Astro conventions
+. Test everything locally
+. Update documentation for new features
+. Ensure Docker build works
+. Submit pull request
 
-## Key dependencies
+ Key dependencies
 
-### Core framework
-- **@astrojs/node** - Node.js adapter for server-side rendering
-- **astro** - The meta-framework itself
-- **typescript** - Static type checking
+ Core framework
+- @astrojs/node - Node.js adapter for server-side rendering
+- astro - The meta-framework itself
+- typescript - Static type checking
 
-### Styling and UI
-- **@astrojs/tailwind** - Tailwind CSS integration
-- **tailwindcss** - Utility-first CSS framework
+ Styling and UI
+- @astrojs/tailwind - Tailwind CSS integration
+- tailwindcss - Utility-first CSS framework
 
-### Content management
-- **@astrojs/mdx** - MDX support for dynamic content
-- **zod** - Runtime type validation for content collections
+ Content management
+- @astrojs/mdx - MDX support for dynamic content
+- zod - Runtime type validation for content collections
 
-## Local development URLs
+ Local development URLs
 
 When running locally with `make up-web`:
 - Website: http://mlorentedev.test
-- Development server: http://localhost:4321
+- Development server: http://localhost:
 
-Add `127.0.0.1 mlorentedev.test` to your `/etc/hosts` file for local domain access.
+Add `... mlorentedev.test` to your `/etc/hosts` file for local domain access.

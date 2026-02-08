@@ -1,0 +1,4 @@
+services:
+  loki:
+    ports:
+      - "${APPS_SERVICES_OBSERVABILITY_LOKI_DEFAULT_PORT}:3100"

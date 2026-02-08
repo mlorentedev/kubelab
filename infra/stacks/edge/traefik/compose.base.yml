@@ -1,0 +1,43 @@
+services:
+  traefik:
+    image: ${EDGE_TRAEFIK_IMAGE}
+    container_name: ${EDGE_TRAEFIK_NAME}
+    restart: ${RESTART_POLICY}
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - ENVIRONMENT
+      - LOG_LEVEL
+      - DEBUG_MODE
+      - HETZNER_API_KEY=${HETZNER_API_KEY}
+      - CF_API_EMAIL=${CLOUDFLARE_API_EMAIL}
+      - CF_DNS_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - BASIC_AUTH_CREDENTIALS=${BASIC_AUTH_CREDENTIALS}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../../../../edge/traefik/generated/${ENVIRONMENT}/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../../../../edge/traefik/generated/${ENVIRONMENT}/dynamic:/etc/traefik/dynamic:ro
+      - traefik-logs:/logs
+      - traefik-certs:/etc/traefik/acme:rw
+      - ../../../../infra/config/certs/${ENVIRONMENT}:/etc/traefik/certs:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+    networks:
+      - default
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true
+
+volumes:
+  traefik-logs:
+    name: traefik-logs
+    external: true
+  traefik-certs:
+    driver: local

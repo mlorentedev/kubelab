@@ -1,5 +1,0 @@
-title: Infraestructura
-nav:
-  - "1. Nginx": nginx
-  - "2. Traefik": traefik
-  - "3. Ansible": ansible

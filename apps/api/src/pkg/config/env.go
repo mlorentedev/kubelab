@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
+)
 
-	"github.com/joho/godotenv"
-	"github.com/rs/zerolog/log"
+// Environment constants
+const (
+	EnvDev     = "dev"
+	EnvStaging = "staging"
+	EnvProd    = "prod"
 )
 
 // Config represents the complete application configuration
@@ -42,20 +43,11 @@ type Config struct {
 
 var config *Config
 
-// GetConfig retrieves the global configuration
+// GetConfig retrieves the global configuration from Environment Variables
 func GetConfig() (*Config, error) {
 	// Return cached config if it exists
 	if config != nil {
 		return config, nil
-	}
-
-	isGitHubActions := os.Getenv("GITHUB_ACTIONS") == "true"
-
-	possiblePaths := getPossibleEnvPaths()
-
-	// Load .env file only for local development
-	if !isGitHubActions {
-		loadDotEnvFile(possiblePaths)
 	}
 
 	cfg, err := populateConfig()
@@ -63,33 +55,8 @@ func GetConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Cache the configuration
 	config = cfg
 	return config, nil
-}
-
-func getPossibleEnvPaths() []string {
-	// Get the directory of the calling file
-	_, filename, _, _ := runtime.Caller(0)
-	baseDir := filepath.Dir(filename)
-
-	return []string{
-		".env",
-		filepath.Join(baseDir, ".env"),
-		filepath.Join(baseDir, "..", ".env"),
-		"/app/.env",
-	}
-}
-
-func loadDotEnvFile(paths []string) {
-	for _, path := range paths {
-		err := godotenv.Load(path)
-		if err == nil {
-			log.Info().Str("path", path).Msg("Successfully loaded .env file")
-			return
-		}
-	}
-	log.Warn().Msg("Could not load .env file from any location")
 }
 
 // populateConfig fills the configuration struct with environment variables
@@ -101,6 +68,14 @@ func populateConfig() (*Config, error) {
 	cfg.Version = os.Getenv("VERSION")
 	cfg.Host = os.Getenv("HOST")
 	cfg.Port = os.Getenv("PORT")
+
+	// Default to dev if empty (Safe fallback)
+	if cfg.Environment == "" {
+		// Strict check: Fail if environment is not set (managed by infra)
+		// return nil, errors.New("ENVIRONMENT variable is required")
+		// Loose check for local execution without toolkit:
+		cfg.Environment = EnvDev
+	}
 
 	// Site Configuration
 	cfg.Site.Title = os.Getenv("SITE_TITLE")
@@ -131,13 +106,11 @@ func populateConfig() (*Config, error) {
 
 // constructSiteURL builds the site URL based on environment and configuration
 func constructSiteURL(cfg *Config) string {
-	// If URL is explicitly set, use it
 	if url := os.Getenv("SITE_URL"); url != "" {
 		return url
 	}
 
-	// Construct URL based on environment
-	if cfg.Environment == "production" {
+	if cfg.Environment == EnvProd {
 		return fmt.Sprintf("https://%s", cfg.Site.Domain)
 	}
 
@@ -152,7 +125,6 @@ func getBoolEnv(key string, defaultValue bool) bool {
 	}
 	boolValue, err := strconv.ParseBool(value)
 	if err != nil {
-		log.Warn().Str("key", key).Msg("Invalid boolean value, using default")
 		return defaultValue
 	}
 	return boolValue
@@ -160,29 +132,21 @@ func getBoolEnv(key string, defaultValue bool) bool {
 
 // validateConfig checks the configuration for completeness and correctness
 func validateConfig(cfg *Config) error {
-	// Validate environment
-	if cfg.Environment != "local" && cfg.Environment != "production" {
-		return fmt.Errorf("invalid environment: %s. Must be local or production", cfg.Environment)
+	if cfg.Environment != EnvDev && cfg.Environment != EnvStaging && cfg.Environment != EnvProd {
+		return fmt.Errorf("invalid environment: %s. Must be %s, %s, or %s", cfg.Environment, EnvDev, EnvStaging, EnvProd)
 	}
 
-	// Validate site information
 	if cfg.Site.Title == "" {
-		return errors.New("site title cannot be empty")
+		return errors.New("SITE_TITLE is required")
 	}
 
-	if cfg.Site.Domain == "" {
-		return errors.New("site domain cannot be empty")
-	}
-
-	// Validate site URL
-	if !strings.HasPrefix(cfg.Site.URL, "http://") && !strings.HasPrefix(cfg.Site.URL, "https://") {
-		return fmt.Errorf("invalid site URL: %s. Must start with http:// or https://", cfg.Site.URL)
-	}
-
-	// Validate email configuration in production
-	if cfg.Environment == "production" {
-		if cfg.Email.Host == "" || cfg.Email.Port == "" || cfg.Email.User == "" || cfg.Email.Pass == "" {
-			return errors.New("complete email configuration is required in production")
+	// Production strict checks
+	if cfg.Environment == EnvProd {
+		if cfg.Site.Domain == "" {
+			return errors.New("SITE_DOMAIN is required in production")
+		}
+		if cfg.Email.Host == "" || cfg.Email.User == "" || cfg.Email.Pass == "" {
+			return errors.New("email credentials (EMAIL_HOST, USER, PASS) are required in production")
 		}
 	}
 

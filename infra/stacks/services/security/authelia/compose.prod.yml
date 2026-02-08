@@ -1,0 +1,19 @@
+services:
+  authelia:
+    deploy:
+      update_config:
+        order: ${DEPLOY_UPDATE_ORDER}
+        failure_action: ${DEPLOY_UPDATE_FAILURE_ACTION}
+      resources:
+        limits:
+          cpus: '${APPS_SERVICES_SECURITY_AUTHELIA_RESOURCES_CPU_LIMIT}'
+          memory: ${APPS_SERVICES_SECURITY_AUTHELIA_RESOURCES_MEMORY_LIMIT}
+        reservations:
+          cpus: '${APPS_SERVICES_SECURITY_AUTHELIA_RESOURCES_CPU_RESERVATION}'
+          memory: ${APPS_SERVICES_SECURITY_AUTHELIA_RESOURCES_MEMORY_RESERVATION}
+
+  authelia-redis:
+    deploy:
+      resources:
+        limits:
+          memory: 128M

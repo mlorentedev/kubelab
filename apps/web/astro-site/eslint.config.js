@@ -79,7 +79,7 @@ export default [
       '.vscode/',
       'public/',
       '**/*.d.ts',
-      '**/*.config.ts',
+      '*.config.ts',
     ],
   },
 ];

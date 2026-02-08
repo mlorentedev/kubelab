@@ -1,27 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<svg xmlns="http://www.w.org//svg" viewBox="   " width="" height="">
   <defs>
-    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#006064"/>
-      <stop offset="50%" style="stop-color:#008099"/>
-      <stop offset="100%" style="stop-color:#00acc1"/>
+    <linearGradient id="gradient" x="%" y="%" x="%" y="%">
+      <stop offset="%" style="stop-color:"/>
+      <stop offset="%" style="stop-color:"/>
+      <stop offset="%" style="stop-color:acc"/>
     </linearGradient>
   </defs>
-  
+
   <!-- Background circle -->
-  <circle cx="24" cy="24" r="22" fill="url(#gradient)" stroke="none"/>
-  
+  <circle cx="" cy="" r="" fill="url(gradient)" stroke="none"/>
+
   <!-- Book icon -->
   <g fill="white">
     <!-- Main book body -->
-    <rect x="14" y="12" width="20" height="24" rx="2" fill="white" opacity="0.95"/>
-    
+    <rect x="" y="" width="" height="" rx="" fill="white" opacity="."/>
+
     <!-- Book spine -->
-    <rect x="14" y="12" width="3" height="24" rx="1.5" fill="white"/>
-    
+    <rect x="" y="" width="" height="" rx="." fill="white"/>
+
     <!-- Page lines -->
-    <line x1="20" y1="18" x2="30" y2="18" stroke="#006064" stroke-width="1" opacity="0.7"/>
-    <line x1="20" y1="22" x2="30" y2="22" stroke="#006064" stroke-width="1" opacity="0.7"/>
-    <line x1="20" y1="26" x2="28" y2="26" stroke="#006064" stroke-width="1" opacity="0.7"/>
-    <line x1="20" y1="30" x2="30" y2="30" stroke="#006064" stroke-width="1" opacity="0.7"/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
   </g>
 </svg>

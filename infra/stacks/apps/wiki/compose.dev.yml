@@ -1,0 +1,8 @@
+services:
+  wiki:
+    build:
+      args:
+        ENVIRONMENT: dev
+    volumes:
+      # Mount docs for hot-reloading in dev, overridden in prod if needed or kept if standard pattern
+      - ../../../../apps/wiki/docs:/app/docs:ro

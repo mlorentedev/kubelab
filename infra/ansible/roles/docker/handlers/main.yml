@@ -1,0 +1,7 @@
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+
+- name: reload sysctl
+  command: sysctl -p /etc/sysctl.d/99-container.conf

@@ -1,0 +1,77 @@
+# ==========================================================================
+# PROD SETTINGS
+# ==========================================================================
+environment: prod
+global:
+  base_domain: cubelab.cloud
+  restart_policy: unless-stopped
+
+# ==========================================================================
+# RUNTIME
+# ==========================================================================
+log_level: INFO
+debug_mode: false
+
+# ==========================================================================
+# PROTOCOLS & NETWORKING
+# ==========================================================================
+protocol: https
+
+# ==========================================================================
+# SERVICE DISCOVERY (Internal endpoints)
+# ==========================================================================
+endpoints:
+  api: http://api:8080
+
+# ==========================================================================
+# EDGE SETTINGS
+# ==========================================================================
+edge:
+  traefik:
+    domain: traefik.cubelab.cloud
+    disable_https: false
+    acme_server: https://acme-v02.api.letsencrypt.org/directory
+
+  nginx:
+    domain: errors.cubelab.cloud
+
+  cloudflared:
+    enabled: true
+
+# ==========================================================================
+# APPS SETTINGS
+# ==========================================================================
+apps:
+  # Platform applications (custom-built)
+  platform:
+    api:
+      domain: api.cubelab.cloud
+      site_domain: cubelab.cloud
+      site_url: https://cubelab.cloud
+      email_secure: true
+
+    web:
+      backend_url: "https://api.cubelab.cloud"
+      allowed_hosts: "localhost,web,127.0.0.1,.cubelab.cloud,cubelab.cloud"
+      domain: cubelab.cloud
+      site_domain: cubelab.cloud
+      site_url: http://cubelab.cloud
+      enable_blog: false
+      enable_homelabs: false
+      enable_contact: false
+
+  # Third-party services
+  services:
+    core:
+      portainer:
+        domain: portainer.cubelab.cloud
+
+    observability:
+      loki:
+        domain: loki.cubelab.cloud
+
+      uptime_kuma:
+        domain: status.cubelab.cloud
+
+      grafana:
+        domain: grafana.cubelab.cloud

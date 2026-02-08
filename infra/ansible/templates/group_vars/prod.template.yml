@@ -1,0 +1,162 @@
+ Production environment overrides
+ Docker Compose configuration for VPS deployment
+
+---
+ Infrastructure settings
+infrastructure_type: docker-compose
+use_docker_compose: true
+
+ Performance tuning for VPS
+resource_limits:
+  memory_default: {{MEMORY_LIMIT_DEFAULT}}
+  memory_heavy: {{MEMORY_LIMIT_HEAVY}}
+  cpu_default: {{CPU_LIMIT_DEFAULT}}
+  cpu_heavy: {{CPU_LIMIT_HEAVY}}
+
+ Docker Compose specific configuration
+docker_compose:
+  version: "."
+  restart_policy: unless-stopped
+  logging_driver: json-file
+  logging_options:
+    max-size: "{{ resource_limits.memory_default }}"
+    max-file: ""
+
+ Production security enhancements
+security_prod:
+  strict_ssl: true
+  csrf_protection: true
+  rate_limiting_enabled: true
+  hsts_enabled: true
+  content_security_policy: true
+
+ Rate limiting configuration
+rate_limiting:
+  average: {{RATE_LIMIT_AVERAGE}}
+  burst: {{RATE_LIMIT_BURST}}
+  period: {{RATE_LIMIT_PERIOD}}
+
+ Security headers configuration
+security_headers:
+  frame_deny: {{HEADERS_FRAME_DENY}}
+  ssl_redirect: {{HEADERS_SSL_REDIRECT}}
+  xss_filter: {{HEADERS_XSS_FILTER}}
+  nosniff: {{HEADERS_NOSNIFF}}
+  sts_seconds: {{HEADERS_STS_SECONDS}}
+  sts_include_subdomains: {{HEADERS_STS_INCLUDE_SUBDOMAINS}}
+  sts_preload: {{HEADERS_STS_PRELOAD}}
+
+ TLS configuration
+tls_prod:
+  min_version: {{TLS_MIN_VERSION}}
+  options: {{TLS_OPTIONS}}
+  cipher_suites:
+    - "TLS_ECDHE_RSA_WITH_AES__GCM_SHA"
+    - "TLS_ECDHE_RSA_WITH_CHACHA_POLY"
+    - "TLS_ECDHE_RSA_WITH_AES__GCM_SHA"
+
+ Deployment strategy
+deployment_strategy:
+  type: docker_compose
+  pull_policy: always
+  restart_policy: unless-stopped
+  update_config:
+    parallelism:
+    delay: s
+    failure_action: rollback
+    monitor: s
+
+ Services to deploy in production
+services_to_deploy: "{{ deployment.prod_services }}"
+
+ Production features
+prod_features:
+  debug_enabled: {{DEBUG_ENABLED}}
+  log_level: {{LOG_LEVEL}}
+  metrics_enabled: true
+  alerting_enabled: true
+  auto_backup: true
+
+ Network policies (restrictive for production)
+network_policies:
+  enabled: true
+  default_deny: true
+  allow_internal: true
+  allow_monitoring: true
+
+ Backup settings (local + remote)
+backup_prod:
+  enabled: {{BACKUP_ENABLED}}
+  local_retention: {{BACKUP_RETENTION_LOCAL}}
+  remote_retention: {{BACKUP_RETENTION_REMOTE}}
+  compression: {{BACKUP_COMPRESSION}}
+  encryption: {{BACKUP_ENCRYPTION}}
+  schedule: "    "
+
+ Registry configuration (if using private registry)
+registry:
+  enabled: true
+  url: {{REGISTRY_URL}}
+  username: {{REGISTRY_USERNAME}}
+  password: {{REGISTRY_PASSWORD}}
+
+ Application-specific production configurations
+apps_prod:
+  blog:
+    name: {{APP_BLOG_NAME}}
+    port: {{APP_BLOG_PORT}}
+    host: {{APP_BLOG_HOST}}
+    replicas:
+
+  web:
+    name: {{APP_WEB_NAME}}
+    port: {{APP_WEB_PORT}}
+    host: {{APP_WEB_HOST}}
+    replicas:
+
+  api:
+    name: {{APP_API_NAME}}
+    port: {{APP_API_PORT}}
+    host: {{APP_API_HOST}}
+    replicas:
+
+  nn:
+    name: {{APP_NN_NAME}}
+    port: {{APP_NN_PORT}}
+    host: {{APP_NN_HOST}}
+    replicas:
+
+  wiki:
+    name: {{APP_WIKI_NAME}}
+    port: {{APP_WIKI_PORT}}
+    host: {{APP_WIKI_HOST}}
+    replicas:
+
+  grafana:
+    name: {{APP_GRAFANA_NAME}}
+    port: {{APP_GRAFANA_PORT}}
+    host: {{APP_GRAFANA_HOST}}
+    admin_password: {{GRAFANA_ADMIN_PASSWORD}}
+    replicas:
+
+  portainer:
+    name: {{APP_PORTAINER_NAME}}
+    port: {{APP_PORTAINER_PORT}}
+    host: {{APP_PORTAINER_HOST}}
+    replicas:
+
+ Monitoring and alerting
+monitoring_prod:
+  enabled: {{MONITORING_ENABLED}}
+  retention_days:
+  alert_manager: true
+  prometheus: true
+  grafana: true
+  loki: true
+
+ Performance monitoring
+performance:
+  apm_enabled: true
+  tracing_enabled: true
+  metrics_interval: s
+  log_sampling_rate: .

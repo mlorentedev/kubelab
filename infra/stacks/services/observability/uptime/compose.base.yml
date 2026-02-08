@@ -1,0 +1,23 @@
+services:
+  uptime-kuma:
+    image: ${APPS_SERVICES_OBSERVABILITY_UPTIME_KUMA_IMAGE}
+    container_name: ${APPS_SERVICES_OBSERVABILITY_UPTIME_KUMA_NAME}
+    restart: ${RESTART_POLICY}
+    volumes:
+      - uptime_kuma_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "node /app/extra/healthcheck.js || exit 1"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+    networks:
+      - default
+
+volumes:
+  uptime_kuma_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

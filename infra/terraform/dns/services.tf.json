@@ -1,0 +1,22 @@
+{
+  "services": [
+    { "name": "api", "priority": 1, "environments": ["dev", "staging", "prod"] },
+    { "name": "web", "priority": 2, "environments": ["dev", "staging", "prod"] },
+    { "name": "blog", "priority": 3, "environments": ["dev", "staging", "prod"] },
+    { "name": "wiki", "priority": 4, "environments": ["dev", "staging", "prod"] },
+    { "name": "grafana", "priority": 5, "environments": ["staging", "prod"] },
+    { "name": "prometheus", "priority": 6, "environments": ["staging", "prod"] },
+    { "name": "loki", "priority": 7, "environments": ["staging", "prod"] },
+    { "name": "uptime", "priority": 8, "environments": ["staging", "prod"] },
+    { "name": "n8n", "priority": 9, "environments": ["staging", "prod"] },
+    { "name": "portainer", "priority": 10, "environments": ["staging"] },
+    { "name": "minio", "priority": 11, "environments": ["staging", "prod"] },
+    { "name": "authelia", "priority": 12, "environments": ["staging", "prod"] },
+    { "name": "gitea", "priority": 13, "environments": ["staging", "prod"] },
+    { "name": "calcom", "priority": 14, "environments": ["prod"] },
+    { "name": "docmost", "priority": 15, "environments": ["staging", "prod"] },
+    { "name": "immich", "priority": 16, "environments": ["staging", "prod"] },
+    { "name": "vaultwarden", "priority": 17, "environments": ["staging", "prod"] },
+    { "name": "ollama", "priority": 18, "environments": ["staging"] }
+  ]
+}

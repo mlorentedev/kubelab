@@ -1,0 +1,71 @@
+api:
+  dashboard: {{ TRAEFIK_DASHBOARD }}
+  insecure: {{ TRAEFIK_INSECURE }}
+
+ping: {}
+
+log:
+  level: {{ LOG_LEVEL }}
+  format: {{ LOG_FORMAT }}
+
+accessLog:
+  filePath: "/logs/access.log"
+  format: {{ ACCESS_LOG_FORMAT }}
+  fields:
+    headers:
+      defaultMode: {{ HEADERS_DEFAULT_MODE }}
+      names:
+        User-Agent: {{ HEADERS_USER_AGENT }}
+        Authorization: {{ HEADERS_AUTHORIZATION }}
+        Content-Type: {{ HEADERS_CONTENT_TYPE }}
+
+entryPoints:
+  web:
+    address: :80
+    {% if DISABLE_HTTPS|lower != 'true' %}
+    http:
+      redirections:
+        entryPoint:
+          to: {{ TRAEFIK_ENTRYPOINT }}
+          scheme: https
+          permanent: {{ HTTPS_PERMANENT_REDIRECT }}
+    {% endif %}
+  {% if DISABLE_HTTPS|lower != 'true' %}
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        {% if USE_LOCAL_CERTS|lower != 'true' %}
+        certResolver: {{ CERT_RESOLVER }}
+        {% endif %}
+        options: {{ TLS_OPTIONS }}
+        domains:
+          - main: "{{ DOMAIN }}"
+            sans:
+              - "*.{{ DOMAIN }}"
+  {% endif %}
+
+providers:
+  docker:
+    endpoint: {{ DOCKER_ENDPOINT }}
+    exposedByDefault: {{ DOCKER_EXPOSED_BY_DEFAULT }}
+    network: {{ DOCKER_NETWORK | default('proxy') }}
+
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: {{ WATCH_DYNAMIC_CONF }}
+
+{% if DISABLE_HTTPS|lower != 'true' and USE_LOCAL_CERTS|lower != 'true' %}
+certificatesResolvers:
+  {{ CERT_RESOLVER }}:
+    acme:
+      caServer: {{ ACME_SERVER }}
+      email: {{ ACME_EMAIL }}
+      storage: "/etc/traefik/acme/acme.json"
+      dnsChallenge:
+        provider: {{ DNS_PROVIDER }}
+        delayBeforeCheck: "{{ DNS_DELAY_BEFORE_CHECK }}"
+        resolvers:
+          - {{ DNS_RESOLVER_1 }}
+          - {{ DNS_RESOLVER_2 }}
+{% endif %}

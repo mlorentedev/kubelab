@@ -1,0 +1,4 @@
+# Overrides for Staging Environment
+url: "https://staging.blog.cubelab.cloud"
+baseurl: ""
+avatar: "assets/img/me-2.webp"

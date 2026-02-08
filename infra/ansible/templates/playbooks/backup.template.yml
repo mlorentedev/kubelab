@@ -1,0 +1,248 @@
+ Backup playbook for {{ENVIRONMENT}} environment
+ Creates backups of configurations and data before deployments
+
+---
+- name: Create deployment backup
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    backup_timestamp: "{{ backup_date | default(lookup('pipe', 'date +%Y%m%d_%H%M%S')) }}"
+    backup_dir: "{{ backup.path }}/{{ backup_timestamp }}"
+    retention_days: "{{ backup.retention_days | default() }}"
+
+  pre_tasks:
+    - name: Display backup information
+      debug:
+        msg:
+          - "=== Creating Deployment Backup ==="
+          - "Environment: {{ environment }}"
+          - "Infrastructure: Docker Compose"
+          - "Backup Directory: {{ backup_dir }}"
+          - "Retention: {{ retention_days }} days"
+
+    - name: Create backup directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: ''
+      loop:
+        - "{{ backup_dir }}"
+        - "{{ backup_dir }}/configs"
+        - "{{ backup_dir }}/data"
+        - "{{ backup_dir }}/logs"
+
+  tasks:
+    - name: Backup Traefik configuration
+      block:
+        - name: Create Traefik backup directory
+          file:
+            path: "{{ backup_dir }}/traefik"
+            state: directory
+            mode: ''
+
+        - name: Backup Traefik files
+          copy:
+            src: "{{ item.src }}"
+            dest: "{{ item.dest }}"
+            remote_src: yes
+            mode: preserve
+          loop:
+            - { src: "/opt/traefik/", dest: "{{ backup_dir }}/traefik/" }
+          ignore_errors: true
+
+        - name: Backup SSL certificates
+          copy:
+            src: "/opt/traefik/certs/"
+            dest: "{{ backup_dir }}/traefik/certs/"
+            remote_src: yes
+            mode: preserve
+          ignore_errors: true
+      tags: [traefik, ssl]
+
+    - name: Backup application configurations
+      block:
+        - name: Create apps backup directory
+          file:
+            path: "{{ backup_dir }}/apps"
+            state: directory
+            mode: ''
+
+        - name: Backup core applications
+          copy:
+            src: "{{ apps_remote }}/{{ item }}/"
+            dest: "{{ backup_dir }}/apps/{{ item }}/"
+            remote_src: yes
+            mode: preserve
+          loop: "{{ deployment.core_apps }}"
+          ignore_errors: true
+
+        - name: Backup worker applications
+          copy:
+            src: "{{ workers_remote }}/{{ item }}/"
+            dest: "{{ backup_dir }}/apps/workers/{{ item }}/"
+            remote_src: yes
+            mode: preserve
+          loop: "{{ deployment.worker_apps }}"
+          ignore_errors: true
+      tags: [apps, configs]
+
+    - name: Backup service configurations
+      block:
+        - name: Create services backup directory
+          file:
+            path: "{{ backup_dir }}/services"
+            state: directory
+            mode: ''
+
+        - name: Backup services
+          copy:
+            src: "{{ services_remote }}/{{ item }}/"
+            dest: "{{ backup_dir }}/services/{{ item }}/"
+            remote_src: yes
+            mode: preserve
+          loop: "{{ deployment.staging_services if environment == 'staging' else deployment.prod_services }}"
+          ignore_errors: true
+      tags: [services, monitoring]
+
+    - name: Backup Docker Compose files
+      copy:
+        src: "{{ compose_remote }}/"
+        dest: "{{ backup_dir }}/compose/"
+        remote_src: yes
+        mode: preserve
+      ignore_errors: true
+      tags: [docker, compose]
+
+    - name: Backup Docker volumes data
+      block:
+        - name: List Docker volumes
+          shell: docker volume ls --format "{% raw %}{{.Name}}{% endraw %}"
+          register: docker_volumes
+          ignore_errors: true
+
+        - name: Create volume backup directory
+          file:
+            path: "{{ backup_dir }}/volumes"
+            state: directory
+            mode: ''
+          when: docker_volumes.stdout_lines | length >
+
+        - name: Backup important Docker volumes
+          shell: |
+            docker run --rm -v {{ item }}:/source:ro -v {{ backup_dir }}/volumes:/backup alpine \
+            tar czf /backup/{{ item }}.tar.gz -C /source .
+          loop: "{{ docker_volumes.stdout_lines | select('match', '._(data|config|logs)$') | list }}"
+          ignore_errors: true
+          when: docker_volumes.stdout_lines | length >
+      tags: [docker, volumes, data]
+
+    - name: Backup system configurations
+      block:
+        - name: Create system backup directory
+          file:
+            path: "{{ backup_dir }}/system"
+            state: directory
+            mode: ''
+
+        - name: Backup important system files
+          copy:
+            src: "{{ item }}"
+            dest: "{{ backup_dir }}/system/"
+            remote_src: yes
+            mode: preserve
+          loop:
+            - /etc/docker/daemon.json
+            - "{{ deploy_path }}/.setup_completed"
+          ignore_errors: true
+      tags: [system]
+
+    - name: Export current deployment state
+      block:
+        - name: Export Docker container state
+          shell: docker ps --format "{% raw %}{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}{% endraw %}"
+          register: container_state
+
+        - name: Save deployment state
+          copy:
+            content: |
+               Deployment State Backup
+               Created: {{ ansible_date_time.iso }}
+               Environment: {{ environment }}
+               Infrastructure: Docker Compose
+
+               Docker Containers
+              {{ container_state.stdout }}
+
+               Configuration
+              Domain: {{ domain }}
+              Deploy Path: {{ deploy_path }}
+              Backup Location: {{ backup_dir }}
+            dest: "{{ backup_dir }}/deployment-state.txt"
+            mode: ''
+      tags: [state]
+
+  post_tasks:
+    - name: Create backup manifest
+      copy:
+        content: |
+           Backup Manifest
+           Created: {{ ansible_date_time.iso }}
+
+           Backup Information
+          Environment: {{ environment }}
+          Infrastructure: Docker Compose
+          Backup Directory: {{ backup_dir }}
+          Retention Days: {{ retention_days }}
+
+           Contents
+          - OK Traefik configuration and SSL certificates
+          - OK Application configurations ({{ deployment.core_apps | length }} apps)
+          - OK Service configurations ({{ (deployment.staging_services if environment == 'staging' else deployment.prod_services) | length }} services)
+          - OK Docker Compose files
+          - OK System configurations
+          - OK Deployment state export
+          - OK Docker volume data
+
+           Restoration
+          To restore from this backup, run:
+          ```bash
+          ansible-playbook -i hosts.yml rollback.yml -e backup_date={{ backup_timestamp }}
+          ```
+
+           Cleanup
+          This backup will be automatically removed after {{ retention_days }} days.
+          To remove manually:
+          ```bash
+          rm -rf {{ backup_dir }}
+          ```
+        dest: "{{ backup_dir }}/BACKUP_MANIFEST.md"
+        mode: ''
+
+    - name: Clean up old backups
+      shell: |
+        find {{ backup.path }} -type d -name "_" -mtime +{{ retention_days }} -exec rm -rf {} + >/dev/null || true
+      ignore_errors: true
+      when: backup.enabled | bool
+
+    - name: Calculate backup size
+      shell: du -sh {{ backup_dir }}
+      register: backup_size
+      ignore_errors: true
+
+    - name: Display backup completion
+      debug:
+        msg:
+          - "=== Backup Complete ==="
+          - "Location: {{ backup_dir }}"
+          - "Size: {{ backup_size.stdout.split()[] if backup_size.stdout is defined else 'Unknown' }}"
+          - " Contents:"
+          - " - Traefik configs + SSL certs"
+          - " - {{ deployment.core_apps | length }} application configs"
+          - " - {{ (deployment.staging_services if environment == 'staging' else deployment.prod_services) | length }} service configs"
+          - " - System configurations"
+          - "Retention: {{ retention_days }} days"
+          - ""
+          - "Restore command:"
+          - " ansible-playbook -i hosts.yml rollback.yml -e backup_date={{ backup_timestamp }}"

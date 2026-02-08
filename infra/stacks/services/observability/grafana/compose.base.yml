@@ -1,0 +1,53 @@
+services:
+  grafana:
+    container_name: ${APPS_SERVICES_OBSERVABILITY_GRAFANA_NAME}
+    image: ${APPS_SERVICES_OBSERVABILITY_GRAFANA_IMAGE}
+    restart: ${RESTART_POLICY}
+    environment:
+      # Credenciales de Admin (para el primer inicio)
+      - GF_SECURITY_ADMIN_USER=${APPS_SERVICES_OBSERVABILITY_GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${APPS_SERVICES_OBSERVABILITY_GRAFANA_ADMIN_PASSWORD}
+      # URL base de Grafana para los callbacks
+      - GF_SERVER_ROOT_URL=https://${APPS_SERVICES_OBSERVABILITY_GRAFANA_DOMAIN}
+      # Configuración de Authelia OIDC
+      - GF_AUTH_GENERIC_OAUTH_ENABLED=true
+      - GF_AUTH_GENERIC_OAUTH_NAME=Authelia
+      - GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=${APPS_SERVICES_OBSERVABILITY_GRAFANA_OAUTH_ALLOW_SIGN_UP}
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=${APPS_SERVICES_OBSERVABILITY_GRAFANA_OAUTH_CLIENT_ID}
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_GRAFANA}
+      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email groups
+      - GF_AUTH_GENERIC_OAUTH_AUTH_URL=https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/api/oidc/authorization
+      - GF_AUTH_GENERIC_OAUTH_TOKEN_URL=https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/api/oidc/token
+      - GF_AUTH_GENERIC_OAUTH_API_URL=https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/api/oidc/userinfo
+      - GF_AUTH_GENERIC_OAUTH_USE_PKCE=true
+      # Mapeo de roles (opcional, si Authelia envía grupos en el token ID)
+      - >-
+        GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=contains(groups, 'admins') && 'Admin' ||
+        contains(groups, 'editors') && 'Editor' || 'Viewer'
+    extra_hosts:
+      # Mapea el dominio al gateway del host (Traefik)
+      - "${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}:host-gateway"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - default
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - "http://localhost:${APPS_SERVICES_OBSERVABILITY_GRAFANA_DEFAULT_PORT}${APPS_SERVICES_OBSERVABILITY_GRAFANA_HEALTH_PATH}"
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+
+volumes:
+  grafana_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

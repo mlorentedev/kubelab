@@ -1,0 +1,392 @@
+# ==========================================================================
+# GLOBAL SETTINGS
+# ==========================================================================
+project_name: cubelab
+log_format: json
+
+global:
+  timezone: Europe/Madrid
+  restart_policy: unless-stopped
+  base_domain: cubelab.cloud
+
+# ===========================================================================
+# INFRASTRUCTURE & DOCKER
+# ===========================================================================
+registry: docker.io/mlorentedev
+network_name: cubelab
+python_version: "3.12"
+
+resources:
+  default_memory_limit: 512m
+  default_memory_reservation: 256m
+  default_cpu_limit: 0.5
+  default_cpu_reservation: 0.25
+
+# ===========================================================================
+# HEALTHCHECK DEFAULTS
+# ===========================================================================
+healthcheck:
+  interval: 10s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+
+# ===========================================================================
+# DEPLOY STRATEGY
+# ===========================================================================
+deploy:
+  update_order: start-first
+  update_failure_action: rollback
+  update_delay: 5s
+  rollback_parallelism: 1
+  rollback_delay: 5s
+
+# ===========================================================================
+# EDGE SERVICES (Reverse Proxy, Gateway, CDN)
+# ===========================================================================
+edge:
+  nginx:
+    name: nginx-errors
+    image: nginx:alpine
+    port: 80
+    health_path: /health
+    resources:
+      cpu_limit: "0.25"
+      memory_limit: 128M
+      cpu_reservation: "0.1"
+      memory_reservation: 64M
+
+  traefik:
+    name: traefik
+    image: traefik:v3.6
+    dashboard_port: 8080
+    health_path: /ping
+    # Core
+    entrypoint: websecure
+    insecure: false
+    dashboard: true
+    dashboard_auth_middleware: authelia@file
+    dashboard_security_middleware: secure-headers@file
+    # Docker provider
+    docker_endpoint: unix:///var/run/docker.sock
+    docker_exposed_by_default: false
+    watch_dynamic_conf: true
+    # SSL certificates
+    cert_resolver: letsencrypt
+    acme_email: mlorentedev@gmail.com
+    # DNS
+    dns_provider: cloudflare
+    dns_resolver_1: 1.1.1.1:53
+    dns_resolver_2: 8.8.8.8:53
+    dns_delay_before_check: 30
+    # Logging
+    access_log_format: json
+    headers_default_mode: keep
+    headers_user_agent: keep
+    headers_authorization: drop
+    headers_content_type: keep
+    # Security
+    headers_frame_deny: true
+    headers_xss_filter: true
+    headers_nosniff: true
+    headers_sts_seconds: 31536000
+    headers_sts_include_subdomains: true
+    headers_sts_preload: true
+    headers_ssl_redirect: true
+    # HTTPS/TLS
+    https_permanent_redirect: true
+    tls_options: default
+    tls_min_version: VersionTLS12
+    tls_cipher_suite_1: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    tls_cipher_suite_2: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    tls_cipher_suite_3: TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    tls_cipher_suite_4: TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    tls_cipher_suite_5: TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+    tls_cipher_suite_6: TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+    # Rate limiting
+    rate_limit_average: 50
+    rate_limit_burst: 25
+    rate_limit_period: 1s
+    # Resources
+    resources:
+      cpu_limit: "1.0"
+      memory_limit: 256M
+      cpu_reservation: "0.5"
+      memory_reservation: 128M
+
+  cloudflared:
+    name: cloudflared
+    image: cloudflare/cloudflared:latest
+    resources:
+      cpu_limit: "0.25"
+      memory_limit: 128M
+      cpu_reservation: "0.1"
+      memory_reservation: 64M
+
+# ===========================================================================
+# CUSTOM APPLICATIONS
+# ===========================================================================
+apps:
+  # Platform applications (custom-built)
+  platform:
+    api:
+      name: api
+      domain: api.cubelab.cloud
+      image_name: cubelab-api
+      version: dev
+      enable_auth: false
+      auth_level: bypass
+      default_port: 8080
+      health_path: /health
+      site_title: mlorentedev
+      email_host: smtp.gmail.com
+      email_port: 587
+
+    web:
+      name: web
+      domain: web.cubelab.cloud
+      image_name: cubelab-web
+      version: dev
+      enable_auth: false
+      auth_level: bypass
+      default_port: 4321
+      health_path: /
+      backend_url: "https://api.cubelab.cloud"
+      allowed_hosts: "localhost,web,127.0.0.1"
+      # Site Info
+      site_title: "Manu Lorente"
+      site_description: "Cloud Native Automation in Spanish"
+      site_mail: "info@mlorente.dev"
+      site_author: "Manu Lorente"
+      site_keywords: "devops, cloud, kubernetes, aws, azure, python, go"
+      # Social Media
+      buy_me_a_coffee_url: "https://www.buymeacoffee.com/mlorente"
+      calendly_url: "https://calendly.com/mlorentedev/videollamada"
+      twitter_url: "https://x.com/mlorentedev"
+      youtube_url: "https://www.youtube.com/@mlorentedev"
+      github_url: "https://github.com/mlorentedev"
+      # Analytics
+      google_analytics_id: "G-PLL8SP2YFC"
+      google_tag_manager_id: "GTM-XXXXXX"
+      # Feature flags
+      enable_blog: true
+      enable_homelabs: true
+      enable_contact: true
+
+    blog:
+      name: blog
+      domain: blog.cubelab.cloud
+      image_name: cubelab-blog
+      version: dev
+      enable_auth: false
+      auth_level: bypass
+      default_port: 4000
+      health_path: /
+
+    wiki:
+      name: wiki
+      domain: wiki.cubelab.cloud
+      image_name: cubelab-wiki
+      version: dev
+      enable_auth: false
+      auth_level: bypass
+      default_port: 80
+      health_path: /
+      # Nueva sección para configuración de MkDocs
+      mkdocs:
+        site_name: CubeLab Wiki
+        site_description: Platform documentation for mlorente.dev
+        site_author: Manu Lorente
+        site_url: https://wiki.cubelab.cloud
+        repo_name: mlorentedev/mlorente.dev
+        repo_url: https://github.com/mlorentedev/mlorente.dev
+        edit_uri: https://github.com/mlorentedev/mlorente.dev/edit/main/apps/wiki/docs/
+        copyright: Copyright &copy; 2025 Manu Lorente
+        logo_path: assets/logo.svg
+        favicon_path: assets/favicon.ico
+
+  # Third-party services
+  services:
+    # Core infrastructure services
+    core:
+      traefik:
+        name: traefik
+        domain: traefik.cubelab.cloud
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 443
+
+      portainer:
+        name: portainer
+        domain: portainer.cubelab.cloud
+        image: portainer/portainer-ce:2.33.5
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 9000
+        external_port: 9443
+        health_path: /
+
+      kestra:
+        name: kestra
+        domain: automation.cubelab.cloud
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 5678
+        health_path: /healthz
+
+    # Automation & CI/CD
+    automation:
+      github_runner:
+        name: github-runner
+        image: myoung34/github-runner:latest
+        repo_url: https://github.com/mlorentedev/mlorente.dev
+        runner_group: default
+        labels: self-hosted,linux,docker
+        resources:
+          cpu_limit: "1.0"
+          memory_limit: 1G
+          cpu_reservation: "0.25"
+          memory_reservation: 512M
+
+    # Data services (storage, databases)
+    data:
+      minio:
+        name: minio
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+        domain: minio.cubelab.cloud
+        console_domain: console.minio.cubelab.cloud
+        enable_auth: false
+        auth_level: bypass
+        default_port_api: 9000
+        default_port_console: 9001
+        health_path: /minio/health/live
+
+    # Observability (monitoring, logging, alerting)
+    observability:
+      grafana:
+        name: grafana
+        domain: grafana.cubelab.cloud
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 3000
+        health_path: /api/health
+        image: grafana/grafana-oss
+        # Permite que Authelia registre usuarios en Grafana si no existen
+        oauth_allow_sign_up: true
+        oauth_client_id: grafana-oidc
+
+
+      loki:
+        name: loki
+        domain: loki.cubelab.cloud
+        image: grafana/loki:3.3.2
+        vector_image: timberio/vector:0.43.1-alpine
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 3100
+        health_path: /ready
+        resources:
+          cpu_limit: "0.5"
+          memory_limit: 512M
+          cpu_reservation: "0.25"
+          memory_reservation: 256M
+
+      uptime_kuma:
+        name: uptime-kuma
+        domain: status.cubelab.cloud
+        image: louislam/uptime-kuma:2.0.2
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 3001
+        health_path: /
+
+    # Security (authentication, authorization, secrets)
+    security:
+      authelia:
+        name: authelia
+        image: authelia/authelia:4.39.15
+        redis_image: redis:7-alpine
+        enable_auth: false
+        domain: auth.cubelab.cloud
+        default_port: 9091
+        health_path: /api/health
+        issuer_domain: cubelab.cloud
+        display_name: CubeLab
+        default_domain_root: cubelab.cloud
+        resources:
+          cpu_limit: "0.5"
+          memory_limit: 128M
+          cpu_reservation: "0.1"
+          memory_reservation: 64M
+        log_level: info
+        log_format: json
+        metrics_port: 9959
+        totp_algorithm: sha1
+        totp_digits: 6
+        totp_period: 30
+        totp_skew: 1
+        totp_secret_size: 32
+        webauthn_attestation_conveyance_preference: indirect
+        webauthn_selection_criteria_user_verification: preferred
+        webauthn_timeout: 60s
+        session_name: authelia_session
+        session_same_site: lax
+        session_inactivity: 1h
+        session_expiration: 8h
+        session_remember_me: 1M
+        regulation_max_retries: 3
+        regulation_find_time: 2m
+        regulation_ban_time: 5m
+        notifier_disable_startup_check: false
+        jwt_secret_reset_password: some_dummy_secret_for_jwt_reset
+        # Moved OIDC client definitions to a list structure
+        oidc_clients:
+          - client_id: cubelab-oidc
+            client_name: CubeLab OIDC Client (General)
+            redirect_uris:
+              - https://auth.cubelab.cloud/oauth2/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+          - client_id: grafana-oidc
+            client_name: Grafana OIDC Client
+            redirect_uris:
+              - https://grafana.cubelab.cloud/login/generic_oauth
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+          - client_id: minio-oidc
+            client_name: MinIO OIDC Client
+            redirect_uris:
+              - https://console.minio.cubelab.cloud/oauth_callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+        oidc_jwks_url: https://auth.cubelab.cloud/.well-known/jwks.json
+        # User configuration (passwords stored in SOPS secrets)
+        users:
+          - username: admin
+            displayname: Administrator
+            email: mlorentedev@gmail.com
+            disabled: false
+            groups:
+              - admins
+              - users
+
+      crowdsec:
+        name: crowdsec
+        domain: crowdsec.cubelab.cloud
+        image: crowdsecurity/crowdsec:latest
+        bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
+        bouncer_name: crowdsec-bouncer-traefik
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 8080
+        health_path: /health
+        bouncer_api_key: secrets://apps.services.security.crowdsec.bouncer_api_key
