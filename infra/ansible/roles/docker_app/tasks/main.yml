@@ -3,8 +3,8 @@
   set_fact:
     app_local_path: "{{ apps_local }}/{{ app_name }}"
     app_remote_path: "{{ apps_remote }}/{{ app_name }}"
-    app_compose_file: "{{ app_local_path }}/docker-compose.{{ environment }}.yml"
-    app_env_file: "{{ app_local_path }}/.env.{{ environment }}"
+    app_compose_base: "{{ app_local_path }}/compose.base.yml"
+    app_compose_env: "{{ app_local_path }}/compose.{{ environment }}.yml"
 
 - name: Display application deployment info
   debug:
@@ -21,7 +21,7 @@
     group: "{{ ansible_user }}"
     mode: '0755'
 
-- name: Copy application compose and environment files
+- name: Copy application compose files
   copy:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
@@ -29,8 +29,8 @@
     group: "{{ ansible_user }}"
     mode: '0644'
   loop:
-    - { src: "{{ app_compose_file }}", dest: "{{ app_remote_path }}/docker-compose.yml" }
-    - { src: "{{ app_env_file }}", dest: "{{ app_remote_path }}/.env" }
+    - { src: "{{ app_compose_base }}", dest: "{{ app_remote_path }}/compose.base.yml" }
+    - { src: "{{ app_compose_env }}", dest: "{{ app_remote_path }}/compose.{{ environment }}.yml" }
   ignore_errors: true
 
 - name: Synchronize additional application files
@@ -43,11 +43,10 @@
   ignore_errors: true
 
 - name: "Deploy or update {{ app_name }} stack"
-  community.docker.docker_compose:
-    project_src: "{{ app_remote_path }}"
-    pull: yes
-    state: present
-    restarted: yes
+  shell: >
+    cd {{ app_remote_path }} &&
+    docker compose -f compose.base.yml -f compose.{{ environment }}.yml pull &&
+    docker compose -f compose.base.yml -f compose.{{ environment }}.yml up -d
   environment:
     DOMAIN: "{{ domain }}"
   register: app_start_result

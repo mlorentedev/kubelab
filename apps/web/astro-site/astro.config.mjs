@@ -40,7 +40,7 @@ export default defineConfig({
   }),
   integrations: [tailwind(), sitemap(), mdx()],
   server: {
-    allowedHosts: (envVars.PUBLIC_ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(h => h),
+    allowedHosts: (envVars.PUBLIC_ALLOWED_HOSTS || '').split(',').map(h => h.trim()).filter(h => h),
   },
   vite: {
     define: {

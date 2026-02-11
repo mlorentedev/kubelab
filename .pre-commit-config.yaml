@@ -68,12 +68,12 @@ repos:
     hooks:
       # Check for env file commits
       - id: check-env-files
-        name: Prevent committing real env files
+        name: Safety net - prevent accidental .env file commits
         entry: >-
           bash -c 'git diff --cached --name-only |
           grep -E "\.env\.(dev|staging|prod)$" |
           grep -v ".example$" &&
-          echo "Attempting to commit real .env file!" &&
+          echo "Attempting to commit real .env file! Config lives in values/*.yaml" &&
           exit 1 || true'
         language: system
         pass_filenames: false

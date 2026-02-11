@@ -48,8 +48,8 @@ jobs:
       - name: Verify required files exist
         run: |
           # Define app lists as bash arrays
-          APPS_WITH_DOCKERFILES=(api blog web wiki workers)
-          APPS_WITH_COMPOSE=(api blog web wiki workers)
+          APPS_WITH_DOCKERFILES=(api blog web workers)
+          APPS_WITH_COMPOSE=(api blog web workers)
           ENVIRONMENTS=(dev staging prod)
 
           # Check if required Dockerfiles exist
@@ -62,17 +62,23 @@ jobs:
             echo "✅ apps/$app/Dockerfile"
           done
 
-          # Check if .env.example files exist for all environments
+          # Check if compose files exist for all environments
           echo ""
           echo "Validating deployment configs..."
           for app in "${APPS_WITH_COMPOSE[@]}"; do
+            base_file="infra/stacks/apps/$app/compose.base.yml"
+            if [ ! -f "$base_file" ]; then
+              echo "❌ Missing $base_file"
+              exit 1
+            fi
+            echo "✅ $base_file"
             for env in "${ENVIRONMENTS[@]}"; do
-              env_file="infra/stacks/apps/$app/.env.$env.example"
-              if [ ! -f "$env_file" ]; then
-                echo "❌ Missing $env_file"
+              compose_file="infra/stacks/apps/$app/compose.$env.yml"
+              if [ ! -f "$compose_file" ]; then
+                echo "❌ Missing $compose_file"
                 exit 1
               fi
-              echo "✅ $env_file"
+              echo "✅ $compose_file"
             done
           done
 

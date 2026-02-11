@@ -1,10 +1,11 @@
 "Service and application management commands."
 
 from pathlib import Path
-from typing import Annotated  # Import Annotated for type hinting lists
+from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
 from toolkit.config.settings import get_settings
@@ -166,6 +167,44 @@ def list_components() -> None:
         for item in sorted(components[category]):
             logger.info(f"  • {item}")
         logger.info("")
+
+
+@app.command("health")
+def health_check(
+    component_names: Annotated[
+        list[str] | None,
+        typer.Argument(help="Service name(s) to check (default: all running)"),
+    ] = None,
+    environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
+) -> None:
+    """Check health of running services using config-driven endpoints."""
+    from toolkit.features.health_check import HealthChecker
+
+    checker = HealthChecker(environment)
+    filter_names = list(component_names) if component_names else None
+    results = checker.check_health(filter_names=filter_names)
+
+    if not results:
+        logger.warning("No services to check.")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Service Health — {environment.upper()}")
+    table.add_column("Service", style="cyan")
+    table.add_column("URL", style="dim")
+    table.add_column("Status", justify="center")
+    table.add_column("Reason")
+
+    has_failures = False
+    for r in results:
+        status = "[green]PASS[/green]" if r.healthy else "[red]FAIL[/red]"
+        if not r.healthy:
+            has_failures = True
+        table.add_row(r.service, r.url, status, r.reason)
+
+    console.print(table)
+
+    if has_failures:
+        raise typer.Exit(1)
 
 
 def _backup_gitea(service_dir: Path, environment: str, output_dir: str) -> None:

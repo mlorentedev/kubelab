@@ -5,21 +5,22 @@ This directory contains deployment configurations for all custom applications.
  Structure
 
 ```
-infra/compose/apps/
+infra/stacks/apps/
 ├── api/
-│   ├── docker-compose.dev.yml
-│   ├── docker-compose.staging.yml
-│   ├── docker-compose.prod.yml
-│   ├── .env.dev
-│   ├── .env.staging
-│   ├── .env.prod
-│   └── .env..example
+│   ├── compose.base.yml
+│   ├── compose.dev.yml
+│   ├── compose.staging.yml
+│   └── compose.prod.yml
 ├── blog/
 ├── web/
 ├── wiki/
 ├── nn/
 └── workers/
 ```
+
+Configuration is centralized in `infra/config/`:
+- Values: `infra/config/values/{common,dev,staging,prod}.yaml`
+- Secrets: `infra/config/secrets/{env}.enc.yaml` (SOPS-encrypted)
 
  Deployment
 
@@ -43,44 +44,34 @@ poetry run toolkit apps down web
 
 ```bash
  Development
-cd infra/compose/apps/web
-docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
+cd infra/stacks/apps/web
+docker compose -f compose.base.yml -f compose.dev.yml up -d
 
  Staging
-docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
+docker compose -f compose.base.yml -f compose.staging.yml up -d
 
  Production
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+docker compose -f compose.base.yml -f compose.prod.yml up -d
 ```
 
- Environment Files
+ Configuration
 
-Each application has environment files per environment:
+All configuration is centralized (not per-stack):
 
-- `.env.dev` - Development (local)
-- `.env.staging` - Staging (CubeLab homelab)
-- `.env.prod` - Production (Hetzner VPS)
-- `.env..example` - Templates (committed to git)
+- **Values**: `infra/config/values/{common,dev,staging,prod}.yaml` - YAML configuration per environment
+- **Secrets**: `infra/config/secrets/{env}.enc.yaml` - SOPS-encrypted secrets (age key)
 
- Creating Environment Files
+The `compose.base.yml` defines service defaults, and `compose.{env}.yml` overlays provide environment-specific overrides (images, ports, volumes, resource limits).
 
-If `.env.` files don't exist, copy from examples:
+ Editing Configuration
 
 ```bash
-cd infra/compose/apps/web
-cp .env.dev.example .env.dev
-vim .env.dev   Edit with actual values
+ Edit environment values
+vim infra/config/values/dev.yaml
+
+ Edit encrypted secrets (requires age key)
+sops infra/config/secrets/dev.enc.yaml
 ```
-
- Generating New Examples
-
-After updating environment variables, generate new examples:
-
-```bash
-poetry run toolkit tools env-examples dev
-```
-
-This creates sanitized `.env..example` files safe for git.
 
  Source Code
 

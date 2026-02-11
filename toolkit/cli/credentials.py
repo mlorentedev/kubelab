@@ -38,6 +38,13 @@ def hash_password(
 @app.command("generate")
 def generate_credentials(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
+    auto_update: Annotated[
+        bool,
+        typer.Option(
+            "--auto-update",
+            help="Automatically update SOPS and restart affected services",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate all primary authentication credentials (Authelia and Basic Auth).
@@ -52,7 +59,7 @@ def generate_credentials(
     - JWKS RSA private key (saved as file)
     - Basic auth user/password/credentials (htpasswd bcrypt)
     """
-    credentials_manager.setup_authelia_secrets(env=env)
+    credentials_manager.setup_authelia_secrets(env=env, auto_update=auto_update)
 
 
 @app.command()

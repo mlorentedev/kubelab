@@ -91,14 +91,14 @@ setup-certs:
 .PHONY: setup-local-dns
 setup-local-dns:
 	@echo "Setting up local DNS entries in /etc/hosts..."
-	@if grep -q "cubelab.test" /etc/hosts 2>/dev/null; then \
+	@if grep -q "cubelab.test" /etc/hosts 2>/dev/null && grep -q "mlorente.test" /etc/hosts 2>/dev/null; then \
 		echo "✓ DNS entries already configured"; \
 	else \
-		echo "Adding *.cubelab.test entries..."; \
+		echo "Adding local development DNS entries..."; \
 		echo "" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "# CubeLab local development" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 traefik.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 api.cubelab.test web.cubelab.test blog.cubelab.test wiki.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 mlorente.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 traefik.cubelab.test api.cubelab.test blog.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 auth.cubelab.test kestra.cubelab.test grafana.cubelab.test loki.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 portainer.cubelab.test status.cubelab.test minio.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 console.minio.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
@@ -124,13 +124,12 @@ build-dev:
 	@$(TOOLKIT) services build blog --env dev --no-cache
 	@$(TOOLKIT) services build api --env dev --no-cache
 	@$(TOOLKIT) services build web --env dev --no-cache
-	@$(TOOLKIT) services build wiki --env dev --no-cache
 	@echo "✓ Development services built"
 
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		blog api web wiki nginx portainer uptime loki grafana authelia crowdsec minio github-runner traefik \
+		blog api web nginx portainer uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -138,7 +137,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		blog api web wiki nginx portainer uptime loki grafana authelia crowdsec minio github-runner traefik \
+		blog api web nginx portainer uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -163,7 +162,7 @@ dev-full-reset: dev-full-clean credentials-generate
 	@read -p "" # Pauses execution until user presses Enter
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik portainer uptime loki grafana api web blog minio github-runner wiki --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik portainer uptime loki grafana api web blog minio github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
 	@echo "============================================================"
 
@@ -191,6 +190,10 @@ deploy-prod:
 # -----------------------------------------------------------------------------
 # Validation & Testing
 # -----------------------------------------------------------------------------
+.PHONY: smoke-test
+smoke-test:
+	@$(TOOLKIT) services health --env dev
+
 .PHONY: validate
 validate:
 	@$(TOOLKIT) config validate

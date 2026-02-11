@@ -5,7 +5,7 @@ This directory contains deployment configurations for third-party services, orga
  Structure
 
 ```
-infra/compose/services/
+infra/stacks/services/
 ├── core/                  Essential platform services
 │   ├── gitea/             Git hosting
 │   ├── portainer/         Container management
@@ -49,23 +49,21 @@ poetry run toolkit services down vaultwarden
 
 ```bash
  Navigate to service directory
-cd infra/compose/services/core/gitea
+cd infra/stacks/services/core/gitea
 
  Start in development
-docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
+docker compose -f compose.base.yml -f compose.dev.yml up -d
 
  Start in production
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+docker compose -f compose.base.yml -f compose.prod.yml up -d
 ```
 
- Environment Files
+ Configuration
 
-Each service has environment files per environment:
+All configuration is centralized (not per-stack):
 
-- `.env.dev` - Development
-- `.env.staging` - Staging (CubeLab)
-- `.env.prod` - Production (Hetzner)
-- `.env..example` - Templates (in git)
+- **Values**: `infra/config/values/{common,dev,staging,prod}.yaml`
+- **Secrets**: `infra/config/secrets/{env}.enc.yaml` (SOPS-encrypted)
 
  Service Categories
 
@@ -103,21 +101,18 @@ AI and machine learning services:
 
 . Create service directory in appropriate category:
    ```bash
-   mkdir -p infra/compose/services/{category}/{service-name}
+   mkdir -p infra/stacks/services/{category}/{service-name}
    ```
 
-. Add docker-compose files:
+. Add compose files:
    ```bash
-   touch docker-compose.dev.yml
-   touch docker-compose.staging.yml
-   touch docker-compose.prod.yml
+   touch compose.base.yml
+   touch compose.dev.yml
+   touch compose.staging.yml
+   touch compose.prod.yml
    ```
 
-. Create environment files:
-   ```bash
-   cp .env.dev.example .env.dev
-    Edit with actual values
-   ```
+. Add configuration values to `infra/config/values/{env}.yaml` for the new service
 
 . Update this README with service description
 
@@ -130,5 +125,5 @@ AI and machine learning services:
  Related
 
 - Edge Services: `edge/` - Network edge (Traefik, Nginx, DNS)
-- Custom Apps: `infra/compose/apps/` - Custom application deployments
+- Custom Apps: `infra/stacks/apps/` - Custom application deployments
 - Toolkit: `toolkit/cli/services.py` - Service management commands

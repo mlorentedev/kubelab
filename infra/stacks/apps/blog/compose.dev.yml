@@ -1,5 +1,6 @@
 services:
   blog:
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ../../../../apps/blog/jekyll-site:/srv/jekyll
     environment:

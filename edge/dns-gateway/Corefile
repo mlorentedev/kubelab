@@ -1,0 +1,17 @@
+staging.cubelab.cloud {
+    hosts {
+        # MiniPC B Tailscale IP — replace with actual IP after Tailscale setup
+        # <minipc-tailscale-ip>  staging.cubelab.cloud
+        # <minipc-tailscale-ip>  *.staging.cubelab.cloud
+        fallthrough
+    }
+    log
+    errors
+}
+
+. {
+    forward . 1.1.1.1 8.8.8.8
+    cache 30
+    log
+    errors
+}

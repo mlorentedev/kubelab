@@ -282,3 +282,27 @@ class AutheliaGenerator(BaseGenerator):
         except Exception as e:
             logger.error(f"Failed to generate Authelia config: {e}")
             return {"success": False, "error": str(e)}
+
+    def validate(self) -> bool:
+        """Validate Authelia configuration and structure.
+
+        Returns:
+            True if validation passes, False otherwise
+        """
+        templates_dir = (
+            self.project_root / "infra" / "config" / "authelia" / "templates"
+        )
+
+        if not templates_dir.exists():
+            logger.error(f"Authelia templates directory not found: {templates_dir}")
+            return False
+
+        required_templates = ["configuration.yml.j2", "users_database.yml.j2"]
+        missing = [t for t in required_templates if not (templates_dir / t).exists()]
+
+        if missing:
+            logger.warning(f"Missing Authelia templates: {', '.join(missing)}")
+            return False
+
+        logger.success("Authelia configuration is valid")
+        return True

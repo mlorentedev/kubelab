@@ -16,7 +16,17 @@ from toolkit.config.constants import AUTHELIA_CONFIG
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
-from toolkit.features.docker_service import DockerService  # Import DockerService
+from toolkit.features.docker_service import DockerService
+
+# Mapping from secret key prefix to service component names that need restarting
+CREDENTIAL_SERVICE_MAP: dict[str, list[str]] = {
+    "basic_auth": ["traefik"],
+    "apps.authelia": ["authelia"],
+    "apps.security.authelia": ["authelia"],
+    "apps.services.observability.grafana": ["grafana"],
+    "apps.services.data.minio": ["minio"],
+    "apps.services.security.crowdsec": ["crowdsec"],
+}
 
 # RSA key generation requires cryptography library
 try:
@@ -541,9 +551,68 @@ class CredentialsManager:
                 logger.info(
                     "Run 'toolkit config generate' to apply changes to templated files."
                 )
+                # Reconcile affected services
+                self._reconcile_services(list(generated_secrets.keys()), env)
         else:
             # Print for manual copy (original behavior)
             self._print_secrets_for_manual_copy(env, generated_secrets)
+
+    def _reconcile_services(self, updated_keys: list[str], env: str) -> None:
+        """Restart services affected by credential changes.
+
+        Matches updated secret keys against CREDENTIAL_SERVICE_MAP to determine
+        which services need restarting. If traefik is affected (e.g. basic_auth
+        changed), regenerates Traefik config first since bcrypt hashes live in
+        the dynamic config.
+
+        Args:
+            updated_keys: List of dot-separated secret key paths that were updated.
+            env: Target environment.
+        """
+        affected_services: set[str] = set()
+
+        for key in updated_keys:
+            for prefix, services in CREDENTIAL_SERVICE_MAP.items():
+                if key.startswith(prefix):
+                    affected_services.update(services)
+
+        if not affected_services:
+            logger.info("No services affected by credential changes.")
+            return
+
+        logger.section("Reconciling affected services")
+        logger.info(f"Services to restart: {', '.join(sorted(affected_services))}")
+
+        # If traefik is affected, regenerate config first (bcrypt hash in dynamic config)
+        if "traefik" in affected_services:
+            logger.info("Regenerating Traefik config (basic_auth hash updated)...")
+            try:
+                from toolkit.features.generator_traefik import TraefikGenerator
+
+                generator = TraefikGenerator()
+                generator.generate(env)
+                logger.success("Traefik config regenerated.")
+            except Exception as e:
+                logger.error(f"Failed to regenerate Traefik config: {e}")
+                logger.warning(
+                    "Traefik may use stale credentials until config is regenerated."
+                )
+
+        # Restart each affected service via docker compose up -d
+        from toolkit.config.settings import get_settings
+
+        docker_service = DockerService(get_settings(env))
+
+        for service_name in sorted(affected_services):
+            try:
+                logger.info(f"Restarting {service_name}...")
+                docker_service.start_component(service_name, env)
+            except Exception as e:
+                logger.error(f"Failed to restart {service_name}: {e}")
+
+        logger.success(
+            f"Reconciliation complete. Restarted {len(affected_services)} service(s)."
+        )
 
     def _print_secrets_for_manual_copy(
         self, env: str, secrets_dict: dict[str, str]

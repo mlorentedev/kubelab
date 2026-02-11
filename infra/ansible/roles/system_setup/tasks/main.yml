@@ -42,7 +42,7 @@
         - { direction: 'outgoing', policy: 'allow' }
       become: true
 
-    - name: Allow essential ports
+    - name: Allow essential TCP ports
       ufw:
         rule: allow
         port: "{{ item }}"
@@ -51,7 +51,13 @@
         - '22'   # SSH
         - '80'   # HTTP
         - '443'  # HTTPS
-        - '6443' # K3s API (staging only, but won't hurt in prod)
+      become: true
+
+    - name: Allow Tailscale UDP port
+      ufw:
+        rule: allow
+        port: '41641'
+        proto: udp
       become: true
 
     - name: Enable UFW
@@ -98,6 +104,5 @@
     group: "{{ ansible_user }}"
     mode: '0755'
   loop:
-    - "/home/{{ ansible_user }}/.kube"
     - "/home/{{ ansible_user }}/.docker"
   become: true

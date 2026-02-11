@@ -36,21 +36,9 @@ all:
       vars:
         app_category: core
         deploy_apps:
-          - blog
           - web
           - api
-          - nn
-          - wiki
-
-    workers:
-      hosts:
-        {{ENVIRONMENT}}-server:
-      vars:
-        app_category: workers
-        deploy_workers:
-          - notifier
-          - pdf-generator
-          - scraper
+          - blog
 
     services:
       hosts:

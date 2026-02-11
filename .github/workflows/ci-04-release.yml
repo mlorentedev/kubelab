@@ -43,14 +43,14 @@ jobs:
             # Or use incremental if you prefer. Let's use Date + ShortSHA for uniqueness
             RELEASE_TAG="v${DATE_TAG}"
             IS_PRERELEASE="false"
-            ENV_FILE="infra/config/values/prod.yaml"
+            CONFIG_FILE="infra/config/values/prod.yaml"
             echo "::notice::🚀 Preparing Stable Release: $RELEASE_TAG"
 
           elif [[ "$BRANCH" == "develop" ]]; then
             # Release Candidate
             RELEASE_TAG="v${DATE_TAG}-rc.${SHORT_SHA}"
             IS_PRERELEASE="true"
-            ENV_FILE="infra/config/values/staging.yaml"
+            CONFIG_FILE="infra/config/values/staging.yaml"
             echo "::notice::🧪 Preparing Release Candidate: $RELEASE_TAG"
 
           else
@@ -66,7 +66,7 @@ jobs:
 
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "env_file=$ENV_FILE" >> "$GITHUB_OUTPUT"
+          echo "config_file=$CONFIG_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Create Deployment Artifact (ZIP)
         if: steps.strategy.outputs.skip != 'true'
@@ -95,19 +95,17 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Cleaning Bundle"
-          # Remove potential secrets or trash
+          # Remove potential secrets or trash (safety net)
           find dist/cubelab-deploy -name ".env*" -delete
           find dist/cubelab-deploy -name "__pycache__" -type d -exec rm -rf {} +
-          find dist/cubelab-deploy -name "*.enc.yaml" -delete # Secrets should be injected, not in zip? Or encrypted?
-          # Actually, encrypted secrets ARE needed. Keeping *.enc.yaml
-          # But removing .env files is correct.
+          # Note: Configuration lives in values/*.yaml, not .env files
           echo "::endgroup::"
 
           # Create Version Manifest
           echo "Build Date: $(date)" > dist/cubelab-deploy/MANIFEST.txt
           echo "Global Tag: $RELEASE_TAG" >> dist/cubelab-deploy/MANIFEST.txt
           echo "Commit: ${{ github.sha }}" >> dist/cubelab-deploy/MANIFEST.txt
-          echo "Config Source: ${{ steps.strategy.outputs.env_file }}" >> dist/cubelab-deploy/MANIFEST.txt
+          echo "Config Source: ${{ steps.strategy.outputs.config_file }}" >> dist/cubelab-deploy/MANIFEST.txt
 
           echo "--- Changed Apps ---" >> dist/cubelab-deploy/MANIFEST.txt
           echo '${{ inputs.changed_apps_json }}' >> dist/cubelab-deploy/MANIFEST.txt

@@ -27,9 +27,12 @@ ARG PUBLIC_ENABLE_BLOG
 ARG PUBLIC_ENABLE_CONTACT
 ARG BACKEND_URL
 
-RUN apk update && apk upgrade --no-cache
+# System packages (requires root)
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache curl
 
 WORKDIR /app
+RUN chown node:node /app
 
 # Configure npm to skip optional dependencies for faster builds
 ENV npm_config_omit=optional
@@ -55,22 +58,23 @@ ENV PUBLIC_ENABLE_BLOG=${PUBLIC_ENABLE_BLOG}
 ENV PUBLIC_ENABLE_CONTACT=${PUBLIC_ENABLE_CONTACT}
 ENV BACKEND_URL=${BACKEND_URL}
 
-COPY astro-site/package.json astro-site/package-lock.json ./
+COPY --chown=node:node astro-site/package.json astro-site/package-lock.json ./
+
+# Switch to non-root user (node:alpine ships with `node` user, UID/GID 1000)
+USER node
 
 # Install dependencies with cache
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
     npm ci
 
-RUN apk add --no-cache curl
-
 # Copy the rest of the source code
-COPY astro-site/ ./
+COPY --chown=node:node astro-site/ ./
 
 # Environment variable (optional)
 ARG BUILD_ENV=production
 ENV NODE_ENV=${BUILD_ENV}
 
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
     case "$TARGETARCH" in \
       "amd64") \
         echo "Installing Rollup for AMD64..." && \
@@ -83,7 +87,7 @@ RUN --mount=type=cache,target=/root/.npm \
     esac
 
 # Build the application
-RUN --mount=type=cache,target=/root/.npm npm run build \
+RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 npm run build \
  && npm audit --omit=dev --audit-level=high || true
 
 #---------- Runtime Stage ----------

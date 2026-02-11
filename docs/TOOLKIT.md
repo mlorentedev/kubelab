@@ -207,18 +207,18 @@ poetry run ruff check --fix toolkit/
 Running Docker Compose:
 ```python
 def _start_docker_service(compose_dir: Path, environment: str) -> None:
-    env_file = compose_dir / f".env.{environment}"
-    compose_file = compose_dir / f"compose.{environment}.yml"
+    base_file = compose_dir / "compose.base.yml"
+    overlay_file = compose_dir / f"compose.{environment}.yml"
 
-    if not env_file.exists():
-        logger.error(f"Env file not found: {env_file}")
+    if not base_file.exists() or not overlay_file.exists():
+        logger.error(f"Compose files not found in: {compose_dir}")
         raise typer.Exit()
 
     result = system.run_command_list(
         [
             "docker", "compose",
-            "--env-file", str(env_file),
-            "-f", str(compose_file),
+            "-f", str(base_file),
+            "-f", str(overlay_file),
             "up", "-d"
         ],
         cwd=compose_dir,
@@ -282,15 +282,15 @@ poetry run toolkit services up web
 Check configs exist:
 ```bash
 ls infra/stacks/apps/web/
- Should show compose.*.yml, .env.*
+ Should show compose.base.yml, compose.{env}.yml
 ```
 
- "Environment file not found"
+ "Configuration file not found"
 
-Create from template:
+Verify configuration values exist:
 ```bash
-cp infra/stacks/apps/web/.env.dev.example infra/stacks/apps/web/.env.dev
- Edit .env.dev with your values
+ls infra/config/values/
+ Should show common.yaml, dev.yaml, staging.yaml, prod.yaml
 ```
 
  Changes not taking effect

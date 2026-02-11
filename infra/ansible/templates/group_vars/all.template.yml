@@ -10,18 +10,17 @@ deploy_path: {{DEPLOY_PATH}}
  Project structure (integration with existing setup)
 project_root_local: "{{ playbook_dir | dirname | dirname | dirname }}"
 
- Local paths (your existing structure)
+ Local paths (aligned with infra/stacks/ structure)
 apps_local: "{{ project_root_local }}/apps"
-services_local: "{{ project_root_local }}/services"
-workers_local: "{{ project_root_local }}/apps/workers"
-infra_compose_local: "{{ project_root_local }}/infra/compose"
+stacks_local: "{{ project_root_local }}/infra/stacks"
+stacks_apps_local: "{{ stacks_local }}/apps"
+stacks_services_local: "{{ stacks_local }}/services"
+stacks_edge_local: "{{ stacks_local }}/edge"
 edge_traefik_local: "{{ project_root_local }}/edge/traefik"
 
  Remote deployment paths
 apps_remote: "{{ deploy_path }}/apps"
-services_remote: "{{ deploy_path }}/services"
-workers_remote: "{{ deploy_path }}/workers"
-compose_remote: "{{ deploy_path }}/compose"
+stacks_remote: "{{ deploy_path }}/infra/stacks"
 traefik_remote: "/opt/traefik"
 
  Infrastructure configuration
@@ -89,17 +88,9 @@ notifications:
 deployment:
    Core applications (always deployed)
   core_apps:
-    - blog
     - web
     - api
-    - nn
-    - wiki
-
-   Worker applications
-  worker_apps:
-    - notifier
-    - pdf-generator
-    - scraper
+    - blog
 
    Environment-specific services
   staging_services:
@@ -107,13 +98,18 @@ deployment:
     - grafana
     - loki
     - uptime
-    - ollama
+    - authelia
+    - crowdsec
+    - minio
 
   prod_services:
     - portainer
     - grafana
     - loki
     - uptime
+    - authelia
+    - crowdsec
+    - minio
     - calcom
     - immich
     - docmost
@@ -126,7 +122,12 @@ deployment:
     - gitea
     - vaultwarden
 
+  security_services:
+    - authelia
+    - crowdsec
+
   data_services:
+    - minio
     - docmost
 
   observability_services:
@@ -143,21 +144,16 @@ deployment:
 
  Application port mappings (for health checks and service discovery)
 app_ports:
-  blog:
   web:
   api:
-  nn:
-  wiki:
+  blog:
   grafana:
   loki:
   uptime:
   portainer:
-  calcom:
-  immich:
-  docmost:
-  vaultwarden:
-  gitea:
-  ollama:
+  authelia:
+  crowdsec:
+  minio:
 
  Health check configuration
 health_check:
@@ -165,14 +161,14 @@ health_check:
   retries:
   delay:
   endpoints:
-    blog: "/"
     web: "/"
     api: "/health"
-    nn: "/healthz"
-    wiki: "/"
+    blog: "/"
     grafana: "/api/health"
     uptime: "/"
     portainer: "/api/system/status"
+    authelia: "/api/health"
+    minio: "/minio/health/live"
 
  Deployment workflow configuration
 workflow:

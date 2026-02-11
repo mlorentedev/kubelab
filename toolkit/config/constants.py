@@ -60,7 +60,7 @@ class Components:
     SERVICES_OBSERVABILITY: Sequence[str] = ("grafana", "loki", "uptime_kuma")
 
     # Security services (apps.services.security.*)
-    SERVICES_SECURITY: Sequence[str] = ("authelia",)
+    SERVICES_SECURITY: Sequence[str] = ("authelia", "crowdsec")
 
     # Automation services (apps.services.automation.*)
     SERVICES_AUTOMATION: Sequence[str] = ("kestra", "github-runner")
@@ -99,28 +99,6 @@ class Components:
 @dataclass(frozen=True)
 class FilePatterns:
     """File patterns and extensions."""
-
-    # Environment files
-    ENV_FILES: Sequence[str] = (".env", ".env.dev", ".env.staging", ".env.prod")
-    ENV_EXAMPLE_SUFFIX: str = ".example"
-    ENV_EXCLUDE_EXTENSIONS: Sequence[str] = (
-        ".example",
-        ".py",
-        ".pyc",
-        ".ts",
-        ".d.ts",
-        ".mjs",
-        ".go",
-    )
-    ENV_EXCLUDE_DIRS: Sequence[str] = (
-        "**/.venv/**",
-        "**/__pycache__/**",
-        "**/node_modules/**",
-        "**/.tmp/**",
-        "**/.git/**",
-        "**/.archive/**",
-        "**/.bckp/**",
-    )
 
     # Docker Compose
     COMPOSE_FILE_TEMPLATE: str = "compose.{}.yml"
@@ -163,9 +141,6 @@ class PathStructures:
     EDGE_TRAEFIK: str = "infra/stacks/edge/traefik"
     EDGE_NGINX: str = "infra/stacks/edge/nginx"
 
-    # Config directories
-    INFRA_CONFIG_ENV: str = "infra/config/env"
-
     # Templates (Jinja2)
     TRAEFIK_TEMPLATES_DIR: str = "edge/traefik/templates"
     TRAEFIK_CONFIG_OUTPUT_DIR: str = "edge/traefik/generated"
@@ -189,7 +164,6 @@ class DockerConfig:
 
     # Flags
     FLAG_DETACH: str = "-d"
-    FLAG_ENV_FILE: str = "--env-file"
     FLAG_FILE: str = "-f"
     FLAG_FOLLOW: str = "-f"
     FLAG_NO_CACHE: str = "--no-cache"
@@ -325,7 +299,6 @@ class Messages:
 
     # File operations
     ERROR_COMPOSE_FILE_NOT_FOUND: str = "Compose file not found: {}"
-    ERROR_ENV_FILE_NOT_FOUND: str = "Environment file not found: {}"
     ERROR_TEMPLATE_NOT_FOUND: str = "Template not found: {}"
     ERROR_DIR_NOT_FOUND: str = "Directory not found: {}"
 
@@ -334,12 +307,7 @@ class Messages:
     SUCCESS_SERVICE_STOPPED: str = "Service '{}' stopped successfully"
     SUCCESS_DOCKER_IMAGE_BUILT: str = "Docker image built: {}"
     SUCCESS_DOCKER_IMAGE_PUSHED: str = "Docker image pushed: {}"
-    SUCCESS_FILES_VALIDATED: str = "All {} environment files are valid"
-    SUCCESS_ENV_FILES_INITIALIZED: str = "Initialized {} environment files for {}"
-    SUCCESS_ENV_FILES_BACKED_UP: str = "Backed up {} environment files"
-    SUCCESS_EXAMPLE_FILES_CREATED: str = (
-        "Created {} sanitized environment example files"
-    )
+    SUCCESS_FILES_VALIDATED: str = "All {} files are valid"
     SUCCESS_BUILD_GO: str = "Go application built successfully"
     SUCCESS_BUILD_ASTRO: str = "Astro application built successfully"
     SUCCESS_BUILD_JEKYLL: str = "Jekyll site built successfully"
@@ -353,15 +321,7 @@ class Messages:
     INFO_CLEANING_APP: str = "Cleaning {} artifacts"
     INFO_BUILDING_DOCKER_IMAGE: str = "Building Docker image for {}"
     INFO_PUSHING_DOCKER_IMAGE: str = "Pushing Docker image for {}"
-    INFO_BACKING_UP_ENV_FILES: str = "Backing up environment files to: {}"
-    INFO_VALIDATING_ENV_FILES: str = "Validating environment files..."
-    INFO_SEARCHING_ENV_FILES: str = "Searching for files matching pattern: {}"
-    INFO_INITIALIZING_ENV_FILES: str = (
-        "Initializing environment files for '{}' from example templates..."
-    )
-    INFO_CREATING_EXAMPLE_FILES: str = (
-        "Creating sanitized example files from environment '{}' configuration..."
-    )
+    INFO_VALIDATING_CONFIG_FILES: str = "Validating configuration files..."
     INFO_FILE_FOUND: str = "Found {} files:"
     INFO_FILE_COPIED: str = "✓ {}"
     INFO_FILE_CREATED: str = "Created {}"
@@ -369,17 +329,12 @@ class Messages:
     INFO_FILE_EMPTY: str = "Skipping empty file: {}"
 
     WARNING_FILE_NOT_FOUND: str = "File {} does not exist"
-    WARNING_ENV_FILE_NOT_FOUND: str = "Environment file not found: {}"
     WARNING_DEPLOYING_STAGING: str = "Deploying to STAGING environment"
     WARNING_NO_FILES_FOUND: str = "No files found matching pattern: {}"
     WARNING_NO_TESTS_CONFIGURED: str = "No tests configured for {}"
     WARNING_NO_LINTING_CONFIGURED: str = "No linting configured for {}"
-    WARNING_NO_ENV_FILES_FOUND: str = "No environment files found to process for '{}'"
-    WARNING_NO_EXAMPLE_FILES_FOUND: str = (
-        "No environment example files found to initialize for {}"
-    )
 
-    ERROR_MISSING_REQUIRED_VARS: str = "Missing required variables in .env:"
+    ERROR_MISSING_REQUIRED_VARS: str = "Missing required variables:"
     ERROR_FAILED_BACKUP: str = "Failed to create backup of {}: {}"
     ERROR_SERVICE_START_FAILED: str = "Failed to start service"
     ERROR_SERVICE_STOP_FAILED: str = "Failed to stop service"
@@ -443,8 +398,8 @@ class Messages:
     # =============================================================================
     ERROR_CREDENTIALS_REQUIRED: str = "Username and password are required"
     ERROR_CREDENTIALS_GENERATION_FAILED: str = "Failed to generate credentials: {}"
-    ERROR_CREDENTIALS_ENV_FILE_NOT_FOUND: str = (
-        "Environment file not found for credentials sync: {}"
+    ERROR_CREDENTIALS_CONFIG_NOT_FOUND: str = (
+        "Configuration not found for credentials sync: {}"
     )
     ERROR_CREDENTIALS_SECRET_SET_FAILED: str = "Failed to set secret '{}': {}"
     ERROR_CREDENTIALS_SECRET_DELETE_FAILED: str = "Failed to delete secret '{}': {}"
@@ -471,7 +426,7 @@ class Messages:
     SUCCESS_CREDENTIALS_SECRET_DELETED: str = "Secret '{}' deleted successfully"
     WARNING_CREDENTIALS_NO_SECRETS_SYNCED: str = "No secrets were synced"
     WARNING_CREDENTIALS_NO_GITHUB_SECRETS: str = (
-        "No GitHub secrets configured in .env files"
+        "No GitHub secrets configured in values files"
     )
     WARNING_NO_SECRETS_SYNCED: str = "No secrets were synced"
     WARNING_NO_GH_SECRETS: str = "No GitHub secrets configured"
@@ -515,13 +470,6 @@ class Messages:
     SUCCESS_ALL_VALIDATIONS_PASSED: str = "All validations passed"
     SUCCESS_TRAEFIK_VALID: str = "Traefik validation passed"
     SUCCESS_ANSIBLE_VALID: str = "Ansible validation passed"
-    SUCCESS_CONFIG_EXAMPLE_FILES_CREATED_TOTAL: str = "Created {} example files total"
-    WARNING_NO_EXAMPLE_FILES_CREATED: str = (
-        "No example files were created for any environment"
-    )
-    WARNING_CONFIG_NO_EXAMPLE_FILES_CREATED: str = (
-        "No example files were created for any environment"
-    )
     WARNING_CONFIG_GENERATION_FAILED: str = "Configuration generation failed: {}"
     WARNING_FAILED: str = "{} operation(s) failed"
 
@@ -532,7 +480,7 @@ class Messages:
     SUCCESS_CONFIG_ANSIBLE_VALIDATION_PASSED: str = "Ansible configuration is valid"
     WARNING_CONFIG_VALIDATION_FAILED: str = "{} validation failed"
     WARNING_CONFIG_SOME_VALIDATIONS_FAILED: str = (
-        "{}/{} configuration validations failed"
+        "{}/{} configuration validations passed"
     )
     WARNING_CONFIG_MISSING_TRAEFIK_FILES: str = (
         "Missing Traefik configuration files: {}"
@@ -626,7 +574,7 @@ class Messages:
 
     VALIDATION_FILE_EXISTS: str = "✓ {} exists"
     VALIDATION_YAML_VALID: str = "✓ {} is valid YAML"
-    VALIDATION_ENV_VALID: str = "✓ Valid: {}"
+    VALIDATION_CONFIG_VALID: str = "✓ Valid: {}"
 
 
 # =============================================================================

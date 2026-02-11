@@ -35,33 +35,25 @@ Each application contains:
 
 . Deploy using configurations from `infra/stacks/apps/{app-name}/`
 
- Environment Files for Development
+ Configuration
 
-When developing locally, you may need to copy `.env.dev` files to app directories:
+Environment configuration is centralized in `infra/config/`:
 
-```bash
- Example: Copy web app env for local development
-cp infra/stacks/apps/web/.env.dev apps/web/.env.dev
-```
+- **Values**: `infra/config/values/{common,dev,staging,prod}.yaml` - YAML configuration per environment
+- **Secrets**: `infra/config/secrets/{env}.enc.yaml` - SOPS-encrypted secrets (age key)
 
-This allows Dockerfiles to access environment variables during build.
-
-Note: `.env.` files in `apps/` are gitignored. Only commit `.env..example` files.
+No `.env` files are used. All configuration is injected through compose overlays and the values/secrets system.
 
  Deployment Configurations
 
-Deployment configurations (docker-compose, .env files) are located separately:
+Deployment configurations (compose overlays) are located separately:
 
 ```
 infra/stacks/apps/{app-name}/
-├── compose.base.yml
-├── compose.dev.yml
-├── compose.staging.yml
-├── compose.prod.yml
-├── .env.dev
-├── .env.staging
-├── .env.prod
-└── .env..example
+├── compose.base.yml           Service defaults
+├── compose.dev.yml            Dev environment overlay
+├── compose.staging.yml        Staging environment overlay
+└── compose.prod.yml           Production environment overlay
 ```
 
 See `infra/stacks/apps/README.md` for deployment documentation.
