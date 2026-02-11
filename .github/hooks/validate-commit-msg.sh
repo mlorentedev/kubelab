@@ -2,8 +2,8 @@
 MSG_FILE=$1
 MSG=$(cat "$MSG_FILE")
 
-if ! echo "$MSG" | grep -Eq '^[a-z]+: .+'; then
-  echo "[ERROR] Commit message must start with a lowercase prefix followed by a colon and a space (e.g., 'chore: Your message here')."
+if ! echo "$MSG" | grep -Eq '^[a-z]+(\(.+\))?!?: .+'; then
+  echo "[ERROR] Commit message must follow Conventional Commits format (e.g., 'feat: message', 'fix(scope): message', 'refactor!: breaking change')."
   echo "Commit message was: $MSG"
   echo "Please correct the commit message and try again."
   exit 1

@@ -171,7 +171,7 @@ Branch strategies:
 
 Environment variables:
 - Secrets managed through GitHub Secrets
-- Environment-specific configuration via .env files
+- Environment-specific configuration via `infra/config/values/*.yaml`
 - Runtime configuration through Docker labels
 
  Debugging CI/CD Issues
@@ -239,7 +239,7 @@ The pipeline includes comprehensive security scanning at multiple stages:
 Developers run automated security checks before commits:
 - Secret detection: gitleaks scans for exposed credentials
 - Path validation: Prevents commits to old/deprecated paths
-- Environment files: Blocks real `.env.dev/staging/prod` files
+- Configuration files: Blocks unencrypted secrets from `infra/config/secrets/`
 - Python linting: Ruff, black, mypy with strict typing
 - YAML/JSON validation: Prevents configuration errors
 

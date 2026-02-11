@@ -183,27 +183,7 @@ apps:
       default_port: 4000
       health_path: /
 
-    wiki:
-      name: wiki
-      domain: wiki.cubelab.cloud
-      image_name: cubelab-wiki
-      version: dev
-      enable_auth: false
-      auth_level: bypass
-      default_port: 80
-      health_path: /
-      # Nueva sección para configuración de MkDocs
-      mkdocs:
-        site_name: CubeLab Wiki
-        site_description: Platform documentation for mlorente.dev
-        site_author: Manu Lorente
-        site_url: https://wiki.cubelab.cloud
-        repo_name: mlorentedev/mlorente.dev
-        repo_url: https://github.com/mlorentedev/mlorente.dev
-        edit_uri: https://github.com/mlorentedev/mlorente.dev/edit/main/apps/wiki/docs/
-        copyright: Copyright &copy; 2025 Manu Lorente
-        logo_path: assets/logo.svg
-        favicon_path: assets/favicon.ico
+    # wiki: removed — integrated in toolkit as `cubelab docs` (see B1/TOOLKIT-008)
 
   # Third-party services
   services:
@@ -239,7 +219,7 @@ apps:
       github_runner:
         name: github-runner
         image: myoung34/github-runner:latest
-        repo_url: https://github.com/mlorentedev/mlorente.dev
+        repo_url: https://github.com/mlorentedev/cubelab
         runner_group: default
         labels: self-hosted,linux,docker
         resources:

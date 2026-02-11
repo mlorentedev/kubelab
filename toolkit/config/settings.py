@@ -231,10 +231,6 @@ class PlatformSettings(BaseSettings):
         return self.project_root / PATH_STRUCTURES.EDGE_NGINX
 
     @property
-    def global_env_dir(self) -> Path:
-        return self.project_root / PATH_STRUCTURES.INFRA_CONFIG_ENV
-
-    @property
     def tmp_dir(self) -> Path:
         return self.project_root / DEFAULT_CONFIG.BACKUP_DIR
 

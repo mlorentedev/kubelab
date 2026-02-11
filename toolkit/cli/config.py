@@ -148,7 +148,7 @@ def validate(
                 elif svc == "ansible":
                     result = AnsibleGenerator().validate()
                 elif svc == "authelia":
-                    result = AutheliaGenerator().validate()  # type: ignore[attr-defined]
+                    result = AutheliaGenerator().validate()
                 else:
                     logger.error(MESSAGES.ERROR_INVALID.format("service", svc))
                     continue

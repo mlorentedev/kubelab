@@ -52,10 +52,10 @@ apps:
 
     web:
       backend_url: "https://api.cubelab.cloud"
-      allowed_hosts: "localhost,web,127.0.0.1,.cubelab.cloud,cubelab.cloud"
-      domain: cubelab.cloud
-      site_domain: cubelab.cloud
-      site_url: http://cubelab.cloud
+      allowed_hosts: "localhost,web,127.0.0.1,.cubelab.cloud,.mlorente.dev"
+      domain: mlorente.dev
+      site_domain: mlorente.dev
+      site_url: https://mlorente.dev
       enable_blog: false
       enable_homelabs: false
       enable_contact: false

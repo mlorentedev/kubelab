@@ -1,0 +1,17 @@
+services:
+  coredns:
+    container_name: coredns
+    image: coredns/coredns:1.12.1
+    restart: unless-stopped
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    volumes:
+      - ./Corefile:/etc/coredns/Corefile:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "health.check", "+short", "||", "exit", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

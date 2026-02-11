@@ -205,27 +205,16 @@ class DeploymentOrchestrator:
         if result.returncode == 0:
             logger.console.print(result.stdout)
 
-        services = {
-            "api": self.settings.api_endpoint,
-            "web": self.settings.web_endpoint,
-            "blog": self.settings.blog_endpoint,
-            "wiki": self.settings.wiki_endpoint,
-        }
-        for service, url in services.items():
-            try:
-                result = command.run(
-                    f"curl -s -o /dev/null -w '%{{http_code}}' {url}", check=False
-                )
-                if result.returncode == 0 and result.stdout.strip() in [
-                    "200",
-                    "301",
-                    "302",
-                ]:
-                    logger.success(f"✓ {service} is healthy")
-                else:
-                    logger.warning(f"✗ {service} is not responding")
-            except Exception:
-                pass
+        from toolkit.features.health_check import HealthChecker
+
+        checker = HealthChecker(self.env)
+        results = checker.check_health()
+
+        for r in results:
+            if r.healthy:
+                logger.success(f"✓ {r.service} is healthy ({r.reason})")
+            else:
+                logger.warning(f"✗ {r.service} is not responding ({r.reason})")
 
     def _health_checks_remote(self) -> None:
         try:

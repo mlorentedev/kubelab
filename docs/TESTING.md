@@ -196,10 +196,10 @@ def test_invalid_config_raises_error() -> None:
 def test_validation_error_message() -> None:
     """Test validation error includes details."""
     try:
-        validate_env_file("invalid.env")
+        validate_config_file("invalid.yaml")
         assert False, "Should have raised ValidationError"
     except ValidationError as e:
-        assert "invalid.env" in str(e)
+        assert "invalid.yaml" in str(e)
         assert e.exit_code == 
 ```
 
@@ -256,8 +256,8 @@ View coverage: `poetry run pytest --cov=toolkit --cov-report=html`
 
  Write descriptive test names
 ```python
-def test_env_file_validation_fails_for_missing_required_vars() -> None:
-    """Test env file validation detects missing required variables."""
+def test_config_validation_fails_for_missing_required_vars() -> None:
+    """Test config file validation detects missing required variables."""
 ```
 
  One assertion per test (when possible)
@@ -352,17 +352,16 @@ def test_services_list_command() -> None:
  Testing File Operations
 
 ```python
-def test_env_file_generation(temp_dir: Path) -> None:
-    """Test environment file generation."""
-    source = temp_dir / ".env.dev"
-    source.write_text("SECRET=value\n")
+def test_compose_config_validation(temp_dir: Path) -> None:
+    """Test compose configuration validation."""
+    base_file = temp_dir / "compose.base.yml"
+    base_file.write_text("services:\n  web:\n    image: nginx\n")
 
-    generate_env_example(source)
+    overlay_file = temp_dir / "compose.dev.yml"
+    overlay_file.write_text("services:\n  web:\n    ports:\n      - '8080:80'\n")
 
-    example = temp_dir / ".env.dev.example"
-    assert example.exists()
-    assert "CHANGE_ME" in example.read_text()
-    assert "value" not in example.read_text()
+    assert base_file.exists()
+    assert overlay_file.exists()
 ```
 
  Testing Configuration

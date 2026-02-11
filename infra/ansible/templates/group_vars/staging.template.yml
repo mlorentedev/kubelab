@@ -1,27 +1,21 @@
- Staging environment overrides for Raspberry Pi Docker Compose
+ Staging environment overrides for Acemagic (Docker Compose)
 
 ---
  Infrastructure settings
 infrastructure_type: docker-compose
 use_docker_compose: true
 
- Performance tuning for Raspberry Pi
+ Performance tuning for Acemagic N95 (12GB RAM, x86_64)
 resource_limits:
   memory_default: {{MEMORY_LIMIT_DEFAULT}}
   memory_heavy: {{MEMORY_LIMIT_HEAVY}}
   cpu_default: {{CPU_LIMIT_DEFAULT}}
   cpu_heavy: {{CPU_LIMIT_HEAVY}}
 
- DNS gateway integration
-edge_gateway:
-  host: {{EDGE_HOST | default('...')}}
-  wireguard_port:
-  coredns_port:
-
  Deployment strategy
 deployment_strategy:
   type: docker_compose
-  compose_override: docker-compose.staging.yml
+  compose_override: compose.staging.yml
 
  Services to deploy in staging
 services_to_deploy: "{{ deployment.staging_services }}"

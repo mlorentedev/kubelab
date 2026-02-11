@@ -7,8 +7,8 @@
 
 - name: Determine service configuration sources
   set_fact:
-    service_compose_file: "{{ service_local_path }}/docker-compose.{{ environment }}.yml"
-    service_env_file: "{{ service_local_path }}/.env.{{ environment }}"
+    service_compose_base: "{{ service_local_path }}/compose.base.yml"
+    service_compose_env: "{{ service_local_path }}/compose.{{ environment }}.yml"
 
 - name: Display service deployment info
   debug:
@@ -29,7 +29,7 @@
         group: "{{ ansible_user }}"
         mode: '0755'
 
-    - name: Copy service docker-compose files
+    - name: Copy service compose files
       copy:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
@@ -37,8 +37,8 @@
         group: "{{ ansible_user }}"
         mode: '0644'
       loop:
-        - { src: "{{ service_compose_file }}", dest: "{{ service_remote_path }}/docker-compose.yml" }
-        - { src: "{{ service_env_file }}", dest: "{{ service_remote_path }}/.env" }
+        - { src: "{{ service_compose_base }}", dest: "{{ service_remote_path }}/compose.base.yml" }
+        - { src: "{{ service_compose_env }}", dest: "{{ service_remote_path }}/compose.{{ environment }}.yml" }
       ignore_errors: true
 
     - name: Copy additional service files
@@ -51,15 +51,15 @@
       ignore_errors: true
 
     - name: Stop existing service container
-      shell: cd {{ service_remote_path }} && docker compose down
+      shell: cd {{ service_remote_path }} && docker compose -f compose.base.yml -f compose.{{ environment }}.yml down
       ignore_errors: true
 
     - name: Pull service images
-      shell: cd {{ service_remote_path }} && docker compose pull
+      shell: cd {{ service_remote_path }} && docker compose -f compose.base.yml -f compose.{{ environment }}.yml pull
       ignore_errors: true
 
     - name: Start service container
-      shell: cd {{ service_remote_path }} && docker compose up -d
+      shell: cd {{ service_remote_path }} && docker compose -f compose.base.yml -f compose.{{ environment }}.yml up -d
       environment:
         DOMAIN: "{{ domain }}"
       register: service_start_result

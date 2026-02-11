@@ -1,50 +1,154 @@
 # CubeLab - Roadmap
 
-> **Objetivo**: Estabilizar, desplegar a producción, construir homelab staging.
+> **Goal**: Stabilize, deploy to production, extract repos, build homelab staging.
 >
-> **Horizonte**: 3 meses ejecutables. Backlog separado para ideas futuras.
+> **Methodology**: Kanban + XP practices (no sprints, no time-boxes)
 >
-> **Estrategia**: Fix code → Commit → Local dev → Production VPS → Homelab staging
+> **Strategy**: Fix code → Local dev → CI → Homelab staging → Production VPS → Extract repos
 
 ---
 
-## Quick Reference
+## Methodology
 
-| Simbolo | Estado |
-|---------|--------|
-| `[ ]` | Pendiente |
-| `[~]` | En progreso |
-| `[x]` | Completado |
-| `[!]` | Bloqueado |
+### Kanban
 
-| Prioridad | Significado |
-|-----------|-------------|
-| **P0** | Critico - Bloquea todo |
-| **P1** | Alto - Sprint actual |
-| **P2** | Medio - Proximo sprint |
-| **P3** | Bajo - Backlog |
+- **WIP Limit**: 2-3 items in progress simultaneously
+- **Pull-based**: Pick the next item when capacity is available
+- **Priority = position** in backlog (top = most urgent)
+- **No time-boxes**: No sprints, no story points
+- **Blockers**: Marked with `[!]` and reference to blocking item
+
+### XP Practices (Continuous Disciplines)
+
+These are not tasks — they are habits that apply to ALL work:
+
+- **TDD**: Red test → green → refactor. No separate "testing phase".
+- **Small releases**: Ship functional increments frequently
+- **Continuous integration**: Keep main branch deployable
+- **Simple design**: Minimum viable solution first
+- **Refactoring**: Improve structure while working, not as a separate task
+
+### Symbols
+
+| Symbol | Status |
+|--------|--------|
+| `[ ]` | Pending |
+| `[~]` | In progress |
+| `[x]` | Completed |
+| `[!]` | Blocked (see reference) |
 
 ---
 
-## Dependency Graph
+## Architecture Decisions (Locked)
 
-```text
-Sprint 0A (Fix Broken Code)
-    │
-    └──► Sprint 0B (Align Documentation)
-              │
-              └──► Sprint 0C (Validate + Commit + PR)
-                        │
-                        └──► Sprint 1 (Local Dev Working)
-                                  │
-                                  ├──► Sprint 2 (Production VPS)
-                                  │
-                                  └──► Sprint 3 (Homelab Staging)
-                                            │
-                                            └──► Sprint 4 (Persistence + Observability)
+> Decisions made 2026-02-08. Create formal ADR in vault when implemented.
 
-Backlog (P3 - sin dependencias directas):
-    Workers Phase 2+, ClawdBot, K3s, GitHub Org Migration
+### Pattern: SDK Distribution + Internal Developer Platform (IDP)
+
+Generic toolkit published as a versioned package. Each consumer project
+pins its own version and controls its upgrade timeline independently.
+
+### Repos (under `github.com/mlorente/`)
+
+```
+cubelab-cli              → Generic Python CLI (Typer+Rich)
+                           Published on GitHub Packages + PyPI
+                           Reads cubelab.yaml per project
+                           Command: cubelab
+
+cubelab-platform         → Infrastructure monorepo:
+                           - Platform services (Traefik, Authelia, Grafana, Gitea, n8n...)
+                           - CubeLab apps (api, web, personal blog)
+                           - IaC (Ansible, Terraform)
+                           - Edge configs
+                           Consumes: cubelab-cli
+
+cubernautas-blog         → Cubernautas blog (separate identity)
+                           Independent repo, deployed on CubeLab infra
+                           Consumes: cubelab-cli
+
+sensortool               → B2B SaaS (FastAPI/Go + Astro), portable
+                           Own compose stacks, overrides for shared infra
+                           Consumes: cubelab-cli
+
+future-static-sites      → Each static site in its own repo
+                           Same pattern: cubelab.yaml + cubelab-cli
+```
+
+### Key Decisions
+
+| Decision | Choice | Reason |
+|----------|--------|--------|
+| Pattern | SDK Distribution + IDP | Versioned toolkit, consumers pin versions |
+| Repos | 4+ (toolkit, platform, blog, sensortool) | Each portfolio-ready, independent lifecycle |
+| Config file | `cubelab.yaml` per project | Namespaced, declarative |
+| Package | `cubelab-cli` → command `cubelab` | PyPI + GitHub Packages |
+| Shared infra | Platform services shared, data logically isolated | One PostgreSQL, separate DBs per app |
+| Portability | Compose overrides (dev=local, prod=shared) | Env vars abstract the difference |
+| Blog split | cubernautas = own repo, personal blog in platform | Different identities, different lifecycles |
+| Wiki | Not deployed as app — lives in toolkit as `cubelab docs` | Auto-generated from cubelab.yaml, served locally or published to `docs.cubelab.cloud` |
+
+### Domain Strategy
+
+| Environment | Personal site | Platform services |
+|-------------|--------------|-------------------|
+| Local dev | `mlorente.test` | `*.cubelab.test` |
+| Staging | `web.staging.cubelab.cloud` | `*.staging.cubelab.cloud` |
+| Production | `mlorente.dev` | `*.cubelab.cloud` |
+
+Terraform DNS: two zones (`mlorente.dev` + `cubelab.cloud`)
+
+### cubelab.yaml Schema (Reference)
+
+```yaml
+# Example for cubelab-platform
+project:
+  name: cubelab-platform
+  type: platform           # platform | app | static-site
+
+stacks:
+  path: infra/stacks
+  categories: [apps, services, edge]
+
+apps:
+  path: apps
+  items:
+    api: { type: go, stack: infra/stacks/apps/api }
+    web: { type: astro, stack: infra/stacks/apps/web }
+    blog: { type: jekyll, stack: infra/stacks/apps/blog }
+
+environments: [dev, staging, prod]
+
+compose:
+  base_file: compose.base.yml
+  env_template: "compose.{env}.yml"
+
+config:
+  values: infra/config/values
+  secrets: infra/config/secrets
+  env: infra/config/env
+
+edge:
+  traefik:
+    templates: edge/traefik/templates
+    generated: edge/traefik/generated
+```
+
+### Shared vs Per-App Infrastructure
+
+```
+Platform services (always shared):
+  Traefik, Authelia, Grafana, Loki, Uptime Kuma
+
+Stateful data (single instance, logical isolation):
+  PostgreSQL → one instance, separate DB per app
+  Minio → one instance, separate buckets per app
+
+Stateless/cache (per app):
+  Redis → instance per app (different eviction policies)
+
+Task queues (per app):
+  Celery broker → per app (independent scaling)
 ```
 
 ---
@@ -53,623 +157,623 @@ Backlog (P3 - sin dependencias directas):
 
 ```
 ┌─────────────────────┬───────────────────────────────────┐
-│  VPS Hetzner        │ Produccion + WireGuard Hub        │
-│  162.55.57.175      │ Traefik + Apps + Loki + Uptime    │
+│  VPS Hetzner        │ Production                        │
+│  162.55.57.175      │ Traefik + Apps + Services          │
 ├─────────────────────┼───────────────────────────────────┤
-│  Mini PC #1         │ Proxmox: VM staging               │
-│  (Proxmox)          │ Docker Compose stack              │
-│  + USB 128GB        │ /mnt/staging-data (futuro PG)     │
+│  Beelink MiniS 8GB  │ Proxmox VE 8.x lab               │
+│  cubelab-gw         │ VMs, experiments, WiFi backup mgmt │
 ├─────────────────────┼───────────────────────────────────┤
-│  Mini PC #2         │ Reservado (Sprint 4+)             │
-│  (sin asignar)      │ Observability dedicada o K3s      │
+│  Acemagic 12GB      │ Staging (mirrors VPS)             │
+│  cubelab-staging    │ Ubuntu Server 24.04 LTS + Docker   │
+│                     │ Full CubeLab stack                 │
 ├─────────────────────┼───────────────────────────────────┤
-│  RPi #1             │ Pi-hole + DNS local               │
+│  RPi 4 (8GB)        │ Edge infrastructure                │
+│  cubelab-edge       │ Tailscale subnet router + CoreDNS  │
+│                     │ + External monitoring (Uptime Kuma) │
 ├─────────────────────┼───────────────────────────────────┤
-│  RPi #2             │ Reservado (futuro K3s ARM64)      │
+│  RPi 3 (1GB)        │ Pi-hole DNS sinkhole              │
+│  cubelab-dns        │ Network-wide ad blocking           │
+├─────────────────────┼───────────────────────────────────┤
+│  Jetson Nano (4GB)  │ Ollama + Text Polish API           │
+│  cubelab-ai         │ GPU-accelerated inference           │
+│                     │ Routed via Traefik on staging       │
 └─────────────────────┴───────────────────────────────────┘
 ```
 
 ---
 
-## Hallazgos del Audit (2026-02-05)
+## Backlog
 
-Bugs de codigo descubiertos que el plan anterior no contemplaba:
+> Ordered by priority (top = most urgent). Pick items top-down.
+> Respect WIP limit: max 2-3 items `[~]` simultaneously.
 
-| # | Bug | Severidad | Archivos |
-|---|-----|-----------|----------|
-| 1 | Toolkit referencia `docker-compose.{env}.yml` pero archivos reales son `compose.{base,env}.yml` | **CRITICO** | `cli/services.py`, `cli/infra.py`, `features/validation.py`, `config/constants.py`, `features/generator_traefik.py` |
-| 2 | `toolkit edge` importado en `main.py:16` pero nunca registrado con `add_typer()` | **ALTO** | `toolkit/main.py` |
-| 3 | `toolkit apps` eliminado (Phase 8) pero CLAUDE.md lo documenta como comando activo | **ALTO** | `CLAUDE.md`, `docs/TOOLKIT.md` |
-| 4 | `constants.py` COMPOSE_FILE_TEMPLATE = `docker-compose.{}.yml` (patron legacy) | **ALTO** | `toolkit/config/constants.py:126` |
-| 5 | `pre-push.sh` ejecuta `task lint` pero no existe Taskfile | **MEDIO** | `.github/hooks/pre-push.sh` |
-| 6 | Terraform `services.json` contiene solo `PLACEHOLDER` | **MEDIO** | `infra/terraform/dns/services.json` |
-| 7 | `SERVICES_CORE` en constants.py incluye "traefik" (es edge, no core) | **BAJO** | `toolkit/config/constants.py:54` |
-| 8 | `infra/stacks/apps/workers/` vacio - sin compose files | **BAJO** | directorio vacio |
-| 9 | `tests/` directorio no existe en disco (solo staged) | **INFO** | tests/ |
-| 10 | `sprint-0-docs-checklist.md` referencia `infra/compose/` (obsoleto) | **BAJO** | `tasks/sprint-0-docs-checklist.md` |
+### Stream A: Stabilize and Deploy (current monorepo)
 
----
+> Prerequisite for everything else. Flow: A1-A4 (local → CI) → Stream B (staging) → A5 (prod).
+> Staging must validate the full stack before touching production.
 
-## Fase 1: Estabilizacion (Semanas 1-3)
+#### A1: Verify local environment
 
-### Sprint 0A: Corregir Codigo Roto [P0]
+> Blocked by: nothing (Sprint 0 completed)
 
-> **Contexto**: 655 archivos staged en `feature/blog-restruct`
-> **Problema critico**: El toolkit CLI no encontrara compose files porque busca nombres incorrectos
-> **Duracion**: 2-4 horas
+- [x] **LOCAL-001**: CLI loads and responds
 
-Estos bugs deben corregirse ANTES de alinear documentacion o commitear.
-
-#### FIX-001: Corregir patron de nombres de compose files
-
-El toolkit busca `docker-compose.{env}.yml` pero los archivos reales son `compose.{base|dev|staging|prod}.yml`.
-
-**Archivos a corregir**:
-
-- [x] `toolkit/config/constants.py:126` - Cambiar COMPOSE_FILE_TEMPLATE
-  ```python
-  # ANTES
-  COMPOSE_FILE_TEMPLATE: str = "docker-compose.{}.yml"
-  # DESPUES
-  COMPOSE_FILE_TEMPLATE: str = "compose.{}.yml"
-  ```
-
-- [x] `toolkit/cli/services.py:168,203,246` - Refactorizado a `ConfigurationManager.get_compose_files()`
-  ```python
-  # ANTES
-  f"docker-compose.{environment}.yml"
-  # DESPUES - usar ConfigurationManager.get_compose_files() en su lugar
-  ```
-
-- [x] `toolkit/cli/infra.py:519` - Nuke refactorizado: eliminado compose lookup legacy, usa docker stop/prune
-  ```python
-  # ANTES
-  compose_file = f"docker-compose.{env}.yml"
-  # DESPUES
-  compose_file = f"compose.{env}.yml"
-  ```
-
-- [x] `toolkit/features/validation.py:98` - Corregir path de validacion
-  ```python
-  # ANTES
-  compose_file = component_dir / f"docker-compose.{environment}.yml"
-  # DESPUES
-  compose_file = component_dir / f"compose.{environment}.yml"
-  ```
-
-- [x] `toolkit/features/generator_traefik.py:105-107` - Corregir lista de archivos
-  ```python
-  # ANTES
-  "docker-compose.dev.yml", "docker-compose.staging.yml", "docker-compose.prod.yml"
-  # DESPUES
-  "compose.dev.yml", "compose.staging.yml", "compose.prod.yml"
-  ```
-
-- [x] `toolkit/features/generator_wiki.py:208-209` - Corregir path `infra/compose/services` → `PATH_STRUCTURES.INFRA_STACKS_SERVICES`
-
-**Verificacion**:
-```bash
-# Despues de corregir, no debe haber resultados:
-grep -rn "docker-compose\." toolkit/ --include="*.py" | grep -v "DOCKER_COMPOSE_CMD" | grep -v "__pycache__"
-```
-
-#### FIX-002: Registrar o eliminar edge CLI
-
-- [x] N/A - El import fantasma no existe en main.py actual. `toolkit/cli/edge.py` tampoco existe. Bug ya resuelto antes del audit.
-
-#### FIX-003: Corregir constants.py SERVICES_CORE
-
-- [x] Eliminar "traefik" de `SERVICES_CORE` (es un edge service, no core)
-  ```python
-  # ANTES
-  SERVICES_CORE: Sequence[str] = ("traefik", "portainer", "n8n", "gitea", "vaultwarden")
-  # DESPUES
-  SERVICES_CORE: Sequence[str] = ("portainer", "n8n", "gitea", "vaultwarden")
-  ```
-
-#### FIX-004: Corregir pre-push hook
-
-- [x] `.github/hooks/pre-push.sh` ejecuta `task lint` pero no hay Taskfile
-  - Aplicada Opcion A: Cambiado a `make lint`
-
-#### FIX-005: Limpiar referencias a `infra/compose/` en toolkit
-
-- [x] `toolkit/features/generator_wiki.py` - Corregido en FIX-001 (path + docstring)
-- [x] `toolkit/features/validation.py` - Corregido en FIX-001 (docstring find_component_directory)
-  ```bash
-  grep -rn "infra/compose" toolkit/ --include="*.py"
-  ```
-
-**Definition of Done Sprint 0A**:
-```bash
-# Todos estos deben pasar:
-poetry run python -c "from toolkit.main import app; print('OK')"
-grep -rn "docker-compose\." toolkit/ --include="*.py" | grep -v "DOCKER_COMPOSE_CMD" | grep -v "__pycache__" | wc -l  # debe ser 0
-grep -rn "infra/compose" toolkit/ --include="*.py" | wc -l  # debe ser 0
-```
-
----
-
-### Sprint 0B: Alinear Documentacion [P0]
-
-> **Bloqueado por**: Sprint 0A completado
-> **Duracion**: 2-4 horas
-
-#### TICKET-000: Actualizar Documentacion
-
-**Problema**: La documentacion referencia paths y comandos que no existen:
-
-| Que | Docs Dicen | Realidad |
-|-----|------------|----------|
-| Compose path | `infra/compose/` | `infra/stacks/` |
-| File naming | `docker-compose.{env}.yml` | `compose.{base,dev,staging,prod}.yml` |
-| CLI apps | `toolkit apps up web` | `toolkit services up web` (apps fue eliminado) |
-| CLI edge | `toolkit edge up traefik` | Depende de FIX-002 |
-| Env location | `configs/env/` | `infra/config/env/` |
-| Toolkit structure | `toolkit/commands/` | `toolkit/cli/` |
-
-**Estructura Real** (post-migracion):
-
-```
-infra/stacks/
-├── apps/           api/, blog/, web/, wiki/, workers/
-├── edge/           traefik/, nginx/, cloudflared/
-└── services/
-    ├── ai/          ollama, webui
-    ├── automation/  github-runner, kestra
-    ├── core/        gitea, portainer
-    ├── data/        docmost, minio
-    ├── misc/        calcom, immich
-    ├── observability/ grafana, loki, uptime
-    └── security/    authelia, crowdsec
-```
-
-**Tareas (por prioridad)**:
-
-- [x] **ALIGN-001**: Actualizar `CLAUDE.md` (15 edits: paths, comandos, arbol directorios)
-- [x] **ALIGN-002**: Actualizar `README.md` (7 edits: paths, comandos, tree)
-- [x] **ALIGN-003**: `docs/HOW-TO.md` - N/A, ya era un pointer al vault sin refs obsoletas
-- [x] **ALIGN-004**: Actualizar `docs/TOOLKIT.md` (18 reemplazos: apps→services, paths, tree)
-- [x] **ALIGN-005**: Actualizar `CONTRIBUTING.md` (13 edits: paths, comandos)
-- [x] **ALIGN-006**: `docs/CUBELAB.md` - N/A, ya era un pointer al vault sin refs obsoletas
-- [x] **ALIGN-007**: `.github/workflows/content-validation.yml` (1 path fix)
-- [x] **ALIGN-008**: `.github/workflows/ci-01-dispatch.yml` (9 path fixes en dorny/paths-filter)
-- [x] **ALIGN-009**: `apps/README.md` (7 edits: paths, comandos, filenames)
-- [x] **ALIGN-010**: `tasks/sprint-0-docs-checklist.md` - Archivo borrado (redundante con todo.md)
-- [x] **Extra**: `docs/TESTING.md` (1 fix: toolkit apps → toolkit services en ejemplo)
-
-**Verificacion**:
-```bash
-# No deben quedar referencias obsoletas en docs:
-grep -rn "infra/compose" docs/ CLAUDE.md README.md CONTRIBUTING.md --include="*.md" | wc -l  # debe ser 0
-grep -rn "toolkit apps" docs/ CLAUDE.md README.md CONTRIBUTING.md --include="*.md" | wc -l  # debe ser 0
-grep -rn "toolkit/commands" docs/ CLAUDE.md README.md CONTRIBUTING.md --include="*.md" | wc -l  # debe ser 0
-```
-
----
-
-### Sprint 0C: Validar y Commitear [P0]
-
-> **Bloqueado por**: Sprint 0A + 0B completados
-> **Duracion**: 1-2 horas
-
-- [x] **VAL-001**: Buscar secretos accidentalmente staged (3 falsos positivos: GH secret ref, placeholder, test example)
-  ```bash
-  git diff --cached --name-only | xargs grep -l -i -E "(password|secret|token|api_key)=.[^C]" 2>/dev/null
-  # Excluir lineas con CHANGE_ME (son templates)
-  ```
-
-- [x] **VAL-002**: Verificar .gitignore cubre archivos sensibles
-  ```bash
-  grep -E "\.env$|\.env\.[^e]|secrets|\.sops" .gitignore
-  ```
-
-- [x] **VAL-003**: Smoke test del toolkit (import OK, --help OK, services --help OK)
-  ```bash
-  poetry run python -c "from toolkit.main import app; print('Import OK')"
-  poetry run toolkit --help
-  poetry run toolkit services --help
-  ```
-
-- [x] **VAL-004**: Validar sintaxis Python (9/9 archivos OK)
-  ```bash
-  poetry run python -m py_compile toolkit/main.py
-  poetry run python -m py_compile toolkit/cli/services.py
-  poetry run python -m py_compile toolkit/features/docker_service.py
-  ```
-
-- [ ] **VAL-005**: Commit 1 - Reorganizacion (655 archivos staged)
-- [ ] **VAL-006**: Commit 2 - Sprint 0 fixes (codigo + docs)
-- [ ] **VAL-007**: Push branch (sin PR todavia - primero Sprint 1 para verificar que todo funciona)
-
-**Definition of Done Sprint 0**:
-- [x] Toolkit importa sin errores
-- [x] No hay secretos en el commit
-- [ ] Commits creados y pusheados
-- [ ] PR se crea despues de Sprint 1 (verificacion local completa)
-
----
-
-### Sprint 1: Entorno Local Funcionando [P1]
-
-> **Bloqueado por**: Sprint 0 completado (PR mergeado)
-> **Duracion**: 3-5 dias
-
-#### Phase 1: Verificar Toolkit CLI
-
-- [ ] **T-001**: CLI carga y responde
   ```bash
   poetry run toolkit --help
   poetry run toolkit services list
   poetry run toolkit config validate
   ```
 
-- [ ] **T-002**: Generar configuracion dev
+- [x] **LOCAL-002**: Generate dev configuration
+
   ```bash
   ENVIRONMENT=dev poetry run toolkit config generate
-  ```
-
-- [ ] **T-003**: Verificar configs generadas
-  ```bash
   ls edge/traefik/generated/dev/
-  ls infra/ansible/generated/dev/ 2>/dev/null
   ```
 
-#### Phase 2: Levantar Primera App (Web)
+- [x] **LOCAL-003**: Start Traefik locally
 
-- [ ] **T-004**: Levantar Traefik local
   ```bash
   poetry run toolkit services up traefik
-  # Verificar: docker ps | grep traefik
+  docker ps | grep traefik
   ```
 
-- [ ] **T-005**: Levantar web app
+- [x] **LOCAL-004**: Start web app
+
   ```bash
   poetry run toolkit services up web
-  # Verificar: curl -k https://web.cubelab.test (si DNS configurado)
-  # O: curl http://localhost:{port}
   ```
 
-- [ ] **T-006**: Verificar logs y healthcheck
-  ```bash
-  poetry run toolkit services logs web --no-follow
-  ```
+- [x] **LOCAL-005**: Start remaining apps (blog, api)
 
-#### Phase 3: Levantar Resto de Apps
-
-- [ ] **T-007**: Blog
   ```bash
   poetry run toolkit services up blog
-  ```
-
-- [ ] **T-008**: Wiki
-  ```bash
-  poetry run toolkit services up wiki
-  ```
-
-- [ ] **T-009**: API
-  ```bash
   poetry run toolkit services up api
   ```
 
-#### Phase 4: Build Tests
+- [x] **LOCAL-006**: Build tests (Go, Astro, Jekyll, MkDocs)
 
-- [ ] **T-010**: Build API (Go)
   ```bash
   cd apps/api/src && go build ./... && cd -
-  ```
-
-- [ ] **T-011**: Build Web (Astro)
-  ```bash
   cd apps/web/astro-site && npm ci && npm run build && cd -
-  ```
-
-- [ ] **T-012**: Build Blog (Jekyll)
-  ```bash
   cd apps/blog/jekyll-site && bundle install && bundle exec jekyll build && cd -
-  ```
-
-- [ ] **T-013**: Build Wiki (MkDocs)
-  ```bash
   cd apps/wiki && mkdocs build && cd -
   ```
 
-#### Phase 5: Calidad de Codigo (Toolkit)
+- [x] **LOCAL-007**: Toolkit code quality
 
-- [ ] **T-014**: Type checking
   ```bash
   poetry run mypy toolkit/
-  ```
-
-- [ ] **T-015**: Linting
-  ```bash
   poetry run ruff check toolkit/
   poetry run black --check toolkit/
   ```
 
-- [ ] **T-016**: Crear tests/ directorio con smoke tests basicos
+- [x] **LOCAL-008**: Create basic smoke tests
+
   ```bash
   mkdir -p tests
-  # Crear test minimo: importar toolkit, verificar CLI commands registrados
+  # Minimum test: import toolkit, verify CLI commands registered
   poetry run pytest tests/ -v
   ```
 
-#### Phase 6: CI/CD Fixes
+**Done when**: Apps build locally, toolkit CLI works, mypy passes, >=1 test. Completed 2026-02-09
 
-- [ ] **T-017**: Monitorear CI despues del merge
-- [ ] **T-018**: Fix paths rotos en workflows si los hay
-- [ ] **T-019**: Verificar que Docker builds en CI funcionan
+#### A2: Domain migration ✅
 
-**Definition of Done Sprint 1**:
-- [ ] Las 4 apps levantan localmente con Docker Compose
-- [ ] Toolkit CLI funciona para operaciones basicas
-- [ ] `poetry run mypy toolkit/` pasa (o issues documentados)
-- [ ] Al menos 1 smoke test en tests/
-- [ ] CI pasa en master
+> Blocked by: A1 completed
 
----
+- [x] **DOM-001**: Audit current domain references in the project
+- [x] **DOM-002**: Update `infra/config/values/` with new domain scheme
+  - dev.yaml: `*.cubelab.test` + `mlorente.test`
+  - staging.yaml: `*.staging.cubelab.cloud`
+  - prod.yaml: `*.cubelab.cloud` + `mlorente.dev`
+- [x] **DOM-003**: Update Traefik templates (Jinja2) for new scheme
+  - Templates already use variables from values.yaml (no hardcoded domains)
+- [x] **DOM-004**: ~~Update `.env.*.example` files~~ — Superseded: eliminated all `.env` files, migrated to `values/*.yaml` exclusively
+- [x] **DOM-005**: Update Makefile `setup-local-dns` (add `mlorente.test`)
+- [x] **DOM-006**: Regenerate configs and validate
+- [x] **ENV-CLEANUP**: Full `.env` removal across project (toolkit code, Ansible roles, CI workflows, documentation)
 
-## Fase 2: Produccion y Staging (Semanas 4-8)
+**Completed**: 2026-02-09. All domain references correct per environment.
+Config model migrated from `.env` files to `values/*.yaml` + SOPS secrets.
 
-### Sprint 2: Produccion VPS [P1]
+#### A3: Full local integration
 
-> **Bloqueado por**: Sprint 1 (apps funcionan localmente)
-> **Duracion**: 1 semana
-> **Razon de ir primero**: VPS ya existe (162.55.57.175), Ansible playbooks ya generados.
-> Desplegar a prod con lo que ya funciona es mas rapido que montar homelab desde cero.
+> Blocked by: A2 completed
+>
+> Goal: Bring up the ENTIRE stack locally, as close to prod as possible.
+> Verify Traefik routes correctly to each service with local TLS.
 
-**Arquitectura**:
+- [x] **INT-001**: Setup local DNS and certificates
 
-```
-                         INTERNET
-                            |
-              ┌─────────────▼─────────────┐
-              │      VPS HETZNER          │
-              │  162.55.57.175            │
-              │                           │
-              │  Traefik (edge + TLS)     │
-              │  Web    → web.mlorente.dev│
-              │  Blog   → blog...        │
-              │  Wiki   → wiki...        │
-              │  API    → api...         │
-              │  Uptime → uptime...      │
-              │                           │
-              │  WireGuard Hub (futuro)   │
-              └───────────────────────────┘
-```
+  ```bash
+  make setup-local-dns       # /etc/hosts: *.cubelab.test + mlorente.test
+  make setup-certs           # mkcert for all local domains
+  ```
 
-#### TICKET-009: Despliegue VPS
+- [x] **INT-002**: Generate credentials and configuration
 
-- [ ] **PROD-001**: Verificar acceso SSH al VPS
+  ```bash
+  make credentials-generate
+  make config-generate
+  make validate
+  ```
+
+- [x] **INT-003**: Build all images
+
+  ```bash
+  make build-dev
+  ```
+
+- [x] **INT-004**: Bring up full stack
+
+  ```bash
+  make up-dev
+  docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+  ```
+
+- [x] **INT-005**: Verify all containers are healthy
+
+  ```bash
+  # No container in "unhealthy" or "restarting" state
+  docker ps --filter "health=unhealthy" --format "{{.Names}}"
+  docker ps --filter "status=restarting" --format "{{.Names}}"
+  ```
+
+- [ ] **INT-006**: HTTP smoke test for each service
+
+  ```bash
+  make smoke-test            # Target to create: curl each endpoint
+  # Manual verification:
+  # - https://mlorente.test (personal website)
+  # - https://api.cubelab.test/health (API)
+  # - https://blog.cubelab.test (blog)
+  # - https://traefik.cubelab.test (dashboard)
+  # - https://grafana.cubelab.test (grafana)
+  # - https://portainer.cubelab.test (portainer)
+  # - https://auth.cubelab.test (authelia)
+  # Wiki NOT deployed — integrated in toolkit (see C1/TOOLKIT-008)
+  ```
+
+- [ ] **INT-007**: Verify Traefik routing (each domain → correct container)
+
+  ```bash
+  # Check Traefik dashboard at https://traefik.cubelab.test
+  # All routers should be green
+  ```
+
+- [ ] **INT-008**: Clean teardown
+
+  ```bash
+  make down-dev
+  # Verify no orphaned containers remain
+  docker ps -a --filter "label=com.docker.compose.project"
+  ```
+
+**Done when**: Full stack is up (no wiki — lives in toolkit), all services respond
+via HTTPS with mkcert certificates, Traefik routes correctly.
+`make up-dev` → `make smoke-test` → all green.
+
+#### A4: Push, PR and CI
+
+> Blocked by: A3 completed (local verified end-to-end)
+
+- [ ] **CI-001**: Push branch and create PR
+
+  ```bash
+  git push origin feature/blog-restruct
+  gh pr create
+  ```
+
+- [ ] **CI-002**: Monitor CI, fix broken paths if needed
+
+- [ ] **CI-003**: Verify Docker builds in CI
+
+**Done when**: PR merged, CI green on main.
+
+#### A5: Production VPS
+
+> Blocked by: A4 completed + Stream B completed (staging validated end-to-end)
+
+- [ ] **PROD-001**: Verify SSH access to VPS
+
   ```bash
   ssh mlorente-deployer@162.55.57.175 "hostname && docker --version"
   ```
 
-- [ ] **PROD-002**: Verificar/corregir Terraform DNS
-  - Fix `services.json` placeholder → generar desde `common.yaml`
+- [ ] **PROD-002**: Verify/fix Terraform DNS (two zones)
+
   ```bash
-  ENVIRONMENT=prod poetry run toolkit config generate
-  ENVIRONMENT=prod poetry run toolkit infra terraform plan
+  ENVIRONMENT=prod make config-generate
+  ENVIRONMENT=prod toolkit infra terraform plan
+  # Must manage: mlorente.dev + cubelab.cloud
   ```
 
-- [ ] **PROD-003**: Deploy con Ansible
+- [ ] **PROD-003**: Deploy with Ansible
+
   ```bash
-  ENVIRONMENT=prod poetry run toolkit infra ansible deploy
-  ```
-  O manualmente:
-  ```bash
-  cd infra/ansible/generated/prod
-  ansible-playbook -i hosts.yml playbooks/main.yml
+  ENVIRONMENT=prod toolkit infra ansible deploy
   ```
 
-- [ ] **PROD-004**: Verificar Traefik + TLS
+- [ ] **PROD-004**: Verify Traefik + TLS (Let's Encrypt)
+
   ```bash
-  curl -I https://mlorente.dev  # debe retornar 200 con cert valido
-  curl -I https://api.mlorente.dev/health
+  curl -I https://mlorente.dev
+  curl -I https://api.cubelab.cloud/health
   ```
 
-- [ ] **PROD-005**: Verificar cada app
-  - `https://mlorente.dev` (web)
-  - `https://blog.mlorente.dev` (blog)
-  - `https://wiki.mlorente.dev` (wiki)
-  - `https://api.mlorente.dev` (API)
+- [ ] **PROD-005**: Verify each public app/service
+  - `https://mlorente.dev` (personal website)
+  - `https://blog.cubelab.cloud` (cubernautas blog)
+  - `https://api.cubelab.cloud` (API)
+  - `https://grafana.cubelab.cloud` (monitoring)
+  - Wiki not deployed — lives in toolkit (`cubelab docs serve`)
 
-- [ ] **PROD-006**: Configurar monitoring basico
-  - Uptime Kuma con checks para cada app
-  - Loki recibiendo logs de todos los containers
+- [ ] **PROD-006**: Basic monitoring (Uptime Kuma + Loki)
 
-**Definition of Done Sprint 2**:
-- [ ] 4 apps accesibles publicamente con TLS valido
-- [ ] Uptime Kuma monitoreando endpoints
-- [ ] Logs centralizados en Loki
+**Done when**: Apps publicly accessible with valid TLS on both domains, monitoring active.
 
 ---
 
-### Sprint 3: Homelab Staging [P1]
+### Stream B: Homelab Staging Environment
 
-> **Bloqueado por**: Sprint 2 (prod funcionando = safety net)
-> **Duracion**: 1-2 semanas
+> **Prerequisite for A5 (prod)**. Starts after A4 (CI green). Acemagic runs
+> full stack as staging mirror of VPS. Must validate end-to-end before prod.
+> RPi 4 provides network infra (Tailscale, CoreDNS, external monitoring).
+> RPi 3 runs Pi-hole for LAN ad blocking. Beelink runs Proxmox for lab VMs.
+>
+> **ADR**: [[adr-006-tailscale-over-wireguard]] — Tailscale chosen over WireGuard
+> (no port forwarding available behind NAT).
+>
+> **Hardware**: See vault [[hardware/_index]] for full specs and topology.
 
-#### TICKET-006: VPS WireGuard Hub
+#### B0: Hardware Provisioning (manual, runbook-guided)
 
-- [ ] **WG-001**: Instalar WireGuard en VPS
-- [ ] **WG-002**: Configurar como hub (AllowedIPs para homelab + road warriors)
-- [ ] **WG-003**: Generar keys para: homelab, laptop, movil
-- [ ] **WG-004**: Abrir puerto UDP en firewall VPS
-- [ ] **WG-005**: Testear conexion desde laptop
+> User executes manually, following vault runbooks.
 
-#### TICKET-007: Proxmox Setup
+- [ ] **HW-001**: Install Proxmox VE 8.x on Beelink (hostname: `cubelab-gw`) → see vault [[runbooks/proxmox-setup]]
+- [ ] **HW-002**: Configure WiFi dongle as backup management on Beelink
+- [ ] **HW-003**: Install Ubuntu Server 24.04 LTS on Acemagic (hostname: `cubelab-staging`, user: `cubelab`)
+- [ ] **HW-004**: Install Ubuntu Server 24.04 LTS on RPi 4 (hostname: `cubelab-edge`, user: `cubelab`)
+- [ ] **HW-005**: Install Raspberry Pi OS Lite on RPi 3 (hostname: `cubelab-dns`, user: `cubelab`)
+- [ ] **HW-006**: Setup Jetson Nano with JetPack + Docker (hostname: `cubelab-ai`)
+- [ ] **HW-007**: Run Ethernet cables from router to TP-Link switch to all 5 devices
+- [ ] **HW-008**: Configure DHCP reservations on home router for all 5 devices
+- [ ] **HW-009**: Copy SSH keys, verify SSH access to staging + edge + dns + ai
+- [ ] **HW-010**: Verify all devices can reach internet
 
-- [ ] **PVE-001**: Documentar IP y recursos del Mini PC #1
-- [ ] **PVE-002**: Instalar Proxmox VE
-- [ ] **PVE-003**: Configurar USB 128GB como storage
-  ```bash
-  mkfs.ext4 /dev/sda1
-  mkdir -p /mnt/staging-data
-  mount /dev/sda1 /mnt/staging-data
-  echo "/dev/sda1 /mnt/staging-data ext4 defaults,nofail 0 2" >> /etc/fstab
-  ```
-- [ ] **PVE-004**: Crear LXC: wg-gateway (Alpine, 256MB) - cliente WireGuard
-- [ ] **PVE-005**: Crear VM: staging-node (Ubuntu 22.04, 4GB RAM, 50GB)
-- [ ] **PVE-006**: Bind mount `/mnt/staging-data` en VM staging
-- [ ] **PVE-007**: Establecer tunel WireGuard persistente al VPS
-- [ ] **PVE-008**: Verificar ping VPS ↔ Homelab
+> Runbook: vault [[runbooks/hardware-setup]]
 
-#### Deploy Staging
+#### B-pihole: Pi-hole on RPi 3 (can run parallel with B1)
 
-- [ ] **STG-001**: Clonar repo en VM staging
-- [ ] **STG-002**: Configurar .env.staging (SOPS decrypt)
-- [ ] **STG-003**: `ENVIRONMENT=staging poetry run toolkit config generate`
-- [ ] **STG-004**: `ENVIRONMENT=staging poetry run toolkit services up traefik`
-- [ ] **STG-005**: Deploy apps en staging
-- [ ] **STG-006**: Verificar acceso via WireGuard
+> Quick win — useful immediately for the home network.
 
-#### Raspberry Pi
+- [ ] **PIHOLE-001**: Install Docker on RPi 3
+- [ ] **PIHOLE-002**: Deploy Pi-hole container
+- [ ] **PIHOLE-003**: Configure home router to use RPi 3 as primary DNS
+- [ ] **PIHOLE-004**: Verify DNS resolution and ad blocking
 
-- [ ] **RPI-001**: Instalar Pi-hole en RPi #1
-- [ ] **RPI-002**: Configurar DNS local para `*.staging.cubelab.cloud`
+> Runbook: vault [[runbooks/pihole-setup]]
 
-#### Acceso de Emergencia
+#### B1: Tailscale VPN Mesh
 
-> Si el tunel WireGuard cae (reboot, IP change, config rota), necesitas
-> una via alternativa para llegar al Proxmox host sin acceso fisico.
+- [ ] **TS-001**: Install Tailscale on cubelab-staging, cubelab-edge, cubelab-gw, workstation
+- [ ] **TS-002**: Configure cubelab-edge (RPi 4) as subnet router (`--advertise-routes`)
+- [ ] **TS-003**: Approve subnet route in Tailscale admin
+- [ ] **TS-004**: Record Tailscale IPs, update Ansible inventory
+- [ ] **TS-005**: Configure Tailscale split DNS for `staging.cubelab.cloud` → cubelab-edge CoreDNS
 
-**Evaluar alternativas** (elegir 1 primaria + 1 secundaria):
+> Runbook: vault [[runbooks/tailscale-setup]]
 
-| Opcion | Tipo | Pros | Contras |
-|--------|------|------|---------|
-| **Tailscale** | Mesh VPN (WireGuard-based) | Zero-config, NAT traversal, ACLs, MagicDNS | Freemium (3 users free), control plane externo |
-| **Netbird** | Mesh VPN (open-source) | Self-hostable, WireGuard-based, similar a Tailscale | Mas setup, menos maduro |
-| **Headscale** | Tailscale server self-hosted | 100% open-source, compatible con clientes Tailscale | Requiere servidor publico (VPS), mas mantenimiento |
-| **autossh** | Reverse SSH tunnel | Zero dependencies, funciona en cualquier sitio | Fragil, necesita monitoreo, un solo puerto |
-| **Cloudflare Tunnel** | HTTP tunnel | Gratis, no abre puertos, acceso web | Solo HTTP/S, no SSH directo sin WARP |
-| **ZeroTier** | Mesh VPN | Open-source, P2P, facil setup | Control plane centralizado (free tier), menos usado |
+#### B2: CoreDNS on RPi 4 (parallel with B3)
 
-**Recomendacion**: Tailscale (primaria) + autossh (secundaria minimal)
-- Tailscale: instalar en Proxmox host + laptop + movil. Siempre accesible.
-- autossh: reverse tunnel SSH al VPS como ultimo recurso si todo falla.
+- [ ] **DNS-001**: Install Docker on RPi 4
+- [ ] **DNS-002**: Deploy CoreDNS container (`edge/dns-gateway/`)
+- [ ] **DNS-003**: Update Corefile with cubelab-staging Tailscale IP
+- [ ] **DNS-004**: Verify: `dig @<rpi4-ip> api.staging.cubelab.cloud` → cubelab-staging Tailscale IP
 
-**Tareas**:
+> Runbook: vault [[runbooks/dns-homelab]]
 
-- [ ] **EMG-001**: Evaluar y decidir solucion (Tailscale vs Headscale vs Netbird)
-  - Si self-hosted importa: Headscale en VPS + clientes Tailscale
-  - Si pragmatismo importa: Tailscale free tier (3 users, 100 devices)
-- [ ] **EMG-002**: Instalar solucion elegida en Proxmox host
-- [ ] **EMG-003**: Instalar en laptop y movil
-- [ ] **EMG-004**: Configurar autossh reverse tunnel como backup
-  ```bash
-  # En Proxmox host (crontab o systemd service):
-  autossh -M 0 -f -N -R 2222:localhost:22 mlorente-deployer@162.55.57.175
-  # Acceso de emergencia desde cualquier sitio:
-  ssh -p 2222 root@162.55.57.175
-  ```
-- [ ] **EMG-005**: Documentar procedimientos en `docs/EMERGENCY-ACCESS.md`
-  - Escenario 1: WireGuard caido → usar Tailscale/mesh
-  - Escenario 2: Tailscale caido → usar autossh via VPS
-  - Escenario 3: VPS caido → acceso fisico (documentar localizacion)
-  - Contactos y credenciales (referencia a SOPS secrets)
-- [ ] **EMG-006**: Test de failover: desactivar WireGuard, verificar acceso por via alternativa
+#### B3: Staging Configuration & Secrets
 
-**Definition of Done Sprint 3**:
-- [ ] VPS con WireGuard Hub funcionando
-- [ ] Proxmox con VM Staging funcionando
-- [ ] Tunel site-to-site estable
-- [ ] Apps staging accesibles via VPN
-- [ ] Pi-hole con DNS local
-- [ ] Acceso de emergencia probado (failover test)
+> [x] **CFG-001**: Fix `staging.yaml` (disable cloudflared, add service domains)
+> [x] **CFG-002**: Create missing `compose.staging.yml` files (crowdsec, minio, github-runner)
+> [x] **CFG-003**: Fix Ansible templates (paths, service lists, ports, compose naming)
+
+- [ ] **CFG-004**: Generate staging secrets (`staging.enc.yaml` + `staging.oidc-jwks.pem`)
+- [ ] **CFG-005**: Regenerate all staging configs (`ENVIRONMENT=staging toolkit config generate`)
+- [ ] **CFG-006**: Validate compose files resolve for all staging services
+
+#### B4: Acemagic Provisioning via Ansible
+
+> Blocked by: B1 + B3
+
+- [ ] **PROV-001**: Run `ansible-playbook setup.yml` (system_setup → docker → project_setup)
+- [ ] **PROV-002**: Verify Docker, compose, network, firewall on Acemagic
+
+#### B5: Edge + Full Deployment
+
+> Blocked by: B2 + B4
+
+- [ ] **EDGE-001**: Deploy Traefik on Acemagic
+- [ ] **EDGE-002**: Verify Let's Encrypt TLS via DNS-01 challenge
+- [ ] **EDGE-003**: Deploy Nginx error pages
+- [ ] **DEPLOY-001**: Deploy Authelia + Redis (SSO prerequisite)
+- [ ] **DEPLOY-002**: Deploy Apps (API, Web, Blog — pull from Docker Hub)
+- [ ] **DEPLOY-003**: Deploy Observability (Grafana, Loki + Vector)
+- [ ] **DEPLOY-004**: Deploy Core + Data (Portainer, CrowdSec, MinIO)
+- [ ] **DEPLOY-005**: Smoke test all staging endpoints
+
+#### B-ai: Jetson Nano — Ollama + Text Polish API
+
+> Separate project, routed through staging Traefik via file provider.
+
+- [ ] **AI-001**: Install Docker on Jetson Nano (JetPack environment)
+- [ ] **AI-002**: Deploy Ollama container with GPU passthrough
+- [ ] **AI-003**: Deploy text polish API server (browser extension backend)
+- [ ] **AI-004**: Add Traefik file provider route on cubelab-staging → Jetson LAN IP
+- [ ] **AI-005**: Add CoreDNS entry for `polish.staging.cubelab.cloud`
+- [ ] **AI-006**: Verify end-to-end: browser extension → Traefik → Jetson → Ollama → response
+
+#### B6: External Monitoring (RPi 4)
+
+> Blocked by: B5
+
+- [ ] **MON-001**: Deploy Uptime Kuma on RPi 4 (external to staging blast radius)
+- [ ] **MON-002**: Configure monitors for all staging endpoints
+- [ ] **MON-003**: When prod deployed (A5), add prod endpoints
+
+#### B7: Documentation & Cleanup
+
+- [x] **DOC-001**: Update `tasks/lessons.md` with session learnings
+- [x] **DOC-002**: Rewrite Stream B in `tasks/todo.md`
+- [x] **DOC-003**: Update vault hardware/_index.md (correct specs, topology, all 5 devices)
+- [x] **DOC-004**: Create vault runbooks (pihole-setup, proxmox-setup)
+- [x] **DOC-005**: Update vault runbooks/hardware-setup.md (all 5 devices)
+- [x] **DOC-006**: Fix Ansible staging template (12GB not 16GB)
+- [x] **DOC-007**: Add hardware verification lesson to tasks/lessons.md
+- [ ] **DOC-008**: Create ADR-006 (Tailscale over WireGuard) in vault
+- [ ] **DOC-009**: Update vault runbooks (tailscale-setup, dns-homelab, deployment) as phases complete
 
 ---
 
-### Sprint 4: Persistence + Observability [P2]
+### Stream C: Repo Separation
 
-> **Bloqueado por**: Sprint 3 (staging funcional)
-> **Duracion**: 1-2 semanas
-> **Nota**: Solo implementar cuando una app lo necesite. Si ninguna app necesita BD, diferir.
+> Prerequisite: A5 completed (prod working = safety net for repo split).
+> This implements the architecture decisions above.
 
-#### TICKET-008: Persistence Layer (cuando sea necesario)
+#### C1: Make toolkit generic
 
-```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ PostgreSQL  │  │   MinIO     │  │   Redis     │
-│   :5432     │  │   :9000     │  │   :6379     │
-│             │  │             │  │             │
-│ Schemas:    │  │ Buckets:    │  │ Uses:       │
-│ - auth      │  │ - uploads   │  │ - Cache     │
-│ - app       │  │ - reports   │  │ - Celery    │
-│ - workers   │  │ - assets    │  │ - Sessions  │
-└─────────────┘  └─────────────┘  └─────────────┘
-```
+> This is the largest piece of work. Transform the toolkit from CubeLab-specific
+> to generic, reading cubelab.yaml.
 
-- [ ] **DATA-001**: Deploy PostgreSQL 16 en staging
-- [ ] **DATA-002**: Crear schemas con aislamiento
-- [ ] **DATA-003**: Deploy Redis 7 (para Celery workers)
-- [ ] **DATA-004**: Deploy MinIO (si se necesita object storage)
-- [ ] **DATA-005**: Configurar pg_dump daily backup
+- [ ] **TOOLKIT-001**: Design definitive cubelab.yaml schema
+  - Define what is configurable vs convention
+  - Document with examples for: platform, app, static-site
+
+- [ ] **TOOLKIT-002**: Implement cubelab.yaml loading
+  - Parser with Pydantic v2 model
+  - Sensible fallbacks if config is missing
+  - Clear error if cubelab.yaml does not exist
+
+- [ ] **TOOLKIT-003**: Refactor constants.py and settings.py
+  - Remove hardcoded paths (PATH_STRUCTURES, SERVICES_*, etc.)
+  - Everything resolves from cubelab.yaml + smart defaults
+
+- [ ] **TOOLKIT-004**: Refactor cli/services.py
+  - Discover stacks from cubelab.yaml, not from constants
+  - Generic compose file resolution
+
+- [ ] **TOOLKIT-005**: Refactor features/ (validation, generators)
+  - Make generators configurable via cubelab.yaml
+  - Validation reads structure from config
+
+- [ ] **TOOLKIT-006**: Full tests for generic toolkit
+  - Test with cubelab.yaml type platform
+  - Test with cubelab.yaml type app
+  - Test with cubelab.yaml type static-site
+  - Edge cases: missing config, partial config
+
+- [ ] **TOOLKIT-007**: Create cubelab.yaml for current monorepo
+  - Verify toolkit works identically with config file
+
+- [ ] **TOOLKIT-008**: Integrate wiki as `cubelab docs` (replaces wiki app)
+  - Migrate `generator_wiki.py` to `cubelab docs` command
+  - Subcommands: `generate` (static HTML), `serve` (local MkDocs), `validate` (CI)
+  - Reads project structure from `cubelab.yaml`:
+    - Auto-generated service catalog (apps, services, domains, versions)
+    - Available commands (CLI introspection)
+    - Project architecture
+  - Remove wiki app from stack (Dockerfile, compose, Traefik domain)
+  - Local access: `cubelab docs serve` → `http://localhost:8000`
+  - Tests:
+    - `cubelab docs validate` passes without errors
+    - `cubelab docs generate` produces valid HTML
+    - `cubelab docs serve` starts server on configurable port
+    - Content reflects cubelab.yaml (correct service catalog)
+  - Publication (post C2, when cubelab-cli is an independent repo):
+    - CI in `cubelab-cli` generates static HTML with `cubelab docs generate`
+    - Automatic deploy to GitHub Pages (`mlorente.github.io/cubelab-cli/`)
+    - On VPS: Nginx/Traefik serves static HTML at `docs.cubelab.cloud`
+    - Traefik route points to a lightweight container (nginx:alpine) with generated HTML
+    - Option: GitHub Action in cubelab-cli deploys to VPS via SSH/rsync
+    - Result: `docs.cubelab.cloud` always up-to-date with each CLI release
+
+**Done when**: Toolkit works the same as before but reading cubelab.yaml.
+Zero CubeLab-specific hardcoded logic. `cubelab docs serve` serves
+auto-generated project documentation.
+
+#### C2: Publish cubelab-cli
+
+> Blocked by: C1 completed
+
+- [ ] **PUB-001**: Create `cubelab-cli` repo on GitHub
+  - Structure: pyproject.toml, cubelab_cli/, tests/, README
+  - Move toolkit/ code to new repo
+
+- [ ] **PUB-002**: Configure toolkit CI/CD
+  - Tests on PR
+  - Publish to GitHub Packages on tag
+  - Publish to PyPI on tag
+
+- [ ] **PUB-003**: First release (v0.1.0)
+
+  ```bash
+  cd cubelab-cli
+  poetry version 0.1.0
+  poetry publish --build
+  ```
+
+- [ ] **PUB-004**: Verify clean installation
+
+  ```bash
+  pip install cubelab-cli
+  cubelab --help
+  ```
+
+**Done when**: `pip install cubelab-cli` works, `cubelab --help` responds.
+
+#### C3: Convert monorepo → cubelab-platform
+
+> Blocked by: C2 completed (toolkit published)
+
+- [ ] **PLAT-001**: Update pyproject.toml
+  - Remove toolkit as local code
+  - Add dependency: `cubelab-cli = "^0.1.0"`
+
+- [ ] **PLAT-002**: Clean toolkit/ directory from monorepo
+  - Only cubelab.yaml remains as configuration
+
+- [ ] **PLAT-003**: Verify everything works with external toolkit
+
+  ```bash
+  poetry install
+  cubelab services list
+  cubelab services up web
+  ```
+
+- [ ] **PLAT-004**: Clean repo rename references (`mlorente.dev` → `cubelab`)
+  - GitHub URLs in README.md, CONTRIBUTING.md, common.yaml
+  - Go module path in `apps/api/src/go.mod` + all `.go` imports
+  - pyproject.toml metadata
+  - Makefile/pre-commit comments
+  - `toolkit/features/orchestrator.py` hardcoded health check URLs
+  - Note: `mlorente.dev` as DOMAIN stays (it's the personal site domain, not the repo name)
+
+- [ ] **PLAT-005**: Update CI/CD to use cubelab-cli as dependency
+
+**Done when**: Monorepo works without local toolkit, consumes cubelab-cli from PyPI.
+
+#### C4: Create sensortool
+
+> Blocked by: C2 completed (toolkit published)
+> Can be done in parallel with C3.
+
+- [ ] **SENSOR-001**: Create `sensortool` repo on GitHub
+  - Scaffold with cubelab.yaml type app
+  - pyproject.toml with cubelab-cli dependency
+
+- [ ] **SENSOR-002**: Initial structure
+
+  ```
+  sensortool/
+  ├── cubelab.yaml
+  ├── pyproject.toml
+  ├── apps/
+  │   ├── api/          # FastAPI or Go
+  │   └── frontend/     # Astro
+  ├── infra/stacks/
+  │   └── apps/
+  │       ├── api/
+  │       │   ├── compose.base.yml
+  │       │   ├── compose.dev.yml
+  │       │   └── compose.prod.yml
+  │       └── frontend/
+  └── docs/
+  ```
+
+- [ ] **SENSOR-003**: Verify cubelab CLI works in the repo
+
+  ```bash
+  cubelab services list
+  cubelab services up api
+  ```
+
+- [ ] **SENSOR-004**: Own CI/CD
+
+**Done when**: Functional repo, portfolio-ready, `cubelab services up` works.
+
+#### C5: Extract cubernautas-blog
+
+> Blocked by: C2 completed
+> Can be done in parallel with C3 and C4.
+
+- [ ] **BLOG-001**: Create `cubernautas-blog` repo on GitHub
+
+- [ ] **BLOG-002**: Move blog content from cubelab-platform to new repo
+  - Current blog (`apps/blog/`) → `cubernautas-blog/`
+  - Current stack (`infra/stacks/apps/blog/`) → adapt to new repo
+
+- [ ] **BLOG-003**: Create personal blog in cubelab-platform
+  - Replace the blog that left with a personal one
+
+- [ ] **BLOG-004**: cubelab.yaml + own CI/CD
+
+- [ ] **BLOG-005**: Verify deploy on CubeLab infra
+
+**Done when**: Cubernautas is an independent repo, personal blog in platform.
+
+---
+
+### Stream D: Data and Observability
+
+> Only implement when an app needs it. If no app needs a database, defer.
+
+#### D1: Persistence Layer
+
+- [ ] **DATA-001**: Deploy PostgreSQL 16 (one instance, DBs per app)
+- [ ] **DATA-002**: Create databases with per-app isolation
+- [ ] **DATA-003**: Deploy Redis 7 (instance per app that needs it)
+- [ ] **DATA-004**: Deploy MinIO (if object storage is needed)
+- [ ] **DATA-005**: Configure pg_dump daily backup
 - [ ] **DATA-006**: Test backup/restore cycle
-- [ ] **DATA-007**: Replicar en produccion
 
-#### Observability (Docker Compose, no K3s)
+#### D2: Observability
 
-- [ ] **OBS-001**: Grafana funcionando en staging + prod
-- [ ] **OBS-002**: Loki recibiendo logs de todos los containers
-- [ ] **OBS-003**: Crear 5 dashboards basicos:
-  - Container health
-  - Request rates por app
-  - Error rates
-  - Resource usage
-  - Uptime history
-- [ ] **OBS-004**: Alertas basicas (container down, high error rate)
-
-**Definition of Done Sprint 4**:
-- [ ] Persistence layer operativo (si necesario)
-- [ ] Grafana con 5+ dashboards
-- [ ] Alertas configuradas
-- [ ] Backups validados
+- [ ] **OBS-001**: Grafana working on staging + prod
+- [ ] **OBS-002**: Loki receiving logs from all containers
+- [ ] **OBS-003**: 5 basic dashboards (health, requests, errors, resources, uptime)
+- [ ] **OBS-004**: Basic alerts (container down, high error rate)
 
 ---
 
-## Backlog (P3 - Sin Priorizar)
+### Stream E: Backlog (unprioritized)
 
-> Items aqui no tienen sprint asignado. Se priorizan cuando hay capacidad
-> o cuando se convierten en prerequisito de algo activo.
+> Items without defined order. Prioritize when capacity or need arises.
 
-### Tier 1: Probable (proximos 3 meses)
+**Tier 1: Likely**
 
-- [ ] **Workers deployment**: Crear compose files en `infra/stacks/apps/workers/`
-- [ ] **Workers Phase 2**: Media processing (FFmpeg audio, WebP compression)
-- [ ] **Test coverage**: Alcanzar 30%+ en toolkit core modules
-- [ ] **Terraform DNS**: Generar `services.json` automaticamente desde `common.yaml`
-- [ ] **Consolidar youtube-toolkit**: Migrar `youtube-toolkit` → `apps/workers/youtube/`
-- [ ] **SOPS alignment**: Alinear con age keys de dotfiles
+- [ ] Workers deployment: compose files in `infra/stacks/apps/workers/`
+- [ ] Workers Phase 2: Media processing (FFmpeg, WebP)
+- [ ] Test coverage: 30%+ on toolkit core modules
+- [ ] Terraform DNS: Generate `services.json` from `common.yaml`
+- [ ] Consolidate youtube-toolkit → `apps/workers/youtube/`
+- [ ] SOPS alignment: Align with age keys from dotfiles
 
-### Tier 2: Posible (3-6 meses)
+**Tier 2: Possible**
 
-- [ ] **ClawdBot**: Telegram bot (estructura, framework, approval workflow)
-- [ ] **K3s Learning Lab**: Instalar K3s en Proxmox, aprender basics
-- [ ] **ArgoCD**: GitOps para staging environment
-- [ ] **Authelia expand**: Proteger mas servicios con OIDC
-- [ ] **Workers Phase 3**: AI & Intelligence (embeddings, RAG, summarization)
+- [ ] ClawdBot: Telegram bot (framework, approval workflow)
+- [ ] K3s Learning Lab: K3s on Proxmox
+- [ ] ArgoCD: GitOps for staging
+- [ ] Authelia expand: OIDC for more services
+- [ ] Workers Phase 3: AI (embeddings, RAG, summarization)
 
-### Tier 3: Ideas (6+ meses, sin compromiso)
+**Tier 3: Ideas (no commitment)**
 
-- [ ] GitHub Organization migration (hub-and-spoke architecture)
-- [ ] K3s multi-arch cluster con RPi #2
-- [ ] Helm charts para todas las apps
+- [ ] K3s multi-arch cluster with RPi #2
+- [ ] Helm charts for all apps
 - [ ] Workers Phase 4-5 (data aggregator, system maintenance)
 - [ ] Newsletter (Cubernautas) setup
-
----
-
-## Metricas de Exito
-
-| Metrica | Sprint 1 | Sprint 2 | Sprint 4 |
-|---------|----------|----------|----------|
-| Apps en prod | 0 | 4 | 4+ |
-| Toolkit CLI funcional | si | si | si |
-| Test coverage | >0% | 10%+ | 30%+ |
-| Grafana dashboards | 0 | 1 | 5+ |
-| Staging mirror | no | no | si |
-| Uptime monitoring | no | si | si |
 
 ---
 
@@ -678,12 +782,11 @@ grep -rn "toolkit/commands" docs/ CLAUDE.md README.md CONTRIBUTING.md --include=
 ### Compose File Pattern
 
 ```bash
-# Nuevo patron (post-migracion):
 docker compose -f compose.base.yml -f compose.dev.yml up -d
 
-# compose.base.yml: imagen, healthcheck, networks, volumes compartidos
-# compose.dev.yml: hot reload, debug, ports locales
-# compose.staging.yml: mirrors prod, recursos limitados
+# compose.base.yml: image, healthcheck, networks, volumes
+# compose.dev.yml: hot reload, debug, local ports
+# compose.staging.yml: mirrors prod, limited resources
 # compose.prod.yml: resource limits, logging, replicas
 ```
 
@@ -703,67 +806,103 @@ docker compose -f compose.base.yml -f compose.dev.yml up -d
 
 ```
 dev      → Local (hot reload, debug, mkcert certs)
-staging  → CubeLab homelab (mirrors prod, WireGuard access)
+staging  → Acemagic homelab (mirrors prod, Tailscale access)
 prod     → Hetzner VPS (public, Let's Encrypt TLS)
 ```
 
-### CLI Command Reference (Actual)
+### CLI Command Reference
 
 ```bash
-toolkit services up <name>       # Levantar app o servicio
-toolkit services down <name>     # Parar
-toolkit services logs <name>     # Ver logs
-toolkit services list            # Listar disponibles
-toolkit config generate          # Generar configs desde templates
-toolkit config validate          # Validar configs
-toolkit credentials generate     # Generar credenciales
-toolkit infra ansible deploy     # Deploy con Ansible
-toolkit infra terraform plan     # Terraform plan
-toolkit deployment deploy        # Deployment completo
-toolkit dashboard                # Terminal dashboard
-toolkit tools certs generate     # Generar certs locales
+cubelab services up <name>       # Start app or service
+cubelab services down <name>     # Stop
+cubelab services logs <name>     # View logs
+cubelab services list            # List available
+cubelab config generate          # Generate configs from templates
+cubelab config validate          # Validate configs
+cubelab credentials generate     # Generate credentials
+cubelab infra ansible deploy     # Deploy with Ansible
+cubelab infra terraform plan     # Terraform plan
+cubelab deployment deploy        # Full deployment pipeline
+cubelab dashboard                # Terminal dashboard
+cubelab tools certs generate     # Generate local certs
+cubelab docs serve               # Serve project documentation locally
+cubelab docs generate            # Generate static HTML docs
 ```
 
 ---
 
-## Notas
+## Completed
 
-- **Prioridad absoluta**: Sprint 0 (fix code + align docs + commit)
-- **No overengineer**: Resolver lo que hay antes de anadir complejidad
-- **K3s es futuro**: No iniciar hasta tener Docker Compose 100% estable en prod + staging
-- **Lessons learned**: Actualizar `tasks/lessons.md` despues de cada sprint
+### 2026-02-10
 
----
+- [x] Stream B Phase 0: Documentation updates for homelab architecture
+- [x] Vault hardware/_index.md rewritten: correct specs (12GB Acemagic, 8GB RPi 4, 1GB RPi 3, 8GB Beelink, 4GB Jetson), topology, resource budget
+- [x] SD card assignments: 256GB Jetson (AI models), 128GB RPi 4 (edge), 64GB RPi 3 (Pi-hole)
+- [x] Vault runbooks/hardware-setup.md rewritten: all 5 devices, DHCP table, Proxmox + Pi-hole + Jetson sections
+- [x] Vault runbooks/pihole-setup.md created: Pi-hole Docker on RPi 3, router DNS config
+- [x] Vault runbooks/proxmox-setup.md created: Proxmox VE 8.x on Beelink, WiFi backup mgmt, bridge networking
+- [x] Ansible staging template fixed: 16GB → 12GB, MiniPC B → Acemagic
+- [x] Hardware verification lesson added to tasks/lessons.md
+- [x] Stream B backlog revised: B0 expanded to 10 tasks (5 devices), added B-pihole and B-ai phases
 
-## Completado
+### 2026-02-09
+
+- [x] A1 completed: local environment verified (CLI, builds, tests, code quality)
+- [x] Astro config fix: `PUBLIC_ALLOWED_HOSTS` undefined fallback
+- [x] MkDocs fixes: YAML indentation, deprecated emoji extension, corrupt UTF-8 in footer
+- [x] Black formatting fix on generator_traefik.py
+- [x] Smoke tests: 22 tests passing, 26% coverage baseline
+- [x] Docker permission fixes: root-owned .vite/, .astro/, .jekyll-cache/
+- [x] Dev compose user fix: added `user: "${UID:-1000}:${GID:-1000}"` to web and blog
+- [x] Created .dockerignore for web app
+- [x] Domain strategy defined: mlorente.dev (personal) + cubelab.cloud (platform)
+- [x] Wiki decision: removed as deployed app, will integrate as `cubelab docs` in toolkit (C1/TOOLKIT-008)
+- [x] Roadmap restructured: A1→A5 (added domain migration + local integration phases)
+- [x] A2 completed: domain migration across all values/*.yaml files
+- [x] Full .env elimination: deleted physical files, cleaned toolkit code, Ansible roles, CI workflows
+- [x] Documentation updated: AGENTS.md rewrite, CLAUDE.md, 7 docs/README files migrated to values/*.yaml references
+- [x] Ansible roles modernized: compose overlay pattern (compose.base.yml + compose.{env}.yml)
+
+### 2026-02-08
+
+- [x] Architecture decisions: SDK Distribution + IDP pattern
+- [x] Define repos: cubelab-cli, cubelab-platform, sensortool, cubernautas-blog
+- [x] Methodology change: Kanban + XP (no sprints)
+- [x] Define cubelab.yaml schema
+- [x] Decide shared vs per-app services
+- [x] Sprint 0A completed: 5 FIX tickets (compose filenames, edge CLI, constants, pre-push, infra/compose refs)
+- [x] Sprint 0B completed: 11 ALIGN tickets (CLAUDE.md, README, TOOLKIT, CONTRIBUTING, workflows)
+- [x] Sprint 0C completed: Pre-commit hooks (18/18), successful commit
+- [x] Pre-commit fixes: mypy (44 errors), ruff (30+ errors), yamllint, hadolint, gitleaks, black
+- [x] Commit: `refactor: restructure project architecture and align toolkit`
 
 ### 2026-02-05
-- [x] Audit completo del proyecto (estructura, toolkit, CI/CD, docs, infra)
-- [x] Identificar 10 bugs de codigo no contemplados en plan anterior
-- [x] Replanificar roadmap con enfoque en codigo primero
+
+- [x] Full project audit (structure, toolkit, CI/CD, docs, infra)
+- [x] Identify 10 code bugs
+- [x] Replan roadmap
 
 ### 2026-02-04
-- [x] Merge BACKLOG.md y todo.md en archivo unico
-- [x] Definir arquitectura de hardware (VPS + Proxmox + RPis)
-- [x] Refinar arquitectura hibrida (VPS WireGuard Hub)
+
+- [x] Merge BACKLOG.md and todo.md into single file
+- [x] Define hardware architecture
+- [x] Refine hybrid architecture (VPS WireGuard Hub)
 
 ### 2026-02-03
-- [x] Analisis profundo del proyecto
-- [x] Crear plan de ejecucion de 6 meses
-- [x] Definir estrategia de estabilizacion
+
+- [x] Deep project analysis
+- [x] Create initial execution plan
 
 ### Feature Branch (Pre-commit)
-- [x] Reorganizar infraestructura a `infra/stacks/`
-- [x] Traducir blog a espanol
-- [x] Anadir fuentes Roboto al blog
-- [x] Consolidar edge services
-- [x] Anadir soporte staging environment
-- [x] Anadir nuevos servicios (Gitea, Authelia, CrowdSec, etc.)
-- [x] Crear estructura Workers app
+
+- [x] Reorganize infrastructure to `infra/stacks/`
+- [x] Translate blog to Spanish
+- [x] Consolidate edge services
+- [x] Add new services (Gitea, Authelia, CrowdSec, etc.)
 - [x] Workers Phase 1: YouTube toolkit
 - [x] CLI Architecture Audit
 
 ---
 
-*Ultima actualizacion: 2026-02-05*
-*Proxima revision: Despues de Sprint 0*
+*Last updated: 2026-02-10*
+*Next action: Finish A3 (INT-006/007/008), then B0 (hardware provisioning)*

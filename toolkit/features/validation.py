@@ -76,38 +76,6 @@ def confirm_dangerous_operation(env_config: EnvironmentConfig, operation: str) -
             raise typer.Exit(0) from None
 
 
-def get_component_paths(component_name: str, environment: str) -> tuple[Path, Path]:
-    """
-    Get compose file and env file paths for a component.
-
-    Args:
-        component_name: Name of the component/service/app
-        environment: Environment name (dev, staging, prod)
-
-    Returns:
-        Tuple of (compose_file_path, env_file_path)
-
-    Raises:
-        typer.Exit: If component or files not found
-    """
-    component_dir = find_component_directory(component_name)
-    if not component_dir:
-        logger.error(MESSAGES.ERROR_NOT_FOUND.format("Component", component_name))
-        raise typer.Exit(1) from None
-
-    compose_file = component_dir / f"compose.{environment}.yml"
-    env_file = component_dir / f".env.{environment}"
-
-    if not compose_file.exists():
-        logger.error(MESSAGES.ERROR_COMPOSE_FILE_NOT_FOUND.format(compose_file))
-        raise typer.Exit(1) from None
-    if not env_file.exists():
-        logger.error(MESSAGES.ERROR_ENV_FILE_NOT_FOUND.format(env_file))
-        raise typer.Exit(1) from None
-
-    return compose_file, env_file
-
-
 def find_component_directory(component_name: str) -> Path | None:
     """
     Find the directory for a given component name.
@@ -200,20 +168,6 @@ def get_component_name(file_path: Path) -> str:
         return "-".join(component_parts) if component_parts else "unknown"
     except ValueError:
         return "unknown"
-
-
-def get_env_type(filename: str) -> str:
-    """Extract environment type from filename."""
-    if filename.endswith((".env.dev", "env.dev")):
-        return "env-dev"
-    elif filename.endswith((".env.staging", "env.staging")):
-        return "env-staging"
-    elif filename.endswith((".env.prod", "env.prod")):
-        return "env-prod"
-    elif filename in [".env", "env"]:
-        return "env"
-    else:
-        return "env"
 
 
 # =============================================================================

@@ -28,15 +28,15 @@ endpoints:
 # ==========================================================================
 edge:
   traefik:
-    domain: staging.traefik.cubelab.cloud
+    domain: traefik.staging.cubelab.cloud
     disable_https: false
     acme_server: https://acme-v02.api.letsencrypt.org/directory
 
   nginx:
-    domain: staging.errors.cubelab.cloud
+    domain: errors.staging.cubelab.cloud
 
   cloudflared:
-    enabled: true
+    enabled: false  # Tailscale replaces cloudflared for staging access
 
 # ==========================================================================
 # APPS SETTINGS
@@ -45,17 +45,17 @@ apps:
   # Platform applications (custom-built)
   platform:
     api:
-      domain: staging.api.cubelab.cloud
+      domain: api.staging.cubelab.cloud
       site_domain: staging.cubelab.cloud
       site_url: https://staging.cubelab.cloud
       email_secure: true
 
     web:
-      backend_url: "https://staging.api.cubelab.cloud"
-      allowed_hosts: "localhost,web,127.0.0.1,.cubelab.cloud,cubelab.cloud"
-      domain: staging.cubelab.cloud
+      backend_url: "https://api.staging.cubelab.cloud"
+      allowed_hosts: "localhost,web,127.0.0.1,.staging.cubelab.cloud"
+      domain: web.staging.cubelab.cloud
       site_domain: staging.cubelab.cloud
-      site_url: http://staging.cubelab.cloud
+      site_url: https://web.staging.cubelab.cloud
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
@@ -64,14 +64,28 @@ apps:
   services:
     core:
       portainer:
-        domain: staging.portainer.cubelab.cloud
+        domain: portainer.staging.cubelab.cloud
 
     observability:
       loki:
-        domain: staging.loki.cubelab.cloud
+        domain: loki.staging.cubelab.cloud
 
       uptime_kuma:
-        domain: staging.status.cubelab.cloud
+        domain: status.staging.cubelab.cloud
 
       grafana:
-        domain: staging.grafana.cubelab.cloud
+        domain: grafana.staging.cubelab.cloud
+
+    security:
+      authelia:
+        domain: auth.staging.cubelab.cloud
+        issuer_domain: staging.cubelab.cloud
+        default_domain_root: staging.cubelab.cloud
+
+      crowdsec:
+        domain: crowdsec.staging.cubelab.cloud
+
+    data:
+      minio:
+        domain: minio.staging.cubelab.cloud
+        console_domain: console.minio.staging.cubelab.cloud

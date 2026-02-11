@@ -68,7 +68,7 @@ infra/ansible/
  Environment Highlights
 
  Staging (Raspberry Pi)
-- Compose stacks pulled from `infra/compose///docker-compose.staging.yml`.
+- Compose stacks pulled from `infra/stacks/{apps|services}/*/compose.base.yml` + `compose.staging.yml`.
 - WireGuard and CoreDNS details exposed through `edge/dns-gateway/.env.staging`.
 - Lightweight firewall and failban rules tuned for Pi hardware.
 - Optional rsync backups to MiniPC build host.
@@ -98,7 +98,7 @@ These commands:
  Contributing
 
 - Keep templates environment-agnostic; prefer variables in group vars.
-- Document new variables in `.env..example` and toolkit settings.
+- Document new variables in `infra/config/values/*.yaml` and toolkit settings.
 - Update associated tests under `tests/` when editing generation logic.
 - Drop deprecated artefacts into `.archive/infra/ansible` instead of deleting them outright.
 

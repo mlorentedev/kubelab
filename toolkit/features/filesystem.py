@@ -98,45 +98,6 @@ def check_file_exists(file_path: Path, required: bool = False) -> bool:
     return exists
 
 
-# Removed load_env_file() - duplicate of env_manager.load_env_vars()
-# Archived in docs/REFACTORING-AUDIT.md (Phase 4)
-
-
-def update_env_var(var_name: str, var_value: str, env_file: Path) -> bool:
-    """Update a single environment variable in a file."""
-    if not env_file.exists():
-        logger.warning(MESSAGES.WARNING_FILE_NOT_FOUND.format(env_file))
-        return False
-
-    try:
-        lines = []
-        updated = False
-
-        with open(env_file, encoding="utf-8") as f:
-            for line in f:
-                if line.strip().startswith(f"{var_name}="):
-                    lines.append(f"{var_name}='{var_value}'\n")
-                    updated = True
-                else:
-                    lines.append(line)
-
-        if not updated:
-            lines.append(f"{var_name}='{var_value}'\n")
-
-        with open(env_file, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-
-        return True
-
-    except Exception as e:
-        logger.error(
-            MESSAGES.ERROR_FAILED_OPERATION.format(
-                f"update {var_name} in {env_file}", e
-            )
-        )
-        return False
-
-
 def _is_excluded(file_path: Path, exclude_patterns: list[str]) -> bool:
     """Check if a file path matches any exclusion pattern.
 
@@ -190,7 +151,7 @@ def _deduplicate_paths(paths: list[Path]) -> list[Path]:
 
 
 def get_project_files(
-    pattern: str | Sequence[str] = "*.env*",
+    pattern: str | Sequence[str] = "*.yml",
     exclude_patterns: list[str] | None = None,
     root: Path | None = None,
 ) -> list[Path]:

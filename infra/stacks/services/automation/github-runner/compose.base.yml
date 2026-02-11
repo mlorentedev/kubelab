@@ -10,6 +10,7 @@ services:
       RUNNER_WORKDIR: /tmp/runner
       RUNNER_GROUP: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_RUNNER_GROUP}
       LABELS: ${APPS_SERVICES_AUTOMATION_GITHUB_RUNNER_LABELS}
+      EPHEMERAL: "1"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - runner_data:/tmp/runner

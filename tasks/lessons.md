@@ -53,6 +53,48 @@
 **Solucion**: Reducir horizonte a 3 meses ejecutables, mover todo lo aspiracional a backlog con tiers
 **Regla**: Un plan que no puedes ejecutar en 2 sprints de distancia es fantasia, no ingenieria. Trim agresivamente.
 
+### [2026-02-09] Docker Anonymous Volumes Inherit Image Ownership
+
+**Contexto**: Construyendo imagenes Docker para apps web (Astro, Jekyll)
+**Problema**: El build stage corre como root, creando `node_modules/`, `.vite/`, `.astro/` con ownership root. Aunque compose tiene `user: "1000:1000"`, los volumenes anonimos creados durante build mantienen ownership root, causando errores de permisos en runtime.
+**Solucion**: Usar `USER node` en el Dockerfile build stage, no solo la directiva `user:` en compose. Los volumenes deben crearse ya con el usuario correcto.
+**Regla**: Siempre verificar ownership de volumenes anonimos en imagenes multi-stage. `docker compose exec <svc> ls -la /app/` antes de buscar bugs en el codigo.
+
+### [2026-02-09] Staging Must Mirror Prod Architecture
+
+**Contexto**: Diseñando entorno staging en homelab con Raspberry Pis
+**Problema**: Si prod es single-VPS con Docker Compose, staging debe ser single-node con Docker Compose. Usar RPis como nodos de stack introduce diferencias arquitecturales que invalidan la validacion staging→prod.
+**Solucion**: MiniPC B = staging (mirror de VPS). RPis = infraestructura transversal (VPN, DNS, monitoring externo), NO nodos de stack.
+**Regla**: staging == prod en arquitectura. La infra auxiliar (VPN, DNS, monitoring) vive en nodos separados para no contaminar la validacion.
+
+### [2026-02-09] Tailscale Over WireGuard When No Port Forwarding
+
+**Contexto**: Configurando VPN para acceso remoto al homelab
+**Problema**: WireGuard necesita puerto UDP abierto en el router. Sin acceso al router (NAT sin port forwarding) → WireGuard imposible. Headscale requiere nodo publico.
+**Solucion**: Tailscale (o Headscale via relay publico). Las restricciones de red dictan la tecnologia, no la preferencia.
+**Regla**: Antes de elegir VPN, verificar: ¿tengo port forwarding? Si → WireGuard. Si no → Tailscale/Headscale. La arquitectura de red manda.
+
+### [2026-02-09] Ansible Templates Drift from Code
+
+**Contexto**: Auditing Ansible templates after major refactoring (infra/compose → infra/stacks)
+**Problema**: Templates en `infra/ansible/templates/` todavia referencian `infra/compose`, puertos k3s (6443), wiki, n8n, wireguard. Los templates divergen silenciosamente cuando se refactoriza el repo sin actualizar Ansible.
+**Solucion**: Auditar templates cada vez que cambia la estructura del proyecto. Incluir Ansible en el checklist de refactoring.
+**Regla**: Ansible templates son ciudadanos de primera clase. Un refactoring no esta completo hasta que los templates de Ansible estan alineados.
+
+### [2026-02-09] OS Choice Matters for Staging
+
+**Contexto**: Eligiendo SO para nodo staging en homelab
+**Problema**: Si staging corre Arch Linux (rolling release) y prod corre Ubuntu Server (LTS), hay una clase entera de bugs "funciona en staging, falla en prod" causados por diferencias de kernel, libc, paquetes.
+**Solucion**: Staging OS == Prod OS. Ambos Ubuntu Server 24.04 LTS.
+**Regla**: Staging debe ser identico a prod en SO, version, y configuracion base. Las diferencias de SO son bugs esperando a manifestarse.
+
+### [2026-02-10] Always Verify Hardware Specs Against Physical Devices
+
+**Contexto**: Planificando la arquitectura del homelab (Stream B) usando especificaciones de hardware documentadas
+**Problema**: Las especificaciones documentadas eran incorrectas: 16GB para staging (real: 12GB Acemagic), 4GB para RPi 4 (real: 8GB). Ademas, faltaban dispositivos: RPi 3 con Pi-hole, Beelink con Proxmox. Toda la planificacion se baso en datos incorrectos.
+**Solucion**: Verificar fisicamente cada dispositivo (`free -h`, `lsblk`, model labels) antes de documentar o planificar. Actualizar toda la documentacion (vault, todo.md, Ansible templates) con las especificaciones reales.
+**Regla**: Antes de planificar infraestructura, SIEMPRE verificar specs de hardware contra los dispositivos fisicos. Los documentos mienten; `free -h` no miente. Un plan basado en specs incorrectas es peor que no tener plan.
+
 ---
 
 *Mas entradas se anadiran conforme avance el proyecto.*

@@ -91,9 +91,9 @@ class TraefikGenerator(BaseGenerator):
             True if validation passes, False otherwise
         """
         try:
-            # Check if traefik config directory exists
             from toolkit.config.settings import settings
 
+            # Check compose files in stacks directory
             if not settings.traefik_dir.exists():
                 logger.error(
                     MESSAGES.ERROR_CONFIG_TRAEFIK_DIR_NOT_FOUND.format(
@@ -102,25 +102,24 @@ class TraefikGenerator(BaseGenerator):
                 )
                 return False
 
-            # Check for basic files
-            required_files = [
+            compose_files = [
+                "compose.base.yml",
                 "compose.dev.yml",
                 "compose.staging.yml",
                 "compose.prod.yml",
             ]
             missing_files = [
-                f for f in required_files if not (settings.traefik_dir / f).exists()
+                f for f in compose_files if not (settings.traefik_dir / f).exists()
             ]
 
-            # Check for main generated files
-            dynamic_files = [
-                "generated/dev/traefik.yml",
-                "generated/staging/traefik.yml",
-                "generated/prod/traefik.yml",
-            ]
-            missing_files += [
-                f for f in dynamic_files if not (settings.traefik_dir / f).exists()
-            ]
+            # Check generated files in edge/traefik/generated/
+            generated_dir = (
+                self.project_root / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR
+            )
+            for env in ("dev", "staging", "prod"):
+                generated_file = generated_dir / env / "traefik.yml"
+                if not generated_file.exists():
+                    missing_files.append(f"generated/{env}/traefik.yml")
 
             if missing_files:
                 logger.warning(
@@ -160,6 +159,7 @@ class TraefikGenerator(BaseGenerator):
             f"APPS_SERVICES_AUTOMATION_{component_upper}_{suffix}",  # apps.services.automation.*
             f"APPS_SERVICES_MISC_{component_upper}_{suffix}",  # apps.services.misc.*
             f"APPS_SERVICES_AI_{component_upper}_{suffix}",  # apps.services.ai.*
+            f"EDGE_{component_upper}_{suffix}",  # edge.*
         ]
 
         for path in search_paths:
@@ -198,10 +198,11 @@ class TraefikGenerator(BaseGenerator):
             }
         )
 
-        # Combine all component types
+        # Combine all component types (platform apps + third-party services + edge)
         all_components = [
             *COMPONENTS.PLATFORM_APPS,
             *COMPONENTS.ALL_SERVICES,
+            *COMPONENTS.EDGE,
         ]
 
         for component in all_components:
