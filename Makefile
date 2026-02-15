@@ -99,7 +99,7 @@ setup-local-dns:
 		echo "# CubeLab local development" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 mlorente.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 traefik.cubelab.test api.cubelab.test blog.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 auth.cubelab.test kestra.cubelab.test grafana.cubelab.test loki.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 auth.cubelab.test gitea.cubelab.test grafana.cubelab.test loki.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 portainer.cubelab.test status.cubelab.test minio.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 console.minio.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "✓ DNS entries added to /etc/hosts"; \

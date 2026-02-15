@@ -21,6 +21,20 @@
 
 ## Registro
 
+### [2026-02-14] YAML Duplicate Keys Silently Overwrite
+
+**Contexto**: Adding gitea domain override to dev.yaml under `apps.services.core`
+**Problema**: Created a second `core:` block instead of adding to the existing one. YAML silently uses the last occurrence, wiping traefik/portainer/n8n overrides. Portainer started routing to `cubelab.cloud` instead of `cubelab.test`.
+**Solución**: Always search for existing key before adding new entries. YAML does NOT merge duplicate keys.
+**Regla**: When editing YAML overrides, verify with `python3 -c "import yaml; print(yaml.safe_load(open('file.yaml')))"` that keys aren't duplicated.
+
+### [2026-02-14] Docker Bind Mounts Resolve from Compose File Directory
+
+**Contexto**: web and blog containers in restart loop, `package.json` / `Gemfile` not found
+**Problema**: Containers were created from `/home/manu/Projects/mlorente.dev/` (old project path). Relative bind mount paths (`../../../../apps/web/`) resolved to non-existent location.
+**Solución**: Recreate containers from the correct working directory (`/home/manu/Projects/cubelab/`).
+**Regla**: After renaming project directories, always recreate (not just restart) containers that use relative bind mounts.
+
 ### [2026-02-03] Inicialización del Sistema de Tasks
 
 **Contexto**: Configurando el proyecto después de un periodo de inactividad

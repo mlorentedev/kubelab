@@ -206,13 +206,15 @@ apps:
         external_port: 9443
         health_path: /
 
-      kestra:
-        name: kestra
-        domain: automation.cubelab.cloud
+      gitea:
+        name: gitea
+        image: gitea/gitea:1.23
+        domain: gitea.cubelab.cloud
         enable_auth: true
         auth_level: one_factor
-        default_port: 5678
-        health_path: /healthz
+        default_port: 3000
+        ssh_port: 2222
+        health_path: /api/healthz
 
     # Automation & CI/CD
     automation:

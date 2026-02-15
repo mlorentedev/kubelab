@@ -320,39 +320,32 @@ Config model migrated from `.env` files to `values/*.yaml` + SOPS secrets.
   docker ps --filter "status=restarting" --format "{{.Names}}"
   ```
 
-- [ ] **INT-006**: HTTP smoke test for each service
+- [x] **INT-006**: HTTP smoke test for each service
 
   ```bash
-  make smoke-test            # Target to create: curl each endpoint
-  # Manual verification:
-  # - https://mlorente.test (personal website)
-  # - https://api.cubelab.test/health (API)
-  # - https://blog.cubelab.test (blog)
-  # - https://traefik.cubelab.test (dashboard)
-  # - https://grafana.cubelab.test (grafana)
-  # - https://portainer.cubelab.test (portainer)
-  # - https://auth.cubelab.test (authelia)
-  # Wiki NOT deployed — integrated in toolkit (see C1/TOOLKIT-008)
+  # All 11 endpoints verified:
+  # 200: mlorente.test, api.cubelab.test/health, blog.cubelab.test, auth.cubelab.test
+  #      minio.cubelab.test/minio/health/live, console.minio.cubelab.test
+  # 302: traefik.cubelab.test, grafana.cubelab.test, portainer.cubelab.test,
+  #      status.cubelab.test, gitea.cubelab.test (→ Authelia SSO, expected)
   ```
 
-- [ ] **INT-007**: Verify Traefik routing (each domain → correct container)
+- [x] **INT-007**: Verify Traefik routing (each domain → correct container)
 
   ```bash
-  # Check Traefik dashboard at https://traefik.cubelab.test
-  # All routers should be green
+  # All routers green in Traefik dashboard
+  # Fixed: portainer had cubelab.cloud instead of cubelab.test (duplicate YAML key bug in dev.yaml)
   ```
 
-- [ ] **INT-008**: Clean teardown
+- [x] **INT-008**: Clean teardown
 
   ```bash
-  make down-dev
-  # Verify no orphaned containers remain
-  docker ps -a --filter "label=com.docker.compose.project"
+  toolkit services down --all   # New --all flag implemented
+  # Only buildx_buildkit_multiarch0 remains (Docker Buildx builder, not CubeLab)
   ```
 
-**Done when**: Full stack is up (no wiki — lives in toolkit), all services respond
-via HTTPS with mkcert certificates, Traefik routes correctly.
-`make up-dev` → `make smoke-test` → all green.
+**Completed**: 2026-02-14. Full stack up, 11 endpoints verified via HTTPS,
+Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 #### A4: Push, PR and CI
 
@@ -738,12 +731,295 @@ auto-generated project documentation.
 - [ ] **DATA-005**: Configure pg_dump daily backup
 - [ ] **DATA-006**: Test backup/restore cycle
 
-#### D2: Observability
+#### D2: Observability — Logs (already partially deployed)
+
+> Grafana + Loki already exist in stacks. This phase ensures they work end-to-end.
 
 - [ ] **OBS-001**: Grafana working on staging + prod
-- [ ] **OBS-002**: Loki receiving logs from all containers
-- [ ] **OBS-003**: 5 basic dashboards (health, requests, errors, resources, uptime)
-- [ ] **OBS-004**: Basic alerts (container down, high error rate)
+- [ ] **OBS-002**: Loki receiving logs from all containers (via Vector)
+
+#### D3: Observability — Metrics
+
+> **ADR**: [[adr-009-prometheus-metrics-stack]]
+>
+> Blocked by: B5 (staging operational). Grafana must be working (OBS-001).
+> Adds host metrics, container metrics, and HTTP request metrics with historical storage.
+
+- [ ] **MET-001**: Create Prometheus stack (`infra/stacks/services/observability/prometheus/`)
+  - `compose.base.yml`: Prometheus server
+  - `prometheus.yml`: scrape config (Node Exporter, cAdvisor, Traefik targets)
+  - Retention: 15 days
+  - `compose.dev.yml`, `compose.staging.yml`, `compose.prod.yml`
+
+- [ ] **MET-002**: Deploy Node Exporter
+  - Add to Prometheus stack (or separate lightweight compose)
+  - Bind-mount `/proc`, `/sys`, `/` read-only
+  - Verify: `curl localhost:9100/metrics` returns host metrics
+
+- [ ] **MET-003**: Deploy cAdvisor
+  - Add to Prometheus stack
+  - Bind-mount Docker socket (read-only) + `/sys`, `/var/lib/docker`
+  - Verify: `curl localhost:8080/metrics` returns per-container metrics
+
+- [ ] **MET-004**: Enable Traefik Prometheus metrics
+  - Add `--metrics.prometheus=true` to Traefik static config
+  - Add `--entryPoints.metrics.address=:8082` (internal only, not exposed via Traefik routes)
+  - Verify: `curl localhost:8082/metrics` returns request metrics
+
+- [ ] **MET-005**: Configure Prometheus scrape targets
+  ```yaml
+  # prometheus.yml
+  scrape_configs:
+    - job_name: node-exporter
+      static_configs:
+        - targets: ['node-exporter:9100']
+    - job_name: cadvisor
+      static_configs:
+        - targets: ['cadvisor:8080']
+    - job_name: traefik
+      static_configs:
+        - targets: ['traefik:8082']
+  ```
+
+- [ ] **MET-006**: Add Prometheus datasource to Grafana
+  - Grafana provisioning: add Prometheus alongside Loki
+  - Verify: Grafana → Explore → Prometheus → `up` query returns targets
+
+- [ ] **MET-007**: Import Grafana dashboards
+  - Node Exporter Full (ID: 1860) — host resources
+  - Docker & cAdvisor (ID: 893) — container resources
+  - Traefik (ID: 17346) — HTTP traffic
+  - Verify: all 3 dashboards populate with real data
+
+- [ ] **MET-008**: Create custom CubeLab overview dashboard
+  - Panel 1: Host CPU/RAM/Disk per node (Node Exporter)
+  - Panel 2: Top 10 containers by RAM (cAdvisor)
+  - Panel 3: Requests/s per service (Traefik)
+  - Panel 4: Error rate (4xx/5xx) per service (Traefik)
+  - Panel 5: Request latency p95 per service (Traefik)
+
+#### D4: Alerting
+
+> Blocked by: D3 completed (metrics flowing)
+
+- [ ] **ALERT-001**: Configure Grafana alerting (or Alertmanager)
+  - Alert: container down (up == 0) for > 2 min
+  - Alert: host CPU > 85% for > 5 min
+  - Alert: host disk > 90%
+  - Alert: HTTP error rate (5xx) > 5% for > 3 min
+  - Alert: container restart loop (restart count > 3 in 10 min)
+
+- [ ] **ALERT-002**: Notification channel
+  - Slack webhook (via n8n or direct Grafana Slack integration)
+  - Verify: trigger a test alert → Slack notification received
+
+**Done when**: Grafana shows real-time and historical metrics for all hosts, containers,
+and HTTP traffic. 3 imported dashboards + 1 custom overview dashboard. Alerts firing to Slack.
+
+---
+
+### Stream F: Agent-Delegated Task Management
+
+> **ADR**: [[adr-007-vikunja-n8n-openclaw-task-delegation]]
+>
+> Replaces Google Keep with self-hosted task management (Vikunja) + AI agent delegation
+> via n8n orchestration + OpenClaw execution. Human-in-the-loop at all checkpoints.
+>
+> **Prerequisite**: Stream B completed (staging environment operational).
+> n8n must be deployed before F2. Can start F1 as soon as staging is up.
+
+#### F1: Vikunja Deployment
+
+> Blocked by: B5 (staging operational)
+
+- [ ] **VIK-001**: Create Vikunja stack (`infra/stacks/services/core/vikunja/`)
+  - `compose.base.yml`: Vikunja + PostgreSQL (or shared instance)
+  - `compose.dev.yml`, `compose.staging.yml`, `compose.prod.yml`
+
+- [ ] **VIK-002**: Add Vikunja config to `infra/config/values/common.yaml`
+  - Domain: `tasks.cubelab.test` / `tasks.staging.cubelab.cloud` / `tasks.cubelab.cloud`
+  - Resource limits, OIDC config (Authelia), SMTP for notifications
+
+- [ ] **VIK-003**: Add Traefik route for Vikunja
+  - Update templates or add to generated config
+  - Authelia middleware for SSO login
+
+- [ ] **VIK-004**: Deploy and verify Vikunja locally
+  ```bash
+  toolkit services up vikunja
+  curl -I https://tasks.cubelab.test
+  ```
+
+- [ ] **VIK-005**: Configure initial project structure in Vikunja
+  - Projects: `cubelab/infra`, `cubelab/apps`, `trabajo`, `personal`
+  - Labels: `agent:delegable`, `priority:high`, `priority:low`, `checkpoint:per-subtask`, `checkpoint:final-only`
+  - Custom states: `pending`, `agent_working`, `checkpoint`, `approved`, `done`
+
+- [ ] **VIK-006**: Configure Vikunja webhooks
+  - Webhook on task create/update → n8n endpoint
+  - Filter: only fire for tasks with `agent:delegable` label
+
+**Done when**: Vikunja accessible via HTTPS, SSO via Authelia, projects and labels configured,
+webhooks pointing to n8n endpoint.
+
+#### F2: n8n Agent Pipeline Workflow
+
+> Blocked by: F1 + n8n deployed (n8n is already in service catalog as core service)
+
+- [ ] **N8N-001**: Design n8n workflow: "Agent Task Pipeline"
+  - Webhook trigger (Vikunja task event)
+  - Validate `agent:delegable` label
+  - Extract YAML agent context from task description
+  - Error handling: malformed YAML → Slack notification to user
+
+- [ ] **N8N-002**: Implement decomposition phase
+  - Call OpenClaw API: "Decompose this task"
+  - Receive proposed subtasks
+  - Create subtasks in Vikunja via API
+  - Slack notification: "Agent proposes N subtasks. Approve?"
+  - Wait for callback (Slack button or Vikunja state change)
+
+- [ ] **N8N-003**: Implement execution loop
+  - For each subtask:
+    - Call OpenClaw API: execute subtask with agent context
+    - On completion: update Vikunja subtask state
+    - At checkpoint: pause workflow, notify Slack with artifacts (PR URLs, diffs)
+    - Wait for human approval (callback from Slack or Vikunja)
+    - On reject: notify agent, allow revision
+  - Timeout: if no agent progress in X minutes → pause + Slack alert
+
+- [ ] **N8N-004**: Implement completion phase
+  - All subtasks approved → mark parent task as Done in Vikunja
+  - Slack summary: "Task completed. N subtasks, M checkpoints, T tokens used."
+  - Audit log entry (tokens consumed, duration, artifacts)
+
+- [ ] **N8N-005**: Slack interactive messages
+  - Approve/Reject buttons on checkpoint notifications
+  - Comment field for feedback to agent
+  - Thread grouping: one Slack thread per parent task
+
+**Done when**: End-to-end workflow works in n8n — task creation triggers decomposition,
+agent executes with checkpoints, human approves via Slack, task marked done.
+
+#### F3: OpenClaw Deployment
+
+> Blocked by: B5 (staging operational). Can run parallel with F1.
+
+- [ ] **CLAW-001**: Evaluate OpenClaw deployment requirements
+  - Docker image, resource requirements, API documentation
+  - Authentication model, agent isolation guarantees
+
+- [ ] **CLAW-002**: Create OpenClaw stack (`infra/stacks/services/ai/openclaw/`)
+  - `compose.base.yml` + environment overlays
+  - Network: must reach Git repos (internet) but not SOPS/secrets
+
+- [ ] **CLAW-003**: Add OpenClaw config to `infra/config/values/common.yaml`
+  - API endpoint, resource limits, allowed repos list
+  - Agent templates (default constraints, timeout values)
+
+- [ ] **CLAW-004**: Deploy and verify OpenClaw locally
+  ```bash
+  toolkit services up openclaw
+  # Verify API responds
+  curl https://openclaw.cubelab.test/api/health
+  ```
+
+- [ ] **CLAW-005**: Configure multi-repo agent access
+  - Git credential helper for agent containers
+  - Per-repo access list (user configurable via Vikunja task context)
+  - Security: agents NEVER get access to SOPS keys, production credentials, or infra repos unless explicitly allowed
+
+- [ ] **CLAW-006**: Test agent execution in isolation
+  - Create test task: "Add a README to test repo"
+  - Verify: agent clones repo, creates branch, makes changes, pushes PR
+  - Verify: agent cannot access repos not in allowed list
+
+**Done when**: OpenClaw running, API accessible, agents can clone/modify/push to allowed repos,
+isolation verified (no access to unauthorized repos or secrets).
+
+#### F4: Integration Testing
+
+> Blocked by: F2 + F3
+
+- [ ] **INT-F01**: End-to-end test: simple single-subtask flow
+  - Create task in Vikunja with `agent:delegable`
+  - Verify: n8n triggers → OpenClaw runs → Slack notification → approve → done
+
+- [ ] **INT-F02**: End-to-end test: multi-subtask with checkpoints
+  - Task with `checkpoints: per-subtask`
+  - Verify: each subtask pauses for approval before next starts
+
+- [ ] **INT-F03**: End-to-end test: rejection and revision
+  - Reject a checkpoint → verify agent receives feedback
+  - Agent revises → new checkpoint → approve
+
+- [ ] **INT-F04**: End-to-end test: timeout handling
+  - Simulate agent hang → verify timeout triggers Slack alert
+
+- [ ] **INT-F05**: Verify non-delegable tasks are unaffected
+  - Create task WITHOUT `agent:delegable` label
+  - Verify: no n8n workflow triggered, task behaves as normal Vikunja task
+
+- [ ] **INT-F06**: Multi-repo test
+  - Task targeting repo outside cubelab (e.g., sensortool)
+  - Verify: agent accesses correct repo with correct credentials
+
+**Done when**: All integration tests pass. Delegable and non-delegable tasks coexist.
+Slack communication bidirectional. Timeout and rejection flows work.
+
+---
+
+### Stream G: Self-Hosted Knowledge Base (Obsidian → Web)
+
+> **ADR**: [[adr-008-quartz-obsidian-knowledge-base]]
+>
+> Read-only web viewer for the Obsidian vault using Quartz (static site generator).
+> Synced via Git cron (5 min). Defense-in-depth: Authelia (access) + Quartz filtering (content).
+>
+> **Prerequisite**: Stream B completed (staging operational).
+> Independent of Stream F. Small scope — can be done in a few sessions.
+
+- [ ] **KB-001**: Create Knowledge Base stack (`infra/stacks/services/core/knowledge-base/`)
+  - `compose.base.yml`: nginx:alpine serving Quartz HTML output
+  - Sidecar/init container: git clone + `npx quartz build`
+  - Cron script: `git pull` + rebuild every 5 min (only if changes detected)
+  - `compose.dev.yml`, `compose.staging.yml`, `compose.prod.yml`
+
+- [ ] **KB-002**: Add config to `infra/config/values/common.yaml`
+  - Domain: `kb.cubelab.test` / `kb.staging.cubelab.cloud` / `kb.cubelab.cloud`
+  - Git repo URL for vault
+  - Quartz config: published folders/tags whitelist
+
+- [ ] **KB-003**: Configure Quartz content filtering
+  - Define folder whitelist (e.g., `10_projects/cubelab/`, `20_areas/engineering/`)
+  - Exclude sensitive folders (credentials, personal, private notes)
+  - Tag-based filter: only notes tagged `public` or in approved folders
+  - Verify: build output contains ZERO sensitive notes
+
+- [ ] **KB-004**: Add Traefik route with Authelia middleware
+  - `kb.cubelab.test` → knowledge-base container
+  - Authelia SSO required (no anonymous access)
+
+- [ ] **KB-005**: Deploy and verify locally
+  ```bash
+  toolkit services up knowledge-base
+  # Should redirect to Authelia login first
+  curl -I https://kb.cubelab.test
+  # After auth: vault content visible, graph view works, wikilinks resolve
+  ```
+
+- [ ] **KB-006**: Verify sync cycle
+  - Edit a note in Obsidian → push to Git
+  - Wait 5 min (or trigger manual rebuild)
+  - Verify: change appears on `kb.cubelab.test`
+
+- [ ] **KB-007**: Verify security layers
+  - Layer 1: unauthenticated request → Authelia redirect (no content leaked)
+  - Layer 2: inspect built HTML → no sensitive folders/notes present
+  - Verify excluded content is not in search index either
+
+**Done when**: Vault accessible at `kb.cubelab.test` behind Authelia, auto-syncs from Git,
+graph view and wikilinks work, sensitive content excluded at build time AND access-controlled.
 
 ---
 
@@ -794,12 +1070,12 @@ docker compose -f compose.base.yml -f compose.dev.yml up -d
 
 | Category | Purpose | Services |
 |----------|---------|----------|
-| **core** | Essential platform | gitea, portainer, n8n, vaultwarden |
-| **observability** | Monitoring/logging | grafana, loki, uptime |
+| **core** | Essential platform | gitea, portainer, n8n, vaultwarden, vikunja |
+| **observability** | Monitoring/logging | grafana, loki, uptime, prometheus, node-exporter, cadvisor |
 | **security** | Auth/protection | authelia, crowdsec |
-| **data** | Storage/docs | minio, docmost |
-| **automation** | CI/workflows | github-runner, kestra |
-| **ai** | ML/AI | ollama, webui |
+| **data** | Storage | minio |
+| **automation** | CI/workflows | github-runner |
+| **ai** | ML/AI | ollama, webui, openclaw |
 | **misc** | Productivity | calcom, immich |
 
 ### Environment Strategy
@@ -832,6 +1108,21 @@ cubelab docs generate            # Generate static HTML docs
 ---
 
 ## Completed
+
+### 2026-02-14
+
+- [x] A3 completed: full local integration (11 endpoints verified, all green)
+- [x] `toolkit credentials show` command: decrypt and display SOPS secrets
+- [x] `toolkit services down --all` / `up --all`: operate all components at once
+- [x] Gitea stack created (compose.base + dev/staging/prod)
+- [x] MinIO compose.dev.yml created (OIDC disabled for local dev)
+- [x] Kestra removed (redundant — n8n chosen in ADR-007)
+- [x] Docmost removed (redundant — Quartz chosen in ADR-008)
+- [x] Wiki stack removed from infra/stacks/apps/ (will be `cubelab docs` in C1)
+- [x] Fix: portainer domain in dev.yaml (YAML duplicate key overwrite)
+- [x] Fix: SECRETS_DIR moved from AutheliaConfig to PATH_STRUCTURES
+- [x] Makefile: replaced kestra with gitea in setup-local-dns
+- [x] Vault: credentials model documented in sops-and-secrets.md runbook
 
 ### 2026-02-10
 
@@ -904,5 +1195,5 @@ cubelab docs generate            # Generate static HTML docs
 
 ---
 
-*Last updated: 2026-02-10*
-*Next action: Finish A3 (INT-006/007/008), then B0 (hardware provisioning)*
+*Last updated: 2026-02-14*
+*Next action: A4 (push, PR, CI green), then B0 (hardware provisioning)*

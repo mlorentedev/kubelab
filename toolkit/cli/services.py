@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
-from toolkit.config.settings import get_settings
+from toolkit.config.settings import PlatformSettings, get_settings
 from toolkit.core.logging import logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
@@ -18,32 +18,90 @@ console = Console()
 app = typer.Typer(help="Manage services and applications")
 
 
+def _discover_all_components(settings: PlatformSettings) -> list[str]:
+    """Discover all components that have compose files."""
+    components: list[str] = []
+
+    # Apps
+    apps_dir = settings.project_root / PATH_STRUCTURES.INFRA_STACKS_APPS
+    if apps_dir.exists():
+        for d in sorted(apps_dir.iterdir()):
+            if d.is_dir() and (d / "compose.base.yml").exists():
+                components.append(d.name)
+
+    # Services (by category)
+    services_dir = settings.project_root / PATH_STRUCTURES.INFRA_STACKS_SERVICES
+    if services_dir.exists():
+        for category in sorted(services_dir.iterdir()):
+            if category.is_dir():
+                for d in sorted(category.iterdir()):
+                    if d.is_dir() and (d / "compose.base.yml").exists():
+                        components.append(d.name)
+
+    # Edge
+    edge_dir = settings.project_root / PATH_STRUCTURES.EDGE_DIR
+    if edge_dir.exists():
+        for d in sorted(edge_dir.iterdir()):
+            if d.is_dir() and (d / "compose.base.yml").exists():
+                components.append(d.name)
+
+    return components
+
+
 @app.command("up")
 def start_service(
     component_names: Annotated[
-        list[str], typer.Argument(help="Name(s) of the service(s)/app(s) to start")
-    ],
+        list[str] | None,
+        typer.Argument(help="Name(s) of the service(s)/app(s) to start"),
+    ] = None,
+    all_components: bool = typer.Option(
+        False, "--all", "-a", help="Start all components"
+    ),
     environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
 ) -> None:
     """Start one or more services or applications."""
     settings = get_settings(environment)
     service = DockerService(settings)
-    for name in component_names:
+
+    names = (
+        _discover_all_components(settings)
+        if all_components
+        else (component_names or [])
+    )
+    if not names:
+        logger.error("Specify component name(s) or use --all")
+        raise typer.Exit(1)
+
+    for name in names:
         service.start_component(name, environment)
 
 
 @app.command("down")
 def stop_service(
     component_names: Annotated[
-        list[str], typer.Argument(help="Name(s) of the service(s)/app(s) to stop")
-    ],
+        list[str] | None,
+        typer.Argument(help="Name(s) of the service(s)/app(s) to stop"),
+    ] = None,
+    all_components: bool = typer.Option(
+        False, "--all", "-a", help="Stop all components"
+    ),
     environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
     volumes: bool = typer.Option(False, "--volumes", "-v", help="Remove volumes"),
 ) -> None:
     """Stop one or more services or applications."""
     settings = get_settings(environment)
     service = DockerService(settings)
-    for name in component_names:
+
+    names = (
+        _discover_all_components(settings)
+        if all_components
+        else (component_names or [])
+    )
+    if not names:
+        logger.error("Specify component name(s) or use --all")
+        raise typer.Exit(1)
+
+    for name in names:
         service.stop_component(name, environment, volumes=volumes)
 
 

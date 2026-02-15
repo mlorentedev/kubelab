@@ -12,7 +12,7 @@ from typing import TypedDict
 import typer
 from argon2 import PasswordHasher
 
-from toolkit.config.constants import AUTHELIA_CONFIG
+from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
@@ -415,7 +415,7 @@ class CredentialsManager:
         )
         jwks_path = (
             self.project_root
-            / AUTHELIA_CONFIG.SECRETS_DIR
+            / PATH_STRUCTURES.CONFIG_SECRETS_DIR
             / AUTHELIA_CONFIG.JWKS_FILE_TEMPLATE.format(env=env)
         )
         try:

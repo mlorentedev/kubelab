@@ -1,22 +1,22 @@
-site_name: "CubeLab Wiki (DEV)"
-site_description: "Development documentation for mlorente.dev"
-site_author: "Manu Lorente"
-site_url: "https://wiki.cubelab.test"
+site_name: "{{ APPS_PLATFORM_WIKI_MKDOCS_SITE_NAME }}"
+site_description: "{{ APPS_PLATFORM_WIKI_MKDOCS_SITE_DESCRIPTION }}"
+site_author: "{{ APPS_PLATFORM_WIKI_MKDOCS_SITE_AUTHOR }}"
+site_url: "{{ APPS_PLATFORM_WIKI_MKDOCS_SITE_URL }}"
 
-repo_name: "mlorentedev/mlorente.dev"
-repo_url: "https://github.com/mlorentedev/mlorente.dev"
-edit_uri: "https://github.com/mlorentedev/mlorente.dev/edit/dev/apps/wiki/docs/"
+repo_name: "{{ APPS_PLATFORM_WIKI_MKDOCS_REPO_NAME }}"
+repo_url: "{{ APPS_PLATFORM_WIKI_MKDOCS_REPO_URL }}"
+edit_uri: "{{ APPS_PLATFORM_WIKI_MKDOCS_EDIT_URI }}"
 
 # Copyright footer
-copyright: "Copyright &copy; 2025 Manu Lorente - Development"
+copyright: "{{ APPS_PLATFORM_WIKI_MKDOCS_COPYRIGHT }}"
 
 theme:
     name: material
     custom_dir: generated_docs/overrides
 
     # Branding
-    logo: "assets/logo.svg"
-    favicon: "assets/favicon.ico"
+    logo: "{{ APPS_PLATFORM_WIKI_MKDOCS_LOGO_PATH }}"
+    favicon: "{{ APPS_PLATFORM_WIKI_MKDOCS_FAVICON_PATH }}"
 
     # Color Palette (Dark/Light toggle)
     palette:
@@ -42,21 +42,21 @@ theme:
 
     # User Interface Features
     features:
-      - navigation.instant      # SPA-like feeling (no reload)
-      - navigation.tracking     # Update URL on scroll
-      - navigation.tabs         # Top level tabs
-      - navigation.tabs.sticky  # Tabs stay visible
-      - navigation.sections     # Collapsible sections
-      - navigation.expand       # Expand menu
-      - navigation.top          # Back to top button
-      - navigation.path         # Breadcrumbs
-      - navigation.footer       # Next/Prev links
-      - search.suggest          # Search autocomplete
-      - search.highlight        # Highlight search results
-      - search.share            # Share search results
-      - content.code.copy       # Copy code button
-      - content.action.edit     # Edit on GitHub button
-      - content.action.view     # View on GitHub button
+    - navigation.instant      # SPA-like feeling (no reload)
+    - navigation.tracking     # Update URL on scroll
+    - navigation.tabs         # Top level tabs
+    - navigation.tabs.sticky  # Tabs stay visible
+    - navigation.sections     # Collapsible sections
+    - navigation.expand       # Expand menu
+    - navigation.top          # Back to top button
+    - navigation.path         # Breadcrumbs
+    - navigation.footer       # Next/Prev links
+    - search.suggest          # Search autocomplete
+    - search.highlight        # Highlight search results
+    - search.share            # Share search results
+    - content.code.copy       # Copy code button
+    - content.action.edit     # Edit on GitHub button
+    - content.action.view     # View on GitHub button
 
 # Plugins
 plugins:
