@@ -142,9 +142,7 @@ class WikiGenerator(BaseGenerator):
             logger.error(f"Failed to serve wiki: {e}")
             return False
         except FileNotFoundError:
-            logger.error(
-                "MkDocs not found. Please install it: pip install mkdocs mkdocs-material"
-            )
+            logger.error("MkDocs not found. Please install it: pip install mkdocs mkdocs-material")
             return False
         except KeyboardInterrupt:
             logger.info("Wiki server stopped")
@@ -226,9 +224,7 @@ class WikiGenerator(BaseGenerator):
                     service_target = target_dir / service_dir.name
                     service_target.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(readme, service_target / "index.md")
-                    logger.info(
-                        MESSAGES.INFO_WIKI_COLLECTED_SERVICE.format(service_dir.name)
-                    )
+                    logger.info(MESSAGES.INFO_WIKI_COLLECTED_SERVICE.format(service_dir.name))
 
     def _collect_guides(self) -> None:
         """Collect guides from docs/."""

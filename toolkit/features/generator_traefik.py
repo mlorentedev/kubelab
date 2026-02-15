@@ -71,9 +71,7 @@ class TraefikGenerator(BaseGenerator):
                 else:
                     logger.warning(f"Failed to render {template_name}")
 
-            logger.success(
-                f"Generated {len(generated_files)} Traefik configuration files"
-            )
+            logger.success(f"Generated {len(generated_files)} Traefik configuration files")
             return {"success": True, "files": generated_files}
 
         except FileNotFoundError as e:
@@ -95,11 +93,7 @@ class TraefikGenerator(BaseGenerator):
 
             # Check compose files in stacks directory
             if not settings.traefik_dir.exists():
-                logger.error(
-                    MESSAGES.ERROR_CONFIG_TRAEFIK_DIR_NOT_FOUND.format(
-                        settings.traefik_dir
-                    )
-                )
+                logger.error(MESSAGES.ERROR_CONFIG_TRAEFIK_DIR_NOT_FOUND.format(settings.traefik_dir))
                 return False
 
             compose_files = [
@@ -108,25 +102,17 @@ class TraefikGenerator(BaseGenerator):
                 "compose.staging.yml",
                 "compose.prod.yml",
             ]
-            missing_files = [
-                f for f in compose_files if not (settings.traefik_dir / f).exists()
-            ]
+            missing_files = [f for f in compose_files if not (settings.traefik_dir / f).exists()]
 
             # Check generated files in edge/traefik/generated/
-            generated_dir = (
-                self.project_root / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR
-            )
+            generated_dir = self.project_root / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR
             for env in ("dev", "staging", "prod"):
                 generated_file = generated_dir / env / "traefik.yml"
                 if not generated_file.exists():
                     missing_files.append(f"generated/{env}/traefik.yml")
 
             if missing_files:
-                logger.warning(
-                    MESSAGES.WARNING_CONFIG_MISSING_TRAEFIK_FILES.format(
-                        ", ".join(missing_files)
-                    )
-                )
+                logger.warning(MESSAGES.WARNING_CONFIG_MISSING_TRAEFIK_FILES.format(", ".join(missing_files)))
                 return False
 
             logger.success(MESSAGES.SUCCESS_CONFIG_TRAEFIK_VALIDATION_PASSED)
@@ -134,9 +120,7 @@ class TraefikGenerator(BaseGenerator):
         except Exception:
             return False
 
-    def _find_var(
-        self, env_vars: dict[str, str], component: str, suffix: str
-    ) -> str | None:
+    def _find_var(self, env_vars: dict[str, str], component: str, suffix: str) -> str | None:
         """Find variable value for a component by searching hierarchical paths.
 
         Args:
@@ -216,9 +200,7 @@ class TraefikGenerator(BaseGenerator):
             # --- Special Case: MinIO Console ---
             if component == "minio":
                 console_domain = self._find_var(env_vars, component, "CONSOLE_DOMAIN")
-                console_port = self._find_var(
-                    env_vars, component, "DEFAULT_PORT_CONSOLE"
-                )
+                console_port = self._find_var(env_vars, component, "DEFAULT_PORT_CONSOLE")
 
                 if console_domain and console_port:
                     apps.append(
@@ -240,11 +222,7 @@ class TraefikGenerator(BaseGenerator):
 
             # --- Determine Host ---
             # Try hierarchical search first
-            host = (
-                self._find_var(env_vars, component, "DOMAIN")
-                or self._find_var(env_vars, component, "HOST")
-                or ""
-            )
+            host = self._find_var(env_vars, component, "DOMAIN") or self._find_var(env_vars, component, "HOST") or ""
 
             # Special cases for edge services
             if not host and component == "traefik":
@@ -303,8 +281,7 @@ class TraefikGenerator(BaseGenerator):
                     "enable_auth": enable_auth,
                     "enable_compress": enable_compress,
                     "health_path": self._find_var(env_vars, component, "HEALTH_PATH"),
-                    "auth_level": self._find_var(env_vars, component, "AUTH_LEVEL")
-                    or "bypass",
+                    "auth_level": self._find_var(env_vars, component, "AUTH_LEVEL") or "bypass",
                 }
             )
 
@@ -345,8 +322,7 @@ class TraefikGenerator(BaseGenerator):
         context.update(
             {
                 # Template uses DOMAIN, we have BASE_DOMAIN
-                "DOMAIN": env_vars.get("BASE_DOMAIN", "")
-                or env_vars.get("GLOBAL_BASE_DOMAIN", ""),
+                "DOMAIN": env_vars.get("BASE_DOMAIN", "") or env_vars.get("GLOBAL_BASE_DOMAIN", ""),
                 # Template uses DOCKER_NETWORK, we have NETWORK_NAME
                 "DOCKER_NETWORK": env_vars.get("NETWORK_NAME", ""),
                 # Nginx service reference (for error-pages middleware)
@@ -355,24 +331,16 @@ class TraefikGenerator(BaseGenerator):
                 "EDGE_TRAEFIK_DOMAIN": env_vars.get("EDGE_TRAEFIK_DOMAIN", ""),
                 "EDGE_NGINX_DOMAIN": env_vars.get("EDGE_NGINX_DOMAIN", ""),
                 # Authelia compatibility aliases (for middlewares template)
-                "APPS_AUTHELIA_NAME": env_vars.get(
-                    "APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia"
-                ),
-                "APPS_AUTHELIA_DEFAULT_PORT": env_vars.get(
-                    "APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_PORT", "9091"
-                ),
-                "APPS_AUTHELIA_DOMAIN": env_vars.get(
-                    "APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN", ""
-                ),
+                "APPS_AUTHELIA_NAME": env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia"),
+                "APPS_AUTHELIA_DEFAULT_PORT": env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_PORT", "9091"),
+                "APPS_AUTHELIA_DOMAIN": env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN", ""),
                 # Apps list
                 "apps": apps,
                 "env": env,
             }
         )
 
-        logger.debug(
-            f"Context built with {len(context)} variables and {len(apps)} apps"
-        )
+        logger.debug(f"Context built with {len(context)} variables and {len(apps)} apps")
         return context
 
 

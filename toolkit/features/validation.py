@@ -31,12 +31,8 @@ def validate_environment_config(env: str) -> EnvironmentConfig:
         logger.info(f"Target environment: {env_config.description}")
         return env_config
     except ValueError:
-        valid_envs = (
-            list(settings.environments.keys()) or DEFAULT_CONFIG.VALID_ENVIRONMENTS
-        )
-        logger.error(
-            MESSAGES.ERROR_INVALID_ENVIRONMENT.format(env, ", ".join(valid_envs))
-        )
+        valid_envs = list(settings.environments.keys()) or DEFAULT_CONFIG.VALID_ENVIRONMENTS
+        logger.error(MESSAGES.ERROR_INVALID_ENVIRONMENT.format(env, ", ".join(valid_envs)))
         raise typer.Exit(1) from None
 
 
@@ -46,16 +42,10 @@ def validate_environment(env: str | None = None) -> str:
     valid_envs = list(settings.environments.keys()) or DEFAULT_CONFIG.VALID_ENVIRONMENTS
 
     if environment and environment not in valid_envs:
-        raise ValueError(
-            MESSAGES.ERROR_INVALID_ENVIRONMENT.format(
-                environment, ", ".join(valid_envs)
-            )
-        )
+        raise ValueError(MESSAGES.ERROR_INVALID_ENVIRONMENT.format(environment, ", ".join(valid_envs)))
 
     # Return validated environment or default
-    return (
-        environment if environment in valid_envs else DEFAULT_CONFIG.DEFAULT_ENVIRONMENT
-    )
+    return environment if environment in valid_envs else DEFAULT_CONFIG.DEFAULT_ENVIRONMENT
 
 
 def confirm_dangerous_operation(env_config: EnvironmentConfig, operation: str) -> None:
@@ -131,9 +121,7 @@ def check_environment_safety(env: str, operation: str) -> bool:
     return True
 
 
-def verify_required_vars(
-    required_vars: Sequence[str], env_vars: dict[str, str] | None = None
-) -> bool:
+def verify_required_vars(required_vars: Sequence[str], env_vars: dict[str, str] | None = None) -> bool:
     """Verify required variables are set."""
     if env_vars is None:
         env_vars = dict(os.environ)
@@ -199,11 +187,7 @@ def validate_dependencies(required_only: bool = False) -> dict[str, bool]:
         else:
             logger.warning(f"❌ {tool} not available")
 
-    missing_required = [
-        tool
-        for tool in settings.required_tools
-        if tool in results and not results[tool]
-    ]
+    missing_required = [tool for tool in settings.required_tools if tool in results and not results[tool]]
 
     if missing_required:
         raise DependencyError(missing_required)

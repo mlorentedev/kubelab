@@ -61,9 +61,7 @@ def _patch_typer_help() -> None:
 
                     if param_count == 0:
                         patched_methods.append((param, make_metavar))
-                        param.make_metavar = (
-                            lambda bound=make_metavar, context=ctx: bound(context)
-                        )
+                        param.make_metavar = lambda bound=make_metavar, context=ctx: bound(context)
 
                 original_print_options_panel(
                     name=name,

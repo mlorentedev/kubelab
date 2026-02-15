@@ -45,9 +45,7 @@ def _get_docker_status() -> List[Dict[str, str]]:
                 if len(parts) >= 3:
                     containers.append(
                         {
-                            "name": parts[0].replace(
-                                f"{settings.project_name}-", ""
-                            ),  # Clean name
+                            "name": parts[0].replace(f"{settings.project_name}-", ""),  # Clean name
                             "status": parts[1],
                             "state": parts[2],  # running, exited, etc.
                             "ports": parts[3] if len(parts) > 3 else "",
@@ -218,9 +216,7 @@ def _generate_info_panel(env: str, containers: List[Dict[str, str]]) -> Panel:
 
                     urls.append((display_name, f"{protocol}://{domain}{health_path}"))
             elif isinstance(comp_config, dict):
-                process_components(
-                    comp_config, f"{prefix}-{comp_name}" if prefix else comp_name
-                )
+                process_components(comp_config, f"{prefix}-{comp_name}" if prefix else comp_name)
 
     if "apps" in raw_config:
         if "platform" in raw_config["apps"]:
@@ -231,14 +227,10 @@ def _generate_info_panel(env: str, containers: List[Dict[str, str]]) -> Panel:
     # Also add the main Traefik instance from edge, if it's running
     if "edge" in raw_config and "traefik" in raw_config["edge"]:
         if is_container_running("traefik"):  # Check main traefik container
-            traefik_domain = raw_config["edge"]["traefik"].get(
-                "domain", env_settings.base_domain
-            )
+            traefik_domain = raw_config["edge"]["traefik"].get("domain", env_settings.base_domain)
             protocol = env_settings.protocol  # Use env_settings.protocol
             urls.append(("Traefik (Proxy)", f"{protocol}://{traefik_domain}"))
-            urls.append(
-                ("Traefik Dashboard", f"{protocol}://{traefik_domain}/dashboard")
-            )
+            urls.append(("Traefik Dashboard", f"{protocol}://{traefik_domain}/dashboard"))
 
     # Sort for consistent display
     urls = sorted(list(set(urls)))  # Remove duplicates and sort
@@ -267,9 +259,7 @@ def _generate_header(env: str, is_watching: bool, refresh_interval: float) -> Pa
     grid.add_column(justify="left", ratio=1)
     grid.add_column(justify="right", ratio=1)
 
-    watch_status = (
-        f"Watching (every {refresh_interval}s)" if is_watching else "Static Snapshot"
-    )
+    watch_status = f"Watching (every {refresh_interval}s)" if is_watching else "Static Snapshot"
 
     grid.add_row(
         f"[b]Toolkit Dashboard[/b] | Env: [cyan]{env}[/cyan] | Status: {watch_status}",
@@ -283,14 +273,10 @@ def _generate_header(env: str, is_watching: bool, refresh_interval: float) -> Pa
 def run_dashboard(
     ctx: typer.Context,
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
-    watch: Annotated[
-        bool, typer.Option("--watch", "-w", help="Enable auto-refresh mode")
-    ] = False,
+    watch: Annotated[bool, typer.Option("--watch", "-w", help="Enable auto-refresh mode")] = False,
     interval: Annotated[
         float,
-        typer.Option(
-            "--interval", "-i", help="Refresh interval in seconds (only with --watch)"
-        ),
+        typer.Option("--interval", "-i", help="Refresh interval in seconds (only with --watch)"),
     ] = 1.0,  # Default to 1 second
 ) -> None:
     """

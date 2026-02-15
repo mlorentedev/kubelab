@@ -289,9 +289,7 @@ class GitHubSecretsManager:
                     deleted_count += 1
 
         if dry_run:
-            logger.info(
-                f"Found {len(unused_secrets)} unused secrets (use --no-dry-run to delete)"
-            )
+            logger.info(f"Found {len(unused_secrets)} unused secrets (use --no-dry-run to delete)")
         else:
             logger.success(f"Deleted {deleted_count} unused secrets")
 

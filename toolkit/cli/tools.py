@@ -51,9 +51,7 @@ def _get_default_domains(env: str) -> list[str]:
     config_manager = ConfigurationManager(env, settings.project_root)
     env_vars = config_manager.get_env_vars()
 
-    base_domain = env_vars.get(
-        "BASE_DOMAIN", env_vars.get("GLOBAL_BASE_DOMAIN", "cubelab.test")
-    )
+    base_domain = env_vars.get("BASE_DOMAIN", env_vars.get("GLOBAL_BASE_DOMAIN", "cubelab.test"))
 
     return [
         base_domain,
@@ -106,9 +104,7 @@ def install_mkcert() -> None:
         subprocess.run(["mkcert", "-install"], check=True)
         logger.success(MESSAGES.SUCCESS_COMPLETED.format("Local CA installation"))
     except subprocess.CalledProcessError as e:
-        logger.error(
-            MESSAGES.ERROR_FAILED_WITH_REASON.format("Local CA installation", e)
-        )
+        logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Local CA installation", e))
         raise typer.Exit(1) from e
 
 
@@ -150,11 +146,7 @@ def generate_certs(
     cert_file = certs_path / "cert.pem"
     key_file = certs_path / "key.pem"
 
-    logger.info(
-        MESSAGES.INFO_GENERATING.format(
-            f"certificates for: {', '.join(unique_domains)}"
-        )
-    )
+    logger.info(MESSAGES.INFO_GENERATING.format(f"certificates for: {', '.join(unique_domains)}"))
     logger.info(f"Output directory: {certs_path}")
 
     try:
@@ -174,9 +166,7 @@ def generate_certs(
         logger.success(MESSAGES.SUCCESS_CREATED.format(f"Key: {key_file}"))
 
         # Copy local CA root for services that need to trust it (like MinIO)
-        ca_root_result = subprocess.run(
-            ["mkcert", "-CAROOT"], capture_output=True, text=True, check=True
-        )
+        ca_root_result = subprocess.run(["mkcert", "-CAROOT"], capture_output=True, text=True, check=True)
         ca_root_path = Path(ca_root_result.stdout.strip())
         root_ca_file = ca_root_path / "rootCA.pem"
         dest_ca_file = certs_path / "rootCA.pem"
@@ -192,9 +182,7 @@ def generate_certs(
         logger.info("  1. Run: toolkit config generate --env dev")
         logger.info("  2. Restart Traefik: toolkit services restart traefik")
     except subprocess.CalledProcessError as e:
-        logger.error(
-            MESSAGES.ERROR_FAILED_WITH_REASON.format("Certificate generation", e)
-        )
+        logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Certificate generation", e))
         raise typer.Exit(1) from e
 
 
@@ -213,9 +201,7 @@ def certs_status(
     logger.section(f"Certificate Status - {env.upper()}")
 
     if not certs_path.exists():
-        logger.warning(
-            MESSAGES.WARNING_NOT_FOUND.format(f"Certificates directory: {certs_path}")
-        )
+        logger.warning(MESSAGES.WARNING_NOT_FOUND.format(f"Certificates directory: {certs_path}"))
         logger.info("Run: toolkit tools certs generate --env dev")
         return
 

@@ -47,19 +47,13 @@ class DockerService:
         full_env = os.environ.copy()
 
         # Filter out non-string values (like lists/dicts used for templates)
-        safe_vars = {
-            k: str(v)
-            for k, v in project_vars.items()
-            if isinstance(v, (str, int, float, bool))
-        }
+        safe_vars = {k: str(v) for k, v in project_vars.items() if isinstance(v, (str, int, float, bool))}
 
         full_env.update(safe_vars)
 
         return full_env
 
-    def _get_compose_cmd(
-        self, service_dir: Path, environment: str, action: str
-    ) -> list[str]:
+    def _get_compose_cmd(self, service_dir: Path, environment: str, action: str) -> list[str]:
         """Build the docker compose command with correct files."""
         config_manager = ConfigurationManager(environment)
         compose_files = config_manager.get_compose_files(service_dir)
@@ -98,9 +92,7 @@ class DockerService:
             )
 
             if result.returncode != 0:
-                logger.warning(
-                    f"Could not parse compose file for volume validation: {result.stderr}"
-                )
+                logger.warning(f"Could not parse compose file for volume validation: {result.stderr}")
                 return True  # Skip validation if we can't parse
 
             # Parse the full YAML output
@@ -133,11 +125,7 @@ class DockerService:
                         continue
 
                     # Skip named volumes (not paths)
-                    if not (
-                        source.startswith("/")
-                        or source.startswith("./")
-                        or source.startswith("../")
-                    ):
+                    if not (source.startswith("/") or source.startswith("./") or source.startswith("../")):
                         continue
 
                     source_path = Path(source)
@@ -186,21 +174,15 @@ class DockerService:
             result = subprocess.run(check_cmd, capture_output=True, check=False)
 
             if result.returncode != 0:
-                logger.info(
-                    f"External volume '{volume_name}' not found. Creating it..."
-                )
+                logger.info(f"External volume '{volume_name}' not found. Creating it...")
                 create_cmd = ["docker", "volume", "create", volume_name]
                 subprocess.run(create_cmd, check=True, capture_output=True)
                 logger.success(f"External volume '{volume_name}' created successfully")
         except subprocess.CalledProcessError as e:
-            logger.error(
-                f"Failed to ensure external volume '{volume_name}': {e.stderr}"
-            )
+            logger.error(f"Failed to ensure external volume '{volume_name}': {e.stderr}")
             raise typer.Exit(1) from e
 
-    def _get_compose_config(
-        self, service_dir: Path, environment: str
-    ) -> dict[str, Any]:
+    def _get_compose_config(self, service_dir: Path, environment: str) -> dict[str, Any]:
         """
         Parses and returns the effective Docker Compose configuration for a service.
         """
@@ -217,17 +199,13 @@ class DockerService:
         )
 
         if result.returncode != 0:
-            logger.error(
-                f"Failed to parse compose configuration for {service_dir.name}: {result.stderr}"
-            )
+            logger.error(f"Failed to parse compose configuration for {service_dir.name}: {result.stderr}")
             raise typer.Exit(1)
 
         try:
             return yaml.safe_load(result.stdout)
         except yaml.YAMLError as e:
-            logger.error(
-                f"Failed to parse YAML from compose config output for {service_dir.name}: {e}"
-            )
+            logger.error(f"Failed to parse YAML from compose config output for {service_dir.name}: {e}")
             raise typer.Exit(1) from e
 
     def start_service(self, service_dir: Path, environment: str) -> None:
@@ -242,9 +220,7 @@ class DockerService:
         """
         # Validate volume mounts before starting
         if not self.validate_volume_mounts(service_dir, environment):
-            logger.error(
-                "Volume mount validation failed. Please fix the missing files before starting."
-            )
+            logger.error("Volume mount validation failed. Please fix the missing files before starting.")
             raise typer.Exit(1)
 
         full_env = self._get_execution_env(environment)
@@ -261,9 +237,7 @@ class DockerService:
             for vol_name, vol_config in declared_volumes.items():
                 if isinstance(vol_config, dict) and vol_config.get("external") is True:
                     self._ensure_external_volume(vol_name)
-        except (
-            typer.Exit
-        ):  # _get_compose_config or _ensure_external_volume can exit on error
+        except typer.Exit:  # _get_compose_config or _ensure_external_volume can exit on error
             raise
         except Exception as e:
             logger.warning(
@@ -278,17 +252,13 @@ class DockerService:
         logger.debug(f"Running: {' '.join(cmd)}")
 
         try:
-            subprocess.run(
-                cmd, cwd=self.settings.project_root, env=full_env, check=True
-            )
+            subprocess.run(cmd, cwd=self.settings.project_root, env=full_env, check=True)
             logger.success(MESSAGES.SUCCESS_SERVICE_STARTED.format(service_dir.name))
         except subprocess.CalledProcessError as e:
             logger.error(MESSAGES.ERROR_SERVICE_START_FAILED)
             raise typer.Exit(1) from e
 
-    def stop_service(
-        self, service_dir: Path, environment: str, volumes: bool = False
-    ) -> None:
+    def stop_service(self, service_dir: Path, environment: str, volumes: bool = False) -> None:
         """Stop Docker Compose service (low-level).
 
         Args:
@@ -297,9 +267,7 @@ class DockerService:
             volumes: If True, remove volumes as well
         """
         full_env = self._get_execution_env(environment)
-        cmd = self._get_compose_cmd(
-            service_dir, environment, DOCKER_CONFIG.COMPOSE_DOWN
-        )
+        cmd = self._get_compose_cmd(service_dir, environment, DOCKER_CONFIG.COMPOSE_DOWN)
 
         if volumes:
             cmd.append("-v")
@@ -310,9 +278,7 @@ class DockerService:
         except subprocess.CalledProcessError:
             logger.error(MESSAGES.ERROR_SERVICE_STOP_FAILED)
 
-    def build_service(
-        self, service_dir: Path, environment: str, no_cache: bool = False
-    ) -> None:
+    def build_service(self, service_dir: Path, environment: str, no_cache: bool = False) -> None:
         """Build Docker Compose service (low-level).
 
         Args:
@@ -324,9 +290,7 @@ class DockerService:
             typer.Exit: If build fails
         """
         full_env = self._get_execution_env(environment)
-        cmd = self._get_compose_cmd(
-            service_dir, environment, DOCKER_CONFIG.COMPOSE_BUILD
-        )
+        cmd = self._get_compose_cmd(service_dir, environment, DOCKER_CONFIG.COMPOSE_BUILD)
 
         if no_cache:
             cmd.append(DOCKER_CONFIG.FLAG_NO_CACHE)
@@ -334,9 +298,7 @@ class DockerService:
         # Stream output
         try:
             logger.debug(f"Running build command: {' '.join(cmd)}")
-            subprocess.run(
-                cmd, cwd=self.settings.project_root, env=full_env, check=True
-            )
+            subprocess.run(cmd, cwd=self.settings.project_root, env=full_env, check=True)
             logger.success(MESSAGES.SUCCESS_BUILT.format(service_dir.name))
         except subprocess.CalledProcessError as e:
             logger.error(MESSAGES.ERROR_FAILED.format(f"build {service_dir.name}"))
@@ -352,9 +314,7 @@ class DockerService:
             follow: If True, follow log output
         """
         full_env = self._get_execution_env(environment)
-        cmd = self._get_compose_cmd(
-            service_dir, environment, DOCKER_CONFIG.COMPOSE_LOGS
-        )
+        cmd = self._get_compose_cmd(service_dir, environment, DOCKER_CONFIG.COMPOSE_LOGS)
 
         if follow:
             cmd.append(DOCKER_CONFIG.FLAG_FOLLOW)
@@ -385,9 +345,7 @@ class DockerService:
             raise typer.Exit(1)
         self.start_service(component_dir, environment)
 
-    def stop_component(
-        self, component_name: str, environment: str, volumes: bool = False
-    ) -> None:
+    def stop_component(self, component_name: str, environment: str, volumes: bool = False) -> None:
         """Stop any component (app, service, or edge).
 
         Args:
@@ -405,9 +363,7 @@ class DockerService:
             raise typer.Exit(1)
         self.stop_service(component_dir, environment, volumes=volumes)
 
-    def show_component_logs(
-        self, component_name: str, environment: str, follow: bool = True
-    ) -> None:
+    def show_component_logs(self, component_name: str, environment: str, follow: bool = True) -> None:
         """Show logs for any component (app, service, or edge).
 
         Args:
@@ -429,9 +385,7 @@ class DockerService:
     # App-Level Operations (from apps_manager.py)
     # =========================================================================
 
-    def build_app(
-        self, app_name: str, environment: str, no_cache: bool = False
-    ) -> None:
+    def build_app(self, app_name: str, environment: str, no_cache: bool = False) -> None:
         """Build application using docker compose.
 
         Args:

@@ -55,15 +55,9 @@ def generate(
         total_count = 0
 
         if env == "dev":
-            services_to_generate = (
-                [service] if service else ["traefik", "wiki", "authelia"]
-            )
+            services_to_generate = [service] if service else ["traefik", "wiki", "authelia"]
         else:
-            services_to_generate = (
-                [service]
-                if service
-                else ["terraform", "traefik", "ansible", "wiki", "authelia"]
-            )
+            services_to_generate = [service] if service else ["terraform", "traefik", "ansible", "wiki", "authelia"]
 
         for svc in services_to_generate:
             total_count += 1
@@ -88,14 +82,10 @@ def generate(
                     success_count += 1
                     logger.success(MESSAGES.SUCCESS_CREATED.format(f"{svc} config"))
                 else:
-                    logger.warning(
-                        MESSAGES.WARNING_CONFIG_GENERATION_FAILED.format(svc, env)
-                    )
+                    logger.warning(MESSAGES.WARNING_CONFIG_GENERATION_FAILED.format(svc, env))
 
             except Exception as e:
-                logger.error(
-                    MESSAGES.ERROR_FAILED.format(f"generate {svc} config: {e}")
-                )
+                logger.error(MESSAGES.ERROR_FAILED.format(f"generate {svc} config: {e}"))
 
         # Summary
         if success_count == total_count:
@@ -131,9 +121,7 @@ def validate(
         success_count = 0
         total_count = 0
 
-        services_to_validate = (
-            [service] if service else ["terraform", "traefik", "ansible", "authelia"]
-        )
+        services_to_validate = [service] if service else ["terraform", "traefik", "ansible", "authelia"]
 
         for svc in services_to_validate:
             total_count += 1
@@ -155,13 +143,9 @@ def validate(
 
                 if result:
                     success_count += 1
-                    logger.success(
-                        MESSAGES.SUCCESS_CONFIG_VALIDATION_PASSED.format(svc)
-                    )
+                    logger.success(MESSAGES.SUCCESS_CONFIG_VALIDATION_PASSED.format(svc))
                 else:
-                    logger.warning(
-                        MESSAGES.WARNING_CONFIG_VALIDATION_FAILED.format(svc)
-                    )
+                    logger.warning(MESSAGES.WARNING_CONFIG_VALIDATION_FAILED.format(svc))
 
             except Exception as e:
                 logger.error(MESSAGES.ERROR_CONFIG_VALIDATION_ERROR.format(svc, e))
@@ -170,11 +154,7 @@ def validate(
         if success_count == total_count:
             logger.success(MESSAGES.SUCCESS_CONFIG_ALL_VALIDATIONS_PASSED)
         else:
-            logger.warning(
-                MESSAGES.WARNING_CONFIG_SOME_VALIDATIONS_FAILED.format(
-                    success_count, total_count
-                )
-            )
+            logger.warning(MESSAGES.WARNING_CONFIG_SOME_VALIDATIONS_FAILED.format(success_count, total_count))
             raise typer.Exit(1) from None
 
     except Exception as e:

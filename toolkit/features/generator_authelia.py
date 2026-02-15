@@ -22,16 +22,10 @@ class AutheliaGenerator(BaseGenerator):
             Dictionary with success status and list of generated files
         """
         logger.info(f"Generating Authelia configuration for {env}")
-        logger.debug(
-            f"Effective UID: {os.geteuid()}, GID: {os.getegid()}"
-        )  # Add this line
+        logger.debug(f"Effective UID: {os.geteuid()}, GID: {os.getegid()}")  # Add this line
 
-        templates_dir = (
-            self.project_root / "infra" / "config" / "authelia" / "templates"
-        )
-        output_dir = (
-            self.project_root / "infra" / "config" / "authelia" / "generated" / env
-        )
+        templates_dir = self.project_root / "infra" / "config" / "authelia" / "templates"
+        output_dir = self.project_root / "infra" / "config" / "authelia" / "generated" / env
 
         output_dir.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
 
@@ -60,20 +54,18 @@ class AutheliaGenerator(BaseGenerator):
                     continue
 
                 app_name = env_vars.get(name_key, component)
-                enable_auth = env_vars.get(
-                    f"APPS_{component_upper}_ENABLE_AUTH", "false"
-                ).lower() in ("true", "1", "yes")
-                auth_level = env_vars.get(
-                    f"APPS_{component_upper}_AUTH_LEVEL", "bypass"
+                enable_auth = env_vars.get(f"APPS_{component_upper}_ENABLE_AUTH", "false").lower() in (
+                    "true",
+                    "1",
+                    "yes",
                 )
+                auth_level = env_vars.get(f"APPS_{component_upper}_AUTH_LEVEL", "bypass")
 
                 # Check for special cases like Authelia itself
                 if app_name == "authelia":
                     # Authelia does not protect itself with middleware
                     app_auth_level_for_config = "bypass"
-                    app_host = env_vars.get(
-                        f"APPS_{component_upper}_DOMAIN", ""
-                    )  # Get its domain
+                    app_host = env_vars.get(f"APPS_{component_upper}_DOMAIN", "")  # Get its domain
                 else:
                     app_auth_level_for_config = auth_level
                     app_host = env_vars[host_key]  # Use host for other apps
@@ -90,13 +82,7 @@ class AutheliaGenerator(BaseGenerator):
                 )
 
             # Read JWKS PEM key if it exists
-            jwks_pem_path = (
-                self.project_root
-                / "infra"
-                / "config"
-                / "secrets"
-                / f"{env}.oidc-jwks.pem"
-            )
+            jwks_pem_path = self.project_root / "infra" / "config" / "secrets" / f"{env}.oidc-jwks.pem"
             jwks_key = ""
             if jwks_pem_path.exists():
                 jwks_key = jwks_pem_path.read_text().strip()
@@ -116,9 +102,7 @@ class AutheliaGenerator(BaseGenerator):
                         return default
                 return d
 
-            authelia_config = get_nested(
-                merged_config, ["apps", "services", "security", "authelia"], {}
-            )
+            authelia_config = get_nested(merged_config, ["apps", "services", "security", "authelia"], {})
 
             # Access secrets directly (decrypted but not flattened) for precise key lookup
             # Note: config_manager.get_merged_config() already merges secrets into the config dict
@@ -133,15 +117,9 @@ class AutheliaGenerator(BaseGenerator):
 
             if not oidc_clients_config:
                 # ... (Legacy fallback code remains the same) ...
-                legacy_client_id = env_vars.get(
-                    "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_ID"
-                )
-                legacy_secret_hash = env_vars.get(
-                    "APPS_AUTHELIA_OIDC_CLIENT_SECRET_HASH"
-                )
-                legacy_redirect_uris = authelia_config.get(
-                    "oidc_client_redirect_uri", []
-                )
+                legacy_client_id = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_ID")
+                legacy_secret_hash = env_vars.get("APPS_AUTHELIA_OIDC_CLIENT_SECRET_HASH")
+                legacy_redirect_uris = authelia_config.get("oidc_client_redirect_uri", [])
                 if isinstance(legacy_redirect_uris, str):
                     legacy_redirect_uris = [legacy_redirect_uris]
 
@@ -158,9 +136,7 @@ class AutheliaGenerator(BaseGenerator):
             else:
                 for client in oidc_clients_config:
                     client_id = client.get("client_id")
-                    secret_suffix = (
-                        client_id.replace("-oidc", "").replace("-", "_").upper()
-                    )
+                    secret_suffix = client_id.replace("-oidc", "").replace("-", "_").upper()
 
                     # Construct expected env var keys for secrets using the LONG prefix found in debug
                     # Pattern: APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_{SUFFIX}_HASH
@@ -169,12 +145,8 @@ class AutheliaGenerator(BaseGenerator):
                     secret_hash = env_vars.get(secret_hash_key)
 
                     # Fallback for 'cubelab-oidc' (main) to legacy/main var
-                    if not secret_hash and (
-                        secret_suffix == "CUBELAB" or secret_suffix == "MAIN"
-                    ):
-                        secret_hash = env_vars.get(
-                            "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_HASH"
-                        )
+                    if not secret_hash and (secret_suffix == "CUBELAB" or secret_suffix == "MAIN"):
+                        secret_hash = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_HASH")
 
                     if not secret_hash:
                         logger.warning(
@@ -189,9 +161,7 @@ class AutheliaGenerator(BaseGenerator):
                             "client_name": client.get("client_name", client_id),
                             "client_secret_hash": secret_hash,
                             "redirect_uris": client.get("redirect_uris", []),
-                            "scopes": client.get(
-                                "scopes", ["openid", "profile", "email"]
-                            ),
+                            "scopes": client.get("scopes", ["openid", "profile", "email"]),
                         }
                     )
 
@@ -245,9 +215,7 @@ class AutheliaGenerator(BaseGenerator):
             output_name_config = "configuration.yml"
             output_file_config = output_dir / output_name_config
 
-            if renderer.render_template(
-                template_name_config, output_file_config, context
-            ):
+            if renderer.render_template(template_name_config, output_file_config, context):
                 generated_files.append(str(output_file_config))
                 logger.info(f"Generated {output_name_config}: {output_file_config}")
             else:
@@ -262,9 +230,7 @@ class AutheliaGenerator(BaseGenerator):
             output_name_users = "users_database.yml"
             output_file_users = output_dir / output_name_users
 
-            if renderer.render_template(
-                template_name_users, output_file_users, context
-            ):
+            if renderer.render_template(template_name_users, output_file_users, context):
                 generated_files.append(str(output_file_users))
                 logger.info(f"Generated {output_name_users}: {output_file_users}")
             else:
@@ -274,9 +240,7 @@ class AutheliaGenerator(BaseGenerator):
                     "error": f"Failed to render {template_name_users}",
                 }
 
-            logger.success(
-                f"Generated {len(generated_files)} Authelia configuration files"
-            )
+            logger.success(f"Generated {len(generated_files)} Authelia configuration files")
             return {"success": True, "files": generated_files}
 
         except Exception as e:
@@ -289,9 +253,7 @@ class AutheliaGenerator(BaseGenerator):
         Returns:
             True if validation passes, False otherwise
         """
-        templates_dir = (
-            self.project_root / "infra" / "config" / "authelia" / "templates"
-        )
+        templates_dir = self.project_root / "infra" / "config" / "authelia" / "templates"
 
         if not templates_dir.exists():
             logger.error(f"Authelia templates directory not found: {templates_dir}")

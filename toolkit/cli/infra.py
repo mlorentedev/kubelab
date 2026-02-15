@@ -78,9 +78,7 @@ def ansible_deploy(
         inventory_path = ansible_dir / env_config.ansible_inventory
 
         if not inventory_path.exists():
-            logger.error(
-                MESSAGES.ERROR_ANSIBLE_INVENTORY_NOT_FOUND.format(inventory_path)
-            )
+            logger.error(MESSAGES.ERROR_ANSIBLE_INVENTORY_NOT_FOUND.format(inventory_path))
             raise typer.Exit(1) from None
 
         # Build command
@@ -116,9 +114,7 @@ def _check_terraform_setup() -> None:
         raise typer.Exit(1) from None
 
     if not settings.terraform_dir.exists():
-        logger.error(
-            MESSAGES.ERROR_TERRAFORM_DIR_NOT_FOUND.format(settings.terraform_dir)
-        )
+        logger.error(MESSAGES.ERROR_TERRAFORM_DIR_NOT_FOUND.format(settings.terraform_dir))
         raise typer.Exit(1) from None
 
 
@@ -171,9 +167,7 @@ def tf_init(env: str = typer.Argument("dev", help="Target environment")) -> None
 @terraform_app.command("plan")
 def tf_plan(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
-    out: Annotated[
-        str | None, typer.Option("--out", "-o", help="Save plan to file")
-    ] = None,
+    out: Annotated[str | None, typer.Option("--out", "-o", help="Save plan to file")] = None,
 ) -> None:
     """
     Create a Terraform execution plan.
@@ -213,12 +207,8 @@ def tf_plan(
 @terraform_app.command("apply")
 def tf_apply(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
-    plan_file: Annotated[
-        str | None, typer.Option("--plan-file", "-f", help="Plan file to apply")
-    ] = None,
-    auto_approve: Annotated[
-        bool, typer.Option("--auto-approve", help="Skip interactive approval")
-    ] = False,
+    plan_file: Annotated[str | None, typer.Option("--plan-file", "-f", help="Plan file to apply")] = None,
+    auto_approve: Annotated[bool, typer.Option("--auto-approve", help="Skip interactive approval")] = False,
 ) -> None:
     """
     Apply Terraform configuration changes.
@@ -267,9 +257,7 @@ def tf_apply(
 @terraform_app.command("destroy")
 def tf_destroy(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
-    auto_approve: Annotated[
-        bool, typer.Option("--auto-approve", help="Skip interactive approval")
-    ] = False,
+    auto_approve: Annotated[bool, typer.Option("--auto-approve", help="Skip interactive approval")] = False,
 ) -> None:
     """
     Destroy Terraform-managed infrastructure.
@@ -291,9 +279,7 @@ def tf_destroy(
 
             # Additional confirmation for production (special case for destroy)
             if env == "prod":
-                if not logger.confirm(
-                    "This is PRODUCTION. Type 'destroy' to confirm:", default=False
-                ):
+                if not logger.confirm("This is PRODUCTION. Type 'destroy' to confirm:", default=False):
                     logger.info(MESSAGES.INFO_TERRAFORM_DESTROY_CANCELLED)
                     raise typer.Exit(0) from None
 
@@ -339,9 +325,7 @@ def tf_validate() -> None:
 
             # Format check
             progress.update(task, description="Checking formatting...")
-            format_result = command.run(
-                "terraform fmt -check", cwd=terraform_dir, check=False
-            )
+            format_result = command.run("terraform fmt -check", cwd=terraform_dir, check=False)
             progress.advance(task)
 
             # Syntax validation
@@ -437,23 +421,14 @@ def _check_traefik_health(env: str) -> None:
             check=False,
         )
 
-        if (
-            result.returncode == 0
-            and result.stdout.strip() in NETWORK_DEFAULTS.CONNECTION_SUCCESS_CODES
-        ):
+        if result.returncode == 0 and result.stdout.strip() in NETWORK_DEFAULTS.CONNECTION_SUCCESS_CODES:
             logger.success(MESSAGES.SUCCESS_INFRASTRUCTURE_TRAEFIK_API_RESPONDING)
         else:
-            logger.warning(
-                MESSAGES.WARNING_INFRASTRUCTURE_TRAEFIK_API_NOT_RESPONDING.format(
-                    result.stdout.strip()
-                )
-            )
+            logger.warning(MESSAGES.WARNING_INFRASTRUCTURE_TRAEFIK_API_NOT_RESPONDING.format(result.stdout.strip()))
 
         # Check service discovery
         logger.info(MESSAGES.INFO_SERVICE_DISCOVERY_STATUS)
-        result = command.run(
-            "docker ps --format 'table {{.Names}}\t{{.Labels}}'", check=False
-        )
+        result = command.run("docker ps --format 'table {{.Names}}\t{{.Labels}}'", check=False)
         if result.returncode == 0:
             # Count services with traefik labels
             traefik_services = 0
@@ -478,13 +453,9 @@ def _check_all_services_status(env: str) -> None:
         try:
             if service == "traefik":
                 _check_traefik_status(env)
-            logger.success(
-                MESSAGES.SUCCESS_INFRASTRUCTURE_SERVICE_STATUS_CHECKED.format(service)
-            )
+            logger.success(MESSAGES.SUCCESS_INFRASTRUCTURE_SERVICE_STATUS_CHECKED.format(service))
         except Exception:
-            logger.warning(
-                MESSAGES.WARNING_INFRASTRUCTURE_SERVICE_CHECK_FAILED.format(service)
-            )
+            logger.warning(MESSAGES.WARNING_INFRASTRUCTURE_SERVICE_CHECK_FAILED.format(service))
 
     logger.info(MESSAGES.INFO_INFRASTRUCTURE_STATUS_CHECK_COMPLETED)
 
@@ -492,9 +463,7 @@ def _check_all_services_status(env: str) -> None:
 @app.command("nuke")
 def nuke_infra(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
-    force: Annotated[
-        bool, typer.Option("--force", "-f", help="Force execution without confirmation")
-    ] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Force execution without confirmation")] = False,
 ) -> None:
     """
     DESTROY EVERYTHING: Stops containers, removes volumes, networks, and cleans caches.
@@ -545,9 +514,7 @@ def nuke_infra(
     logger.success(f"Removed {cleaned_count} cache directories.")
 
     # 3. Docker System Prune (Optional)
-    if force or typer.confirm(
-        "Do you want to run 'docker system prune -a' (removes unused images/networks)?"
-    ):
+    if force or typer.confirm("Do you want to run 'docker system prune -a' (removes unused images/networks)?"):
         logger.info("Pruning Docker system...")
         command.run("docker system prune -a -f --volumes", check=False)
 

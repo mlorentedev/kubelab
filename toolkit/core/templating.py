@@ -27,9 +27,7 @@ class TemplateRenderer:
             keep_trailing_newline=True,
         )
 
-    def render_template(
-        self, template_name: str, output_path: Path, context: dict[str, Any]
-    ) -> bool:
+    def render_template(self, template_name: str, output_path: Path, context: dict[str, Any]) -> bool:
         """Render a Jinja2 template to an output file.
 
         Args:
@@ -75,9 +73,7 @@ class TemplateRenderer:
             logger.error(f"Unexpected error rendering {template_name}: {e}")
             return False
 
-    def render_string(
-        self, template_string: str, context: dict[str, Any]
-    ) -> str | None:
+    def render_string(self, template_string: str, context: dict[str, Any]) -> str | None:
         """Render a template from a string.
 
         Args:

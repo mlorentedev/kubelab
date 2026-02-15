@@ -292,9 +292,7 @@ class Messages:
 
     # Component/Service specific
     ERROR_COMPONENT_NOT_FOUND: str = "Component not found: {}"
-    INFO_USE_DOCKER_CONTAINER: str = (
-        "Use 'toolkit services up {}' to start in Docker container"
-    )
+    INFO_USE_DOCKER_CONTAINER: str = "Use 'toolkit services up {}' to start in Docker container"
     WARNING_NO_VOLUMES_FOUND: str = "No volumes found for {}"
 
     # Environment specific
@@ -355,9 +353,7 @@ class Messages:
     # =============================================================================
     # TERRAFORM
     # =============================================================================
-    ERROR_TERRAFORM_NOT_FOUND: str = (
-        "Terraform not found. Please install Terraform first."
-    )
+    ERROR_TERRAFORM_NOT_FOUND: str = "Terraform not found. Please install Terraform first."
     ERROR_TERRAFORM_DIR_NOT_FOUND: str = "Terraform directory not found: {}"
     ERROR_TERRAFORM_INIT_FAILED: str = "Terraform init failed"
     ERROR_TERRAFORM_INIT_FAILED_WITH_ERROR: str = "Terraform init failed: {}"
@@ -365,53 +361,37 @@ class Messages:
     ERROR_TERRAFORM_APPLY_FAILED: str = "Terraform apply failed: {}"
     ERROR_TERRAFORM_DESTROY_FAILED: str = "Terraform destroy failed: {}"
     ERROR_TERRAFORM_VALIDATION_FAILED: str = "Terraform validation failed: {}"
-    ERROR_TERRAFORM_GENERATION_FAILED: str = (
-        "Failed to generate Terraform configuration"
-    )
-    ERROR_TERRAFORM_CONFIG_GENERATION_FAILED: str = (
-        "Terraform configuration generation failed: {}"
-    )
+    ERROR_TERRAFORM_GENERATION_FAILED: str = "Failed to generate Terraform configuration"
+    ERROR_TERRAFORM_CONFIG_GENERATION_FAILED: str = "Terraform configuration generation failed: {}"
     ERROR_DEPLOYMENT_FAILED: str = "Deployment failed"
     INFO_TERRAFORM_APPLY_CANCELLED: str = "Terraform apply cancelled"
     INFO_TERRAFORM_DESTROY_CANCELLED: str = "Terraform destroy cancelled"
     INFO_TERRAFORM_RUNNING_APPLY: str = "Running apply without pre-generated plan"
     INFO_TERRAFORM_APPLY_WITHOUT_PLAN: str = "Applying without pre-generated plan"
-    WARNING_TERRAFORM_PLAN_NOT_FOUND: str = (
-        "Terraform plan file not found for environment: {}"
-    )
-    WARNING_TERRAFORM_DESTROY_DANGER: str = (
-        "  DANGER: This will destroy infrastructure!"
-    )
+    WARNING_TERRAFORM_PLAN_NOT_FOUND: str = "Terraform plan file not found for environment: {}"
+    WARNING_TERRAFORM_DESTROY_DANGER: str = "  DANGER: This will destroy infrastructure!"
     WARNING_TERRAFORM_FORMAT_ISSUES: str = "Terraform files are not properly formatted"
     WARNING_TERRAFORM_FORMAT_NEEDED: str = "Terraform files need formatting"
     INFO_TERRAFORM_FIX_FORMAT: str = "Run 'terraform fmt' to fix formatting issues"
-    INFO_TERRAFORM_FMT_COMMAND: str = (
-        "Run 'terraform fmt -recursive .' to fix formatting"
-    )
+    INFO_TERRAFORM_FMT_COMMAND: str = "Run 'terraform fmt -recursive .' to fix formatting"
     SUCCESS_TERRAFORM_VALID: str = "Terraform configuration is valid"
     SUCCESS_TERRAFORM_FORMATTED: str = "Terraform configuration is properly formatted"
     SUCCESS_TERRAFORM_INIT: str = "Terraform initialized for {} environment"
     SUCCESS_TERRAFORM_PLAN_CREATED: str = "Terraform plan created for {} environment"
     SUCCESS_TERRAFORM_APPLY: str = "Terraform applied successfully for {} environment"
-    SUCCESS_TERRAFORM_DESTROY: str = (
-        "Terraform destroyed successfully for {} environment"
-    )
+    SUCCESS_TERRAFORM_DESTROY: str = "Terraform destroyed successfully for {} environment"
 
     # =============================================================================
     # CREDENTIALS
     # =============================================================================
     ERROR_CREDENTIALS_REQUIRED: str = "Username and password are required"
     ERROR_CREDENTIALS_GENERATION_FAILED: str = "Failed to generate credentials: {}"
-    ERROR_CREDENTIALS_CONFIG_NOT_FOUND: str = (
-        "Configuration not found for credentials sync: {}"
-    )
+    ERROR_CREDENTIALS_CONFIG_NOT_FOUND: str = "Configuration not found for credentials sync: {}"
     ERROR_CREDENTIALS_SECRET_SET_FAILED: str = "Failed to set secret '{}': {}"
     ERROR_CREDENTIALS_SECRET_DELETE_FAILED: str = "Failed to delete secret '{}': {}"
     ERROR_PASSWORD_EMPTY: str = "Password cannot be empty"
     ERROR_PASSWORD_MISMATCH: str = "Passwords do not match"
-    ERROR_GITHUB_CLI_NOT_FOUND: str = (
-        "GitHub CLI not found. Please install gh CLI and authenticate."
-    )
+    ERROR_GITHUB_CLI_NOT_FOUND: str = "GitHub CLI not found. Please install gh CLI and authenticate."
     INFO_CREDENTIALS_GENERATING: str = "Generating main authentication credentials..."
     INFO_CREDENTIALS_GENERATED: str = "Generated credentials successfully"
     INFO_CREDENTIALS_SECRET_DELETION_CANCELLED: str = "Secret deletion cancelled"
@@ -419,19 +399,13 @@ class Messages:
     INFO_NO_UNUSED_SECRETS: str = "No unused secrets found"
     INFO_PASSWORD_HIDDEN: str = "Password: ********"
     INFO_SAVE_CREDENTIALS: str = "Please save these credentials securely."
-    SUCCESS_CREDENTIALS_MAIN: str = (
-        "Main authentication credentials generated and updated successfully!"
-    )
-    SUCCESS_CREDENTIALS_DISPLAY: str = (
-        "Generated credentials from provided username and password"
-    )
+    SUCCESS_CREDENTIALS_MAIN: str = "Main authentication credentials generated and updated successfully!"
+    SUCCESS_CREDENTIALS_DISPLAY: str = "Generated credentials from provided username and password"
     SUCCESS_CREDENTIALS_SECRETS_SYNCED: str = "Synced {} secrets to GitHub"
     SUCCESS_CREDENTIALS_SECRET_SET: str = "Secret '{}' set successfully"
     SUCCESS_CREDENTIALS_SECRET_DELETED: str = "Secret '{}' deleted successfully"
     WARNING_CREDENTIALS_NO_SECRETS_SYNCED: str = "No secrets were synced"
-    WARNING_CREDENTIALS_NO_GITHUB_SECRETS: str = (
-        "No GitHub secrets configured in values files"
-    )
+    WARNING_CREDENTIALS_NO_GITHUB_SECRETS: str = "No GitHub secrets configured in values files"
     WARNING_NO_SECRETS_SYNCED: str = "No secrets were synced"
     WARNING_NO_GH_SECRETS: str = "No GitHub secrets configured"
     WARNING_NO_ENV_VARS: str = "No environment variables found to sync"
@@ -462,9 +436,7 @@ class Messages:
     ERROR_WIKI_COLLECTION_FAILED: str = "Wiki collection failed: {}"
     ERROR_WIKI_GENERATION_FAILED: str = "Wiki generation failed: {}"
     ERROR_WIKI_BUILD_FAILED: str = "Wiki build failed: {}"
-    ERROR_MKDOCS_NOT_FOUND: str = (
-        "MkDocs not found. Please install it: pip install mkdocs mkdocs-material"
-    )
+    ERROR_MKDOCS_NOT_FOUND: str = "MkDocs not found. Please install it: pip install mkdocs mkdocs-material"
 
     # =============================================================================
     # CONFIG
@@ -483,28 +455,18 @@ class Messages:
     SUCCESS_CONFIG_TRAEFIK_VALIDATION_PASSED: str = "Traefik configuration is valid"
     SUCCESS_CONFIG_ANSIBLE_VALIDATION_PASSED: str = "Ansible configuration is valid"
     WARNING_CONFIG_VALIDATION_FAILED: str = "{} validation failed"
-    WARNING_CONFIG_SOME_VALIDATIONS_FAILED: str = (
-        "{}/{} configuration validations passed"
-    )
-    WARNING_CONFIG_MISSING_TRAEFIK_FILES: str = (
-        "Missing Traefik configuration files: {}"
-    )
-    WARNING_CONFIG_MISSING_ANSIBLE_FILES: str = (
-        "Missing Ansible configuration files: {}"
-    )
+    WARNING_CONFIG_SOME_VALIDATIONS_FAILED: str = "{}/{} configuration validations passed"
+    WARNING_CONFIG_MISSING_TRAEFIK_FILES: str = "Missing Traefik configuration files: {}"
+    WARNING_CONFIG_MISSING_ANSIBLE_FILES: str = "Missing Ansible configuration files: {}"
     ERROR_CONFIG_VALIDATION_ERROR: str = "Error validating {}: {}"
-    ERROR_CONFIG_VALIDATION_FAILED_WITH_ERROR: str = (
-        "Configuration validation failed: {}"
-    )
+    ERROR_CONFIG_VALIDATION_FAILED_WITH_ERROR: str = "Configuration validation failed: {}"
     ERROR_CONFIG_TRAEFIK_DIR_NOT_FOUND: str = "Traefik directory not found: {}"
     ERROR_CONFIG_ANSIBLE_DIR_NOT_FOUND: str = "Ansible directory not found: {}"
 
     # =============================================================================
     # ANSIBLE
     # =============================================================================
-    ERROR_ANSIBLE_NO_INVENTORY: str = (
-        "No Ansible inventory configured for {} environment"
-    )
+    ERROR_ANSIBLE_NO_INVENTORY: str = "No Ansible inventory configured for {} environment"
     ERROR_ANSIBLE_INVENTORY_NOT_FOUND: str = "Ansible inventory not found: {}"
     ERROR_ANSIBLE_DEPLOYMENT_FAILED: str = "Ansible deployment failed"
     ERROR_ANSIBLE_DEPLOYMENT_FAILED_WITH_ERROR: str = "Ansible deployment failed: {}"
@@ -517,9 +479,7 @@ class Messages:
     INFO_ENVIRONMENT_SETUP_CANCELLED: str = "Environment setup cancelled"
     INFO_RESTORE_CANCELLED: str = "Restore cancelled"
     INFO_ROLLBACK_CANCELLED: str = "Rollback cancelled"
-    WARNING_DEV_BACKUP_UNNECESSARY: str = (
-        "Backups for development environment are typically not necessary"
-    )
+    WARNING_DEV_BACKUP_UNNECESSARY: str = "Backups for development environment are typically not necessary"
     INFO_DEV_USES_LOCAL: str = "Development uses local Docker containers"
 
     # =============================================================================
@@ -537,9 +497,7 @@ class Messages:
     SUCCESS_INFRASTRUCTURE_SERVICE_STATUS_CHECKED: str = "{} status checked"
     WARNING_TRAEFIK_NOT_RUNNING: str = "Traefik is not running"
     WARNING_INFRASTRUCTURE_TRAEFIK_NOT_RUNNING: str = "Traefik container is not running"
-    WARNING_INFRASTRUCTURE_TRAEFIK_API_NOT_RESPONDING: str = (
-        "Traefik API not responding (HTTP {})"
-    )
+    WARNING_INFRASTRUCTURE_TRAEFIK_API_NOT_RESPONDING: str = "Traefik API not responding (HTTP {})"
     WARNING_INFRASTRUCTURE_HEALTH_CHECK_FAILED: str = "Health check failed: {}"
     WARNING_INFRASTRUCTURE_SERVICE_CHECK_FAILED: str = "Failed to check {} status"
     ERROR_INFRASTRUCTURE_STATUS_CHECK_FAILED: str = "Status check failed: {}"
@@ -548,12 +506,8 @@ class Messages:
     # ORCHESTRATOR
     # =============================================================================
     INFO_CREATING_BACKUPS: str = "Creating local Docker volume backups..."
-    INFO_RESTART_TO_ROLLBACK: str = (
-        "Use `docker-compose down && docker-compose up` to restart with previous images"
-    )
-    WARNING_RESTORE_NOT_IMPLEMENTED: str = (
-        "Local restore functionality not yet fully implemented"
-    )
+    INFO_RESTART_TO_ROLLBACK: str = "Use `docker-compose down && docker-compose up` to restart with previous images"
+    WARNING_RESTORE_NOT_IMPLEMENTED: str = "Local restore functionality not yet fully implemented"
     WARNING_HEALTH_CHECKS_FAILED: str = "Health checks failed, trying basic ping..."
 
     # =============================================================================
@@ -563,15 +517,11 @@ class Messages:
     ERROR_GITEA_BACKUP_FAILED: str = "Gitea backup failed"
     ERROR_GITEA_RESTORE_FAILED: str = "Gitea restore failed"
     SUCCESS_GITEA_RESTORED: str = "Gitea data restored successfully"
-    WARNING_VAULTWARDEN_RESTORE_NOT_IMPL: str = (
-        "Vaultwarden restore not yet implemented"
-    )
+    WARNING_VAULTWARDEN_RESTORE_NOT_IMPL: str = "Vaultwarden restore not yet implemented"
     SUCCESS_CLEANED_RESOURCES: str = "Cleaned {} resources"
 
     # Confirmation prompts
-    CONFIRM_PRODUCTION_DEPLOY: str = (
-        "You are about to deploy to PRODUCTION. This will affect live services. Continue?"
-    )
+    CONFIRM_PRODUCTION_DEPLOY: str = "You are about to deploy to PRODUCTION. This will affect live services. Continue?"
     CONFIRM_DESTROY_SERVICES: str = (
         "You are about to DESTROY services in {} environment. This action cannot be undone. Continue?"
     )
