@@ -1,0 +1,13 @@
+services:
+  minio:
+    environment:
+      # Override OIDC vars from base to disable OpenID in dev
+      MINIO_IDENTITY_OPENID_CONFIG_URL: ""
+      MINIO_IDENTITY_OPENID_CLIENT_ID: ""
+      MINIO_IDENTITY_OPENID_CLIENT_SECRET: ""
+      MINIO_IDENTITY_OPENID_DISPLAY_NAME: ""
+      MINIO_IDENTITY_OPENID_SCOPES: ""
+      MINIO_IDENTITY_OPENID_REDIRECT_URI: ""
+      # Use local URLs in dev
+      MINIO_SERVER_URL: "https://${APPS_SERVICES_DATA_MINIO_DOMAIN}"
+      MINIO_BROWSER_REDIRECT_URL: "https://${APPS_SERVICES_DATA_MINIO_CONSOLE_DOMAIN}"

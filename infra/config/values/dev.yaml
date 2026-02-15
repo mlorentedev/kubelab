@@ -88,6 +88,9 @@ apps:
       n8n:
         domain: n8n.cubelab.test
 
+      gitea:
+        domain: gitea.cubelab.test
+
     data:
       minio:
         domain: minio.cubelab.test
@@ -149,7 +152,3 @@ apps:
         # Placeholder, replace with generated secret
         oidc_client_secret: "supersecretoidcclientkey"
         disable_require_tls: false
-
-    automation:
-      kestra:
-        domain: kestra.cubelab.test

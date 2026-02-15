@@ -54,7 +54,7 @@ class Components:
     SERVICES_CORE: Sequence[str] = ("portainer", "n8n", "gitea", "vaultwarden")
 
     # Data services (apps.services.data.*)
-    SERVICES_DATA: Sequence[str] = ("minio", "docmost")
+    SERVICES_DATA: Sequence[str] = ("minio",)
 
     # Observability services (apps.services.observability.*)
     SERVICES_OBSERVABILITY: Sequence[str] = ("grafana", "loki", "uptime_kuma")
@@ -63,7 +63,7 @@ class Components:
     SERVICES_SECURITY: Sequence[str] = ("authelia", "crowdsec")
 
     # Automation services (apps.services.automation.*)
-    SERVICES_AUTOMATION: Sequence[str] = ("kestra", "github-runner")
+    SERVICES_AUTOMATION: Sequence[str] = ("github-runner",)
 
     # Misc services (apps.services.misc.*)
     SERVICES_MISC: Sequence[str] = ("calcom", "immich", "nextcloud")
@@ -140,6 +140,10 @@ class PathStructures:
     EDGE_DIR: str = "infra/stacks/edge"
     EDGE_TRAEFIK: str = "infra/stacks/edge/traefik"
     EDGE_NGINX: str = "infra/stacks/edge/nginx"
+
+    # Configuration
+    CONFIG_VALUES_DIR: str = "infra/config/values"
+    CONFIG_SECRETS_DIR: str = "infra/config/secrets"
 
     # Templates (Jinja2)
     TRAEFIK_TEMPLATES_DIR: str = "edge/traefik/templates"
@@ -601,8 +605,7 @@ class AutheliaConfig:
     # RSA key generation
     RSA_KEY_SIZE: int = 4096
 
-    # Secrets file paths (relative to project root)
-    SECRETS_DIR: str = "infra/config/secrets"
+    # Secrets file templates
     JWKS_FILE_TEMPLATE: str = "{env}.oidc-jwks.pem"
     ENCRYPTED_SECRETS_TEMPLATE: str = "{env}.enc.yaml"
 

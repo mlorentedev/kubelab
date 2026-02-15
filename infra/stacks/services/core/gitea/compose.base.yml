@@ -1,0 +1,39 @@
+services:
+  gitea:
+    container_name: ${APPS_SERVICES_CORE_GITEA_NAME}
+    image: ${APPS_SERVICES_CORE_GITEA_IMAGE}
+    restart: ${GLOBAL_RESTART_POLICY}
+    ports:
+      - "${APPS_SERVICES_CORE_GITEA_SSH_PORT}:22"
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__server__DOMAIN=${APPS_SERVICES_CORE_GITEA_DOMAIN}
+      - GITEA__server__ROOT_URL=https://${APPS_SERVICES_CORE_GITEA_DOMAIN}
+      - GITEA__server__HTTP_PORT=${APPS_SERVICES_CORE_GITEA_DEFAULT_PORT}
+      - GITEA__server__SSH_PORT=${APPS_SERVICES_CORE_GITEA_SSH_PORT}
+      - GITEA__server__SSH_DOMAIN=${APPS_SERVICES_CORE_GITEA_DOMAIN}
+    volumes:
+      - gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - default
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - "http://localhost:${APPS_SERVICES_CORE_GITEA_DEFAULT_PORT}${APPS_SERVICES_CORE_GITEA_HEALTH_PATH}"
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+
+volumes:
+  gitea_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

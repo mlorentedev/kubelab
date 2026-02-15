@@ -1,0 +1,4 @@
+services:
+  gitea:
+    environment:
+      - GITEA__server__DISABLE_SSH=true

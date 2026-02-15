@@ -1,11 +1,13 @@
 """Credential generation and GitHub secrets management commands."""
 
-from typing import Annotated
+import subprocess
+from typing import Annotated, Any
 
 import typer
+import yaml
 
-from toolkit.config.constants import MESSAGES
-from toolkit.config.settings import settings
+from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
+from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.features.credentials import credentials_manager
 from toolkit.features.github_secrets import github_secrets_manager
@@ -15,6 +17,69 @@ app = typer.Typer(
     help="Generate credentials and manage GitHub secrets.",
     no_args_is_help=True,
 )
+
+
+def _resolve_secret_value(data: dict[str, Any], key_path: str) -> Any:
+    """Traverse nested dict by dot-separated key path."""
+    keys = key_path.split(".")
+    current = data
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _decrypt_secrets_file(env: str) -> dict[str, Any]:
+    """Decrypt SOPS secrets file and return as dict."""
+    secrets_file = PROJECT_ROOT / PATH_STRUCTURES.CONFIG_SECRETS_DIR / f"{env}.enc.yaml"
+    if not secrets_file.exists():
+        logger.error(f"Secrets file not found: {secrets_file}")
+        raise typer.Exit(1)
+
+    result = subprocess.run(
+        ["sops", "-d", "--output-type", "yaml", str(secrets_file)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return yaml.safe_load(result.stdout) or {}
+
+
+@app.command("show")
+def show_secrets(
+    key: Annotated[
+        str | None,
+        typer.Argument(
+            help="Dot-separated key path (e.g., 'apps.authelia.admin_password'). "
+            "Omit to show all secrets."
+        ),
+    ] = None,
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
+) -> None:
+    """Decrypt and display secrets from SOPS-encrypted file."""
+    settings.validate_environment(env)
+
+    try:
+        secrets = _decrypt_secrets_file(env)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to decrypt secrets: {e.stderr.strip()}")
+        raise typer.Exit(1) from None
+    except FileNotFoundError:
+        logger.error("sops is not installed")
+        raise typer.Exit(1) from None
+
+    if key:
+        value = _resolve_secret_value(secrets, key)
+        if value is None:
+            logger.error(f"Key '{key}' not found in {env} secrets")
+            raise typer.Exit(1) from None
+        if isinstance(value, dict):
+            print(yaml.dump(value, default_flow_style=False, sort_keys=False).rstrip())
+        else:
+            print(value)
+    else:
+        print(yaml.dump(secrets, default_flow_style=False, sort_keys=False).rstrip())
 
 
 @app.command("hash-password")
