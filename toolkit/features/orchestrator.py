@@ -59,20 +59,14 @@ class DeploymentOrchestrator:
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_dir = (
-                self.settings.project_root
-                / ".bckp"
-                / f"docker_volumes_{self.env}_{timestamp}"
-            )
+            backup_dir = self.settings.project_root / ".bckp" / f"docker_volumes_{self.env}_{timestamp}"
             backup_dir.mkdir(parents=True, exist_ok=True)
             logger.success(f"Backup location created at {backup_dir}")
 
     def restore(self, backup_id: str) -> None:
         """Perform restore operations."""
         if self.env in ["staging", "prod"]:
-            self._run_ansible_playbook(
-                "restore.yml", extra_args=["-e", f"backup_id={backup_id}"]
-            )
+            self._run_ansible_playbook("restore.yml", extra_args=["-e", f"backup_id={backup_id}"])
         else:
             logger.warning(MESSAGES.WARNING_RESTORE_NOT_IMPLEMENTED)
 
@@ -138,9 +132,7 @@ class DeploymentOrchestrator:
     def _setup_dev(self) -> None:
         logger.info(MESSAGES.INFO_DEV_USES_LOCAL)
         validation.validate_dependencies()
-        result = command.run(
-            f"docker network inspect {self.settings.docker_network}", check=False
-        )
+        result = command.run(f"docker network inspect {self.settings.docker_network}", check=False)
         if result.returncode != 0:
             command.run(f"docker network create {self.settings.docker_network}")
 
@@ -199,9 +191,7 @@ class DeploymentOrchestrator:
             self._run_ansible_playbook("deploy-apps.yml")
 
     def _health_checks_dev(self) -> None:
-        result = command.run(
-            "docker ps --format 'table {{.Names}}\t{{.Status}}'", check=False
-        )
+        result = command.run("docker ps --format 'table {{.Names}}\t{{.Status}}'", check=False)
         if result.returncode == 0:
             logger.console.print(result.stdout)
 
@@ -218,9 +208,7 @@ class DeploymentOrchestrator:
 
     def _health_checks_remote(self) -> None:
         try:
-            self._run_ansible_playbook(
-                "health-check.yml", extra_args=["--tags", "health"]
-            )
+            self._run_ansible_playbook("health-check.yml", extra_args=["--tags", "health"])
         except RuntimeError:
             logger.warning(MESSAGES.WARNING_HEALTH_CHECKS_FAILED)
             self._run_ansible_playbook("main.yml", extra_args=["--tags", "ping"])
@@ -246,8 +234,6 @@ class DeploymentOrchestrator:
             command.run(f"curl -s -o /dev/null {url}", check=False)
 
         try:
-            self._run_ansible_playbook(
-                "main.yml", extra_args=["--tags", "verify", "--check"]
-            )
+            self._run_ansible_playbook("main.yml", extra_args=["--tags", "verify", "--check"])
         except RuntimeError:
             pass

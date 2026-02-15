@@ -110,17 +110,13 @@ class CredentialsManager:
             PEM-encoded RSA private key as string
         """
         if not HAS_CRYPTOGRAPHY:
-            logger.error(
-                "cryptography library not installed. Run: poetry add cryptography"
-            )
+            logger.error("cryptography library not installed. Run: poetry add cryptography")
             raise RuntimeError("cryptography library required for JWKS generation")
 
         if key_size is None:
             key_size = AUTHELIA_CONFIG.RSA_KEY_SIZE
 
-        private_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=key_size, backend=default_backend()
-        )
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size, backend=default_backend())
 
         pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -184,9 +180,7 @@ class CredentialsManager:
         self.config_manager.env = env
 
         # 1. Prompt for password securely
-        password = typer.prompt(
-            "Enter new password", hide_input=True, confirmation_prompt=True
-        )
+        password = typer.prompt("Enter new password", hide_input=True, confirmation_prompt=True)
         if not password:
             logger.error("Password cannot be empty.")
             raise typer.Exit(1)
@@ -208,9 +202,7 @@ class CredentialsManager:
         print(f"Key:   {key_path}")
         print(f"Value: {password_hash}")
         logger.info("")
-        logger.info(
-            "Then run 'toolkit config generate' to apply changes to templated files."
-        )
+        logger.info("Then run 'toolkit config generate' to apply changes to templated files.")
 
     def _get_crowdsec_bouncer_api_key(self, bouncer_name: str, env: str) -> str:
         """
@@ -222,9 +214,7 @@ class CredentialsManager:
         # Determine the CrowdSec agent container name dynamically
         cm = ConfigurationManager(env, self.project_root)
         env_vars = cm.get_env_vars()
-        crowdsec_agent_container_name = env_vars.get(
-            "APPS_SERVICES_SECURITY_CROWDSEC_NAME", "crowdsec"
-        )
+        crowdsec_agent_container_name = env_vars.get("APPS_SERVICES_SECURITY_CROWDSEC_NAME", "crowdsec")
 
         # Ensure CrowdSec agent is running
         docker_service = DockerService(settings)
@@ -241,8 +231,7 @@ class CredentialsManager:
             )
             if not result.stdout.strip():
                 logger.warning(
-                    f"CrowdSec agent '{crowdsec_agent_container_name}' is not running. "
-                    "Starting it temporarily..."
+                    f"CrowdSec agent '{crowdsec_agent_container_name}' is not running. Starting it temporarily..."
                 )
                 docker_service.start_service(crowdsec_agent_dir, env)
                 import time
@@ -264,17 +253,12 @@ class CredentialsManager:
                 "-o",
                 "json",
             ]
-            result = subprocess.run(
-                list_bouncers_cmd, capture_output=True, text=True, check=True
-            )
+            result = subprocess.run(list_bouncers_cmd, capture_output=True, text=True, check=True)
             bouncers_list = json.loads(result.stdout)
 
             for bouncer in bouncers_list:
                 if bouncer.get("name") == bouncer_name:
-                    logger.info(
-                        f"CrowdSec bouncer '{bouncer_name}' exists. "
-                        "Rotating key (delete/re-create)..."
-                    )
+                    logger.info(f"CrowdSec bouncer '{bouncer_name}' exists. Rotating key (delete/re-create)...")
                     delete_cmd = [
                         "docker",
                         "exec",
@@ -299,19 +283,13 @@ class CredentialsManager:
                 "-o",
                 "raw",
             ]
-            result = subprocess.run(
-                add_bouncer_cmd, capture_output=True, text=True, check=True
-            )
+            result = subprocess.run(add_bouncer_cmd, capture_output=True, text=True, check=True)
             api_key = result.stdout.strip()
-            logger.success(
-                f"CrowdSec bouncer API key generated/rotated for '{bouncer_name}'."
-            )
+            logger.success(f"CrowdSec bouncer API key generated/rotated for '{bouncer_name}'.")
             return api_key
 
         except subprocess.CalledProcessError as e:
-            logger.error(
-                f"Failed to manage CrowdSec bouncer '{bouncer_name}': {e.stderr}"
-            )
+            logger.error(f"Failed to manage CrowdSec bouncer '{bouncer_name}': {e.stderr}")
             raise typer.Exit(1) from e
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse CrowdSec bouncer list: {e}")
@@ -337,12 +315,8 @@ class CredentialsManager:
         self.config_manager.env = env
 
         # 1. Prompt for common username and password
-        logger.info(
-            "Setting up common username and password for Authelia and Basic Auth..."
-        )
-        common_username = typer.prompt(
-            "Enter common username (default: admin)", default="admin"
-        ).strip()
+        logger.info("Setting up common username and password for Authelia and Basic Auth...")
+        common_username = typer.prompt("Enter common username (default: admin)", default="admin").strip()
         if not common_username:
             logger.error("Username cannot be empty.")
             raise typer.Exit(1)
@@ -350,9 +324,7 @@ class CredentialsManager:
             logger.error("Username must be at least 4 characters long.")
             raise typer.Exit(1)
 
-        common_password = typer.prompt(
-            "Enter common password", hide_input=True, confirmation_prompt=True
-        )
+        common_password = typer.prompt("Enter common password", hide_input=True, confirmation_prompt=True)
         if not common_password:
             logger.error("Password cannot be empty.")
             raise typer.Exit(1)
@@ -394,29 +366,19 @@ class CredentialsManager:
         oidc_client_secret = secrets.token_urlsafe(64)
         logger.success("OIDC Client Secret generated.")
 
-        logger.info(
-            "Generating OIDC Client Secret hash (Authelia 4.38+ requires hashed secrets)..."
-        )
+        logger.info("Generating OIDC Client Secret hash (Authelia 4.38+ requires hashed secrets)...")
         try:
-            oidc_client_secret_hash = self.generate_oidc_client_secret_hash(
-                oidc_client_secret
-            )
+            oidc_client_secret_hash = self.generate_oidc_client_secret_hash(oidc_client_secret)
             logger.success("OIDC Client Secret hash generated.")
         except Exception as e:
-            logger.warning(
-                f"Could not generate OIDC client secret hash via Docker: {e}"
-            )
+            logger.warning(f"Could not generate OIDC client secret hash via Docker: {e}")
             logger.warning("Using Argon2 hash from local library instead...")
             oidc_client_secret_hash = self.generate_argon2_hash(oidc_client_secret)
 
         # 8. Generate JWKS RSA key for OIDC (saved as file, not in SOPS)
-        logger.info(
-            f"Generating JWKS RSA private key ({AUTHELIA_CONFIG.RSA_KEY_SIZE} bits)..."
-        )
+        logger.info(f"Generating JWKS RSA private key ({AUTHELIA_CONFIG.RSA_KEY_SIZE} bits)...")
         jwks_path = (
-            self.project_root
-            / PATH_STRUCTURES.CONFIG_SECRETS_DIR
-            / AUTHELIA_CONFIG.JWKS_FILE_TEMPLATE.format(env=env)
+            self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / AUTHELIA_CONFIG.JWKS_FILE_TEMPLATE.format(env=env)
         )
         try:
             jwks_private_key = self.generate_jwks_rsa_key()
@@ -430,9 +392,7 @@ class CredentialsManager:
         # 9. Setup Basic Auth Credentials (htpasswd compatible bcrypt)
         logger.info("Generating Basic Auth credentials (htpasswd compatible bcrypt)...")
         try:
-            basic_auth_credentials_hash = self._generate_htpasswd_bcrypt_hash(
-                common_username, common_password
-            )
+            basic_auth_credentials_hash = self._generate_htpasswd_bcrypt_hash(common_username, common_password)
             logger.success("Basic Auth credentials (htpasswd compatible) generated.")
         except Exception as e:
             logger.error(f"Failed to generate Basic Auth credentials: {e}")
@@ -445,18 +405,12 @@ class CredentialsManager:
 
         logger.info("Generating Grafana OIDC Client Secret hash...")
         try:
-            grafana_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(
-                grafana_oidc_client_secret
-            )
+            grafana_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(grafana_oidc_client_secret)
             logger.success("Grafana OIDC Client Secret hash generated.")
         except Exception as e:
-            logger.warning(
-                f"Could not generate Grafana OIDC client secret hash via Docker: {e}"
-            )
+            logger.warning(f"Could not generate Grafana OIDC client secret hash via Docker: {e}")
             logger.warning("Using Argon2 hash from local library instead...")
-            grafana_oidc_client_secret_hash = self.generate_argon2_hash(
-                grafana_oidc_client_secret
-            )
+            grafana_oidc_client_secret_hash = self.generate_argon2_hash(grafana_oidc_client_secret)
 
         # 11. Generate MinIO OIDC Client Secret and its hash
         logger.info("Generating MinIO OIDC Client Secret...")
@@ -465,31 +419,21 @@ class CredentialsManager:
 
         logger.info("Generating MinIO OIDC Client Secret hash...")
         try:
-            minio_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(
-                minio_oidc_client_secret
-            )
+            minio_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(minio_oidc_client_secret)
             logger.success("MinIO OIDC Client Secret hash generated.")
         except Exception as e:
-            logger.warning(
-                f"Could not generate MinIO OIDC client secret hash via Docker: {e}"
-            )
+            logger.warning(f"Could not generate MinIO OIDC client secret hash via Docker: {e}")
             logger.warning("Using Argon2 hash from local library instead...")
-            minio_oidc_client_secret_hash = self.generate_argon2_hash(
-                minio_oidc_client_secret
-            )
+            minio_oidc_client_secret_hash = self.generate_argon2_hash(minio_oidc_client_secret)
 
         # 12. Generate CrowdSec Bouncer API Key
         # Determine bouncer name from config (e.g., crowdsec-bouncer-traefik)
         cm = ConfigurationManager(env, self.project_root)
         env_vars = cm.get_env_vars()
-        bouncer_name = env_vars.get(
-            "APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_NAME", "crowdsec-bouncer-traefik"
-        )
+        bouncer_name = env_vars.get("APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_NAME", "crowdsec-bouncer-traefik")
 
         try:
-            crowdsec_bouncer_api_key = self._get_crowdsec_bouncer_api_key(
-                bouncer_name, env
-            )
+            crowdsec_bouncer_api_key = self._get_crowdsec_bouncer_api_key(bouncer_name, env)
         except Exception as e:
             logger.error(f"Failed to get CrowdSec bouncer API key: {e}")
             raise typer.Exit(1) from e
@@ -539,18 +483,12 @@ class CredentialsManager:
                     fail_count += 1
 
             if fail_count > 0:
-                logger.warning(
-                    f"Auto-update partially failed: {success_count} succeeded, {fail_count} failed"
-                )
+                logger.warning(f"Auto-update partially failed: {success_count} succeeded, {fail_count} failed")
                 logger.warning("Falling back to manual output...")
                 self._print_secrets_for_manual_copy(env, generated_secrets)
             else:
-                logger.success(
-                    f"All {success_count} secrets updated in SOPS successfully!"
-                )
-                logger.info(
-                    "Run 'toolkit config generate' to apply changes to templated files."
-                )
+                logger.success(f"All {success_count} secrets updated in SOPS successfully!")
+                logger.info("Run 'toolkit config generate' to apply changes to templated files.")
                 # Reconcile affected services
                 self._reconcile_services(list(generated_secrets.keys()), env)
         else:
@@ -594,9 +532,7 @@ class CredentialsManager:
                 logger.success("Traefik config regenerated.")
             except Exception as e:
                 logger.error(f"Failed to regenerate Traefik config: {e}")
-                logger.warning(
-                    "Traefik may use stale credentials until config is regenerated."
-                )
+                logger.warning("Traefik may use stale credentials until config is regenerated.")
 
         # Restart each affected service via docker compose up -d
         from toolkit.config.settings import get_settings
@@ -610,13 +546,9 @@ class CredentialsManager:
             except Exception as e:
                 logger.error(f"Failed to restart {service_name}: {e}")
 
-        logger.success(
-            f"Reconciliation complete. Restarted {len(affected_services)} service(s)."
-        )
+        logger.success(f"Reconciliation complete. Restarted {len(affected_services)} service(s).")
 
-    def _print_secrets_for_manual_copy(
-        self, env: str, secrets_dict: dict[str, str]
-    ) -> None:
+    def _print_secrets_for_manual_copy(self, env: str, secrets_dict: dict[str, str]) -> None:
         """Print generated secrets in YAML format for manual copy to SOPS."""
         logger.section(f"Generated Secrets for {env.upper()}")
         logger.warning("Copy these values to your SOPS file:")
@@ -624,27 +556,19 @@ class CredentialsManager:
 
         print("basic_auth:")
         print(f"    user: {secrets_dict['basic_auth.user']}")
-        print(f"    password: \"{secrets_dict['basic_auth.password']}\"")
-        print(f"    credentials: \"{secrets_dict['basic_auth.credentials']}\"")
+        print(f'    password: "{secrets_dict["basic_auth.password"]}"')
+        print(f'    credentials: "{secrets_dict["basic_auth.credentials"]}"')
         print("apps:")
         print("    services:")
         print("        data:")
         print("            minio:")
-        print(
-            f"                root_user: \"{secrets_dict['apps.services.data.minio.root_user']}\""
-        )
-        print(
-            f"                root_password: \"{secrets_dict['apps.services.data.minio.root_password']}\""
-        )
-        print(
-            f"                oidc_client_secret: \"{secrets_dict['apps.services.data.minio.oidc_client_secret']}\""
-        )
+        print(f'                root_user: "{secrets_dict["apps.services.data.minio.root_user"]}"')
+        print(f'                root_password: "{secrets_dict["apps.services.data.minio.root_password"]}"')
+        print(f'                oidc_client_secret: "{secrets_dict["apps.services.data.minio.oidc_client_secret"]}"')
         print("        observability:")
         print("            grafana:")
         admin_user = secrets_dict["apps.services.observability.grafana.admin_user"]
-        admin_password = secrets_dict[
-            "apps.services.observability.grafana.admin_password"
-        ]
+        admin_password = secrets_dict["apps.services.observability.grafana.admin_password"]
         print(f'                admin_user: "{admin_user}"')
         print(f'                admin_password: "{admin_password}"')
         print("        security:")
@@ -666,23 +590,15 @@ class CredentialsManager:
         print(f'                oidc_client_secret: "{oidc_secret}"')
         oidc_hash = secrets_dict["apps.authelia.oidc_client_secret_hash"]
         print(f'                oidc_client_secret_hash: "{oidc_hash}"')
-        grafana_secret = secrets_dict[
-            "apps.security.authelia.oidc_client_secret_grafana"
-        ]
+        grafana_secret = secrets_dict["apps.security.authelia.oidc_client_secret_grafana"]
         print(f'                oidc_client_secret_grafana: "{grafana_secret}"')
-        grafana_hash = secrets_dict[
-            "apps.security.authelia.oidc_client_secret_grafana_hash"
-        ]
+        grafana_hash = secrets_dict["apps.security.authelia.oidc_client_secret_grafana_hash"]
         print(f'                oidc_client_secret_grafana_hash: "{grafana_hash}"')
-        minio_hash = secrets_dict[
-            "apps.services.security.authelia.oidc_client_secret_minio_hash"
-        ]
+        minio_hash = secrets_dict["apps.services.security.authelia.oidc_client_secret_minio_hash"]
         print(f'                oidc_client_secret_minio_hash: "{minio_hash}"')
         print("")
 
-        logger.success(
-            "Secrets generated. Copy above to SOPS, then run 'toolkit config generate'."
-        )
+        logger.success("Secrets generated. Copy above to SOPS, then run 'toolkit config generate'.")
 
 
 # Global credentials manager instance

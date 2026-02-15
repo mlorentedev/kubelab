@@ -54,20 +54,14 @@ def start_service(
         list[str] | None,
         typer.Argument(help="Name(s) of the service(s)/app(s) to start"),
     ] = None,
-    all_components: bool = typer.Option(
-        False, "--all", "-a", help="Start all components"
-    ),
+    all_components: bool = typer.Option(False, "--all", "-a", help="Start all components"),
     environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
 ) -> None:
     """Start one or more services or applications."""
     settings = get_settings(environment)
     service = DockerService(settings)
 
-    names = (
-        _discover_all_components(settings)
-        if all_components
-        else (component_names or [])
-    )
+    names = _discover_all_components(settings) if all_components else (component_names or [])
     if not names:
         logger.error("Specify component name(s) or use --all")
         raise typer.Exit(1)
@@ -82,9 +76,7 @@ def stop_service(
         list[str] | None,
         typer.Argument(help="Name(s) of the service(s)/app(s) to stop"),
     ] = None,
-    all_components: bool = typer.Option(
-        False, "--all", "-a", help="Stop all components"
-    ),
+    all_components: bool = typer.Option(False, "--all", "-a", help="Stop all components"),
     environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
     volumes: bool = typer.Option(False, "--volumes", "-v", help="Remove volumes"),
 ) -> None:
@@ -92,11 +84,7 @@ def stop_service(
     settings = get_settings(environment)
     service = DockerService(settings)
 
-    names = (
-        _discover_all_components(settings)
-        if all_components
-        else (component_names or [])
-    )
+    names = _discover_all_components(settings) if all_components else (component_names or [])
     if not names:
         logger.error("Specify component name(s) or use --all")
         raise typer.Exit(1)
@@ -107,13 +95,9 @@ def stop_service(
 
 @app.command("restart")
 def restart_service(
-    component_names: Annotated[
-        list[str], typer.Argument(help="Name(s) of the service(s)/app(s) to restart")
-    ],
+    component_names: Annotated[list[str], typer.Argument(help="Name(s) of the service(s)/app(s) to restart")],
     environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
-    volumes: bool = typer.Option(
-        False, "--volumes", "-v", help="Remove volumes on stop"
-    ),
+    volumes: bool = typer.Option(False, "--volumes", "-v", help="Remove volumes on stop"),
 ) -> None:
     """Restart one or more services or applications (down + up)."""
     settings = get_settings(environment)
@@ -127,9 +111,7 @@ def restart_service(
 
 @app.command("logs")
 def show_logs(
-    component_names: Annotated[
-        list[str], typer.Argument(help="Name(s) of the service(s)/app(s)")
-    ],
+    component_names: Annotated[list[str], typer.Argument(help="Name(s) of the service(s)/app(s)")],
     environment: str = typer.Option("dev", "--env", "-e", help="Environment to use"),
     follow: bool = typer.Option(
         False,
@@ -148,12 +130,8 @@ def show_logs(
 @app.command("build")
 def build_app(
     app_name: str = typer.Argument(..., help="Name of the application to build"),
-    environment: str = typer.Option(
-        "dev", "--env", "-e", help="Environment to build for"
-    ),
-    no_cache: bool = typer.Option(
-        False, "--no-cache", help="Build without using cache"
-    ),
+    environment: str = typer.Option("dev", "--env", "-e", help="Environment to build for"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Build without using cache"),
 ) -> None:
     """Build application using docker compose."""
     settings = get_settings(environment)
@@ -175,9 +153,7 @@ def clean_app(
 @app.command("push")
 def push_image(
     app_name: str = typer.Argument(..., help="Name of the application"),
-    environment: str = typer.Option(
-        "dev", "--env", "-e", help="Environment tag for image"
-    ),
+    environment: str = typer.Option("dev", "--env", "-e", help="Environment tag for image"),
 ) -> None:
     """Push Docker image for an application to registry."""
     settings = get_settings(environment)
@@ -298,9 +274,7 @@ def _backup_vaultwarden(service_dir: Path, environment: str, output_dir: str) ->
     _backup_docker_volumes(service_dir, environment, "vaultwarden", output_dir)
 
 
-def _backup_docker_volumes(
-    service_dir: Path, environment: str, service_name: str, output_dir: str
-) -> None:
+def _backup_docker_volumes(service_dir: Path, environment: str, service_name: str, output_dir: str) -> None:
     """Generic Docker volume backup."""
     config_manager = ConfigurationManager(environment)
     compose_files = config_manager.get_compose_files(service_dir)
@@ -368,9 +342,7 @@ def _restore_gitea(service_dir: Path, environment: str, backup_path: Path) -> No
         raise typer.Exit(1)
 
 
-def _restore_vaultwarden(
-    service_dir: Path, environment: str, backup_path: Path
-) -> None:
+def _restore_vaultwarden(service_dir: Path, environment: str, backup_path: Path) -> None:
     """Restore Vaultwarden service data."""
     logger.warning(MESSAGES.WARNING_VAULTWARDEN_RESTORE_NOT_IMPL)
 

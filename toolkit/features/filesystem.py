@@ -43,9 +43,7 @@ def backup_file(file_path: Path) -> Path | None:
     from datetime import datetime
 
     timestamp = datetime.now().strftime(DEFAULT_CONFIG.BACKUP_TIMESTAMP_FORMAT)
-    backup_path = (
-        file_path.parent / f"{file_path.name}.{timestamp}{FILE_PATTERNS.BACKUP_SUFFIX}"
-    )
+    backup_path = file_path.parent / f"{file_path.name}.{timestamp}{FILE_PATTERNS.BACKUP_SUFFIX}"
 
     try:
         shutil.copy2(file_path, backup_path)

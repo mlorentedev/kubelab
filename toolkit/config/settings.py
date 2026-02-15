@@ -151,9 +151,7 @@ class PlatformSettings(BaseSettings):
     # =============================================================================
 
     environment: str
-    environments: dict[str, EnvironmentConfig] = Field(
-        default_factory=_load_environments
-    )
+    environments: dict[str, EnvironmentConfig] = Field(default_factory=_load_environments)
 
     # =============================================================================
     # PATHS (from constants)
@@ -168,12 +166,7 @@ class PlatformSettings(BaseSettings):
     def get_service_path(self, service_name: str, category: str = "") -> Path:
         """Get service path dynamically."""
         if category:
-            return (
-                self.project_root
-                / PATH_STRUCTURES.INFRA_STACKS_SERVICES
-                / category
-                / service_name
-            )
+            return self.project_root / PATH_STRUCTURES.INFRA_STACKS_SERVICES / category / service_name
         # Auto-detect category from COMPONENTS
         for cat_name in (
             "core",
@@ -186,12 +179,7 @@ class PlatformSettings(BaseSettings):
         ):
             cat_services = getattr(COMPONENTS, f"SERVICES_{cat_name.upper()}", ())
             if service_name in cat_services:
-                return (
-                    self.project_root
-                    / PATH_STRUCTURES.INFRA_STACKS_SERVICES
-                    / cat_name
-                    / service_name
-                )
+                return self.project_root / PATH_STRUCTURES.INFRA_STACKS_SERVICES / cat_name / service_name
         return self.project_root / PATH_STRUCTURES.INFRA_STACKS_SERVICES / service_name
 
     def get_edge_path(self, edge_name: str) -> Path:
@@ -301,14 +289,10 @@ class PlatformSettings(BaseSettings):
     # =============================================================================
 
     check_tools: list[str] = Field(
-        default_factory=lambda: _list_from_env(
-            "CHECK_TOOLS", list(DEFAULT_CONFIG.CHECK_TOOLS)
-        )
+        default_factory=lambda: _list_from_env("CHECK_TOOLS", list(DEFAULT_CONFIG.CHECK_TOOLS))
     )
     required_tools: list[str] = Field(
-        default_factory=lambda: _list_from_env(
-            "REQUIRED_TOOLS", list(DEFAULT_CONFIG.REQUIRED_TOOLS)
-        )
+        default_factory=lambda: _list_from_env("REQUIRED_TOOLS", list(DEFAULT_CONFIG.REQUIRED_TOOLS))
     )
 
     # =============================================================================

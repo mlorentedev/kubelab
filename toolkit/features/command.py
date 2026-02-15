@@ -51,9 +51,7 @@ def run_list(
     try:
         if stream_output:
             result = subprocess.run(command, cwd=cwd, env=env, text=True, check=check)
-            return subprocess.CompletedProcess(
-                command, result.returncode if result else 0, "", ""
-            )
+            return subprocess.CompletedProcess(command, result.returncode if result else 0, "", "")
         else:
             result = subprocess.run(
                 command,

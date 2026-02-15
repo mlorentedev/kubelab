@@ -53,9 +53,7 @@ class ConfigurationManager:
 
         # Check if sops is installed
         if subprocess.run(["which", "sops"], capture_output=True).returncode != 0:
-            self._get_logger().warning(
-                "SOPS is not installed. Skipping secret decryption."
-            )
+            self._get_logger().warning("SOPS is not installed. Skipping secret decryption.")
             return {}
 
         try:
@@ -71,9 +69,7 @@ class ConfigurationManager:
             self._get_logger().error(f"Failed to decrypt {path}: {e.stderr}")
             return {}
 
-    def _flatten_dict(
-        self, d: Dict[str, Any], parent_key: str = "", sep: str = "_"
-    ) -> Dict[str, Any]:
+    def _flatten_dict(self, d: Dict[str, Any], parent_key: str = "", sep: str = "_") -> Dict[str, Any]:
         """Flatten nested dict keys to UPPERCASE_ENV_VARS."""
         items: List[tuple[str, Any]] = []
         for k, v in d.items():
@@ -91,9 +87,7 @@ class ConfigurationManager:
                 items.append((new_key.upper(), val_str))
         return dict(items)
 
-    def _deep_update(
-        self, source: Dict[str, Any], overrides: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _deep_update(self, source: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
         """Recursive dict update."""
         for key, value in overrides.items():
             if isinstance(value, dict) and value:
@@ -159,9 +153,7 @@ class ConfigurationManager:
         # Base
         base_file = component_path / "compose.base.yml"
         if base_file.exists():
-            files.extend(
-                ["-f", str(base_file.resolve())]
-            )  # Use resolve() to get absolute path
+            files.extend(["-f", str(base_file.resolve())])  # Use resolve() to get absolute path
         else:
             # Fallback to old behavior if not migrated?
             # Or assume if base missing, check for docker-compose.{env}.yml (legacy)
@@ -175,15 +167,11 @@ class ConfigurationManager:
         # Env Override
         override = component_path / f"compose.{self.env}.yml"
         if override.exists():
-            files.extend(
-                ["-f", str(override.resolve())]
-            )  # Use resolve() to get absolute path
+            files.extend(["-f", str(override.resolve())])  # Use resolve() to get absolute path
 
         return files
 
-    def update_secret_key(
-        self, key_path: str, value: Any, secret_file_path: Optional[Path] = None
-    ) -> bool:
+    def update_secret_key(self, key_path: str, value: Any, secret_file_path: Optional[Path] = None) -> bool:
         """
         Updates a specific key in a SOPS-encrypted YAML secret file.
 
@@ -195,20 +183,14 @@ class ConfigurationManager:
         Returns:
             True if successful, False otherwise.
         """
-        file_to_update = (
-            secret_file_path
-            if secret_file_path
-            else (self.secrets_path / f"{self.env}.enc.yaml")
-        )
+        file_to_update = secret_file_path if secret_file_path else (self.secrets_path / f"{self.env}.enc.yaml")
 
         if not file_to_update.exists():
             self._get_logger().error(f"Secret file not found: {file_to_update}")
             return False
 
         if subprocess.run(["which", "sops"], capture_output=True).returncode != 0:
-            self._get_logger().error(
-                "SOPS is not installed. Cannot update secret file."
-            )
+            self._get_logger().error("SOPS is not installed. Cannot update secret file.")
             return False
 
         try:
@@ -229,9 +211,7 @@ class ConfigurationManager:
                 if i == len(keys) - 1:
                     current_level[key] = value
                 else:
-                    if key not in current_level or not isinstance(
-                        current_level[key], dict
-                    ):
+                    if key not in current_level or not isinstance(current_level[key], dict):
                         current_level[key] = {}
                     current_level = current_level[key]
 
@@ -239,9 +219,7 @@ class ConfigurationManager:
             # Write to temp file first, then encrypt in-place
             # SOPS needs a real file path to match creation_rules
 
-            updated_yaml = yaml.dump(
-                decrypted_data, default_flow_style=False, sort_keys=False
-            )
+            updated_yaml = yaml.dump(decrypted_data, default_flow_style=False, sort_keys=False)
 
             # Write decrypted content to the target file temporarily
             file_to_update.write_text(updated_yaml)
@@ -254,18 +232,12 @@ class ConfigurationManager:
                 capture_output=True,
                 env=os.environ,
             )
-            self._get_logger().info(
-                f"Successfully updated secret key '{key_path}' in {file_to_update}"
-            )
+            self._get_logger().info(f"Successfully updated secret key '{key_path}' in {file_to_update}")
             return True
 
         except subprocess.CalledProcessError as e:
-            self._get_logger().error(
-                f"Failed to update secret file {file_to_update}: {e.stderr}"
-            )
+            self._get_logger().error(f"Failed to update secret file {file_to_update}: {e.stderr}")
             return False
         except Exception as e:
-            self._get_logger().error(
-                f"An unexpected error occurred while updating secret file: {e}"
-            )
+            self._get_logger().error(f"An unexpected error occurred while updating secret file: {e}")
             return False

@@ -43,9 +43,7 @@ class HealthChecker:
         self.config_manager = ConfigurationManager(env)
         self.settings = get_settings(env)
 
-    def _extract_service_configs(
-        self, config: dict[str, Any]
-    ) -> list[ServiceHealthConfig]:
+    def _extract_service_configs(self, config: dict[str, Any]) -> list[ServiceHealthConfig]:
         """Walk merged config tree and extract services with domain + health_path."""
         services: list[ServiceHealthConfig] = []
 
@@ -69,11 +67,7 @@ class HealthChecker:
             if not isinstance(category_services, dict):
                 continue
             for name, svc in category_services.items():
-                if (
-                    isinstance(svc, dict)
-                    and svc.get("domain")
-                    and svc.get("health_path")
-                ):
+                if isinstance(svc, dict) and svc.get("domain") and svc.get("health_path"):
                     services.append(
                         ServiceHealthConfig(
                             name=name,
@@ -111,18 +105,12 @@ class HealthChecker:
             )
             if result.returncode != 0:
                 return set()
-            return {
-                name.strip()
-                for name in result.stdout.strip().split("\n")
-                if name.strip()
-            }
+            return {name.strip() for name in result.stdout.strip().split("\n") if name.strip()}
         except Exception:
             logger.warning("Docker not available")
             return set()
 
-    def _check_service(
-        self, svc: ServiceHealthConfig, protocol: str
-    ) -> HealthCheckResult:
+    def _check_service(self, svc: ServiceHealthConfig, protocol: str) -> HealthCheckResult:
         """Check a single service health endpoint via curl."""
         url = f"{protocol}://{svc.domain}{svc.health_path}"
         timeout = str(NETWORK_DEFAULTS.CURL_TIMEOUT)
@@ -142,9 +130,7 @@ class HealthChecker:
                 ],
                 check=False,
             )
-            status_code = (
-                int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
-            )
+            status_code = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
         except Exception:
             return HealthCheckResult(
                 service=svc.name,
@@ -181,9 +167,7 @@ class HealthChecker:
             reason=f"HTTP {status_code}" if status_code else "no response",
         )
 
-    def check_health(
-        self, filter_names: list[str] | None = None
-    ) -> list[HealthCheckResult]:
+    def check_health(self, filter_names: list[str] | None = None) -> list[HealthCheckResult]:
         """Check health of all (or filtered) running services.
 
         Args:

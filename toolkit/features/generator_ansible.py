@@ -52,9 +52,7 @@ class AnsibleGenerator(BaseGenerator):
                     if self.replace_placeholders(template_file, output_file, env):
                         generated_files.append(str(output_file))
                 else:
-                    logger.warning(
-                        f"Template file not found, skipping: {template_file}"
-                    )
+                    logger.warning(f"Template file not found, skipping: {template_file}")
 
             # Generate playbooks
             playbook_templates = templates_dir / "playbooks"
@@ -63,15 +61,11 @@ class AnsibleGenerator(BaseGenerator):
                 filesystem.ensure_directory(playbook_output)
 
                 for template_file in playbook_templates.glob("*.template.yml"):
-                    output_file = playbook_output / template_file.name.replace(
-                        ".template", ""
-                    )
+                    output_file = playbook_output / template_file.name.replace(".template", "")
                     if self.replace_placeholders(template_file, output_file, env):
                         generated_files.append(str(output_file))
             else:
-                logger.warning(
-                    f"Source playbooks directory not found, skipping: {playbook_templates}"
-                )
+                logger.warning(f"Source playbooks directory not found, skipping: {playbook_templates}")
 
             # Generate roles
             roles_output = output_dir / "roles"
@@ -81,9 +75,7 @@ class AnsibleGenerator(BaseGenerator):
                 shutil.copytree(roles_dir, roles_output)
                 generated_files.append(str(roles_output))
             else:
-                logger.warning(
-                    f"Source roles directory not found, skipping: {roles_dir}"
-                )
+                logger.warning(f"Source roles directory not found, skipping: {roles_dir}")
 
             return {"success": True, "files": generated_files}
 
@@ -102,11 +94,7 @@ class AnsibleGenerator(BaseGenerator):
             from toolkit.config.settings import settings
 
             if not settings.ansible_dir.exists():
-                logger.error(
-                    MESSAGES.ERROR_CONFIG_ANSIBLE_DIR_NOT_FOUND.format(
-                        settings.ansible_dir
-                    )
-                )
+                logger.error(MESSAGES.ERROR_CONFIG_ANSIBLE_DIR_NOT_FOUND.format(settings.ansible_dir))
                 return False
 
             # Check for basic structure
@@ -116,9 +104,7 @@ class AnsibleGenerator(BaseGenerator):
                 "templates/group_vars",
                 "roles",
             ]
-            missing_files = [
-                f for f in basic_files if not (settings.ansible_dir / f).exists()
-            ]
+            missing_files = [f for f in basic_files if not (settings.ansible_dir / f).exists()]
 
             # Check for main generated files
             main_files = [
@@ -129,16 +115,10 @@ class AnsibleGenerator(BaseGenerator):
                 "generated/prod/hosts.yml",
                 "generated/prod/group_vars/all.yml",
             ]
-            missing_files += [
-                f for f in main_files if not (settings.ansible_dir / f).exists()
-            ]
+            missing_files += [f for f in main_files if not (settings.ansible_dir / f).exists()]
 
             if missing_files:
-                logger.warning(
-                    MESSAGES.WARNING_CONFIG_MISSING_ANSIBLE_FILES.format(
-                        ", ".join(missing_files)
-                    )
-                )
+                logger.warning(MESSAGES.WARNING_CONFIG_MISSING_ANSIBLE_FILES.format(", ".join(missing_files)))
                 return False
 
             logger.success(MESSAGES.SUCCESS_CONFIG_ANSIBLE_VALIDATION_PASSED)

@@ -50,10 +50,7 @@ def _decrypt_secrets_file(env: str) -> dict[str, Any]:
 def show_secrets(
     key: Annotated[
         str | None,
-        typer.Argument(
-            help="Dot-separated key path (e.g., 'apps.authelia.admin_password'). "
-            "Omit to show all secrets."
-        ),
+        typer.Argument(help="Dot-separated key path (e.g., 'apps.authelia.admin_password'). Omit to show all secrets."),
     ] = None,
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
 ) -> None:
@@ -86,10 +83,7 @@ def show_secrets(
 def hash_password(
     key_path: Annotated[
         str,
-        typer.Argument(
-            help="Dot-separated path to the secret key "
-            "(e.g., 'apps.authelia.users_admin_password_hash')"
-        ),
+        typer.Argument(help="Dot-separated path to the secret key (e.g., 'apps.authelia.users_admin_password_hash')"),
     ],
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
 ) -> None:
@@ -229,7 +223,5 @@ def delete_gh_secret(
     if github_secrets_manager.delete_secret(secret_name):
         logger.success(MESSAGES.SUCCESS_CREDENTIALS_SECRET_DELETED.format(secret_name))
     else:
-        logger.error(
-            MESSAGES.ERROR_CREDENTIALS_SECRET_DELETE_FAILED.format(secret_name)
-        )
+        logger.error(MESSAGES.ERROR_CREDENTIALS_SECRET_DELETE_FAILED.format(secret_name))
         raise typer.Exit() from None

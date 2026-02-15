@@ -37,9 +37,7 @@ def setup(
 
     # Validate environment and get config
     env_config = validate_environment_config(env)
-    logger.info(
-        MESSAGES.INFO_PROCESSING.format(f"Setting up: {env_config.description}")
-    )
+    logger.info(MESSAGES.INFO_PROCESSING.format(f"Setting up: {env_config.description}"))
 
     # Confirm dangerous operations
     confirm_dangerous_operation(env_config, "Set up environment")
@@ -49,9 +47,7 @@ def setup(
         orchestrator.setup_environment()
         logger.success(MESSAGES.SUCCESS_COMPLETED.format(f"Environment {env} setup"))
     except Exception as e:
-        logger.error(
-            MESSAGES.ERROR_FAILED_WITH_REASON.format("Environment setup", str(e))
-        )
+        logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Environment setup", str(e)))
         raise typer.Exit(1) from None
 
 
@@ -85,9 +81,7 @@ def deploy(
 
     # Validate environment and get config
     env_config = validate_environment_config(env)
-    logger.info(
-        MESSAGES.INFO_PROCESSING.format(f"Deploying to: {env_config.description}")
-    )
+    logger.info(MESSAGES.INFO_PROCESSING.format(f"Deploying to: {env_config.description}"))
 
     # Confirm dangerous operations
     confirm_dangerous_operation(env_config, "Deploy")

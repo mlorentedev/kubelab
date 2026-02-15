@@ -63,11 +63,7 @@ class TerraformGenerator(BaseGenerator):
             from toolkit.config.settings import settings
 
             if not settings.terraform_dir.exists():
-                logger.error(
-                    MESSAGES.ERROR_TERRAFORM_DIR_NOT_FOUND.format(
-                        settings.terraform_dir
-                    )
-                )
+                logger.error(MESSAGES.ERROR_TERRAFORM_DIR_NOT_FOUND.format(settings.terraform_dir))
                 return False
 
             logger.success(MESSAGES.SUCCESS_TERRAFORM_VALID)
