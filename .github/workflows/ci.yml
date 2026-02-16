@@ -1,0 +1,139 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [master, develop, 'feature/**', 'hotfix/**']
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate branch name
+        if: github.event_name == 'push' && !contains(fromJSON('["master", "develop"]'), github.ref_name)
+        run: |
+          if [[ ! "${{ github.ref_name }}" =~ ^(feature|hotfix)/.+ ]]; then
+            echo "::error::Branch name must match feature/* or hotfix/*"
+            exit 1
+          fi
+
+      - name: Validate merge rules
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$BASE_REF" == "master" && "$HEAD_REF" != "develop" ]]; then
+            echo "::error::PRs to master are only allowed from develop"
+            exit 1
+          fi
+
+      - name: Validate YAML syntax
+        run: |
+          pip install --quiet yamllint
+          yamllint -d relaxed .github/workflows/
+
+      - name: Validate Makefile
+        run: make -n help >/dev/null
+
+  detect-changes:
+    name: Detect Changes
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      blog: ${{ steps.filter.outputs.blog }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      any_changed: ${{ steps.check.outputs.any_changed }}
+      changed_apps: ${{ steps.list.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: >-
+            ${{ github.event.before != '0000000000000000000000000000000000000000'
+            && github.event.before || github.sha }}
+          filters: |
+            blog:
+              - 'apps/blog/jekyll-site/**'
+              - 'apps/blog/Dockerfile'
+              - 'infra/stacks/apps/blog/**'
+            api:
+              - 'apps/api/src/**'
+              - 'apps/api/go.mod'
+              - 'apps/api/go.sum'
+              - 'apps/api/Dockerfile'
+              - 'infra/stacks/apps/api/**'
+            web:
+              - 'apps/web/astro-site/**'
+              - 'apps/web/Dockerfile'
+              - 'infra/stacks/apps/web/**'
+
+      - name: Check if any app changed
+        id: check
+        env:
+          BLOG: ${{ steps.filter.outputs.blog }}
+          API: ${{ steps.filter.outputs.api }}
+          WEB: ${{ steps.filter.outputs.web }}
+        run: |
+          if [[ "$BLOG" == "true" || "$API" == "true" || "$WEB" == "true" ]]; then
+            echo "any_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: List changed apps
+        id: list
+        env:
+          BLOG: ${{ steps.filter.outputs.blog }}
+          API: ${{ steps.filter.outputs.api }}
+          WEB: ${{ steps.filter.outputs.web }}
+        run: |
+          apps=()
+          [[ "$BLOG" == "true" ]] && apps+=("blog")
+          [[ "$API" == "true" ]] && apps+=("api")
+          [[ "$WEB" == "true" ]] && apps+=("web")
+          apps_json=$(printf '%s\n' "${apps[@]}" | jq -R . | jq -c -s .)
+          echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
+
+  blog-pipeline:
+    name: Blog
+    needs: detect-changes
+    if: needs.detect-changes.outputs.blog == 'true'
+    uses: ./.github/workflows/ci-pipeline.yml
+    with:
+      app: blog
+    secrets: inherit
+
+  api-pipeline:
+    name: API
+    needs: detect-changes
+    if: needs.detect-changes.outputs.api == 'true'
+    uses: ./.github/workflows/ci-pipeline.yml
+    with:
+      app: api
+    secrets: inherit
+
+  web-pipeline:
+    name: Web
+    needs: detect-changes
+    if: needs.detect-changes.outputs.web == 'true'
+    uses: ./.github/workflows/ci-pipeline.yml
+    with:
+      app: web
+    secrets: inherit
