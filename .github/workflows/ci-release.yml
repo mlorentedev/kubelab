@@ -4,11 +4,11 @@ name: Create Global Release Bundle
 on:
   # Trigger automatically after CI pipeline completes successfully
   workflow_run:
-    workflows: ["CI + Build for App"]
+    workflows: ["CI"]
     types:
       - completed
     branches:
-      - main
+      - master
       - develop
 
   # Allow manual trigger for emergency releases

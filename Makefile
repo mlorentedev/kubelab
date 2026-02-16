@@ -27,24 +27,38 @@ PYTHON_VERSION ?= 3.12
 # -----------------------------------------------------------------------------
 .PHONY: help
 help:
-	@echo "=== mlorente.dev Project ==="
+	@echo "=== CubeLab ==="
 	@echo ""
 	@echo "Bootstrap:"
-	@echo "  make setup          Install Poetry, dependencies, and toolkit"
+	@echo "  make setup              Install Poetry, dependencies, and toolkit"
+	@echo "  make setup-local-dns    Add local DNS entries to /etc/hosts"
 	@echo ""
 	@echo "Development:"
-	@echo "  make dev            Deploy local dev environment"
+	@echo "  make up-dev             Start all dev services"
+	@echo "  make down-dev           Stop all dev services"
+	@echo "  make restart-dev        Restart all dev services"
+	@echo "  make build-dev          Build all app images (no cache)"
+	@echo "  make config-generate    Generate config files for dev"
+	@echo "  make credentials-generate  Generate credentials for dev"
+	@echo "  make secrets            Edit SOPS-encrypted dev secrets"
+	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
+	@echo ""
+	@echo "Quality:"
+	@echo "  make check              Run all checks (lint + type + test)"
+	@echo "  make lint               Ruff linting (check only)"
+	@echo "  make format             Ruff formatting (auto-fix)"
+	@echo "  make type               Mypy type checking"
+	@echo "  make test               Run pytest suite"
+	@echo "  make validate           Validate toolkit config"
+	@echo "  make smoke-test         Health check running services"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  make deploy-staging Deploy to staging environment"
-	@echo "  make deploy-prod    Deploy to production environment"
+	@echo "  make deploy-staging     Deploy to staging environment"
+	@echo "  make deploy-prod        Deploy to production environment"
 	@echo ""
 	@echo "Toolkit CLI (use directly for most operations):"
-	@echo "  toolkit services up web          Start web app (local)"
-	@echo "  toolkit services logs api        View API logs (local)"
-	@echo "  toolkit services up grafana      Start Grafana service (local)"
-	@echo "  toolkit infra ansible deploy     Deploy infra config (remote)"
-	@echo "  toolkit deployment deploy        Full deployment pipeline"
+	@echo "  toolkit services up web          Start web app"
+	@echo "  toolkit services logs api        View API logs"
 	@echo "  toolkit --help                   Show all commands"
 	@echo ""
 
@@ -215,3 +229,7 @@ lint:
 .PHONY: type
 type:
 	@$(POETRY) run mypy toolkit
+
+.PHONY: check
+check: lint type test
+	@echo "✓ All checks passed"

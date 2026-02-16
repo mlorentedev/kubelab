@@ -160,23 +160,25 @@ Task queues (per app):
 │  VPS Hetzner        │ Production                        │
 │  162.55.57.175      │ Traefik + Apps + Services          │
 ├─────────────────────┼───────────────────────────────────┤
-│  Beelink MiniS 8GB  │ Proxmox VE 8.x lab               │
-│  cubelab-gw         │ VMs, experiments, WiFi backup mgmt │
+│  RPi 4 (8GB)        │ Network gateway + AI agents        │
+│  cubelab-edge       │ Bridge/NAT (USB ETH↑ built-in↓)   │
+│                     │ Pi-hole + CoreDNS + Tailscale      │
+│                     │ OpenClaw + PicoClaw                │
 ├─────────────────────┼───────────────────────────────────┤
 │  Acemagic 12GB      │ Staging (mirrors VPS)             │
 │  cubelab-staging    │ Ubuntu Server 24.04 LTS + Docker   │
 │                     │ Full CubeLab stack                 │
 ├─────────────────────┼───────────────────────────────────┤
-│  RPi 4 (8GB)        │ Edge infrastructure                │
-│  cubelab-edge       │ Tailscale subnet router + CoreDNS  │
-│                     │ + External monitoring (Uptime Kuma) │
+│  Beelink MiniS 8GB  │ Proxmox VE 8.x lab               │
+│  cubelab-gw         │ VMs, experiments                   │
 ├─────────────────────┼───────────────────────────────────┤
-│  RPi 3 (1GB)        │ Pi-hole DNS sinkhole              │
-│  cubelab-dns        │ Network-wide ad blocking           │
+│  RPi 3 (1GB)        │ External monitor (independent)    │
+│  cubelab-monitor    │ Uptime Kuma (probes VPS+homelab)   │
 ├─────────────────────┼───────────────────────────────────┤
-│  Jetson Nano (4GB)  │ Ollama + Text Polish API           │
-│  cubelab-ai         │ GPU-accelerated inference           │
-│                     │ Routed via Traefik on staging       │
+│  Jetson Nano #1     │ Pollex (llama.cpp + Qwen 2.5)     │
+│  cubelab-ai         │ GPU inference, text polish API     │
+├─────────────────────┼───────────────────────────────────┤
+│  Jetson Nano #2     │ Spare (backup for #1)             │
 └─────────────────────┴───────────────────────────────────┘
 ```
 
@@ -411,9 +413,9 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 ### Stream B: Homelab Staging Environment
 
 > **Prerequisite for A5 (prod)**. Starts after A4 (CI green). Acemagic runs
-> full stack as staging mirror of VPS. Must validate end-to-end before prod.
-> RPi 4 provides network infra (Tailscale, CoreDNS, external monitoring).
-> RPi 3 runs Pi-hole for LAN ad blocking. Beelink runs Proxmox for lab VMs.
+> full stack as staging mirror of VPS. RPi 4 is the network gateway (bridge/NAT,
+> Pi-hole, CoreDNS, Tailscale) and hosts AI agents (OpenClaw, PicoClaw).
+> RPi 3 runs external monitoring (Uptime Kuma) independently. Beelink runs Proxmox for lab VMs.
 >
 > **ADR**: [[adr-006-tailscale-over-wireguard]] — Tailscale chosen over WireGuard
 > (no port forwarding available behind NAT).
@@ -428,23 +430,27 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **HW-002**: Configure WiFi dongle as backup management on Beelink
 - [ ] **HW-003**: Install Ubuntu Server 24.04 LTS on Acemagic (hostname: `cubelab-staging`, user: `cubelab`)
 - [ ] **HW-004**: Install Ubuntu Server 24.04 LTS on RPi 4 (hostname: `cubelab-edge`, user: `cubelab`)
-- [ ] **HW-005**: Install Raspberry Pi OS Lite on RPi 3 (hostname: `cubelab-dns`, user: `cubelab`)
-- [ ] **HW-006**: Setup Jetson Nano with JetPack + Docker (hostname: `cubelab-ai`)
-- [ ] **HW-007**: Run Ethernet cables from router to TP-Link switch to all 5 devices
-- [ ] **HW-008**: Configure DHCP reservations on home router for all 5 devices
-- [ ] **HW-009**: Copy SSH keys, verify SSH access to staging + edge + dns + ai
-- [ ] **HW-010**: Verify all devices can reach internet
+- [ ] **HW-005**: Install Raspberry Pi OS Lite on RPi 3 (hostname: `cubelab-monitor`, user: `cubelab`)
+- [ ] **HW-006**: Setup Jetson Nano #1 with JetPack + Docker (hostname: `cubelab-ai`)
+- [ ] **HW-007**: Connect USB 3.0 Ethernet adapter to RPi 4 (uplink to router)
+- [ ] **HW-008**: Run Ethernet from RPi 4 built-in port to TP-Link switch (downlink)
+- [ ] **HW-009**: Connect RPi 3 directly to home router (independent path, not through switch)
+- [ ] **HW-010**: Connect Acemagic, Beelink, Jetson to TP-Link switch
+- [ ] **HW-011**: Configure DHCP reservations on home router for all devices
+- [ ] **HW-012**: Configure RPi 4 as bridge/NAT (iptables/nftables, IP forwarding)
+- [ ] **HW-013**: Copy SSH keys, verify SSH access to staging + edge + monitor + ai
+- [ ] **HW-014**: Verify all devices can reach internet via RPi 4 bridge
 
 > Runbook: vault [[runbooks/hardware-setup]]
 
-#### B-pihole: Pi-hole on RPi 3 (can run parallel with B1)
+#### B-pihole: Pi-hole on RPi 4 (can run parallel with B1)
 
-> Quick win — useful immediately for the home network.
+> Pi-hole runs on RPi 4 (gateway node) alongside CoreDNS. All DNS consolidated.
 
-- [ ] **PIHOLE-001**: Install Docker on RPi 3
-- [ ] **PIHOLE-002**: Deploy Pi-hole container
-- [ ] **PIHOLE-003**: Configure home router to use RPi 3 as primary DNS
-- [ ] **PIHOLE-004**: Verify DNS resolution and ad blocking
+- [ ] **PIHOLE-001**: Deploy Pi-hole container on RPi 4
+- [ ] **PIHOLE-002**: Configure Pi-hole upstream DNS + blocklists
+- [ ] **PIHOLE-003**: Configure home router to use RPi 4 as primary DNS
+- [ ] **PIHOLE-004**: Verify DNS resolution and ad blocking from all homelab devices
 
 > Runbook: vault [[runbooks/pihole-setup]]
 
@@ -460,10 +466,11 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 #### B2: CoreDNS on RPi 4 (parallel with B3)
 
-- [ ] **DNS-001**: Install Docker on RPi 4
-- [ ] **DNS-002**: Deploy CoreDNS container (`edge/dns-gateway/`)
-- [ ] **DNS-003**: Update Corefile with cubelab-staging Tailscale IP
-- [ ] **DNS-004**: Verify: `dig @<rpi4-ip> api.staging.cubelab.cloud` → cubelab-staging Tailscale IP
+> CoreDNS runs alongside Pi-hole on RPi 4 gateway. Docker already installed in B-pihole.
+
+- [ ] **DNS-001**: Deploy CoreDNS container on RPi 4 (`edge/dns-gateway/`)
+- [ ] **DNS-002**: Update Corefile with cubelab-staging Tailscale IP
+- [ ] **DNS-003**: Verify: `dig @<rpi4-ip> api.staging.cubelab.cloud` → cubelab-staging Tailscale IP
 
 > Runbook: vault [[runbooks/dns-homelab]]
 
@@ -497,24 +504,29 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **DEPLOY-004**: Deploy Core + Data (Portainer, CrowdSec, MinIO)
 - [ ] **DEPLOY-005**: Smoke test all staging endpoints
 
-#### B-ai: Jetson Nano — Ollama + Text Polish API
+#### B-ai: Jetson Nano — Pollex (llama.cpp)
 
-> Separate project, routed through staging Traefik via file provider.
+> Separate project ([[../../pollex/_index|Pollex]]), routed through staging Traefik via file provider.
+> Qwen 2.5 1.5B Q4_0, full GPU offload on Jetson Nano Maxwell GPU.
 
 - [ ] **AI-001**: Install Docker on Jetson Nano (JetPack environment)
-- [ ] **AI-002**: Deploy Ollama container with GPU passthrough
-- [ ] **AI-003**: Deploy text polish API server (browser extension backend)
+- [ ] **AI-002**: Deploy llama-server with Qwen 2.5 1.5B Q4_0 model (GPU offload `-ngl 999`)
+- [ ] **AI-003**: Deploy Pollex Go API (browser extension backend, port 8090)
 - [ ] **AI-004**: Add Traefik file provider route on cubelab-staging → Jetson LAN IP
 - [ ] **AI-005**: Add CoreDNS entry for `polish.staging.cubelab.cloud`
-- [ ] **AI-006**: Verify end-to-end: browser extension → Traefik → Jetson → Ollama → response
+- [ ] **AI-006**: Verify end-to-end: browser extension → Traefik → Pollex API → llama-server → response
 
-#### B6: External Monitoring (RPi 4)
+#### B6: External Monitoring (RPi 3)
 
-> Blocked by: B5
+> Blocked by: B5. RPi 3 connects directly to router (independent internet),
+> outside RPi 4 blast radius. Monitors both homelab and VPS.
 
-- [ ] **MON-001**: Deploy Uptime Kuma on RPi 4 (external to staging blast radius)
-- [ ] **MON-002**: Configure monitors for all staging endpoints
-- [ ] **MON-003**: When prod deployed (A5), add prod endpoints
+- [ ] **MON-001**: Install Docker on RPi 3 (`cubelab-monitor`)
+- [ ] **MON-002**: Install Tailscale on RPi 3 (access internal services for probes)
+- [ ] **MON-003**: Deploy Uptime Kuma on RPi 3
+- [ ] **MON-004**: Configure monitors for all staging endpoints (via Tailscale)
+- [ ] **MON-005**: Configure alerts (Telegram/email)
+- [ ] **MON-006**: When prod deployed (A5), add VPS endpoints
 
 #### B7: Documentation & Cleanup
 
@@ -901,28 +913,30 @@ webhooks pointing to n8n endpoint.
 **Done when**: End-to-end workflow works in n8n — task creation triggers decomposition,
 agent executes with checkpoints, human approves via Slack, task marked done.
 
-#### F3: OpenClaw Deployment
+#### F3: Agent Deployment on RPi 4
 
-> Blocked by: B5 (staging operational). Can run parallel with F1.
+> Blocked by: B0 (RPi 4 provisioned as gateway). Can run parallel with F1.
+> Agents run on RPi 4 (`cubelab-edge`, 8GB) — no GPU needed, uses external LLM APIs.
 
-- [ ] **CLAW-001**: Evaluate OpenClaw deployment requirements
-  - Docker image, resource requirements, API documentation
-  - Authentication model, agent isolation guarantees
+- [ ] **CLAW-001**: Evaluate OpenClaw + PicoClaw deployment requirements
+  - OpenClaw: Node.js, npm install, API documentation
+  - PicoClaw: Go binary, minimal config, Docker support
+  - LLM providers: DeepSeek, OpenRouter (no Anthropic API key needed)
 
-- [ ] **CLAW-002**: Create OpenClaw stack (`infra/stacks/services/ai/openclaw/`)
-  - `compose.base.yml` + environment overlays
-  - Network: must reach Git repos (internet) but not SOPS/secrets
+- [ ] **CLAW-002**: Deploy OpenClaw on RPi 4
+  - Docker or native Node.js install
+  - Configure LLM backend (DeepSeek API or OpenRouter)
+  - Configure integrations (email, calendar, GitHub, Telegram, etc.)
 
-- [ ] **CLAW-003**: Add OpenClaw config to `infra/config/values/common.yaml`
-  - API endpoint, resource limits, allowed repos list
-  - Agent templates (default constraints, timeout values)
+- [ ] **CLAW-003**: Deploy PicoClaw on RPi 4
+  - Docker container or Go binary
+  - Configure LLM backend (DeepSeek)
+  - Configure chat integrations (Telegram, Discord)
+  - Configure scheduled tasks (cron expressions)
 
-- [ ] **CLAW-004**: Deploy and verify OpenClaw locally
-  ```bash
-  toolkit services up openclaw
-  # Verify API responds
-  curl https://openclaw.cubelab.test/api/health
-  ```
+- [ ] **CLAW-004**: Configure n8n → OpenClaw pipeline
+  - n8n (Acemagic) calls OpenClaw API (RPi 4) over LAN/Tailscale
+  - Verify webhook connectivity
 
 - [ ] **CLAW-005**: Configure multi-repo agent access
   - Git credential helper for agent containers
@@ -934,8 +948,46 @@ agent executes with checkpoints, human approves via Slack, task marked done.
   - Verify: agent clones repo, creates branch, makes changes, pushes PR
   - Verify: agent cannot access repos not in allowed list
 
-**Done when**: OpenClaw running, API accessible, agents can clone/modify/push to allowed repos,
-isolation verified (no access to unauthorized repos or secrets).
+**Done when**: OpenClaw + PicoClaw running on RPi 4, accessible via LAN/Tailscale,
+agents use DeepSeek/OpenRouter for LLM, isolation verified.
+
+#### F5: Agent Persistent Memory
+
+> Blocked by: F3 (agents deployed). Agents must retain context across sessions.
+> Without persistent memory, agents forget previous work, repeat mistakes,
+> and lose accumulated knowledge about projects and preferences.
+
+- [ ] **MEM-001**: Design memory architecture (MEMORY.md + QMD hybrid)
+  - **Decision**: Same pattern as Claude Code — proven in daily use
+  - MEMORY.md: flat file loaded at session start (conventions, decisions, preferences, ~200 lines)
+  - QMD: structured observation database (searchable by date/type/project/keyword)
+  - Evaluate QMD options for self-hosted: sqlite-based, file-based JSON, or lightweight DB
+  - Must run on RPi 4 (arm64, 8GB) — no heavy dependencies
+
+- [ ] **MEM-002**: Implement chosen memory system
+  - Agent reads memory on startup / before each task
+  - Agent writes learnings after task completion
+  - Memory includes: project conventions, past decisions, error patterns, user preferences
+  - Timestamped entries for freshness tracking
+
+- [ ] **MEM-003**: Define memory lifecycle
+  - What to remember: confirmed patterns, architectural decisions, user preferences, bug fixes
+  - What to forget: session-specific context, speculative conclusions
+  - Pruning strategy: stale entries after N days without reference
+  - Memory budget: max file size or entry count to prevent bloat
+
+- [ ] **MEM-004**: Integration with agent workflows
+  - OpenClaw: pre-task memory load, post-task memory write
+  - PicoClaw: persistent context across chat sessions
+  - n8n: pass relevant memory context in task execution payload
+
+- [ ] **MEM-005**: Test memory persistence
+  - Agent completes task A → learns pattern → completes task B using that knowledge
+  - Agent restart → memory survives
+  - Verify: no hallucinated memories, no stale data causing bad decisions
+
+**Done when**: Agents retain knowledge across sessions, reference past decisions,
+and avoid repeating mistakes. Memory is searchable and prunable.
 
 #### F4: Integration Testing
 
@@ -1075,7 +1127,7 @@ docker compose -f compose.base.yml -f compose.dev.yml up -d
 | **security** | Auth/protection | authelia, crowdsec |
 | **data** | Storage | minio |
 | **automation** | CI/workflows | github-runner |
-| **ai** | ML/AI | ollama, webui, openclaw |
+| **ai** | ML/AI agents | openclaw, picoclaw, pollex (llama.cpp) |
 | **misc** | Productivity | calcom, immich |
 
 ### Environment Strategy
@@ -1195,5 +1247,5 @@ cubelab docs generate            # Generate static HTML docs
 
 ---
 
-*Last updated: 2026-02-14*
-*Next action: A4 (push, PR, CI green), then B0 (hardware provisioning)*
+*Last updated: 2026-02-15*
+*Next action: A4 (push, PR, CI green), then B0 (hardware provisioning with new gateway architecture)*
