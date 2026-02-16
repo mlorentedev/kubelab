@@ -1075,6 +1075,100 @@ graph view and wikilinks work, sensitive content excluded at build time AND acce
 
 ---
 
+### Stream H: Agent Workforce (24/7 Autonomous Operations)
+
+> **ADR**: Pending — create when designing.
+>
+> **Prerequisite**: Stream F completed (agents deployed + task management operational).
+> Builds on F's infrastructure to create self-sustaining agent loops that
+> minimize human intervention for low-risk, repeatable tasks.
+>
+> **Design decisions (open — resolve in ADR):**
+> 1. Budget model: Claude MAX (80% weekly cap) + DeepSeek (bulk cheap tasks) + local Pollex (free, text-only)
+> 2. Task catalog: which tasks are delegable, risk tier per task type
+> 3. Autonomy levels: Level 2 (checkpoint) vs Level 3 (autonomous with guardrails) per task tier
+
+#### H1: LLM Budget & Routing Strategy
+
+> Define which LLM handles which task type based on cost, quality, and latency.
+
+- [ ] **BUD-001**: Map task types to LLM tiers
+  - **Tier 1 (free/local)**: Pollex on Jetson — text polish, spelling, short rewrites
+  - **Tier 2 (cheap)**: DeepSeek API — triaje, log analysis, scraping, data transforms, content drafts
+  - **Tier 3 (premium)**: Claude via MAX plan — architecture review, complex code, PR reviews
+- [ ] **BUD-002**: Implement LLM router in n8n or OpenClaw
+  - Route by task label/category → appropriate LLM backend
+  - Fallback chain: local → DeepSeek → Claude (escalate on failure or low confidence)
+- [ ] **BUD-003**: Token budget and alerting
+  - Daily/weekly token budget per tier
+  - Alert when approaching limits (80% threshold)
+  - Hard stop at budget cap to prevent surprise costs
+- [ ] **BUD-004**: Cost tracking dashboard
+  - Grafana panel: tokens consumed per tier, per task type, per day
+  - Monthly cost projection based on rolling average
+
+#### H2: Task Catalog & Autonomy Classification
+
+> Define what agents can do, and how much supervision each task type requires.
+
+- [ ] **CAT-001**: Define task catalog with autonomy levels
+  - **Level 3 (autonomous)**: log triaje, uptime alert response, scheduled reports, data scraping, RSS digest
+  - **Level 2 (checkpoint)**: content drafts, PR reviews, dependency updates, config changes
+  - **Level 1 (assist only)**: architecture proposals, security-related changes, infra modifications
+- [ ] **CAT-002**: Implement autonomy enforcement in n8n
+  - Level 3: agent completes → logs result → no human needed
+  - Level 2: agent completes → pauses → Slack approval → continues
+  - Level 1: agent proposes → human implements → agent not involved in execution
+- [ ] **CAT-003**: Define guardrails per level
+  - Level 3 guardrails: max execution time, no git push, no external API calls beyond whitelist, output size limits
+  - Level 2 guardrails: same as L3 + diff size limit, mandatory PR (no direct push)
+  - Blast radius control: agent containers have no access to prod, SOPS keys, or infra repos
+
+#### H3: Always-On Agent Loops
+
+> Agents that run continuously without being triggered by human tasks.
+
+- [ ] **LOOP-001**: Monitoring response loop
+  - Uptime Kuma alert → n8n → agent triages (checks logs, recent deploys, known issues)
+  - If known pattern: auto-remediate (restart container, clear cache) + log
+  - If unknown: escalate to Slack with diagnosis summary
+- [ ] **LOOP-002**: Daily digest loop
+  - Agent runs at 07:00: scrape RSS feeds, GitHub notifications, calendar, Vikunja backlog
+  - Produce morning briefing → Slack DM or Telegram
+  - LLM tier: DeepSeek (cheap, bulk text)
+- [ ] **LOOP-003**: Content pipeline loop
+  - Agent monitors content queue in Vikunja (label: `content:draft`)
+  - Produces draft → pushes to blog repo branch → Slack notification for review
+  - LLM tier: DeepSeek for first draft, Claude for polish (if budget allows)
+- [ ] **LOOP-004**: Data analysis loop
+  - Scheduled: weekly metrics summary from Prometheus/Grafana
+  - Agent fetches data, generates trend analysis, flags anomalies
+  - Output: Slack report or Vikunja task if action needed
+
+#### H4: Scaling & Evaluation
+
+> Measure agent effectiveness. Scale what works, kill what doesn't.
+
+- [ ] **EVAL-001**: Agent effectiveness metrics
+  - Tasks completed autonomously (L3) vs requiring intervention
+  - Time saved per task type (estimate vs manual baseline)
+  - Error rate: agent mistakes requiring human correction
+  - Cost per task type
+- [ ] **EVAL-002**: Weekly agent review (human ritual)
+  - Review agent activity log
+  - Promote tasks from L2 → L3 if consistently approved without changes
+  - Demote tasks from L3 → L2 if error rate exceeds threshold
+  - Retire agents/loops that don't deliver value
+- [ ] **EVAL-003**: Scale decision framework
+  - When to add more agent loops (value proven, budget available)
+  - When to add hardware (RPi 4 saturated, need second agent host)
+  - When to upgrade LLM tier for a task type (quality matters more than cost)
+
+**Done when**: Agents operate 24/7 on defined task catalog, LLM routing minimizes cost,
+autonomy levels enforced, effectiveness measured and reviewed weekly.
+
+---
+
 ### Stream E: Backlog (unprioritized)
 
 > Items without defined order. Prioritize when capacity or need arises.
@@ -1249,3 +1343,4 @@ cubelab docs generate            # Generate static HTML docs
 
 *Last updated: 2026-02-15*
 *Next action: A4 (push, PR, CI green), then B0 (hardware provisioning with new gateway architecture)*
+*Streams: A (stabilize) → B (homelab) → C (repo split) → D (data/observability) → F (agents) → G (knowledge base) → H (agent workforce)*
