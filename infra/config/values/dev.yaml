@@ -131,7 +131,7 @@ apps:
         oidc_client_secret: "supersecretoidcclientkey"
         disable_require_tls: false
   api:
-    version: 0.0.0-dev.56fb6ca
+    version: 0.0.0-dev.7111fd5
   blog:
     version: 0.0.0-dev.7111fd5
   web:
