@@ -14,7 +14,7 @@ export async function getStaticPaths() {
 
 export const prerender = true;
 
-const resource = Astro.props;
+const { resource } = Astro.props as { resource: any };
 const { Content } = await render(resource);
 
 const { title, description, resourceId, fileId, pubDate, tags, buttonText } = resource.data;
