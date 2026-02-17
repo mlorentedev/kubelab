@@ -1181,6 +1181,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] Terraform DNS: Generate `services.json` from `common.yaml`
 - [ ] Consolidate youtube-toolkit → `apps/workers/youtube/`
 - [ ] SOPS alignment: Align with age keys from dotfiles
+- [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
 
 **Tier 2: Possible**
 
