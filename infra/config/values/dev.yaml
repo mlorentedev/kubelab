@@ -133,4 +133,4 @@ apps:
   api:
     version: 0.0.0-dev.ae0e2f0
   blog:
-    version: 0.0.0-dev.b3a5b1e
+    version: 0.0.0-dev.ae0e2f0
