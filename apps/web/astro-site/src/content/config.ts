@@ -19,6 +19,7 @@ const projects = defineCollection({
 });
 
 const resources = defineCollection({
+  loader: glob({ base: './src/content/resources', pattern: '**/*.{md,mdx}' }),
   schema: z.object({
     title: z.string(),
     description: z.string(),
