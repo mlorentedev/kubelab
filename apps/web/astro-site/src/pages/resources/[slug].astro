@@ -6,8 +6,8 @@ import SectionHeader from '../../components/sections/SectionHeader.astro';
 
 export async function getStaticPaths() {
   const resources = await getCollection('resources');
-  return resources.map((resource: { slug: any }) => ({
-    params: { slug: resource.slug },
+  return resources.map((resource: { id: any }) => ({
+    params: { slug: resource.id },
     props: { resource },
   }));
 }
