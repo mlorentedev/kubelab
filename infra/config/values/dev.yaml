@@ -132,3 +132,5 @@ apps:
         disable_require_tls: false
   api:
     version: 0.0.0-dev.ae0e2f0
+  blog:
+    version: 0.0.0-dev.09ad184
