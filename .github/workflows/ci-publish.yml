@@ -23,7 +23,7 @@ jobs:
     name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
     runs-on: ubuntu-latest
     env:
-      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'mlorente' }}
+      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'cubelab' }}
     outputs:
       image_tag: ${{ steps.docker_tags.outputs.final_tag }}
       registry_url: ${{ steps.docker_tags.outputs.registry }}
@@ -99,7 +99,7 @@ jobs:
             TAG_TYPE=${{ steps.docker_tags.outputs.tag_type }}
           labels: |
             org.opencontainers.image.title=${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}
-            org.opencontainers.image.description=${{ inputs.app }} service for ${{ env.REGISTRY_PREFIX }}.dev
+            org.opencontainers.image.description=${{ inputs.app }} service for CubeLab platform
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ inputs.tag }}

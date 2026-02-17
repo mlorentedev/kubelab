@@ -108,7 +108,7 @@ jobs:
           echo "Config Source: ${{ steps.strategy.outputs.config_file }}" >> dist/cubelab-deploy/MANIFEST.txt
 
           echo "--- Changed Apps ---" >> dist/cubelab-deploy/MANIFEST.txt
-          echo '${{ inputs.changed_apps_json }}' >> dist/cubelab-deploy/MANIFEST.txt
+          echo "See commit history for changed apps" >> dist/cubelab-deploy/MANIFEST.txt
 
           # Zip it
           cd dist
