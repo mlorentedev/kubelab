@@ -135,4 +135,4 @@ apps:
   blog:
     version: 0.0.0-dev.7111fd5
   web:
-    version: 0.0.0-dev.56fb6ca
+    version: 0.0.0-dev.7111fd5
