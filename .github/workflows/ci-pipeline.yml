@@ -312,7 +312,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Update Environment Config
         id: update_yaml
@@ -352,7 +352,7 @@ jobs:
             chore(infra): update ${{ inputs.app }} version to
             ${{ needs.app-pipeline.outputs.docker_version }} [skip ci]
           file_pattern: "${{ steps.update_yaml.outputs.file }}"
-          branch: ${{ github.ref }}
+          branch: ${{ github.head_ref || github.ref_name }}
 
       - name: Tag Version in Git
         if: github.ref_name == 'main' || github.ref_name == 'master'
