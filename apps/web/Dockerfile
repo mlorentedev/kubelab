@@ -60,30 +60,14 @@ COPY --chown=node:node astro-site/package.json astro-site/package-lock.json ./
 # Switch to non-root user (node:alpine ships with `node` user, UID/GID 1000)
 USER node
 
-# Install dependencies with cache
+# Install ALL dependencies (including dev) needed for the build
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
-    npm ci
+    npm ci --include=dev
 
 # Copy the rest of the source code
 COPY --chown=node:node astro-site/ ./
 
-# Environment variable (optional)
-ARG BUILD_ENV=production
-ENV NODE_ENV=${BUILD_ENV}
-
-RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
-    case "$TARGETARCH" in \
-      "amd64") \
-        echo "Installing Rollup for AMD64..." && \
-        npm install --no-save @rollup/rollup-linux-x64-musl ;; \
-      "arm64") \
-        echo "Installing Rollup for ARM64..." && \
-        npm install --no-save @rollup/rollup-linux-arm64-musl ;; \
-      *) \
-        echo "Warning: Unknown architecture $TARGETARCH, skipping Rollup native binaries" ;; \
-    esac
-
-# Build the application
+# Build the application (Rollup musl binaries resolved from lockfile)
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 npm run build \
  && npm audit --omit=dev --audit-level=high || true
 
