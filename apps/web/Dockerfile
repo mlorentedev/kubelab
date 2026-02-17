@@ -34,9 +34,6 @@ RUN apk update && apk upgrade --no-cache && \
 WORKDIR /app
 RUN chown node:node /app
 
-# Configure npm to skip optional dependencies for faster builds
-ENV npm_config_omit=optional
-
 # Make Astro-specific build arguments available as environment variables for the build process
 ENV PUBLIC_ALLOWED_HOSTS=${PUBLIC_ALLOWED_HOSTS}
 ENV PUBLIC_SITE_TITLE=${PUBLIC_SITE_TITLE}
