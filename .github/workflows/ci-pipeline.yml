@@ -56,9 +56,9 @@ jobs:
             exit 0
           fi
 
-          if ! ls apps/$APP/docker-compose*.yml 1> /dev/null 2>&1; then
-            echo "::warning::No docker-compose files found for app $APP"
-            echo "This is not critical but may affect local development"
+          if ! ls infra/stacks/apps/$APP/compose*.yml 1> /dev/null 2>&1; then
+            echo "::warning::No compose files found for app $APP in infra/stacks/apps/$APP/"
+            echo "This is not critical but may affect deployment"
           fi
 
           # If we get here, we should build
