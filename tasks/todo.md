@@ -161,22 +161,22 @@ Task queues (per app):
 │  162.55.57.175      │ Traefik + Apps + Services          │
 ├─────────────────────┼───────────────────────────────────┤
 │  RPi 4 (8GB)        │ Network gateway + AI agents        │
-│  cubelab-edge       │ Bridge/NAT (USB ETH↑ built-in↓)   │
+│  cubelab-rpi4-edge  │ Bridge/NAT (USB ETH↑ built-in↓)   │
 │                     │ Pi-hole + CoreDNS + Tailscale      │
 │                     │ OpenClaw + PicoClaw                │
 ├─────────────────────┼───────────────────────────────────┤
 │  Acemagic 12GB      │ Staging (mirrors VPS)             │
-│  cubelab-staging    │ Ubuntu Server 24.04 LTS + Docker   │
+│  cubelab-ace-staging│ Ubuntu Server 24.04 LTS + Docker   │
 │                     │ Full CubeLab stack                 │
 ├─────────────────────┼───────────────────────────────────┤
 │  Beelink MiniS 8GB  │ Proxmox VE 8.x lab               │
-│  cubelab-gw         │ VMs, experiments                   │
+│  cubelab-bee-pve    │ VMs, experiments                   │
 ├─────────────────────┼───────────────────────────────────┤
 │  RPi 3 (1GB)        │ External monitor (independent)    │
-│  cubelab-monitor    │ Uptime Kuma (probes VPS+homelab)   │
+│  cubelab-rpi3-monitor│ Uptime Kuma (probes VPS+homelab)  │
 ├─────────────────────┼───────────────────────────────────┤
 │  Jetson Nano #1     │ Pollex (llama.cpp + Qwen 2.5)     │
-│  cubelab-ai         │ GPU inference, text polish API     │
+│  cubelab-jet1-ai    │ GPU inference, text polish API     │
 ├─────────────────────┼───────────────────────────────────┤
 │  Jetson Nano #2     │ Spare (backup for #1)             │
 └─────────────────────┴───────────────────────────────────┘
@@ -437,20 +437,20 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 > User executes manually, following vault runbooks.
 
-- [ ] **HW-001**: Install Proxmox VE 8.x on Beelink (hostname: `cubelab-gw`) → see vault [[runbooks/proxmox-setup]]
+- [ ] **HW-001**: Install Proxmox VE 8.x on Beelink (`cubelab-bee-pve`) → see vault [[runbooks/proxmox-setup]]
 - [ ] **HW-002**: Configure WiFi dongle as backup management on Beelink
-- [ ] **HW-003**: Install Ubuntu Server 24.04 LTS on Acemagic (hostname: `cubelab-staging`, user: `cubelab`)
-- [ ] **HW-004**: Install Ubuntu Server 24.04 LTS on RPi 4 (hostname: `cubelab-edge`, user: `cubelab`)
-- [ ] **HW-005**: Install Raspberry Pi OS Lite on RPi 3 (hostname: `cubelab-monitor`, user: `cubelab`)
-- [ ] **HW-006**: Setup Jetson Nano #1 with JetPack + Docker (hostname: `cubelab-ai`)
-- [ ] **HW-007**: Connect USB 3.0 Ethernet adapter to RPi 4 (uplink to router)
-- [ ] **HW-008**: Run Ethernet from RPi 4 built-in port to TP-Link switch (downlink)
-- [ ] **HW-009**: Connect RPi 3 directly to home router (independent path, not through switch)
-- [ ] **HW-010**: Connect Acemagic, Beelink, Jetson to TP-Link switch
-- [ ] **HW-011**: Configure DHCP reservations on home router for all devices
-- [ ] **HW-012**: Configure RPi 4 as bridge/NAT (iptables/nftables, IP forwarding)
-- [ ] **HW-013**: Copy SSH keys, verify SSH access to staging + edge + monitor + ai
-- [ ] **HW-014**: Verify all devices can reach internet via RPi 4 bridge
+- [ ] **HW-003**: Install Ubuntu Server 24.04 LTS on Acemagic (`cubelab-ace-staging`, user: `cubelab`)
+- [x] **HW-004**: Install Ubuntu Server 24.04 LTS on RPi 4 (`cubelab-rpi4-edge`, user: `cubelab`)
+- [x] **HW-005**: Install Raspberry Pi OS Lite on RPi 3 (`cubelab-rpi3-monitor`, user: `cubelab`)
+- [~] **HW-006**: Setup Jetson Nano #1 with JetPack + Docker (`cubelab-jet1-ai`) — online, hostname pending rename
+- [x] **HW-007**: Connect USB 3.0 Ethernet adapter to RPi 4 (uplink to router) — 1 Gbps confirmed
+- [x] **HW-008**: Run Ethernet from RPi 4 built-in port to TP-Link switch (downlink)
+- [x] **HW-009**: Connect RPi 3 directly to home router (independent path, not through switch)
+- [x] **HW-010**: Connect Beelink and Jetson to TP-Link switch (Acemagic pending)
+- [x] **HW-011**: Configure dnsmasq DHCP on RPi 4 (172.16.1.0/24, reservations by MAC)
+- [x] **HW-012**: Configure RPi 4 as NAT gateway (nftables masquerade + IP forwarding)
+- [ ] **HW-013**: Copy SSH keys, verify SSH access to all devices
+- [x] **HW-014**: Verify internet via RPi 4 bridge (Jetson confirmed: `ping 8.8.8.8` 0% loss)
 
 > Runbook: vault [[runbooks/hardware-setup]]
 
@@ -1193,6 +1193,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] Consolidate youtube-toolkit → `apps/workers/youtube/`
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
+- [ ] Docker image cleanup: purge stale `0.0.0-dev.*` tags from DockerHub (retention policy or GitHub Action cleanup job)
 
 **Tier 2: Possible**
 
@@ -1266,6 +1267,17 @@ cubelab docs generate            # Generate static HTML docs
 ---
 
 ## Completed
+
+### 2026-02-17
+
+- [x] PR merge to develop: feature/blog-restruct → develop
+- [x] Fix: Astro 5 content collections (`resource.slug` → `resource.id`, `resource.render()` → `render(resource)`)
+- [x] Fix: Docker web build — 3 chained issues (vite.define without JSON.stringify, NODE_ENV=production before build, unnecessary Rollup manual install)
+- [x] Fix: CI gitops commit (`github.ref` → `github.head_ref` for PR events)
+- [x] Fix: CI compose file path check (`apps/` → `infra/stacks/apps/`)
+- [x] Updated browserslist (4.26→4.28) to fix baseline-browser-mapping warning
+- [x] Vault: documented GitOps rebase gotcha in `runbooks/cicd.md`
+- [x] CLAUDE.md: updated CI workflow reference (`ci-02-pipeline` → `ci-pipeline`)
 
 ### 2026-02-16
 
@@ -1364,6 +1376,6 @@ cubelab docs generate            # Generate static HTML docs
 
 ---
 
-*Last updated: 2026-02-16*
-*Next action: Merge PR to develop, then B0 (hardware provisioning with new gateway architecture)*
+*Last updated: 2026-02-17*
+*Next action: B0 remaining (Acemagic Ubuntu install, Beelink Proxmox, Jetson hostname, SSH keys)*
 *Streams: A (stabilize) → B (homelab) → C (repo split) → D (data/observability) → F (agents) → G (knowledge base) → H (agent workforce)*
