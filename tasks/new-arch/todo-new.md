@@ -87,10 +87,6 @@ future-static-sites      → Each static site in its own repo
 | Portability | Compose overrides (dev=local, prod=shared) | Env vars abstract the difference |
 | Blog split | cubernautas = own repo, personal blog in platform | Different identities, different lifecycles |
 | Wiki | Not deployed as app — lives in toolkit as `cubelab docs` | Auto-generated from cubelab.yaml, served locally or published to `docs.cubelab.cloud` |
-| VPN | Headscale (self-hosted) + Tailscale clients | WireGuard underneath, self-owned, industry-relevant |
-| Users | `manu` on homelab, `deploy` on VPS | Avoids `cubelab@cubelab-*` redundancy; others can substitute their username |
-| K8s deploy | `kubectl apply -k` initially, ArgoCD in Stream E | Learn raw tools before abstractions |
-| Portfolio | Army of small focused repos (like steipete) | Each solves a real problem, publicly useful |
 
 ### Domain Strategy
 
@@ -159,57 +155,48 @@ Task queues (per app):
 
 ## Hardware Allocation
 
-> **Updated 2026-02-18**: 2x Acemagic (both Proxmox) + Beelink (Ollama) + VPS (Docker Compose → K3s in B6).
-> See vault [[hardware/_index]].
+> **Updated 2026-02-18**: 2x Acemagic (hybrid K3s) + Beelink (Ollama) + VPS (K3s single-node).
+> See `tasks/homelab-k3s-architecture.md` and vault [[hardware/_index]].
 
 ```
 ┌─────────────────────┬───────────────────────────────────────────┐
-│  VPS Hetzner        │ Production — Docker Compose (initial)     │
-│  162.55.57.175      │ kubectl apply -k overlays/prod (post-B6)  │
-│  user: deploy       │ Headscale control plane runs here         │
+│  VPS Hetzner        │ Production — K3s single-node              │
+│  162.55.57.175      │ ArgoCD auto-sync from master branch       │
+│                     │ (migrating from Docker Compose)           │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Acemagic-1 (12GB)  │ Proxmox VE 8.x — K3s server + agent VM   │
-│  cubelab-ace1       │ VM k3s-server (5GB) + VM k3s-agent-1 (5GB)│
-│  user: manu         │ Proxmox snapshots for SRE exercises       │
+│  cubelab-pve        │ VM k3s-server (5GB) + VM k3s-agent-1 (5GB)│
+│                     │ Proxmox snapshots for SRE exercises       │
 ├─────────────────────┼───────────────────────────────────────────┤
-│  Acemagic-2 (12GB)  │ Proxmox VE 8.x — K3s agent-2 VM          │
-│  cubelab-ace2       │ VM k3s-agent-2 (~10GB) — heavy workloads  │
-│  user: manu         │ Observability, data services              │
+│  Acemagic-2 (12GB)  │ K3s agent — bare metal                    │
+│  cubelab-k3s-agent  │ Debian 12, heavy workloads (~11GB usable) │
+│                     │ Observability, data services               │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Beelink 8GB        │ Ollama — bare metal                       │
-│  cubelab-bee        │ Debian 12 + Ollama (API OpenAI-compatible)│
-│  user: manu         │ For agents (Stream F) + generic LLM tasks │
+│  cubelab-ai         │ Debian 12 + Ollama (API OpenAI-compatible)│
+│                     │ For agents (Stream F) + generic LLM tasks │
 │                     │ Endpoint: http://<beelink-ip>:11434       │
 ├─────────────────────┼───────────────────────────────────────────┤
-│  RPi 4 (8GB)        │ Network gateway + AI agents               │
-│  cubelab-rpi4       │ Bridge/NAT, Pi-hole, CoreDNS, Headscale   │
-│  user: manu         │ OpenClaw + PicoClaw                       │
-│                     │ Smart plug on full homelab power strip     │
+│  RPi 4 (8GB)        │ Network gateway + AI agents (unchanged)   │
+│  cubelab-rpi4-edge  │ Bridge/NAT, Pi-hole, CoreDNS, Tailscale  │
+│                     │ OpenClaw + PicoClaw                       │
 ├─────────────────────┼───────────────────────────────────────────┤
-│  RPi 3 (1GB)        │ External monitor — physically separate    │
-│  cubelab-rpi3       │ Uptime Kuma (probes VPS+homelab)          │
-│  user: manu         │ WiFi dongle (direct to router, diff room) │
+│  RPi 3 (1GB)        │ External monitor (unchanged)              │
+│  cubelab-rpi3-monitor│ Uptime Kuma (probes VPS+homelab)          │
 ├─────────────────────┼───────────────────────────────────────────┤
-│  Jetson Nano #1     │ Pollex — independent project              │
-│  cubelab-jet1       │ llama.cpp + Qwen 2.5, GPU inference       │
-│  user: manu         │ Text polish + embeddings                  │
+│  Jetson Nano #1     │ Pollex — independent project (unchanged)  │
+│  cubelab-jet1-ai    │ llama.cpp + Qwen 2.5, GPU inference       │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Jetson Nano #2     │ Spare (backup for #1)                     │
 └─────────────────────┴───────────────────────────────────────────┘
 ```
 
-**User convention**: `manu` on all homelab nodes (prompt: `manu@cubelab-ace1`),
-`deploy` on VPS for CI/CD deploys (not `cubelab` — avoids redundant `cubelab@cubelab-vps`).
-
 ### Deployment Flow
 
 ```
+develop branch → ArgoCD → K3s cluster (staging: Acemagic-1 VMs + Acemagic-2 bare metal)
+master branch  → ArgoCD → K3s single-node (production: Hetzner VPS)
 local dev      → toolkit → Docker Compose (workstation)
-develop branch → kubectl apply -k overlays/staging → K3s staging (Acemagic-1 VMs + Acemagic-2 VM)
-master branch  → kubectl apply -k overlays/prod → Docker Compose on VPS (pre-B6)
-                                                → K3s single-node on VPS (post-B6)
-
-ArgoCD: deferred to Stream E — learn raw kubectl first, add GitOps automation later.
 ```
 
 ---
@@ -409,13 +396,13 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 #### A5: Production Validation
 
-> Blocked by: A4 completed + B5 completed (staging validated).
-> VPS runs Docker Compose initially. K3s migration happens later in B6.
+> Blocked by: A4 completed + B6 completed (K3s running on VPS with ArgoCD)
+> B6 does the K3s migration on the VPS. A5 is the final verification gate.
 
 - [ ] **PROD-001**: Verify SSH access to VPS
 
   ```bash
-  ssh deploy@162.55.57.175 "hostname && docker ps"
+  ssh mlorente-deployer@162.55.57.175 "hostname && kubectl get nodes"
   ```
 
 - [ ] **PROD-002**: Verify/fix Terraform DNS (two zones)
@@ -425,14 +412,14 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   # Must manage: mlorente.dev + cubelab.cloud
   ```
 
-- [ ] **PROD-003**: Deploy stack on VPS (Docker Compose)
+- [ ] **PROD-003**: Verify K3s single-node + ArgoCD syncing from master branch
 
   ```bash
-  ssh deploy@162.55.57.175
-  docker compose -f compose.base.yml -f compose.prod.yml up -d
+  kubectl get pods -n cubelab
+  argocd app list
   ```
 
-- [ ] **PROD-004**: Verify Traefik routing + TLS (Let's Encrypt)
+- [ ] **PROD-004**: Verify Traefik Ingress + TLS (Let's Encrypt)
 
   ```bash
   curl -I https://mlorente.dev
@@ -446,9 +433,9 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   - `https://grafana.cubelab.cloud` (monitoring)
   - Wiki not deployed — lives in toolkit (`cubelab docs serve`)
 
-- [ ] **PROD-006**: Basic monitoring (Uptime Kuma probes + Grafana/Loki on VPS)
+- [ ] **PROD-006**: Basic monitoring (Uptime Kuma probes + Grafana/Loki on cluster)
 
-**Done when**: Apps publicly accessible with valid TLS on both domains, Docker Compose managing VPS, monitoring active.
+**Done when**: Apps publicly accessible with valid TLS on both domains, ArgoCD managing deployment, monitoring active.
 
 ---
 
@@ -456,21 +443,20 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 > **Prerequisite for A5 (prod validation)**. Starts after A4 (CI green).
 >
-> **Architecture (2026-02-18)**: K3s on homelab staging. VPS starts with Docker Compose,
-> migrates to K3s in B6. Compose in `infra/stacks/` for local dev only. K8s manifests in `infra/k8s/`.
+> **Architecture (2026-02-18)**: Both staging and production run K3s.
+> No Docker Compose staging — straight to K3s. Compose preserved in
+> `infra/stacks/` for local dev only. New manifests in `infra/k8s/`.
 >
 > **Topology (hybrid)**:
 > - **Acemagic-1 (12GB)**: Proxmox VE → 2 VMs (k3s-server 5GB + k3s-agent-1 5GB)
-> - **Acemagic-2 (12GB)**: Proxmox VE → 1 VM (k3s-agent-2 ~10GB for heavy workloads)
+> - **Acemagic-2 (12GB)**: Bare metal → K3s agent-2 (~11GB for heavy workloads)
 > - **Beelink (8GB)**: Bare metal → Ollama (external to cluster, LAN access)
-> - **VPS Hetzner**: Docker Compose (initial) → K3s single-node (B6)
+> - **VPS Hetzner**: K3s single-node (production)
 >
 > RPi 4 = network gateway (outside cluster). RPi 3 = external monitor (outside cluster).
 > Jetson = Pollex (independent project, outside cluster).
-> VPN: **Headscale** (self-hosted control plane on VPS) + Tailscale clients = WireGuard underneath.
-> Deploy method: `kubectl apply -k`. ArgoCD deferred to Stream E.
 >
-> **ADRs**: [[adr-010-headscale-over-tailscale-cloud]], [[adr-006-k3s-homelab-staging]]
+> **ADRs**: [[adr-006-tailscale-over-wireguard]], `tasks/homelab-k3s-architecture.md`
 > **Hardware**: See vault [[hardware/_index]] for full specs and topology.
 
 #### B0: Hardware Provisioning (manual, runbook-guided)
@@ -483,10 +469,9 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **HW-002**: Create VM `k3s-server` (5GB RAM, 2 vCPU, 40GB disk, Debian 12)
 - [ ] **HW-003**: Create VM `k3s-agent-1` (5GB RAM, 2 vCPU, 40GB disk, Debian 12)
 
-**Acemagic-2 → Proxmox VE (same as Acemagic-1):**
+**Acemagic-2 → Bare metal K3s agent:**
 
-- [ ] **HW-004**: Install Proxmox VE 8.x on Acemagic-2 (`cubelab-ace2`, user: `manu`) → see vault [[runbooks/proxmox-setup]]
-- [ ] **HW-004a**: Create VM `k3s-agent-2` (10GB RAM, 2 vCPU, 50GB disk, Debian 12) on Acemagic-2
+- [ ] **HW-004**: Install Debian 12 on Acemagic-2 (`cubelab-k3s-agent`, user: `cubelab`)
 
 **Beelink → Ollama:**
 
@@ -497,7 +482,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 **Network (completed previously):**
 
 - [x] **HW-008**: RPi 4 Ubuntu Server installed (`cubelab-rpi4-edge`)
-- [x] **HW-009**: RPi 3 Raspberry Pi OS Lite installed (`cubelab-rpi3`, `10.0.0.157`, WiFi built-in)
+- [x] **HW-009**: RPi 3 Raspberry Pi OS Lite installed (`cubelab-rpi3-monitor`)
 - [~] **HW-010**: Jetson Nano #1 JetPack + Docker (`cubelab-jet1-ai`) — online, hostname pending
 - [x] **HW-011**: USB 3.0 Ethernet on RPi 4 (uplink, 1 Gbps confirmed)
 - [x] **HW-012**: Ethernet RPi 4 → TP-Link switch (downlink)
@@ -521,24 +506,15 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 > Runbook: vault [[runbooks/pihole-setup]]
 
-#### B1: Headscale + Tailscale VPN Mesh
+#### B1: Tailscale VPN Mesh
 
-> **VPN decision**: Headscale (self-hosted control plane on VPS) + Tailscale clients.
-> WireGuard protocol underneath. Self-owned coordination = industry-relevant skill.
-> Cloudflare Tunnel stays only for Pollex public HTTP API (separate concern).
+- [ ] **TS-001**: Install Tailscale on Acemagic-1, Acemagic-2, Beelink, cubelab-edge, workstation
+- [ ] **TS-002**: Configure cubelab-edge (RPi 4) as subnet router (`--advertise-routes=172.16.1.0/24`)
+- [ ] **TS-003**: Approve subnet route in Tailscale admin
+- [ ] **TS-004**: Record Tailscale IPs for all devices, update inventory
+- [ ] **TS-005**: Configure Tailscale split DNS for `*.staging.cubelab.cloud` → cubelab-edge CoreDNS
 
-- [ ] **TS-001**: Deploy Headscale on VPS (Docker Compose, port 8080 + DERP port 3478)
-  ```bash
-  # Headscale manages the Tailscale control plane — runs on cubelab-vps
-  ```
-- [ ] **TS-002**: Install Tailscale client on all nodes (ace1, ace2, bee, rpi4, rpi3, jet1, workstation)
-  - Point clients to Headscale: `HEADSCALE_URL=https://vpn.cubelab.cloud`
-- [ ] **TS-003**: Configure cubelab-rpi4 as subnet router (`--advertise-routes=172.16.1.0/24`)
-- [ ] **TS-004**: Approve subnet route in Headscale admin (`headscale routes enable`)
-- [ ] **TS-005**: Record Tailscale IPs for all devices, update inventory and `~/.ssh/config`
-- [ ] **TS-006**: Configure Tailscale split DNS for `*.staging.cubelab.cloud` → cubelab-rpi4 CoreDNS
-
-> Runbook: vault [[runbooks/headscale-setup]]
+> Runbook: vault [[runbooks/tailscale-setup]]
 
 #### B2: CoreDNS on RPi 4 (parallel with B3)
 
@@ -569,7 +545,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   curl -sfL https://get.k3s.io | K3S_URL=https://<server-ip>:6443 K3S_TOKEN=<token> sh -
   ```
 
-- [ ] **K3S-003**: Join `k3s-agent-2` VM (Acemagic-2 Proxmox) to cluster
+- [ ] **K3S-003**: Join `k3s-agent-2` bare metal (Acemagic-2) to cluster
 - [ ] **K3S-004**: Verify: `kubectl get nodes` → 3 nodes Ready
 - [ ] **K3S-005**: Create namespace `cubelab`
 - [ ] **K3S-006**: Configure `kubectl` access from workstation (copy kubeconfig via Tailscale)
@@ -599,11 +575,9 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
     OLLAMA_ENDPOINT: "http://<beelink-ip>:11434"
   ```
 
-#### B4: K8s Manifests + kubectl deploy
+#### B4: K8s Manifests + ArgoCD
 
-> Blocked by: B3 (cluster running).
-> No ArgoCD yet — learn raw kubectl first, add GitOps automation in Stream E.
-> Deploy method: `kubectl apply -k overlays/staging/` (Kustomize built-in to kubectl).
+> Blocked by: B3 (cluster running)
 
 **Directory structure:**
 
@@ -632,17 +606,20 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **MANIFEST-006**: Convert volumes → PersistentVolumeClaims (where needed)
 - [ ] **MANIFEST-007**: Create Kustomize overlays for staging and prod
 - [ ] **MANIFEST-008**: Validate: `kubectl apply --dry-run=client -k overlays/staging/`
-- [ ] **MANIFEST-009**: First deploy: `kubectl apply -k infra/k8s/overlays/staging/`
+
+**ArgoCD:**
+
+- [ ] **ARGO-001**: Install ArgoCD on K3s cluster
+- [ ] **ARGO-002**: Create ArgoCD Application for staging (source: `develop`, path: `infra/k8s/overlays/staging`)
+- [ ] **ARGO-003**: Create ArgoCD Application for prod (source: `master`, path: `infra/k8s/overlays/prod`) — used in B6
+- [ ] **ARGO-004**: Configure ArgoCD auto-sync for staging
+- [ ] **ARGO-005**: Verify: push to develop → ArgoCD syncs → pods updated
 
 #### B5: Staging Deployment + Validation
 
-> Blocked by: B1 (Headscale/Tailscale) + B2 (DNS) + B4 (manifests)
+> Blocked by: B1 (Tailscale) + B2 (DNS) + B4 (manifests + ArgoCD)
 
-- [ ] **STAGE-001**: Apply staging overlay → all pods Running
-  ```bash
-  kubectl apply -k infra/k8s/overlays/staging/
-  kubectl get pods -n cubelab
-  ```
+- [ ] **STAGE-001**: ArgoCD syncs staging overlay → all pods Running
 - [ ] **STAGE-002**: Verify Traefik Ingress routes (each domain → correct service)
 - [ ] **STAGE-003**: Verify TLS (Let's Encrypt via DNS-01 or Traefik CRD)
 - [ ] **STAGE-004**: Verify Ollama connectivity from cluster pods
@@ -669,15 +646,13 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   curl -sfL https://get.k3s.io | sh -
   ```
 
-- [ ] **PROD-K3S-002**: Apply prod overlay
-  ```bash
-  kubectl apply -k infra/k8s/overlays/prod/
-  kubectl get pods -n cubelab
-  ```
-- [ ] **PROD-K3S-003**: Verify apps accessible with valid TLS on `mlorente.dev` + `cubelab.cloud`
-- [ ] **PROD-K3S-004**: Update GitHub Actions: add `kubectl apply -k` deploy step on push to master
-- [ ] **PROD-K3S-005**: Decommission Docker Compose on VPS (remove old containers, configs)
-- [ ] **PROD-K3S-006**: Document rollback procedure: if K3s fails → `docker compose up` from `infra/stacks/`
+- [ ] **PROD-K3S-002**: Install ArgoCD on VPS K3s
+- [ ] **PROD-K3S-003**: Configure ArgoCD Application (source: `master`, path: `infra/k8s/overlays/prod`)
+- [ ] **PROD-K3S-004**: Enable ArgoCD auto-sync for prod
+- [ ] **PROD-K3S-005**: Verify apps accessible with valid TLS on `mlorente.dev` + `cubelab.cloud`
+- [ ] **PROD-K3S-006**: Update GitHub Actions: trigger ArgoCD sync or rely on auto-sync from master
+- [ ] **PROD-K3S-007**: Decommission Docker Compose on VPS (remove old containers, configs)
+- [ ] **PROD-K3S-008**: Document rollback procedure: if K3s fails → `docker compose up` from `infra/stacks/`
 
 **Done when**: staging == prod (both K3s), ArgoCD manages both,
 Docker Compose only used for local dev.
@@ -699,9 +674,9 @@ Docker Compose only used for local dev.
 > Blocked by: B5. RPi 3 connects directly to router (independent internet),
 > outside RPi 4 blast radius. Monitors both homelab and VPS.
 
-- [x] **MON-001**: Install Docker on RPi 3 (`cubelab-rpi3`) ✓ 2026-02-18
-- [ ] **MON-002**: Install Tailscale on RPi 3 (access internal services for probes) — blocked by B1
-- [x] **MON-003**: Deploy Uptime Kuma v2 on RPi 3 — monitors: VPS, RPi 4, router ✓ 2026-02-18
+- [ ] **MON-001**: Install Docker on RPi 3 (`cubelab-monitor`)
+- [ ] **MON-002**: Install Tailscale on RPi 3 (access internal services for probes)
+- [ ] **MON-003**: Deploy Uptime Kuma on RPi 3
 - [ ] **MON-004**: Configure monitors for all staging K3s endpoints (via Tailscale)
 - [ ] **MON-005**: Configure monitors for all prod endpoints (public URLs)
 - [ ] **MON-006**: Configure alerts (Telegram/email)
@@ -1349,72 +1324,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 
 ---
 
-### Stream E: ArgoCD GitOps
-
-> **Prerequisite**: Stream B completed (B6 — K3s running on both staging and prod).
-> Add GitOps automation on top of working kubectl deploys.
-> Deferred from B4 intentionally — learn raw kubectl before abstracting.
-
-- [ ] **ARGO-001**: Install ArgoCD on staging K3s cluster (Acemagic-1)
-- [ ] **ARGO-002**: Create ArgoCD Application for staging (source: `develop`, path: `infra/k8s/overlays/staging`)
-- [ ] **ARGO-003**: Install ArgoCD on prod K3s (VPS) and configure for `master` branch
-- [ ] **ARGO-004**: Enable auto-sync for staging, manual-sync for prod (safer)
-- [ ] **ARGO-005**: Replace manual `kubectl apply` in CI with ArgoCD sync trigger
-- [ ] **ARGO-006**: Configure ArgoCD notifications → Slack on sync success/failure
-
----
-
-### Stream P: Portfolio Tools
-
-> **Goal**: Extract and publish standalone tools from CubeLab. Pattern: small focused repos,
-> each solving a real personal problem but useful to others. Like steipete's army of repos.
-> Prerequisite: C1 completed (toolkit decoupled — cubelab-cli is the reuse pattern to follow).
-
-#### P1: Pollex MCP Server
-
-> Pollex already exists as a complete Go project (llama.cpp API on Jetson).
-> Add MCP server adapter so Claude Code and other MCP clients can use it directly.
-> Low effort: thin wrapper over existing HTTP API.
-
-- [ ] **POL-001**: Design MCP server interface for Pollex
-  - Endpoint: `polish(text)` → polished text via local Qwen 2.5
-  - MCP tool definition in Go
-- [ ] **POL-002**: Implement MCP server in Pollex Go codebase
-  - Add `cmd/mcp-server/main.go` alongside existing `cmd/server/`
-  - Reuse existing adapter pattern (llama.cpp/Ollama/Claude/Mock)
-- [ ] **POL-003**: Test with Claude Code MCP integration
-  - Register in `~/.claude.json` as local MCP server
-  - Verify: Claude Code can call Pollex for text polish tasks
-- [ ] **POL-004**: Update Pollex README with MCP usage section
-- [ ] **POL-005**: Tag release on GitHub (pollex is already public, MIT)
-
-#### P2: yt-intel CLI
-
-> YouTube intelligence CLI extracted from `apps/workers/youtube/`.
-> Currently buried in monorepo as a Celery worker. Extract as standalone Python CLI.
-> Portfolio value: solves a real problem (YouTube channel analysis) with clean CLI UX.
-
-- [ ] **YT-001**: Create `yt-intel` repo on GitHub
-  - MIT license, pyproject.toml (uv or Poetry), Typer + Rich CLI
-- [ ] **YT-002**: Extract `apps/workers/youtube/` → `yt-intel/`
-  - Remove Celery dependency (sync CLI, no queue needed for standalone use)
-  - Keep: transcript download, channel analytics, metrics, export
-- [ ] **YT-003**: CLI design
-  ```
-  yt-intel analyze <channel-id>     # Full channel report
-  yt-intel transcript <video-id>    # Get transcript
-  yt-intel export <channel-id> --format json|csv|md
-  ```
-- [ ] **YT-004**: README with demo GIF, install instructions, examples
-- [ ] **YT-005**: CI: tests + publish to PyPI on tag
-  ```bash
-  pip install yt-intel
-  yt-intel analyze @mkbhd
-  ```
-
----
-
-### Stream Z: Backlog (unprioritized)
+### Stream E: Backlog (unprioritized)
 
 > Items without defined order. Prioritize when capacity or need arises.
 
@@ -1424,6 +1334,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] Workers Phase 2: Media processing (FFmpeg, WebP)
 - [ ] Test coverage: 30%+ on toolkit core modules
 - [ ] Terraform DNS: Generate `services.json` from `common.yaml`
+- [ ] Consolidate youtube-toolkit → `apps/workers/youtube/`
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
 - [ ] Docker image cleanup: purge stale `0.0.0-dev.*` tags from DockerHub (retention policy or GitHub Action cleanup job)
@@ -1608,5 +1519,5 @@ cubelab docs generate            # Generate static HTML docs
 ---
 
 *Last updated: 2026-02-18*
-*Next action: B0 — Proxmox on Acemagic-1 + Acemagic-2, Debian+Ollama on Beelink. RPi 3 complete (Docker + Uptime Kuma v2 online).*
-*Streams: A (stabilize) → B (homelab K3s + prod migration) → C (repo split) → D (observability) → E (ArgoCD) → F (agents) → G (knowledge base) → H (agent workforce) → P (portfolio tools)*
+*Next action: B0 hardware provisioning (Proxmox on Acemagic-1, Debian on Acemagic-2, Ollama on Beelink)*
+*Streams: A (stabilize) → B (homelab K3s + prod migration) → C (repo split + K8s toolkit) → D (data/observability) → F (agents) → G (knowledge base) → H (agent workforce)*

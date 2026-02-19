@@ -100,6 +100,7 @@ logs/
 CLAUDE.md
 AGENTS.md
 GEMINI.md
+MEMORY.md
 
 # Temporary Docker files
 docker-compose.override.yml
