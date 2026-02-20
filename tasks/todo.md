@@ -6,6 +6,29 @@
 >
 > **Strategy**: Fix code → Local dev → CI → Homelab staging → Production VPS → Extract repos
 
+### Progress (updated 2026-02-19)
+
+```
+Overall:  █████░░░░░░░░░░░░░░░░░░░░░  22% (58/253)
+
+Stream A: ████████████████████░░░░░░  81% (26/32)  — Stabilize & Deploy
+Stream B: █████████░░░░░░░░░░░░░░░░░  37% (32/85)  — Homelab K3s ← ACTIVE
+Stream C: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/30)  — Repo Separation + Imaging Suite
+Stream D: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/18)  — Data & Observability
+Stream E: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/6)   — ArgoCD GitOps
+Stream F: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/28)  — Agent Task Mgmt
+Stream G: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/7)   — Knowledge Base
+Stream H: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/14)  — Agent Workforce
+Stream P: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/10)  — Portfolio Tools
+Stream Z: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/23)  — Backlog (newsletter, blog, API, perf)
+
+Velocity:    ~5.5 tasks/session (58 tasks in ~10 sessions, Feb 3-19)
+Remaining:   195 tasks ÷ 5.5/session ≈ 35 sessions
+Schedule:    ~4.5 sessions/week → ~8 weeks → late April 2026
+Next:        B1 (Headscale VPN mesh)
+Focus:       CubeLab infra first (B1-B6) → then SensorTool + blog + newsletters
+```
+
 ---
 
 ## Methodology
@@ -159,7 +182,7 @@ Task queues (per app):
 
 ## Hardware Allocation
 
-> **Updated 2026-02-18**: 2x Acemagic (both Proxmox) + Beelink (Ollama) + VPS (Docker Compose → K3s in B6).
+> **Updated 2026-02-19**: 2x Acemagic (both Proxmox VE 9.1.5) + Beelink (Ubuntu 24.04, Ollama pending) + VPS (Docker Compose → K3s in B6).
 > See vault [[hardware/_index]].
 
 ```
@@ -168,16 +191,16 @@ Task queues (per app):
 │  162.55.57.175      │ kubectl apply -k overlays/prod (post-B6)  │
 │  user: deploy       │ Headscale control plane runs here         │
 ├─────────────────────┼───────────────────────────────────────────┤
-│  Acemagic-1 (12GB)  │ Proxmox VE 8.x — K3s server + agent VM   │
+│  Acemagic-1 (12GB)  │ Proxmox VE 9.x — K3s server + agent VM   │
 │  cubelab-ace1       │ VM k3s-server (5GB) + VM k3s-agent-1 (5GB)│
 │  user: manu         │ Proxmox snapshots for SRE exercises       │
 ├─────────────────────┼───────────────────────────────────────────┤
-│  Acemagic-2 (12GB)  │ Proxmox VE 8.x — K3s agent-2 VM          │
+│  Acemagic-2 (12GB)  │ Proxmox VE 9.x — K3s agent-2 VM          │
 │  cubelab-ace2       │ VM k3s-agent-2 (~10GB) — heavy workloads  │
 │  user: manu         │ Observability, data services              │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Beelink 8GB        │ Ollama — bare metal                       │
-│  cubelab-bee        │ Debian 12 + Ollama (API OpenAI-compatible)│
+│  cubelab-bee        │ Ubuntu Server 24.04 + Ollama (OpenAI API) │
 │  user: manu         │ For agents (Stream F) + generic LLM tasks │
 │                     │ Endpoint: http://<beelink-ip>:11434       │
 ├─────────────────────┼───────────────────────────────────────────┤
@@ -188,7 +211,7 @@ Task queues (per app):
 ├─────────────────────┼───────────────────────────────────────────┤
 │  RPi 3 (1GB)        │ External monitor — physically separate    │
 │  cubelab-rpi3       │ Uptime Kuma (probes VPS+homelab)          │
-│  user: manu         │ WiFi dongle (direct to router, diff room) │
+│  user: manu         │ Built-in WiFi (direct to router, 10.0.0.157) │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Jetson Nano #1     │ Pollex — independent project              │
 │  cubelab-jet1       │ llama.cpp + Qwen 2.5, GPU inference       │
@@ -409,8 +432,9 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 #### A5: Production Validation
 
-> Blocked by: A4 completed + B5 completed (staging validated).
+> Blocked by: A4 completed. B1 (Headscale) recommended but not hard-blocking.
 > VPS runs Docker Compose initially. K3s migration happens later in B6.
+> Note: A5 deploys Docker Compose on VPS — independent of K3s staging (B5).
 
 - [ ] **PROD-001**: Verify SSH access to VPS
 
@@ -460,8 +484,8 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 > migrates to K3s in B6. Compose in `infra/stacks/` for local dev only. K8s manifests in `infra/k8s/`.
 >
 > **Topology (hybrid)**:
-> - **Acemagic-1 (12GB)**: Proxmox VE → 2 VMs (k3s-server 5GB + k3s-agent-1 5GB)
-> - **Acemagic-2 (12GB)**: Proxmox VE → 1 VM (k3s-agent-2 ~10GB for heavy workloads)
+> - **Acemagic-1 (12GB)**: Proxmox VE 9.x → 2 VMs (k3s-server 5GB + k3s-agent-1 5GB)
+> - **Acemagic-2 (12GB)**: Proxmox VE 9.x → 1 VM (k3s-agent-2 ~10GB for heavy workloads)
 > - **Beelink (8GB)**: Bare metal → Ollama (external to cluster, LAN access)
 > - **VPS Hetzner**: Docker Compose (initial) → K3s single-node (B6)
 >
@@ -479,33 +503,34 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 **Acemagic-1 → Proxmox VE:**
 
-- [ ] **HW-001**: Install Proxmox VE 8.x on Acemagic-1 (`cubelab-pve`) → see vault [[runbooks/proxmox-setup]]
-- [ ] **HW-002**: Create VM `k3s-server` (5GB RAM, 2 vCPU, 40GB disk, Debian 12)
-- [ ] **HW-003**: Create VM `k3s-agent-1` (5GB RAM, 2 vCPU, 40GB disk, Debian 12)
+- [x] **HW-001**: Install Proxmox VE 9.1.5 on Acemagic-1 (`cubelab-ace1`) ✓ 2026-02-19 → see vault [[runbooks/proxmox-setup]]
+- [x] **HW-002**: Create VM `k3s-server` (5GB RAM, 2 vCPU, 40GB disk, Debian 13, `172.16.1.10`) ✓ 2026-02-19
+- [x] **HW-003**: Create VM `k3s-agent-1` (5GB RAM, 2 vCPU, 40GB disk, Debian 13, `172.16.1.11`) ✓ 2026-02-19
 
 **Acemagic-2 → Proxmox VE (same as Acemagic-1):**
 
-- [ ] **HW-004**: Install Proxmox VE 8.x on Acemagic-2 (`cubelab-ace2`, user: `manu`) → see vault [[runbooks/proxmox-setup]]
-- [ ] **HW-004a**: Create VM `k3s-agent-2` (10GB RAM, 2 vCPU, 50GB disk, Debian 12) on Acemagic-2
+- [x] **HW-004**: Install Proxmox VE 9.1.5 on Acemagic-2 (`cubelab-ace2`, user: `manu`) ✓ 2026-02-19 → see vault [[runbooks/proxmox-setup]]
+- [x] **HW-004a**: Create VM `k3s-agent-2` (10GB RAM, 4 vCPU, 50GB disk, Debian 13, `172.16.1.12`) on Acemagic-2 ✓ 2026-02-19
 
 **Beelink → Ollama:**
 
-- [ ] **HW-005**: Install Debian 12 on Beelink (`cubelab-ai`, user: `cubelab`)
-- [ ] **HW-006**: Install Ollama, verify: `curl http://localhost:11434/api/tags`
-- [ ] **HW-007**: Pull initial model (size that fits 8GB RAM comfortably)
+- [x] **HW-005**: Install Ubuntu Server 24.04 LTS on Beelink (`cubelab-bee`, user: `manu`) ✓ 2026-02-19
+- [x] **HW-006**: Install Ollama + LAN config (`OLLAMA_HOST=0.0.0.0`) ✓ 2026-02-19
+- [x] **HW-007**: Pull qwen2.5:7b (~4.7GB, ceiling for 8GB RAM) + LAN inference verified from RPi 4 ✓ 2026-02-19
 
 **Network (completed previously):**
 
-- [x] **HW-008**: RPi 4 Ubuntu Server installed (`cubelab-rpi4-edge`)
+- [x] **HW-008**: RPi 4 Ubuntu Server installed (`cubelab-rpi4`)
 - [x] **HW-009**: RPi 3 Raspberry Pi OS Lite installed (`cubelab-rpi3`, `10.0.0.157`, WiFi built-in)
-- [~] **HW-010**: Jetson Nano #1 JetPack + Docker (`cubelab-jet1-ai`) — online, hostname pending
+- [x] **HW-010**: Jetson Nano #1 JetPack + Docker (`cubelab-jet1`) — online, hostname renamed ✓ 2026-02-19
 - [x] **HW-011**: USB 3.0 Ethernet on RPi 4 (uplink, 1 Gbps confirmed)
+  - ⚠️ **BUG**: USB ETH adapter `enx00e04c690e15` shows NO-CARRIER after reboot — RPi 4 WAN falls back to WiFi (`wlan0`). Investigate: cable? adapter? NetworkManager config?
 - [x] **HW-012**: Ethernet RPi 4 → TP-Link switch (downlink)
 - [x] **HW-013**: RPi 3 direct to home router (independent path)
-- [x] **HW-014**: Beelink + Jetson on switch (add Acemagic-1 + Acemagic-2)
+- [x] **HW-014**: Beelink + Jetson + Acemagic-1 + Acemagic-2 on switch ✓
 - [x] **HW-015**: dnsmasq DHCP on RPi 4 (172.16.1.0/24, MAC reservations)
 - [x] **HW-016**: RPi 4 NAT gateway (nftables masquerade + IP forwarding)
-- [ ] **HW-017**: Copy SSH keys to all new devices (Acemagic-1 VMs, Acemagic-2, Beelink)
+- [x] **HW-017**: Copy SSH keys to all new devices (Acemagic-1, Acemagic-2, Beelink, Jetson) ✓ 2026-02-19
 - [x] **HW-018**: Internet via RPi 4 bridge verified (Jetson: 0% loss)
 
 > Runbook: vault [[runbooks/hardware-setup]]
@@ -514,10 +539,12 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 > Pi-hole runs on RPi 4 (gateway node) alongside CoreDNS. All DNS consolidated.
 
-- [ ] **PIHOLE-001**: Deploy Pi-hole container on RPi 4
-- [ ] **PIHOLE-002**: Configure Pi-hole upstream DNS + blocklists
-- [ ] **PIHOLE-003**: Configure home router to use RPi 4 as primary DNS
-- [ ] **PIHOLE-004**: Verify DNS resolution and ad blocking from all homelab devices
+- [x] **PIHOLE-001**: Deploy Pi-hole container on RPi 4 ✓ 2026-02-19
+  - Disabled systemd-resolved (port 53 conflict), Docker volumes for persistence
+- [x] **PIHOLE-002**: Configure Pi-hole — `listeningMode=ALL` for LAN access ✓ 2026-02-19
+- [x] **PIHOLE-003**: dnsmasq `dhcp-option=6,172.16.1.1` — LAN devices get Pi-hole via DHCP ✓ 2026-02-19
+  - Home router (Xfinity) blocks DNS config — workaround: per-device or via Headscale (B1)
+- [x] **PIHOLE-004**: Verify DNS resolution + ad blocking from LAN (ace1 → google.com ✓, ads.google.com blocked ✓) 2026-02-19
 
 > Runbook: vault [[runbooks/pihole-setup]]
 
@@ -679,8 +706,8 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **PROD-K3S-005**: Decommission Docker Compose on VPS (remove old containers, configs)
 - [ ] **PROD-K3S-006**: Document rollback procedure: if K3s fails → `docker compose up` from `infra/stacks/`
 
-**Done when**: staging == prod (both K3s), ArgoCD manages both,
-Docker Compose only used for local dev.
+**Done when**: staging == prod (both K3s), `kubectl apply -k` deploys to both.
+Docker Compose only used for local dev. ArgoCD automation deferred to Stream E.
 
 #### B-ai: Jetson Nano — Pollex (llama.cpp)
 
@@ -849,44 +876,65 @@ auto-generated project documentation.
 
 **Done when**: Monorepo works without local toolkit, consumes cubelab-cli from PyPI.
 
-#### C4: Create sensortool
+#### C4: Imaging Suite (SensorTool + SensorDB)
 
-> Blocked by: C2 completed (toolkit published)
-> Can be done in parallel with C3.
+> **Blocked by**: C2 completed (toolkit published). Can be done in parallel with C3.
+>
+> **Context**: Imaging Suite is a B2B SaaS platform for industrial image sensor comparison
+> (SensorDB) and EMVA 1288 / ISO 24942 analysis (SensorLab) via WebAssembly.
+> See `~/Downloads/imaging-suite-business-plan-v3.1.md` for full business plan.
+>
+> **Strategy**: Start inside CubeLab monorepo (apps/sensortool/), then extract to
+> private monorepo (imaging-suite-platform) when stable. CubeLab provides infra
+> (K3s, monitoring, auth, CI/CD), SensorTool is the product.
+>
+> **Tech stack**: Go API (SensorDB backend) + Astro frontend + Go→WASM (SensorLab browser engine)
+> Core algorithms in Go compile to: binary (CLI), WASM (browser), Docker (CI/CD).
 
-- [ ] **SENSOR-001**: Create `sensortool` repo on GitHub
-  - Scaffold with cubelab.yaml type app
-  - pyproject.toml with cubelab-cli dependency
+- [ ] **SENSOR-001**: Create `apps/sensortool/` inside CubeLab monorepo
+  - Go API: `apps/sensortool/api/` (SensorDB endpoints: search, compare, export)
+  - Astro frontend: `apps/sensortool/web/` (SensorDB UI + SensorLab WASM host)
+  - WASM engine: `apps/sensortool/wasm/` (Go→WASM: EMVA 1288 algorithms)
+  - Compose: `infra/stacks/apps/sensortool/`
 
-- [ ] **SENSOR-002**: Initial structure
+- [ ] **SENSOR-002**: SensorDB schema and seed data
+  - PostgreSQL schema: sensors table (specs normalizadas cross-vendor)
+  - Seed with first 50 industrial sensors from public datasheets
+  - Go API endpoints: `GET /sensors`, `GET /sensors/:id`, `GET /sensors/compare`
 
-  ```
-  sensortool/
-  ├── cubelab.yaml
-  ├── pyproject.toml
-  ├── apps/
-  │   ├── api/          # FastAPI or Go
-  │   └── frontend/     # Astro
-  ├── infra/stacks/
-  │   └── apps/
-  │       ├── api/
-  │       │   ├── compose.base.yml
-  │       │   ├── compose.dev.yml
-  │       │   └── compose.prod.yml
-  │       └── frontend/
-  └── docs/
-  ```
+- [ ] **SENSOR-003**: SensorDB API — search, filter, compare
+  - Filtros: resolución, framerate, rango espectral, interfaz, fabricante
+  - Comparador lado a lado (hasta 5 sensores)
+  - Selection Wizard (requisitos → ranking automático)
+  - Export PDF/CSV/JSON
 
-- [ ] **SENSOR-003**: Verify cubelab CLI works in the repo
+- [ ] **SENSOR-004**: SensorLab WASM engine (EMVA 1288 core)
+  - Go core library: MTF, SNR, QE, Dynamic Range, Noise Floor
+  - Compile to WASM with `GOOS=js GOARCH=wasm`
+  - Zero-upload: imagen RAW procesada 100% en browser
+  - Report generation (client-side PDF)
 
-  ```bash
-  cubelab services list
-  cubelab services up api
-  ```
+- [ ] **SENSOR-005**: Report Polish (LLM integration)
+  - Pollex (Jetson) or Ollama (Beelink) for technical language optimization
+  - API endpoint: `POST /reports/polish` → LLM-enhanced technical writing
 
-- [ ] **SENSOR-004**: Own CI/CD
+- [ ] **SENSOR-006**: Auth and tiers (Free vs Pro $99/mes)
+  - Authelia SSO or custom JWT
+  - Stripe integration for Pro tier
+  - Feature gating: free = 50 sensors + 5 searches/month, Pro = full access
 
-**Done when**: Functional repo, portfolio-ready, `cubelab services up` works.
+- [ ] **SENSOR-007**: CI/CD within CubeLab pipeline
+  - Go lint + build + WASM compile in CI
+  - Docker build multi-arch
+  - Deploy to staging K3s
+
+- [ ] **SENSOR-008**: Extract to private monorepo `imaging-suite-platform`
+  - Move from CubeLab apps/ to own repo when product is stable
+  - Own CI/CD, own Stripe keys, own domain (sensortool.io)
+  - CubeLab remains as infra provider (K3s, monitoring)
+
+**Done when**: SensorDB searchable with 50+ sensors, SensorLab WASM runs in browser,
+Free/Pro tiers work, deployed on CubeLab staging K3s.
 
 #### C5: Extract cubernautas-blog
 
@@ -1096,7 +1144,7 @@ agent executes with checkpoints, human approves via Slack, task marked done.
 #### F3: Agent Deployment on RPi 4
 
 > Blocked by: B0 (RPi 4 provisioned as gateway). Can run parallel with F1.
-> Agents run on RPi 4 (`cubelab-edge`, 8GB) — no GPU needed, uses external LLM APIs.
+> Agents run on RPi 4 (`cubelab-rpi4`, 8GB) — no GPU needed, uses external LLM APIs.
 
 - [ ] **CLAW-001**: Evaluate OpenClaw + PicoClaw deployment requirements
   - OpenClaw: Node.js, npm install, API documentation
@@ -1427,19 +1475,28 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
 - [ ] Docker image cleanup: purge stale `0.0.0-dev.*` tags from DockerHub (retention policy or GitHub Action cleanup job)
+- [ ] API expansion (3 phases): Phase 1 = full portfolio API (projects, blog feed, CV, /status aggregator). Phase 2 = SensorDB backend. Phase 3 = microservices gateway. See brainstorm 2026-02-19
+- [ ] Service performance tuning: resource limits, benchmarks, Ollama inference speed, K3s pod resource requests/limits
+- [ ] Blog content plan (Cubernautas): content batching strategy — accumulate vault notes during B1-B6, convert to 10-15 posts, publish 1/week with buffer. ES first, EN translation via agents (Stream H). First topics: homelab K3s, Pi-hole Docker, Headscale self-hosted, Ollama homelab, Proxmox VMs
+- [ ] Newsletter — Imaging Sales Intel: Beehiiv (frontend) + PostgreSQL sync (backup). n8n cron exports subs via Beehiiv API weekly to own DB. Listmonk as documented plan B if Beehiiv fails. See imaging-suite-business-plan-v3.1.md
+- [ ] Newsletter — Cubernautas: platform TBD (Beehiiv or shared Listmonk). ES audience, Platform Engineering content
+- [ ] Newsletter subscriber persistence: n8n workflow to sync Beehiiv subscribers → PostgreSQL (both Imaging Sales Intel + Cubernautas). Single source of truth for all subscriber data. Export on schedule + webhook on new sub
 
 **Tier 2: Possible**
 
 - [ ] ClawdBot: Telegram bot (framework, approval workflow)
 - [ ] Authelia expand: OIDC for more services
 - [ ] Workers Phase 3: AI (embeddings, RAG, summarization)
+- [ ] API as platform gateway: unified auth (Authelia JWT), rate limiting, service mesh entry point for all CubeLab services
+- [ ] Blog analytics: self-hosted Plausible or Umami (privacy-first, no Google Analytics)
+- [ ] Listmonk self-hosted (plan B): deploy on K3s if Beehiiv becomes unsuitable. Migration path: PostgreSQL backup → Listmonk import → DNS cutover
+- [ ] CMOSBench SEO landing: public page with free MTF calculator + partial sensor DB. SEO targets: "CMOS sensor comparison", "EMVA 1288 calculator"
 
 **Tier 3: Ideas (no commitment)**
 
 - [ ] K3s multi-arch cluster with RPi #2
 - [ ] Helm charts for all apps
 - [ ] Workers Phase 4-5 (data aggregator, system maintenance)
-- [ ] Newsletter (Cubernautas) setup
 
 ---
 
@@ -1543,7 +1600,7 @@ cubelab docs generate            # Generate static HTML docs
 - [x] SD card assignments: 256GB Jetson (AI models), 128GB RPi 4 (edge), 64GB RPi 3 (Pi-hole)
 - [x] Vault runbooks/hardware-setup.md rewritten: all 5 devices, DHCP table, Proxmox + Pi-hole + Jetson sections
 - [x] Vault runbooks/pihole-setup.md created: Pi-hole Docker on RPi 3, router DNS config
-- [x] Vault runbooks/proxmox-setup.md created: Proxmox VE 8.x on Beelink, WiFi backup mgmt, bridge networking
+- [x] Vault runbooks/proxmox-setup.md created: Proxmox VE 9.x on Acemagics, WiFi backup mgmt, bridge networking
 - [x] Ansible staging template fixed: 16GB → 12GB, MiniPC B → Acemagic
 - [x] Hardware verification lesson added to tasks/lessons.md
 - [x] Stream B backlog revised: B0 expanded to 10 tasks (5 devices), added B-pihole and B-ai phases
@@ -1607,6 +1664,6 @@ cubelab docs generate            # Generate static HTML docs
 
 ---
 
-*Last updated: 2026-02-18*
-*Next action: B0 — Proxmox on Acemagic-1 + Acemagic-2, Debian+Ollama on Beelink. RPi 3 complete (Docker + Uptime Kuma v2 online).*
+*Last updated: 2026-02-19*
+*Next action: B0 — Proxmox on both Acemagics ✓, Beelink Ubuntu ✓. Remaining: Ollama on Beelink + VMs on Acemagics. Then B-pihole / B1 (Headscale+Tailscale).*
 *Streams: A (stabilize) → B (homelab K3s + prod migration) → C (repo split) → D (observability) → E (ArgoCD) → F (agents) → G (knowledge base) → H (agent workforce) → P (portfolio tools)*
