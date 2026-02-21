@@ -9,10 +9,10 @@
 ### Progress (updated 2026-02-21)
 
 ```
-Overall:  ████████░░░░░░░░░░░░░░░░░░  31% (80/256)
+Overall:  ████████░░░░░░░░░░░░░░░░░░  31% (81/260)
 
 Stream A: ████████████████████░░░░░░  81% (26/33)  — Stabilize & Deploy
-Stream B: ████████████████░░░░░░░░░░  60% (53/87)  — Homelab K3s ← ACTIVE
+Stream B: ████████████████░░░░░░░░░░  62% (54/87)  — Homelab K3s ← ACTIVE
 Stream C: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/30)  — Repo Separation + Imaging Suite
 Stream D: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/18)  — Data & Observability
 Stream E: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/6)   — ArgoCD GitOps
@@ -20,12 +20,12 @@ Stream F: ░░░░░░░░░░░░░░░░░░░░░░░�
 Stream G: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/7)   — Knowledge Base
 Stream H: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/14)  — Agent Workforce
 Stream P: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/10)  — Portfolio Tools
-Stream Z: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/23)  — Backlog (newsletter, blog, API, perf)
+Stream Z: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/27)  — Backlog (newsletter, blog, API, perf)
 
 Velocity:    ~6.2 tasks/session (74 tasks in ~12 sessions, Feb 3-21)
-Remaining:   182 tasks ÷ 6.2/session ≈ 29 sessions
+Remaining:   179 tasks ÷ 6.2/session ≈ 29 sessions
 Schedule:    ~4.5 sessions/week → ~6.5 weeks → early April 2026
-Next:        TS-006 (split DNS) → B2 (CoreDNS) → B5 (staging deploy)
+Next:        B5 Phase 6 (staging deploy — waiting on CI web build, then kubectl apply)
 Focus:       KubeLab infra first (B1-B6) → then SensorTool + blog + newsletters
 ```
 
@@ -666,7 +666,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [x] **MANIFEST-002**: Convert app stacks (api, web, blog) → Deployments + Services
 - [x] **MANIFEST-003**: Convert edge (Traefik labels) → Ingress resources or IngressRoutes
 - [x] **MANIFEST-004**: Convert environment vars → ConfigMaps
-- [ ] **MANIFEST-005**: Convert secrets → K8s Secrets (SOPS-encrypted in git)
+- [x] **MANIFEST-005**: Convert secrets → K8s Secrets (conditional `secretRef` in deployment template + manual `kubectl create secret` for Cloudflare token. SOPS-encrypted git storage deferred to Stream E)
 - [ ] **MANIFEST-006**: Convert volumes → PersistentVolumeClaims (where needed)
 - [x] **MANIFEST-007**: Create Kustomize overlays for staging and prod
 - [x] **MANIFEST-008**: Validate: `kubectl apply --dry-run=client -k overlays/staging/`
@@ -1516,6 +1516,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
 - [ ] Docker image cleanup: purge stale `0.0.0-dev.*` tags from DockerHub (retention policy or GitHub Action cleanup job)
+- [ ] Dependency vulnerability audit: `go get -u` (API), `npm audit fix` (web), `poetry update` (toolkit). Silence gosec TLS false positives with `//nolint:gosec`. Routine maintenance, not blocking
 - [ ] CI build speed: single-arch for staging (amd64 only), eliminate double web build (npm ci runs in both ci-pipeline validation and Dockerfile), consider native ARM runners for prod multi-arch
 - [ ] GitHub Issues as portfolio: create one Issue per stream as living epic (not per task). Retroactive summaries for completed streams (B0-B4), ongoing for active streams. Claude creates, user closes via PRs. Format: objective + checklist + key decisions + runbook links. ~10 issues total
 - [ ] Git remote rename: update origin URL from `mlorente.dev.git` → `cubelab.git` (GitHub redirect works but cosmetic fix)

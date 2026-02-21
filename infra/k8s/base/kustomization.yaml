@@ -6,4 +6,3 @@ namespace: kubelab
 resources:
   - namespace.yaml
   - external/ollama.yaml
-  - traefik-config.yaml

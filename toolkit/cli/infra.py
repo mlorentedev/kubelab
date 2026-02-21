@@ -72,6 +72,12 @@ def _generate_k8s_manifests(env: str) -> bool:
     return True
 
 
+def _get_traefik_config_path() -> str | None:
+    """Return path to traefik-config.yaml if it exists (applied outside Kustomize)."""
+    path = settings.project_root / PATH_STRUCTURES.K8S_BASE_DIR / "traefik-config.yaml"
+    return str(path) if path.exists() else None
+
+
 @k8s_app.command("deploy")
 def k8s_deploy(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
@@ -114,7 +120,16 @@ def k8s_deploy(
         raise typer.Exit(1)
     logger.success("Dry-run passed")
 
-    # 3. Apply
+    # 3. Apply cluster-wide resources (outside Kustomize namespace override)
+    traefik_cfg = _get_traefik_config_path()
+    if traefik_cfg:
+        logger.info("Applying Traefik config to kube-system...")
+        tc_result = command.run(f"{kctl} apply -f {traefik_cfg}", check=False)
+        if tc_result.returncode != 0:
+            logger.error(f"Traefik config apply failed:\n{tc_result.stderr}")
+            raise typer.Exit(1)
+
+    # 4. Apply namespace-scoped manifests
     logger.info("Applying manifests...")
     apply_result = command.run(f"{kctl} apply -k {overlay_dir}", check=False)
     if apply_result.returncode != 0:
@@ -159,7 +174,20 @@ def k8s_dry_run(
         logger.error(f"Overlay directory not found: {overlay_dir}")
         raise typer.Exit(1)
 
-    # Dry-run
+    # Dry-run cluster-wide resources
+    traefik_cfg = _get_traefik_config_path()
+    if traefik_cfg:
+        logger.info("Validating Traefik config (kube-system)...")
+        tc_result = command.run(
+            f"{kctl} apply --dry-run=client -f {traefik_cfg}",
+            check=False,
+        )
+        if tc_result.returncode != 0:
+            logger.error(f"Traefik config dry-run failed:\n{tc_result.stderr}")
+            raise typer.Exit(1)
+        logger.console.print(tc_result.stdout)
+
+    # Dry-run namespace-scoped resources
     logger.info("Running dry-run validation...")
     result = command.run(
         f"{kctl} apply --dry-run=client -k {overlay_dir}",
