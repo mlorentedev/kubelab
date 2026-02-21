@@ -151,7 +151,7 @@ class PathStructures:
 
     # Kubernetes
     K8S_TEMPLATES_DIR: str = "infra/k8s/templates"
-    K8S_GENERATED_DIR: str = "infra/k8s/generated"
+    K8S_OVERLAYS_DIR: str = "infra/k8s/overlays"
     K8S_BASE_DIR: str = "infra/k8s/base"
 
 

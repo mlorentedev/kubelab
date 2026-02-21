@@ -57,7 +57,7 @@ class K8sGenerator(BaseGenerator):
         logger.info(f"Generating K8s manifests for {env}")
 
         templates_dir = self.project_root / PATH_STRUCTURES.K8S_TEMPLATES_DIR
-        output_dir = self.project_root / PATH_STRUCTURES.K8S_GENERATED_DIR / env
+        output_dir = self.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env
 
         if not templates_dir.exists():
             logger.error(f"K8s templates directory not found: {templates_dir}")
@@ -104,20 +104,20 @@ class K8sGenerator(BaseGenerator):
             logger.warning(f"Missing K8s templates: {', '.join(missing)}")
             return False
 
-        # Check generated files for staging/prod
-        generated_dir = self.project_root / PATH_STRUCTURES.K8S_GENERATED_DIR
-        missing_generated = []
+        # Check overlay files for staging/prod
+        overlays_dir = self.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR
+        missing_overlays = []
         for env in ("staging", "prod"):
-            env_dir = generated_dir / env
+            env_dir = overlays_dir / env
             if not env_dir.exists():
-                missing_generated.append(f"generated/{env}/")
+                missing_overlays.append(f"overlays/{env}/")
                 continue
             for _, output_name in self._TEMPLATE_MAP:
                 if not (env_dir / output_name).exists():
-                    missing_generated.append(f"generated/{env}/{output_name}")
+                    missing_overlays.append(f"overlays/{env}/{output_name}")
 
-        if missing_generated:
-            logger.warning(f"Missing K8s generated files: {', '.join(missing_generated)}")
+        if missing_overlays:
+            logger.warning(f"Missing K8s overlay files: {', '.join(missing_overlays)}")
             return False
 
         logger.success("K8s configuration validation passed")
@@ -201,6 +201,9 @@ class K8sGenerator(BaseGenerator):
             app_env_vars = self._extract_app_env_vars(env_vars, component)
             app_env_vars["ENVIRONMENT"] = env
 
+            # Check if app has secret-pattern vars (needs a K8s Secret)
+            has_secrets = self._has_secret_vars(env_vars, component)
+
             # Middleware list for IngressRoute
             middlewares = self._build_middlewares(env_vars, enable_auth)
 
@@ -215,6 +218,7 @@ class K8sGenerator(BaseGenerator):
                     "domain": domain,
                     "health_path": health_path,
                     "enable_auth": enable_auth,
+                    "has_secrets": has_secrets,
                     "env_vars": app_env_vars,
                     "resources": app_resources,
                     "middlewares": middlewares,
@@ -268,6 +272,30 @@ class K8sGenerator(BaseGenerator):
             result[suffix] = str(value)
 
         return result
+
+    def _has_secret_vars(self, env_vars: dict[str, str], component: str) -> bool:
+        """Check if a component has any secret-pattern environment variables.
+
+        Args:
+            env_vars: Flattened environment variables
+            component: Component name
+
+        Returns:
+            True if the component has vars matching SECRET_PATTERNS
+        """
+        component_upper = component.upper().replace("-", "_")
+        prefix = f"APPS_PLATFORM_{component_upper}_"
+
+        for key in env_vars:
+            if not key.startswith(prefix):
+                continue
+            suffix = key[len(prefix) :]
+            if suffix in self._METADATA_SUFFIXES or suffix.startswith("RESOURCES_"):
+                continue
+            parts = suffix.split("_")
+            if any(part in VALIDATION_RULES.SECRET_PATTERNS for part in parts):
+                return True
+        return False
 
     def _build_middlewares(self, env_vars: dict[str, str], enable_auth: bool) -> list[str]:
         """Build IngressRoute middleware list.

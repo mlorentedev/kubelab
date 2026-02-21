@@ -1,10 +1,11 @@
 "Infrastructure management commands for deployment and status checking."
 
+import os
 from typing import Annotated
 
 import typer
 
-from toolkit.config.constants import MESSAGES, NETWORK_DEFAULTS
+from toolkit.config.constants import MESSAGES, NETWORK_DEFAULTS, PATH_STRUCTURES
 from toolkit.config.settings import get_settings, settings
 from toolkit.core.logging import logger
 from toolkit.features import command
@@ -31,8 +32,171 @@ terraform_app = typer.Typer(
     no_args_is_help=True,
 )
 
+k8s_app = typer.Typer(
+    name="k8s",
+    help="Kubernetes management commands",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
+app.add_typer(k8s_app, name="k8s")
+
+
+# =============================================================================
+# KUBERNETES COMMANDS
+# =============================================================================
+
+_K8S_DEFAULT_KUBECONFIG = "~/.kube/kubelab-config"
+
+
+def _get_kubeconfig() -> str:
+    """Get kubeconfig path from env or default."""
+    return os.environ.get("KUBECONFIG", os.path.expanduser(_K8S_DEFAULT_KUBECONFIG))
+
+
+def _kubectl_cmd(kubeconfig: str) -> str:
+    """Build kubectl base command with kubeconfig."""
+    return f"kubectl --kubeconfig {kubeconfig}"
+
+
+def _generate_k8s_manifests(env: str) -> bool:
+    """Generate K8s manifests via K8sGenerator. Returns True on success."""
+    from toolkit.features.generator_k8s import K8sGenerator
+
+    generator = K8sGenerator()
+    result = generator.generate(env)
+    if not result.get("success", False):
+        logger.error(f"Manifest generation failed: {result.get('error', 'unknown')}")
+        return False
+    return True
+
+
+@k8s_app.command("deploy")
+def k8s_deploy(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    skip_generate: Annotated[bool, typer.Option("--skip-generate", help="Skip manifest generation")] = False,
+) -> None:
+    """Deploy K8s manifests to the cluster.
+
+    Generates manifests, validates with dry-run, applies, and waits for rollout.
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    logger.section(f"K8s Deploy - {env.upper()}")
+    env_config = validate_environment_config(env)
+    confirm_dangerous_operation(env_config, "Deploy to Kubernetes")
+
+    kubeconfig = _get_kubeconfig()
+    kctl = _kubectl_cmd(kubeconfig)
+    overlay_dir = settings.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env
+
+    # 1. Generate manifests
+    if not skip_generate:
+        logger.info("Generating K8s manifests...")
+        if not _generate_k8s_manifests(env):
+            raise typer.Exit(1)
+
+    if not overlay_dir.exists():
+        logger.error(f"Overlay directory not found: {overlay_dir}")
+        raise typer.Exit(1)
+
+    # 2. Dry-run validation
+    logger.info("Running dry-run validation...")
+    dry_run = command.run(
+        f"{kctl} apply --dry-run=client -k {overlay_dir}",
+        check=False,
+    )
+    if dry_run.returncode != 0:
+        logger.error(f"Dry-run failed:\n{dry_run.stderr}")
+        raise typer.Exit(1)
+    logger.success("Dry-run passed")
+
+    # 3. Apply
+    logger.info("Applying manifests...")
+    apply_result = command.run(f"{kctl} apply -k {overlay_dir}", check=False)
+    if apply_result.returncode != 0:
+        logger.error(f"Apply failed:\n{apply_result.stderr}")
+        raise typer.Exit(1)
+    logger.console.print(apply_result.stdout)
+
+    # 4. Wait for rollout
+    logger.info("Waiting for rollout completion...")
+    rollout = command.run(
+        f"{kctl} rollout status deployment -n kubelab --timeout=120s",
+        check=False,
+    )
+    if rollout.returncode != 0:
+        logger.warning(f"Rollout not fully complete:\n{rollout.stderr}")
+    else:
+        logger.success("All deployments rolled out successfully")
+
+
+@k8s_app.command("dry-run")
+def k8s_dry_run(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+) -> None:
+    """Generate manifests and validate with dry-run (no apply)."""
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    logger.section(f"K8s Dry-Run - {env.upper()}")
+    validate_environment_config(env)
+
+    kubeconfig = _get_kubeconfig()
+    kctl = _kubectl_cmd(kubeconfig)
+    overlay_dir = settings.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env
+
+    # Generate manifests
+    logger.info("Generating K8s manifests...")
+    if not _generate_k8s_manifests(env):
+        raise typer.Exit(1)
+
+    if not overlay_dir.exists():
+        logger.error(f"Overlay directory not found: {overlay_dir}")
+        raise typer.Exit(1)
+
+    # Dry-run
+    logger.info("Running dry-run validation...")
+    result = command.run(
+        f"{kctl} apply --dry-run=client -k {overlay_dir}",
+        check=False,
+    )
+    if result.returncode != 0:
+        logger.error(f"Dry-run failed:\n{result.stderr}")
+        raise typer.Exit(1)
+
+    logger.console.print(result.stdout)
+    logger.success("Dry-run validation passed — manifests are valid")
+
+
+@k8s_app.command("status")
+def k8s_status(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+) -> None:
+    """Show K8s resource status for the kubelab namespace."""
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    logger.section(f"K8s Status - {env.upper()}")
+    validate_environment_config(env)
+
+    kubeconfig = _get_kubeconfig()
+    kctl = _kubectl_cmd(kubeconfig)
+
+    result = command.run(
+        f"{kctl} get pods,svc,ingressroute -n kubelab",
+        check=False,
+    )
+    if result.returncode != 0:
+        logger.error(f"Failed to get status:\n{result.stderr}")
+        raise typer.Exit(1)
+
+    logger.console.print(result.stdout)
 
 
 # =============================================================================

@@ -122,6 +122,34 @@ qm start <vmid>
 ```
 **Regla**: NUNCA renombrar un host Proxmox con solo `hostnamectl`. Siempre verificar `/etc/pve/nodes/` y mover los configs de VM. Documentado también en el runbook `proxmox-setup.md` del vault.
 
+### [2026-02-21] Tailscale DNS Chicken-and-Egg on Pi-hole Nodes
+
+**Contexto**: Configurando RPi 4 como subnet router para Headscale VPN mesh
+**Problema**: Tailscale reescribe `/etc/resolv.conf` con `nameserver 100.100.100.100` (su DNS mágico). En RPi 4, `systemd-resolved` está deshabilitado (para Pi-hole, puerto 53). Tras reboot: Tailscale no puede resolver `vpn.kubelab.live` → no conecta → su DNS no funciona → bucle infinito. Logs: `trying bootstrapDNS` + `failed to resolve`.
+**Solución**: Tres pasos: (1) `--accept-dns=false` en `tailscale up` para que no toque resolv.conf, (2) `/etc/resolv.conf` → `nameserver 127.0.0.1` (Pi-hole local), (3) `chattr +i /etc/resolv.conf` para proteger de sobrescrituras.
+**Regla**: En cualquier nodo que corra su propio DNS (Pi-hole, CoreDNS, etc.) con `systemd-resolved` deshabilitado, SIEMPRE usar `--accept-dns=false` en Tailscale. Nunca dejar que Tailscale gestione DNS en nodos que son servidores DNS.
+
+### [2026-02-21] Pi-hole v6 Ignores dnsmasq.d by Default
+
+**Contexto**: Configurando Pi-hole para forward `*.staging.kubelab.live` a CoreDNS (puerto 5353) via archivo en `/etc/dnsmasq.d/`
+**Problema**: Pi-hole v6 usa FTL como resolver propio, no dnsmasq. Por defecto `etc_dnsmasq_d = false` en `pihole.toml`, así que cualquier archivo en `/etc/dnsmasq.d/` es completamente ignorado. Además, `pihole restartdns` ya no existe en v6 — el comando es `pihole reloaddns`.
+**Solución**: Editar `pihole.toml` → `etc_dnsmasq_d = true`, luego `docker restart pihole`. La conditional forward: `server=/staging.kubelab.live/172.17.0.1#5353` (usar Docker bridge gateway IP, no 127.0.0.1 — dentro del container, localhost es el propio container).
+**Regla**: Pi-hole v6 ≠ Pi-hole v5. Siempre verificar `pihole.toml` para features que antes eran automáticas. Y dentro de un container Docker, `127.0.0.1` ≠ host — usar `172.17.0.1` para alcanzar el host.
+
+### [2026-02-21] Avahi Blocks Port 5353 on Ubuntu Server
+
+**Contexto**: Desplegando CoreDNS en puerto 5353 en RPi4 (puerto 53 ocupado por Pi-hole)
+**Problema**: `avahi-daemon` (mDNS) escucha en puerto 5353 por defecto en Ubuntu. Docker no puede bindear el puerto. Además, deshabilitar solo el service no basta — el socket (`.socket` unit) lo rearranca.
+**Solución**: `sudo systemctl disable --now avahi-daemon avahi-daemon.socket`. En un servidor headless, Avahi no tiene utilidad.
+**Regla**: Antes de asignar un puerto alternativo, verificar `ss -ulnp | grep <puerto>`. En Ubuntu Server headless, deshabilitar Avahi proactivamente.
+
+### [2026-02-21] Headscale v0.28 CLI Route Commands
+
+**Contexto**: Intentando aprobar subnet routes en Headscale v0.28
+**Problema**: Documentación online y memoria del proyecto referían `headscale routes list` y `headscale routes enable -r <ID>` — ninguno existe en v0.28. El comando `routes` fue movido bajo `nodes`.
+**Solución**: CLI correcto: `headscale nodes list-routes`, `headscale nodes approve-routes -i <NODE_ID> --routes <CIDR>`. El flag `--routes` es una operación SET (reemplaza todas las rutas aprobadas, no es aditivo).
+**Regla**: Siempre verificar `--help` antes de ejecutar CLI de Headscale. La API cambia entre versiones minor. Ejecutar sin `--routes` puede limpiar rutas aprobadas existentes.
+
 ---
 
 *Mas entradas se anadiran conforme avance el proyecto.*

@@ -1,8 +1,20 @@
 staging.kubelab.live {
     hosts {
-        # MiniPC B Tailscale IP — replace with actual IP after Tailscale setup
-        # <minipc-tailscale-ip>  staging.kubelab.live
-        # <minipc-tailscale-ip>  *.staging.kubelab.live
+        100.64.0.4 staging.kubelab.live
+        100.64.0.4 api.staging.kubelab.live
+        100.64.0.4 web.staging.kubelab.live
+        100.64.0.4 blog.staging.kubelab.live
+        100.64.0.4 grafana.staging.kubelab.live
+        100.64.0.4 traefik.staging.kubelab.live
+        100.64.0.4 auth.staging.kubelab.live
+        100.64.0.4 status.staging.kubelab.live
+        100.64.0.4 gitea.staging.kubelab.live
+        100.64.0.4 portainer.staging.kubelab.live
+        fallthrough
+    }
+    template IN A staging.kubelab.live {
+        match .*\.staging\.kubelab\.live
+        answer "{{ .Name }} 60 IN A 100.64.0.4"
         fallthrough
     }
     log

@@ -35,6 +35,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ app.name }}-config
+{% if app.has_secrets %}
+            - secretRef:
+                name: {{ app.name }}-secrets
+{% endif %}
 {% if app.health_path %}
           livenessProbe:
             httpGet:
