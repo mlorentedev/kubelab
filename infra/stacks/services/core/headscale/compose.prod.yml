@@ -1,0 +1,10 @@
+services:
+  headscale:
+    deploy:
+      resources:
+        limits:
+          cpus: "${RESOURCES_DEFAULT_CPU_LIMIT}"
+          memory: 256M
+        reservations:
+          cpus: "${RESOURCES_DEFAULT_CPU_RESERVATION}"
+          memory: 128M

@@ -1,6 +1,6 @@
 # API - Go Backend Service
 
-The REST API that powers [cubelab.cloud](https://cubelab.cloud). Built with Go, it handles newsletter subscriptions, lead magnets, and other backend services.
+The REST API that powers [kubelab.live](https://kubelab.live). Built with Go, it handles newsletter subscriptions, lead magnets, and other backend services.
 
  What it does
 
@@ -64,7 +64,7 @@ BEEHIIV_API_KEY=your_api_key_here
 BEEHIIV_PUBLICATION_ID=your_publication_id
 
  CORS configuration
-ALLOWED_ORIGINS=https://cubelab.cloud,https://www.cubelab.cloud
+ALLOWED_ORIGINS=https://kubelab.live,https://www.kubelab.live
 ```
 
  Running the API
@@ -206,8 +206,8 @@ Started simple and grew as needed. When adding features, keep it simple - that's
  Local development URLs
 
 When running locally with `make up-api`:
-- API: http://api.cubelab.test
-- Health: http://api.cubelab.test/health
+- API: http://api.kubelab.test
+- Health: http://api.kubelab.test/health
 - Docs: Check the endpoints section above
 
-Add `... api.cubelab.test` to your `/etc/hosts` file.
+Add `... api.kubelab.test` to your `/etc/hosts` file.

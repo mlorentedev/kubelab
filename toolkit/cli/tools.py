@@ -51,7 +51,7 @@ def _get_default_domains(env: str) -> list[str]:
     config_manager = ConfigurationManager(env, settings.project_root)
     env_vars = config_manager.get_env_vars()
 
-    base_domain = env_vars.get("BASE_DOMAIN", env_vars.get("GLOBAL_BASE_DOMAIN", "cubelab.test"))
+    base_domain = env_vars.get("BASE_DOMAIN", env_vars.get("GLOBAL_BASE_DOMAIN", "kubelab.test"))
 
     return [
         base_domain,

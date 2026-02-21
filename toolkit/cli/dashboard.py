@@ -114,18 +114,18 @@ def _generate_info_panel(env: str, containers: List[Dict[str, str]]) -> Panel:
                     health_path = comp_config.get("health_path", "/")
 
                     # Fix for localhost/dev environments: Append port if domain is
-                    # localhost/127.0.0.1. In dev, domains like 'blog.cubelab.test'
+                    # localhost/127.0.0.1. In dev, domains like 'blog.kubelab.test'
                     # resolve to 127.0.0.1 via /etc/hosts or DNS. But if we are
                     # accessing them directly without a reverse proxy on port 80/443
                     # (which might be the case if Traefik is not exposing them there,
                     # or we want direct access). However, the user says "incomplete".
-                    # If domain is "blog.cubelab.test", and protocol is https,
-                    # it becomes https://blog.cubelab.test. If Traefik is running
+                    # If domain is "blog.kubelab.test", and protocol is https,
+                    # it becomes https://blog.kubelab.test. If Traefik is running
                     # on 80/443, this is correct. But maybe Traefik is on a
                     # different port? Let's check Traefik config.
 
                     # Actually, for the specific "dev" environment in the provided values/dev.yaml:
-                    # Traefik has domain "traefik.cubelab.test".
+                    # Traefik has domain "traefik.kubelab.test".
                     # And `endpoints` section in dev.yaml shows:
                     # api: http://api:8080
                     # web: http://web:4321
@@ -153,8 +153,8 @@ def _generate_info_panel(env: str, containers: List[Dict[str, str]]) -> Panel:
                     # `domain` variable in the config is somehow not what we expect.
 
                     # Wait, looking at dev.yaml:
-                    # apps.platform.api.domain = "api.cubelab.test"
-                    # apps.platform.web.domain = "web.cubelab.test"
+                    # apps.platform.api.domain = "api.kubelab.test"
+                    # apps.platform.web.domain = "web.kubelab.test"
 
                     # If I assume the user simply hasn't seen the links yet because of the docker ps bug,
                     # then fixing docker ps might be enough.
@@ -174,8 +174,8 @@ def _generate_info_panel(env: str, containers: List[Dict[str, str]]) -> Panel:
                     # The issue might be that for local dev, if Traefik isn't routing these domains to the containers,
                     # the user might expect `localhost:port`.
 
-                    # But `dev.yaml` sets `domain: blog.cubelab.test`.
-                    # And `traefik` in `dev.yaml` has `domain: traefik.cubelab.test`.
+                    # But `dev.yaml` sets `domain: blog.kubelab.test`.
+                    # And `traefik` in `dev.yaml` has `domain: traefik.kubelab.test`.
 
                     # If I want to be safe, I can check if `default_port` is
                     # available and `base_domain` includes "localhost" (or "test"
@@ -185,8 +185,8 @@ def _generate_info_panel(env: str, containers: List[Dict[str, str]]) -> Panel:
 
                     # Let's assume the "incomplete" comment was about the empty list.
                     # But wait, the user said "Quick links are wrong, not capturing full endpoint".
-                    # Maybe they mean `http://api` instead of `http://api.cubelab.test`?
-                    # In `dev.yaml`, `apps.platform.api.domain` is `api.cubelab.test`.
+                    # Maybe they mean `http://api` instead of `http://api.kubelab.test`?
+                    # In `dev.yaml`, `apps.platform.api.domain` is `api.kubelab.test`.
 
                     # Let's look at `toolkit/cli/dashboard.py` logic again:
                     # domain = comp_config['domain']

@@ -235,7 +235,7 @@ class PlatformSettings(BaseSettings):
     # =============================================================================
 
     registry: str = "docker.io"
-    docker_network: str = "cubelab"
+    docker_network: str = "kubelab"
     dockerhub_username: str | None = None
     dockerhub_token: str | None = None
     restart_policy: str = "unless-stopped"

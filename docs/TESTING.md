@@ -1,6 +1,6 @@
  Testing Guide
 
-This document describes the testing strategy and practices for the cubelab.cloud project.
+This document describes the testing strategy and practices for the kubelab.live project.
 
  Testing Philosophy
 

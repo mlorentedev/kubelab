@@ -95,7 +95,7 @@ See `apps/README.md` for development documentation.
 - Services: Traefik (HTTP only)
 
  Staging (staging)
-- Location: CubeLab homelab (Raspberry Pi)
+- Location: KubeLab homelab (Raspberry Pi)
 - Purpose: Pre-production testing
 - Access: VPN (WireGuard) + .staging.mlorente.dev
 - Services: Full stack with CoreDNS gateway

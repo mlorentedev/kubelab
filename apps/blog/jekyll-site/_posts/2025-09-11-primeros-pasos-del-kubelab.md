@@ -1,17 +1,17 @@
 ---
 layout: post
-title: Los primeros pasos del cubelab
+title: Los primeros pasos del kubelab
 date: "2025-09-14"
 categories: 
   - "DevOps"
-  - "Cubelab"
+  - "KubeLab"
 tags: 
   - "devops"
-  - "cubelab"
+  - "kubelab"
 readtime: true
 lang: es
 author: Manu Lorente
 ---
 
 > ⚡️ **TL;DR**  
-> Si quieres montar tu propio cubelab, empieza por aquí:
+> Si quieres montar tu propio kubelab, empieza por aquí:

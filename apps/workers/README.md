@@ -1,6 +1,6 @@
 # Workers - Background Job Processing
 
-Background job processing services for asynchronous tasks in the CubeLab platform.
+Background job processing services for asynchronous tasks in the KubeLab platform.
 
 ## Overview
 
@@ -95,7 +95,7 @@ Web scraping and data collection jobs.
   "filters": {
     "published_after": "2025-11-01"
   },
-  "callback": "https://api.cubelab.cloud/webhooks/rss"
+  "callback": "https://api.kubelab.live/webhooks/rss"
 }
 ```
 
@@ -141,7 +141,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=notifications@mlorente.dev
 SMTP_PASSWORD=app_password
-SMTP_FROM=CubeLab <no-reply@mlorente.dev>
+SMTP_FROM=KubeLab <no-reply@mlorente.dev>
 
 # PDF Generation
 WKHTMLTOPDF_PATH=/usr/bin/wkhtmltopdf
@@ -149,7 +149,7 @@ PDF_DPI=300
 PDF_PAPER_SIZE=A4
 
 # Scraper Settings
-SCRAPER_USER_AGENT=CubeLab-Bot/1.0
+SCRAPER_USER_AGENT=KubeLab-Bot/1.0
 SCRAPER_MAX_RETRIES=3
 SCRAPER_TIMEOUT=30
 
@@ -157,7 +157,7 @@ SCRAPER_TIMEOUT=30
 S3_ENDPOINT=http://minio:9000
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin
-S3_BUCKET=cubelab-workers
+S3_BUCKET=kubelab-workers
 
 # Logging
 LOG_LEVEL=INFO
@@ -188,7 +188,7 @@ celery -A workers flower --port=5555
 
 ```bash
 # Build image
-docker build -t cubelab-workers:latest .
+docker build -t kubelab-workers:latest .
 
 # Run with docker-compose
 cd infra/compose/apps/workers

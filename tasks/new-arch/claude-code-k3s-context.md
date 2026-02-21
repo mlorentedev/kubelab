@@ -5,7 +5,7 @@
 
 ## Homelab Architecture Change (2026-02-18)
 
-The CubeLab homelab architecture is migrating from Docker Compose staging to Kubernetes (K3s) staging. This is a deliberate transition to build SRE skills and eventually migrate production to K3s as well.
+The KubeLab homelab architecture is migrating from Docker Compose staging to Kubernetes (K3s) staging. This is a deliberate transition to build SRE skills and eventually migrate production to K3s as well.
 
 ### Hardware Allocation (UPDATED)
 
@@ -60,7 +60,7 @@ When implementing this migration:
 - Production deployment via GitHub Actions + Docker Compose (until Phase 2)
 - Docker images (same images, different orchestration)
 - App code (zero changes to API, web, blog)
-- Domain strategy (mlorente.dev + cubelab.cloud)
+- Domain strategy (mlorente.dev + kubelab.live)
 - SOPS secrets management
 - Edge infrastructure (RPi 4, RPi 3, Jetson)
 - `infra/stacks/` directory with compose files (preserved as reference and for production)

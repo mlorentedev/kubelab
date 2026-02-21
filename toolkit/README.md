@@ -1,6 +1,6 @@
  Toolkit - Modern Infrastructure Management CLI
 
-A Python-based CLI for orchestrating the CubeLab ecosystem with centralized configuration and clean architecture.
+A Python-based CLI for orchestrating the KubeLab ecosystem with centralized configuration and clean architecture.
 
  Philosophy
 
@@ -51,9 +51,9 @@ The toolkit uses a centralized configuration system organized by domains:
 
 ```text
 infra/config/env/
-├── env.dev           Development (http://cubelab.test)
-├── env.staging       Staging (https://staging.cubelab.cloud)
-└── env.prod          Production (https://cubelab.cloud)
+├── env.dev           Development (http://kubelab.test)
+├── env.staging       Staging (https://staging.kubelab.live)
+└── env.prod          Production (https://kubelab.live)
 ```
 
  Configuration Domains
@@ -64,12 +64,12 @@ Each environment file is organized by logical domains:
  === PROJECT & ENVIRONMENT ===
 PYTHON_VERSION=.
 ENVIRONMENT=dev
-PROJECT_NAME=cubelab
+PROJECT_NAME=kubelab
 LOG_LEVEL=info
 DEBUG_MODE=true
 
  === NETWORKING & DOMAINS ===
-BASE_DOMAIN=cubelab.test
+BASE_DOMAIN=kubelab.test
 PROTOCOL=http
 DOCKER_NETWORK=proxy-dev
 

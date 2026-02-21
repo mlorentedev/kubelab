@@ -1,6 +1,6 @@
  Applications - Source Code
 
-This directory contains source code for all custom applications in the CubeLab platform.
+This directory contains source code for all custom applications in the KubeLab platform.
 
  Structure
 

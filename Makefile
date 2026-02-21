@@ -27,7 +27,7 @@ PYTHON_VERSION ?= 3.12
 # -----------------------------------------------------------------------------
 .PHONY: help
 help:
-	@echo "=== CubeLab ==="
+	@echo "=== KubeLab ==="
 	@echo ""
 	@echo "Bootstrap:"
 	@echo "  make setup              Install Poetry, dependencies, and toolkit"
@@ -105,17 +105,17 @@ setup-certs:
 .PHONY: setup-local-dns
 setup-local-dns:
 	@echo "Setting up local DNS entries in /etc/hosts..."
-	@if grep -q "cubelab.test" /etc/hosts 2>/dev/null && grep -q "mlorente.test" /etc/hosts 2>/dev/null; then \
+	@if grep -q "kubelab.test" /etc/hosts 2>/dev/null && grep -q "mlorente.test" /etc/hosts 2>/dev/null; then \
 		echo "✓ DNS entries already configured"; \
 	else \
 		echo "Adding local development DNS entries..."; \
 		echo "" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "# CubeLab local development" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "# KubeLab local development" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "127.0.0.1 mlorente.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 traefik.cubelab.test api.cubelab.test blog.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 auth.cubelab.test gitea.cubelab.test grafana.cubelab.test loki.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 portainer.cubelab.test status.cubelab.test minio.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 console.minio.cubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 traefik.kubelab.test api.kubelab.test blog.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 auth.kubelab.test gitea.kubelab.test grafana.kubelab.test loki.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 portainer.kubelab.test status.kubelab.test minio.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
+		echo "127.0.0.1 console.minio.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
 		echo "✓ DNS entries added to /etc/hosts"; \
 	fi
 

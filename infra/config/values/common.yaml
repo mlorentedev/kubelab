@@ -1,19 +1,19 @@
 # ==========================================================================
 # GLOBAL SETTINGS
 # ==========================================================================
-project_name: cubelab
+project_name: kubelab
 log_format: json
 
 global:
   timezone: Europe/Madrid
   restart_policy: unless-stopped
-  base_domain: cubelab.cloud
+  base_domain: kubelab.live
 
 # ===========================================================================
 # INFRASTRUCTURE & DOCKER
 # ===========================================================================
 registry: docker.io/mlorentedev
-network_name: cubelab
+network_name: kubelab
 python_version: "3.12"
 
 resources:
@@ -131,8 +131,8 @@ apps:
   platform:
     api:
       name: api
-      domain: api.cubelab.cloud
-      image_name: cubelab-api
+      domain: api.kubelab.live
+      image_name: kubelab-api
       version: dev
       enable_auth: false
       auth_level: bypass
@@ -144,14 +144,14 @@ apps:
 
     web:
       name: web
-      domain: web.cubelab.cloud
-      image_name: cubelab-web
+      domain: web.kubelab.live
+      image_name: kubelab-web
       version: dev
       enable_auth: false
       auth_level: bypass
       default_port: 4321
       health_path: /
-      backend_url: "https://api.cubelab.cloud"
+      backend_url: "https://api.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1"
       # Site Info
       site_title: "Manu Lorente"
@@ -175,15 +175,15 @@ apps:
 
     blog:
       name: blog
-      domain: blog.cubelab.cloud
-      image_name: cubelab-blog
+      domain: blog.kubelab.live
+      image_name: kubelab-blog
       version: dev
       enable_auth: false
       auth_level: bypass
       default_port: 4000
       health_path: /
 
-    # wiki: removed — integrated in toolkit as `cubelab docs` (see B1/TOOLKIT-008)
+    # wiki: removed — integrated in toolkit as `kubelab docs` (see B1/TOOLKIT-008)
 
   # Third-party services
   services:
@@ -191,14 +191,14 @@ apps:
     core:
       traefik:
         name: traefik
-        domain: traefik.cubelab.cloud
+        domain: traefik.kubelab.live
         enable_auth: true
         auth_level: one_factor
         default_port: 443
 
       portainer:
         name: portainer
-        domain: portainer.cubelab.cloud
+        domain: portainer.kubelab.live
         image: portainer/portainer-ce:2.33.5
         enable_auth: true
         auth_level: one_factor
@@ -209,19 +209,29 @@ apps:
       gitea:
         name: gitea
         image: gitea/gitea:1.23
-        domain: gitea.cubelab.cloud
+        domain: gitea.kubelab.live
         enable_auth: true
         auth_level: one_factor
         default_port: 3000
         ssh_port: 2222
         health_path: /api/healthz
 
+      headscale:
+        name: headscale
+        image: headscale/headscale:0.23
+        domain: vpn.kubelab.live
+        enable_auth: false
+        auth_level: bypass
+        default_port: 8080
+        stun_port: 3478
+        health_path: /health
+
     # Automation & CI/CD
     automation:
       github_runner:
         name: github-runner
         image: myoung34/github-runner:latest
-        repo_url: https://github.com/mlorentedev/cubelab
+        repo_url: https://github.com/mlorentedev/kubelab
         runner_group: default
         labels: self-hosted,linux,docker
         resources:
@@ -235,8 +245,8 @@ apps:
       minio:
         name: minio
         image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        domain: minio.cubelab.cloud
-        console_domain: console.minio.cubelab.cloud
+        domain: minio.kubelab.live
+        console_domain: console.minio.kubelab.live
         enable_auth: false
         auth_level: bypass
         default_port_api: 9000
@@ -247,7 +257,7 @@ apps:
     observability:
       grafana:
         name: grafana
-        domain: grafana.cubelab.cloud
+        domain: grafana.kubelab.live
         enable_auth: true
         auth_level: one_factor
         default_port: 3000
@@ -260,7 +270,7 @@ apps:
 
       loki:
         name: loki
-        domain: loki.cubelab.cloud
+        domain: loki.kubelab.live
         image: grafana/loki:3.3.2
         vector_image: timberio/vector:0.43.1-alpine
         enable_auth: true
@@ -275,7 +285,7 @@ apps:
 
       uptime_kuma:
         name: uptime-kuma
-        domain: status.cubelab.cloud
+        domain: status.kubelab.live
         image: louislam/uptime-kuma:2.0.2
         enable_auth: true
         auth_level: one_factor
@@ -289,12 +299,12 @@ apps:
         image: authelia/authelia:4.39.15
         redis_image: redis:7-alpine
         enable_auth: false
-        domain: auth.cubelab.cloud
+        domain: auth.kubelab.live
         default_port: 9091
         health_path: /api/health
-        issuer_domain: cubelab.cloud
-        display_name: CubeLab
-        default_domain_root: cubelab.cloud
+        issuer_domain: kubelab.live
+        display_name: KubeLab
+        default_domain_root: kubelab.live
         resources:
           cpu_limit: "0.5"
           memory_limit: 128M
@@ -323,10 +333,10 @@ apps:
         jwt_secret_reset_password: some_dummy_secret_for_jwt_reset
         # Moved OIDC client definitions to a list structure
         oidc_clients:
-          - client_id: cubelab-oidc
-            client_name: CubeLab OIDC Client (General)
+          - client_id: kubelab-oidc
+            client_name: KubeLab OIDC Client (General)
             redirect_uris:
-              - https://auth.cubelab.cloud/oauth2/callback
+              - https://auth.kubelab.live/oauth2/callback
             scopes:
               - openid
               - profile
@@ -335,7 +345,7 @@ apps:
           - client_id: grafana-oidc
             client_name: Grafana OIDC Client
             redirect_uris:
-              - https://grafana.cubelab.cloud/login/generic_oauth
+              - https://grafana.kubelab.live/login/generic_oauth
             scopes:
               - openid
               - profile
@@ -344,13 +354,13 @@ apps:
           - client_id: minio-oidc
             client_name: MinIO OIDC Client
             redirect_uris:
-              - https://console.minio.cubelab.cloud/oauth_callback
+              - https://console.minio.kubelab.live/oauth_callback
             scopes:
               - openid
               - profile
               - email
               - groups
-        oidc_jwks_url: https://auth.cubelab.cloud/.well-known/jwks.json
+        oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
           - username: admin
@@ -363,7 +373,7 @@ apps:
 
       crowdsec:
         name: crowdsec
-        domain: crowdsec.cubelab.cloud
+        domain: crowdsec.kubelab.live
         image: crowdsecurity/crowdsec:latest
         bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
         bouncer_name: crowdsec-bouncer-traefik

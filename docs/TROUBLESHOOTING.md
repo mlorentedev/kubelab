@@ -5,7 +5,7 @@
 ## Location
 
 ```
-~/Projects/knowledge/10_projects/cubelab/troubleshooting/
+~/Projects/knowledge/10_projects/kubelab/troubleshooting/
 ```
 
 ## Categories

@@ -6,7 +6,7 @@ environment: dev
 # GLOBAL OVERRIDES
 # ==========================================================================
 global:
-  base_domain: cubelab.test
+  base_domain: kubelab.test
   restart_policy: always
 # ==========================================================================
 # RUNTIME
@@ -29,7 +29,7 @@ endpoints:
 # ==========================================================================
 edge:
   traefik:
-    domain: traefik.cubelab.test
+    domain: traefik.kubelab.test
     disable_https: false
     use_local_certs: true # Use mkcert certificates instead of ACME
     insecure: false
@@ -38,7 +38,7 @@ edge:
     rate_limit_average: 200
     rate_limit_burst: 100
   nginx:
-    domain: errors.cubelab.test
+    domain: errors.kubelab.test
   cloudflared:
     enabled: false
 # ==========================================================================
@@ -48,59 +48,59 @@ apps:
   # Platform applications (custom-built)
   platform:
     api:
-      domain: api.cubelab.test
-      site_domain: cubelab.test
-      site_url: http://cubelab.test
+      domain: api.kubelab.test
+      site_domain: kubelab.test
+      site_url: http://kubelab.test
       email_secure: false
     web:
-      backend_url: "http://api.cubelab.test"
-      allowed_hosts: "localhost,web,127.0.0.1,.cubelab.test,.mlorente.test"
+      backend_url: "http://api.kubelab.test"
+      allowed_hosts: "localhost,web,127.0.0.1,.kubelab.test,.mlorente.test"
       domain: mlorente.test
       site_domain: mlorente.test
       site_url: http://mlorente.test
       google_analytics_id: ""
       google_tag_manager_id: ""
     blog:
-      domain: blog.cubelab.test
+      domain: blog.kubelab.test
       enable_livereload: true
-      # wiki: removed — integrated in toolkit as `cubelab docs` (see B1/TOOLKIT-008)
+      # wiki: removed — integrated in toolkit as `kubelab docs` (see B1/TOOLKIT-008)
   # Third-party services
   services:
     core:
       traefik:
-        domain: traefik.cubelab.test
+        domain: traefik.kubelab.test
       portainer:
-        domain: portainer.cubelab.test
+        domain: portainer.kubelab.test
       n8n:
-        domain: n8n.cubelab.test
+        domain: n8n.kubelab.test
       gitea:
-        domain: gitea.cubelab.test
+        domain: gitea.kubelab.test
     data:
       minio:
-        domain: minio.cubelab.test
-        console_domain: console.minio.cubelab.test
+        domain: minio.kubelab.test
+        console_domain: console.minio.kubelab.test
     observability:
       grafana:
-        domain: grafana.cubelab.test
+        domain: grafana.kubelab.test
         oauth_allow_sign_up: true
       loki:
-        domain: loki.cubelab.test
+        domain: loki.kubelab.test
       uptime_kuma:
-        domain: status.cubelab.test
+        domain: status.kubelab.test
     security:
       crowdsec:
-        domain: crowdsec.cubelab.test
+        domain: crowdsec.kubelab.test
       authelia:
-        domain: auth.cubelab.test
-        default_domain_root: cubelab.test
-        issuer_domain: cubelab.test
+        domain: auth.kubelab.test
+        default_domain_root: kubelab.test
+        issuer_domain: kubelab.test
         oidc_clients:
-          - client_id: cubelab-oidc
-            client_name: CubeLab OIDC Client (General)
+          - client_id: kubelab-oidc
+            client_name: KubeLab OIDC Client (General)
             redirect_uris:
-              - https://auth.cubelab.test/oauth2/callback
+              - https://auth.kubelab.test/oauth2/callback
               # Redirect de Portainer
-              - https://portainer.cubelab.test/login/oauth/oidc/callback
+              - https://portainer.kubelab.test/login/oauth/oidc/callback
             scopes:
               - openid
               - profile
@@ -110,7 +110,7 @@ apps:
             client_name: Grafana OIDC Client
             redirect_uris:
               # Redirect de Grafana
-              - https://grafana.cubelab.test/login/generic_oauth
+              - https://grafana.kubelab.test/login/generic_oauth
             scopes:
               - openid
               - profile
@@ -119,7 +119,7 @@ apps:
           - client_id: minio-oidc
             client_name: MinIO OIDC Client
             redirect_uris:
-              - https://console.minio.cubelab.test/oauth_callback
+              - https://console.minio.kubelab.test/oauth_callback
             scopes:
               - openid
               - profile

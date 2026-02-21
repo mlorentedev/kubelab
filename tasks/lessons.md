@@ -1,4 +1,4 @@
-# CubeLab - Lessons Learned
+# KubeLab - Lessons Learned
 
 > Este archivo documenta patrones aprendidos, errores evitados, y mejores prácticas descubiertas durante el desarrollo.
 >
@@ -24,7 +24,7 @@
 ### [2026-02-14] YAML Duplicate Keys Silently Overwrite
 
 **Contexto**: Adding gitea domain override to dev.yaml under `apps.services.core`
-**Problema**: Created a second `core:` block instead of adding to the existing one. YAML silently uses the last occurrence, wiping traefik/portainer/n8n overrides. Portainer started routing to `cubelab.cloud` instead of `cubelab.test`.
+**Problema**: Created a second `core:` block instead of adding to the existing one. YAML silently uses the last occurrence, wiping traefik/portainer/n8n overrides. Portainer started routing to `kubelab.live` instead of `kubelab.test`.
 **Solución**: Always search for existing key before adding new entries. YAML does NOT merge duplicate keys.
 **Regla**: When editing YAML overrides, verify with `python3 -c "import yaml; print(yaml.safe_load(open('file.yaml')))"` that keys aren't duplicated.
 
@@ -32,7 +32,7 @@
 
 **Contexto**: web and blog containers in restart loop, `package.json` / `Gemfile` not found
 **Problema**: Containers were created from `/home/manu/Projects/mlorente.dev/` (old project path). Relative bind mount paths (`../../../../apps/web/`) resolved to non-existent location.
-**Solución**: Recreate containers from the correct working directory (`/home/manu/Projects/cubelab/`).
+**Solución**: Recreate containers from the correct working directory (`/home/manu/Projects/kubelab/`).
 **Regla**: After renaming project directories, always recreate (not just restart) containers that use relative bind mounts.
 
 ### [2026-02-03] Inicialización del Sistema de Tasks
@@ -108,6 +108,19 @@
 **Problema**: Las especificaciones documentadas eran incorrectas: 16GB para staging (real: 12GB Acemagic), 4GB para RPi 4 (real: 8GB). Ademas, faltaban dispositivos: RPi 3 con Pi-hole, Beelink con Proxmox. Toda la planificacion se baso en datos incorrectos.
 **Solucion**: Verificar fisicamente cada dispositivo (`free -h`, `lsblk`, model labels) antes de documentar o planificar. Actualizar toda la documentacion (vault, todo.md, Ansible templates) con las especificaciones reales.
 **Regla**: Antes de planificar infraestructura, SIEMPRE verificar specs de hardware contra los dispositivos fisicos. Los documentos mienten; `free -h` no miente. Un plan basado en specs incorrectas es peor que no tener plan.
+
+### [2026-02-20] Proxmox Hostname Rename Breaks VM Visibility
+
+**Contexto**: Renombrando hostnames de `cubelab-*` a `kubelab-*` como parte del rename global del proyecto
+**Problema**: Después de `hostnamectl set-hostname kubelab-ace1`, `qm list` devuelve vacío. Las VMs parecen haber desaparecido. Proxmox vincula los `.conf` de las VMs al directorio `/etc/pve/nodes/{hostname}/qemu-server/`. Al cambiar el hostname, Proxmox crea un nuevo directorio pero los configs quedan en el viejo.
+**Solución**: Mover los `.conf` del directorio antiguo al nuevo:
+```bash
+ls /etc/pve/nodes/                    # Verás old-name y new-name
+mv /etc/pve/nodes/{old}/qemu-server/*.conf /etc/pve/nodes/{new}/qemu-server/
+qm list                               # VMs reaparecen
+qm start <vmid>
+```
+**Regla**: NUNCA renombrar un host Proxmox con solo `hostnamectl`. Siempre verificar `/etc/pve/nodes/` y mover los configs de VM. Documentado también en el runbook `proxmox-setup.md` del vault.
 
 ---
 

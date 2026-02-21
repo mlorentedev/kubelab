@@ -127,7 +127,7 @@ class AutheliaGenerator(BaseGenerator):
                     processed_oidc_clients.append(
                         {
                             "client_id": legacy_client_id,
-                            "client_name": "CubeLab OIDC Client (Legacy)",
+                            "client_name": "KubeLab OIDC Client (Legacy)",
                             "client_secret_hash": legacy_secret_hash,
                             "redirect_uris": legacy_redirect_uris,
                             "scopes": ["openid", "profile", "email", "groups"],
@@ -144,8 +144,8 @@ class AutheliaGenerator(BaseGenerator):
                     secret_hash_key = f"APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_{secret_suffix}_HASH"
                     secret_hash = env_vars.get(secret_hash_key)
 
-                    # Fallback for 'cubelab-oidc' (main) to legacy/main var
-                    if not secret_hash and (secret_suffix == "CUBELAB" or secret_suffix == "MAIN"):
+                    # Fallback for 'kubelab-oidc' (main) to legacy/main var
+                    if not secret_hash and (secret_suffix == "KUBELAB" or secret_suffix == "MAIN"):
                         secret_hash = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_HASH")
 
                     if not secret_hash:

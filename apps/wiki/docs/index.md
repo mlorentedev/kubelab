@@ -1,8 +1,8 @@
- cubelab.cloud
+ kubelab.live
 
-Personal ecosystem monorepo for [cubelab.cloud](https://cubelab.cloud) - portfolio, blog, API and infrastructure.
+Personal ecosystem monorepo for [kubelab.live](https://kubelab.live) - portfolio, blog, API and infrastructure.
 
-This is my personal project where I keep everything needed to run cubelab.cloud. It's designed as a monorepo that includes everything from the frontend to the infrastructure. I've organized it this way to have everything under control and be able to deploy easily.
+This is my personal project where I keep everything needed to run kubelab.live. It's designed as a monorepo that includes everything from the frontend to the infrastructure. I've organized it this way to have everything under control and be able to deploy easily.
 
  What's included
 
@@ -33,7 +33,7 @@ make down
  Project structure
 
 ```
-cubelab.cloud/
+kubelab.live/
 ├── . apps/                    Applications
 │   ├── . api/                Go REST API
 │   ├── . blog/               Jekyll blog

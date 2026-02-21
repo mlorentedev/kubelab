@@ -1,4 +1,4 @@
-# CubeLab - Roadmap
+# KubeLab - Roadmap
 
 > **Goal**: Stabilize, deploy to production, extract repos, build homelab staging.
 >
@@ -26,7 +26,7 @@ Velocity:    ~5.5 tasks/session (58 tasks in ~10 sessions, Feb 3-19)
 Remaining:   195 tasks ÷ 5.5/session ≈ 35 sessions
 Schedule:    ~4.5 sessions/week → ~8 weeks → late April 2026
 Next:        B1 (Headscale VPN mesh)
-Focus:       CubeLab infra first (B1-B6) → then SensorTool + blog + newsletters
+Focus:       KubeLab infra first (B1-B6) → then SensorTool + blog + newsletters
 ```
 
 ---
@@ -74,28 +74,28 @@ pins its own version and controls its upgrade timeline independently.
 ### Repos (under `github.com/mlorente/`)
 
 ```
-cubelab-cli              → Generic Python CLI (Typer+Rich)
+kubelab-cli              → Generic Python CLI (Typer+Rich)
                            Published on GitHub Packages + PyPI
-                           Reads cubelab.yaml per project
-                           Command: cubelab
+                           Reads kubelab.yaml per project
+                           Command: kubelab
 
-cubelab-platform         → Infrastructure monorepo:
+kubelab-platform         → Infrastructure monorepo:
                            - Platform services (Traefik, Authelia, Grafana, Gitea, n8n...)
-                           - CubeLab apps (api, web, personal blog)
+                           - KubeLab apps (api, web, personal blog)
                            - IaC (Ansible, Terraform)
                            - Edge configs
-                           Consumes: cubelab-cli
+                           Consumes: kubelab-cli
 
 cubernautas-blog         → Cubernautas blog (separate identity)
-                           Independent repo, deployed on CubeLab infra
-                           Consumes: cubelab-cli
+                           Independent repo, deployed on KubeLab infra
+                           Consumes: kubelab-cli
 
 sensortool               → B2B SaaS (FastAPI/Go + Astro), portable
                            Own compose stacks, overrides for shared infra
-                           Consumes: cubelab-cli
+                           Consumes: kubelab-cli
 
 future-static-sites      → Each static site in its own repo
-                           Same pattern: cubelab.yaml + cubelab-cli
+                           Same pattern: kubelab.yaml + kubelab-cli
 ```
 
 ### Key Decisions
@@ -104,14 +104,14 @@ future-static-sites      → Each static site in its own repo
 |----------|--------|--------|
 | Pattern | SDK Distribution + IDP | Versioned toolkit, consumers pin versions |
 | Repos | 4+ (toolkit, platform, blog, sensortool) | Each portfolio-ready, independent lifecycle |
-| Config file | `cubelab.yaml` per project | Namespaced, declarative |
-| Package | `cubelab-cli` → command `cubelab` | PyPI + GitHub Packages |
+| Config file | `kubelab.yaml` per project | Namespaced, declarative |
+| Package | `kubelab-cli` → command `kubelab` | PyPI + GitHub Packages |
 | Shared infra | Platform services shared, data logically isolated | One PostgreSQL, separate DBs per app |
 | Portability | Compose overrides (dev=local, prod=shared) | Env vars abstract the difference |
 | Blog split | cubernautas = own repo, personal blog in platform | Different identities, different lifecycles |
-| Wiki | Not deployed as app — lives in toolkit as `cubelab docs` | Auto-generated from cubelab.yaml, served locally or published to `docs.cubelab.cloud` |
+| Wiki | Not deployed as app — lives in toolkit as `kubelab docs` | Auto-generated from kubelab.yaml, served locally or published to `docs.kubelab.live` |
 | VPN | Headscale (self-hosted) + Tailscale clients | WireGuard underneath, self-owned, industry-relevant |
-| Users | `manu` on homelab, `deploy` on VPS | Avoids `cubelab@cubelab-*` redundancy; others can substitute their username |
+| Users | `manu` on homelab, `deploy` on VPS | Avoids `kubelab@kubelab-*` redundancy; others can substitute their username |
 | K8s deploy | `kubectl apply -k` initially, ArgoCD in Stream E | Learn raw tools before abstractions |
 | Portfolio | Army of small focused repos (like steipete) | Each solves a real problem, publicly useful |
 
@@ -119,18 +119,18 @@ future-static-sites      → Each static site in its own repo
 
 | Environment | Personal site | Platform services |
 |-------------|--------------|-------------------|
-| Local dev | `mlorente.test` | `*.cubelab.test` |
-| Staging | `web.staging.cubelab.cloud` | `*.staging.cubelab.cloud` |
-| Production | `mlorente.dev` | `*.cubelab.cloud` |
+| Local dev | `mlorente.test` | `*.kubelab.test` |
+| Staging | `web.staging.kubelab.live` | `*.staging.kubelab.live` |
+| Production | `mlorente.dev` | `*.kubelab.live` |
 
-Terraform DNS: two zones (`mlorente.dev` + `cubelab.cloud`)
+Terraform DNS: two zones (`mlorente.dev` + `kubelab.live`)
 
-### cubelab.yaml Schema (Reference)
+### kubelab.yaml Schema (Reference)
 
 ```yaml
-# Example for cubelab-platform
+# Example for kubelab-platform
 project:
-  name: cubelab-platform
+  name: kubelab-platform
   type: platform           # platform | app | static-site
 
 stacks:
@@ -189,40 +189,40 @@ Task queues (per app):
 ┌─────────────────────┬───────────────────────────────────────────┐
 │  VPS Hetzner        │ Production — Docker Compose (initial)     │
 │  162.55.57.175      │ kubectl apply -k overlays/prod (post-B6)  │
-│  user: deploy       │ Headscale control plane runs here         │
+│  user: deployer     │ Headscale control plane runs here         │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Acemagic-1 (12GB)  │ Proxmox VE 9.x — K3s server + agent VM   │
-│  cubelab-ace1       │ VM k3s-server (5GB) + VM k3s-agent-1 (5GB)│
+│  kubelab-ace1       │ VM k3s-server (5GB) + VM k3s-agent-1 (5GB)│
 │  user: manu         │ Proxmox snapshots for SRE exercises       │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Acemagic-2 (12GB)  │ Proxmox VE 9.x — K3s agent-2 VM          │
-│  cubelab-ace2       │ VM k3s-agent-2 (~10GB) — heavy workloads  │
+│  kubelab-ace2       │ VM k3s-agent-2 (~10GB) — heavy workloads  │
 │  user: manu         │ Observability, data services              │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Beelink 8GB        │ Ollama — bare metal                       │
-│  cubelab-bee        │ Ubuntu Server 24.04 + Ollama (OpenAI API) │
+│  kubelab-bee        │ Ubuntu Server 24.04 + Ollama (OpenAI API) │
 │  user: manu         │ For agents (Stream F) + generic LLM tasks │
 │                     │ Endpoint: http://<beelink-ip>:11434       │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  RPi 4 (8GB)        │ Network gateway + AI agents               │
-│  cubelab-rpi4       │ Bridge/NAT, Pi-hole, CoreDNS, Headscale   │
+│  kubelab-rpi4       │ Bridge/NAT, Pi-hole, CoreDNS, Headscale   │
 │  user: manu         │ OpenClaw + PicoClaw                       │
 │                     │ Smart plug on full homelab power strip     │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  RPi 3 (1GB)        │ External monitor — physically separate    │
-│  cubelab-rpi3       │ Uptime Kuma (probes VPS+homelab)          │
+│  kubelab-rpi3       │ Uptime Kuma (probes VPS+homelab)          │
 │  user: manu         │ Built-in WiFi (direct to router, 10.0.0.157) │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Jetson Nano #1     │ Pollex — independent project              │
-│  cubelab-jet1       │ llama.cpp + Qwen 2.5, GPU inference       │
+│  kubelab-jet1       │ llama.cpp + Qwen 2.5, GPU inference       │
 │  user: manu         │ Text polish + embeddings                  │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Jetson Nano #2     │ Spare (backup for #1)                     │
 └─────────────────────┴───────────────────────────────────────────┘
 ```
 
-**User convention**: `manu` on all homelab nodes (prompt: `manu@cubelab-ace1`),
-`deploy` on VPS for CI/CD deploys (not `cubelab` — avoids redundant `cubelab@cubelab-vps`).
+**User convention**: `manu` on all homelab nodes (prompt: `manu@kubelab-ace1`),
+`deployer` on VPS for CI/CD deploys (not `kubelab` — avoids redundant `kubelab@kubelab-vps`).
 
 ### Deployment Flow
 
@@ -319,9 +319,9 @@ ArgoCD: deferred to Stream E — learn raw kubectl first, add GitOps automation 
 
 - [x] **DOM-001**: Audit current domain references in the project
 - [x] **DOM-002**: Update `infra/config/values/` with new domain scheme
-  - dev.yaml: `*.cubelab.test` + `mlorente.test`
-  - staging.yaml: `*.staging.cubelab.cloud`
-  - prod.yaml: `*.cubelab.cloud` + `mlorente.dev`
+  - dev.yaml: `*.kubelab.test` + `mlorente.test`
+  - staging.yaml: `*.staging.kubelab.live`
+  - prod.yaml: `*.kubelab.live` + `mlorente.dev`
 - [x] **DOM-003**: Update Traefik templates (Jinja2) for new scheme
   - Templates already use variables from values.yaml (no hardcoded domains)
 - [x] **DOM-004**: ~~Update `.env.*.example` files~~ — Superseded: eliminated all `.env` files, migrated to `values/*.yaml` exclusively
@@ -342,7 +342,7 @@ Config model migrated from `.env` files to `values/*.yaml` + SOPS secrets.
 - [x] **INT-001**: Setup local DNS and certificates
 
   ```bash
-  make setup-local-dns       # /etc/hosts: *.cubelab.test + mlorente.test
+  make setup-local-dns       # /etc/hosts: *.kubelab.test + mlorente.test
   make setup-certs           # mkcert for all local domains
   ```
 
@@ -379,24 +379,24 @@ Config model migrated from `.env` files to `values/*.yaml` + SOPS secrets.
 
   ```bash
   # All 11 endpoints verified:
-  # 200: mlorente.test, api.cubelab.test/health, blog.cubelab.test, auth.cubelab.test
-  #      minio.cubelab.test/minio/health/live, console.minio.cubelab.test
-  # 302: traefik.cubelab.test, grafana.cubelab.test, portainer.cubelab.test,
-  #      status.cubelab.test, gitea.cubelab.test (→ Authelia SSO, expected)
+  # 200: mlorente.test, api.kubelab.test/health, blog.kubelab.test, auth.kubelab.test
+  #      minio.kubelab.test/minio/health/live, console.minio.kubelab.test
+  # 302: traefik.kubelab.test, grafana.kubelab.test, portainer.kubelab.test,
+  #      status.kubelab.test, gitea.kubelab.test (→ Authelia SSO, expected)
   ```
 
 - [x] **INT-007**: Verify Traefik routing (each domain → correct container)
 
   ```bash
   # All routers green in Traefik dashboard
-  # Fixed: portainer had cubelab.cloud instead of cubelab.test (duplicate YAML key bug in dev.yaml)
+  # Fixed: portainer had kubelab.live instead of kubelab.test (duplicate YAML key bug in dev.yaml)
   ```
 
 - [x] **INT-008**: Clean teardown
 
   ```bash
   toolkit services down --all   # New --all flag implemented
-  # Only buildx_buildkit_multiarch0 remains (Docker Buildx builder, not CubeLab)
+  # Only buildx_buildkit_multiarch0 remains (Docker Buildx builder, not KubeLab)
   ```
 
 **Completed**: 2026-02-14. Full stack up, 11 endpoints verified via HTTPS,
@@ -424,8 +424,8 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   - Fixed: undefined `inputs.changed_apps_json` in release workflow
 
 - [x] **CI-003**: Verify Docker builds in CI
-  - Docker image pushed: `mlorentedev/cubelab-api:0.0.0-dev.{sha}`
-  - Registry rebranded: `mlorente-{app}` → `cubelab-{app}`
+  - Docker image pushed: `mlorentedev/kubelab-api:0.0.0-dev.{sha}`
+  - Registry rebranded: `mlorente-{app}` → `kubelab-{app}`
   - Versioning reset from 0.0.1 (clean start)
 
 **Completed**: 2026-02-16. PR to develop created, CI green, Docker build validated.
@@ -436,23 +436,25 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 > VPS runs Docker Compose initially. K3s migration happens later in B6.
 > Note: A5 deploys Docker Compose on VPS — independent of K3s staging (B5).
 
-- [ ] **PROD-001**: Verify SSH access to VPS
+- [x] **PROD-001**: Verify SSH access to VPS ✓ 2026-02-20
 
   ```bash
-  ssh deploy@162.55.57.175 "hostname && docker ps"
+  ssh deployer@162.55.57.175 "hostname && docker ps"
+  # Fixed: SSH key was corrupted in authorized_keys, re-added via Hetzner Web Console
+  # Hostname changed: mlorente-01 → kubelab-vps
   ```
 
 - [ ] **PROD-002**: Verify/fix Terraform DNS (two zones)
 
   ```bash
   ENVIRONMENT=prod toolkit infra terraform plan
-  # Must manage: mlorente.dev + cubelab.cloud
+  # Must manage: mlorente.dev + kubelab.live
   ```
 
 - [ ] **PROD-003**: Deploy stack on VPS (Docker Compose)
 
   ```bash
-  ssh deploy@162.55.57.175
+  ssh deployer@162.55.57.175
   docker compose -f compose.base.yml -f compose.prod.yml up -d
   ```
 
@@ -460,15 +462,15 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
   ```bash
   curl -I https://mlorente.dev
-  curl -I https://api.cubelab.cloud/health
+  curl -I https://api.kubelab.live/health
   ```
 
 - [ ] **PROD-005**: Verify each public app/service
   - `https://mlorente.dev` (personal website)
-  - `https://blog.cubelab.cloud` (cubernautas blog)
-  - `https://api.cubelab.cloud` (API)
-  - `https://grafana.cubelab.cloud` (monitoring)
-  - Wiki not deployed — lives in toolkit (`cubelab docs serve`)
+  - `https://blog.kubelab.live` (cubernautas blog)
+  - `https://api.kubelab.live` (API)
+  - `https://grafana.kubelab.live` (monitoring)
+  - Wiki not deployed — lives in toolkit (`kubelab docs serve`)
 
 - [ ] **PROD-006**: Basic monitoring (Uptime Kuma probes + Grafana/Loki on VPS)
 
@@ -503,26 +505,26 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 **Acemagic-1 → Proxmox VE:**
 
-- [x] **HW-001**: Install Proxmox VE 9.1.5 on Acemagic-1 (`cubelab-ace1`) ✓ 2026-02-19 → see vault [[runbooks/proxmox-setup]]
+- [x] **HW-001**: Install Proxmox VE 9.1.5 on Acemagic-1 (`kubelab-ace1`) ✓ 2026-02-19 → see vault [[runbooks/proxmox-setup]]
 - [x] **HW-002**: Create VM `k3s-server` (5GB RAM, 2 vCPU, 40GB disk, Debian 13, `172.16.1.10`) ✓ 2026-02-19
 - [x] **HW-003**: Create VM `k3s-agent-1` (5GB RAM, 2 vCPU, 40GB disk, Debian 13, `172.16.1.11`) ✓ 2026-02-19
 
 **Acemagic-2 → Proxmox VE (same as Acemagic-1):**
 
-- [x] **HW-004**: Install Proxmox VE 9.1.5 on Acemagic-2 (`cubelab-ace2`, user: `manu`) ✓ 2026-02-19 → see vault [[runbooks/proxmox-setup]]
+- [x] **HW-004**: Install Proxmox VE 9.1.5 on Acemagic-2 (`kubelab-ace2`, user: `manu`) ✓ 2026-02-19 → see vault [[runbooks/proxmox-setup]]
 - [x] **HW-004a**: Create VM `k3s-agent-2` (10GB RAM, 4 vCPU, 50GB disk, Debian 13, `172.16.1.12`) on Acemagic-2 ✓ 2026-02-19
 
 **Beelink → Ollama:**
 
-- [x] **HW-005**: Install Ubuntu Server 24.04 LTS on Beelink (`cubelab-bee`, user: `manu`) ✓ 2026-02-19
+- [x] **HW-005**: Install Ubuntu Server 24.04 LTS on Beelink (`kubelab-bee`, user: `manu`) ✓ 2026-02-19
 - [x] **HW-006**: Install Ollama + LAN config (`OLLAMA_HOST=0.0.0.0`) ✓ 2026-02-19
 - [x] **HW-007**: Pull qwen2.5:7b (~4.7GB, ceiling for 8GB RAM) + LAN inference verified from RPi 4 ✓ 2026-02-19
 
 **Network (completed previously):**
 
-- [x] **HW-008**: RPi 4 Ubuntu Server installed (`cubelab-rpi4`)
-- [x] **HW-009**: RPi 3 Raspberry Pi OS Lite installed (`cubelab-rpi3`, `10.0.0.157`, WiFi built-in)
-- [x] **HW-010**: Jetson Nano #1 JetPack + Docker (`cubelab-jet1`) — online, hostname renamed ✓ 2026-02-19
+- [x] **HW-008**: RPi 4 Ubuntu Server installed (`kubelab-rpi4`)
+- [x] **HW-009**: RPi 3 Raspberry Pi OS Lite installed (`kubelab-rpi3`, `10.0.0.157`, WiFi built-in)
+- [x] **HW-010**: Jetson Nano #1 JetPack + Docker (`kubelab-jet1`) — online, hostname renamed ✓ 2026-02-19
 - [x] **HW-011**: USB 3.0 Ethernet on RPi 4 (uplink, 1 Gbps confirmed)
   - ⚠️ **BUG**: USB ETH adapter `enx00e04c690e15` shows NO-CARRIER after reboot — RPi 4 WAN falls back to WiFi (`wlan0`). Investigate: cable? adapter? NetworkManager config?
 - [x] **HW-012**: Ethernet RPi 4 → TP-Link switch (downlink)
@@ -556,25 +558,25 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 - [ ] **TS-001**: Deploy Headscale on VPS (Docker Compose, port 8080 + DERP port 3478)
   ```bash
-  # Headscale manages the Tailscale control plane — runs on cubelab-vps
+  # Headscale manages the Tailscale control plane — runs on kubelab-vps
   ```
 - [ ] **TS-002**: Install Tailscale client on all nodes (ace1, ace2, bee, rpi4, rpi3, jet1, workstation)
-  - Point clients to Headscale: `HEADSCALE_URL=https://vpn.cubelab.cloud`
-- [ ] **TS-003**: Configure cubelab-rpi4 as subnet router (`--advertise-routes=172.16.1.0/24`)
+  - Point clients to Headscale: `HEADSCALE_URL=https://vpn.kubelab.live`
+- [ ] **TS-003**: Configure kubelab-rpi4 as subnet router (`--advertise-routes=172.16.1.0/24`)
 - [ ] **TS-004**: Approve subnet route in Headscale admin (`headscale routes enable`)
 - [ ] **TS-005**: Record Tailscale IPs for all devices, update inventory and `~/.ssh/config`
-- [ ] **TS-006**: Configure Tailscale split DNS for `*.staging.cubelab.cloud` → cubelab-rpi4 CoreDNS
+- [ ] **TS-006**: Configure Tailscale split DNS for `*.staging.kubelab.live` → kubelab-rpi4 CoreDNS
 
 > Runbook: vault [[runbooks/headscale-setup]]
 
 #### B2: CoreDNS on RPi 4 (parallel with B3)
 
 > CoreDNS runs alongside Pi-hole on RPi 4 gateway.
-> Resolves `*.staging.cubelab.cloud` → K3s Ingress IP (Traefik on cluster).
+> Resolves `*.staging.kubelab.live` → K3s Ingress IP (Traefik on cluster).
 
 - [ ] **DNS-001**: Deploy CoreDNS container on RPi 4 (`edge/dns-gateway/`)
-- [ ] **DNS-002**: Update Corefile: `*.staging.cubelab.cloud` → K3s Ingress Tailscale IP
-- [ ] **DNS-003**: Verify: `dig @<rpi4-ip> api.staging.cubelab.cloud` → K3s Ingress IP
+- [ ] **DNS-002**: Update Corefile: `*.staging.kubelab.live` → K3s Ingress Tailscale IP
+- [ ] **DNS-003**: Verify: `dig @<rpi4-ip> api.staging.kubelab.live` → K3s Ingress IP
 
 > Runbook: vault [[runbooks/dns-homelab]]
 
@@ -598,7 +600,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 - [ ] **K3S-003**: Join `k3s-agent-2` VM (Acemagic-2 Proxmox) to cluster
 - [ ] **K3S-004**: Verify: `kubectl get nodes` → 3 nodes Ready
-- [ ] **K3S-005**: Create namespace `cubelab`
+- [ ] **K3S-005**: Create namespace `kubelab`
 - [ ] **K3S-006**: Configure `kubectl` access from workstation (copy kubeconfig via Tailscale)
 
 **Ollama as external service:**
@@ -611,7 +613,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   kind: Service
   metadata:
     name: ollama
-    namespace: cubelab
+    namespace: kubelab
   spec:
     type: ExternalName
     externalName: <beelink-tailscale-ip>
@@ -621,7 +623,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   kind: ConfigMap
   metadata:
     name: ollama-config
-    namespace: cubelab
+    namespace: kubelab
   data:
     OLLAMA_ENDPOINT: "http://<beelink-ip>:11434"
   ```
@@ -668,7 +670,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **STAGE-001**: Apply staging overlay → all pods Running
   ```bash
   kubectl apply -k infra/k8s/overlays/staging/
-  kubectl get pods -n cubelab
+  kubectl get pods -n kubelab
   ```
 - [ ] **STAGE-002**: Verify Traefik Ingress routes (each domain → correct service)
 - [ ] **STAGE-003**: Verify TLS (Let's Encrypt via DNS-01 or Traefik CRD)
@@ -676,7 +678,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
   ```bash
   kubectl run test --rm -it --image=curlimages/curl -- \
-    curl http://ollama.cubelab.svc:11434/api/tags
+    curl http://ollama.kubelab.svc:11434/api/tags
   ```
 
 - [ ] **STAGE-005**: Deploy observability (Grafana, Loki) on K3s
@@ -699,9 +701,9 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 - [ ] **PROD-K3S-002**: Apply prod overlay
   ```bash
   kubectl apply -k infra/k8s/overlays/prod/
-  kubectl get pods -n cubelab
+  kubectl get pods -n kubelab
   ```
-- [ ] **PROD-K3S-003**: Verify apps accessible with valid TLS on `mlorente.dev` + `cubelab.cloud`
+- [ ] **PROD-K3S-003**: Verify apps accessible with valid TLS on `mlorente.dev` + `kubelab.live`
 - [ ] **PROD-K3S-004**: Update GitHub Actions: add `kubectl apply -k` deploy step on push to master
 - [ ] **PROD-K3S-005**: Decommission Docker Compose on VPS (remove old containers, configs)
 - [ ] **PROD-K3S-006**: Document rollback procedure: if K3s fails → `docker compose up` from `infra/stacks/`
@@ -718,7 +720,7 @@ Docker Compose only used for local dev. ArgoCD automation deferred to Stream E.
 - [ ] **AI-002**: Deploy llama-server with Qwen 2.5 1.5B Q4_0 model (GPU offload `-ngl 999`)
 - [ ] **AI-003**: Deploy Pollex Go API (browser extension backend, port 8090)
 - [ ] **AI-004**: Add Traefik IngressRoute or ExternalName Service → Jetson LAN IP
-- [ ] **AI-005**: Add CoreDNS entry for `polish.staging.cubelab.cloud`
+- [ ] **AI-005**: Add CoreDNS entry for `polish.staging.kubelab.live`
 - [ ] **AI-006**: Verify end-to-end: browser extension → Traefik → Pollex API → llama-server → response
 
 #### B7: External Monitoring (RPi 3)
@@ -726,7 +728,7 @@ Docker Compose only used for local dev. ArgoCD automation deferred to Stream E.
 > Blocked by: B5. RPi 3 connects directly to router (independent internet),
 > outside RPi 4 blast radius. Monitors both homelab and VPS.
 
-- [x] **MON-001**: Install Docker on RPi 3 (`cubelab-rpi3`) ✓ 2026-02-18
+- [x] **MON-001**: Install Docker on RPi 3 (`kubelab-rpi3`) ✓ 2026-02-18
 - [ ] **MON-002**: Install Tailscale on RPi 3 (access internal services for probes) — blocked by B1
 - [x] **MON-003**: Deploy Uptime Kuma v2 on RPi 3 — monitors: VPS, RPi 4, router ✓ 2026-02-18
 - [ ] **MON-004**: Configure monitors for all staging K3s endpoints (via Tailscale)
@@ -753,74 +755,83 @@ Docker Compose only used for local dev. ArgoCD automation deferred to Stream E.
 
 > Prerequisite: A5 completed (prod working = safety net for repo split).
 > This implements the architecture decisions above.
+>
+> **IMPORTANT — Pre-C4 checkpoint (Imaging Suite / SensorTool):**
+> Before writing any SensorTool code, do audience building FIRST:
+> 1. Setup Beehiiv for Imaging Sales Intel newsletter (30 min)
+> 2. Write 4 newsletter issues batch (4h) — you already know the content
+> 3. Publish 3 LinkedIn posts positioning as imaging sensor expert (1h)
+> 4. THEN start coding SensorTool
+> Reason: market validation is confirmed (insider), but audience = 0. Every week
+> of audience before launch = warmer reception on day 1. ISO 24942 window is 2-3 years.
 
 #### C1: Make toolkit generic
 
-> This is the largest piece of work. Transform the toolkit from CubeLab-specific
-> to generic, reading cubelab.yaml.
+> This is the largest piece of work. Transform the toolkit from KubeLab-specific
+> to generic, reading kubelab.yaml.
 
-- [ ] **TOOLKIT-001**: Design definitive cubelab.yaml schema
+- [ ] **TOOLKIT-001**: Design definitive kubelab.yaml schema
   - Define what is configurable vs convention
   - Document with examples for: platform, app, static-site
 
-- [ ] **TOOLKIT-002**: Implement cubelab.yaml loading
+- [ ] **TOOLKIT-002**: Implement kubelab.yaml loading
   - Parser with Pydantic v2 model
   - Sensible fallbacks if config is missing
-  - Clear error if cubelab.yaml does not exist
+  - Clear error if kubelab.yaml does not exist
 
 - [ ] **TOOLKIT-003**: Refactor constants.py and settings.py
   - Remove hardcoded paths (PATH_STRUCTURES, SERVICES_*, etc.)
-  - Everything resolves from cubelab.yaml + smart defaults
+  - Everything resolves from kubelab.yaml + smart defaults
 
 - [ ] **TOOLKIT-004**: Refactor cli/services.py
-  - Discover stacks from cubelab.yaml, not from constants
+  - Discover stacks from kubelab.yaml, not from constants
   - Generic compose file resolution
 
 - [ ] **TOOLKIT-005**: Refactor features/ (validation, generators)
-  - Make generators configurable via cubelab.yaml
+  - Make generators configurable via kubelab.yaml
   - Validation reads structure from config
 
 - [ ] **TOOLKIT-006**: Full tests for generic toolkit
-  - Test with cubelab.yaml type platform
-  - Test with cubelab.yaml type app
-  - Test with cubelab.yaml type static-site
+  - Test with kubelab.yaml type platform
+  - Test with kubelab.yaml type app
+  - Test with kubelab.yaml type static-site
   - Edge cases: missing config, partial config
 
-- [ ] **TOOLKIT-007**: Create cubelab.yaml for current monorepo
+- [ ] **TOOLKIT-007**: Create kubelab.yaml for current monorepo
   - Verify toolkit works identically with config file
 
-- [ ] **TOOLKIT-008**: Integrate wiki as `cubelab docs` (replaces wiki app)
-  - Migrate `generator_wiki.py` to `cubelab docs` command
+- [ ] **TOOLKIT-008**: Integrate wiki as `kubelab docs` (replaces wiki app)
+  - Migrate `generator_wiki.py` to `kubelab docs` command
   - Subcommands: `generate` (static HTML), `serve` (local MkDocs), `validate` (CI)
-  - Reads project structure from `cubelab.yaml`:
+  - Reads project structure from `kubelab.yaml`:
     - Auto-generated service catalog (apps, services, domains, versions)
     - Available commands (CLI introspection)
     - Project architecture
   - Remove wiki app from stack (Dockerfile, compose, Traefik domain)
-  - Local access: `cubelab docs serve` → `http://localhost:8000`
+  - Local access: `kubelab docs serve` → `http://localhost:8000`
   - Tests:
-    - `cubelab docs validate` passes without errors
-    - `cubelab docs generate` produces valid HTML
-    - `cubelab docs serve` starts server on configurable port
-    - Content reflects cubelab.yaml (correct service catalog)
-  - Publication (post C2, when cubelab-cli is an independent repo):
-    - CI in `cubelab-cli` generates static HTML with `cubelab docs generate`
-    - Automatic deploy to GitHub Pages (`mlorente.github.io/cubelab-cli/`)
-    - On VPS: Nginx/Traefik serves static HTML at `docs.cubelab.cloud`
+    - `kubelab docs validate` passes without errors
+    - `kubelab docs generate` produces valid HTML
+    - `kubelab docs serve` starts server on configurable port
+    - Content reflects kubelab.yaml (correct service catalog)
+  - Publication (post C2, when kubelab-cli is an independent repo):
+    - CI in `kubelab-cli` generates static HTML with `kubelab docs generate`
+    - Automatic deploy to GitHub Pages (`mlorente.github.io/kubelab-cli/`)
+    - On VPS: Nginx/Traefik serves static HTML at `docs.kubelab.live`
     - Traefik route points to a lightweight container (nginx:alpine) with generated HTML
-    - Option: GitHub Action in cubelab-cli deploys to VPS via SSH/rsync
-    - Result: `docs.cubelab.cloud` always up-to-date with each CLI release
+    - Option: GitHub Action in kubelab-cli deploys to VPS via SSH/rsync
+    - Result: `docs.kubelab.live` always up-to-date with each CLI release
 
-**Done when**: Toolkit works the same as before but reading cubelab.yaml.
-Zero CubeLab-specific hardcoded logic. `cubelab docs serve` serves
+**Done when**: Toolkit works the same as before but reading kubelab.yaml.
+Zero KubeLab-specific hardcoded logic. `kubelab docs serve` serves
 auto-generated project documentation.
 
-#### C2: Publish cubelab-cli
+#### C2: Publish kubelab-cli
 
 > Blocked by: C1 completed
 
-- [ ] **PUB-001**: Create `cubelab-cli` repo on GitHub
-  - Structure: pyproject.toml, cubelab_cli/, tests/, README
+- [ ] **PUB-001**: Create `kubelab-cli` repo on GitHub
+  - Structure: pyproject.toml, kubelab_cli/, tests/, README
   - Move toolkit/ code to new repo
 
 - [ ] **PUB-002**: Configure toolkit CI/CD
@@ -831,7 +842,7 @@ auto-generated project documentation.
 - [ ] **PUB-003**: First release (v0.1.0)
 
   ```bash
-  cd cubelab-cli
+  cd kubelab-cli
   poetry version 0.1.0
   poetry publish --build
   ```
@@ -839,32 +850,32 @@ auto-generated project documentation.
 - [ ] **PUB-004**: Verify clean installation
 
   ```bash
-  pip install cubelab-cli
-  cubelab --help
+  pip install kubelab-cli
+  kubelab --help
   ```
 
-**Done when**: `pip install cubelab-cli` works, `cubelab --help` responds.
+**Done when**: `pip install kubelab-cli` works, `kubelab --help` responds.
 
-#### C3: Convert monorepo → cubelab-platform
+#### C3: Convert monorepo → kubelab-platform
 
 > Blocked by: C2 completed (toolkit published)
 
 - [ ] **PLAT-001**: Update pyproject.toml
   - Remove toolkit as local code
-  - Add dependency: `cubelab-cli = "^0.1.0"`
+  - Add dependency: `kubelab-cli = "^0.1.0"`
 
 - [ ] **PLAT-002**: Clean toolkit/ directory from monorepo
-  - Only cubelab.yaml remains as configuration
+  - Only kubelab.yaml remains as configuration
 
 - [ ] **PLAT-003**: Verify everything works with external toolkit
 
   ```bash
   poetry install
-  cubelab services list
-  cubelab services up web
+  kubelab services list
+  kubelab services up web
   ```
 
-- [ ] **PLAT-004**: Clean repo rename references (`mlorente.dev` → `cubelab`)
+- [ ] **PLAT-004**: Clean repo rename references (`mlorente.dev` → `kubelab`)
   - GitHub URLs in README.md, CONTRIBUTING.md, common.yaml
   - Go module path in `apps/api/src/go.mod` + all `.go` imports
   - pyproject.toml metadata
@@ -872,9 +883,9 @@ auto-generated project documentation.
   - `toolkit/features/orchestrator.py` hardcoded health check URLs
   - Note: `mlorente.dev` as DOMAIN stays (it's the personal site domain, not the repo name)
 
-- [ ] **PLAT-005**: Update CI/CD to use cubelab-cli as dependency
+- [ ] **PLAT-005**: Update CI/CD to use kubelab-cli as dependency
 
-**Done when**: Monorepo works without local toolkit, consumes cubelab-cli from PyPI.
+**Done when**: Monorepo works without local toolkit, consumes kubelab-cli from PyPI.
 
 #### C4: Imaging Suite (SensorTool + SensorDB)
 
@@ -884,14 +895,14 @@ auto-generated project documentation.
 > (SensorDB) and EMVA 1288 / ISO 24942 analysis (SensorLab) via WebAssembly.
 > See `~/Downloads/imaging-suite-business-plan-v3.1.md` for full business plan.
 >
-> **Strategy**: Start inside CubeLab monorepo (apps/sensortool/), then extract to
-> private monorepo (imaging-suite-platform) when stable. CubeLab provides infra
+> **Strategy**: Start inside KubeLab monorepo (apps/sensortool/), then extract to
+> private monorepo (imaging-suite-platform) when stable. KubeLab provides infra
 > (K3s, monitoring, auth, CI/CD), SensorTool is the product.
 >
 > **Tech stack**: Go API (SensorDB backend) + Astro frontend + Go→WASM (SensorLab browser engine)
 > Core algorithms in Go compile to: binary (CLI), WASM (browser), Docker (CI/CD).
 
-- [ ] **SENSOR-001**: Create `apps/sensortool/` inside CubeLab monorepo
+- [ ] **SENSOR-001**: Create `apps/sensortool/` inside KubeLab monorepo
   - Go API: `apps/sensortool/api/` (SensorDB endpoints: search, compare, export)
   - Astro frontend: `apps/sensortool/web/` (SensorDB UI + SensorLab WASM host)
   - WASM engine: `apps/sensortool/wasm/` (Go→WASM: EMVA 1288 algorithms)
@@ -923,18 +934,18 @@ auto-generated project documentation.
   - Stripe integration for Pro tier
   - Feature gating: free = 50 sensors + 5 searches/month, Pro = full access
 
-- [ ] **SENSOR-007**: CI/CD within CubeLab pipeline
+- [ ] **SENSOR-007**: CI/CD within KubeLab pipeline
   - Go lint + build + WASM compile in CI
   - Docker build multi-arch
   - Deploy to staging K3s
 
 - [ ] **SENSOR-008**: Extract to private monorepo `imaging-suite-platform`
-  - Move from CubeLab apps/ to own repo when product is stable
+  - Move from KubeLab apps/ to own repo when product is stable
   - Own CI/CD, own Stripe keys, own domain (sensortool.io)
-  - CubeLab remains as infra provider (K3s, monitoring)
+  - KubeLab remains as infra provider (K3s, monitoring)
 
 **Done when**: SensorDB searchable with 50+ sensors, SensorLab WASM runs in browser,
-Free/Pro tiers work, deployed on CubeLab staging K3s.
+Free/Pro tiers work, deployed on KubeLab staging K3s.
 
 #### C5: Extract cubernautas-blog
 
@@ -943,16 +954,16 @@ Free/Pro tiers work, deployed on CubeLab staging K3s.
 
 - [ ] **BLOG-001**: Create `cubernautas-blog` repo on GitHub
 
-- [ ] **BLOG-002**: Move blog content from cubelab-platform to new repo
+- [ ] **BLOG-002**: Move blog content from kubelab-platform to new repo
   - Current blog (`apps/blog/`) → `cubernautas-blog/`
   - Current stack (`infra/stacks/apps/blog/`) → adapt to new repo
 
-- [ ] **BLOG-003**: Create personal blog in cubelab-platform
+- [ ] **BLOG-003**: Create personal blog in kubelab-platform
   - Replace the blog that left with a personal one
 
-- [ ] **BLOG-004**: cubelab.yaml + own CI/CD
+- [ ] **BLOG-004**: kubelab.yaml + own CI/CD
 
-- [ ] **BLOG-005**: Verify deploy on CubeLab infra
+- [ ] **BLOG-005**: Verify deploy on KubeLab infra
 
 **Done when**: Cubernautas is an independent repo, personal blog in platform.
 
@@ -1031,7 +1042,7 @@ Free/Pro tiers work, deployed on CubeLab staging K3s.
   - Traefik (ID: 17346) — HTTP traffic
   - Verify: all 3 dashboards populate with real data
 
-- [ ] **MET-008**: Create custom CubeLab overview dashboard
+- [ ] **MET-008**: Create custom KubeLab overview dashboard
   - Panel 1: Host CPU/RAM/Disk per node (Node Exporter)
   - Panel 2: Top 10 containers by RAM (cAdvisor)
   - Panel 3: Requests/s per service (Traefik)
@@ -1077,7 +1088,7 @@ and HTTP traffic. 3 imported dashboards + 1 custom overview dashboard. Alerts fi
   - `compose.dev.yml`, `compose.staging.yml`, `compose.prod.yml`
 
 - [ ] **VIK-002**: Add Vikunja config to `infra/config/values/common.yaml`
-  - Domain: `tasks.cubelab.test` / `tasks.staging.cubelab.cloud` / `tasks.cubelab.cloud`
+  - Domain: `tasks.kubelab.test` / `tasks.staging.kubelab.live` / `tasks.kubelab.live`
   - Resource limits, OIDC config (Authelia), SMTP for notifications
 
 - [ ] **VIK-003**: Add Traefik route for Vikunja
@@ -1087,11 +1098,11 @@ and HTTP traffic. 3 imported dashboards + 1 custom overview dashboard. Alerts fi
 - [ ] **VIK-004**: Deploy and verify Vikunja locally
   ```bash
   toolkit services up vikunja
-  curl -I https://tasks.cubelab.test
+  curl -I https://tasks.kubelab.test
   ```
 
 - [ ] **VIK-005**: Configure initial project structure in Vikunja
-  - Projects: `cubelab/infra`, `cubelab/apps`, `trabajo`, `personal`
+  - Projects: `kubelab/infra`, `kubelab/apps`, `trabajo`, `personal`
   - Labels: `agent:delegable`, `priority:high`, `priority:low`, `checkpoint:per-subtask`, `checkpoint:final-only`
   - Custom states: `pending`, `agent_working`, `checkpoint`, `approved`, `done`
 
@@ -1144,7 +1155,7 @@ agent executes with checkpoints, human approves via Slack, task marked done.
 #### F3: Agent Deployment on RPi 4
 
 > Blocked by: B0 (RPi 4 provisioned as gateway). Can run parallel with F1.
-> Agents run on RPi 4 (`cubelab-rpi4`, 8GB) — no GPU needed, uses external LLM APIs.
+> Agents run on RPi 4 (`kubelab-rpi4`, 8GB) — no GPU needed, uses external LLM APIs.
 
 - [ ] **CLAW-001**: Evaluate OpenClaw + PicoClaw deployment requirements
   - OpenClaw: Node.js, npm install, API documentation
@@ -1241,7 +1252,7 @@ and avoid repeating mistakes. Memory is searchable and prunable.
   - Verify: no n8n workflow triggered, task behaves as normal Vikunja task
 
 - [ ] **INT-F06**: Multi-repo test
-  - Task targeting repo outside cubelab (e.g., sensortool)
+  - Task targeting repo outside kubelab (e.g., sensortool)
   - Verify: agent accesses correct repo with correct credentials
 
 **Done when**: All integration tests pass. Delegable and non-delegable tasks coexist.
@@ -1266,39 +1277,39 @@ Slack communication bidirectional. Timeout and rejection flows work.
   - `compose.dev.yml`, `compose.staging.yml`, `compose.prod.yml`
 
 - [ ] **KB-002**: Add config to `infra/config/values/common.yaml`
-  - Domain: `kb.cubelab.test` / `kb.staging.cubelab.cloud` / `kb.cubelab.cloud`
+  - Domain: `kb.kubelab.test` / `kb.staging.kubelab.live` / `kb.kubelab.live`
   - Git repo URL for vault
   - Quartz config: published folders/tags whitelist
 
 - [ ] **KB-003**: Configure Quartz content filtering
-  - Define folder whitelist (e.g., `10_projects/cubelab/`, `20_areas/engineering/`)
+  - Define folder whitelist (e.g., `10_projects/kubelab/`, `20_areas/engineering/`)
   - Exclude sensitive folders (credentials, personal, private notes)
   - Tag-based filter: only notes tagged `public` or in approved folders
   - Verify: build output contains ZERO sensitive notes
 
 - [ ] **KB-004**: Add Traefik route with Authelia middleware
-  - `kb.cubelab.test` → knowledge-base container
+  - `kb.kubelab.test` → knowledge-base container
   - Authelia SSO required (no anonymous access)
 
 - [ ] **KB-005**: Deploy and verify locally
   ```bash
   toolkit services up knowledge-base
   # Should redirect to Authelia login first
-  curl -I https://kb.cubelab.test
+  curl -I https://kb.kubelab.test
   # After auth: vault content visible, graph view works, wikilinks resolve
   ```
 
 - [ ] **KB-006**: Verify sync cycle
   - Edit a note in Obsidian → push to Git
   - Wait 5 min (or trigger manual rebuild)
-  - Verify: change appears on `kb.cubelab.test`
+  - Verify: change appears on `kb.kubelab.test`
 
 - [ ] **KB-007**: Verify security layers
   - Layer 1: unauthenticated request → Authelia redirect (no content leaked)
   - Layer 2: inspect built HTML → no sensitive folders/notes present
   - Verify excluded content is not in search index either
 
-**Done when**: Vault accessible at `kb.cubelab.test` behind Authelia, auto-syncs from Git,
+**Done when**: Vault accessible at `kb.kubelab.test` behind Authelia, auto-syncs from Git,
 graph view and wikilinks work, sensitive content excluded at build time AND access-controlled.
 
 ---
@@ -1414,9 +1425,9 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 
 ### Stream P: Portfolio Tools
 
-> **Goal**: Extract and publish standalone tools from CubeLab. Pattern: small focused repos,
+> **Goal**: Extract and publish standalone tools from KubeLab. Pattern: small focused repos,
 > each solving a real personal problem but useful to others. Like steipete's army of repos.
-> Prerequisite: C1 completed (toolkit decoupled — cubelab-cli is the reuse pattern to follow).
+> Prerequisite: C1 completed (toolkit decoupled — kubelab-cli is the reuse pattern to follow).
 
 #### P1: Pollex MCP Server
 
@@ -1487,7 +1498,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] ClawdBot: Telegram bot (framework, approval workflow)
 - [ ] Authelia expand: OIDC for more services
 - [ ] Workers Phase 3: AI (embeddings, RAG, summarization)
-- [ ] API as platform gateway: unified auth (Authelia JWT), rate limiting, service mesh entry point for all CubeLab services
+- [ ] API as platform gateway: unified auth (Authelia JWT), rate limiting, service mesh entry point for all KubeLab services
 - [ ] Blog analytics: self-hosted Plausible or Umami (privacy-first, no Google Analytics)
 - [ ] Listmonk self-hosted (plan B): deploy on K3s if Beehiiv becomes unsuitable. Migration path: PostgreSQL backup → Listmonk import → DNS cutover
 - [ ] CMOSBench SEO landing: public page with free MTF calculator + partial sensor DB. SEO targets: "CMOS sensor comparison", "EMVA 1288 calculator"
@@ -1536,20 +1547,20 @@ prod     → Hetzner VPS (public, Let's Encrypt TLS)
 ### CLI Command Reference
 
 ```bash
-cubelab services up <name>       # Start app or service
-cubelab services down <name>     # Stop
-cubelab services logs <name>     # View logs
-cubelab services list            # List available
-cubelab config generate          # Generate configs from templates
-cubelab config validate          # Validate configs
-cubelab credentials generate     # Generate credentials
-cubelab infra ansible deploy     # Deploy with Ansible
-cubelab infra terraform plan     # Terraform plan
-cubelab deployment deploy        # Full deployment pipeline
-cubelab dashboard                # Terminal dashboard
-cubelab tools certs generate     # Generate local certs
-cubelab docs serve               # Serve project documentation locally
-cubelab docs generate            # Generate static HTML docs
+kubelab services up <name>       # Start app or service
+kubelab services down <name>     # Stop
+kubelab services logs <name>     # View logs
+kubelab services list            # List available
+kubelab config generate          # Generate configs from templates
+kubelab config validate          # Validate configs
+kubelab credentials generate     # Generate credentials
+kubelab infra ansible deploy     # Deploy with Ansible
+kubelab infra terraform plan     # Terraform plan
+kubelab deployment deploy        # Full deployment pipeline
+kubelab dashboard                # Terminal dashboard
+kubelab tools certs generate     # Generate local certs
+kubelab docs serve               # Serve project documentation locally
+kubelab docs generate            # Generate static HTML docs
 ```
 
 ---
@@ -1571,7 +1582,7 @@ cubelab docs generate            # Generate static HTML docs
 
 - [x] A4 completed: PR to develop, CI green, Docker build validated
 - [x] CI pipeline: fix critical step ID mismatch, semver branch, permissions
-- [x] Docker registry rebranded: `mlorente-{app}` → `cubelab-{app}`, versioning reset
+- [x] Docker registry rebranded: `mlorente-{app}` → `kubelab-{app}`, versioning reset
 - [x] DockerHub credentials: added `DOCKERHUB_USERNAME`, rotated expired token
 - [x] Gitleaks: `.gitleaks.toml` to exclude removed wiki, `continue-on-error` for parallel jobs
 - [x] Trivy: codeql-action v4, SARIF upload non-blocking
@@ -1587,7 +1598,7 @@ cubelab docs generate            # Generate static HTML docs
 - [x] MinIO compose.dev.yml created (OIDC disabled for local dev)
 - [x] Kestra removed (redundant — n8n chosen in ADR-007)
 - [x] Docmost removed (redundant — Quartz chosen in ADR-008)
-- [x] Wiki stack removed from infra/stacks/apps/ (will be `cubelab docs` in C1)
+- [x] Wiki stack removed from infra/stacks/apps/ (will be `kubelab docs` in C1)
 - [x] Fix: portainer domain in dev.yaml (YAML duplicate key overwrite)
 - [x] Fix: SECRETS_DIR moved from AutheliaConfig to PATH_STRUCTURES
 - [x] Makefile: replaced kestra with gitea in setup-local-dns
@@ -1615,8 +1626,8 @@ cubelab docs generate            # Generate static HTML docs
 - [x] Docker permission fixes: root-owned .vite/, .astro/, .jekyll-cache/
 - [x] Dev compose user fix: added `user: "${UID:-1000}:${GID:-1000}"` to web and blog
 - [x] Created .dockerignore for web app
-- [x] Domain strategy defined: mlorente.dev (personal) + cubelab.cloud (platform)
-- [x] Wiki decision: removed as deployed app, will integrate as `cubelab docs` in toolkit (C1/TOOLKIT-008)
+- [x] Domain strategy defined: mlorente.dev (personal) + kubelab.live (platform)
+- [x] Wiki decision: removed as deployed app, will integrate as `kubelab docs` in toolkit (C1/TOOLKIT-008)
 - [x] Roadmap restructured: A1→A5 (added domain migration + local integration phases)
 - [x] A2 completed: domain migration across all values/*.yaml files
 - [x] Full .env elimination: deleted physical files, cleaned toolkit code, Ansible roles, CI workflows
@@ -1626,9 +1637,9 @@ cubelab docs generate            # Generate static HTML docs
 ### 2026-02-08
 
 - [x] Architecture decisions: SDK Distribution + IDP pattern
-- [x] Define repos: cubelab-cli, cubelab-platform, sensortool, cubernautas-blog
+- [x] Define repos: kubelab-cli, kubelab-platform, sensortool, cubernautas-blog
 - [x] Methodology change: Kanban + XP (no sprints)
-- [x] Define cubelab.yaml schema
+- [x] Define kubelab.yaml schema
 - [x] Decide shared vs per-app services
 - [x] Sprint 0A completed: 5 FIX tickets (compose filenames, edge CLI, constants, pre-push, infra/compose refs)
 - [x] Sprint 0B completed: 11 ALIGN tickets (CLAUDE.md, README, TOOLKIT, CONTRIBUTING, workflows)
@@ -1665,5 +1676,5 @@ cubelab docs generate            # Generate static HTML docs
 ---
 
 *Last updated: 2026-02-19*
-*Next action: B0 — Proxmox on both Acemagics ✓, Beelink Ubuntu ✓. Remaining: Ollama on Beelink + VMs on Acemagics. Then B-pihole / B1 (Headscale+Tailscale).*
+*Next action: B1 — Headscale on VPS + Tailscale clients on all nodes. VPS hostname changed to kubelab-vps (2026-02-20).*
 *Streams: A (stabilize) → B (homelab K3s + prod migration) → C (repo split) → D (observability) → E (ArgoCD) → F (agents) → G (knowledge base) → H (agent workforce) → P (portfolio tools)*

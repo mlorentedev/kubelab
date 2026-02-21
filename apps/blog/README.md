@@ -68,7 +68,7 @@ jekyll-site/
  _config.yml
 title: Manu Lorente
 author: Manuel Lorente
-url: "https://cubelab.cloud"
+url: "https://kubelab.live"
 description: "Personal blog about DevOps, SRE and development"
 
  Main navigation

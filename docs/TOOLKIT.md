@@ -21,7 +21,7 @@ Key point: Toolkit runs locally, manages servers remotely. Never installed on se
  Setup (Once)
 
 ```bash
-cd ~/Projects/cubelab.cloud
+cd ~/Projects/kubelab.live
 poetry install
 echo "alias tk='poetry run toolkit'" >> ~/.bashrc
 source ~/.bashrc

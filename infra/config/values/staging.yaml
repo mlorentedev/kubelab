@@ -3,7 +3,7 @@
 # ==========================================================================
 environment: staging
 global:
-  base_domain: staging.cubelab.cloud
+  base_domain: staging.kubelab.live
   restart_policy: unless-stopped
 
 # ==========================================================================
@@ -28,12 +28,12 @@ endpoints:
 # ==========================================================================
 edge:
   traefik:
-    domain: traefik.staging.cubelab.cloud
+    domain: traefik.staging.kubelab.live
     disable_https: false
     acme_server: https://acme-v02.api.letsencrypt.org/directory
 
   nginx:
-    domain: errors.staging.cubelab.cloud
+    domain: errors.staging.kubelab.live
 
   cloudflared:
     enabled: false  # Tailscale replaces cloudflared for staging access
@@ -45,17 +45,17 @@ apps:
   # Platform applications (custom-built)
   platform:
     api:
-      domain: api.staging.cubelab.cloud
-      site_domain: staging.cubelab.cloud
-      site_url: https://staging.cubelab.cloud
+      domain: api.staging.kubelab.live
+      site_domain: staging.kubelab.live
+      site_url: https://staging.kubelab.live
       email_secure: true
 
     web:
-      backend_url: "https://api.staging.cubelab.cloud"
-      allowed_hosts: "localhost,web,127.0.0.1,.staging.cubelab.cloud"
-      domain: web.staging.cubelab.cloud
-      site_domain: staging.cubelab.cloud
-      site_url: https://web.staging.cubelab.cloud
+      backend_url: "https://api.staging.kubelab.live"
+      allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live"
+      domain: web.staging.kubelab.live
+      site_domain: staging.kubelab.live
+      site_url: https://web.staging.kubelab.live
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
@@ -64,28 +64,28 @@ apps:
   services:
     core:
       portainer:
-        domain: portainer.staging.cubelab.cloud
+        domain: portainer.staging.kubelab.live
 
     observability:
       loki:
-        domain: loki.staging.cubelab.cloud
+        domain: loki.staging.kubelab.live
 
       uptime_kuma:
-        domain: status.staging.cubelab.cloud
+        domain: status.staging.kubelab.live
 
       grafana:
-        domain: grafana.staging.cubelab.cloud
+        domain: grafana.staging.kubelab.live
 
     security:
       authelia:
-        domain: auth.staging.cubelab.cloud
-        issuer_domain: staging.cubelab.cloud
-        default_domain_root: staging.cubelab.cloud
+        domain: auth.staging.kubelab.live
+        issuer_domain: staging.kubelab.live
+        default_domain_root: staging.kubelab.live
 
       crowdsec:
-        domain: crowdsec.staging.cubelab.cloud
+        domain: crowdsec.staging.kubelab.live
 
     data:
       minio:
-        domain: minio.staging.cubelab.cloud
-        console_domain: console.minio.staging.cubelab.cloud
+        domain: minio.staging.kubelab.live
+        console_domain: console.minio.staging.kubelab.live

@@ -1,11 +1,11 @@
-# CubeLab
+# KubeLab
 
 > This document has been migrated to the knowledge vault (source of truth).
 
 ## Location
 
 ```
-~/Projects/knowledge/10_projects/cubelab/hardware/_index.md
+~/Projects/knowledge/10_projects/kubelab/hardware/_index.md
 ```
 
 ## Contents
@@ -19,5 +19,5 @@
 ## Quick search
 
 ```bash
-claude "show CubeLab hardware inventory" --cwd ~/Projects/knowledge
+claude "show KubeLab hardware inventory" --cwd ~/Projects/knowledge
 ```

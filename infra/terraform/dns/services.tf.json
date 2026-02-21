@@ -17,6 +17,7 @@
     { "name": "docmost", "priority": 15, "environments": ["staging", "prod"] },
     { "name": "immich", "priority": 16, "environments": ["staging", "prod"] },
     { "name": "vaultwarden", "priority": 17, "environments": ["staging", "prod"] },
-    { "name": "ollama", "priority": 18, "environments": ["staging"] }
+    { "name": "ollama", "priority": 18, "environments": ["staging"] },
+    { "name": "vpn", "priority": 19, "environments": ["prod"] }
   ]
 }

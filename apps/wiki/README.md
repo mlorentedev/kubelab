@@ -1,10 +1,10 @@
  . Wiki - Documentation Platform
 
-Technical documentation service built with MkDocs to provide a centralized knowledge base, technical guides, and project documentation for the CubeLab ecosystem.
+Technical documentation service built with MkDocs to provide a centralized knowledge base, technical guides, and project documentation for the KubeLab ecosystem.
 
  What it is
 
-This is the documentation hub for the entire CubeLab project. It collects and organizes all documentation from across the monorepo into a single, searchable knowledge base. I built it with MkDocs Material because it creates beautiful, fast documentation sites and handles markdown perfectly.
+This is the documentation hub for the entire KubeLab project. It collects and organizes all documentation from across the monorepo into a single, searchable knowledge base. I built it with MkDocs Material because it creates beautiful, fast documentation sites and handles markdown perfectly.
 
 The wiki automatically syncs documentation from all apps and infrastructure components, making it easy to find guides, architectural decisions, troubleshooting steps, and API documentation in one place.
 
@@ -57,8 +57,8 @@ apps/wiki/
  MkDocs configuration (`mkdocs.yml`)
 
 ```yaml
-site_name: CubeLab
-site_url: https://wiki.cubelab.cloud
+site_name: KubeLab
+site_url: https://wiki.kubelab.live
 site_description: Technical knowledge base and project documentation
 
  Theme configuration
@@ -136,8 +136,8 @@ IMAGE_NAME=mlorente-wiki
 PORT=
 
  MkDocs configuration
-SITE_NAME="CubeLab"
-SITE_URL="https://wiki.cubelab.cloud"
+SITE_NAME="KubeLab"
+SITE_URL="https://wiki.kubelab.live"
 SITE_LANG="en"
 ```
 

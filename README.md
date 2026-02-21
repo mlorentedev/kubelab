@@ -1,14 +1,14 @@
- CubeLab
+ KubeLab
 
 Personal platform monorepo - portfolio, blog, API, and self-hosted services.
 
-Live: [cubelab.cloud](https://cubelab.cloud)
+Live: [kubelab.live](https://kubelab.live)
 
  Overview
 
-This monorepo contains everything needed to run the CubeLab platform across three environments:
+This monorepo contains everything needed to run the KubeLab platform across three environments:
 - Development (local) - For development and testing
-- Staging (CubeLab homelab) - Pre-production on Raspberry Pi cluster
+- Staging (KubeLab homelab) - Pre-production on Raspberry Pi cluster
 - Production (Hetzner VPS) - Live public platform
 
  Tech Stack
@@ -33,8 +33,8 @@ This monorepo contains everything needed to run the CubeLab platform across thre
 
 ```bash
  Clone repository
-git clone https://github.com/mlorente/cubelab.cloud
-cd cubelab.cloud
+git clone https://github.com/mlorente/kubelab.live
+cd kubelab.live
 
  Install Poetry (if not installed)
 curl -sSL https://install.python-poetry.org | python -
@@ -64,7 +64,7 @@ Once running, services are available at:
  Project Structure
 
 ```
-cubelab.cloud/
+kubelab.live/
 ├── apps/                     Application source code
 │   ├── api/                  Go REST API
 │   ├── blog/                 Jekyll blog
@@ -148,15 +148,15 @@ See `docs/TOOLKIT.md` for complete documentation.
 - Access: localhost
 - Services: Basic stack (Traefik HTTP only)
 
- Staging (CubeLab homelab)
+ Staging (KubeLab homelab)
 - Infrastructure: Raspberry Pi cluster
-- Access: VPN (WireGuard) + `.staging.cubelab.cloud`
+- Access: VPN (WireGuard) + `.staging.kubelab.live`
 - Services: Full production-like stack
 - Purpose: Pre-production testing
 
  Production (Hetzner VPS)
 - Infrastructure: Cloud VPS
-- Access: Public `.cubelab.cloud`
+- Access: Public `.kubelab.live`
 - Services: Full stack with HTTPS
 - Purpose: Live production
 
@@ -262,7 +262,7 @@ tk deployment status
 | HOW-TO.md | Quick command reference |
 | CONTRIBUTING.md | How to contribute |
 | CI-CD.md | CI/CD pipeline documentation |
-| CUBELAB.md | Homelab (staging) setup |
+| KUBELAB.md | Homelab (staging) setup |
 | TROUBLESHOOTING.md | Common issues and solutions |
 | VERSIONING.md | Versioning strategy |
 
@@ -390,7 +390,7 @@ See [LICENSE](LICENSE) for details.
  Author
 
 Manuel Lorente
-- Website: [cubelab.cloud](https://cubelab.cloud)
+- Website: [kubelab.live](https://kubelab.live)
 - GitHub: [@mlorente](https://github.com/mlorente)
 
  Acknowledgments

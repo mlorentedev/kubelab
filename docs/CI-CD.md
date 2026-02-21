@@ -1,6 +1,6 @@
  . CI/CD Pipeline
 
-This document explains how the CI/CD pipeline works for the cubelab.cloud project. The pipeline consists of  GitHub Actions workflows that handle building, testing, and deploying applications.
+This document explains how the CI/CD pipeline works for the kubelab.live project. The pipeline consists of  GitHub Actions workflows that handle building, testing, and deploying applications.
 
  How it works
 

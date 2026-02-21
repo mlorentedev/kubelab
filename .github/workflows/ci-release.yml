@@ -72,47 +72,47 @@ jobs:
         if: steps.strategy.outputs.skip != 'true'
         run: |
           RELEASE_TAG="${{ steps.strategy.outputs.tag }}"
-          mkdir -p dist/cubelab-deploy
+          mkdir -p dist/kubelab-deploy
 
           echo "::group::Copying Infrastructure Files"
           # 1. Core Infrastructure
-          cp Makefile dist/cubelab-deploy/
-          cp -r infra dist/cubelab-deploy/
-          cp -r scripts dist/cubelab-deploy/ 2>/dev/null || true
+          cp Makefile dist/kubelab-deploy/
+          cp -r infra dist/kubelab-deploy/
+          cp -r scripts dist/kubelab-deploy/ 2>/dev/null || true
 
           # 2. App Compose Files (Only what's needed to run, NOT source code)
-          mkdir -p dist/cubelab-deploy/apps
+          mkdir -p dist/kubelab-deploy/apps
           # Copy only directory structure and compose files
           find apps -name "compose*.yml" | while read f; do
             dir=$(dirname "$f")
-            mkdir -p "dist/cubelab-deploy/$dir"
-            cp "$f" "dist/cubelab-deploy/$dir/"
+            mkdir -p "dist/kubelab-deploy/$dir"
+            cp "$f" "dist/kubelab-deploy/$dir/"
           done
 
           # 3. Toolkit (If it's needed for deployment orchestration)
-          cp -r toolkit dist/cubelab-deploy/
-          cp pyproject.toml dist/cubelab-deploy/
+          cp -r toolkit dist/kubelab-deploy/
+          cp pyproject.toml dist/kubelab-deploy/
           echo "::endgroup::"
 
           echo "::group::Cleaning Bundle"
           # Remove potential secrets or trash (safety net)
-          find dist/cubelab-deploy -name ".env*" -delete
-          find dist/cubelab-deploy -name "__pycache__" -type d -exec rm -rf {} +
+          find dist/kubelab-deploy -name ".env*" -delete
+          find dist/kubelab-deploy -name "__pycache__" -type d -exec rm -rf {} +
           # Note: Configuration lives in values/*.yaml, not .env files
           echo "::endgroup::"
 
           # Create Version Manifest
-          echo "Build Date: $(date)" > dist/cubelab-deploy/MANIFEST.txt
-          echo "Global Tag: $RELEASE_TAG" >> dist/cubelab-deploy/MANIFEST.txt
-          echo "Commit: ${{ github.sha }}" >> dist/cubelab-deploy/MANIFEST.txt
-          echo "Config Source: ${{ steps.strategy.outputs.config_file }}" >> dist/cubelab-deploy/MANIFEST.txt
+          echo "Build Date: $(date)" > dist/kubelab-deploy/MANIFEST.txt
+          echo "Global Tag: $RELEASE_TAG" >> dist/kubelab-deploy/MANIFEST.txt
+          echo "Commit: ${{ github.sha }}" >> dist/kubelab-deploy/MANIFEST.txt
+          echo "Config Source: ${{ steps.strategy.outputs.config_file }}" >> dist/kubelab-deploy/MANIFEST.txt
 
-          echo "--- Changed Apps ---" >> dist/cubelab-deploy/MANIFEST.txt
-          echo "See commit history for changed apps" >> dist/cubelab-deploy/MANIFEST.txt
+          echo "--- Changed Apps ---" >> dist/kubelab-deploy/MANIFEST.txt
+          echo "See commit history for changed apps" >> dist/kubelab-deploy/MANIFEST.txt
 
           # Zip it
           cd dist
-          zip -r "cubelab-${RELEASE_TAG}.zip" cubelab-deploy
+          zip -r "kubelab-${RELEASE_TAG}.zip" kubelab-deploy
 
       - name: Create Git Tag & Release
         if: steps.strategy.outputs.skip != 'true'
@@ -130,10 +130,10 @@ jobs:
             configuration and Docker Compose files.
 
             ### Deployment
-            Download `cubelab-${{ steps.strategy.outputs.tag }}.zip`, unzip on server, and run:
+            Download `kubelab-${{ steps.strategy.outputs.tag }}.zip`, unzip on server, and run:
             ```bash
             make deploy
             ```
-          artifacts: "dist/cubelab-${{ steps.strategy.outputs.tag }}.zip"
+          artifacts: "dist/kubelab-${{ steps.strategy.outputs.tag }}.zip"
           prerelease: ${{ steps.strategy.outputs.prerelease }}
           makeLatest: ${{ steps.strategy.outputs.prerelease == 'false' }}

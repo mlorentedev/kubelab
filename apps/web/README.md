@@ -1,6 +1,6 @@
  . Web - Frontend Portfolio
 
-The main frontend website for [cubelab.cloud](https://cubelab.cloud) - my personal portfolio and landing page. Built with Astro for maximum performance and developer experience.
+The main frontend website for [kubelab.live](https://kubelab.live) - my personal portfolio and landing page. Built with Astro for maximum performance and developer experience.
 
  What it is
 
@@ -65,7 +65,7 @@ HOST=...
 NODE_ENV=production
 
  API integration
-API_BASE_URL=https://api.cubelab.cloud
+API_BASE_URL=https://api.kubelab.live
 API_TIMEOUT=
 
  Feature flags
@@ -135,7 +135,7 @@ title: "My Awesome Project"
 description: "A brief description that sells the project"
 technologies: ["Astro", "TypeScript", "Tailwind"]
 github: "https://github.com/mlorentedev/project"
-demo: "https://project.cubelab.cloud"
+demo: "https://project.kubelab.live"
 image: "/images/projects/project.jpg"
 featured: true
 date: --

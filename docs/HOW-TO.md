@@ -5,7 +5,7 @@
 ## Location
 
 ```
-~/Projects/knowledge/10_projects/cubelab/runbooks/
+~/Projects/knowledge/10_projects/kubelab/runbooks/
 ```
 
 ## Available runbooks

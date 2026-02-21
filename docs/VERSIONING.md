@@ -1,6 +1,6 @@
  . Versioning Strategy
 
-This document explains how Docker images and releases are versioned across different branches in the cubelab.cloud project. The versioning follows semantic versioning principles while providing specific builds for development branches.
+This document explains how Docker images and releases are versioned across different branches in the kubelab.live project. The versioning follows semantic versioning principles while providing specific builds for development branches.
 
  Versioning by Branch
 

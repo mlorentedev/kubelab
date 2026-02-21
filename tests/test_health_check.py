@@ -15,7 +15,7 @@ class TestServiceHealthConfig:
     def test_basic_construction(self) -> None:
         cfg = ServiceHealthConfig(
             name="api",
-            domain="api.cubelab.cloud",
+            domain="api.kubelab.live",
             health_path="/health",
         )
         assert cfg.name == "api"
@@ -25,7 +25,7 @@ class TestServiceHealthConfig:
     def test_with_auth(self) -> None:
         cfg = ServiceHealthConfig(
             name="grafana",
-            domain="grafana.cubelab.cloud",
+            domain="grafana.kubelab.live",
             health_path="/api/health",
             enable_auth=True,
             category="services/observability",
@@ -39,14 +39,14 @@ class TestHealthCheckResult:
 
     def test_healthy_result(self) -> None:
         r = HealthCheckResult(
-            service="api", url="https://api.cubelab.cloud/health",
+            service="api", url="https://api.kubelab.live/health",
             status_code=200, healthy=True, reason="OK",
         )
         assert r.healthy is True
 
     def test_unhealthy_result(self) -> None:
         r = HealthCheckResult(
-            service="minio", url="https://minio.cubelab.cloud/minio/health/live",
+            service="minio", url="https://minio.kubelab.live/minio/health/live",
             status_code=403, healthy=False, reason="HTTP 403",
         )
         assert r.healthy is False
@@ -62,13 +62,13 @@ class TestExtractServiceConfigs:
                 "platform": {
                     "api": {
                         "name": "api",
-                        "domain": "api.cubelab.cloud",
+                        "domain": "api.kubelab.live",
                         "health_path": "/health",
                         "enable_auth": False,
                     },
                     "web": {
                         "name": "web",
-                        "domain": "web.cubelab.cloud",
+                        "domain": "web.kubelab.live",
                         "health_path": "/",
                     },
                 },
@@ -76,7 +76,7 @@ class TestExtractServiceConfigs:
                     "data": {
                         "minio": {
                             "name": "minio",
-                            "domain": "minio.cubelab.cloud",
+                            "domain": "minio.kubelab.live",
                             "health_path": "/minio/health/live",
                             "enable_auth": False,
                         },
@@ -84,7 +84,7 @@ class TestExtractServiceConfigs:
                     "observability": {
                         "grafana": {
                             "name": "grafana",
-                            "domain": "grafana.cubelab.cloud",
+                            "domain": "grafana.kubelab.live",
                             "health_path": "/api/health",
                             "enable_auth": True,
                         },
@@ -92,7 +92,7 @@ class TestExtractServiceConfigs:
                     "security": {
                         "authelia": {
                             "name": "authelia",
-                            "domain": "auth.cubelab.cloud",
+                            "domain": "auth.kubelab.live",
                             "health_path": "/api/health",
                             "enable_auth": False,
                         },
@@ -102,7 +102,7 @@ class TestExtractServiceConfigs:
             "edge": {
                 "traefik": {
                     "name": "traefik",
-                    "domain": "traefik.cubelab.cloud",
+                    "domain": "traefik.kubelab.live",
                     "health_path": "/ping",
                     "enable_auth": True,
                 },
@@ -167,7 +167,7 @@ class TestExtractServiceConfigs:
                 "platform": {
                     "workers": {
                         "name": "workers",
-                        "domain": "workers.cubelab.cloud",
+                        "domain": "workers.kubelab.live",
                         # No health_path
                     },
                 },
@@ -183,7 +183,7 @@ class TestResultInterpretation:
 
     def test_200_is_healthy(self) -> None:
         svc = ServiceHealthConfig(
-            name="api", domain="api.cubelab.cloud", health_path="/health",
+            name="api", domain="api.kubelab.live", health_path="/health",
         )
         checker = HealthChecker.__new__(HealthChecker)
         # We can't easily test _check_service without curl, but we can
@@ -196,21 +196,21 @@ class TestResultInterpretation:
 
     def test_302_with_auth_is_healthy(self) -> None:
         r = HealthCheckResult(
-            service="grafana", url="https://grafana.cubelab.cloud/api/health",
+            service="grafana", url="https://grafana.kubelab.live/api/health",
             status_code=302, healthy=True, reason="redirect (auth expected)",
         )
         assert r.healthy
 
     def test_403_is_unhealthy(self) -> None:
         r = HealthCheckResult(
-            service="minio", url="https://minio.cubelab.cloud/",
+            service="minio", url="https://minio.kubelab.live/",
             status_code=403, healthy=False, reason="HTTP 403",
         )
         assert not r.healthy
 
     def test_zero_status_is_unhealthy(self) -> None:
         r = HealthCheckResult(
-            service="down-svc", url="https://down.cubelab.cloud/health",
+            service="down-svc", url="https://down.kubelab.live/health",
             status_code=0, healthy=False, reason="no response",
         )
         assert not r.healthy

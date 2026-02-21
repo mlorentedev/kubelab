@@ -1,0 +1,46 @@
+server_url: https://vpn.kubelab.live
+listen_addr: 0.0.0.0:8080
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: false
+
+# IP allocation for mesh nodes
+ip_prefixes:
+  - 100.64.0.0/10
+
+# DERP relay config (built-in + Tailscale public fallback)
+derp:
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  server:
+    enabled: true
+    region_id: 999
+    region_code: homelab
+    region_name: KubeLab Homelab
+    stun_listen_addr: 0.0.0.0:3478
+  auto_update_enabled: true
+  update_frequency: 24h
+
+# DNS
+dns_config:
+  override_local_dns: true
+  nameservers:
+    - 1.1.1.1
+  domains: []
+  magic_dns: true
+  base_domain: kubelab.vpn
+
+# Database (SQLite — fine for homelab scale)
+db_type: sqlite3
+db_path: /var/lib/headscale/db.sqlite
+
+# Private keys (auto-generated on first run)
+private_key_path: /var/lib/headscale/private.key
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+# Ephemeral node timeout
+ephemeral_node_inactivity_timeout: 30m
+
+log:
+  level: info

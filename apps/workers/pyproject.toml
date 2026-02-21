@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "workers"
 version = "0.1.0"
-description = "CubeLab Background Workers"
+description = "KubeLab Background Workers"
 authors = ["Manu <info@mlorente.dev>"]
 
 [tool.poetry.dependencies]

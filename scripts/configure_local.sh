@@ -8,11 +8,11 @@ RPI_APPS_IP="192.168.2.101"
 SSH_KEY_PATH="~/.ssh/id_ed25519"
 
 # Markers for idempotency
-MARKER_START="# --- CUBELAB-SSH-START ---"
-MARKER_END="# --- CUBELAB-SSH-END ---"
+MARKER_START="# --- KUBELAB-SSH-START ---"
+MARKER_END="# --- KUBELAB-SSH-END ---"
 CONFIG_FILE="$HOME/.ssh/config"
 
-echo "Configuring $CONFIG_FILE for the CubeLab cluster..."
+echo "Configuring $CONFIG_FILE for the KubeLab cluster..."
 
 # 1. Remove previous block if it exists
 # The 'd' option in sed deletes lines between the markers.

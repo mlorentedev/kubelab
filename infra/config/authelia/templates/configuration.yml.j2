@@ -106,7 +106,7 @@ access_control:
     - domain: '{{ APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN }}'
       policy: bypass
 
-    # Internal network fallback (catch-all for cubelab.cloud from internal IPs)
+    # Internal network fallback (catch-all for kubelab.live from internal IPs)
     - domain: '*.{{ APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_DOMAIN_ROOT }}'
       policy: one_factor
       networks:

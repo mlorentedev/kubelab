@@ -6,7 +6,7 @@
 
 ## Context
 
-The current CubeLab architecture uses Docker Compose for both staging (Acemagic) and production (Hetzner VPS). A strategic decision has been made to migrate to Kubernetes (K3s) to build SRE/Infrastructure skills and enable future production migration.
+The current KubeLab architecture uses Docker Compose for both staging (Acemagic) and production (Hetzner VPS). A strategic decision has been made to migrate to Kubernetes (K3s) to build SRE/Infrastructure skills and enable future production migration.
 
 This ADR explicitly acknowledges a temporary violation of the principle "staging == prod in architecture" as a deliberate transition phase with a defined end state.
 
@@ -24,23 +24,23 @@ Migrate staging from Docker Compose on Acemagic to K3s on Proxmox.
 │  162.55.57.175      │ Docker Compose → Traefik + Apps + Services│
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Acemagic 12GB      │ Proxmox VE 8.x + K3s cluster             │
-│  cubelab-staging    │ 3 VMs: 1 server (3.5GB) + 2 agents (3.5GB)│
-│                     │ Staging environment for all CubeLab apps  │
+│  kubelab-staging    │ 3 VMs: 1 server (3.5GB) + 2 agents (3.5GB)│
+│                     │ Staging environment for all KubeLab apps  │
 │                     │ ArgoCD for GitOps                         │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Beelink 8GB        │ Ollama bare metal                         │
-│  cubelab-ai         │ Debian 12 + Ollama (llama.cpp)            │
+│  kubelab-ai         │ Debian 12 + Ollama (llama.cpp)            │
 │                     │ Accessible from K3s cluster via LAN       │
 │                     │ Endpoint: http://<beelink-ip>:11434       │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  RPi 4 (8GB)        │ Network gateway (unchanged)               │
-│  cubelab-edge       │ Bridge/NAT, Pi-hole, CoreDNS, Tailscale   │
+│  kubelab-edge       │ Bridge/NAT, Pi-hole, CoreDNS, Tailscale   │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  RPi 3 (1GB)        │ External monitor (unchanged)              │
-│  cubelab-monitor    │ Uptime Kuma                                │
+│  kubelab-monitor    │ Uptime Kuma                                │
 ├─────────────────────┼───────────────────────────────────────────┤
 │  Jetson Nano #1     │ Pollex (unchanged)                        │
-│  cubelab-ai-gpu     │ GPU inference, Qwen 2.5                   │
+│  kubelab-ai-gpu     │ GPU inference, Qwen 2.5                   │
 └─────────────────────┴───────────────────────────────────────────┘
 ```
 
@@ -64,7 +64,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ollama
-  namespace: cubelab
+  namespace: kubelab
 spec:
   type: ExternalName
   externalName: <beelink-tailscale-ip>
@@ -147,7 +147,7 @@ With Proxmox + 3-node K3s:
 - RPi 3 remains external monitor (Uptime Kuma)
 - Jetson Nano remains Pollex AI inference
 - VPS remains production until Phase 2
-- Domain strategy unchanged (mlorente.dev + cubelab.cloud)
+- Domain strategy unchanged (mlorente.dev + kubelab.live)
 - SOPS secrets management unchanged
 - CI/CD via GitHub Actions unchanged (ArgoCD is additive)
 

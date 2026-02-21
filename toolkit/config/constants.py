@@ -51,7 +51,7 @@ class Components:
     EDGE: Sequence[str] = ("traefik", "nginx", "dns-gateway", "cloudflared")
 
     # Core infrastructure services (apps.services.core.*)
-    SERVICES_CORE: Sequence[str] = ("portainer", "n8n", "gitea", "vaultwarden")
+    SERVICES_CORE: Sequence[str] = ("portainer", "n8n", "gitea", "vaultwarden", "headscale")
 
     # Data services (apps.services.data.*)
     SERVICES_DATA: Sequence[str] = ("minio",)

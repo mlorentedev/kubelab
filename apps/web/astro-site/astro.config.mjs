@@ -32,7 +32,7 @@ const loadEnvVariables = () => {
 const envVars = loadEnvVariables();
 
 export default defineConfig({
-  site: envVars.PUBLIC_SITE_URL || 'https://cubelab.cloud',
+  site: envVars.PUBLIC_SITE_URL || 'https://kubelab.live',
   publicDir: 'public',
   output: 'server',
   adapter: node({

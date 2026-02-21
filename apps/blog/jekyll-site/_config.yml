@@ -9,7 +9,7 @@ title: Manu Lorente
 author: Manuel Lorente
 
 # SEO
-url: "https://blog.cubelab.cloud"
+url: "https://blog.kubelab.live"
 baseurl: ''
 
 ###############################################
@@ -94,7 +94,7 @@ subscription: false
 navbar-var-length: false
 
 # The keywords to associate with your website, for SEO purposes
-keywords: "Manuel Lorente Alman,ingeniero,cubelab,homelab,engineer,devops,sre,cloud,programming,kubernetes,java,python,golang,ci,cd,aws,backend,fullstack,colorado,triana,sevilla,denver"
+keywords: "Manuel Lorente Alman,ingeniero,kubelab,homelab,engineer,devops,sre,cloud,programming,kubernetes,java,python,golang,ci,cd,aws,backend,fullstack,colorado,triana,sevilla,denver"
 
 ######################################
 # --- Colours / background image --- #
