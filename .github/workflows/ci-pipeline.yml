@@ -361,8 +361,10 @@ jobs:
     name: GitOps Update (${{ inputs.app }})
     needs: [app-pipeline, call-publish]
     runs-on: ubuntu-latest
-    # Only run if build was needed and successful
-    if: needs.app-pipeline.outputs.should_build == 'true'
+    # Only run on main/develop — feature branches are developer-owned, no CI auto-commits
+    if: >-
+      needs.app-pipeline.outputs.should_build == 'true' &&
+      (github.ref_name == 'master' || github.ref_name == 'main' || github.ref_name == 'develop')
     permissions:
       contents: write  # Required to push changes to repo
     steps:
