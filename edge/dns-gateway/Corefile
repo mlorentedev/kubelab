@@ -21,6 +21,18 @@ staging.kubelab.live {
     errors
 }
 
+kubelab.live {
+    hosts {
+        100.64.0.6 status.kubelab.live
+        100.64.0.3 ollama.kubelab.live
+        100.64.0.8 jetson.kubelab.live
+        fallthrough
+    }
+    forward . 1.1.1.1 8.8.8.8
+    log
+    errors
+}
+
 . {
     forward . 1.1.1.1 8.8.8.8
     cache 30

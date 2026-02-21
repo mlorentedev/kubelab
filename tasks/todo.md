@@ -1516,9 +1516,12 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
 - [ ] Docker image cleanup: purge stale `0.0.0-dev.*` tags from DockerHub (retention policy or GitHub Action cleanup job)
+- [ ] CI build speed: single-arch for staging (amd64 only), eliminate double web build (npm ci runs in both ci-pipeline validation and Dockerfile), consider native ARM runners for prod multi-arch
+- [ ] GitHub Issues as portfolio: create one Issue per stream as living epic (not per task). Retroactive summaries for completed streams (B0-B4), ongoing for active streams. Claude creates, user closes via PRs. Format: objective + checklist + key decisions + runbook links. ~10 issues total
 - [ ] Git remote rename: update origin URL from `mlorente.dev.git` → `cubelab.git` (GitHub redirect works but cosmetic fix)
 - [ ] API expansion (3 phases): Phase 1 = full portfolio API (projects, blog feed, CV, /status aggregator). Phase 2 = SensorDB backend. Phase 3 = microservices gateway. See brainstorm 2026-02-19
 - [ ] Service performance tuning: resource limits, benchmarks, Ollama inference speed, K3s pod resource requests/limits
+- [ ] Shared storage exploration: evaluate Longhorn (K3s native) vs NFS (Beelink) vs MicroCeph for Stream D. Needed when running stateful workloads (DBs, Minio) on K3s
 - [ ] Blog content plan (Cubernautas): content batching strategy — accumulate vault notes during B1-B6, convert to 10-15 posts, publish 1/week with buffer. ES first, EN translation via agents (Stream H). First topics: homelab K3s, Pi-hole Docker, Headscale self-hosted, Ollama homelab, Proxmox VMs
 - [ ] Newsletter — Imaging Sales Intel: Beehiiv (frontend) + PostgreSQL sync (backup). n8n cron exports subs via Beehiiv API weekly to own DB. Listmonk as documented plan B if Beehiiv fails. See imaging-suite-business-plan-v3.1.md
 - [ ] Newsletter — Cubernautas: platform TBD (Beehiiv or shared Listmonk). ES audience, Platform Engineering content

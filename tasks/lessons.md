@@ -150,6 +150,20 @@ qm start <vmid>
 **Solución**: CLI correcto: `headscale nodes list-routes`, `headscale nodes approve-routes -i <NODE_ID> --routes <CIDR>`. El flag `--routes` es una operación SET (reemplaza todas las rutas aprobadas, no es aditivo).
 **Regla**: Siempre verificar `--help` antes de ejecutar CLI de Headscale. La API cambia entre versiones minor. Ejecutar sin `--routes` puede limpiar rutas aprobadas existentes.
 
+### [2026-02-21] pihole reloaddns Does NOT Reload dnsmasq Config Files
+
+**Contexto**: Añadiendo conditional forwarding en Pi-hole para `kubelab.live` → CoreDNS
+**Problema**: Después de crear/modificar archivos en `/etc/dnsmasq.d/`, ejecutar `pihole reloaddns` no los recarga. La query seguía devolviendo NXDOMAIN. `pihole reloaddns` solo recarga las listas de bloqueo (gravity), no los archivos de configuración de dnsmasq.
+**Solución**: `docker restart pihole` (o `pihole-FTL --config dns.restart` en Pi-hole v6). Solo un restart completo recarga los archivos de `/etc/dnsmasq.d/`.
+**Regla**: Para cambios en dnsmasq configs (`/etc/dnsmasq.d/`), siempre `docker restart pihole`. `pihole reloaddns` es SOLO para gravity/blocklists. Verificar con `dig @127.0.0.1 <domain>` después del restart.
+
+### [2026-02-21] Headscale Split DNS: Use Parent Domain for Full Coverage
+
+**Contexto**: CoreDNS resolvía `*.staging.kubelab.live` pero no `status.kubelab.live` (bare-metal)
+**Problema**: Headscale split DNS estaba configurado solo para `staging.kubelab.live`. Los subdominios bare-metal (`status.kubelab.live`, `ollama.kubelab.live`) no pasaban por la cadena DNS interna — iban directamente a Cloudflare (que no tiene esos registros) y devolvían NXDOMAIN.
+**Solución**: Cambiar split DNS de `staging.kubelab.live` → `kubelab.live` en la config de Headscale. Esto cubre TODOS los subdominios internos. CoreDNS usa zone precedence: `staging.kubelab.live` (más específico) gana sobre `kubelab.live` para queries de staging.
+**Regla**: Configurar split DNS en el dominio padre (`kubelab.live`), no en subdominios específicos. Así cualquier nuevo subdominio interno funciona automáticamente sin tocar Headscale.
+
 ---
 
 *Mas entradas se anadiran conforme avance el proyecto.*
