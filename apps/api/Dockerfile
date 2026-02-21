@@ -1,4 +1,4 @@
-# Build Stage
+# Build Stage — CI v2 (build-args from YAML config)
 FROM golang:1.25-alpine AS build
 
 WORKDIR /app

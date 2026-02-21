@@ -1,3 +1,4 @@
+# CI v2 (build-args from YAML config)
 FROM ruby:3.3-slim AS dev
 
 # Install dependencies

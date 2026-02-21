@@ -1,4 +1,4 @@
-# ---------- Build Stage ----------
+# ---------- Build Stage — CI v2 (build-args from YAML config) ----------
 FROM node:22-alpine AS build
 
 # Declare build arguments for multi-arch support

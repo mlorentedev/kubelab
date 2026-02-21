@@ -1516,6 +1516,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
 - [ ] Docker image cleanup: purge stale `0.0.0-dev.*` tags from DockerHub (retention policy or GitHub Action cleanup job)
+- [ ] Git remote rename: update origin URL from `mlorente.dev.git` → `cubelab.git` (GitHub redirect works but cosmetic fix)
 - [ ] API expansion (3 phases): Phase 1 = full portfolio API (projects, blog feed, CV, /status aggregator). Phase 2 = SensorDB backend. Phase 3 = microservices gateway. See brainstorm 2026-02-19
 - [ ] Service performance tuning: resource limits, benchmarks, Ollama inference speed, K3s pod resource requests/limits
 - [ ] Blog content plan (Cubernautas): content batching strategy — accumulate vault notes during B1-B6, convert to 10-15 posts, publish 1/week with buffer. ES first, EN translation via agents (Stream H). First topics: homelab K3s, Pi-hole Docker, Headscale self-hosted, Ollama homelab, Proxmox VMs
