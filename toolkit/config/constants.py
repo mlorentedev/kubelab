@@ -149,6 +149,11 @@ class PathStructures:
     TRAEFIK_TEMPLATES_DIR: str = "edge/traefik/templates"
     TRAEFIK_CONFIG_OUTPUT_DIR: str = "edge/traefik/generated"
 
+    # Kubernetes
+    K8S_TEMPLATES_DIR: str = "infra/k8s/templates"
+    K8S_GENERATED_DIR: str = "infra/k8s/generated"
+    K8S_BASE_DIR: str = "infra/k8s/base"
+
 
 # =============================================================================
 # DOCKER

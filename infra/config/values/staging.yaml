@@ -50,6 +50,9 @@ apps:
       site_url: https://staging.kubelab.live
       email_secure: true
 
+    blog:
+      domain: blog.staging.kubelab.live
+
     web:
       backend_url: "https://api.staging.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live"

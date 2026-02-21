@@ -6,13 +6,13 @@
 >
 > **Strategy**: Fix code → Local dev → CI → Homelab staging → Production VPS → Extract repos
 
-### Progress (updated 2026-02-19)
+### Progress (updated 2026-02-21)
 
 ```
-Overall:  █████░░░░░░░░░░░░░░░░░░░░░  22% (58/253)
+Overall:  ████████░░░░░░░░░░░░░░░░░░  29% (74/256)
 
-Stream A: ████████████████████░░░░░░  81% (26/32)  — Stabilize & Deploy
-Stream B: █████████░░░░░░░░░░░░░░░░░  37% (32/85)  — Homelab K3s ← ACTIVE
+Stream A: ████████████████████░░░░░░  81% (26/33)  — Stabilize & Deploy
+Stream B: ██████████████░░░░░░░░░░░░  54% (47/87)  — Homelab K3s ← ACTIVE
 Stream C: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/30)  — Repo Separation + Imaging Suite
 Stream D: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/18)  — Data & Observability
 Stream E: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/6)   — ArgoCD GitOps
@@ -22,10 +22,10 @@ Stream H: ░░░░░░░░░░░░░░░░░░░░░░░�
 Stream P: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/10)  — Portfolio Tools
 Stream Z: ░░░░░░░░░░░░░░░░░░░░░░░░░░   0% (0/23)  — Backlog (newsletter, blog, API, perf)
 
-Velocity:    ~5.5 tasks/session (58 tasks in ~10 sessions, Feb 3-19)
-Remaining:   195 tasks ÷ 5.5/session ≈ 35 sessions
-Schedule:    ~4.5 sessions/week → ~8 weeks → late April 2026
-Next:        B1 (Headscale VPN mesh)
+Velocity:    ~6.2 tasks/session (74 tasks in ~12 sessions, Feb 3-21)
+Remaining:   182 tasks ÷ 6.2/session ≈ 29 sessions
+Schedule:    ~4.5 sessions/week → ~6.5 weeks → early April 2026
+Next:        TS-003 (subnet router) → B2 (CoreDNS) → B5 (staging deploy)
 Focus:       KubeLab infra first (B1-B6) → then SensorTool + blog + newsletters
 ```
 
@@ -465,6 +465,11 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
   curl -I https://api.kubelab.live/health
   ```
 
+- [ ] **PROD-004b**: Upgrade Traefik v3.0 → v3.6 on VPS
+  - Docker provider broken: API v1.24 too old for Docker Engine 29.x (min v1.44)
+  - File provider works fine (current routing unaffected)
+  - Upgrade aligns VPS with `common.yaml` (`traefik:v3.6`)
+
 - [ ] **PROD-005**: Verify each public app/service
   - `https://mlorente.dev` (personal website)
   - `https://blog.kubelab.live` (cubernautas blog)
@@ -556,15 +561,21 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 > WireGuard protocol underneath. Self-owned coordination = industry-relevant skill.
 > Cloudflare Tunnel stays only for Pollex public HTTP API (separate concern).
 
-- [ ] **TS-001**: Deploy Headscale on VPS (Docker Compose, port 8080 + DERP port 3478)
-  ```bash
-  # Headscale manages the Tailscale control plane — runs on kubelab-vps
-  ```
-- [ ] **TS-002**: Install Tailscale client on all nodes (ace1, ace2, bee, rpi4, rpi3, jet1, workstation)
-  - Point clients to Headscale: `HEADSCALE_URL=https://vpn.kubelab.live`
+- [x] **TS-001**: Deploy Headscale on VPS (Docker Compose, port 8080 + DERP port 3478) ✓ 2026-02-21
+  - Headscale v0.28.0 at `/opt/headscale/` on VPS
+  - Traefik route: `app-headscale.yml` in `/opt/traefik/dynamic/`
+  - TLS cert issued via Let's Encrypt DNS challenge (Cloudflare token needs both zones)
+  - VPS Docker network is `proxy` (not `kubelab`)
+  - ACME storage: `/letsencrypt/acme.json` (not `/etc/traefik/acme/`)
+- [x] **TS-002**: Install Tailscale client on all nodes ✓ 2026-02-21
+  - 9 nodes registered: msi, kubelab-vps, kubelab-bee, kubelab-jet1, kubelab-k3s-agent-1, kubelab-k3s-agent-2, kubelab-k3s-server, kubelab-rpi3, kubelab-rpi4
+  - User: `kubelab` (ID 2). Pre-auth keys: `--user 2` (v0.28 uses numeric IDs)
 - [ ] **TS-003**: Configure kubelab-rpi4 as subnet router (`--advertise-routes=172.16.1.0/24`)
 - [ ] **TS-004**: Approve subnet route in Headscale admin (`headscale routes enable`)
-- [ ] **TS-005**: Record Tailscale IPs for all devices, update inventory and `~/.ssh/config`
+- [x] **TS-005**: Record Tailscale IPs for all devices, update SSH config ✓ 2026-02-21
+  - IPs recorded in vault [[runbooks/headscale-setup]] Phase 4 and [[hardware/_index]]
+  - SSH config: VPN primary (`ssh <host>`), LAN fallback (`ssh <host>-lan`)
+  - Documented in vault runbook Phase 5 (reference for new workstation setup)
 - [ ] **TS-006**: Configure Tailscale split DNS for `*.staging.kubelab.live` → kubelab-rpi4 CoreDNS
 
 > Runbook: vault [[runbooks/headscale-setup]]
@@ -586,46 +597,31 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 **K3s installation:**
 
-- [ ] **K3S-001**: Install K3s server on `k3s-server` VM (Acemagic-1)
+- [x] **K3S-001**: Install K3s server on `k3s-server` VM (Acemagic-1) — v1.34.4+k3s1, done 2026-02-20
 
   ```bash
   curl -sfL https://get.k3s.io | sh -
   ```
 
-- [ ] **K3S-002**: Join `k3s-agent-1` VM (Acemagic-1) to cluster
+- [x] **K3S-002**: Join `k3s-agent-1` VM (Acemagic-1) to cluster — done 2026-02-20
 
   ```bash
-  curl -sfL https://get.k3s.io | K3S_URL=https://<server-ip>:6443 K3S_TOKEN=<token> sh -
+  curl -sfL https://get.k3s.io | K3S_URL=https://172.16.1.10:6443 K3S_TOKEN=<token> sh -
   ```
 
-- [ ] **K3S-003**: Join `k3s-agent-2` VM (Acemagic-2 Proxmox) to cluster
-- [ ] **K3S-004**: Verify: `kubectl get nodes` → 3 nodes Ready
-- [ ] **K3S-005**: Create namespace `kubelab`
-- [ ] **K3S-006**: Configure `kubectl` access from workstation (copy kubeconfig via Tailscale)
+- [x] **K3S-003**: Join `k3s-agent-2` VM (Acemagic-2 Proxmox) to cluster — done 2026-02-20
+- [x] **K3S-004**: Verify: `kubectl get nodes` → 3 nodes Ready — done 2026-02-20
+- [x] **K3S-005**: Create namespace `kubelab` — done 2026-02-20
+- [x] **K3S-006**: Configure `kubectl` access from workstation — done 2026-02-20
 
 **Ollama as external service:**
 
-- [ ] **K3S-007**: Create ExternalName Service or ConfigMap for Ollama endpoint
+- [x] **K3S-007**: Ollama as Service + EndpointSlice (172.16.1.3:11434) — done 2026-02-20
 
-  ```yaml
-  # Option A: ExternalName
-  apiVersion: v1
-  kind: Service
-  metadata:
-    name: ollama
-    namespace: kubelab
-  spec:
-    type: ExternalName
-    externalName: <beelink-tailscale-ip>
-  ---
-  # Option B: ConfigMap with endpoint URL
-  apiVersion: v1
-  kind: ConfigMap
-  metadata:
-    name: ollama-config
-    namespace: kubelab
-  data:
-    OLLAMA_ENDPOINT: "http://<beelink-ip>:11434"
+  ```bash
+  kubectl get svc ollama -n kubelab        # ClusterIP → 11434
+  kubectl get endpointslice -n kubelab     # ollama-external → 172.16.1.3
+  # Pods use: http://ollama.kubelab.svc:11434
   ```
 
 #### B4: K8s Manifests + kubectl deploy
@@ -636,7 +632,7 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 **Directory structure:**
 
-- [ ] **MANIFEST-001**: Create `infra/k8s/` directory structure
+- [x] **MANIFEST-001**: Create `infra/k8s/` directory structure
 
   ```
   infra/k8s/
@@ -654,13 +650,13 @@ Traefik routes correctly, clean teardown with `toolkit services down --all`.
 
 **Convert Docker Compose → K8s manifests:**
 
-- [ ] **MANIFEST-002**: Convert app stacks (api, web, blog) → Deployments + Services
-- [ ] **MANIFEST-003**: Convert edge (Traefik labels) → Ingress resources or IngressRoutes
-- [ ] **MANIFEST-004**: Convert environment vars → ConfigMaps
+- [x] **MANIFEST-002**: Convert app stacks (api, web, blog) → Deployments + Services
+- [x] **MANIFEST-003**: Convert edge (Traefik labels) → Ingress resources or IngressRoutes
+- [x] **MANIFEST-004**: Convert environment vars → ConfigMaps
 - [ ] **MANIFEST-005**: Convert secrets → K8s Secrets (SOPS-encrypted in git)
 - [ ] **MANIFEST-006**: Convert volumes → PersistentVolumeClaims (where needed)
-- [ ] **MANIFEST-007**: Create Kustomize overlays for staging and prod
-- [ ] **MANIFEST-008**: Validate: `kubectl apply --dry-run=client -k overlays/staging/`
+- [x] **MANIFEST-007**: Create Kustomize overlays for staging and prod
+- [x] **MANIFEST-008**: Validate: `kubectl apply --dry-run=client -k overlays/staging/`
 - [ ] **MANIFEST-009**: First deploy: `kubectl apply -k infra/k8s/overlays/staging/`
 
 #### B5: Staging Deployment + Validation
@@ -748,6 +744,26 @@ Docker Compose only used for local dev. ArgoCD automation deferred to Stream E.
 - [ ] **DOC-009**: Update vault hardware/_index.md with new allocation (2x Acemagic, Beelink → Ollama)
 - [ ] **DOC-010**: Update vault runbooks as phases complete (tailscale, dns, deployment, k3s-setup)
 - [ ] **DOC-011**: Update CLAUDE.md with final architecture
+- [x] **DOC-012**: Create vault runbook `k3s-setup.md` (from B3 interactive session) — done 2026-02-20
+- [ ] **ANSIBLE-001**: Fix docker_service role env var injection (only passes DOMAIN, needs all flattened vars from values.yaml)
+- [ ] **ANSIBLE-002**: Add `toolkit config generate` env file output (`infra/config/env/{env}.env`) for Ansible deployment
+- [ ] **ANSIBLE-003**: Fix Ansible inventory template (user: deployer, path: /opt/kubelab)
+- [ ] **ANSIBLE-004**: Create Ansible role for K3s node provisioning (post-OS setup: SSH keys, packages, K3s install)
+- [ ] **ANSIBLE-005**: Create Ansible role for homelab node provisioning (Docker, packages, network config)
+- [ ] **ANSIBLE-006**: Create Ansible role for Headscale VPN provisioning
+  - Deploy Headscale container on VPS (`/opt/headscale/`, `proxy` network, config from repo)
+  - Add `app-headscale.yml` to `/opt/traefik/dynamic/` (without touching traefik.yml)
+  - Create user, generate pre-auth key
+  - Install Tailscale + register on all inventory nodes (`tailscale up --login-server=...`)
+  - Configure subnet router on rpi4 (`--advertise-routes=172.16.1.0/24`)
+  - Approve routes via `headscale routes enable`
+  - Idempotent: skip already-registered nodes, skip existing Headscale user
+  - Inputs: Cloudflare API token (SOPS), Headscale user name, node list from inventory
+  - Ref: vault [[runbooks/headscale-setup]] for manual procedure
+- [ ] **ANSIBLE-007**: Create Ansible role for Traefik dynamic route deployment
+  - Copy individual `app-*.yml` files to `/opt/traefik/dynamic/` on VPS
+  - Do NOT touch `traefik.yml` (managed separately until PROD-004b aligns VPS with toolkit)
+  - Source files from `edge/traefik/generated/prod/dynamic/`
 
 ---
 
@@ -1482,6 +1498,7 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 - [ ] Workers deployment: compose files in `infra/stacks/apps/workers/`
 - [ ] Workers Phase 2: Media processing (FFmpeg, WebP)
 - [ ] Test coverage: 30%+ on toolkit core modules
+- [ ] DNS cleanup + Terraform automation: Audit and clean all DNS records on both `kubelab.live` (Cloudflare) and `mlorente.dev` (Cloudflare). Remove stale/unused records, keep only what's active. Then automate via Terraform Cloudflare provider — generate records from `common.yaml` service catalog so DNS stays in sync with deployed services
 - [ ] Terraform DNS: Generate `services.json` from `common.yaml`
 - [ ] SOPS alignment: Align with age keys from dotfiles
 - [ ] GitHub secrets/vars cleanup: fix naive filter in `setup-gh-secrets`, separate `vars` (non-sensitive) from `secrets`, add `DOCKERHUB_USERNAME` to vars, document required CI credentials
@@ -1675,6 +1692,6 @@ kubelab docs generate            # Generate static HTML docs
 
 ---
 
-*Last updated: 2026-02-19*
-*Next action: B1 — Headscale on VPS + Tailscale clients on all nodes. VPS hostname changed to kubelab-vps (2026-02-20).*
+*Last updated: 2026-02-21*
+*Next action: TS-003 (rpi4 subnet router) → B2 (CoreDNS) → B5 (staging deploy). PROD-004b (Traefik upgrade) when convenient.*
 *Streams: A (stabilize) → B (homelab K3s + prod migration) → C (repo split) → D (observability) → E (ArgoCD) → F (agents) → G (knowledge base) → H (agent workforce) → P (portfolio tools)*

@@ -72,6 +72,7 @@ edge:
     docker_exposed_by_default: false
     watch_dynamic_conf: true
     # SSL certificates
+    use_local_certs: false
     cert_resolver: letsencrypt
     acme_email: mlorentedev@gmail.com
     # DNS
@@ -218,7 +219,7 @@ apps:
 
       headscale:
         name: headscale
-        image: headscale/headscale:0.23
+        image: headscale/headscale:v0.28.0
         domain: vpn.kubelab.live
         enable_auth: false
         auth_level: bypass

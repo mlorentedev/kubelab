@@ -5,7 +5,6 @@ services:
     restart: ${GLOBAL_RESTART_POLICY}
     command: serve
     ports:
-      - "${APPS_SERVICES_CORE_HEADSCALE_DEFAULT_PORT}:8080"
       - "${APPS_SERVICES_CORE_HEADSCALE_STUN_PORT}:3478/udp"
     volumes:
       - ./config:/etc/headscale:ro

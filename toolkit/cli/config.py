@@ -8,6 +8,7 @@ from toolkit.config.constants import MESSAGES
 from toolkit.core.logging import logger
 from toolkit.features.generator_ansible import AnsibleGenerator
 from toolkit.features.generator_authelia import AutheliaGenerator
+from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.generator_terraform import TerraformGenerator
 from toolkit.features.generator_traefik import TraefikGenerator
 from toolkit.features.generator_wiki import WikiGenerator
@@ -35,7 +36,7 @@ def generate(
         None,
         "--service",
         "-s",
-        help="Specific service (traefik, ansible, terraform, authelia)",
+        help="Specific service (traefik, ansible, terraform, authelia, k8s)",
     ),
 ) -> None:
     """
@@ -57,7 +58,9 @@ def generate(
         if env == "dev":
             services_to_generate = [service] if service else ["traefik", "wiki", "authelia"]
         else:
-            services_to_generate = [service] if service else ["terraform", "traefik", "ansible", "wiki", "authelia"]
+            services_to_generate = (
+                [service] if service else ["terraform", "traefik", "ansible", "wiki", "authelia", "k8s"]
+            )
 
         for svc in services_to_generate:
             total_count += 1
@@ -74,6 +77,8 @@ def generate(
                     result = WikiGenerator().generate(env)
                 elif svc == "authelia":
                     result = AutheliaGenerator().generate(env)
+                elif svc == "k8s":
+                    result = K8sGenerator().generate(env)
                 else:
                     logger.error(MESSAGES.ERROR_INVALID.format("service", svc))
                     continue
@@ -108,7 +113,7 @@ def validate(
         typer.Option(
             "--service",
             "-s",
-            help="Specific service to validate (terraform, traefik, ansible, authelia)",
+            help="Specific service to validate (terraform, traefik, ansible, authelia, k8s)",
         ),
     ] = None,
 ) -> None:
@@ -121,7 +126,7 @@ def validate(
         success_count = 0
         total_count = 0
 
-        services_to_validate = [service] if service else ["terraform", "traefik", "ansible", "authelia"]
+        services_to_validate = [service] if service else ["terraform", "traefik", "ansible", "authelia", "k8s"]
 
         for svc in services_to_validate:
             total_count += 1
@@ -137,6 +142,8 @@ def validate(
                     result = AnsibleGenerator().validate()
                 elif svc == "authelia":
                     result = AutheliaGenerator().validate()
+                elif svc == "k8s":
+                    result = K8sGenerator().validate()
                 else:
                     logger.error(MESSAGES.ERROR_INVALID.format("service", svc))
                     continue

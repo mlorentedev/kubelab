@@ -1,0 +1,61 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+data:
+  EMAIL_HOST: "smtp.gmail.com"
+  EMAIL_PORT: "587"
+  EMAIL_SECURE: "true"
+  ENVIRONMENT: "staging"
+  SITE_DOMAIN: "staging.kubelab.live"
+  SITE_TITLE: "mlorentedev"
+  SITE_URL: "https://staging.kubelab.live"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+data:
+  ALLOWED_HOSTS: "localhost,web,127.0.0.1,.staging.kubelab.live"
+  BACKEND_URL: "https://api.staging.kubelab.live"
+  BUY_ME_A_COFFEE_URL: "https://www.buymeacoffee.com/mlorente"
+  CALENDLY_URL: "https://calendly.com/mlorentedev/videollamada"
+  ENABLE_BLOG: "false"
+  ENABLE_CONTACT: "false"
+  ENABLE_HOMELABS: "false"
+  ENVIRONMENT: "staging"
+  GITHUB_URL: "https://github.com/mlorentedev"
+  GOOGLE_ANALYTICS_ID: "G-PLL8SP2YFC"
+  GOOGLE_TAG_MANAGER_ID: "GTM-XXXXXX"
+  SITE_AUTHOR: "Manu Lorente"
+  SITE_DESCRIPTION: "Cloud Native Automation in Spanish"
+  SITE_DOMAIN: "staging.kubelab.live"
+  SITE_KEYWORDS: "devops, cloud, kubernetes, aws, azure, python, go"
+  SITE_MAIL: "info@mlorente.dev"
+  SITE_TITLE: "Manu Lorente"
+  SITE_URL: "https://web.staging.kubelab.live"
+  TWITTER_URL: "https://x.com/mlorentedev"
+  YOUTUBE_URL: "https://www.youtube.com/@mlorentedev"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blog-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: blog
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+data:
+  ENVIRONMENT: "staging"
