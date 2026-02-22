@@ -50,11 +50,8 @@ mlorente.dev/
 │   ├── ansible/             # Server provisioning
 │   ├── terraform/           # DNS management
 │   └── config/              # Global configuration
-├── toolkit/                 # Python CLI tool
-└── docs/                    # Documentation
+└── toolkit/                 # Python CLI tool
 ```
-
-See `docs/TOOLKIT.md` for detailed architecture.
 
 ## Development Workflow
 
@@ -255,7 +252,6 @@ When adding new environment variables:
 
 3. Update documentation:
    - App/service README.md
-   - `docs/TOOLKIT.md` if architectural change
 
 ## Docker Guidelines
 
@@ -293,9 +289,6 @@ CMD ["node", "server.js"]
 When changing functionality:
 
 - Update relevant README.md files
-- Update `docs/TOOLKIT.md` for architectural changes
-- Update `docs/HOW-TO.md` for command changes
-- Update `docs/TOOLKIT.md` for toolkit changes
 - Test all documentation steps
 
 ## Release Process
@@ -343,13 +336,8 @@ poetry run toolkit tools env-examples dev
 ENVIRONMENT=staging poetry run toolkit deployment deploy
 ```
 
-See `docs/TOOLKIT.md` for complete documentation.
-
 ## Questions?
 
-- Documentation: Check `docs/` directory
-- Architecture: Read `docs/TOOLKIT.md`
-- Commands: See `docs/HOW-TO.md`
 - Issues: Create a [GitHub issue](https://github.com/mlorente/mlorente.dev/issues)
 - Discussions: Start a [GitHub discussion](https://github.com/mlorente/mlorente.dev/discussions)
 

@@ -99,13 +99,6 @@ kubelab.live/
 │   ├── features/             Feature implementations
 │   └── config/               Toolkit configuration
 │
-├── docs/                     Documentation
-│   ├── ARCHITECTURE.md       System architecture
-│   ├── TOOLKIT.md            Toolkit usage guide
-│   ├── HOW-TO.md             Quick command reference
-│   ├── CI-CD.md              CI/CD documentation
-│   └── ...
-│
 ├── Makefile                  Development shortcuts
 ├── pyproject.toml            Python/Poetry configuration
 └── CONTRIBUTING.md           Contributing guidelines
@@ -138,8 +131,6 @@ tk tools env-examples dev    Generate .env..example files
  Deployment
 ENVIRONMENT=staging tk deployment deploy
 ```
-
-See `docs/TOOLKIT.md` for complete documentation.
 
  Environments
 
@@ -238,8 +229,6 @@ GitHub Actions automatically:
 . Pushes to Docker Hub
 . Creates git tags
 
-See `docs/CI-CD.md` for complete pipeline documentation.
-
  Manual Deployment
 
 ```bash
@@ -252,19 +241,6 @@ make deploy-prod
  Check deployment status
 tk deployment status
 ```
-
- Documentation
-
-| Document | Description |
-|----------|-------------|
-| ARCHITECTURE.md | System architecture and design principles (planned) |
-| TOOLKIT.md | Complete toolkit CLI guide |
-| HOW-TO.md | Quick command reference |
-| CONTRIBUTING.md | How to contribute |
-| CI-CD.md | CI/CD pipeline documentation |
-| KUBELAB.md | Homelab (staging) setup |
-| TROUBLESHOOTING.md | Common issues and solutions |
-| VERSIONING.md | Versioning strategy |
 
  Makefile Shortcuts
 

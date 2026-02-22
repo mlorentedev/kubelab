@@ -25,7 +25,7 @@ idea → spec → incubating (in this monorepo) → active (own repo) → stable
 
 ### This repo's scope
 
-Only L0 infrastructure. Streams A, B, C3, D, E, G in `tasks/todo.md`.
+Only L0 infrastructure. Streams A, B, C3, D, E, G in vault `10_projects/kubelab/roadmap.md`.
 Streams C1-C2, C4-C5, F, H, P have been extracted to product specs in the vault (2026-02-21).
 
 ## Architecture
@@ -71,11 +71,9 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **VPS is ARM**: Multi-arch Docker builds (amd64+arm64) required.
 - **Never clone repos on deployment targets** — VPS/servers are not dev machines.
 
-## Key paths
+## Key paths (repo)
 
 ```
-tasks/todo.md              — L0 infrastructure roadmap (Kanban)
-tasks/lessons.md           — Learnings from past sessions
 infra/k8s/                 — K8s manifests (base + overlays)
 infra/config/values/       — Environment config (dev/staging/prod)
 infra/stacks/              — Docker Compose stacks (local dev)
@@ -87,4 +85,29 @@ apps/                      — Application source (api, web, blog)
 
 ## Vault location
 
-Operational knowledge (ADRs, runbooks, troubleshooting) lives in the Obsidian vault at `~/Projects/knowledge/`. Project docs: `10_projects/kubelab/`.
+All documentation, roadmaps, and operational knowledge lives in the Obsidian vault at `~/Projects/knowledge/`. This repo has NO `tasks/` or `docs/` directories — everything is in the vault.
+
+### Vault paths for this project (`10_projects/kubelab/`)
+
+```
+roadmap.md                 — L0 infrastructure backlog (Kanban, active/pending tasks)
+completed.md               — Archived completed tasks (full detail, zero info loss)
+lessons.md                 — Patterns learned, gotchas, post-mortems
+toolkit.md                 — Toolkit CLI documentation
+testing.md                 — Testing strategy
+versioning.md              — Versioning strategy
+architecture-diagram.md    — Detailed architecture diagrams
+portfolio.md               — Product portfolio master index
+service-catalog.md         — Service catalog
+runbooks/                  — Operational runbooks (19 guides)
+adrs/                      — Architecture Decision Records (11 ADRs)
+troubleshooting/           — Troubleshooting guides (17 categories)
+```
+
+### Task management conventions
+
+- Every `[x]` MUST have a date: `✓ YYYY-MM-DD`
+- Every `[!]` MUST reference blocker by task ID, not section name
+- Completed tasks archived in `completed.md` (zero info loss)
+- Product specs tracked in vault `10_projects/<product>/_index.md`
+- Lessons that mature into critical gotchas → add to CLAUDE.md "Critical gotchas" section

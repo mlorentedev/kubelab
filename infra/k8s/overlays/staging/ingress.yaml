@@ -14,6 +14,8 @@ spec:
   routes:
     - match: Host(`api.staging.kubelab.live`)
       kind: Rule
+      middlewares:
+        - name: error-pages
       services:
         - name: api
           port: 8080
@@ -35,6 +37,8 @@ spec:
   routes:
     - match: Host(`web.staging.kubelab.live`)
       kind: Rule
+      middlewares:
+        - name: error-pages
       services:
         - name: web
           port: 4321
@@ -56,8 +60,32 @@ spec:
   routes:
     - match: Host(`blog.staging.kubelab.live`)
       kind: Rule
+      middlewares:
+        - name: error-pages
       services:
         - name: blog
           port: 4000
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: catch-all
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: nginx-errors
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostRegexp(`.+\.staging\.kubelab\.live`)
+      kind: Rule
+      priority: 1
+      services:
+        - name: nginx-errors
+          port: 80
   tls:
     certResolver: letsencrypt
