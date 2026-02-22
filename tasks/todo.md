@@ -5,6 +5,10 @@
 > **Methodology**: Kanban + XP practices (no sprints, no time-boxes)
 >
 > **Strategy**: Fix code → Local dev → CI → Homelab staging → Production VPS → Extract repos
+>
+> **Product Portfolio**: This file tracks **L0 infrastructure** tasks only.
+> Products extracted to independent specs live in the vault: `knowledge/10_projects/<product>/_index.md`
+> Master index: vault `10_projects/kubelab/portfolio.md`
 
 ### Progress (updated 2026-02-21)
 
@@ -785,6 +789,12 @@ Docker Compose only used for local dev. ArgoCD automation deferred to Stream E.
 > Prerequisite: A5 completed (prod working = safety net for repo split).
 > This implements the architecture decisions above.
 >
+> **Product extraction (2026-02-21):**
+> - C1-C2 → vault `[[kubelab-cli/_index]]` (L1-1 platform service)
+> - C4 → vault `[[imagingsuite/_index]]` (L2-1 application)
+> - C5 → vault `[[cubernautas/_index]]` (L2-2 application)
+> - C3 remains here (monorepo refactor is L0 infra work)
+>
 > **IMPORTANT — Pre-C4 checkpoint (Imaging Suite / SensorTool):**
 > Before writing any SensorTool code, do audience building FIRST:
 > 1. Setup Beehiiv for Imaging Sales Intel newsletter (30 min)
@@ -1100,6 +1110,11 @@ and HTTP traffic. 3 imported dashboards + 1 custom overview dashboard. Alerts fi
 
 ### Stream F: Agent-Delegated Task Management
 
+> **Product extraction (2026-02-21):**
+> - F1-F4 → vault `[[kubelab-agents/_index]]` (L1-4 platform service)
+> - F5 (Agent Memory) → vault `[[kubelab-memory/_index]]` (L1-3 platform service)
+> - Tasks below kept for reference. Implementation tracked in product specs.
+>
 > **ADR**: [[adr-007-vikunja-n8n-openclaw-task-delegation]]
 >
 > Replaces Google Keep with self-hosted task management (Vikunja) + AI agent delegation
@@ -1345,6 +1360,11 @@ graph view and wikilinks work, sensitive content excluded at build time AND acce
 
 ### Stream H: Agent Workforce (24/7 Autonomous Operations)
 
+> **Product extraction (2026-02-21):**
+> - H1 (LLM Routing) → vault `[[kubelab-gateway/_index]]` (L1-2 platform service)
+> - H2-H4 (Task Catalog, Autonomy, Loops) → vault `[[kubelab-agents/_index]]` (L1-4 platform service)
+> - Tasks below kept for reference. Implementation tracked in product specs.
+>
 > **ADR**: Pending — create when designing.
 >
 > **Prerequisite**: Stream F completed (agents deployed + task management operational).
@@ -1454,6 +1474,12 @@ autonomy levels enforced, effectiveness measured and reviewed weekly.
 
 ### Stream P: Portfolio Tools
 
+> **Product extraction (2026-02-21):**
+> - P1 (Pollex MCP) → vault `[[pollex/_index]]` (L3-1 standalone tool)
+> - P2 (yt-intel) → vault `[[yt-intel/_index]]` (L3-2 standalone tool)
+> - New: `[[sec-scan/_index]]` (L3-3 standalone tool) — added 2026-02-21
+> - Tasks below kept for reference. Implementation tracked in product specs.
+>
 > **Goal**: Extract and publish standalone tools from KubeLab. Pattern: small focused repos,
 > each solving a real personal problem but useful to others. Like steipete's army of repos.
 > Prerequisite: C1 completed (toolkit decoupled — kubelab-cli is the reuse pattern to follow).

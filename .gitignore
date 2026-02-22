@@ -97,7 +97,6 @@ logs/
 # AI assistants
 .claude/
 .chat/
-CLAUDE.md
 AGENTS.md
 GEMINI.md
 MEMORY.md
