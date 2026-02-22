@@ -71,6 +71,29 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
+  name: grafana
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`grafana.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: error-pages
+      services:
+        - name: grafana
+          port: 3000
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
   name: catch-all
   namespace: kubelab
   labels:

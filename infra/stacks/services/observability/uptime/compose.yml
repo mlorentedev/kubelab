@@ -1,0 +1,28 @@
+# Uptime Kuma — deployed on kubelab-rpi3 (100.64.0.6)
+# Deploy: scp this file to manu@100.64.0.6:~/uptime-kuma/compose.yml
+#         ssh manu@100.64.0.6 "cd ~/uptime-kuma && docker compose up -d"
+#
+# DNS: Pi-hole (100.64.0.5) required for *.staging.kubelab.live resolution.
+#      Without it, Docker's internal DNS falls back to ISP resolvers which
+#      cannot resolve split-DNS domains.
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    dns:
+      - 100.64.0.5    # RPi4 Pi-hole (via Tailscale) — resolves *.staging.kubelab.live
+      - 1.1.1.1        # Fallback for public domains
+    volumes:
+      - uptime_kuma_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "node /app/extra/healthcheck.js || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  uptime_kuma_data:

@@ -7,3 +7,6 @@ resources:
   - namespace.yaml
   - external/ollama.yaml
   - edge/nginx-errors.yaml
+  - services/grafana.yaml
+  - services/loki.yaml
+  - services/vector.yaml

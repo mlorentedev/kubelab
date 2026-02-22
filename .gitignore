@@ -101,6 +101,9 @@ AGENTS.md
 GEMINI.md
 MEMORY.md
 
+# Uptime Kuma backups (binary SQLite, use `toolkit monitoring backup` to pull)
+infra/config/uptime-kuma/*.db
+
 # Temporary Docker files
 docker-compose.override.yml
 *.tmp
