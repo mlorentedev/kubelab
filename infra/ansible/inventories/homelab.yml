@@ -1,0 +1,35 @@
+---
+# Homelab inventory — all physical nodes and VMs running Tailscale.
+# Access via Tailscale IPs from workstation.
+# If a node is disconnected from Tailscale, fix it manually via SSH LAN
+# (through RPi4 at 172.16.1.1) then re-run this playbook to prevent recurrence.
+
+all:
+  vars:
+    ansible_user: manu
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    headscale_domain: vpn.kubelab.live
+    headscale_ip: 162.55.57.175
+
+  children:
+    lan_nodes:
+      hosts:
+        kubelab-jet1:
+          ansible_host: 100.64.0.8
+          legacy_python: true
+        kubelab-bee:
+          ansible_host: 100.64.0.3
+        k3s-server:
+          ansible_host: 100.64.0.4
+        k3s-agent-1:
+          ansible_host: 100.64.0.7
+        k3s-agent-2:
+          ansible_host: 100.64.0.9
+
+    gateway_nodes:
+      hosts:
+        kubelab-rpi4:
+          ansible_host: 100.64.0.5
+        kubelab-rpi3:
+          ansible_host: 100.64.0.6

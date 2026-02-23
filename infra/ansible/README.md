@@ -103,3 +103,31 @@ These commands:
 - Drop deprecated artefacts into `.archive/infra/ansible` instead of deleting them outright.
 
 With these playbooks the staging Raspberry Pi and production VPS stay aligned while remaining easy to recover and audit.
+
+## Homelab-Wide Playbooks
+
+Separate from the template-generated staging/prod configs, there are playbooks that target **all homelab nodes** directly.
+
+### DNS Resilience
+
+Ensures all nodes can resolve critical infrastructure domains (`vpn.kubelab.live`) via `/etc/hosts`, independent of Pi-hole/RPi4 availability. This prevents Tailscale disconnection cascades when RPi4 is down.
+
+```bash
+# Inventory (static, Tailscale IPs)
+inventories/homelab.yml
+
+# Apply to all nodes (-K prompts for sudo password)
+ansible-playbook -i inventories/homelab.yml playbooks/homelab-dns.yml -K
+
+# Dry-run
+ansible-playbook -i inventories/homelab.yml playbooks/homelab-dns.yml -K --check --diff
+
+# Verify a specific node
+ansible -i inventories/homelab.yml kubelab-jet1 -m raw -a "grep vpn.kubelab.live /etc/hosts"
+```
+
+**Notes:**
+- `-K` required: most nodes need sudo password for `/etc/hosts` (RPi3 has NOPASSWD).
+- The inventory uses Tailscale IPs. If a node is already disconnected from Tailscale, fix it manually via SSH over LAN (`ssh <host>-lan`), then run this playbook to prevent recurrence.
+- Jetson Nano uses `raw` module (Python 3.6 too old for Ansible modules). Flagged with `legacy_python: true` in inventory.
+- Full operational docs: vault `02-runbooks/dns-homelab.md` → "DNS Resilience" section.
