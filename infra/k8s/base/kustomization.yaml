@@ -10,3 +10,4 @@ resources:
   - services/grafana.yaml
   - services/loki.yaml
   - services/vector.yaml
+  - services/redis.yaml
