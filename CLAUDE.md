@@ -62,6 +62,10 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **DO NOT** overwrite VPS `traefik.yml` with toolkit-generated version
 - **Pi-hole v6**: `pihole reloaddns` does NOT reload dnsmasq configs — use `docker restart pihole`
 - **Headscale v0.28**: CLI uses numeric IDs (`--user 2`), routes via `nodes approve-routes`
+- **Authelia on K8s**: MUST set `enableServiceLinks: false` — K8s injects `AUTHELIA_*` env vars that conflict with Authelia config. Also set `automountServiceAccountToken: false` (read-only `/run`).
+- **Binary assets in K8s**: Use kustomize `configMapGenerator` with `files:` (NOT inline binaryData, NOT imperative kubectl). See `authelia-assets` and `grafana-dashboards` patterns.
+- **Toolkit deploy vs kustomize**: `tk infra k8s deploy` may miss binary ConfigMaps from configMapGenerator. Fallback: `kubectl kustomize | kubectl apply -f -`
+- **Authelia secrets key path**: `apps.services.security.authelia.*` (NOT `apps.authelia.*` or `apps.security.authelia.*`)
 
 ## Workflow rules
 

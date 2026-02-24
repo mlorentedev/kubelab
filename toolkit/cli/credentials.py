@@ -94,6 +94,40 @@ def hash_password(
     credentials_manager.update_hashed_secret(key_path=key_path, env=env)
 
 
+@app.command("extract-common")
+def extract_common(
+    source: Annotated[str, typer.Option("--from", "-f", help="Source environment")] = "dev",
+    clean: Annotated[bool, typer.Option("--clean", help="Remove extracted keys from source")] = False,
+) -> None:
+    """Extract shared infrastructure secrets into common.enc.yaml.
+
+    Moves external credentials (Cloudflare, DockerHub, Gmail, Hetzner, etc.)
+    from a per-environment SOPS file to common.enc.yaml so they are
+    automatically available to all environments via the merge chain:
+    common.yaml → {env}.yaml → common.enc.yaml → {env}.enc.yaml
+
+    Example: toolkit credentials extract-common --from dev --clean
+    """
+    if not credentials_manager.extract_common_secrets(source, clean_source=clean):
+        raise typer.Exit(1)
+
+
+@app.command("init-env")
+def init_env(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment to initialize")],
+) -> None:
+    """Initialize a new environment's SOPS file and generate service secrets.
+
+    Shared secrets come from common.enc.yaml automatically (via merge chain).
+    This command only generates the env-specific secrets (Authelia, BasicAuth, etc.).
+
+    Prerequisites: common.enc.yaml must exist (run extract-common first).
+
+    Example: toolkit credentials init-env --env staging
+    """
+    credentials_manager.setup_authelia_secrets(env=env, auto_update=True)
+
+
 @app.command("generate")
 def generate_credentials(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",

@@ -78,6 +78,28 @@ def _get_traefik_config_path() -> str | None:
     return str(path) if path.exists() else None
 
 
+@k8s_app.command("apply-secrets")
+def k8s_apply_secrets(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be applied")] = False,
+) -> None:
+    """Decrypt SOPS secrets and apply as K8s Secrets.
+
+    Reads from infra/config/secrets/{env}.enc.yaml, resolves the secret
+    mappings, and runs kubectl create/apply for each K8s Secret.
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    validate_environment_config(env)
+
+    from toolkit.features.k8s_secrets import apply_secrets
+
+    if not apply_secrets(env, settings.project_root, dry_run=dry_run):
+        raise typer.Exit(1)
+
+
 @k8s_app.command("deploy")
 def k8s_deploy(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],

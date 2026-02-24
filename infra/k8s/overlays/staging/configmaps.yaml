@@ -9,13 +9,18 @@ metadata:
     app.kubernetes.io/part-of: kubelab
     app.kubernetes.io/managed-by: toolkit
 data:
+  BEEHIIV_PUB_ID: "***REDACTED***"
+  EMAIL_FROM: "mlorentedev"
   EMAIL_HOST: "smtp.gmail.com"
+  EMAIL_PASS: "***REDACTED***"
   EMAIL_PORT: "587"
   EMAIL_SECURE: "true"
+  EMAIL_USER: "mlorentedev@gmail.com"
   ENVIRONMENT: "staging"
   SITE_DOMAIN: "staging.kubelab.live"
   SITE_TITLE: "mlorentedev"
   SITE_URL: "https://staging.kubelab.live"
+  ZOHO_CLIENT_ID: "***REDACTED***"
 ---
 apiVersion: v1
 kind: ConfigMap

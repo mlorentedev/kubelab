@@ -11,8 +11,17 @@ resources:
   - services/loki.yaml
   - services/vector.yaml
   - services/redis.yaml
+  - services/authelia.yaml
 
 configMapGenerator:
+  - name: authelia-assets
+    namespace: kubelab
+    files:
+      - services/authelia-assets/logo.png
+      - services/authelia-assets/favicon.ico
+    options:
+      disableNameSuffixHash: true
+
   - name: grafana-dashboards
     namespace: kubelab
     files:

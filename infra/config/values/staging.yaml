@@ -84,6 +84,7 @@ apps:
         domain: auth.staging.kubelab.live
         issuer_domain: staging.kubelab.live
         default_domain_root: staging.kubelab.live
+        disable_require_tls: false
 
       crowdsec:
         domain: crowdsec.staging.kubelab.live

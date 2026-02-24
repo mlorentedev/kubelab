@@ -7,7 +7,7 @@ import secrets
 import string
 import subprocess
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import typer
 from argon2 import PasswordHasher
@@ -21,8 +21,7 @@ from toolkit.features.docker_service import DockerService
 # Mapping from secret key prefix to service component names that need restarting
 CREDENTIAL_SERVICE_MAP: dict[str, list[str]] = {
     "basic_auth": ["traefik"],
-    "apps.authelia": ["authelia"],
-    "apps.security.authelia": ["authelia"],
+    "apps.services.security.authelia": ["authelia"],
     "apps.services.observability.grafana": ["grafana"],
     "apps.services.data.minio": ["minio"],
     "apps.services.security.crowdsec": ["crowdsec"],
@@ -439,58 +438,49 @@ class CredentialsManager:
             raise typer.Exit(1) from e
 
         # Build secrets dictionary
+        # Key paths MUST match the structure in common.yaml (apps.services.security.authelia.*)
+        _auth = "apps.services.security.authelia"
         generated_secrets = {
             "basic_auth.user": common_username,
             "basic_auth.password": common_password,
             "basic_auth.credentials": basic_auth_credentials_hash,
-            "apps.authelia.users_admin_password_hash": authelia_admin_password_hash,
-            "apps.authelia.oidc_hmac_secret": oidc_hmac_secret,
-            "apps.authelia.session_secret": session_secret,
-            "apps.authelia.storage_encryption_key": storage_encryption_key,
-            "apps.authelia.jwt_secret_reset_password": jwt_secret_reset_password,
-            "apps.authelia.oidc_client_secret": oidc_client_secret,
-            "apps.authelia.oidc_client_secret_hash": oidc_client_secret_hash,
+            # Authelia secrets
+            f"{_auth}.users_admin_password_hash": authelia_admin_password_hash,
+            f"{_auth}.oidc_hmac_secret": oidc_hmac_secret,
+            f"{_auth}.session_secret": session_secret,
+            f"{_auth}.storage_encryption_key": storage_encryption_key,
+            f"{_auth}.jwt_secret_reset_password": jwt_secret_reset_password,
+            f"{_auth}.oidc_client_secret": oidc_client_secret,
+            f"{_auth}.oidc_client_secret_hash": oidc_client_secret_hash,
+            f"{_auth}.oidc_client_secret_grafana": grafana_oidc_client_secret,
+            f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
+            f"{_auth}.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
-            "apps.security.authelia.oidc_client_secret_grafana": grafana_oidc_client_secret,
-            "apps.security.authelia.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
             # MinIO secrets
             "apps.services.data.minio.root_user": common_username,
             "apps.services.data.minio.root_password": common_password,
             "apps.services.data.minio.oidc_client_secret": minio_oidc_client_secret,
-            "apps.services.security.authelia.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
         }
 
         if auto_update:
-            # Attempt to auto-update SOPS file
+            # Batch update: single decrypt/encrypt cycle
             logger.section("Auto-updating SOPS secrets file...")
-            success_count = 0
-            fail_count = 0
 
-            for key_path, value in generated_secrets.items():
-                try:
-                    if self.config_manager.update_secret_key(key_path, value):
-                        logger.success(f"Updated: {key_path}")
-                        success_count += 1
-                    else:
-                        logger.error(f"Failed to update: {key_path}")
-                        fail_count += 1
-                except Exception as e:
-                    logger.error(f"Error updating {key_path}: {e}")
-                    fail_count += 1
-
-            if fail_count > 0:
-                logger.warning(f"Auto-update partially failed: {success_count} succeeded, {fail_count} failed")
-                logger.warning("Falling back to manual output...")
-                self._print_secrets_for_manual_copy(env, generated_secrets)
+            if self.config_manager.batch_update_secrets(generated_secrets):
+                logger.success(f"All {len(generated_secrets)} secrets updated in SOPS successfully!")
+                # Only reconcile Docker services for dev (staging/prod use K8s)
+                if env == "dev":
+                    self._reconcile_services(list(generated_secrets.keys()), env)
+                else:
+                    logger.info(f"Skipping Docker reconciliation for {env} (use K8s deploy instead)")
+                    logger.info("Next: toolkit infra k8s apply-secrets --env " + env)
             else:
-                logger.success(f"All {success_count} secrets updated in SOPS successfully!")
-                logger.info("Run 'toolkit config generate' to apply changes to templated files.")
-                # Reconcile affected services
-                self._reconcile_services(list(generated_secrets.keys()), env)
+                logger.warning("Batch update failed. Falling back to manual output...")
+                self._print_secrets_for_manual_copy(env, generated_secrets)
         else:
             # Print for manual copy (original behavior)
             self._print_secrets_for_manual_copy(env, generated_secrets)
@@ -576,29 +566,168 @@ class CredentialsManager:
         bouncer_key = secrets_dict["apps.services.security.crowdsec.bouncer_api_key"]
         print(f'                bouncer_api_key: "{bouncer_key}"')
         print("            authelia:")
-        users_hash = secrets_dict["apps.authelia.users_admin_password_hash"]
+        _a = "apps.services.security.authelia"
+        users_hash = secrets_dict[f"{_a}.users_admin_password_hash"]
         print(f'                users_admin_password_hash: "{users_hash}"')
-        oidc_hmac = secrets_dict["apps.authelia.oidc_hmac_secret"]
+        oidc_hmac = secrets_dict[f"{_a}.oidc_hmac_secret"]
         print(f'                oidc_hmac_secret: "{oidc_hmac}"')
-        session = secrets_dict["apps.authelia.session_secret"]
+        session = secrets_dict[f"{_a}.session_secret"]
         print(f'                session_secret: "{session}"')
-        storage_key = secrets_dict["apps.authelia.storage_encryption_key"]
+        storage_key = secrets_dict[f"{_a}.storage_encryption_key"]
         print(f'                storage_encryption_key: "{storage_key}"')
-        jwt_secret = secrets_dict["apps.authelia.jwt_secret_reset_password"]
+        jwt_secret = secrets_dict[f"{_a}.jwt_secret_reset_password"]
         print(f'                jwt_secret_reset_password: "{jwt_secret}"')
-        oidc_secret = secrets_dict["apps.authelia.oidc_client_secret"]
+        oidc_secret = secrets_dict[f"{_a}.oidc_client_secret"]
         print(f'                oidc_client_secret: "{oidc_secret}"')
-        oidc_hash = secrets_dict["apps.authelia.oidc_client_secret_hash"]
+        oidc_hash = secrets_dict[f"{_a}.oidc_client_secret_hash"]
         print(f'                oidc_client_secret_hash: "{oidc_hash}"')
-        grafana_secret = secrets_dict["apps.security.authelia.oidc_client_secret_grafana"]
+        grafana_secret = secrets_dict[f"{_a}.oidc_client_secret_grafana"]
         print(f'                oidc_client_secret_grafana: "{grafana_secret}"')
-        grafana_hash = secrets_dict["apps.security.authelia.oidc_client_secret_grafana_hash"]
+        grafana_hash = secrets_dict[f"{_a}.oidc_client_secret_grafana_hash"]
         print(f'                oidc_client_secret_grafana_hash: "{grafana_hash}"')
-        minio_hash = secrets_dict["apps.services.security.authelia.oidc_client_secret_minio_hash"]
+        minio_hash = secrets_dict[f"{_a}.oidc_client_secret_minio_hash"]
         print(f'                oidc_client_secret_minio_hash: "{minio_hash}"')
         print("")
 
         logger.success("Secrets generated. Copy above to SOPS, then run 'toolkit config generate'.")
+
+    def extract_common_secrets(self, source_env: str, clean_source: bool = False) -> bool:
+        """Extract shared secrets from a per-env SOPS file into common.enc.yaml.
+
+        Shared secrets = external infrastructure credentials that are the same
+        across all environments (Cloudflare, DockerHub, Gmail, Hetzner, etc.).
+
+        Args:
+            source_env: Environment to extract from (typically "dev").
+            clean_source: If True, remove extracted keys from source file.
+
+        Returns:
+            True if successful.
+        """
+        logger.section(f"Extract Shared Secrets → common.enc.yaml (from {source_env})")
+
+        cm = ConfigurationManager(source_env, self.project_root)
+
+        # 1. Decrypt source
+        source_file = cm.secrets_path / f"{source_env}.enc.yaml"
+        source_data = cm._decrypt_sops(source_file)
+        if not source_data:
+            logger.error(f"Failed to decrypt {source_file}")
+            return False
+
+        # 2. Partition into shared vs env-specific
+        shared, env_only = self._partition_secrets(source_data)
+        if not shared:
+            logger.warning("No shared secrets found")
+            return False
+
+        # 3. Write common.enc.yaml
+        common_file = cm.secrets_path / "common.enc.yaml"
+        if not cm._check_sops():
+            return False
+        if not cm._ensure_sops_file(common_file):
+            return False
+
+        existing_common = cm._decrypt_sops(common_file) or {}
+        cm._deep_update(existing_common, shared)
+
+        if not cm._encrypt_sops_file(common_file, existing_common):
+            return False
+
+        flat_shared = cm._flatten_dict(shared)
+        logger.success(f"Wrote {len(flat_shared)} values to common.enc.yaml:")
+        for key in shared:
+            logger.info(f"  ✓ {key}")
+
+        # 4. Optionally clean source
+        if clean_source and env_only:
+            if not cm._encrypt_sops_file(source_file, env_only):
+                logger.error(f"Failed to clean {source_file}")
+                return False
+            flat_remaining = cm._flatten_dict(env_only)
+            logger.success(f"Cleaned {source_env}.enc.yaml — {len(flat_remaining)} env-specific values remain")
+
+        return True
+
+    @staticmethod
+    def _partition_secrets(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Split a secrets dict into shared (cross-env) and env-specific parts.
+
+        Returns:
+            (shared, env_specific) — two dicts with no overlap.
+        """
+        import copy
+
+        # Top-level keys that are shared across all environments
+        SHARED_TOP_KEYS = {"dockerhub", "hetzner", "cloudflare", "webhooks"}
+
+        # Nested subtrees that are shared (external service credentials)
+        # Format: tuple of keys to traverse
+        SHARED_NESTED = [
+            ("apps", "platform", "api", "email"),
+            ("apps", "platform", "api", "zoho"),
+            ("apps", "platform", "api", "beehiiv"),
+            ("apps", "services", "automation"),
+        ]
+
+        shared: dict[str, Any] = {}
+        env_only = copy.deepcopy(data)
+
+        # Extract top-level shared keys
+        for key in SHARED_TOP_KEYS:
+            if key in data:
+                shared[key] = data[key]
+                env_only.pop(key, None)
+
+        # Extract nested shared keys
+        for path_parts in SHARED_NESTED:
+            # Read from source
+            current_src: Any = data
+            found = True
+            for part in path_parts:
+                if isinstance(current_src, dict) and part in current_src:
+                    current_src = current_src[part]
+                else:
+                    found = False
+                    break
+
+            if not found:
+                continue
+
+            # Write to shared (rebuild nested path)
+            current_dst: dict[str, Any] = shared
+            for part in path_parts[:-1]:
+                current_dst = current_dst.setdefault(part, {})
+            current_dst[path_parts[-1]] = current_src
+
+            # Remove from env_only
+            current_rm: Any = env_only
+            for part in path_parts[:-1]:
+                if isinstance(current_rm, dict) and part in current_rm:
+                    current_rm = current_rm[part]
+                else:
+                    current_rm = None
+                    break
+            if isinstance(current_rm, dict):
+                current_rm.pop(path_parts[-1], None)
+
+        # Prune empty dicts left behind (e.g. apps.platform.api: {})
+        # so they don't overwrite common.enc.yaml data during merge
+        _prune_empty_dicts(env_only)
+
+        return shared, env_only
+
+
+def _prune_empty_dicts(d: dict[str, Any]) -> None:
+    """Recursively remove keys whose value is an empty dict."""
+    keys_to_delete = []
+    for k, v in d.items():
+        if isinstance(v, dict):
+            _prune_empty_dicts(v)
+            if not v:
+                keys_to_delete.append(k)
+    for k in keys_to_delete:
+        del d[k]
 
 
 # Global credentials manager instance

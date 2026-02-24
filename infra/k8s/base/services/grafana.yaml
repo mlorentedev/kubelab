@@ -70,6 +70,11 @@ data:
   GF_SERVER_ROOT_URL: "https://grafana.staging.kubelab.live"
   GF_SECURITY_ADMIN_USER: "admin"
   GF_AUTH_ANONYMOUS_ENABLED: "false"
+  GF_AUTH_PROXY_ENABLED: "true"
+  GF_AUTH_PROXY_HEADER_NAME: "Remote-User"
+  GF_AUTH_PROXY_HEADER_PROPERTY: "username"
+  GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+  GF_AUTH_PROXY_HEADERS: "Email:Remote-Email Name:Remote-Name Groups:Remote-Groups"
   GF_LOG_MODE: "console"
   GF_LOG_LEVEL: "info"
 ---
@@ -181,3 +186,26 @@ spec:
       port: 3000
       targetPort: http
       protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`grafana.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: authelia
+      services:
+        - name: grafana
+          port: 3000
+  tls:
+    certResolver: letsencrypt

@@ -99,7 +99,9 @@ class ConfigurationManager:
 
     def get_merged_config(self) -> Dict[str, Any]:
         """
-        Merge: Values(Common) + Values(Env) + Secrets(Env)
+        Merge order (later overrides earlier):
+          common.yaml → {env}.yaml → common.enc.yaml → {env}.enc.yaml
+
         Returns the merged config WITHOUT flattening (preserves nested structure).
         """
         # 1. Load Common Values
@@ -109,9 +111,13 @@ class ConfigurationManager:
         env_values = self._load_yaml(self.values_path / f"{self.env}.yaml")
         self._deep_update(config, env_values)
 
-        # 3. Load Secrets (Decrypt)
-        secrets = self._decrypt_sops(self.secrets_path / f"{self.env}.enc.yaml")
-        self._deep_update(config, secrets)
+        # 3. Load Shared Secrets (Decrypt) — infra creds shared across all envs
+        common_secrets = self._decrypt_sops(self.secrets_path / "common.enc.yaml")
+        self._deep_update(config, common_secrets)
+
+        # 4. Load Env Secrets (Decrypt) — env-specific secrets override common
+        env_secrets = self._decrypt_sops(self.secrets_path / f"{self.env}.enc.yaml")
+        self._deep_update(config, env_secrets)
 
         return config
 
@@ -171,73 +177,117 @@ class ConfigurationManager:
 
         return files
 
-    def update_secret_key(self, key_path: str, value: Any, secret_file_path: Optional[Path] = None) -> bool:
-        """
-        Updates a specific key in a SOPS-encrypted YAML secret file.
-
-        Args:
-            key_path: The dot-separated path to the key (e.g., "apps.authelia.users_admin_password_hash").
-            value: The new value for the key.
-            secret_file_path: The path to the secret file. Defaults to self.secrets_path / f"{self.env}.enc.yaml".
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        file_to_update = secret_file_path if secret_file_path else (self.secrets_path / f"{self.env}.enc.yaml")
-
-        if not file_to_update.exists():
-            self._get_logger().error(f"Secret file not found: {file_to_update}")
-            return False
-
+    def _check_sops(self) -> bool:
+        """Check if SOPS is installed."""
         if subprocess.run(["which", "sops"], capture_output=True).returncode != 0:
-            self._get_logger().error("SOPS is not installed. Cannot update secret file.")
+            self._get_logger().error("SOPS is not installed.")
             return False
+        return True
 
+    def _ensure_sops_file(self, file_path: Path) -> bool:
+        """Create an empty SOPS-encrypted file if it doesn't exist."""
+        if file_path.exists():
+            return True
+
+        self._get_logger().info(f"Creating new SOPS file: {file_path}")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write empty YAML, then encrypt via SOPS (uses .sops.yaml creation_rules)
+        file_path.write_text("{}\n")
         try:
-            # Decrypt the file
-            result = subprocess.run(
-                ["sops", "-d", "--output-type", "yaml", str(file_to_update)],
-                capture_output=True,
-                text=True,
-                check=True,
-                env=os.environ,  # Inherit current environment variables
-            )
-            decrypted_data = yaml.safe_load(result.stdout) or {}
-
-            # Update the specific key
-            keys = key_path.split(".")
-            current_level = decrypted_data
-            for i, key in enumerate(keys):
-                if i == len(keys) - 1:
-                    current_level[key] = value
-                else:
-                    if key not in current_level or not isinstance(current_level[key], dict):
-                        current_level[key] = {}
-                    current_level = current_level[key]
-
-            # Re-encrypt and save the file
-            # Write to temp file first, then encrypt in-place
-            # SOPS needs a real file path to match creation_rules
-
-            updated_yaml = yaml.dump(decrypted_data, default_flow_style=False, sort_keys=False)
-
-            # Write decrypted content to the target file temporarily
-            file_to_update.write_text(updated_yaml)
-
-            # Encrypt in-place using the actual file path (so SOPS can match creation_rules)
-            result = subprocess.run(
-                ["sops", "--encrypt", "--in-place", str(file_to_update)],
+            subprocess.run(
+                ["sops", "--encrypt", "--in-place", str(file_path)],
                 text=True,
                 check=True,
                 capture_output=True,
                 env=os.environ,
             )
-            self._get_logger().info(f"Successfully updated secret key '{key_path}' in {file_to_update}")
+            self._get_logger().info(f"Created encrypted file: {file_path}")
+            return True
+        except subprocess.CalledProcessError as e:
+            self._get_logger().error(f"Failed to create SOPS file: {e.stderr}")
+            file_path.unlink(missing_ok=True)
+            return False
+
+    def _set_nested_key(self, data: Dict[str, Any], key_path: str, value: Any) -> None:
+        """Set a value in a nested dict using a dot-separated key path."""
+        keys = key_path.split(".")
+        current = data
+        for i, key in enumerate(keys):
+            if i == len(keys) - 1:
+                current[key] = value
+            else:
+                if key not in current or not isinstance(current[key], dict):
+                    current[key] = {}
+                current = current[key]
+
+    def _encrypt_sops_file(self, file_path: Path, data: Dict[str, Any]) -> bool:
+        """Write data to file and encrypt with SOPS. Single encrypt operation."""
+        updated_yaml = yaml.dump(data, default_flow_style=False, sort_keys=False)
+        file_path.write_text(updated_yaml)
+        try:
+            subprocess.run(
+                ["sops", "--encrypt", "--in-place", str(file_path)],
+                text=True,
+                check=True,
+                capture_output=True,
+                env=os.environ,
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            self._get_logger().error(f"Failed to encrypt {file_path}: {e.stderr}")
+            return False
+
+    def batch_update_secrets(
+        self,
+        secrets: Dict[str, Any],
+        secret_file_path: Optional[Path] = None,
+    ) -> bool:
+        """Update multiple keys in a SOPS file with a single decrypt/encrypt cycle.
+
+        Args:
+            secrets: Dict of dot-separated key paths → values.
+            secret_file_path: Override for the SOPS file path.
+
+        Returns:
+            True if all updates succeeded.
+        """
+        file_to_update = secret_file_path or (self.secrets_path / f"{self.env}.enc.yaml")
+        logger = self._get_logger()
+
+        if not self._check_sops():
+            return False
+
+        if not self._ensure_sops_file(file_to_update):
+            return False
+
+        try:
+            # 1. Single decrypt
+            result = subprocess.run(
+                ["sops", "-d", "--output-type", "yaml", str(file_to_update)],
+                capture_output=True,
+                text=True,
+                check=True,
+                env=os.environ,
+            )
+            decrypted_data = yaml.safe_load(result.stdout) or {}
+
+            # 2. Update all keys in memory
+            for key_path, value in secrets.items():
+                self._set_nested_key(decrypted_data, key_path, value)
+                logger.success(f"  Updated: {key_path}")
+
+            # 3. Single encrypt
+            if not self._encrypt_sops_file(file_to_update, decrypted_data):
+                return False
+
+            logger.info(f"Wrote {len(secrets)} secrets to {file_to_update}")
             return True
 
         except subprocess.CalledProcessError as e:
-            self._get_logger().error(f"Failed to update secret file {file_to_update}: {e.stderr}")
+            logger.error(f"Failed to decrypt {file_to_update}: {e.stderr}")
             return False
-        except Exception as e:
-            self._get_logger().error(f"An unexpected error occurred while updating secret file: {e}")
-            return False
+
+    def update_secret_key(self, key_path: str, value: Any, secret_file_path: Optional[Path] = None) -> bool:
+        """Update a single key in a SOPS file. For bulk updates use batch_update_secrets."""
+        return self.batch_update_secrets({key_path: value}, secret_file_path)

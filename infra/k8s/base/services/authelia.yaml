@@ -1,0 +1,313 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: authelia-data
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authelia-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+data:
+  configuration.yml: |
+    # ==========================================================================
+    # Authelia — Staging (ForwardAuth only, no OIDC)
+    # ==========================================================================
+    theme: dark
+    default_2fa_method: totp
+
+    server:
+      address: 'tcp://:9091'
+      asset_path: /config/assets
+      buffers:
+        read: 4096
+        write: 4096
+
+    log:
+      level: debug
+      format: json
+
+    # ---- Authentication Backend ----
+    authentication_backend:
+      file:
+        path: /config/users_database.yml
+        watch: true
+        password:
+          algorithm: argon2
+          argon2:
+            variant: argon2id
+            iterations: 3
+            memory: 65536
+            parallelism: 4
+            key_length: 32
+            salt_length: 16
+
+    # ---- TOTP ----
+    totp:
+      issuer: staging.kubelab.live
+      algorithm: sha1
+      digits: 6
+      period: 30
+      skew: 1
+      secret_size: 32
+
+    # ---- WebAuthn ----
+    webauthn:
+      attestation_conveyance_preference: indirect
+      user_verification: preferred
+      timeout: 60s
+
+    # ---- Access Control ----
+    access_control:
+      default_policy: deny
+
+      networks:
+        - name: internal
+          networks:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+
+      rules:
+        # Authelia portal (always bypass)
+        - domain: 'auth.staging.kubelab.live'
+          policy: bypass
+
+        # Public apps (no auth)
+        - domain: 'staging.kubelab.live'
+          policy: bypass
+        - domain: 'blog.staging.kubelab.live'
+          policy: bypass
+        - domain: 'api.staging.kubelab.live'
+          policy: bypass
+
+        # Protected services (one_factor)
+        - domain: 'grafana.staging.kubelab.live'
+          policy: one_factor
+        - domain: 'loki.staging.kubelab.live'
+          policy: one_factor
+
+        # Internal network catch-all
+        - domain: '*.staging.kubelab.live'
+          policy: one_factor
+          networks:
+            - internal
+
+    # ---- Session ----
+    session:
+      name: authelia_session
+      same_site: lax
+      inactivity: 1h
+      expiration: 8h
+      remember_me: 1M
+
+      cookies:
+        - domain: staging.kubelab.live
+          authelia_url: https://auth.staging.kubelab.live
+          default_redirection_url: https://staging.kubelab.live
+
+      redis:
+        host: redis
+        port: 6379
+        database_index: 0
+
+    # ---- Storage ----
+    storage:
+      local:
+        path: /data/db.sqlite3
+
+    # ---- Regulation ----
+    regulation:
+      max_retries: 3
+      find_time: 2m
+      ban_time: 5m
+
+    # ---- Notifier (Gmail SMTP) ----
+    notifier:
+      disable_startup_check: false
+      smtp:
+        address: submission://smtp.gmail.com:587
+        username: mlorentedev@gmail.com
+        sender: "Authelia <mlorentedev@gmail.com>"
+        identifier: auth.staging.kubelab.live
+        subject: "[Authelia] {title}"
+        disable_require_tls: false
+        disable_html_emails: false
+        tls:
+          server_name: smtp.gmail.com
+          skip_verify: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authelia
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authelia
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authelia
+        app.kubernetes.io/component: security
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: authelia
+          image: authelia/authelia:4.39.15
+          ports:
+            - name: http
+              containerPort: 9091
+              protocol: TCP
+          env:
+            - name: AUTHELIA_SESSION_SECRET_FILE
+              value: /run/secrets/session_secret
+            - name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE
+              value: /run/secrets/storage_encryption_key
+            - name: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE
+              value: /run/secrets/jwt_secret
+            - name: AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE
+              value: /run/secrets/smtp_password
+          volumeMounts:
+            - name: config
+              mountPath: /config/configuration.yml
+              subPath: configuration.yml
+              readOnly: true
+            - name: users
+              mountPath: /config/users_database.yml
+              subPath: users_database.yml
+              readOnly: true
+            - name: assets
+              mountPath: /config/assets
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              memory: 128Mi
+              cpu: "0.5"
+            requests:
+              memory: 64Mi
+              cpu: "0.1"
+      volumes:
+        - name: config
+          configMap:
+            name: authelia-config
+        - name: assets
+          configMap:
+            name: authelia-assets
+        - name: users
+          secret:
+            secretName: authelia-users
+        - name: secrets
+          secret:
+            secretName: authelia-secrets
+        - name: data
+          persistentVolumeClaim:
+            claimName: authelia-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authelia
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: authelia
+  ports:
+    - name: http
+      port: 9091
+      targetPort: http
+      protocol: TCP
+---
+# Traefik ForwardAuth Middleware
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  forwardAuth:
+    address: http://authelia.kubelab.svc.cluster.local:9091/api/authz/forward-auth
+    trustForwardHeader: true
+    authResponseHeaders:
+      - Remote-User
+      - Remote-Groups
+      - Remote-Email
+      - Remote-Name
+---
+# Authelia portal IngressRoute (bypass — no middleware on itself)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authelia
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`auth.staging.kubelab.live`)
+      kind: Rule
+      services:
+        - name: authelia
+          port: 9091
+  tls:
+    certResolver: letsencrypt
