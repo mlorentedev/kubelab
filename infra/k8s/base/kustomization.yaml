@@ -11,3 +11,11 @@ resources:
   - services/loki.yaml
   - services/vector.yaml
   - services/redis.yaml
+
+configMapGenerator:
+  - name: grafana-dashboards
+    namespace: kubelab
+    files:
+      - services/grafana-dashboards/kubelab-logs-overview.json
+    options:
+      disableNameSuffixHash: true

@@ -14,8 +14,6 @@ spec:
   routes:
     - match: Host(`api.staging.kubelab.live`)
       kind: Rule
-      middlewares:
-        - name: error-pages
       services:
         - name: api
           port: 8080
@@ -83,8 +81,6 @@ spec:
   routes:
     - match: Host(`grafana.staging.kubelab.live`)
       kind: Rule
-      middlewares:
-        - name: error-pages
       services:
         - name: grafana
           port: 3000
