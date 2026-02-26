@@ -12,6 +12,7 @@ resources:
   - services/vector.yaml
   - services/redis.yaml
   - services/authelia.yaml
+  - services/crowdsec.yaml
 
 configMapGenerator:
   - name: authelia-assets

@@ -132,7 +132,11 @@ class DockerService:
                     if not source_path.is_absolute():
                         source_path = (service_dir / source_path).resolve()
 
-                    if not source_path.exists():
+                    try:
+                        path_exists = source_path.exists()
+                    except PermissionError:
+                        path_exists = True  # Docker daemon has access even if toolkit doesn't
+                    if not path_exists:
                         missing_files.append(str(source_path))
 
             if missing_files:

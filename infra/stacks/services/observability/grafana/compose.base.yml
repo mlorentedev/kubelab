@@ -29,6 +29,9 @@ services:
       - "${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}:host-gateway"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../../../../../infra/k8s/base/services/grafana-dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - default
     healthcheck:

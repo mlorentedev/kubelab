@@ -15,7 +15,9 @@ http:
       service: {{ app.name }}
       {% endif %}
       middlewares:
+        {% if APPS_SERVICES_SECURITY_CROWDSEC_ENABLE_BOUNCER_MIDDLEWARE == 'true' %}
         - crowdsec@file
+        {% endif %}
         - secure-headers@file
         - error-pages@file
         - rate-limit@file

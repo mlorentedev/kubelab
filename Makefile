@@ -40,6 +40,7 @@ help:
 	@echo "  make build-dev          Build all app images (no cache)"
 	@echo "  make config-generate    Generate config files for dev"
 	@echo "  make credentials-generate  Generate credentials for dev"
+	@echo "  make regen-certs        Regenerate dev TLS certs and reinstall browser CA"
 	@echo "  make secrets            Edit SOPS-encrypted dev secrets"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo ""
@@ -102,21 +103,37 @@ setup-certs:
 	@mkcert -install >/dev/null 2>&1 || true
 	@echo "✓ TLS certificates configured"
 
+.PHONY: regen-certs
+regen-certs:
+	@echo "Regenerating dev TLS certificates..."
+	@$(TOOLKIT) tools certs generate --env dev
+	@mkcert -install >/dev/null 2>&1 || true
+	@echo "✓ Certificates regenerated. Restart Traefik and your browser."
+	@$(TOOLKIT) services restart traefik --env dev || true
+
+# All dev domains — update this list when adding new services
+DEV_DOMAINS := mlorente.test \
+	traefik.kubelab.test api.kubelab.test blog.kubelab.test \
+	auth.kubelab.test grafana.kubelab.test loki.kubelab.test \
+	portainer.kubelab.test gitea.kubelab.test n8n.kubelab.test \
+	status.kubelab.test minio.kubelab.test console.minio.kubelab.test \
+	crowdsec.kubelab.test
+
 .PHONY: setup-local-dns
 setup-local-dns:
 	@echo "Setting up local DNS entries in /etc/hosts..."
-	@if grep -q "kubelab.test" /etc/hosts 2>/dev/null && grep -q "mlorente.test" /etc/hosts 2>/dev/null; then \
-		echo "✓ DNS entries already configured"; \
+	@added=0; \
+	for domain in $(DEV_DOMAINS); do \
+		if ! grep -q "$$domain" /etc/hosts 2>/dev/null; then \
+			echo "127.0.0.1 $$domain" | sudo tee -a /etc/hosts > /dev/null; \
+			echo "  + $$domain"; \
+			added=$$((added+1)); \
+		fi; \
+	done; \
+	if [ $$added -eq 0 ]; then \
+		echo "✓ All DNS entries already configured"; \
 	else \
-		echo "Adding local development DNS entries..."; \
-		echo "" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "# KubeLab local development" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 mlorente.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 traefik.kubelab.test api.kubelab.test blog.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 auth.kubelab.test gitea.kubelab.test grafana.kubelab.test loki.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 portainer.kubelab.test status.kubelab.test minio.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "127.0.0.1 console.minio.kubelab.test" | sudo tee -a /etc/hosts > /dev/null; \
-		echo "✓ DNS entries added to /etc/hosts"; \
+		echo "✓ Added $$added DNS entries to /etc/hosts"; \
 	fi
 
 # -----------------------------------------------------------------------------
@@ -143,7 +160,7 @@ build-dev:
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		blog api web nginx portainer uptime loki grafana authelia crowdsec minio github-runner traefik \
+		blog api web nginx portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -151,7 +168,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		blog api web nginx portainer uptime loki grafana authelia crowdsec minio github-runner traefik \
+		blog api web nginx portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -176,8 +193,14 @@ dev-full-reset: dev-full-clean credentials-generate
 	@read -p "" # Pauses execution until user presses Enter
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik portainer uptime loki grafana api web blog minio github-runner --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik portainer gitea n8n uptime loki grafana api web blog minio github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
+	@echo ""
+	@echo "--- Post-start manual steps ---"
+	@echo "  Portainer : set admin password at https://portainer.kubelab.test"
+	@echo "  Gitea     : docker exec --user git gitea gitea admin user create --admin --username admin --password <pass> --email <email> --must-change-password=false"
+	@echo "  n8n       : create owner account at https://n8n.kubelab.test"
+	@echo "  MinIO     : login at https://console.minio.kubelab.test with root creds from SOPS"
 	@echo "============================================================"
 
 .PHONY: restart-dev

@@ -1,0 +1,38 @@
+services:
+  n8n:
+    container_name: ${APPS_SERVICES_CORE_N8N_NAME}
+    image: ${APPS_SERVICES_CORE_N8N_IMAGE}
+    restart: ${GLOBAL_RESTART_POLICY}
+    environment:
+      - N8N_HOST=${APPS_SERVICES_CORE_N8N_DOMAIN}
+      - N8N_PORT=${APPS_SERVICES_CORE_N8N_DEFAULT_PORT}
+      - N8N_PROTOCOL=https
+      - N8N_EDITOR_BASE_URL=https://${APPS_SERVICES_CORE_N8N_DOMAIN}
+      - WEBHOOK_URL=https://${APPS_SERVICES_CORE_N8N_DOMAIN}
+      - N8N_ENCRYPTION_KEY=${APPS_SERVICES_CORE_N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=${GLOBAL_TIMEZONE}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - default
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "require('http').get(
+          'http://localhost:${APPS_SERVICES_CORE_N8N_DEFAULT_PORT}${APPS_SERVICES_CORE_N8N_HEALTH_PATH}',
+          r => process.exit(r.statusCode === 200 ? 0 : 1))
+          .on('error', () => process.exit(1))"
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: 30s
+
+volumes:
+  n8n_data:
+    name: n8n_data
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

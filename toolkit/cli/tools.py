@@ -53,10 +53,26 @@ def _get_default_domains(env: str) -> list[str]:
 
     base_domain = env_vars.get("BASE_DOMAIN", env_vars.get("GLOBAL_BASE_DOMAIN", "kubelab.test"))
 
-    return [
-        base_domain,
-        f"*.{base_domain}",
-    ]
+    domains = [base_domain, f"*.{base_domain}"]
+
+    # Include web app domain if it differs from the base domain (e.g. mlorente.test)
+    web_domain = env_vars.get("APPS_PLATFORM_WEB_DOMAIN", "")
+    if web_domain and web_domain != base_domain and not web_domain.endswith(f".{base_domain}"):
+        domains.append(web_domain)
+
+    # Include any configured domains that have more than one subdomain level
+    # (wildcards like *.kubelab.test only cover one level, not console.minio.kubelab.test)
+    for key, value in env_vars.items():
+        if not key.endswith("_DOMAIN") or not value:
+            continue
+        if not value.endswith(f".{base_domain}"):
+            continue
+        # Check if it has more than one subdomain level relative to base_domain
+        prefix = value[: -(len(base_domain) + 1)]  # strip ".base_domain"
+        if "." in prefix and value not in domains:
+            domains.append(value)
+
+    return domains
 
 
 @certs_app.command("install-mkcert")

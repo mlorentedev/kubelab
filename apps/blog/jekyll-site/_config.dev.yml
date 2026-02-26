@@ -2,3 +2,5 @@
 url: ""
 baseurl: ""
 avatar: "/assets/img/me-2.webp"
+# Redirect cache to /tmp to avoid host permission issues when container runs as non-root
+cache_dir: /tmp/.jekyll-cache

@@ -12,8 +12,7 @@ class TestCredentialServiceMap:
         assert "traefik" in CREDENTIAL_SERVICE_MAP["basic_auth"]
 
     def test_authelia_maps_to_authelia(self) -> None:
-        assert "authelia" in CREDENTIAL_SERVICE_MAP["apps.authelia"]
-        assert "authelia" in CREDENTIAL_SERVICE_MAP["apps.security.authelia"]
+        assert "authelia" in CREDENTIAL_SERVICE_MAP["apps.services.security.authelia"]
 
     def test_grafana_maps_to_grafana(self) -> None:
         assert "grafana" in CREDENTIAL_SERVICE_MAP["apps.services.observability.grafana"]
@@ -57,7 +56,7 @@ class TestAffectedServiceResolution:
     def test_multiple_keys_combine(self) -> None:
         affected = self._resolve_affected([
             "basic_auth.user",
-            "apps.authelia.session_secret",
+            "apps.services.security.authelia.session_secret",
             "apps.services.data.minio.root_password",
         ])
         assert affected == {"traefik", "authelia", "minio"}
@@ -68,17 +67,17 @@ class TestAffectedServiceResolution:
             "basic_auth.user",
             "basic_auth.password",
             "basic_auth.credentials",
-            "apps.authelia.users_admin_password_hash",
-            "apps.authelia.oidc_hmac_secret",
-            "apps.authelia.session_secret",
-            "apps.authelia.storage_encryption_key",
-            "apps.authelia.jwt_secret_reset_password",
-            "apps.authelia.oidc_client_secret",
-            "apps.authelia.oidc_client_secret_hash",
+            "apps.services.security.authelia.users_admin_password_hash",
+            "apps.services.security.authelia.oidc_hmac_secret",
+            "apps.services.security.authelia.session_secret",
+            "apps.services.security.authelia.storage_encryption_key",
+            "apps.services.security.authelia.jwt_secret_reset_password",
+            "apps.services.security.authelia.oidc_client_secret",
+            "apps.services.security.authelia.oidc_client_secret_hash",
             "apps.services.observability.grafana.admin_user",
             "apps.services.observability.grafana.admin_password",
-            "apps.security.authelia.oidc_client_secret_grafana",
-            "apps.security.authelia.oidc_client_secret_grafana_hash",
+            "apps.services.security.authelia.oidc_client_secret_grafana",
+            "apps.services.security.authelia.oidc_client_secret_grafana_hash",
             "apps.services.data.minio.root_user",
             "apps.services.data.minio.root_password",
             "apps.services.data.minio.oidc_client_secret",

@@ -27,6 +27,8 @@ services:
 
     extra_hosts:
       - "${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}:host-gateway"
+      - "${APPS_SERVICES_DATA_MINIO_DOMAIN}:127.0.0.1"
+      - "${APPS_SERVICES_DATA_MINIO_CONSOLE_DOMAIN}:127.0.0.1"
 
     volumes:
       - ../../../../../infra/config/certs/${ENVIRONMENT}/rootCA.pem:/root/.minio/certs/CAs/rootCA.crt:ro

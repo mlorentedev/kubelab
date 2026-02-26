@@ -8,6 +8,7 @@ services:
       MINIO_IDENTITY_OPENID_DISPLAY_NAME: ""
       MINIO_IDENTITY_OPENID_SCOPES: ""
       MINIO_IDENTITY_OPENID_REDIRECT_URI: ""
-      # Use local URLs in dev
-      MINIO_SERVER_URL: "https://${APPS_SERVICES_DATA_MINIO_DOMAIN}"
+      # In dev, Traefik terminates TLS — console must reach API internally via localhost
+      # (MINIO_SERVER_URL with the public https:// URL fails because port 443 is on the host, not inside Docker)
+      MINIO_SERVER_URL: "http://localhost:${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_API}"
       MINIO_BROWSER_REDIRECT_URL: "https://${APPS_SERVICES_DATA_MINIO_CONSOLE_DOMAIN}"

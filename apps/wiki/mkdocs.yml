@@ -11,52 +11,52 @@ edit_uri: "{{ APPS_PLATFORM_WIKI_MKDOCS_EDIT_URI }}"
 copyright: "{{ APPS_PLATFORM_WIKI_MKDOCS_COPYRIGHT }}"
 
 theme:
-  name: material
-  custom_dir: generated_docs/overrides
+    name: material
+    custom_dir: generated_docs/overrides
 
-  # Branding
-  logo: "{{ APPS_PLATFORM_WIKI_MKDOCS_LOGO_PATH }}"
-  favicon: "{{ APPS_PLATFORM_WIKI_MKDOCS_FAVICON_PATH }}"
+    # Branding
+    logo: "{{ APPS_PLATFORM_WIKI_MKDOCS_LOGO_PATH }}"
+    favicon: "{{ APPS_PLATFORM_WIKI_MKDOCS_FAVICON_PATH }}"
 
-  # Color Palette (Dark/Light toggle)
-  palette:
-    # Dark mode (Default)
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-    # Light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+    # Color Palette (Dark/Light toggle)
+    palette:
+      # Dark mode (Default)
+      - scheme: slate
+        primary: indigo
+        accent: indigo
+        toggle:
+          icon: material/brightness-4
+          name: Switch to light mode
+      # Light mode
+      - scheme: default
+        primary: indigo
+        accent: indigo
+        toggle:
+          icon: material/brightness-7
+          name: Switch to dark mode
 
-  # Typography (Matching Web App)
-  font:
-    text: Roboto
-    code: JetBrains Mono
+    # Typography (Matching Web App)
+    font:
+      text: Roboto
+      code: JetBrains Mono
 
-  # User Interface Features
-  features:
-    - navigation.instant      # SPA-like feeling (no reload)
-    - navigation.tracking     # Update URL on scroll
-    - navigation.tabs         # Top level tabs
-    - navigation.tabs.sticky  # Tabs stay visible
-    - navigation.sections     # Collapsible sections
-    - navigation.expand       # Expand menu
-    - navigation.top          # Back to top button
-    - navigation.path         # Breadcrumbs
-    - navigation.footer       # Next/Prev links
-    - search.suggest          # Search autocomplete
-    - search.highlight        # Highlight search results
-    - search.share            # Share search results
-    - content.code.copy       # Copy code button
-    - content.action.edit     # Edit on GitHub button
-    - content.action.view     # View on GitHub button
+    # User Interface Features
+    features:
+      - navigation.instant      # SPA-like feeling (no reload)
+      - navigation.tracking     # Update URL on scroll
+      - navigation.tabs         # Top level tabs
+      - navigation.tabs.sticky  # Tabs stay visible
+      - navigation.sections     # Collapsible sections
+      - navigation.expand       # Expand menu
+      - navigation.top          # Back to top button
+      - navigation.path         # Breadcrumbs
+      - navigation.footer       # Next/Prev links
+      - search.suggest          # Search autocomplete
+      - search.highlight        # Highlight search results
+      - search.share            # Share search results
+      - content.code.copy       # Copy code button
+      - content.action.edit     # Edit on GitHub button
+      - content.action.view     # View on GitHub button
 
 # Plugins
 plugins:

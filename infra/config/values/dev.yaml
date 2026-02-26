@@ -31,7 +31,7 @@ edge:
   traefik:
     domain: traefik.kubelab.test
     disable_https: false
-    use_local_certs: true # Use mkcert certificates instead of ACME
+    use_local_certs: true  # Use mkcert certificates instead of ACME
     insecure: false
     acme_server: https://acme-staging-v02.api.letsencrypt.org/directory
     headers_ssl_redirect: true
@@ -73,6 +73,7 @@ apps:
         domain: portainer.kubelab.test
       n8n:
         domain: n8n.kubelab.test
+        encryption_key: "dev-n8n-encryption-key-32chars!!"
       gitea:
         domain: gitea.kubelab.test
     data:
@@ -90,6 +91,7 @@ apps:
     security:
       crowdsec:
         domain: crowdsec.kubelab.test
+        enable_bouncer_middleware: false  # Bouncer image incompatible with CrowdSec v1.7 + blocks localhost in dev
       authelia:
         domain: auth.kubelab.test
         default_domain_root: kubelab.test
