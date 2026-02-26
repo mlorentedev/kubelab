@@ -50,6 +50,9 @@ apps:
       site_url: https://kubelab.live
       email_secure: true
 
+    blog:
+      domain: blog.kubelab.live
+
     web:
       backend_url: "https://api.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1,.kubelab.live,.mlorente.dev"
@@ -66,6 +69,12 @@ apps:
       portainer:
         domain: portainer.kubelab.live
 
+      gitea:
+        domain: gitea.kubelab.live
+
+      n8n:
+        domain: n8n.kubelab.live
+
     observability:
       loki:
         domain: loki.kubelab.live
@@ -75,3 +84,18 @@ apps:
 
       grafana:
         domain: grafana.kubelab.live
+
+    security:
+      authelia:
+        domain: auth.kubelab.live
+        issuer_domain: kubelab.live
+        default_domain_root: kubelab.live
+        disable_require_tls: false
+
+      crowdsec:
+        domain: crowdsec.kubelab.live
+
+    data:
+      minio:
+        domain: minio.kubelab.live
+        console_domain: console.minio.kubelab.live

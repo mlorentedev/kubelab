@@ -9,3 +9,8 @@ resources:
   - services.yaml
   - configmaps.yaml
   - ingress.yaml
+  - secrets.yaml
+
+# Override base resources with prod-specific domains and config
+patches:
+  - path: patches.yaml
