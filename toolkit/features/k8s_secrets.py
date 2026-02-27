@@ -54,6 +54,19 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "password": "APPS_SERVICES_OBSERVABILITY_GRAFANA_ADMIN_PASSWORD",
         },
     ),
+    SecretMapping(
+        name="crowdsec-bouncer",
+        keys={
+            "api-key": "APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_API_KEY",
+        },
+    ),
+    SecretMapping(
+        name="api-secrets",
+        keys={
+            "EMAIL_PASS": "APPS_PLATFORM_API_EMAIL_PASS",
+            "EMAIL_USER": "APPS_PLATFORM_API_EMAIL_USER",
+        },
+    ),
 ]
 
 
