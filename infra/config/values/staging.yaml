@@ -79,3 +79,5 @@ apps:
         console_domain: console.minio.staging.kubelab.live
   web:
     version: 0.0.0-rc.0
+  blog:
+    version: 0.0.0-rc.0
