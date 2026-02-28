@@ -1,5 +1,6 @@
 """Terraform DNS configuration generator."""
 
+import json
 from typing import Any
 
 from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
@@ -9,43 +10,54 @@ from toolkit.features.generator_base import BaseGenerator
 
 
 class TerraformGenerator(BaseGenerator):
-    """Handles Terraform configuration generation for DNS records."""
+    """Validates Terraform DNS configuration before running commands."""
 
     def generate(self, env: str) -> dict[str, Any]:
-        """Generate Terraform configuration.
+        """Validate that Terraform DNS directory and services.json exist.
 
         Args:
             env: Environment name (dev, staging, prod)
 
         Returns:
-            Dictionary with success status and list of generated files
+            Dictionary with success status
         """
-        logger.info(f"Generating Terraform configuration for {env}")
+        logger.info(f"Validating Terraform configuration for {env}")
 
         terraform_dir = self.project_root / PATH_STRUCTURES.INFRA_TERRAFORM
-        templates_dir = terraform_dir / "templates"
-        output_dir = terraform_dir
 
-        if not templates_dir.exists():
-            logger.error(f"Terraform templates directory not found: {templates_dir}")
-            return {"success": False, "error": "Templates directory not found"}
+        if not terraform_dir.exists():
+            logger.error(f"Terraform directory not found: {terraform_dir}")
+            return {"success": False, "error": "Terraform directory not found"}
+
+        services_file = terraform_dir / "services.json"
+        if not services_file.exists():
+            logger.error(f"services.json not found: {services_file}")
+            return {"success": False, "error": "services.json not found"}
 
         try:
-            generated_files = []
-            template_files = list(templates_dir.glob("*.tf.template"))
-
-            for template_file in template_files:
-                output_file = output_dir / template_file.name.replace(".template", "")
-
-                if self.replace_placeholders(template_file, output_file, env):
-                    generated_files.append(str(output_file))
-                    logger.info(f"Generated: {output_file}")
-
-            return {"success": True, "files": generated_files}
-
-        except Exception as e:
-            logger.error(f"Failed to generate Terraform config: {e}")
+            with open(services_file) as f:
+                services = json.load(f)
+            if not isinstance(services, list) or len(services) == 0:
+                logger.error("services.json must be a non-empty JSON array")
+                return {"success": False, "error": "Invalid services.json"}
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to parse services.json: {e}")
             return {"success": False, "error": str(e)}
+
+        main_tf = terraform_dir / "main.tf"
+        if not main_tf.exists():
+            logger.error(f"main.tf not found: {main_tf}")
+            return {"success": False, "error": "main.tf not found"}
+
+        tfvars = terraform_dir / f"{env}.tfvars"
+        if not tfvars.exists():
+            logger.warning(f"No tfvars file for {env}: {tfvars}")
+
+        env_services = [s for s in services if env in s.get("environments", [])]
+        logger.info(f"Found {len(env_services)} services for {env} environment")
+        logger.success(f"Terraform configuration valid for {env}")
+
+        return {"success": True, "services_count": len(env_services)}
 
     def validate(self) -> bool:
         """Validate Terraform setup and configuration.
@@ -54,12 +66,10 @@ class TerraformGenerator(BaseGenerator):
             True if validation passes, False otherwise
         """
         try:
-            # Check if terraform is available
             if command.run("which terraform", check=False).returncode != 0:
                 logger.error(MESSAGES.ERROR_TERRAFORM_NOT_FOUND)
                 return False
 
-            # Check if terraform directory exists
             from toolkit.config.settings import settings
 
             if not settings.terraform_dir.exists():

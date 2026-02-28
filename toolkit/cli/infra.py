@@ -332,6 +332,29 @@ def _check_terraform_setup() -> None:
         raise typer.Exit(1) from None
 
 
+def _get_terraform_env(env: str) -> dict[str, str]:
+    """Build environment dict with Cloudflare API token from SOPS.
+
+    Extracts the Cloudflare API token from the SOPS secrets and returns
+    an env dict suitable for passing to subprocess/command.run calls.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+
+    config_manager = ConfigurationManager(env, settings.project_root)
+    merged = config_manager.get_merged_config()
+
+    # Navigate: cloudflare.api_token (from common.enc.yaml)
+    token = merged.get("cloudflare", {}).get("api_token", "")
+    if not token:
+        logger.error("Cloudflare API token not found in SOPS secrets (cloudflare.api_token)")
+        raise typer.Exit(1) from None
+
+    # Inherit current environment + inject TF_VAR
+    env_dict = dict(os.environ)
+    env_dict["TF_VAR_cloudflare_api_token"] = token
+    return env_dict
+
+
 @terraform_app.command("init")
 def tf_init(env: str = typer.Argument("dev", help="Target environment")) -> None:
     """
@@ -356,17 +379,12 @@ def tf_init(env: str = typer.Argument("dev", help="Target environment")) -> None
 
         # Run terraform init
         terraform_dir = settings.terraform_dir
-        cmd_parts = ["terraform", "init"]
+        tf_env = _get_terraform_env(env)
 
-        backend_file = terraform_dir / f"backend.{env}.tfvars"
-        if backend_file.exists():
-            logger.info(f"Using backend configuration: {backend_file.name}")
-            cmd_parts.extend(["-backend-config", str(backend_file)])
-
-        cmd = " ".join(cmd_parts)
+        cmd = "terraform init"
         logger.info(f"Running: {cmd}")
 
-        tf_result = command.run(cmd, cwd=terraform_dir)
+        tf_result = command.run(cmd, cwd=terraform_dir, env=tf_env)
         if tf_result.returncode == 0:
             logger.success(MESSAGES.SUCCESS_TERRAFORM_INIT.format(env))
         else:
@@ -394,6 +412,7 @@ def tf_plan(
     try:
         _check_terraform_setup()
         terraform_dir = settings.terraform_dir
+        tf_env = _get_terraform_env(env)
         tfvars_file = terraform_dir / f"{env}.tfvars"
 
         output_file = out or f"{env}.tfplan"
@@ -406,7 +425,7 @@ def tf_plan(
         cmd = " ".join(cmd_parts)
 
         logger.info(f"Creating plan: {cmd}")
-        result = command.run(cmd, cwd=terraform_dir)
+        result = command.run(cmd, cwd=terraform_dir, env=tf_env)
 
         if result.returncode == 0:
             logger.success(MESSAGES.SUCCESS_TERRAFORM_PLAN_CREATED.format(output_file))
@@ -442,6 +461,7 @@ def tf_apply(
             confirm_dangerous_operation(env_config, "Apply Terraform changes")
 
         terraform_dir = settings.terraform_dir
+        tf_env = _get_terraform_env(env)
         plan_to_apply = plan_file or f"{env}.tfplan"
 
         # Check if plan file exists
@@ -456,7 +476,7 @@ def tf_apply(
                 cmd += " -auto-approve"
 
         logger.info(f"Applying configuration: {cmd}")
-        result = command.run(cmd, cwd=terraform_dir)
+        result = command.run(cmd, cwd=terraform_dir, env=tf_env)
 
         if result.returncode == 0:
             logger.success(MESSAGES.SUCCESS_TERRAFORM_APPLY.format(env))
@@ -498,6 +518,7 @@ def tf_destroy(
                     raise typer.Exit(0) from None
 
         terraform_dir = settings.terraform_dir
+        tf_env = _get_terraform_env(env)
         tfvars_file = terraform_dir / f"{env}.tfvars"
 
         cmd_parts = ["terraform", "destroy"]
@@ -511,7 +532,7 @@ def tf_destroy(
         cmd = " ".join(cmd_parts)
 
         logger.info(f"Destroying infrastructure: {cmd}")
-        result = command.run(cmd, cwd=terraform_dir)
+        result = command.run(cmd, cwd=terraform_dir, env=tf_env)
 
         if result.returncode == 0:
             logger.success(MESSAGES.SUCCESS_TERRAFORM_DESTROY.format(env))
@@ -542,9 +563,9 @@ def tf_validate() -> None:
             format_result = command.run("terraform fmt -check", cwd=terraform_dir, check=False)
             progress.advance(task)
 
-            # Syntax validation
+            # Syntax validation (needs provider vars for full validation)
             progress.update(task, description="Validating syntax...")
-            validate_result = command.run("terraform validate", cwd=terraform_dir)
+            validate_result = command.run("terraform validate", cwd=terraform_dir, check=False)
             progress.advance(task)
 
             progress.update(task, description="Finalizing...")

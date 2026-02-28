@@ -68,6 +68,9 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Authelia secrets key path**: `apps.services.security.authelia.*` (NOT `apps.authelia.*` or `apps.security.authelia.*`)
 - **K8s base manifests have staging-hardcoded domains**: IngressRoutes and ConfigMaps in `infra/k8s/base/` use `*.staging.kubelab.live`. Prod overlay uses `patches.yaml` via Kustomize `patches:` to override. Do NOT add base-conflicting resources to the overlay's `resources:` list — use patches instead.
 - **Kustomize `patchesStrategicMerge` is deprecated**: Use `patches: [{path: file.yaml}]` instead.
+- **Headscale MUST stay outside K3s** (ADR-015): Bootstrapping dependency — K3s nodes need Tailscale, Tailscale needs Headscale. Headscale runs in Docker Compose on VPS permanently, even after K3s migration.
+- **VPS K3s migration uses Pattern C** (ADR-015): Side-by-side with alternate ports (8080/8443), then swap to 80/443 at cutover. Never run two Traefik instances on the same ports.
+- **K3s prod TLS SAN**: Must include both `162.55.57.175` (public) and `100.64.0.2` (Tailscale). Configure BEFORE first K3s start.
 
 ## Workflow rules
 

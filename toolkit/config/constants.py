@@ -128,7 +128,7 @@ class PathStructures:
     # Infrastructure
     INFRA_DIR: str = "infra"
     INFRA_ANSIBLE: str = "infra/ansible"
-    INFRA_TERRAFORM: str = "infra/terraform"
+    INFRA_TERRAFORM: str = "infra/terraform/dns"
 
     # Deployment stacks
     INFRA_STACKS: str = "infra/stacks"

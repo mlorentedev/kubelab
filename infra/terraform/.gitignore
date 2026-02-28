@@ -1,8 +1,8 @@
  Terraform state
 .terraform/
 /.terraform/
-.tfstate
-.tfstate.
+*.tfstate
+*.tfstate.*
 crash.log
 crash..log
 
@@ -19,8 +19,8 @@ _override.tf
 _override.tf.json
 
  Plan outputs
-.plan
-.tfplan
+*.plan
+*.tfplan
 
  OS and editor files
 .DS_Store

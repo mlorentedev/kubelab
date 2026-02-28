@@ -18,6 +18,7 @@ __pycache__/
 *.exe
 *.out
 *.test
+*.tmp
 
 # Dependencies
 node_modules/
@@ -26,7 +27,7 @@ node_modules/
 venv/
 vendor/
 
-# IDE
+# IDE & Editors
 .vscode/
 .idea/
 *.swp
@@ -60,7 +61,7 @@ coverage.xml
 # Poetry
 poetry.lock
 
-# IDE
+# Ruby / Jekyll
 Gemfile.lock
 beautiful-jekyll-theme-*.gem
 *.jekyll-cache
@@ -68,7 +69,7 @@ beautiful-jekyll-theme-*.gem
 # Drawio
 *.bkp
 
-# Environment files - ignore real values, keep examples
+# Environment files — ignore real values, keep examples
 .env
 .env.local
 .env.dev
@@ -80,7 +81,7 @@ beautiful-jekyll-theme-*.gem
 infra/config/env/.env.*
 !infra/config/env/.env.*.example
 
-# Secrets & Certificates
+# Secrets & Certificates (includes Authelia JWKS keys)
 certbot/
 certs/
 *.pem
@@ -88,7 +89,6 @@ certs/
 *.crt
 *.p12
 *.pfx
-.cache_gghield
 
 # Logs
 logs/
@@ -104,10 +104,8 @@ MEMORY.md
 # Uptime Kuma backups (binary SQLite, use `toolkit monitoring backup` to pull)
 infra/config/uptime-kuma/*.db
 
-# Temporary Docker files
+# Docker overrides
 docker-compose.override.yml
-*.tmp
-*.swp
 
 # Docker-created artifacts (volume mount directories)
 # Prevent accidental directory creation by Docker when volume sources don't exist
@@ -116,9 +114,8 @@ apps/**/loki/
 apps/**/vector.toml/
 apps/**/nginx.conf/
 
-# Authelia secrets (JWKS keys)
-infra/config/secrets/*.pem
+# Wiki build output
 apps/wiki/generated_docs
 
-# Added by ggshield
+# Security scanning
 .cache_ggshield
