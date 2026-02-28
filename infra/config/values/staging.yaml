@@ -81,3 +81,5 @@ apps:
     version: 0.0.0-rc.0
   blog:
     version: 0.0.0-rc.0
+  api:
+    version: 0.0.0-rc.0
