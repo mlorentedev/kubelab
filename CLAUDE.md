@@ -71,6 +71,8 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Headscale MUST stay outside K3s** (ADR-015): Bootstrapping dependency — K3s nodes need Tailscale, Tailscale needs Headscale. Headscale runs in Docker Compose on VPS permanently, even after K3s migration.
 - **VPS K3s migration uses Pattern C** (ADR-015): Side-by-side with alternate ports (8080/8443), then swap to 80/443 at cutover. Never run two Traefik instances on the same ports.
 - **K3s prod TLS SAN**: Must include both `162.55.57.175` (public) and `100.64.0.2` (Tailscale). Configure BEFORE first K3s start.
+- **K8s ConfigMaps MUST NOT contain SOPS-sourced values**: The K8s generator merges values YAML + SOPS. `SECRET_PATTERNS` blocklist filters secrets from ConfigMaps, but it's fragile. Rule: if a value is in SOPS, it goes in a K8s Secret via `k8s_secrets.py`, NEVER in a ConfigMap. Review generated ConfigMaps before committing.
+- **K8s secrets.yaml uses placeholders only**: Both staging and prod `secrets.yaml` contain `REPLACE_WITH_SOPS_VALUE`. Real values injected at deploy time via `toolkit infra k8s apply-secrets`. Never commit real secret values.
 
 ## Workflow rules
 

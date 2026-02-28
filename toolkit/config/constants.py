@@ -189,6 +189,7 @@ class ValidationRules:
 
     # Patterns for sanitization
     SECRET_PATTERNS: Sequence[str] = (
+        "PASS",
         "PASSWORD",
         "SECRET",
         "TOKEN",
@@ -196,6 +197,7 @@ class ValidationRules:
         "CREDENTIALS",
         "AUTH",
         "JWT",
+        "CLIENT",
     )
     URL_PATTERNS: Sequence[str] = ("URL", "HOST", "DOMAIN")
     SAFE_PATTERNS: Sequence[str] = (
