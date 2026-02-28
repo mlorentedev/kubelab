@@ -5,24 +5,20 @@ environment: staging
 global:
   base_domain: staging.kubelab.live
   restart_policy: unless-stopped
-
 # ==========================================================================
 # RUNTIME
 # ==========================================================================
 log_level: DEBUG
 debug_mode: true
-
 # ==========================================================================
 # PROTOCOLS & NETWORKING
 # ==========================================================================
 protocol: https
-
 # ==========================================================================
 # SERVICE DISCOVERY (Internal endpoints)
 # ==========================================================================
 endpoints:
   api: http://api:8080
-
 # ==========================================================================
 # EDGE SETTINGS
 # ==========================================================================
@@ -31,13 +27,10 @@ edge:
     domain: traefik.staging.kubelab.live
     disable_https: false
     acme_server: https://acme-v02.api.letsencrypt.org/directory
-
   nginx:
     domain: errors.staging.kubelab.live
-
   cloudflared:
-    enabled: false  # Tailscale replaces cloudflared for staging access
-
+    enabled: false # Tailscale replaces cloudflared for staging access
 # ==========================================================================
 # APPS SETTINGS
 # ==========================================================================
@@ -49,10 +42,8 @@ apps:
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
       email_secure: true
-
     blog:
       domain: blog.staging.kubelab.live
-
     web:
       backend_url: "https://api.staging.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live"
@@ -62,34 +53,29 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-
   # Third-party services
   services:
     core:
       portainer:
         domain: portainer.staging.kubelab.live
-
     observability:
       loki:
         domain: loki.staging.kubelab.live
-
       uptime_kuma:
         domain: status.staging.kubelab.live
-
       grafana:
         domain: grafana.staging.kubelab.live
-
     security:
       authelia:
         domain: auth.staging.kubelab.live
         issuer_domain: staging.kubelab.live
         default_domain_root: staging.kubelab.live
         disable_require_tls: false
-
       crowdsec:
         domain: crowdsec.staging.kubelab.live
-
     data:
       minio:
         domain: minio.staging.kubelab.live
         console_domain: console.minio.staging.kubelab.live
+  web:
+    version: 0.0.0-rc.0
