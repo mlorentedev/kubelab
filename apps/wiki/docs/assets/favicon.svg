@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w.org//svg" viewBox="   " width="" height="">
+  <defs>
+    <linearGradient id="favicon-gradient" x="%" y="%" x="%" y="%">
+      <stop offset="%" style="stop-color:"/>
+      <stop offset="%" style="stop-color:"/>
+      <stop offset="%" style="stop-color:acc"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="" height="" rx="" fill="url(favicon-gradient)"/>
+
+  <!-- Simple book icon -->
+  <g fill="white">
+    <rect x="" y="" width="" height="" rx="." fill="white" opacity="."/>
+    <rect x="" y="" width="." height="" rx="" fill="white"/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+  </g>
+</svg>

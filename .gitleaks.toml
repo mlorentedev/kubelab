@@ -1,0 +1,12 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+useDefault = true
+
+# Allowlist known false positives from old wiki documentation (removed in 2026-02)
+# These are example curl commands and rendered HTML, not real secrets
+[allowlist]
+  paths = [
+    '''apps/wiki/''',
+  ]

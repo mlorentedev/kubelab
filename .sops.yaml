@@ -1,0 +1,9 @@
+creation_rules:
+  - path_regex: infra/config/secrets/.*\.enc\.yaml$
+    key_groups:
+      - age:
+          - "age166v8efpskctmxxes5lcqpxkj0ny3q74l3v0pswpdpa63wlkqmc8q35fkdw"
+  - path_regex: infra/config/secrets/.*\.pem(\.enc)?$
+    key_groups:
+      - age:
+          - "age166v8efpskctmxxes5lcqpxkj0ny3q74l3v0pswpdpa63wlkqmc8q35fkdw"

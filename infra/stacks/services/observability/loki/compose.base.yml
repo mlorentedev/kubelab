@@ -1,0 +1,43 @@
+services:
+  loki:
+    image: ${APPS_SERVICES_OBSERVABILITY_LOKI_IMAGE}
+    container_name: ${APPS_SERVICES_OBSERVABILITY_LOKI_NAME}
+    restart: ${RESTART_POLICY}
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget --no-verbose --tries=1 --spider
+          http://localhost:${APPS_SERVICES_OBSERVABILITY_LOKI_DEFAULT_PORT}${APPS_SERVICES_OBSERVABILITY_LOKI_HEALTH_PATH}
+          || exit 1
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+    networks:
+      - default
+
+  vector:
+    image: ${APPS_SERVICES_OBSERVABILITY_LOKI_VECTOR_IMAGE}
+    container_name: ${APPS_SERVICES_OBSERVABILITY_LOKI_NAME}-vector
+    restart: ${RESTART_POLICY}
+    volumes:
+      - ../../../../config/loki/vector.toml:/etc/vector/vector.toml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - default
+
+volumes:
+  loki_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

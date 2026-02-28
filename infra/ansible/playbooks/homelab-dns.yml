@@ -1,0 +1,9 @@
+---
+- name: Apply DNS resilience to all homelab nodes
+  hosts: all
+  become: true
+  gather_facts: false
+
+  roles:
+    - role: ../roles/dns_resilience
+      tags: [dns, resilience]

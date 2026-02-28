@@ -12,19 +12,19 @@ import (
 	"github.com/mlorentedev/mlorente-backend/pkg/logger"
 )
 
-// IsValidEmailFormat determina si un email tiene formato válido
+// IsValidEmailFormat determines if an email has valid format
 func IsValidEmailFormat(email string) bool {
 	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	return re.MatchString(email)
 }
 
-// GetTagsForNewSubscriber determina qué tags aplicar a un nuevo suscriptor
+// GetTagsForNewSubscriber determines which tags to apply to a new subscriber
 func GetTagsForNewSubscriber(customTags []string) []string {
 	result := append([]string{"new"}, customTags...)
 	return result
 }
 
-// GenerateResourceTitle genera el título para un recurso basado en su ID
+// GenerateResourceTitle generates the title for a resource based on its ID
 func GenerateResourceTitle(resourceID string, customTitle string) string {
 	if customTitle != "" {
 		return customTitle
@@ -32,12 +32,12 @@ func GenerateResourceTitle(resourceID string, customTitle string) string {
 	return resourceID
 }
 
-// GenerateResourceURL genera la URL de un recurso basado en su fileId
+// GenerateResourceURL generates the URL of a resource based on its fileId
 func GenerateResourceURL(fileID string) string {
 	return fmt.Sprintf("https://drive.google.com/file/d/%s/view?usp=drive_link", fileID)
 }
 
-// GetEmailDelay calcula un retraso para envío de emails (en milisegundos)
+// GetEmailDelay calculates a delay for email sending (in milliseconds)
 func GetEmailDelay(minutes int) int {
 	if minutes <= 0 {
 		minutes = 1

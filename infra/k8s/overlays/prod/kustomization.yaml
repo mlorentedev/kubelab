@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kubelab
+
+resources:
+  - ../../base
+  - deployments.yaml
+  - services.yaml
+  - configmaps.yaml
+  - ingress.yaml
+  # secrets managed via: toolkit infra k8s apply-secrets --env prod (ADR-014)
+
+# Override base resources with prod-specific domains and config
+patches:
+  - path: patches.yaml

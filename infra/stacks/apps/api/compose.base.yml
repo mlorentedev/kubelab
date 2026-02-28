@@ -1,0 +1,40 @@
+services:
+  api:
+    image: ${REGISTRY}/${APPS_PLATFORM_API_IMAGE_NAME}:${APPS_PLATFORM_API_VERSION}
+    container_name: ${APPS_PLATFORM_API_NAME}
+    build:
+      context: ../../../../apps/api
+      dockerfile: Dockerfile
+    restart: ${RESTART_POLICY}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -f http://localhost:${APPS_PLATFORM_API_DEFAULT_PORT}${APPS_PLATFORM_API_HEALTH_PATH}
+          || exit 1
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+    environment:
+      - ENVIRONMENT
+      - VERSION=${APPS_PLATFORM_API_VERSION}
+      - PORT=${APPS_PLATFORM_API_DEFAULT_PORT}
+      - SITE_TITLE=${APPS_PLATFORM_API_SITE_TITLE}
+      - SITE_DOMAIN=${APPS_PLATFORM_API_SITE_DOMAIN}
+      - SITE_URL=${APPS_PLATFORM_API_SITE_URL}
+      - EMAIL_HOST=${APPS_PLATFORM_API_EMAIL_HOST}
+      - EMAIL_PORT=${APPS_PLATFORM_API_EMAIL_PORT}
+      - EMAIL_SECURE=${APPS_PLATFORM_API_EMAIL_SECURE}
+      - EMAIL_USER=${APPS_PLATFORM_API_EMAIL_USER}
+      - EMAIL_PASS=${APPS_PLATFORM_API_EMAIL_PASS}
+      - EMAIL_FROM=${APPS_PLATFORM_API_EMAIL_FROM}
+      - ZOHO_CLIENT_ID=${APPS_PLATFORM_API_ZOHO_CLIENT_ID}
+      - ZOHO_CLIENT_SECRET=${APPS_PLATFORM_API_ZOHO_CLIENT_SECRET}
+      - BEEHIIV_API_KEY=${APPS_PLATFORM_API_BEEHIIV_API_KEY}
+      - BEEHIIV_PUB_ID=${APPS_PLATFORM_API_BEEHIIV_PUB_ID}
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

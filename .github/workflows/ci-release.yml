@@ -1,0 +1,139 @@
+---
+name: Create Global Release Bundle
+
+on:
+  # Trigger automatically after CI pipeline completes successfully
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - master
+      - develop
+
+  # Allow manual trigger for emergency releases
+  workflow_dispatch:
+
+jobs:
+  create-global-release:
+    name: Create Release Bundle
+    runs-on: ubuntu-latest
+    # Only run if the triggering workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # We need history for changelog/tagging
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine Release Strategy
+        id: strategy
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          DATE_TAG=$(date +'%Y.%m.%d')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            # Stable Release: v2025.12.02 (CalVer is great for Global Monorepo releases)
+            # Or use incremental if you prefer. Let's use Date + ShortSHA for uniqueness
+            RELEASE_TAG="v${DATE_TAG}"
+            IS_PRERELEASE="false"
+            CONFIG_FILE="infra/config/values/prod.yaml"
+            echo "::notice::🚀 Preparing Stable Release: $RELEASE_TAG"
+
+          elif [[ "$BRANCH" == "develop" ]]; then
+            # Release Candidate
+            RELEASE_TAG="v${DATE_TAG}-rc.${SHORT_SHA}"
+            IS_PRERELEASE="true"
+            CONFIG_FILE="infra/config/values/staging.yaml"
+            echo "::notice::🧪 Preparing Release Candidate: $RELEASE_TAG"
+
+          else
+            echo "::warning::Skipping global release for branch $BRANCH"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check if tag exists, append increment if needed
+          if git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            RELEASE_TAG="${RELEASE_TAG}-1"
+          fi
+
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "config_file=$CONFIG_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create Deployment Artifact (ZIP)
+        if: steps.strategy.outputs.skip != 'true'
+        run: |
+          RELEASE_TAG="${{ steps.strategy.outputs.tag }}"
+          mkdir -p dist/kubelab-deploy
+
+          echo "::group::Copying Infrastructure Files"
+          # 1. Core Infrastructure
+          cp Makefile dist/kubelab-deploy/
+          cp -r infra dist/kubelab-deploy/
+          cp -r scripts dist/kubelab-deploy/ 2>/dev/null || true
+
+          # 2. App Compose Files (Only what's needed to run, NOT source code)
+          mkdir -p dist/kubelab-deploy/apps
+          # Copy only directory structure and compose files
+          find apps -name "compose*.yml" | while read f; do
+            dir=$(dirname "$f")
+            mkdir -p "dist/kubelab-deploy/$dir"
+            cp "$f" "dist/kubelab-deploy/$dir/"
+          done
+
+          # 3. Toolkit (If it's needed for deployment orchestration)
+          cp -r toolkit dist/kubelab-deploy/
+          cp pyproject.toml dist/kubelab-deploy/
+          echo "::endgroup::"
+
+          echo "::group::Cleaning Bundle"
+          # Remove potential secrets or trash (safety net)
+          find dist/kubelab-deploy -name ".env*" -delete
+          find dist/kubelab-deploy -name "__pycache__" -type d -exec rm -rf {} +
+          # Note: Configuration lives in values/*.yaml, not .env files
+          echo "::endgroup::"
+
+          # Create Version Manifest
+          echo "Build Date: $(date)" > dist/kubelab-deploy/MANIFEST.txt
+          echo "Global Tag: $RELEASE_TAG" >> dist/kubelab-deploy/MANIFEST.txt
+          echo "Commit: ${{ github.sha }}" >> dist/kubelab-deploy/MANIFEST.txt
+          echo "Config Source: ${{ steps.strategy.outputs.config_file }}" >> dist/kubelab-deploy/MANIFEST.txt
+
+          echo "--- Changed Apps ---" >> dist/kubelab-deploy/MANIFEST.txt
+          echo "See commit history for changed apps" >> dist/kubelab-deploy/MANIFEST.txt
+
+          # Zip it
+          cd dist
+          zip -r "kubelab-${RELEASE_TAG}.zip" kubelab-deploy
+
+      - name: Create Git Tag & Release
+        if: steps.strategy.outputs.skip != 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.strategy.outputs.tag }}
+          name: "System Release ${{ steps.strategy.outputs.tag }}"
+          body: |
+            ## Global System Release
+
+            **Commit:** `${{ github.sha }}`
+            **Branch:** `${{ github.ref_name }}`
+
+            This is an automated release bundle containing the latest infrastructure
+            configuration and Docker Compose files.
+
+            ### Deployment
+            Download `kubelab-${{ steps.strategy.outputs.tag }}.zip`, unzip on server, and run:
+            ```bash
+            make deploy
+            ```
+          artifacts: "dist/kubelab-${{ steps.strategy.outputs.tag }}.zip"
+          prerelease: ${{ steps.strategy.outputs.prerelease }}
+          makeLatest: ${{ steps.strategy.outputs.prerelease == 'false' }}

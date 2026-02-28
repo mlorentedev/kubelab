@@ -1,0 +1,61 @@
+services:
+  gitea:
+    container_name: ${APPS_SERVICES_CORE_GITEA_NAME}
+    image: ${APPS_SERVICES_CORE_GITEA_IMAGE}
+    restart: ${GLOBAL_RESTART_POLICY}
+    ports:
+      - "${APPS_SERVICES_CORE_GITEA_SSH_PORT}:22"
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      # Server
+      - GITEA__server__DOMAIN=${APPS_SERVICES_CORE_GITEA_DOMAIN}
+      - GITEA__server__ROOT_URL=https://${APPS_SERVICES_CORE_GITEA_DOMAIN}
+      - GITEA__server__HTTP_PORT=${APPS_SERVICES_CORE_GITEA_DEFAULT_PORT}
+      - GITEA__server__SSH_PORT=${APPS_SERVICES_CORE_GITEA_SSH_PORT}
+      - GITEA__server__SSH_DOMAIN=${APPS_SERVICES_CORE_GITEA_DOMAIN}
+      - GITEA__server__APP_DATA_PATH=/data/gitea
+      # App identity
+      - GITEA__DEFAULT__APP_NAME=${APPS_SERVICES_CORE_GITEA_APP_NAME}
+      # Service policy
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=false
+      - GITEA__service__DEFAULT_KEEP_EMAIL_PRIVATE=true
+      # Admin bootstrap (first-run only; ignored once DB exists)
+      - GITEA__admin__INSTALL_LOCK=true
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__admin__DEFAULT_EMAIL_NOTIFICATIONS=onmention
+      # Initial admin account (created on first start if not present)
+      - GITEA_ADMIN_USER=${APPS_SERVICES_CORE_GITEA_ADMIN_USER}
+      - GITEA_ADMIN_PASSWORD=${APPS_SERVICES_CORE_GITEA_ADMIN_PASSWORD}
+      - GITEA_ADMIN_EMAIL=${APPS_SERVICES_CORE_GITEA_ADMIN_EMAIL}
+      # Database (SQLite default — override per overlay for PostgreSQL)
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__database__PATH=/data/gitea/gitea.db
+      # Logging
+      - GITEA__log__MODE=console
+      - GITEA__log__LEVEL=Info
+    volumes:
+      - gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - default
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - "http://localhost:${APPS_SERVICES_CORE_GITEA_DEFAULT_PORT}${APPS_SERVICES_CORE_GITEA_HEALTH_PATH}"
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+
+volumes:
+  gitea_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

@@ -1,356 +1,173 @@
-# mlorente.dev
+# KubeLab
 
-Web personal construida con Jekyll, contenerizada con Docker y desplegada utilizando Traefik para terminación SSL y proxy inverso.
+Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure powering a portfolio of web services across homelab and cloud environments.
 
-## Características
+## Architecture
 
-- **Sitio web estático**: Construido con Jekyll para rendimiento óptimo
-- **Diseño responsive**: Adaptado para todos los dispositivos
-- **Contenerización completa**: Docker y Docker Compose para desarrollo y producción
-- **CI/CD automatizado**: GitHub Actions para builds, tests y despliegue
-- **SSL automático**: Certificados Let's Encrypt gestionados por Traefik
-- **Infraestructura como código**: Configuración automatizada con Ansible
-- **Multi-ambiente**: Soporte para local, staging y producción
-- **Seguridad integrada**: Escaneo de secretos y vulnerabilidades
-- **Monitoreo**: Dashboard de Traefik con autenticación
-
-## Estructura del proyecto
-
-```text
-├── .github/workflows/          # Pipelines de CI/CD
-│   ├─ ci-jekyll.yml             # CI del sitio estático
-|   ├─ ci-frontend.yml           # CI del frontend
-|   ├─ ci-backend.yml            # CI del backend
-|   ├─ test-build-push.yml       # Job reutilizable de CI
-|   ├─ deploy.yml                # Job reutilizable de CD
-|   ├─ cd.yml                    # Despliegue auto staging/producción
-|   └─ release.yml               # Release + retag + deploy
-├── deployment/                # Configuración de despliegue
-│   ├── ansible/                 # Playbooks y configuración
-│   │   ├── inventory/              # Inventario de hosts
-│   │   ├── playbooks/              # Playbooks de despliegue
-│   │   └── templates/              # Plantillas de configuración
-│   ├── docker/                  # Configuración Docker
-│   └── traefik/                 # Configuración de proxy
-├── src/                 # Servicios de la aplicación
-│   ├── backend/                 # Servicio backend (futuro)
-│   ├── frontend/                # Servicio frontend (futuro)
-│   └── jekyll/                  # Sitio Jekyll estático
-├── scripts/                  # Scripts de automatización
-├── docs/                     # Documentación adicional
-├── .env.example              # Plantilla de variables de entorno
-└── Makefile                  # Comandos de automatización
+```
+                          Internet
+                             |
+                     Cloudflare DNS (Terraform)
+                             |
+                    +--------+--------+
+                    |                 |
+             Hetzner VPS         Homelab (LAN)
+          (production K3s)     (staging K3s cluster)
+           single-node          3 nodes on Proxmox
+                    |                 |
+                    +--------+--------+
+                             |
+                      Headscale VPN mesh
+                       (9 nodes, WireGuard)
 ```
 
-## Prerrequisitos
+**Production:** Hetzner VPS running K3s single-node, public via `*.kubelab.live` and `*.mlorente.dev`.
+**Staging:** 3-node K3s cluster on Proxmox VMs (Acemagic mini PCs), accessible via Headscale VPN.
+**Development:** Docker Compose on localhost with `*.kubelab.test` domains.
 
-- **Docker** y **Docker Compose** (v2.0+)
-- **Git**
-- **Make**
-- **Ansible** (opcional, para despliegues remotos)
-- **Cuenta DockerHub** para almacenar imágenes
-- **Dominio** (para staging y producción)
-- **Servidor con SSH** (para despliegues remotos)
+### Key architectural decisions
 
-## Instalación
+- **K3s over full K8s** — lightweight, single-binary, built-in Traefik and Helm controller
+- **Kustomize overlays** — base manifests (staging domains) + prod overlay patches, no Helm charts for custom apps
+- **SOPS for secrets** — age-encrypted YAML committed to Git, toolkit injects into K8s at deploy time
+- **Headscale self-hosted VPN** — replaces Tailscale SaaS, WireGuard-based mesh across all nodes
+- **Terraform for DNS** — Cloudflare zones managed declaratively, 28 records, one-command IP migration
+- **Split DNS** — public DNS via Cloudflare, internal via Pi-hole + CoreDNS on RPi4
 
-### Dependencias del sistema
+## Tech Stack
 
-```bash
-# Instalar todas las dependencias necesarias
-make install-deps
+| Layer | Technology |
+|-------|-----------|
+| Orchestration | K3s v1.34, Kustomize |
+| Reverse proxy | Traefik v3 (K3s HelmChartConfig) |
+| Auth | Authelia (SSO + OIDC) |
+| Security | CrowdSec (IDS + Traefik bouncer) |
+| Observability | Grafana + Loki + Vector |
+| Monitoring | Uptime Kuma (external, RPi3) |
+| DNS | Cloudflare + Terraform |
+| VPN | Headscale + Tailscale clients |
+| Secrets | SOPS (age encryption) |
+| CI/CD | GitHub Actions, multi-arch Docker builds |
+| IaC | Terraform, Ansible, Python toolkit |
 
-# Instalar Ansible y colecciones (para despliegues remotos)
-make install-ansible
+### Applications
+
+| App | Stack | Description |
+|-----|-------|------------|
+| [Web](apps/web/) | Astro + TypeScript + Tailwind | Portfolio and landing page |
+| [API](apps/api/) | Go + Gin | Backend services (newsletter, lead magnets) |
+| [Blog](apps/blog/) | Jekyll | Technical blog |
+| [Wiki](apps/wiki/) | MkDocs Material | Project documentation |
+
+### Self-hosted services
+
+Grafana, Loki, Authelia, CrowdSec, Gitea, MinIO, n8n, Portainer, Redis.
+
+## Project Structure
+
+```
+kubelab/
+├── apps/                        Application source code
+│   ├── api/                     Go REST API
+│   ├── blog/                    Jekyll blog
+│   ├── web/                     Astro portfolio site
+│   └── wiki/                    MkDocs documentation
+│
+├── infra/
+│   ├── k8s/                     Kubernetes manifests
+│   │   ├── base/                Base manifests (staging defaults)
+│   │   └── overlays/            Kustomize overlays (staging, prod)
+│   ├── stacks/                  Docker Compose stacks (dev environment)
+│   ├── terraform/               Terraform DNS (Cloudflare)
+│   ├── ansible/                 Server provisioning playbooks
+│   └── config/
+│       ├── values/              Environment config (YAML per env)
+│       └── secrets/             SOPS-encrypted secrets
+│
+├── edge/                        Network edge (Traefik, Nginx, CoreDNS)
+├── toolkit/                     Python CLI for platform management
+├── Makefile                     Development shortcuts
+└── CONTRIBUTING.md              Contributing guidelines
 ```
 
-### Configuración del entorno en local
+See each directory's `README.md` for module-specific documentation.
 
-Para ejecutar el proyecto localmente:
-
-1. Clona el repositorio
-
-2. Crea un archivo de entorno local
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Edita `.env.local` con tu configuración local
-
-   ```env
-   # Site
-   ENVIRONMENT=local
-   ARTIFACT_NAME=blog-site
-   DOMAIN=localhost
-   EMAIL=your-email@example.com
-
-   # DockerHub
-   DOCKERHUB_USERNAME=your-dockerhub-username
-
-   # Environment
-   TRAEFIK_DASHBOARD=true
-   TRAEFIK_INSECURE=true
-   ```
-
-4. Inicia el entorno de desarrollo
-
-   ```bash
-   # Iniciar entorno de desarrollo
-   make dev
-
-   # El sitio estará disponible en:
-   # - Sitio web: http://localhost
-   # - Dashboard Traefik: http://localhost:8080
-   ```
-
-### Comandos de desarrollo
+## Quick Start
 
 ```bash
-# Iniciar entorno de desarrollo local
+# Prerequisites: Docker, Python 3.12+, Poetry, Make
+
+# Install toolkit
+poetry install
+
+# Initialize dev environment
+make setup
+
+# Start development stack
 make dev
-
-# Limpiar recursos locales
-make clean
-
-# Generar configuración de Traefik
-make generate-config
-
-# Generar credenciales de autenticación para acceso al dashboard de Traefik
-make generate-auth
 ```
 
-## Despliegue remoto
+Services available at `*.kubelab.test` (requires `/etc/hosts` entries — see `make hosts`).
 
-### Configuracion SSH
+## Environments
 
-Primero, asegúrate de tener configurada tu clave SSH para acceder a los servidores remotos. Si no tienes una clave SSH, puedes generarla con el siguiente comando:
-
-```bash
-ssh-keygen -t rsa -b 4096 -C "tu-correo@ejemplo.com"
-```
-
-Cuando se te pregunte dónde guardar la clave, puedes presionar Enter para aceptar la ubicación predeterminada (`~/.ssh/id_rsa`). También puedes establecer una frase de contraseña para mayor seguridad.
-Esto generará dos archivos: `id_rsa` (clave privada) y `id_rsa.pub` (clave pública).
-Asegúrate de que el agente SSH esté en ejecución y agrega tu clave privada:
-
-```bash
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_rsa
-```
-
-Si no tienes el agente SSH en ejecución, puedes iniciarlo con el comando anterior. Luego, agrega tu clave privada al agente SSH:
-
-```bash
-ssh-add ~/.ssh/id_rsa
-```
-
-Si ya tienes una clave SSH, asegúrate de que esté en el directorio `~/.ssh/` y que tenga los permisos correctos:
-
-```bash
-chmod 600 ~/.ssh/id_rsa
-chmod 644 ~/.ssh/id_rsa.pub
-```
-
-Asegúrate de que el archivo `~/.ssh/config` tenga la siguiente configuración:
-
-```bash
-Host servidor-remoto
-    HostName ip-del-servidor
-    User usuario
-    IdentityFile ~/.ssh/id_rsa
-```
-
-Esto te permitirá conectarte al servidor remoto usando el alias `servidor-remoto` en lugar de la dirección IP completa.
-Asegúrate de que el archivo `~/.ssh/config` tenga los permisos correctos:
-
-```bash
-chmod 644 ~/.ssh/config
-```
-
-Si no tienes el archivo `~/.ssh/config`, puedes crearlo con el siguiente comando:
-
-```bash
-touch ~/.ssh/config
-```
-
-Luego, edítalo con tu editor de texto favorito y agrega la configuración anterior.
-Asegúrate de que el archivo `~/.ssh/config` tenga los permisos correctos:
-
-```bash
-chmod 644 ~/.ssh/config
-```
-
-Si el servidor remoto no tiene tu clave pública SSH, puedes copiarla manualmente o usar el siguiente comando para agregarla automáticamente:
-
-```bash
-ssh-copy-id usuario@servidor-remoto
-```
-
-Este comando te pedirá la contraseña del usuario en el servidor remoto. Una vez ingresada, se copiará tu clave pública al servidor remoto y se agregará al archivo `~/.ssh/authorized_keys`, permitiéndote conectarte sin necesidad de ingresar una contraseña.
-
-Asegúrate de que tu usuario tenga permisos para ejecutar comandos de Docker y Ansible así como permisos de sudo.
-
-```bash
-sudo usermod -aG sudo $USER
-```
-
-### Comandos de despliegue
-
-```bash
-# Verificar requisitos previos
-make check
-
-# Configuración inicial del entorno (staging o production)
-make setup ENV=staging
-
-# Desplegar aplicación (staging o production)
-make deploy ENV=staging
-
-# Ver logs de la aplicación
-make logs ENV=staging
-
-# Ver estado de los servicios
-make status ENV=staging
-```
-
-Cuando se despliega en staging los certificados generados por Let's Encrypt son temporales y los navegadores pueden mostrar advertencias de seguridad. Para poder testar localmente el entorno de staging sin advertencias,  tienes que copiar los certificados generados a tu máquina local y añadirlos a tu almacén de certificados de confianza.
-
-```bash
-make copy-certificates ENV=staging
-```
-
-Por defecto ningún navegador acepta certificados autofirmados pero puedes añadirlos a tu almacén de certificados de confianza. En sistemas basados en Unix, como Ubuntu, puedes hacer lo siguiente:
-
-```bash
-google-chrome --ignore-certificate-errors --user-data-dir=/tmp/chrome-test
-```
-
-## Configuración del servidor
-
-Antes de desplegar a staging o producción, asegúrate de tener configurados los archivos de entorno necesarios y tener acceso a tu servidor.
-
-### Configuración inicial del servidor
-
-Para preparar un servidor nuevo:
-
-```bash
-make setup ENV=staging
-```
-
-Este comando:
-
-- Actualiza los paquetes del sistema
-- Instala Docker y Docker Compose
-- Configura el firewall
-- Crea la estructura de directorios necesaria
-- Configura la red de Docker
-
-### Despliegue a entornos remotos
-
-Para desplegar la aplicación:
-
-```bash
-make deploy ENV=production
-```
-
-Este comando:
-
-- Crea un respaldo de la configuración actual
-- Copia todos los archivos necesarios al servidor
-- Genera la configuración de Traefik
-- Inicia los contenedores de Docker
-- Verifica que el despliegue se haya completado correctamente
-
-## Ejemplos de uso
-
-### Desarrollo completo en local
-
-```bash
-# Instalar dependencias
-make install-deps
-
-# Iniciar entorno de desarrollo
-make dev
-
-# Realizar cambios en los archivos del proyecto...
-
-# Ver los cambios en http://localhost
-
-# Limpiar recursos cuando termines
-make clean
-```
-
-### Despliegue a un entorno de staging o producción
-
-```bash
-# Verificar requisitos previos
-make check
-
-# Configuración inicial (solo la primera vez)
-make setup ENV=staging
-
-# Desplegar la aplicación
-make deploy ENV=staging
-
-# Verificar estado
-make status ENV=staging
-
-# Ver logs
-make logs ENV=staging
-```
+| Environment | Infrastructure | Access | Domains |
+|-------------|---------------|--------|---------|
+| Development | Docker Compose (local) | localhost | `*.kubelab.test` |
+| Staging | K3s cluster (3 nodes, Proxmox) | Headscale VPN | `*.staging.kubelab.live` |
+| Production | K3s single-node (Hetzner VPS) | Public internet | `*.kubelab.live`, `*.mlorente.dev` |
 
 ## CI/CD Pipeline
 
-El proyecto incluye un workflow de GitHub Actions que:
+GitHub Actions with Gitflow branching (`feature/* -> develop -> master`):
 
-| Etapa | Disparador | Pasos clave | Resultado |
-|-------|------------|-------------|-----------|
-| **CI de servicio** (`ci-jekyll`, `ci-frontend`, `ci-backend`) | Push / PR a `master`, `develop`, `feature/*`, `hotfix/*` | *Draft‑skip* → Linter → Tests → Gitleaks → **Build** multi‑arquitectura → Push a Docker Hub (etiquetas `version`, `sha`, `branch`) → Aviso Slack | Imagen fresca en Docker Hub |
-| **CD automático** (`cd.yml`) | Push a `develop` → *staging*<br>Push a `master` → *production* | Llama a `deploy.yml` → Roles Ansible (Traefik + backups + certs + prune) → Smoke test → Aviso Slack | Contenedores actualizados en el VPS |
-| **Release** (`release.yml`) | Push de tag `vX.Y.Z` | Crea Release en GitHub con notas → Comprime infra y la adjunta → Retag/push de imágenes `vX.Y.Z` → Despliegue en *production* con esa tag → Aviso Slack | Release inmutable + producción desplegada |
+- **Change detection** — only builds affected apps (blog, api, web)
+- **Security scanning** — gitleaks, gosec, bandit, npm audit, Trivy
+- **Multi-arch builds** — `linux/amd64` + `linux/arm64` Docker images
+- **Semantic versioning** — automatic from conventional commits
+- **Three-tier tags** — `dev.{sha}` (feature) / `rc.N` (develop) / `X.Y.Z` (master)
 
-```text
-Commit / PR
-    │
-    ├─► CI-Static ──┐
-    ├─► CI-Frontend ├─► Tests → Buildx → Docker Hub → Slack
-    └─► CI-Backend ─┘
-                      │
-                      ├─► Push a *develop* → Deploy (staging) → Health-check → Slack
-                      └─► Push a *master*  → Deploy (production) → Health-check → Slack
+## Toolkit CLI
 
-Tag vX.Y.Z
-    │
-    └─► GitHub Release → Zip infra
-                        │
-                        └─► Retag imágenes (vX.Y.Z) → Deploy (prod vX.Y.Z) → Health-check → Slack
-```
-
-### Configuración de secretos de GitHub
-
-El proyecto incluye un script automatizado para configurar todos los secretos necesarios en GitHub Actions desde tus archivos `.env`:
+The `toolkit` CLI manages the entire platform lifecycle:
 
 ```bash
-# Configurar secretos desde .env en el directorio raíz
-make setup-secrets
+alias tk='poetry run toolkit'
 
-# Configurar secretos desde un archivo específico
-make setup-secrets ../tmp/.env.production
+# Services
+tk services list                          # List all services
+tk services up grafana                    # Start a service
+
+# Infrastructure
+tk infra k8s deploy --env staging         # Deploy K8s manifests
+tk infra k8s apply-secrets --env prod     # Inject SOPS secrets into K8s
+tk infra terraform plan --env prod        # Plan DNS changes
+tk infra terraform apply --env prod       # Apply DNS changes
+
+# Configuration
+tk config generate --env dev              # Generate configs for environment
+tk config validate                        # Validate all configs
 ```
 
-## Documentación adicional
+See [`toolkit/README.md`](toolkit/README.md) for full command reference.
 
-- [Guía de contribución](docs/CONTRIBUTING.md)
-- [Documentación de CubeLab](docs/CUBELAB.md)
-- [Workflows de GitHub](.github/workflows/)
+## Hardware Topology
 
-## 📄 Licencia
+```
+Hetzner VPS (ARM)      — Production K3s + Headscale (Docker Compose)
+Acemagic-1 (Proxmox)   — K3s server + agent-1 VMs
+Acemagic-2 (Proxmox)   — K3s agent-2 VM
+Beelink (bare metal)   — Ollama (LLM inference)
+RPi 4 (8GB)            — Network gateway: Pi-hole, CoreDNS, Headscale relay
+RPi 3 (1GB)            — External monitoring (Uptime Kuma)
+```
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+All nodes connected via Headscale VPN mesh (WireGuard protocol, 9 nodes).
 
----
+## License
 
-**Autor**: Manuel Lorente  
-**Sitio web**: [mlorente.dev](https://mlorente.dev)  
-**Email**: <info@mlorente.dev>
+See [LICENSE](LICENSE) for details.
+
+## Author
+
+Manuel Lorente — [kubelab.live](https://kubelab.live) | [GitHub](https://github.com/mlorentedev)

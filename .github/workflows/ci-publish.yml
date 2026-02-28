@@ -1,0 +1,212 @@
+---
+name: Reusable Docker Build
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+        description: "Docker version (e.g., 1.3.0-pre.123, 1.3.0-rc.45, 1.3.0)"
+      sha:
+        required: true
+        type: string
+      context:
+        required: true
+        type: string
+      extra_build_args:
+        required: false
+        type: string
+        default: ""
+        description: "Additional build args (multiline key=value)"
+
+jobs:
+  docker-build-push:
+    name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
+    outputs:
+      image_tag: ${{ steps.docker_tags.outputs.final_tag }}
+      registry_url: ${{ steps.docker_tags.outputs.registry }}
+      full_image: ${{ steps.docker_tags.outputs.full_image }}
+      tag_type: ${{ steps.docker_tags.outputs.tag_type }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login registry
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate Docker tags
+        id: docker_tags
+        run: |
+          DOCKER_VERSION="${{ inputs.tag }}"
+          REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}"
+          BRANCH_NAME="${{ github.ref_name }}"
+
+          echo "Processing Docker version: $DOCKER_VERSION"
+          echo "Registry: $REGISTRY"
+          echo "Branch: $BRANCH_NAME"
+
+          case "$DOCKER_VERSION" in
+            *-dev.*)
+              FINAL_TAG="$DOCKER_VERSION"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
+              TAG_TYPE="pre-release"
+              ;;
+            *-rc.*)
+              FINAL_TAG="$DOCKER_VERSION"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
+              TAG_TYPE="release-candidate"
+              ;;
+            *)
+              FINAL_TAG="$DOCKER_VERSION"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:latest"
+              TAG_TYPE="stable"
+              ;;
+          esac
+
+          echo "tags=${DOCKER_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "full_image=${REGISTRY}:${FINAL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag_type=${TAG_TYPE}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Final Docker tags: $DOCKER_TAGS"
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ./apps/${{ inputs.app }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_ENV=production
+            VERSION=${{ inputs.tag }}
+            COMMIT_SHA=${{ inputs.sha }}
+            TAG_TYPE=${{ steps.docker_tags.outputs.tag_type }}
+            ${{ inputs.extra_build_args }}
+          labels: |
+            org.opencontainers.image.title=${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}
+            org.opencontainers.image.description=${{ inputs.app }} service for KubeLab platform
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.tag }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
+
+      # Security Scanning - Docker Image with Trivy
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.docker_tags.outputs.full_image }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy vulnerability scanner (table output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.docker_tags.outputs.full_image }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Log build summary
+        run: |
+          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- App: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag Type: ${{ steps.docker_tags.outputs.tag_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Registry: ${{ steps.docker_tags.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
+          echo "- All Tags: ${{ steps.docker_tags.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Primary Image: ${{ steps.docker_tags.outputs.full_image }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit SHA: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  notify-build-completion:
+    name: Notify Build Completion
+    runs-on: ubuntu-latest
+    needs: [docker-build-push]
+    if: always() && (needs.docker-build-push.result == 'success')
+    steps:
+      - name: Notify via Secure Webhook
+        run: |
+          # Create enhanced payload for build completion
+          PAYLOAD=$(cat <<EOF
+          {
+            "type": "docker_build_completed",
+            "app": "${{ inputs.app }}",
+            "docker_version": "${{ inputs.tag }}",
+            "tag_type": "${{ needs.docker-build-push.outputs.tag_type }}",
+            "full_image": "${{ needs.docker-build-push.outputs.full_image }}",
+            "registry": "${{ needs.docker-build-push.outputs.registry_url }}",
+            "all_tags": "${{ needs.docker-build-push.outputs.image_tag }}",
+            "sha": "${{ inputs.sha }}",
+            "branch": "${{ github.ref_name }}",
+            "context": "${{ inputs.context }}",
+            "status": "success",
+            "timestamp": "${{ github.event.head_commit.timestamp }}",
+            "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "simplified_strategy": true,
+            "versioning_approach": "unified_prerelease"
+          }
+          EOF
+          )
+
+          # Send notification with retry logic and better error handling
+          WEBHOOK_URL="${{ secrets.N8N_WEBHOOK_URL }}"
+          WEBHOOK_TOKEN="${{ secrets.N8N_DEPLOY_TOKEN }}"
+
+          if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_TOKEN" ]; then
+            echo "::warning::Webhook URL or token not configured, skipping notification"
+            exit 0
+          fi
+
+          for i in {1..3}; do
+            echo "Sending notification attempt $i/3..."
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $WEBHOOK_TOKEN" \
+              -d "$PAYLOAD" \
+              --max-time 30 \
+              --retry 0 2>/dev/null)
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "✅ Docker build notification sent successfully (HTTP $HTTP_CODE)"
+              break
+            else
+              echo "❌ Notification attempt $i failed (HTTP $HTTP_CODE)"
+              [ $i -lt 3 ] && echo "Retrying in 5 seconds..." && sleep 5
+            fi
+          done || echo "⚠️ All notification attempts failed, but build was successful"

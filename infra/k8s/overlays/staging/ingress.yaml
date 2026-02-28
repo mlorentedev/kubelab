@@ -1,0 +1,72 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: api
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`api.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: api
+          port: 8080
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: web
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`web.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: web
+          port: 4321
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: blog
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: blog
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`blog.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: blog
+          port: 4000
+  tls:
+    certResolver: letsencrypt

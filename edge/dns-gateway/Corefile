@@ -1,0 +1,41 @@
+staging.kubelab.live {
+    hosts {
+        100.64.0.4 staging.kubelab.live
+        100.64.0.4 api.staging.kubelab.live
+        100.64.0.4 web.staging.kubelab.live
+        100.64.0.4 blog.staging.kubelab.live
+        100.64.0.4 grafana.staging.kubelab.live
+        100.64.0.4 traefik.staging.kubelab.live
+        100.64.0.4 auth.staging.kubelab.live
+        100.64.0.4 status.staging.kubelab.live
+        100.64.0.4 gitea.staging.kubelab.live
+        100.64.0.4 portainer.staging.kubelab.live
+        fallthrough
+    }
+    template IN A staging.kubelab.live {
+        match .*\.staging\.kubelab\.live
+        answer "{{ .Name }} 60 IN A 100.64.0.4"
+        fallthrough
+    }
+    log
+    errors
+}
+
+kubelab.live {
+    hosts {
+        100.64.0.6 status.kubelab.live
+        100.64.0.3 ollama.kubelab.live
+        100.64.0.8 jetson.kubelab.live
+        fallthrough
+    }
+    forward . 1.1.1.1 8.8.8.8
+    log
+    errors
+}
+
+. {
+    forward . 1.1.1.1 8.8.8.8
+    cache 30
+    log
+    errors
+}

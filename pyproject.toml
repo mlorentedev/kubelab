@@ -1,0 +1,122 @@
+[tool.poetry]
+name = "toolkit"
+version = "0.0.1"
+description = "Unified infrastructure management toolkit"
+authors = ["mlorentedev <contact@mlorente.dev>"]
+readme = "README.md"
+packages = [{include = "toolkit"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+typer = "^0.20.0"
+rich = "^14.2.0"
+pydantic = "^2.12.4"
+pydantic-settings = "^2.12.0"
+jinja2 = "^3.1.0"
+argon2-cffi = "^23.1.0" # For Argon2 password hashing
+pyyaml = "^6.0.0" # For YAML configuration files
+cryptography = "^45.0.0" # For JWKS RSA key generation
+mkdocs = "^1.6.1"
+mkdocs-material = "^9.7.0"
+pymdown-extensions = "^10.18"
+mkdocs-glightbox = "^0.5.2"
+mkdocs-minify-plugin = "^0.8.0"
+mkdocs-git-revision-date-localized-plugin = "^1.5.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.7.3"
+mypy = "^1.17.0"
+pre-commit = "^4.3.0"
+pytest = "^8.2.3"
+pytest-cov = "^7.0.0"
+pytest-mock = "^3.15.1"
+
+[tool.poetry.scripts]
+toolkit = "toolkit.main:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["toolkit"]
+
+[tool.ruff.lint]
+# E: pycodestyle errors
+# W: pycodestyle warnings
+# F: Pyflakes
+# I: isort (Importante para ordenar imports)
+# B: flake8-bugbear (encuentra bugs potenciales)
+select = ["E", "W", "F", "I", "B"]
+ignore = [
+    "B008",  # Typer uses function calls in defaults (standard pattern)
+]
+
+[tool.ruff.format]
+# Configuración del formateador (estilo Black)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["toolkit"]
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["sh.*", "yaml.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--verbose",
+    "--cov=toolkit",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-branch",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow running tests",
+]
+
+[tool.coverage.run]
+source = ["toolkit"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

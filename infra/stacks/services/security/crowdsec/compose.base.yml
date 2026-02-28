@@ -1,0 +1,43 @@
+services:
+  crowdsec:
+    image: ${APPS_SERVICES_SECURITY_CROWDSEC_IMAGE}
+    container_name: ${APPS_SERVICES_SECURITY_CROWDSEC_NAME}
+    restart: ${RESTART_POLICY}
+    environment:
+      GID: "1000"
+      COLLECTIONS: "crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/linux"
+      BOUNCER_KEY_crowdsec-bouncer-traefik: ${APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_API_KEY}
+    volumes:
+      - crowdsec-db:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+      - ../../../../config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - traefik-logs:/var/log/traefik:ro
+    networks:
+      - default
+    security_opt:
+      - no-new-privileges=true
+
+  crowdsec-bouncer:
+    image: ${APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_IMAGE}
+    container_name: ${APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_NAME}
+    restart: ${RESTART_POLICY}
+    environment:
+      CROWDSEC_AGENT_HOST: ${APPS_SERVICES_SECURITY_CROWDSEC_NAME}:8080
+      GIN_MODE: release
+      CROWDSEC_BOUNCER_API_KEY: ${APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_API_KEY}
+    networks:
+      - default
+    depends_on:
+      - crowdsec
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true
+
+volumes:
+  crowdsec-db:
+  crowdsec-config:
+  traefik-logs:
+    external: true
+    name: traefik-logs

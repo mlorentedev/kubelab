@@ -1,0 +1,103 @@
+# Terraform DNS — Cloudflare
+
+Manages DNS records for `kubelab.live` and `mlorente.dev` via the Cloudflare provider.
+
+## Structure
+
+```
+infra/terraform/
+  dns/
+    main.tf              # Provider, data sources, locals
+    variables.tf         # Input variables
+    records_kubelab.tf   # kubelab.live root + service records
+    records_mlorente.tf  # mlorente.dev root + service records
+    outputs.tf           # Service URLs and record counts
+    services.json        # Data-driven service catalog
+    prod.tfvars          # Zone IDs, VPS IP, TTL
+    terraform.tfstate    # Local state (gitignored)
+  .gitignore
+  README.md              # This file
+```
+
+## How it works
+
+1. `services.json` defines all services with `name`, `zone`, `proxied`, and `environments` fields
+2. `main.tf` parses `services.json` and filters by zone + environment
+3. `records_*.tf` create A records via `for_each` from the filtered service list
+4. Root records (`@`, `www`) are defined explicitly outside the loop
+
+## Adding a new service
+
+Edit `services.json`:
+
+```json
+{
+  "name": "newservice",
+  "zone": "kubelab",
+  "proxied": false,
+  "environments": ["prod"]
+}
+```
+
+Then: `terraform plan -var-file=prod.tfvars` and `terraform apply -var-file=prod.tfvars`.
+
+## Credentials
+
+The Cloudflare API token is stored in SOPS (`infra/config/secrets/common.enc.yaml` under `cloudflare.api_token`) and injected via toolkit as `TF_VAR_cloudflare_api_token`.
+
+Required token permissions:
+- Zone: DNS: Edit
+- Zone: Zone: Read
+
+## Toolkit integration
+
+```bash
+# Validate config
+toolkit infra terraform init prod
+
+# Plan changes
+toolkit infra terraform plan --env prod
+
+# Apply changes
+toolkit infra terraform apply --env prod
+
+# Destroy (with confirmation)
+toolkit infra terraform destroy --env prod
+```
+
+The toolkit automatically extracts the Cloudflare API token from SOPS and passes it as `TF_VAR_cloudflare_api_token`.
+
+## Manual usage
+
+```bash
+cd infra/terraform/dns
+export TF_VAR_cloudflare_api_token="$(sops -d ../../config/secrets/common.enc.yaml | grep api_token | awk '{print $2}')"
+
+terraform init
+terraform plan -var-file=prod.tfvars
+terraform apply -var-file=prod.tfvars
+```
+
+## Records managed
+
+### kubelab.live (17 records)
+
+| Record | Type | Proxied |
+|--------|------|---------|
+| @ | A | Yes |
+| www | CNAME | Yes |
+| api, blog, wiki | A | Yes |
+| status, auth, vpn, grafana, loki, portainer, gitea, n8n, minio, console.minio, crowdsec, traefik | A | No |
+
+### mlorente.dev (11 records)
+
+| Record | Type | Proxied |
+|--------|------|---------|
+| @ | A | No |
+| api, grafana, loki, minio, n8n, portainer, status, traefik, web, wiki | A | No |
+
+**Not managed** by Terraform (manual/third-party): MX (Zoho), CNAME (SendGrid, Beehiiv, Cloudflare tunnels), TXT (SPF, DKIM, DMARC, domain verification).
+
+## State
+
+Local backend (`terraform.tfstate`). State file is gitignored. To recover state, re-import existing records using `terraform import`.

@@ -1,0 +1,14 @@
+services:
+  minio:
+    environment:
+      # Override OIDC vars from base to disable OpenID in dev
+      MINIO_IDENTITY_OPENID_CONFIG_URL: ""
+      MINIO_IDENTITY_OPENID_CLIENT_ID: ""
+      MINIO_IDENTITY_OPENID_CLIENT_SECRET: ""
+      MINIO_IDENTITY_OPENID_DISPLAY_NAME: ""
+      MINIO_IDENTITY_OPENID_SCOPES: ""
+      MINIO_IDENTITY_OPENID_REDIRECT_URI: ""
+      # In dev, Traefik terminates TLS — console must reach API internally via localhost
+      # (MINIO_SERVER_URL with the public https:// URL fails because port 443 is on the host, not inside Docker)
+      MINIO_SERVER_URL: "http://localhost:${APPS_SERVICES_DATA_MINIO_DEFAULT_PORT_API}"
+      MINIO_BROWSER_REDIRECT_URL: "https://${APPS_SERVICES_DATA_MINIO_CONSOLE_DOMAIN}"

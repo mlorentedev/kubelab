@@ -9,47 +9,47 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// NewLogger inicializa y configura el logger
+// NewLogger initializes and configures the logger
 func NewLogger() *zerolog.Logger {
-	// Configurar output
+	// Configure output
 	output := zerolog.ConsoleWriter{
 		Out:        os.Stdout,
 		TimeFormat: time.RFC3339,
 		NoColor:    false,
 	}
 
-	// Configurar logger
+	// Configure logger
 	logger := zerolog.New(output).
 		With().
 		Timestamp().
 		Logger()
 
-	// Nivel de log basado en entorno
+	// Log level based on environment
 	level := zerolog.InfoLevel
 	if os.Getenv("ENV") == "development" {
 		level = zerolog.DebugLevel
 	}
 	logger = logger.Level(level)
 
-	// Reemplazar logger global
+	// Replace global logger
 	log.Logger = logger
 
 	return &logger
 }
 
-// LogFunction registra un mensaje con información de la función que lo llama
+// LogFunction logs a message with information from the calling function
 func LogFunction(level string, message string, data interface{}) {
-	// Obtener información de la función que llama
+	// Get information from the calling function
 	pc, _, _, ok := runtime.Caller(1)
 	funcName := "unknown"
 	if ok {
 		funcName = runtime.FuncForPC(pc).Name()
 	}
 
-	// Crear evento de log
+	// Create log event
 	event := log.With().Str("function", funcName).Interface("data", data).Logger()
 
-	// Registrar con el nivel adecuado
+	// Log with the appropriate level
 	switch level {
 	case "debug":
 		event.Debug().Msg(message)

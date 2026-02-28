@@ -1,6 +1,6 @@
 package models
 
-// SubscriptionSource define las fuentes de suscripción
+// SubscriptionSource defines subscription sources
 type SubscriptionSource string
 
 const (
@@ -9,7 +9,7 @@ const (
 	SubscriptionSourceNewsletter  SubscriptionSource = "newsletter"
 )
 
-// SubscriptionTag define los tags de suscripción
+// SubscriptionTag defines subscription tags
 type SubscriptionTag string
 
 const (
@@ -17,21 +17,21 @@ const (
 	SubscriptionTagExistingSubscriber SubscriptionTag = "existing"
 )
 
-// Subscriber representa un suscriptor
+// Subscriber represents a subscriber
 type Subscriber struct {
 	ID    string   `json:"id"`
 	Email string   `json:"email"`
 	Tags  []string `json:"tags"`
 }
 
-// SubscriptionRequest representa una solicitud de suscripción
+// SubscriptionRequest represents a subscription request
 type SubscriptionRequest struct {
 	Email     string   `json:"email" binding:"required,email"`
 	Tags      []string `json:"tags"`
 	UtmSource string   `json:"utm_source"`
 }
 
-// SubscriptionResult representa el resultado de una operación de suscripción
+// SubscriptionResult represents the result of a subscription operation
 type SubscriptionResult struct {
 	HttpCode          int    `json:"httpCode"`
 	Success           bool   `json:"success"`
@@ -40,12 +40,12 @@ type SubscriptionResult struct {
 	AlreadySubscribed bool   `json:"alreadySubscribed,omitempty"`
 }
 
-// UnsubscriptionRequest representa una solicitud de cancelación de suscripción
+// UnsubscriptionRequest represents an unsubscription request
 type UnsubscriptionRequest struct {
 	Email string `json:"email" binding:"required"`
 }
 
-// UnsubscriptionResult representa el resultado de una operación de cancelación de suscripción
+// UnsubscriptionResult represents the result of an unsubscription operation
 type UnsubscriptionResult struct {
 	HttpCode int    `json:"httpCode"`
 	Success  bool   `json:"success"`

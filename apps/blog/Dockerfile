@@ -1,31 +1,27 @@
-FROM ruby:3.1-slim
+# CI v2 (build-args from YAML config)
+FROM ruby:3.3-slim AS dev
 
-# Evita prompts interactivos
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Instala dependencias de Jekyll
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
-    cmake \
-    libffi-dev \
-    libyaml-dev \
     curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Bundler moderno
-RUN gem install bundler -v 2.5.22
+    && rm -rf /var/lib/apt/lists/
 
 WORKDIR /srv/jekyll
 
-# Instala gems antes de copiar todo el proyecto (mejor cacheo)
-COPY jekyll-site/Gemfile* ./
+# Install gems
+COPY jekyll-site/Gemfile jekyll-site/Gemfile.lock* ./
 
-RUN bundle config set --local force_ruby_platform true && \
-    bundle config set --local deployment false && \
-    bundle install --jobs 4 --retry 3 --verbose
+# Configure Bundler via ENV (Persists across volume mounts)
+ENV BUNDLE_FORCE_RUBY_PLATFORM=true \
+    BUNDLE_JOBS=4 \
+    BUNDLE_RETRY=3
 
+RUN gem install bundler && \
+    bundle install
+
+# Copy site content and build
 COPY jekyll-site/ .
 
 EXPOSE 4000

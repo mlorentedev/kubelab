@@ -1,21 +1,21 @@
 ---
-import { getCollection, type CollectionEntry } from 'astro:content';
+import { getCollection, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import LeadMagnetForm from '../../components/forms/subscribe/LeadMagnetForm.astro';
 import SectionHeader from '../../components/sections/SectionHeader.astro';
 
 export async function getStaticPaths() {
   const resources = await getCollection('resources');
-  return resources.map((resource: { slug: any }) => ({
-    params: { slug: resource.slug },
+  return resources.map((resource: { id: any }) => ({
+    params: { slug: resource.id },
     props: { resource },
   }));
 }
 
 export const prerender = true;
 
-const { resource } = Astro.props as { resource: CollectionEntry<'resources'> };
-const { Content } = await resource.render();
+const { resource } = Astro.props as { resource: any };
+const { Content } = await render(resource);
 
 const { title, description, resourceId, fileId, pubDate, tags, buttonText } = resource.data;
 ---

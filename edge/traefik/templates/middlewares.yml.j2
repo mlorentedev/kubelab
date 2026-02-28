@@ -1,0 +1,71 @@
+http:
+  services:
+    {{ APP_NGINX_NAME }}:
+      loadBalancer:
+        servers:
+          - url: "http://{{ APP_NGINX_NAME }}:{{ APP_NGINX_PORT }}"
+
+  middlewares:
+    error-pages:
+      errors:
+        status:
+          - "400"
+          - "402-599"
+        service: {{ APP_NGINX_NAME }}
+        query: "/errors/{status}.html"
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: {{ HTTPS_PERMANENT_REDIRECT }}
+    basic-auth:
+      basicAuth:
+        users:
+          - "{{ BASIC_AUTH_CREDENTIALS }}"
+    crowdsec:
+      forwardAuth:
+        address: http://{{ APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_NAME }}:8080/api/v1/forwardAuth
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-CrowdSec-Appsec-User-Agent
+          - X-CrowdSec-Appsec-Verb
+          - X-CrowdSec-Appsec-Uri
+          - X-CrowdSec-Appsec-Ip
+    authelia:
+      forwardAuth:
+        address: http://{{ APPS_AUTHELIA_NAME }}:{{ APPS_AUTHELIA_DEFAULT_PORT }}/api/authz/forward-auth?authelia_url=https://{{ APPS_AUTHELIA_DOMAIN }}
+        trustForwardHeader: true
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Email
+          - Remote-Name
+    authelia-2fa:
+      forwardAuth:
+        address: http://{{ APPS_AUTHELIA_NAME }}:{{ APPS_AUTHELIA_DEFAULT_PORT }}/api/authz/forward-auth?authelia_url=https://{{ APPS_AUTHELIA_DOMAIN }}
+        trustForwardHeader: true
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Email
+          - Remote-Name
+    rate-limit:
+      rateLimit:
+        average: {{ RATE_LIMIT_AVERAGE }}
+        burst: {{ RATE_LIMIT_BURST }}
+        period: {{ RATE_LIMIT_PERIOD }}
+    compress:
+      compress: {}
+    secure-headers:
+      headers:
+        frameDeny: {{ HEADERS_FRAME_DENY }}
+        browserXssFilter: {{ HEADERS_XSS_FILTER }}
+        contentTypeNosniff: {{ HEADERS_NOSNIFF }}
+        stsSeconds: {{ HEADERS_STS_SECONDS }}
+        stsIncludeSubdomains: {{ HEADERS_STS_INCLUDE_SUBDOMAINS }}
+        stsPreload: {{ HEADERS_STS_PRELOAD }}
+        sslRedirect: {{ HEADERS_SSL_REDIRECT }}
+    dashboard-redirect:
+      redirectRegex:
+        regex: "^(.*)/dashboard$"
+        replacement: "${1}/dashboard/"
+        permanent: true

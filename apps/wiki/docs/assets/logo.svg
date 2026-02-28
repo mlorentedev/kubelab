@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w.org//svg" viewBox="   " width="" height="">
+  <defs>
+    <linearGradient id="gradient" x="%" y="%" x="%" y="%">
+      <stop offset="%" style="stop-color:"/>
+      <stop offset="%" style="stop-color:"/>
+      <stop offset="%" style="stop-color:acc"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="" cy="" r="" fill="url(gradient)" stroke="none"/>
+
+  <!-- Book icon -->
+  <g fill="white">
+    <!-- Main book body -->
+    <rect x="" y="" width="" height="" rx="" fill="white" opacity="."/>
+
+    <!-- Book spine -->
+    <rect x="" y="" width="" height="" rx="." fill="white"/>
+
+    <!-- Page lines -->
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+    <line x="" y="" x="" y="" stroke="" stroke-width="" opacity="."/>
+  </g>
+</svg>

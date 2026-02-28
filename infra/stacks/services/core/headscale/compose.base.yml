@@ -1,0 +1,27 @@
+services:
+  headscale:
+    container_name: ${APPS_SERVICES_CORE_HEADSCALE_NAME}
+    image: ${APPS_SERVICES_CORE_HEADSCALE_IMAGE}
+    restart: ${GLOBAL_RESTART_POLICY}
+    command: serve
+    ports:
+      - "${APPS_SERVICES_CORE_HEADSCALE_STUN_PORT}:3478/udp"
+    volumes:
+      - ./config:/etc/headscale:ro
+      - headscale_data:/var/lib/headscale
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "headscale", "version"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+
+volumes:
+  headscale_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

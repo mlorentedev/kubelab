@@ -1,0 +1,48 @@
+__pycache__/
+ .pyc
+ .pyo
+ .pyd
+ .swp
+ .DS_Store
+ .env
+ .env.
+ .vscode/
+ .idea/
+ .mypy_cache/
+ .pytest_cache/
+ .ruff_cache/
+
+  Logs
+ logs/
+ .log
+
+  Dependency directories
+ .tox/
+ .nox/
+ .eggs/
+ .egg-info/
+ dist/
+ build/
+
+  Jupyter Notebook
+ .ipynb_checkpoints
+
+  Coverage reports
+ htmlcov/
+ .coverage
+ .coverage.
+
+  Pyre type checker
+ .pyre/
+
+  Output directory
+ output/
+
+  Poetry
+ poetry.lock
+
+  MkDocs documentation
+ site/
+
+  mypy
+ .mypy_cache/

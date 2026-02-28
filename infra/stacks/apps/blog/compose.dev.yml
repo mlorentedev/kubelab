@@ -1,0 +1,15 @@
+services:
+  blog:
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ../../../../apps/blog/jekyll-site:/srv/jekyll
+    environment:
+      - JEKYLL_ENV=development
+    command:
+      - bundle
+      - exec
+      - jekyll
+      - serve
+      - --host=0.0.0.0
+      - --port=4000
+      - --config=_config.yml,_config.dev.yml

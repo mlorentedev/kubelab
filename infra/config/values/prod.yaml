@@ -1,0 +1,101 @@
+# ==========================================================================
+# PROD SETTINGS
+# ==========================================================================
+environment: prod
+global:
+  base_domain: kubelab.live
+  restart_policy: unless-stopped
+
+# ==========================================================================
+# RUNTIME
+# ==========================================================================
+log_level: INFO
+debug_mode: false
+
+# ==========================================================================
+# PROTOCOLS & NETWORKING
+# ==========================================================================
+protocol: https
+
+# ==========================================================================
+# SERVICE DISCOVERY (Internal endpoints)
+# ==========================================================================
+endpoints:
+  api: http://api:8080
+
+# ==========================================================================
+# EDGE SETTINGS
+# ==========================================================================
+edge:
+  traefik:
+    domain: traefik.kubelab.live
+    disable_https: false
+    acme_server: https://acme-v02.api.letsencrypt.org/directory
+
+  nginx:
+    domain: errors.kubelab.live
+
+  cloudflared:
+    enabled: true
+
+# ==========================================================================
+# APPS SETTINGS
+# ==========================================================================
+apps:
+  # Platform applications (custom-built)
+  platform:
+    api:
+      domain: api.kubelab.live
+      site_domain: kubelab.live
+      site_url: https://kubelab.live
+      email_secure: true
+
+    blog:
+      domain: blog.kubelab.live
+
+    web:
+      backend_url: "https://api.kubelab.live"
+      allowed_hosts: "localhost,web,127.0.0.1,.kubelab.live,.mlorente.dev"
+      domain: mlorente.dev
+      site_domain: mlorente.dev
+      site_url: https://mlorente.dev
+      enable_blog: false
+      enable_homelabs: false
+      enable_contact: false
+
+  # Third-party services
+  services:
+    core:
+      portainer:
+        domain: portainer.kubelab.live
+
+      gitea:
+        domain: gitea.kubelab.live
+
+      n8n:
+        domain: n8n.kubelab.live
+
+    observability:
+      loki:
+        domain: loki.kubelab.live
+
+      uptime_kuma:
+        domain: status.kubelab.live
+
+      grafana:
+        domain: grafana.kubelab.live
+
+    security:
+      authelia:
+        domain: auth.kubelab.live
+        issuer_domain: kubelab.live
+        default_domain_root: kubelab.live
+        disable_require_tls: false
+
+      crowdsec:
+        domain: crowdsec.kubelab.live
+
+    data:
+      minio:
+        domain: minio.kubelab.live
+        console_domain: console.minio.kubelab.live

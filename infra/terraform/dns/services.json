@@ -1,0 +1,152 @@
+[
+  {
+    "name": "api",
+    "zone": "kubelab",
+    "proxied": true,
+    "environments": ["prod"]
+  },
+  {
+    "name": "blog",
+    "zone": "kubelab",
+    "proxied": true,
+    "environments": ["prod"]
+  },
+  {
+    "name": "wiki",
+    "zone": "kubelab",
+    "proxied": true,
+    "environments": ["prod"]
+  },
+  {
+    "name": "status",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "auth",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "vpn",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "grafana",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "loki",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "portainer",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "gitea",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "n8n",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "minio",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "console.minio",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "crowdsec",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "traefik",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "api",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "grafana",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "loki",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "minio",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "n8n",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "portainer",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "status",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "traefik",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "web",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "wiki",
+    "zone": "mlorente",
+    "proxied": false,
+    "environments": ["prod"]
+  }
+]

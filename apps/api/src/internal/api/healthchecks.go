@@ -21,6 +21,7 @@ type HealthCheckResult struct {
 
 // HealthCheckResponse aggregates health checks for all components
 type HealthCheckResponse struct {
+	Service   string              `json:"service"`
 	Status    string              `json:"status"`
 	Checks    []HealthCheckResult `json:"checks"`
 	Timestamp time.Time           `json:"timestamp"`
@@ -37,9 +38,10 @@ func HealthCheckHandler(c *gin.Context) {
 
 	// Prepare response
 	response := HealthCheckResponse{
+		Service:   "cubelab-api",
 		Status:    "healthy",
 		Timestamp: time.Now(),
-		Version:   conf.Version, // Assuming you have a version in your config
+		Version:   conf.Version,
 	}
 
 	// Concurrent health checks
