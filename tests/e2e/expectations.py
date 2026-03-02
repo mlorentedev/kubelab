@@ -90,7 +90,6 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     "uptime_kuma": ServiceExpectation(
         health_status=(200, 302),
-        skip_in_envs=("staging",),  # Docker Compose only, no K3s IngressRoute
     ),
     # -- Core --
     "traefik": ServiceExpectation(

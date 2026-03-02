@@ -47,7 +47,9 @@ kubelab.live {
         100.64.0.2 n8n.kubelab.live
         100.64.0.2 minio.kubelab.live
         100.64.0.2 console.minio.kubelab.live
-        100.64.0.2 vpn.kubelab.live
+        # Headscale MUST use public IP — bootstrap dependency (nodes need VPN to reach Tailscale IPs)
+        # networking.vps.public_ip (common.yaml)
+        162.55.57.175 vpn.kubelab.live
         fallthrough
     }
     forward . 1.1.1.1 8.8.8.8

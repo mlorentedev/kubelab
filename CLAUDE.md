@@ -78,6 +78,10 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Authelia OIDC JWKS key injection**: Use `issuer_private_key` (NOT `jwks[0].key`) in configuration.yml. `_FILE` env vars only work for flat config keys, not array-indexed. Set `AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE`.
 - **CoreDNS on RPi4**: Deploy via `make deploy-dns` (SCP + docker restart). RPi4 is NOT part of K3s — it's a standalone Docker Compose host. Never mix `hosts` and `template` plugins in same CoreDNS zone when IPs differ (template overrides hosts). Prod zone uses explicit entries only.
 - **Secret operations go through toolkit**: `toolkit secrets *` is the single entry point. Never use raw `sops` or `openssl` in Makefile. SECRET_CATALOG in `toolkit/features/secrets_manager.py` is the authoritative registry.
+- **Headscale (`vpn.kubelab.live`) MUST resolve to public IP**: CoreDNS and `/etc/hosts` entries for `vpn.kubelab.live` must use `162.55.57.175` (public), NEVER `100.64.0.2` (Tailscale). Bootstrap services can't depend on VPN being up.
+- **RPi4 Tailscale flags**: `--login-server=https://vpn.kubelab.live --accept-dns=false --advertise-routes=172.16.1.0/24`. All three are required. `tailscale-watchdog.timer` auto-reconnects every 5 min.
+- **External services through K3s Traefik**: Bare-metal services (Uptime Kuma, Ollama) use Service + EndpointSlice in `infra/k8s/base/external/`. Label: `kubelab.live/location: external`.
+- **yamllint directives inside `|` blocks don't work**: `# yamllint disable` is string content inside literal block scalars, not a YAML comment. yamllint max line-length is 130 (accommodates argon2 hashes).
 
 ## Workflow rules
 

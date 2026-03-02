@@ -6,6 +6,7 @@ namespace: kubelab
 resources:
   - namespace.yaml
   - external/ollama.yaml
+  - external/uptime-kuma.yaml
   - edge/nginx-errors.yaml
   - edge/secure-headers.yaml
   - services/grafana.yaml
