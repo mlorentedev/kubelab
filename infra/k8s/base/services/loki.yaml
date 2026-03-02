@@ -171,6 +171,8 @@ spec:
     - match: Host(`loki.staging.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+        - name: error-pages
         - name: authelia
       services:
         - name: loki

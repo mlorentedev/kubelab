@@ -7,12 +7,16 @@ resources:
   - namespace.yaml
   - external/ollama.yaml
   - edge/nginx-errors.yaml
+  - edge/secure-headers.yaml
   - services/grafana.yaml
   - services/loki.yaml
   - services/vector.yaml
   - services/redis.yaml
   - services/authelia.yaml
   - services/crowdsec.yaml
+  - services/gitea.yaml
+  - services/n8n.yaml
+  - services/minio.yaml
 
 configMapGenerator:
   - name: authelia-assets

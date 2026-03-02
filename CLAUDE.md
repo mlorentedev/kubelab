@@ -72,7 +72,12 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **VPS K3s migration uses Pattern C** (ADR-015): Side-by-side with alternate ports (8080/8443), then swap to 80/443 at cutover. Never run two Traefik instances on the same ports.
 - **K3s prod TLS SAN**: Must include both `162.55.57.175` (public) and `100.64.0.2` (Tailscale). Configure BEFORE first K3s start.
 - **K8s ConfigMaps MUST NOT contain SOPS-sourced values**: The K8s generator merges values YAML + SOPS. `SECRET_PATTERNS` blocklist filters secrets from ConfigMaps, but it's fragile. Rule: if a value is in SOPS, it goes in a K8s Secret via `k8s_secrets.py`, NEVER in a ConfigMap. Review generated ConfigMaps before committing.
+- **Never hardcode IPs/CIDRs in K8s manifests, tests, or toolkit code**: All network addresses live in `networking.*` in `infra/config/values/common.yaml`. K8s manifests that duplicate values MUST have a comment noting the common.yaml key they mirror. Tests MUST read from common.yaml via `yaml.safe_load`. See B10 (SSOT) tasks for remaining gaps.
+- **DNS wildcard covers services NOT on K3s**: `*.staging.kubelab.live` resolves to K3s (100.64.0.4) via CoreDNS wildcard. Services only on Docker Compose (portainer, gitea, n8n, minio, uptime_kuma) have no IngressRoute → Traefik returns self-signed cert. Mark with `skip_in_envs=("staging",)` in expectations.py.
 - **K8s secrets.yaml uses placeholders only**: Both staging and prod `secrets.yaml` contain `REPLACE_WITH_SOPS_VALUE`. Real values injected at deploy time via `toolkit infra k8s apply-secrets`. Never commit real secret values.
+- **Authelia OIDC JWKS key injection**: Use `issuer_private_key` (NOT `jwks[0].key`) in configuration.yml. `_FILE` env vars only work for flat config keys, not array-indexed. Set `AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE`.
+- **CoreDNS on RPi4**: Deploy via `make deploy-dns` (SCP + docker restart). RPi4 is NOT part of K3s — it's a standalone Docker Compose host. Never mix `hosts` and `template` plugins in same CoreDNS zone when IPs differ (template overrides hosts). Prod zone uses explicit entries only.
+- **Secret operations go through toolkit**: `toolkit secrets *` is the single entry point. Never use raw `sops` or `openssl` in Makefile. SECRET_CATALOG in `toolkit/features/secrets_manager.py` is the authoritative registry.
 
 ## Workflow rules
 

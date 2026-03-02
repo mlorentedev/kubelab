@@ -1,10 +1,10 @@
 """Tests for config-driven health check feature."""
 
-import pytest
+from __future__ import annotations
 
 from toolkit.features.health_check import (
-    HealthCheckResult,
     HealthChecker,
+    HealthCheckResult,
     ServiceHealthConfig,
 )
 
@@ -185,9 +185,6 @@ class TestResultInterpretation:
         svc = ServiceHealthConfig(
             name="api", domain="api.kubelab.live", health_path="/health",
         )
-        checker = HealthChecker.__new__(HealthChecker)
-        # We can't easily test _check_service without curl, but we can
-        # verify the result model interpretation
         r = HealthCheckResult(
             service=svc.name, url=f"https://{svc.domain}{svc.health_path}",
             status_code=200, healthy=True, reason="OK",

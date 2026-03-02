@@ -19,6 +19,27 @@ data:
     labels:
       type: traefik
 ---
+# Whitelist for Tailscale VPN subnet — prevents CrowdSec from creating
+# ban decisions for internal traffic coming through the VPN mesh.
+# Source of truth: networking.tailscale_cidr in infra/config/values/common.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-whitelist
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+data:
+  tailscale-whitelist.yaml: |
+    name: local/tailscale-whitelist
+    description: "Whitelist Tailscale VPN subnet"
+    whitelist:
+      reason: "Tailscale VPN internal traffic"
+      cidr:
+        - "100.64.0.0/10"  # Must match networking.tailscale_cidr
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -76,6 +97,20 @@ spec:
         app.kubernetes.io/part-of: kubelab
     spec:
       automountServiceAccountToken: false
+      initContainers:
+        - name: inject-whitelist
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /etc/crowdsec/postoverflows/s01-whitelist
+              cp /whitelist/tailscale-whitelist.yaml /etc/crowdsec/postoverflows/s01-whitelist/
+          volumeMounts:
+            - name: config
+              mountPath: /etc/crowdsec
+            - name: whitelist
+              mountPath: /whitelist
+              readOnly: true
       containers:
         - name: crowdsec
           image: crowdsecurity/crowdsec:latest
@@ -134,6 +169,9 @@ spec:
         - name: acquis
           configMap:
             name: crowdsec-acquis
+        - name: whitelist
+          configMap:
+            name: crowdsec-whitelist
         - name: db
           persistentVolumeClaim:
             claimName: crowdsec-db

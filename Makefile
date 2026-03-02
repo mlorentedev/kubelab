@@ -41,7 +41,12 @@ help:
 	@echo "  make config-generate    Generate config files for dev"
 	@echo "  make credentials-generate  Generate credentials for dev"
 	@echo "  make regen-certs        Regenerate dev TLS certs and reinstall browser CA"
-	@echo "  make secrets            Edit SOPS-encrypted dev secrets"
+	@echo "  make secrets ENV=x      Edit SOPS-encrypted secrets (default: dev)"
+	@echo "  make secrets-init ENV=x Generate machine secrets for an env"
+	@echo "  make secrets-jwks ENV=x Generate OIDC JWKS RSA key for an env"
+	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
+	@echo "  make secrets-audit      Audit secrets across all environments"
+	@echo "  make deploy-dns         Deploy CoreDNS config to RPi4 (via SSH)"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo ""
 	@echo "Quality:"
@@ -49,7 +54,9 @@ help:
 	@echo "  make lint               Ruff linting (check only)"
 	@echo "  make format             Ruff formatting (auto-fix)"
 	@echo "  make type               Mypy type checking"
-	@echo "  make test               Run pytest suite"
+	@echo "  make test               Run pytest suite (unit/integration only)"
+	@echo "  make test-e2e           Run e2e tests (ENV=dev|staging|prod)"
+	@echo "  make test-infra         Run infra tests (ENV=staging|prod, requires VPN)"
 	@echo "  make validate           Validate toolkit config"
 	@echo "  make smoke-test         Health check running services"
 	@echo ""
@@ -117,7 +124,7 @@ DEV_DOMAINS := mlorente.test \
 	auth.kubelab.test grafana.kubelab.test loki.kubelab.test \
 	portainer.kubelab.test gitea.kubelab.test n8n.kubelab.test \
 	status.kubelab.test minio.kubelab.test console.minio.kubelab.test \
-	crowdsec.kubelab.test
+	crowdsec.kubelab.test errors.kubelab.test
 
 .PHONY: setup-local-dns
 setup-local-dns:
@@ -209,8 +216,34 @@ restart-dev: down-dev up-dev
 
 .PHONY: secrets
 secrets:
-	@EDITOR=nano sops ./infra/config/secrets/dev.enc.yaml
-	@echo "✓ Secrets setup complete"
+	@$(TOOLKIT) secrets edit --env $(ENV)
+
+.PHONY: secrets-init
+secrets-init:
+	@$(TOOLKIT) secrets init --env $(ENV)
+
+.PHONY: secrets-jwks
+secrets-jwks:
+	@$(TOOLKIT) secrets jwks --env $(ENV)
+
+.PHONY: secrets-hash
+secrets-hash:
+	@$(TOOLKIT) secrets hash --env $(ENV)
+
+.PHONY: secrets-audit
+secrets-audit:
+	@$(TOOLKIT) secrets audit
+
+# RPi4 DNS gateway (CoreDNS + Pi-hole) — no K3s, manual deploy via SSH
+RPI4_HOST ?= manu@100.64.0.5
+RPI4_COREDNS_DIR ?= ~/coredns
+
+.PHONY: deploy-dns
+deploy-dns:
+	@echo "Deploying CoreDNS config to RPi4 ($(RPI4_HOST))..."
+	@scp edge/dns-gateway/Corefile $(RPI4_HOST):$(RPI4_COREDNS_DIR)/
+	@ssh $(RPI4_HOST) "cd $(RPI4_COREDNS_DIR) && docker compose -f compose.base.yml restart coredns"
+	@echo "✓ CoreDNS restarted on RPi4"
 
 
 # -----------------------------------------------------------------------------
@@ -235,9 +268,19 @@ smoke-test:
 validate:
 	@$(TOOLKIT) config validate
 
+ENV ?= dev
+
 .PHONY: test
 test:
 	@$(POETRY) run pytest
+
+.PHONY: test-e2e
+test-e2e:
+	@$(POETRY) run pytest tests/e2e/ -m e2e --env $(ENV) -v --no-cov --override-ini="addopts="
+
+.PHONY: test-infra
+test-infra:
+	@$(POETRY) run pytest tests/infra/ -m infra --env $(ENV) -v --no-cov --override-ini="addopts="
 
 .PHONY: format
 format:

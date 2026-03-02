@@ -15,6 +15,10 @@ spec:
     - match: Host(`api.staging.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
       services:
@@ -39,6 +43,10 @@ spec:
     - match: Host(`web.staging.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
       services:
@@ -63,6 +71,10 @@ spec:
     - match: Host(`blog.staging.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
       services:
