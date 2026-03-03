@@ -1,13 +1,17 @@
 "Infrastructure management commands for deployment and status checking."
 
 import os
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Annotated
 
 import typer
+import yaml
 
 from toolkit.config.constants import MESSAGES, NETWORK_DEFAULTS, PATH_STRUCTURES
 from toolkit.config.settings import get_settings, settings
-from toolkit.core.logging import logger
+from toolkit.core.logging import console, logger
 from toolkit.features import command
 from toolkit.features.validation import (
     confirm_dangerous_operation,
@@ -38,9 +42,246 @@ k8s_app = typer.Typer(
     no_args_is_help=True,
 )
 
+backup_app = typer.Typer(
+    name="backup",
+    help="Backup Docker volumes and critical data on remote hosts",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
+app.add_typer(backup_app, name="backup")
+
+
+# =============================================================================
+# BACKUP COMMANDS
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class _VpsBackupConfig:
+    ip: str
+    user: str
+    backup_root: str
+    retention: int
+    filesystem_paths: tuple[str, ...]
+    exclude_volumes: tuple[str, ...]
+
+
+def _get_vps_config() -> _VpsBackupConfig:
+    """Read VPS backup config from common.yaml."""
+    common_path = settings.project_root / "infra" / "config" / "values" / "common.yaml"
+    with open(common_path) as f:
+        config = yaml.safe_load(f)
+    vps = config["networking"]["vps"]
+    backup = vps.get("backup", {})
+    return _VpsBackupConfig(
+        ip=vps["tailscale_ip"],
+        user=vps.get("ssh_user", "deployer"),
+        backup_root=backup.get("root", "/opt/backups"),
+        retention=backup.get("retention", 3),
+        filesystem_paths=tuple(backup.get("filesystem_paths", [])),
+        exclude_volumes=tuple(backup.get("exclude_volumes", [])),
+    )
+
+
+def _vps_ssh(cmd: str) -> str:
+    """Build SSH command string to VPS."""
+    vps = _get_vps_config()
+    return f"ssh -o ConnectTimeout=10 {vps.user}@{vps.ip} {cmd!r}"
+
+
+def _vps_run(cmd: str) -> subprocess.CompletedProcess[str]:
+    """Execute a command on VPS via SSH. Returns result (never raises)."""
+    return command.run(_vps_ssh(cmd), check=False)
+
+
+@backup_app.command("volumes")
+def backup_volumes(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be backed up")] = False,
+) -> None:
+    """Backup Docker volumes and filesystem paths on VPS.
+
+    Auto-discovers all Docker volumes, excludes those in common.yaml
+    exclude_volumes list. Filesystem paths from common.yaml are backed up
+    as tar archives. Retention policy keeps the last N backups.
+    """
+    logger.section(f"VPS Volume Backup - {env.upper()}")
+
+    env_config = validate_environment_config(env)
+    if env_config.requires_confirmation and not dry_run:
+        confirm_dangerous_operation(env_config, "Backup VPS volumes")
+
+    vps = _get_vps_config()
+    timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    backup_dir = f"{vps.backup_root}/{timestamp}"
+
+    if dry_run:
+        # Dry-run: show plan without connecting
+        from rich.table import Table
+
+        plan = Table(title="Backup Plan")
+        plan.add_column("Item", style="cyan")
+        plan.add_column("Type", justify="center")
+
+        for path in vps.filesystem_paths:
+            plan.add_row(f"[bold]{path}[/bold]", "path")
+        plan.add_row("[dim]<all Docker volumes>[/dim]", "auto")
+        if vps.exclude_volumes:
+            for vol in vps.exclude_volumes:
+                plan.add_row(f"[red]- {vol}[/red]", "exclude")
+
+        console.print(plan)
+        logger.info(f"Target: {vps.user}@{vps.ip}:{backup_dir}")
+        logger.info(f"Retention: {vps.retention} backups")
+        logger.info("Dry run — no changes made")
+        return
+
+    # 1. Connectivity check
+    logger.info(f"Connecting to VPS ({vps.ip})...")
+    ping = command.run(f"ping -c1 -W3 {vps.ip}", check=False)
+    if ping.returncode != 0:
+        logger.error(f"VPS unreachable at {vps.ip}. Is Tailscale connected?")
+        raise typer.Exit(1)
+    logger.success("VPS reachable")
+
+    # 2. Discover Docker volumes
+    vol_result = _vps_run("docker volume ls --format '{{.Name}}'")
+    if vol_result.returncode != 0:
+        logger.error(f"Failed to list volumes: {vol_result.stderr}")
+        raise typer.Exit(1)
+
+    all_volumes = vol_result.stdout.strip().splitlines()
+    volumes = [v for v in all_volumes if v not in vps.exclude_volumes]
+    excluded = [v for v in all_volumes if v in vps.exclude_volumes]
+
+    if excluded:
+        logger.info(f"Excluding {len(excluded)} volume(s): {', '.join(excluded)}")
+    logger.info(f"Backing up {len(volumes)} volume(s) + {len(vps.filesystem_paths)} path(s)")
+
+    # 3. Create backup directory
+    result = _vps_run(f"mkdir -p {backup_dir}")
+    if result.returncode != 0:
+        logger.error(f"Failed to create {backup_dir}: {result.stderr}")
+        raise typer.Exit(1)
+
+    errors: list[str] = []
+    backed_up: list[str] = []
+
+    # 4. Backup filesystem paths
+    if vps.filesystem_paths:
+        logger.subsection("Filesystem Paths")
+        for src_path in vps.filesystem_paths:
+            archive_name = src_path.strip("/").replace("/", "-")
+            logger.info(f"Backing up {src_path}...")
+            r = _vps_run(
+                f"test -e {src_path} && "
+                f"tar czf {backup_dir}/{archive_name}.tar.gz "
+                f"-C $(dirname {src_path}) $(basename {src_path})"
+            )
+            if r.returncode == 0:
+                backed_up.append(archive_name)
+                logger.success(f"  {archive_name}.tar.gz")
+            else:
+                errors.append(f"{src_path}: {r.stderr.strip()}")
+                logger.error(f"  Failed: {src_path}")
+
+    # 5. Backup Docker volumes
+    logger.subsection("Docker Volumes")
+    for vol_name in volumes:
+        logger.info(f"Backing up {vol_name}...")
+        r = _vps_run(
+            f"docker run --rm "
+            f"-v {vol_name}:/source:ro "
+            f"-v {backup_dir}:/backup "
+            f"alpine tar czf /backup/{vol_name}.tar.gz -C /source ."
+        )
+        if r.returncode == 0:
+            backed_up.append(vol_name)
+            logger.success(f"  {vol_name}.tar.gz")
+        else:
+            errors.append(f"{vol_name}: {r.stderr.strip()}")
+            logger.error(f"  Failed: {vol_name}")
+
+    # 6. Write remote manifest
+    manifest_lines = [
+        f"KubeLab VPS Backup — {timestamp}",
+        f"Host: {vps.ip}",
+        f"Items: {len(backed_up)}, Errors: {len(errors)}",
+        "",
+        *[f"  {item}.tar.gz" for item in backed_up],
+    ]
+    manifest_content = "\\n".join(manifest_lines)
+    _vps_run(f"printf '{manifest_content}\\n' > {backup_dir}/manifest.txt")
+
+    # 7. Show sizes
+    logger.subsection("Backup Sizes")
+    sizes = _vps_run(f"du -sh {backup_dir}/*.tar.gz 2>/dev/null | sort -rh")
+    if sizes.returncode == 0 and sizes.stdout.strip():
+        console.print(sizes.stdout.strip())
+    total = _vps_run(f"du -sh {backup_dir}")
+    if total.returncode == 0:
+        logger.info(f"Total: {total.stdout.strip().split()[0]}")
+
+    # 8. Retention
+    count_result = _vps_run(f"find {vps.backup_root} -maxdepth 1 -mindepth 1 -type d | wc -l")
+    backup_count = int(count_result.stdout.strip()) if count_result.returncode == 0 else 0
+    if backup_count > vps.retention:
+        logger.subsection("Retention")
+        old_dirs = _vps_run(f"find {vps.backup_root} -maxdepth 1 -mindepth 1 -type d | sort | head -n -{vps.retention}")
+        if old_dirs.returncode == 0 and old_dirs.stdout.strip():
+            for old_dir in old_dirs.stdout.strip().splitlines():
+                logger.warning(f"Removing old backup: {old_dir}")
+                _vps_run(f"rm -rf {old_dir}")
+
+    # 9. Summary
+    if errors:
+        logger.error(f"Backup finished with {len(errors)} error(s):")
+        for err in errors:
+            logger.error(f"  {err}")
+        raise typer.Exit(1)
+
+    logger.success(f"Backup complete: {len(backed_up)} items → {backup_dir}")
+
+
+@backup_app.command("list")
+def backup_list(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+) -> None:
+    """List existing backups on VPS."""
+    logger.section("VPS Backups")
+    validate_environment_config(env)
+
+    vps = _get_vps_config()
+    backup_root = vps.backup_root
+    logger.info(f"Connecting to VPS ({vps.ip})...")
+
+    result = _vps_run(
+        f"for d in {backup_root}/*/; do "
+        f'[ -d "$d" ] && echo "$(basename $d) $(du -sh $d | cut -f1) '
+        f'$(cat $d/manifest.txt 2>/dev/null | head -1)"; '
+        f"done | sort -r"
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        logger.info("No backups found")
+        return
+
+    from rich.table import Table
+
+    table = Table(title="VPS Backups")
+    table.add_column("Timestamp", style="cyan")
+    table.add_column("Size", justify="right")
+    table.add_column("Info")
+
+    for line in result.stdout.strip().splitlines():
+        parts = line.split(maxsplit=2)
+        if len(parts) >= 2:
+            table.add_row(parts[0], parts[1], parts[2] if len(parts) > 2 else "")
+
+    console.print(table)
 
 
 # =============================================================================

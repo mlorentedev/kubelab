@@ -1,7 +1,5 @@
 """Tests for credential-to-service mapping and reconciliation."""
 
-import pytest
-
 from toolkit.features.credentials import CREDENTIAL_SERVICE_MAP
 
 

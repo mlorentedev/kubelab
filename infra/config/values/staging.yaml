@@ -58,6 +58,13 @@ apps:
     core:
       portainer:
         domain: portainer.staging.kubelab.live
+
+      gitea:
+        domain: gitea.staging.kubelab.live
+
+      n8n:
+        domain: n8n.staging.kubelab.live
+
     observability:
       loki:
         domain: loki.staging.kubelab.live

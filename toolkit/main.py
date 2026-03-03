@@ -14,6 +14,7 @@ from toolkit.cli import (
     deployment,
     infra,
     monitoring,
+    secrets,
     services,
     tools,
 )
@@ -122,9 +123,9 @@ app.add_typer(dashboard.app, name="dashboard")
 app.add_typer(deployment.app, name="deployment")
 app.add_typer(infra.app, name="infra")
 app.add_typer(monitoring.app, name="monitoring")
+app.add_typer(secrets.app, name="secrets")
 app.add_typer(services.app, name="services")
 app.add_typer(tools.app, name="tools")
-# Removed apps.app - deprecated module deleted in Phase 8
 
 if __name__ == "__main__":
     app()

@@ -451,3 +451,7 @@ spec:
           port: 80
   tls:
     certResolver: letsencrypt
+    domains:
+      - main: "staging.kubelab.live"
+        sans:
+          - "*.staging.kubelab.live"

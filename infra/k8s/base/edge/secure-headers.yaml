@@ -1,0 +1,22 @@
+---
+# Traefik Middleware: Security headers applied to all IngressRoutes.
+# Equivalent of secure-headers@file in Docker Compose Traefik config.
+# Source of truth for header values: edge.traefik.headers_* in common.yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: secure-headers
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  headers:
+    frameDeny: true
+    browserXssFilter: true
+    contentTypeNosniff: true
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    sslRedirect: true

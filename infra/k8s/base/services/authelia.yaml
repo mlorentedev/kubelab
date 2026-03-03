@@ -97,7 +97,17 @@ data:
         - domain: 'api.staging.kubelab.live'
           policy: bypass
 
-        # Protected services (one_factor)
+        # OIDC-enabled services (bypass Authelia forward-auth — OIDC handles login)
+        - domain: 'console.minio.staging.kubelab.live'
+          policy: bypass
+        - domain: 'minio.staging.kubelab.live'
+          policy: bypass
+        - domain: 'gitea.staging.kubelab.live'
+          policy: bypass
+
+        # Protected services (one_factor via Authelia forward-auth)
+        - domain: 'n8n.staging.kubelab.live'
+          policy: one_factor
         - domain: 'grafana.staging.kubelab.live'
           policy: one_factor
         - domain: 'loki.staging.kubelab.live'
@@ -152,6 +162,25 @@ data:
         tls:
           server_name: smtp.gmail.com
           skip_verify: false
+
+    # ---- OIDC Identity Provider (MinIO SSO) ----
+    identity_providers:
+      oidc:
+        hmac_secret: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
+        issuer_private_key: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE
+        clients:
+          - client_id: minio
+            client_name: MinIO
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$m/AX8CozfEySg044nfsGFQ$ocewO2BPqMJ6sQOPkmsQEr5aJcWdPb2cwrvG98HNJXU'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://console.minio.staging.kubelab.live/oauth_callback
+            scopes:
+              - openid
+              - profile
+              - email
+            consent_mode: implicit
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -194,6 +223,10 @@ spec:
               value: /run/secrets/jwt_secret
             - name: AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE
               value: /run/secrets/smtp_password
+            - name: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
+              value: /run/secrets/oidc_hmac_secret
+            - name: AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE
+              value: /run/secrets/oidc_jwks_key
           volumeMounts:
             - name: config
               mountPath: /config/configuration.yml
@@ -229,10 +262,10 @@ spec:
             failureThreshold: 3
           resources:
             limits:
-              memory: 128Mi
+              memory: 256Mi
               cpu: "0.5"
             requests:
-              memory: 64Mi
+              memory: 128Mi
               cpu: "0.1"
       volumes:
         - name: config
@@ -290,7 +323,8 @@ spec:
       - Remote-Email
       - Remote-Name
 ---
-# Authelia portal IngressRoute (bypass — no middleware on itself)
+# Authelia portal IngressRoute — secure-headers applied so HSTS is present
+# on all responses (including redirects from other services via forwardAuth).
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -306,6 +340,9 @@ spec:
   routes:
     - match: Host(`auth.staging.kubelab.live`)
       kind: Rule
+      middlewares:
+        - name: secure-headers
+        - name: error-pages
       services:
         - name: authelia
           port: 9091

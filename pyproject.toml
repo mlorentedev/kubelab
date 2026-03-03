@@ -30,6 +30,7 @@ pre-commit = "^4.3.0"
 pytest = "^8.2.3"
 pytest-cov = "^7.0.0"
 pytest-mock = "^3.15.1"
+httpx = "^0.28.0"
 
 [tool.poetry.scripts]
 toolkit = "toolkit.main:app"
@@ -93,11 +94,14 @@ addopts = [
     "--cov-report=html",
     "--cov-report=xml",
     "--cov-branch",
+    "-m", "not e2e and not infra",
 ]
 markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "slow: Slow running tests",
+    "e2e: End-to-end tests (require network access to target environment)",
+    "infra: Infrastructure tests (require VPN + SSH access to homelab nodes)",
 ]
 
 [tool.coverage.run]

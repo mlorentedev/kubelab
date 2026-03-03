@@ -91,7 +91,7 @@ repos:
           - >-
             {extends: default,
             rules: {
-              line-length: {max: 120},
+              line-length: {max: 130},
               document-start: disable,
               truthy: {check-keys: false},
               comments-indentation: disable
