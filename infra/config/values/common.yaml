@@ -20,6 +20,16 @@ networking:
   vps:
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
+    ssh_user: "deployer"
+    backup:
+      root: "/opt/backups"
+      retention: 3
+      filesystem_paths:
+        - "/opt/traefik"
+        - "/opt/headscale"
+      exclude_volumes:
+        - "jekyll-staging-data"
+        - "jekyll-staging-site-data"
   nodes:
     k3s_server:
       tailscale_ip: "100.64.0.4"

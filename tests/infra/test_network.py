@@ -46,7 +46,7 @@ class TestTailscaleMesh:
         self,
         inventory: list[NodeInfo],
     ) -> None:
-        """Tailscale ping must succeed to all inventory nodes."""
+        """Tailscale ping must succeed to all inventory nodes (direct or relayed)."""
         errors: list[str] = []
         for node in inventory:
             try:
@@ -56,8 +56,9 @@ class TestTailscaleMesh:
                     text=True,
                     timeout=10,
                 )
-                if result.returncode != 0:
-                    errors.append(f"{node.name} ({node.host}): ping failed — {result.stderr.strip()}")
+                has_pong = "pong" in result.stdout.lower()
+                if result.returncode != 0 and not has_pong:
+                    errors.append(f"{node.name} ({node.host}): unreachable — {result.stderr.strip()}")
             except subprocess.TimeoutExpired:
                 errors.append(f"{node.name} ({node.host}): ping timed out")
             except FileNotFoundError:
