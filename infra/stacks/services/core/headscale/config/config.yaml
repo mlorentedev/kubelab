@@ -48,9 +48,17 @@ dns:
     global:
       - 1.1.1.1
       - 1.0.0.1
-    split: {}
+    split:
+      staging.kubelab.live:
+        - 100.64.0.5  # networking.nodes.rpi4.tailscale_ip (CoreDNS for staging only)
   search_domains: []
-  extra_records: []
+  extra_records:
+    - name: ollama.kubelab.live
+      type: A
+      value: 100.64.0.3    # networking.nodes.beelink.tailscale_ip
+    - name: jetson.kubelab.live
+      type: A
+      value: 100.64.0.8    # networking.nodes.jet1.tailscale_ip
 
 # Database (SQLite — correct for homelab scale)
 database:
