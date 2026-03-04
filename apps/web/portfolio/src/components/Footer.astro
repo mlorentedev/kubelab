@@ -1,0 +1,34 @@
+---
+import { social } from '../data/social';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-slate-100">
+  <div class="max-w-3xl mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400">
+    <div class="flex gap-6">
+      {social.map((link) => (
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-primary transition-colors"
+          aria-label={link.name}
+        >
+          {link.name}
+        </a>
+      ))}
+    </div>
+    <div class="flex items-center gap-4">
+      <a
+        href="https://kubelab.live"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="hover:text-primary transition-colors"
+      >
+        Blog en español &rarr;
+      </a>
+      <span>&copy; {year} Manu Lorente</span>
+    </div>
+  </div>
+</footer>

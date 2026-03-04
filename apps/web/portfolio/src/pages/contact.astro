@@ -1,0 +1,40 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+---
+
+<PageLayout title="Contact" description="Schedule a call or get in touch.">
+  <p class="text-sm text-slate-400 tracking-wide uppercase mb-6">Contact</p>
+  <h1 class="text-3xl font-bold text-slate-900 mb-4">Let's talk.</h1>
+  <p class="text-slate-500 text-lg mb-10 max-w-xl">
+    Open to freelance projects, consulting engagements, and full-time opportunities.
+    Pick a time that works for you.
+  </p>
+
+  <div class="bg-white rounded-lg border border-slate-100 overflow-hidden" style="min-height:550px;">
+    <iframe
+      src="https://cal.com/mlorentedev?embed=true&theme=light"
+      width="100%"
+      height="550"
+      class="border-0"
+      loading="lazy"
+      style="border:none;min-height:550px;"
+    ></iframe>
+  </div>
+
+  <div class="mt-12 pt-8 border-t border-slate-100">
+    <p class="text-sm text-slate-400 mb-3">Or reach out directly</p>
+    <div class="flex gap-6 text-slate-600">
+      <a href="mailto:hello@mlorente.dev" class="hover:text-primary transition-colors">
+        hello@mlorente.dev
+      </a>
+      <a
+        href="https://linkedin.com/in/manuellorente"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="hover:text-primary transition-colors"
+      >
+        LinkedIn
+      </a>
+    </div>
+  </div>
+</PageLayout>
