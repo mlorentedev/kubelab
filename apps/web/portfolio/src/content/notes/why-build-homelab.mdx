@@ -1,0 +1,68 @@
+---
+title: "Why I'm Building a Homelab in 2025"
+description: "Cloud abstractions are comfortable. That's exactly the problem. Why I'm spending real money on bare metal to build an internal developer platform from scratch."
+pubDate: 2024-12-16
+tags: ["homelab", "platform-engineering"]
+draft: false
+---
+
+A colleague asked me last week why I was buying mini PCs instead of spinning up a managed Kubernetes cluster on any of the big three. "You could have a GKE cluster running in ten minutes."
+
+He's right. And that's exactly the problem.
+
+## The managed services trap
+
+I've been working with cloud infrastructure for years. I can deploy a production workload on EKS. I can write Terraform modules that provision VPCs, load balancers, and RDS instances. I've done it dozens of times.
+
+But I couldn't tell you how the kubelet actually negotiates with the API server during node registration. I couldn't explain what happens inside etcd when a deployment scales from 3 to 5 replicas. I couldn't debug a CNI plugin failure without googling it.
+
+Managed Kubernetes hides the hard parts. That's its selling point and its cost. You trade understanding for velocity. For a company shipping product, that trade makes sense. For an engineer trying to actually understand distributed systems, it's a trap.
+
+## What I actually want to build
+
+The plan is an Internal Developer Platform — not a toy cluster with nginx running on it, but the full stack:
+
+- **Compute**: K3s across multiple nodes, with proper control plane separation
+- **Networking**: VPN mesh connecting home nodes to a public VPS, split-horizon DNS, TLS everywhere
+- **Auth**: SSO with OIDC, forward authentication on every service
+- **Observability**: Centralized logging, metrics, dashboards
+- **IaC**: Everything version-controlled. Terraform for DNS, Kustomize for K8s, Ansible for provisioning
+
+The goal isn't to replicate AWS. It's to understand every layer between "developer pushes code" and "user hits HTTPS endpoint." Every certificate, every DNS record, every firewall rule.
+
+## The cost argument actually works
+
+Here's the rough budget:
+
+| Item | Cost |
+|------|------|
+| Acemagic mini PC x2 (12GB RAM each) | ~400 EUR |
+| Beelink mini PC (8GB RAM) | ~150 EUR |
+| Raspberry Pi 4 (8GB) | ~80 EUR |
+| Raspberry Pi 3 (1GB) | ~50 EUR |
+| Jetson Nano (4GB) | Already owned |
+| Hetzner VPS (CX22) | ~5 EUR/mo |
+| **Total upfront** | **~680 EUR** |
+| **Monthly recurring** | **~5 EUR + electricity** |
+
+Compare that to running a 3-node managed K8s cluster on any cloud provider. Even the cheapest option — a few small instances with a managed control plane — runs you 150-200 EUR per month. My entire hardware budget pays for itself in under 5 months. After that, it's essentially free minus electricity (these mini PCs draw 10-15W each under load).
+
+And I own the hardware. No surprise bills, no egress charges, no "we're deprecating this instance type" emails.
+
+## The real reason
+
+I come from a hardware and firmware background. Before I ever wrote a Kubernetes manifest, I was writing C for embedded systems and debugging signals with an oscilloscope. Cloud-native infrastructure has always felt like a black box to me — functional, but opaque.
+
+Building a homelab is my way of prying that box open. I want to understand what happens when a packet hits my network interface and trace it all the way through to an HTTP response. I want to know why things break, not just how to restart them.
+
+There's a specific kind of confidence that comes from building infrastructure you fully understand. It's the difference between "I've used Kubernetes" and "I know what the kube-proxy actually does." One gets you through an interview. The other gets you through an outage at 3 AM.
+
+## The skills gap is real
+
+Platform engineering is one of the fastest-growing specializations in the industry, and most people practicing it have never set up a load balancer that wasn't a managed service. They've never configured a DNS server. They've never debugged a TLS certificate chain manually.
+
+Managed services don't teach you infrastructure. They teach you how to use managed services. Those are different skills, and the gap between them only shows up when something goes wrong.
+
+I'd rather find that gap at home, on my own hardware, on a Saturday afternoon — not in production, at 3 AM, with a Slack channel full of people waiting for answers.
+
+That's why I'm building a homelab.

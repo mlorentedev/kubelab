@@ -1,0 +1,69 @@
+---
+title: "BIOS Auto-Power-On: The Dumbest Problem That Took Hours"
+description: "My cluster went down. Not because of Kubernetes. Not because of a bug. Because the power flickered for 200 milliseconds."
+pubDate: 2025-02-24
+tags: ["hardware", "homelab"]
+draft: false
+---
+
+My cluster went down. Not because of Kubernetes. Not because of a bug. Because the power flickered for 200 milliseconds.
+
+I was at my desk when the monitors blinked. Router LEDs cycled. My laptop switched to battery and back. The kind of micro-outage that happens once a year and you forget about immediately.
+
+Except I didn't forget, because five minutes later Grafana stopped loading. Then the API. Then everything.
+
+## Walking to the rack
+
+SSH timed out on every node. I walked to the shelf where the mini PCs live and found them all dark. Power strip was fine. Wall outlet was fine. The machines had simply... turned off. And stayed off.
+
+I pressed five power buttons. Waited for POST. Waited for boot. Waited for Tailscale to reconnect. Waited for K3s to reschedule pods. Ten minutes of staring at blinking LEDs before the cluster was healthy again.
+
+Not a disaster. But a problem, because I don't live next to my homelab. If this happened while I was traveling, those machines would sit there, dark and cold, until I physically walked over and pressed a button. No amount of Ansible or Kubernetes self-healing helps when the hardware won't turn on.
+
+## The fix is a BIOS setting
+
+The setting exists on every server and workstation motherboard, but consumer mini PCs bury it. The concept is simple: when AC power is restored after a loss, should the machine (a) stay off, (b) return to its previous state, or (c) power on automatically?
+
+The default on every mini PC I own is (a). Stay off. Wait for a human to press the button.
+
+The fix is to change it to (c). In AMI Aptio BIOS -- which is what both the Acemagic and Beelink use -- the setting is called **"State after G3"** and you set it to **"S0 State"**.
+
+Finding it took hours. Here's why.
+
+## The Acemagic path
+
+On the Acemagic mini PCs, the BIOS is a stripped-down AMI Aptio V. Some menus are hidden or reorganized compared to the full version. My first instinct was to look under a "Power Management" section. There isn't one.
+
+The actual navigation path:
+
+```
+Advanced (tab)
+  └── Chipset Configuration
+        └── State after G3: [S0 State]
+```
+
+"G3" is the ACPI term for "mechanical off" -- the state where AC power is completely removed. "S0" is "fully running." So "State after G3 = S0 State" means "when power comes back, boot immediately."
+
+I found it after 45 minutes of tabbing through every BIOS screen. It wasn't under Power, it wasn't under Boot, it wasn't under Advanced top-level. It was nested inside Chipset Configuration, a section I had mentally filed as "things I'll never touch."
+
+## The Beelink path
+
+The Beelink uses the same AMI Aptio base, but the OEM customized the menu layout differently. Same setting, different location:
+
+```
+Advanced (tab)
+  └── Power Management
+        └── Restore on AC Power Loss: [Power On]
+```
+
+Same behavior, different name, different menu. The Beelink at least puts it where you'd expect -- under Power Management. But the label is "Restore on AC Power Loss" instead of "State after G3," so searching online for the exact setting name from the Acemagic documentation leads nowhere.
+
+## What I actually learned
+
+The fix took 30 seconds per machine. The diagnosis took hours, mostly because I was searching for the wrong terms. "Auto power on mini PC" gives you results about Wake-on-LAN. "BIOS auto start after power failure" gets you closer but still assumes a standard BIOS layout. The AMI Aptio documentation references "G3" and "S0" without explaining what they mean in practical terms.
+
+After configuring all five machines, I tested by pulling the power strip, waiting ten seconds, and plugging it back in. Every machine booted within 15 seconds. K3s was fully healthy in under two minutes. Problem solved permanently.
+
+There's a specific irony in spending weeks building a self-healing Kubernetes platform with automated failover, health checks, and pod rescheduling -- only to have the whole thing defeated by a default BIOS setting. No amount of software sophistication matters if the hardware won't turn on.
+
+The gap between "cloud-native engineer" and "person who can keep servers running" is a BIOS setting nobody told you about.

@@ -11,23 +11,35 @@ export const projects: Project[] = [
   {
     title: 'KubeLab',
     description:
-      'Personal Internal Developer Platform. K3s cluster, Headscale VPN mesh, Traefik, Authelia SSO, observability stack. From bare metal to production.',
+      'I wanted to understand how platforms actually work — not just click buttons on managed K8s. So I built one from scratch. 5 physical nodes, K3s, VPN mesh, SSO, full observability. Everything IaC, nothing manual.',
+    url: 'https://mlorentedev.github.io/kubelab/',
     github: 'https://github.com/mlorentedev/kubelab',
     tags: ['Kubernetes', 'Go', 'Python', 'Terraform', 'Ansible'],
     featured: true,
   },
   {
+    title: 'Hive',
+    description:
+      'AI assistants waste tokens loading context they don\'t need. Hive queries your Obsidian vault on demand via MCP — only what\'s relevant, when it\'s relevant. 67-82% token reduction.',
+    url: 'https://mlorentedev.github.io/hive/',
+    github: 'https://github.com/mlorentedev/hive',
+    tags: ['Python', 'MCP', 'Obsidian', 'AI'],
+    featured: true,
+  },
+  {
     title: 'Pollex',
     description:
-      'MCP server for text polishing via local LLMs. Runs on Jetson Nano and Ollama. Zero cloud dependencies.',
+      'Cloud LLM APIs see everything you type. Pollex polishes your English on a $99 Jetson Nano — grammar, coherence, wording. 3-second inference, zero cloud dependencies.',
+    url: 'https://mlorentedev.github.io/pollex/',
     github: 'https://github.com/mlorentedev/pollex',
-    tags: ['Go', 'MCP', 'LLM', 'Ollama'],
+    tags: ['Go', 'MCP', 'LLM', 'Jetson Nano'],
     featured: true,
   },
   {
     title: 'ts-bridge',
     description:
-      'Tailscale bridge for Windows machines behind corporate firewalls. Ephemeral nodes, auto-reconnect, zero-config RDP access.',
+      'Corporate firewalls block VPN clients that need admin rights. ts-bridge tunnels RDP/SSH through Tailscale in userspace — no install, no admin, no traces. One binary.',
+    url: 'https://mlorentedev.github.io/ts-bridge/',
     github: 'https://github.com/mlorentedev/ts-bridge',
     tags: ['Go', 'Tailscale', 'Networking'],
     featured: true,
@@ -35,7 +47,8 @@ export const projects: Project[] = [
   {
     title: 'pdf-modifier-mcp',
     description:
-      'MCP server for PDF manipulation. Merge, split, extract, watermark — all from your AI assistant.',
+      'Find-and-replace in PDFs without destroying the formatting. CLI for batch jobs, MCP server for AI agents.',
+    url: 'https://mlorentedev.github.io/pdf-modifier-mcp/',
     github: 'https://github.com/mlorentedev/pdf-modifier-mcp',
     tags: ['Python', 'MCP', 'PDF'],
     featured: false,
@@ -43,7 +56,8 @@ export const projects: Project[] = [
   {
     title: 'youtube-toolkit',
     description:
-      'CLI for YouTube channel analytics. Transcript extraction, metadata analysis, content planning.',
+      'YouTube Studio analytics are shallow and locked to your own channel. This CLI pulls metrics for any public channel and exports everything.',
+    url: 'https://mlorentedev.github.io/youtube-toolkit/',
     github: 'https://github.com/mlorentedev/youtube-toolkit',
     tags: ['Python', 'CLI', 'YouTube'],
     featured: false,
@@ -51,7 +65,7 @@ export const projects: Project[] = [
   {
     title: 'kasa-provisioner',
     description:
-      'Bulk provisioner for TP-Link Kasa smart plugs. Network scanning, firmware updates, schedule configuration.',
+      'Configuring 20 smart plugs one by one through a phone app is painful. This scans the network, updates firmware, and sets schedules in bulk.',
     github: 'https://github.com/mlorentedev/kasa-provisioner',
     tags: ['Python', 'IoT', 'Networking'],
     featured: false,
@@ -59,7 +73,7 @@ export const projects: Project[] = [
   {
     title: 'dotfiles',
     description:
-      'Personal development environment. Zsh, Neovim, tmux, Git — scripted and reproducible.',
+      'Dev environment that rebuilds itself. Zsh, Neovim, tmux, Git — one script on a fresh machine.',
     github: 'https://github.com/mlorentedev/dotfiles',
     tags: ['Shell', 'Neovim', 'DevEx'],
     featured: false,

@@ -1,0 +1,188 @@
+---
+title: "Bootstrapping K3s with Ansible"
+description: "I could SSH into each VM and run the K3s install script. I could also eat soup with a fork. Here's how I automated a 3-node K3s cluster with Ansible."
+pubDate: 2025-01-20
+tags: ["kubernetes", "ansible", "iac"]
+draft: false
+---
+
+I could SSH into each VM and run the K3s install script. I could also eat soup with a fork.
+
+The first time I set up my K3s cluster, I did it manually. Three SSH sessions, three install commands, copy-paste the server token. Took about twenty minutes. It worked. Then a week later, I changed a Proxmox network bridge config and had to rebuild the VMs from scratch.
+
+Twenty minutes again. Same commands. Same copy-paste. Same "did I use the right flags last time?" anxiety. That was the last time I did it manually.
+
+## Why automate a 3-node cluster
+
+The argument against automating a homelab is usually "it's just three nodes, how long can it take?" The answer is: long enough that you'll forget what you did. Not the install command itself -- that's documented everywhere. The flags. The config file options. The order of operations.
+
+My cluster runs K3s v1.34.4+k3s1 across three nodes:
+
+- **k3s-server** (172.16.1.10) -- control plane, on an Acemagic-1 Proxmox VM
+- **k3s-agent-1** (172.16.1.11) -- worker, second VM on the same Acemagic-1
+- **k3s-agent-2** (172.16.1.12) -- worker, Acemagic-2 Proxmox VM for heavier workloads
+
+All three are reachable over a Headscale VPN mesh (100.64.0.x addresses), which is how I access them from my workstation. The Ansible inventory reflects this:
+
+```yaml
+# infra/ansible/inventories/homelab.yml
+all:
+  vars:
+    ansible_user: manu
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    headscale_domain: vpn.kubelab.live
+    headscale_ip: 162.55.57.175
+
+  children:
+    lan_nodes:
+      hosts:
+        k3s-server:
+          ansible_host: 100.64.0.4
+        k3s-agent-1:
+          ansible_host: 100.64.0.7
+        k3s-agent-2:
+          ansible_host: 100.64.0.9
+```
+
+## The config.yaml approach
+
+K3s can take all its flags as a YAML config file at `/etc/rancher/k3s/config.yaml`. This is vastly better than passing flags to the install script, because the config file survives upgrades and restarts, and you can template it with Ansible.
+
+Here's the server config:
+
+```yaml
+# /etc/rancher/k3s/config.yaml (server node)
+write-kubeconfig-mode: "644"
+tls-san:
+  - "172.16.1.10"
+  - "100.64.0.4"
+  - "k3s-server"
+  - "k3s-server.kubelab.live"
+disable:
+  - servicelb
+node-label:
+  - "kubelab.live/role=server"
+```
+
+The `tls-san` block is the most important part, and the one I got wrong the first time.
+
+## The TLS SAN mistake that cost me an hour
+
+When K3s starts for the first time, it generates its TLS certificates. The SAN (Subject Alternative Name) list determines which hostnames and IPs can be used to reach the API server without TLS errors. If an address isn't in the SAN, `kubectl` will refuse to connect -- or worse, it'll connect only if you add `insecure-skip-tls-verify: true` to your kubeconfig, which defeats the entire point of TLS.
+
+I installed K3s on the server node first, then tried to run `kubectl get nodes` from my workstation over the Tailscale VPN. Connection refused. Not a network issue -- the TCP handshake succeeded, but the TLS certificate didn't include the Tailscale IP `100.64.0.4`.
+
+The fix is simple: add the Tailscale IP to `tls-san` in `config.yaml`. The catch is that **this must be set before the first K3s start**. Once K3s generates its certificates, it doesn't regenerate them when you add new SANs. You have to either delete the certs manually (`/var/lib/rancher/k3s/server/tls/`) and restart, or -- what I actually did -- blow away the install and start over.
+
+The Ansible task templates this config file before the install script runs:
+
+```yaml
+- name: Create K3s config directory
+  file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Template K3s server config
+  template:
+    src: k3s-server-config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    mode: '0644'
+  become: true
+
+- name: Install K3s server
+  shell: >
+    curl -sfL https://get.k3s.io |
+    INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server
+  args:
+    creates: /usr/local/bin/k3s
+  become: true
+```
+
+The `creates: /usr/local/bin/k3s` guard is critical. Without it, Ansible would re-run the install script every time, which is idempotent but slow. With it, the task skips if K3s is already installed.
+
+## Agent join: the token dance
+
+Agent nodes need the server's node token to join the cluster. K3s stores it at `/var/lib/rancher/k3s/server/node-token` on the server. The Ansible playbook reads it, then passes it to each agent:
+
+```yaml
+- name: Read K3s server token
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token
+  delegate_to: k3s-server
+  become: true
+
+- name: Template K3s agent config
+  template:
+    src: k3s-agent-config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    mode: '0644'
+  become: true
+
+- name: Install K3s agent
+  shell: >
+    curl -sfL https://get.k3s.io |
+    INSTALL_K3S_VERSION="{{ k3s_version }}"
+    K3S_URL="https://{{ k3s_server_ip }}:6443"
+    K3S_TOKEN="{{ k3s_token.content | b64decode | trim }}"
+    sh -s - agent
+  args:
+    creates: /usr/local/bin/k3s
+  become: true
+```
+
+The `slurp` + `b64decode` pattern is Ansible's way of reading a remote file into a variable. It reads the file as base64 (because Ansible modules communicate over JSON, which doesn't handle arbitrary binary content well), and the `b64decode` filter converts it back. The `trim` removes the trailing newline that K3s includes in the token file.
+
+## The role structure
+
+The full directory layout for the K3s Ansible automation looks like this:
+
+```
+infra/ansible/
+  inventories/
+    homelab.yml                  # All nodes with Tailscale IPs
+  roles/
+    system_setup/                # Base packages, UFW, monitoring tools
+      tasks/main.yml
+    dns_resilience/              # /etc/hosts entries for VPN bootstrap
+      tasks/main.yml
+    docker/                      # Docker CE install (for non-K3s nodes)
+      tasks/main.yml
+      handlers/main.yml
+  playbooks/
+    homelab-dns.yml              # DNS resilience across all nodes
+  templates/
+    k3s-server-config.yaml.j2   # Server config template
+    k3s-agent-config.yaml.j2    # Agent config template
+```
+
+The `system_setup` role runs first on all nodes -- it installs base packages, configures UFW firewall rules (ports 22, 80, 443, and Tailscale's 41641/UDP), and sets up log rotation. Then `dns_resilience` ensures every node can resolve `vpn.kubelab.live` to the Headscale server's public IP via `/etc/hosts`, because if the VPN goes down, you still need to reach Headscale to bring it back up.
+
+## Templates that drift
+
+There's a problem with this approach that I haven't fully solved yet. Ansible templates are Jinja2 files that live in `infra/ansible/templates/`. When I refactor the repo -- rename paths, restructure stacks, change variable names -- the templates don't update themselves. They silently diverge from reality.
+
+I've had deploys succeed with templates that referenced paths that no longer existed, because Ansible rendered the template just fine and the shell command ran without error -- it just created files in the wrong directory on the target host. No failure, no warning. Just a config file sitting in `/opt/old-path/` while the service reads from `/opt/new-path/`.
+
+The mitigation I use now: a `verify` task at the end of each role that checks the rendered output exists where the service expects it. It's not elegant, but it catches the obvious cases.
+
+```yaml
+- name: Verify K3s config exists
+  stat:
+    path: /etc/rancher/k3s/config.yaml
+  register: k3s_config
+  failed_when: not k3s_config.stat.exists
+```
+
+## The 15-minute test
+
+Here's my benchmark for whether my automation is good enough: can I rebuild the entire cluster from scratch in 15 minutes?
+
+Right now, the answer is "almost." The Ansible playbooks handle K3s install, base system setup, and DNS resilience. K8s manifests deploy via `kubectl apply -k infra/k8s/overlays/staging/`. Secrets inject through a toolkit command. The gap is the Proxmox VM creation itself -- I still do that manually through the web UI.
+
+But from "three fresh Ubuntu VMs with SSH access" to "3-node K3s cluster running Traefik, Authelia, Grafana, and Loki," I'm at about 12 minutes. Most of that is waiting for `apt` to finish on three nodes in parallel.
+
+If you can't rebuild your cluster from scratch in 15 minutes, you don't have infrastructure. You have a pet. And pets are great, but they're terrible at surviving disk failures.

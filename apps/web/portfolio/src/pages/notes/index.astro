@@ -2,7 +2,6 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import NoteCard from '../../components/NoteCard.astro';
 import { getCollection, type CollectionEntry } from 'astro:content';
 import { projects } from '../../data/portfolio';
 
@@ -10,12 +9,15 @@ const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data 
   .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
 const featured = projects.filter((p) => p.featured);
+
+const dateFormat: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+const formatDate = (d: Date) => d.toLocaleDateString('en-US', dateFormat);
 ---
 
 <BaseLayout title="Notes" description="Platform engineering notes — from hardware to Kubernetes.">
   <Header />
   <main>
-    <section class="pt-20 pb-10 md:pt-24 md:pb-14">
+    <section class="pt-20 pb-20 md:pt-24 md:pb-28">
       <div class="max-w-3xl mx-auto px-6">
         <div class="text-lg text-slate-600 leading-relaxed max-w-2xl">
           <p class="mb-5">
@@ -34,50 +36,56 @@ const featured = projects.filter((p) => p.featured);
             loading="lazy"
           />
         </a>
-      </div>
-    </section>
 
-    <section class="py-20 md:py-28 bg-white">
-      <div class="max-w-3xl mx-auto px-6">
-        <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-10">Things I've built</h2>
-        <div class="space-y-6">
+        <h2 class="text-sm text-slate-500 tracking-wide uppercase mt-16 mb-10">What I ship</h2>
+        <div class="divide-y divide-slate-100">
           {featured.map((project) => (
-            <div class="flex items-start gap-4">
-              <div class="flex-1">
-                <h3 class="font-heading font-bold text-slate-900">{project.title}</h3>
-                <p class="text-slate-500 text-sm mt-1.5">{project.description}</p>
+            <div class="py-6 first:pt-0 last:pb-0">
+              <h3 class="font-heading font-bold text-slate-900">
+                {project.url ? (
+                  <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">
+                    {project.title}
+                  </a>
+                ) : project.title}
+              </h3>
+              <p class="text-slate-600 text-sm mt-2 leading-relaxed">{project.description}</p>
+              <div class="flex flex-wrap gap-1.5 mt-3">
+                {project.tags.map((tag) => (
+                  <a href={`/tags/${tag.toLowerCase()}`} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 hover:bg-primary hover:text-white transition-colors">
+                    {tag}
+                  </a>
+                ))}
               </div>
-              {project.github && (
-                <a
-                  href={project.github}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-sm text-slate-500 hover:text-primary transition-colors whitespace-nowrap"
-                >
-                  GitHub &rarr;
-                </a>
-              )}
             </div>
           ))}
         </div>
       </div>
     </section>
 
-    <section class="py-20 md:py-28">
+    <section class="py-20 md:py-28 bg-white">
       <div class="max-w-3xl mx-auto px-6">
-        <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-10">Notes</h2>
+        <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-10">What I think</h2>
         {notes.length === 0 ? (
           <p class="text-slate-500">Coming soon.</p>
         ) : (
-          <div class="grid md:grid-cols-2 gap-6">
+          <div class="divide-y divide-slate-100">
             {notes.map((note: CollectionEntry<'notes'>) => (
-              <NoteCard
-                title={note.data.title}
-                description={note.data.description}
-                pubDate={note.data.pubDate}
-                tags={note.data.tags}
-                slug={note.id}
-              />
+                <div class="py-6 first:pt-0 last:pb-0">
+                  <a href={`/notes/${note.id}`} class="group block">
+                    <time class="text-xs text-slate-400">{formatDate(note.data.pubDate)}</time>
+                    <h3 class="font-heading font-bold text-slate-900 mt-1 group-hover:text-primary transition-colors">
+                      {note.data.title}
+                    </h3>
+                    <p class="text-slate-600 text-sm mt-1.5 leading-relaxed">{note.data.description}</p>
+                  </a>
+                  <div class="flex flex-wrap gap-1.5 mt-3">
+                    {note.data.tags.map((tag: string) => (
+                      <a href={`/tags/${tag.toLowerCase()}`} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 hover:bg-primary hover:text-white transition-colors">
+                        {tag}
+                      </a>
+                    ))}
+                  </div>
+                </div>
             ))}
           </div>
         )}

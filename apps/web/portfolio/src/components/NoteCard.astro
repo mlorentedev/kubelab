@@ -22,12 +22,12 @@ const formattedDate = pubDate.toLocaleDateString('en-US', {
       {title}
     </h3>
     <p class="text-slate-500 text-sm mb-3">{description}</p>
-    <div class="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 border border-slate-200">
-          {tag}
-        </span>
-      ))}
-    </div>
   </a>
+  <div class="flex flex-wrap gap-1.5">
+    {tags.map((tag) => (
+      <a href={`/tags/${tag.toLowerCase()}`} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 border border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-colors">
+        {tag}
+      </a>
+    ))}
+  </div>
 </article>

@@ -6,5 +6,5 @@ export interface SocialLink {
 
 export const social: SocialLink[] = [
   { name: 'GitHub', url: 'https://github.com/mlorentedev', icon: 'github' },
-  { name: 'Email', url: 'mailto:hello@mlorente.dev', icon: 'mail' },
+  { name: 'Email', url: 'mailto:info@mlorente.dev', icon: 'mail' },
 ];

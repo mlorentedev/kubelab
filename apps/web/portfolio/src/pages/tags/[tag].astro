@@ -1,0 +1,99 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import NoteCard from '../../components/NoteCard.astro';
+import { getCollection, type CollectionEntry } from 'astro:content';
+import { projects, type Project } from '../../data/portfolio';
+
+export async function getStaticPaths() {
+  const notes = await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft);
+
+  const tagSet = new Set<string>();
+  for (const project of projects) {
+    for (const tag of project.tags) tagSet.add(tag.toLowerCase());
+  }
+  for (const note of notes) {
+    for (const tag of note.data.tags) tagSet.add(tag.toLowerCase());
+  }
+
+  return [...tagSet].map((tag) => ({
+    params: { tag },
+    props: {
+      tag,
+      matchingProjects: projects.filter((p) =>
+        p.tags.some((t) => t.toLowerCase() === tag)
+      ),
+      matchingNotes: notes
+        .filter((n: CollectionEntry<'notes'>) => n.data.tags.some((t: string) => t.toLowerCase() === tag))
+        .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()),
+    },
+  }));
+}
+
+interface Props {
+  tag: string;
+  matchingProjects: Project[];
+  matchingNotes: CollectionEntry<'notes'>[];
+}
+
+const { tag, matchingProjects, matchingNotes } = Astro.props;
+const displayTag = matchingProjects.find((p) => p.tags.some((t) => t.toLowerCase() === tag))
+  ?.tags.find((t) => t.toLowerCase() === tag)
+  || matchingNotes[0]?.data.tags.find((t: string) => t.toLowerCase() === tag)
+  || tag;
+---
+
+<BaseLayout title={`${displayTag}`} description={`Projects and notes tagged ${displayTag}.`}>
+  <Header />
+  <main>
+    <section class="pt-20 pb-10 md:pt-24 md:pb-14">
+      <div class="max-w-3xl mx-auto px-6">
+        <a href="/notes" class="text-sm text-slate-400 hover:text-primary transition-colors">&larr; All notes</a>
+        <h1 class="text-2xl font-heading font-bold text-slate-900 mt-4">{displayTag}</h1>
+      </div>
+    </section>
+
+    {matchingProjects.length > 0 && (
+      <section class="py-12 md:py-16 bg-white">
+        <div class="max-w-3xl mx-auto px-6">
+          <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-8">Projects</h2>
+          <div class="divide-y divide-slate-100">
+            {matchingProjects.map((project) => (
+              <div class="py-5 first:pt-0 last:pb-0">
+                <h3 class="font-heading font-bold text-slate-900">
+                  {project.url ? (
+                    <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">
+                      {project.title}
+                    </a>
+                  ) : project.title}
+                </h3>
+                <p class="text-slate-600 text-sm mt-1.5 leading-relaxed">{project.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    )}
+
+    {matchingNotes.length > 0 && (
+      <section class="py-12 md:py-16">
+        <div class="max-w-3xl mx-auto px-6">
+          <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-8">Notes</h2>
+          <div class="grid md:grid-cols-2 gap-6">
+            {matchingNotes.map((note) => (
+              <NoteCard
+                title={note.data.title}
+                description={note.data.description}
+                pubDate={note.data.pubDate}
+                tags={note.data.tags}
+                slug={note.id}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+    )}
+  </main>
+  <Footer />
+</BaseLayout>

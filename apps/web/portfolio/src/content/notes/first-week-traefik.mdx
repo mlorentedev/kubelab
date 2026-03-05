@@ -1,0 +1,165 @@
+---
+title: "My First Week with Traefik: Things Nobody Tells You"
+description: "Traefik's docs make it look simple. It is not. A week of lessons from replacing K3s's built-in ingress controller."
+pubDate: 2025-02-03
+tags: ["traefik", "kubernetes", "networking"]
+draft: false
+---
+
+Traefik's documentation makes everything look like a five-minute setup. Install it, add a few labels, traffic flows. I've been doing this for a week now and I can confirm: that's marketing, not engineering.
+
+## Why Traefik over Nginx Ingress
+
+K3s ships with Traefik by default, which is part of why I picked it. But the real reason is Traefik's native Kubernetes CRDs. Nginx Ingress uses the standard `Ingress` resource and crams everything into annotations. Traefik gives you `IngressRoute`, a proper custom resource with typed fields.
+
+Compare these two approaches for a service with TLS, a redirect, and security headers.
+
+**Nginx Ingress (annotation soup):**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+    nginx.ingress.kubernetes.io/auth-url: "http://authelia:9091/api/verify" # gitleaks:allow
+    nginx.ingress.kubernetes.io/auth-signin: "https://auth.staging.kubelab.live"
+```
+
+**Traefik IngressRoute (structured CRD):**
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`grafana.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+        - name: error-pages
+        - name: authelia
+      services:
+        - name: grafana
+          port: 3000
+  tls:
+    certResolver: letsencrypt
+```
+
+The IngressRoute is declarative. Each middleware is a separate resource you can reuse. No string-typed annotation keys to typo. No configuration snippets embedded in YAML strings. When something breaks, `kubectl get middleware` tells you exactly what's deployed. With Nginx, you're grepping through annotations across every Ingress object.
+
+## Replace the built-in Traefik immediately
+
+K3s bundles Traefik, but it manages it through a `HelmChartConfig` resource in `kube-system`. This is fine for getting started, but the moment you need custom config, you want version control over the Traefik deployment.
+
+The way I handle it: I keep a `HelmChartConfig` in my base manifests that overrides the K3s defaults. This gives me Git-tracked configuration without having to disable K3s's built-in Traefik and manage the Helm chart myself.
+
+```yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    additionalArguments:
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.letsencrypt.acme.email=mlorentedev@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
+```
+
+One gotcha with Kustomize: `HelmChartConfig` is a cluster-scoped-ish resource in `kube-system`, not in your app namespace. If your `kustomization.yaml` has a `namespace:` field, Kustomize will override it and break things. Apply it separately or keep it out of the namespace-scoped kustomization.
+
+## The HTTP-to-HTTPS redirect trap
+
+This one cost me half a day. Traefik has a `redirectTo` option in its port configuration:
+
+```yaml
+ports:
+  web:
+    redirectTo:
+      port: websecure
+```
+
+It looks right. The docs show it. But it doesn't work reliably in K3s with `HelmChartConfig`. Sometimes the redirect fires, sometimes it doesn't, and the error messages are useless.
+
+The fix is to use CLI arguments instead:
+
+```
+--entrypoints.web.http.redirections.entryPoint.to=websecure
+--entrypoints.web.http.redirections.entryPoint.scheme=https
+--entrypoints.web.http.redirections.entryPoint.permanent=true
+```
+
+Three lines in `additionalArguments`. Works every time. I don't know why the `ports.web.redirectTo` approach is inconsistent, but I stopped investigating once the CLI args worked. Life is short.
+
+## Middleware order matters
+
+Traefik applies middlewares in the order you list them in the IngressRoute. This matters more than you'd think.
+
+My middleware chain for most services is:
+
+1. `secure-headers` -- security response headers (HSTS, XSS protection, frame deny)
+2. `error-pages` -- custom error pages via an nginx container
+3. `authelia` -- forward authentication
+
+If you put `authelia` before `secure-headers`, unauthenticated responses from Authelia's redirect won't have your security headers. If you put `error-pages` after the service, errors from the actual service won't get caught.
+
+The secure-headers middleware itself is a reusable resource:
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: secure-headers
+spec:
+  headers:
+    frameDeny: true
+    browserXssFilter: true
+    contentTypeNosniff: true
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    sslRedirect: true
+```
+
+Define it once, reference it everywhere. Every IngressRoute in my cluster includes `secure-headers`. No exceptions. If I find one without it, that's a bug.
+
+## TLS with DNS challenge
+
+I use Let's Encrypt with Cloudflare DNS challenge instead of HTTP challenge. The reason: my staging environment is only accessible over VPN. There's no public HTTP endpoint for Let's Encrypt to validate against. DNS challenge works regardless of network topology.
+
+The Cloudflare API token lives in a Kubernetes Secret:
+
+```yaml
+env:
+  - name: CF_DNS_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+```
+
+Traefik picks it up automatically. Certificates renew without intervention. This is one of the few things that actually worked on the first try.
+
+## The verdict after one week
+
+Traefik is the best ingress controller for a homelab -- once you stop trusting the examples in the docs. The CRD model is genuinely better than annotation-based configuration. The middleware system is clean and composable. Auto-discovery with Kubernetes providers works well.
+
+But the documentation has a gap between "getting started" and "production-ready" that you'll fill with trial and error. The redirect behavior is inconsistent across configuration methods. Error messages often tell you what failed without telling you why. And if you're running it inside K3s, half the guides assume a standalone Traefik installation that doesn't apply to you.
+
+Read the CRD specs, not the tutorials. Test every middleware in isolation before stacking them. And use CLI args for anything critical -- they're the most reliable configuration surface Traefik has.

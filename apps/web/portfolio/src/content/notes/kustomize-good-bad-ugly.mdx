@@ -1,0 +1,126 @@
+---
+title: "Kustomize: The Good, the Bad, and the Ugly"
+description: "Helm charts are somebody else's opinions wrapped in Go templates. I wanted my own opinions. Here's what happened."
+pubDate: 2025-02-17
+tags: ["kubernetes", "kustomize", "iac"]
+draft: false
+---
+
+Helm charts are somebody else's opinions wrapped in Go templates. I wanted my own opinions.
+
+That's the honest version of why I chose Kustomize over Helm for my homelab cluster. The diplomatic version involves words like "simplicity" and "native YAML," but the truth is I looked at a Helm `values.yaml` with 400 lines of nested config and thought: I'd rather just write the manifests myself.
+
+Six months in, I have thoughts. Not all of them positive.
+
+## The Good
+
+**Base manifests are real YAML.** This sounds trivial until you've spent an afternoon debugging a Helm template where someone used `{{- if .Values.ingress.enabled }}` with three levels of indentation and a stray whitespace that only breaks in certain value combinations. With Kustomize, my base manifests are valid Kubernetes resources. I can `kubectl apply` them directly. No rendering step, no template engine, no surprises.
+
+**Overlays are intuitive.** My staging environment uses the base manifests as-is. Production uses an overlay that patches domains and replica counts. The mental model is straightforward: base + patches = final manifests.
+
+Here's a concrete comparison. This is what a Helm chart looks like for overriding a domain:
+
+```yaml
+# values-prod.yaml (Helm)
+ingress:
+  enabled: true
+  hosts:
+    - host: grafana.kubelab.live
+      paths:
+        - path: /
+          pathType: Prefix
+```
+
+And here's the Kustomize equivalent:
+
+```yaml
+# overlays/prod/patches.yaml (Kustomize)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+spec:
+  routes:
+    - match: "Host(`grafana.kubelab.live`)"
+      kind: Rule
+      services:
+        - name: grafana
+          port: 3000
+```
+
+Both work. But the Kustomize version is a valid Kubernetes resource. I can read it, reason about it, and debug it without understanding a templating language.
+
+**configMapGenerator is brilliant for binary assets.** I needed to ship a PNG logo and a favicon into Authelia's container. Inlining base64 blobs in YAML is a nightmare. Imperative `kubectl create configmap --from-file` works but isn't version-controlled. Kustomize's `configMapGenerator` with `files:` handles it cleanly:
+
+```yaml
+configMapGenerator:
+  - name: authelia-assets
+    namespace: kubelab
+    files:
+      - services/authelia-assets/logo.png
+      - services/authelia-assets/favicon.ico
+    options:
+      disableNameSuffixHash: true
+```
+
+Binary files, version-controlled, declarative. That's exactly what I wanted.
+
+## The Bad
+
+**The namespace override is a trap.** Kustomization files support a top-level `namespace:` field that injects a namespace into every resource. Sounds convenient. Except it injects into *every* resource -- including HelmChartConfig (which is cluster-scoped) and any other resource that shouldn't be namespaced.
+
+My base kustomization has this:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kubelab
+resources:
+  - services/grafana.yaml
+  - services/authelia.yaml
+  # ...
+```
+
+Every resource listed under `resources:` gets `namespace: kubelab` injected, whether it makes sense or not. If you have a ClusterRole or a HelmChartConfig in there, Kustomize will happily namespace it, and `kubectl apply` will either error out or create a broken resource that silently does nothing. The fix is to apply cluster-scoped resources separately, outside the kustomization. Not elegant, but it works.
+
+**`patchesStrategicMerge` is deprecated.** I found this out when my CI pipeline started printing warnings. The old syntax:
+
+```yaml
+patchesStrategicMerge:
+  - patches/grafana-domain.yaml
+```
+
+The new syntax:
+
+```yaml
+patches:
+  - path: patches/grafana-domain.yaml
+```
+
+Functionally identical. But every tutorial, Stack Overflow answer, and blog post from before 2024 uses the old syntax. You'll find the deprecation notice buried in a GitHub issue, not in the docs.
+
+**No conditional includes.** I can't say "include this resource only if we're deploying to staging." Every environment gets every resource in the base, and overlays can only patch -- not remove. If staging needs a resource that prod doesn't, I either put it in the staging overlay's `resources:` or maintain two separate base directories. Both options feel wrong.
+
+## The Ugly
+
+**Debugging merge failures is opaque.** When a strategic merge patch doesn't apply the way you expect, Kustomize gives you... nothing. No diff, no explanation, just the wrong output. I've spent entire debugging sessions running `kubectl kustomize .` and diffing the output against what I expected, trying to figure out which patch was winning.
+
+**Patch ordering is undocumented.** If two patches modify the same field, which one wins? The docs don't say. In practice, it seems to be "last one listed," but I've seen exceptions. The only reliable strategy is to never have overlapping patches, which defeats the point of composability.
+
+**The toolkit deploy missed configMapGenerator binaries.** This one cost me an afternoon. My Python toolkit has a `deploy` command that applies K8s manifests. It worked for every resource -- except the binary ConfigMaps generated by `configMapGenerator`. The deploy logic was iterating over YAML files in the directory, but `configMapGenerator` resources only exist in the kustomize output, not as standalone files.
+
+The workaround is simple but ugly:
+
+```bash
+kubectl kustomize infra/k8s/overlays/staging/ | kubectl apply -f -
+```
+
+Pipe the full kustomize output directly to `kubectl apply`. It catches everything, including generated resources. But it means my toolkit's deploy command is a lie for any kustomization that uses generators. I still haven't found a clean fix.
+
+## The verdict
+
+Kustomize won't win any design awards. The namespace trap will bite you. The error messages range from unhelpful to nonexistent. The deprecation cycle means half the internet's advice is already outdated.
+
+But it does one thing well: it lets you manage YAML without pretending it's a programming language. My base manifests are readable. My overlays are small. And when something breaks, I can debug it with `kubectl kustomize` and a text diff, not by reverse-engineering a Go template.
+
+That's enough for me. Barely.

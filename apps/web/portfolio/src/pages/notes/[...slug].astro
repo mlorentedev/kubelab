@@ -5,14 +5,24 @@ import Footer from '../../components/Footer.astro';
 import { getCollection, render, type CollectionEntry } from 'astro:content';
 
 export async function getStaticPaths() {
-  const notes = await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft);
-  return notes.map((note: CollectionEntry<'notes'>) => ({
+  const notes = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft))
+    .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => a.data.pubDate.valueOf() - b.data.pubDate.valueOf());
+
+  return notes.map((note: CollectionEntry<'notes'>, i: number) => ({
     params: { slug: note.id },
-    props: { note },
+    props: {
+      note,
+      prev: i > 0 ? { id: notes[i - 1].id, title: notes[i - 1].data.title } : null,
+      next: i < notes.length - 1 ? { id: notes[i + 1].id, title: notes[i + 1].data.title } : null,
+    },
   }));
 }
 
-const { note } = Astro.props as { note: CollectionEntry<'notes'> };
+const { note, prev, next } = Astro.props as {
+  note: CollectionEntry<'notes'>;
+  prev: { id: string; title: string } | null;
+  next: { id: string; title: string } | null;
+};
 const { Content } = await render(note);
 
 const formattedDate = note.data.pubDate.toLocaleDateString('en-US', {
@@ -33,9 +43,9 @@ const formattedDate = note.data.pubDate.toLocaleDateString('en-US', {
             <h1 class="text-3xl font-heading font-bold text-slate-900 mt-3">{note.data.title}</h1>
             <div class="flex flex-wrap gap-2 mt-4">
               {note.data.tags.map((tag: string) => (
-                <span class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 border border-slate-200">
+                <a href={`/tags/${tag.toLowerCase()}`} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 border border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-colors">
                   {tag}
-                </span>
+                </a>
               ))}
             </div>
           </header>
@@ -46,11 +56,25 @@ const formattedDate = note.data.pubDate.toLocaleDateString('en-US', {
       </div>
     </section>
 
-    <section class="py-20 md:py-28 bg-white">
+    <nav class="py-12 md:py-16 bg-white border-t border-slate-100">
       <div class="max-w-3xl mx-auto px-6">
-        <a href="/notes" class="text-primary hover:text-primary-dark transition-colors">&larr; All notes</a>
+        <div class="flex items-center justify-between gap-4">
+          {prev ? (
+            <a href={`/notes/${prev.id}`} class="group flex-1 min-w-0">
+              <span class="text-xs text-slate-400">&larr; Previous</span>
+              <span class="block text-sm font-heading font-bold text-slate-700 group-hover:text-primary transition-colors truncate mt-0.5">{prev.title}</span>
+            </a>
+          ) : <div class="flex-1" />}
+          <a href="/notes" class="text-xs text-slate-400 hover:text-primary transition-colors shrink-0 px-2">All notes</a>
+          {next ? (
+            <a href={`/notes/${next.id}`} class="group flex-1 min-w-0 text-right">
+              <span class="text-xs text-slate-400">Next &rarr;</span>
+              <span class="block text-sm font-heading font-bold text-slate-700 group-hover:text-primary transition-colors truncate mt-0.5">{next.title}</span>
+            </a>
+          ) : <div class="flex-1" />}
+        </div>
       </div>
-    </section>
+    </nav>
   </main>
   <Footer />
 </BaseLayout>
