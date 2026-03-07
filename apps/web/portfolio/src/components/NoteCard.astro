@@ -1,4 +1,6 @@
 ---
+import { getLocale, useTranslatedPath, getDateLocale } from '../i18n/utils';
+
 interface Props {
   title: string;
   description: string;
@@ -7,8 +9,10 @@ interface Props {
   slug: string;
 }
 
+const lang = getLocale(Astro.currentLocale);
+const translatePath = useTranslatedPath(lang);
 const { title, description, pubDate, tags, slug } = Astro.props;
-const formattedDate = pubDate.toLocaleDateString('en-US', {
+const formattedDate = pubDate.toLocaleDateString(getDateLocale(lang), {
   year: 'numeric',
   month: 'long',
   day: 'numeric',
@@ -16,7 +20,7 @@ const formattedDate = pubDate.toLocaleDateString('en-US', {
 ---
 
 <article class="bg-white rounded-lg p-6 border border-slate-200 hover:border-primary transition-colors">
-  <a href={`/notes/${slug}`} class="block outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded">
+  <a href={translatePath(`/notes/${slug}`)} class="block outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded">
     <time class="text-xs text-slate-500">{formattedDate}</time>
     <h3 class="text-lg font-heading font-bold text-slate-900 mt-1 mb-2">
       {title}
@@ -25,7 +29,7 @@ const formattedDate = pubDate.toLocaleDateString('en-US', {
   </a>
   <div class="flex flex-wrap gap-1.5">
     {tags.map((tag) => (
-      <a href={`/tags/${tag.toLowerCase()}`} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 border border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-colors">
+      <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 border border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-colors">
         {tag}
       </a>
     ))}

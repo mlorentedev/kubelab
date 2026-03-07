@@ -1,10 +1,10 @@
 ---
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import Header from '../../components/Header.astro';
-import Footer from '../../components/Footer.astro';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Header from '../../../components/Header.astro';
+import Footer from '../../../components/Footer.astro';
 import { getCollection, type CollectionEntry } from 'astro:content';
-import { projects } from '../../data/portfolio';
-import { getLocale, useTranslations, useTranslatedPath, getDateLocale } from '../../i18n/utils';
+import { projects } from '../../../data/portfolio';
+import { getLocale, useTranslations, useTranslatedPath, getDateLocale } from '../../../i18n/utils';
 
 const lang = getLocale(Astro.currentLocale);
 const t = useTranslations(lang);

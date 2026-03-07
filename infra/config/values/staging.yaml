@@ -42,6 +42,8 @@ apps:
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
       email_secure: true
+    portfolio:
+      domain: portfolio.staging.kubelab.live
     blog:
       domain: blog.staging.kubelab.live
     web:

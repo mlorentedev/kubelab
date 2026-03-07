@@ -217,6 +217,16 @@ apps:
       enable_homelabs: true
       enable_contact: true
 
+    portfolio:
+      name: portfolio
+      domain: mlorente.dev
+      image_name: kubelab-portfolio
+      version: dev
+      enable_auth: false
+      auth_level: bypass
+      default_port: 8080
+      health_path: /
+
     blog:
       name: blog
       domain: blog.kubelab.live

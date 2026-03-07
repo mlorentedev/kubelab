@@ -1,40 +1,58 @@
 ---
+import { languages } from '../i18n/ui';
+import { getLocale, useTranslations, useTranslatedPath, switchLangUrl } from '../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
+
 const navItems = [
-  { label: 'Notes', href: '/notes' },
-  { label: 'Work with me', href: '/contact' },
+  { label: t('nav.notes'), href: translatePath('/notes') },
+  { label: t('nav.contact'), href: translatePath('/contact') },
 ];
 
 const currentPath = Astro.url.pathname;
+const otherLangs = Object.entries(languages).filter(([l]) => l !== lang);
 ---
 
 <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-slate-100">
   <nav class="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
-    <a href="/" class="text-lg font-heading font-bold text-slate-900 hover:text-primary focus:text-primary transition-colors outline-none">
+    <a href={translatePath('/')} class="text-lg font-heading font-bold text-slate-900 hover:text-primary focus:text-primary transition-colors outline-none">
       Manu Lorente
     </a>
 
-    <ul class="hidden md:flex gap-8 text-sm">
-      {navItems.map((item) => (
-        <li>
-          <a
-            href={item.href}
-            class:list={[
-              'hover:text-primary focus:text-primary transition-colors outline-none',
-              currentPath === item.href || currentPath.startsWith(item.href + '/')
-                ? 'text-primary font-medium'
-                : 'text-slate-500',
-            ]}
-          >
-            {item.label}
-          </a>
-        </li>
+    <div class="hidden md:flex items-center gap-8">
+      <ul class="flex gap-8 text-sm">
+        {navItems.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              class:list={[
+                'hover:text-primary focus:text-primary transition-colors outline-none',
+                currentPath === item.href || currentPath.startsWith(item.href + '/')
+                  ? 'text-primary font-medium'
+                  : 'text-slate-500',
+              ]}
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+      {otherLangs.map(([l, label]) => (
+        <a
+          href={switchLangUrl(Astro.url, l as keyof typeof languages)}
+          class="text-xs text-slate-400 hover:text-primary transition-colors uppercase tracking-wide"
+        >
+          {label}
+        </a>
       ))}
-    </ul>
+    </div>
 
     <button
       id="menu-toggle"
       class="md:hidden text-slate-500 hover:text-primary focus:text-primary transition-colors outline-none"
-      aria-label="Toggle menu"
+      aria-label={t('nav.toggle')}
       aria-expanded="false"
     >
       <svg id="icon-open" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -60,6 +78,16 @@ const currentPath = Astro.url.pathname;
             ]}
           >
             {item.label}
+          </a>
+        </li>
+      ))}
+      {otherLangs.map(([l, label]) => (
+        <li>
+          <a
+            href={switchLangUrl(Astro.url, l as keyof typeof languages)}
+            class="block py-1 text-slate-400 hover:text-primary transition-colors"
+          >
+            {label}
           </a>
         </li>
       ))}

@@ -1,0 +1,19 @@
+services:
+  portfolio:
+    expose:
+      - "${APPS_PLATFORM_PORTFOLIO_DEFAULT_PORT}"
+    deploy:
+      update_config:
+        order: ${DEPLOY_UPDATE_ORDER}
+        failure_action: ${DEPLOY_UPDATE_FAILURE_ACTION}
+        delay: ${DEPLOY_UPDATE_DELAY}
+      rollback_config:
+        parallelism: ${DEPLOY_ROLLBACK_PARALLELISM}
+        delay: ${DEPLOY_ROLLBACK_DELAY}
+      resources:
+        limits:
+          cpus: '${RESOURCES_DEFAULT_CPU_LIMIT}'
+          memory: ${RESOURCES_DEFAULT_MEMORY_LIMIT}
+        reservations:
+          cpus: '${RESOURCES_DEFAULT_CPU_RESERVATION}'
+          memory: ${RESOURCES_DEFAULT_MEMORY_RESERVATION}

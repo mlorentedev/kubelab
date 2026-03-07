@@ -1,28 +1,30 @@
 ---
+import { getLocale, useTranslations, useTranslatedPath } from '../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
 ---
 
 <section class="pt-28 pb-20 md:pt-36 md:pb-24">
   <div class="max-w-3xl mx-auto px-6">
-    <p class="text-sm text-primary font-medium tracking-wide uppercase mb-8">
-      10+ years · Engineer · From hardware to Kubernetes · Cloud & on-prem
+    <p class="text-sm text-primary font-medium tracking-wide mb-8">
+      {t('hero.tagline')}
     </p>
     <h1 class="text-4xl md:text-5xl font-heading font-bold text-slate-900 leading-tight mb-10">
-      Your infrastructure is costing you<br />
-      more than you think.
+      {t('hero.title')}
     </h1>
     <p class="text-xl text-slate-600 leading-relaxed max-w-2xl mb-5">
-      Every week your team spends fighting deployments, debugging pipelines,
-      or waiting for environments is a week of features that never shipped.
+      {t('hero.subtitle1')}
     </p>
     <p class="text-lg text-slate-600 leading-relaxed max-w-2xl mb-12">
-      I build platforms that give your developers their time back.
-      Cloud, on-prem, or hybrid — your data stays where you decide.
+      {t('hero.subtitle2')}
     </p>
     <a
-      href="/contact"
+      href={translatePath('/contact')}
       class="inline-block px-8 py-4 bg-primary hover:bg-primary-dark focus:bg-primary-dark text-white font-medium rounded-lg transition-colors text-base outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
     >
-      Tell me what's broken
+      {t('hero.cta')}
     </a>
   </div>
 </section>

@@ -1,0 +1,30 @@
+# mlorente.dev
+
+> Manu Lorente's personal site. Engineer — infrastructure, platforms, and products.
+
+## About
+
+Manu Lorente is a platform engineer with 10+ years of experience across Spain, France, China, and the US. Background in hardware engineering (cleanroom semiconductor fab), firmware, backend systems, and cloud infrastructure. Currently focused on Kubernetes, IaC, and self-hosted platforms.
+
+## Site Structure
+
+- / — Homepage: personal story, services, CTA
+- /notes/ — Technical blog posts about platform engineering, homelab, Kubernetes, networking
+- /contact/ — Work with me (consulting)
+- /es/ — Spanish version of all pages
+- /tags/[tag]/ — Posts and projects filtered by technology tag
+
+## Key Topics
+
+Platform engineering, Kubernetes (K3s), Infrastructure as Code, Terraform, Ansible, Docker, Tailscale/Headscale VPN, DNS (Pi-hole, CoreDNS), observability (Grafana, Loki), security (Authelia, CrowdSec), homelab, self-hosting, MCP servers, Go, Python, TypeScript.
+
+## Projects
+
+- KubeLab: 5-node hybrid homelab IDP (K3s, VPN mesh, SSO, full observability)
+- Hive: MCP server for Obsidian vault context (67-82% token reduction)
+- Pollex: Local LLM English polisher on Jetson Nano
+- ts-bridge: Tailscale userspace VPN tunnel (one binary, no admin)
+
+## Contact
+
+info@mlorente.dev

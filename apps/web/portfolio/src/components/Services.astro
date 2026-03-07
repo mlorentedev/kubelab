@@ -1,10 +1,15 @@
 ---
-import { services } from '../data/services';
+import { getServices } from '../data/services';
+import { getLocale, useTranslations } from '../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const services = getServices(lang);
 ---
 
 <section class="py-20 md:py-28 bg-white">
   <div class="max-w-3xl mx-auto px-6">
-    <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-14">I solve five problems</h2>
+    <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-14">{t('services.heading')}</h2>
     <div class="space-y-16">
       {services.map((service) => (
         <div>

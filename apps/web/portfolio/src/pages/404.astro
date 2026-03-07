@@ -4,21 +4,53 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 ---
 
-<BaseLayout title="Not Found" description="Page not found.">
+<BaseLayout title="Not Found" description="This page doesn't exist.">
   <Header />
   <main>
     <section class="pt-28 pb-20 md:pt-36 md:pb-24">
       <div class="max-w-3xl mx-auto px-6 text-center">
         <h1 class="text-6xl font-heading font-bold text-slate-300 mb-6">404</h1>
-        <p class="text-slate-500 text-lg mb-10">This page doesn't exist.</p>
+        <p class="text-slate-500 text-lg mb-10">
+          <span data-i18n="text-en">This page doesn't exist.</span>
+          <span data-i18n="text-es" class="hidden">Esta página no existe.</span>
+        </p>
         <a
+          id="home-link"
           href="/"
           class="inline-block px-8 py-4 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-colors text-base"
         >
-          Go home
+          <span data-i18n="cta-en">Go home</span>
+          <span data-i18n="cta-es" class="hidden">Ir al inicio</span>
         </a>
       </div>
     </section>
   </main>
   <Footer />
 </BaseLayout>
+
+<script>
+  const isEs = window.location.pathname.startsWith('/es/') || window.location.pathname === '/es';
+  if (isEs) {
+    document.querySelectorAll('[data-i18n$="-en"]').forEach((el) => el.classList.add('hidden'));
+    document.querySelectorAll('[data-i18n$="-es"]').forEach((el) => el.classList.remove('hidden'));
+    const link = document.getElementById('home-link');
+    if (link) link.setAttribute('href', '/es/');
+    document.title = 'No encontrado | Manu Lorente';
+
+    // Fix header: nav links to ES, logo to /es/, language switcher to EN
+    const header = document.querySelector('header');
+    if (header) {
+      header.querySelectorAll<HTMLAnchorElement>('a[href="/"]').forEach((a) => {
+        if (a.textContent?.trim() === 'Manu Lorente') a.href = '/es/';
+      });
+      header.querySelectorAll<HTMLAnchorElement>('a[href="/notes"]').forEach((a) => { a.href = '/es/notes'; });
+      header.querySelectorAll<HTMLAnchorElement>('a[href="/contact"]').forEach((a) => { a.href = '/es/contact'; });
+      header.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => {
+        if (a.textContent?.trim() === 'Español') {
+          a.textContent = 'English';
+          a.href = '/';
+        }
+      });
+    }
+  }
+</script>

@@ -32,7 +32,7 @@ export const projects: Project[] = [
       'Cloud LLM APIs see everything you type. Pollex polishes your English on a $99 Jetson Nano — grammar, coherence, wording. 3-second inference, zero cloud dependencies.',
     url: 'https://mlorentedev.github.io/pollex/',
     github: 'https://github.com/mlorentedev/pollex',
-    tags: ['Go', 'MCP', 'LLM', 'Jetson Nano'],
+    tags: ['Go', 'MCP', 'LLM', 'Jetson-Nano'],
     featured: true,
   },
   {

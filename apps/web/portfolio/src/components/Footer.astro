@@ -1,4 +1,8 @@
 ---
+import { getLocale, useTranslations } from '../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
 const year = new Date().getFullYear();
 ---
 
@@ -10,7 +14,7 @@ const year = new Date().getFullYear();
       rel="noopener noreferrer"
       class="hover:text-primary focus:text-primary transition-colors outline-none"
     >
-      Blog en español &rarr;
+      {t('footer.blog')} &rarr;
     </a>
     <span>&copy; {year} Manu Lorente</span>
   </div>
