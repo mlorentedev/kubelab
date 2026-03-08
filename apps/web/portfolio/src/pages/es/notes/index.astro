@@ -10,7 +10,7 @@ const lang = getLocale(Astro.currentLocale);
 const t = useTranslations(lang);
 const translatePath = useTranslatedPath(lang);
 
-const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft))
+const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'es'))
   .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
 const featured = projects.filter((p) => p.featured);
@@ -22,10 +22,10 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
 
 <BaseLayout title={t('notes.title')} description={t('notes.description')}>
   <Header />
-  <main>
-    <section class="pt-20 pb-20 md:pt-24 md:pb-28">
-      <div class="max-w-3xl mx-auto px-6">
-        <div class="text-lg text-slate-600 leading-relaxed max-w-2xl">
+  <main id="main-content" class="flex-grow pt-12">
+    <section class="pt-12 pb-16 md:pt-16 md:pb-20">
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="text-base text-gray-700 leading-relaxed max-w-2xl">
           <p class="mb-5">{t('notes.intro1')}</p>
           <p>{t('notes.intro2')}</p>
         </div>
@@ -33,26 +33,28 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
           <img
             src="https://ghchart.rshah.org/0e7490/mlorentedev"
             alt={t('meta.ghchart.alt')}
+            width="722"
+            height="112"
             class="w-full rounded"
             loading="lazy"
           />
         </a>
 
-        <h2 class="text-sm text-slate-500 tracking-wide uppercase mt-16 mb-10">{t('notes.projects')}</h2>
-        <div class="divide-y divide-slate-100">
+        <h2 class="text-sm text-gray-500 tracking-wide uppercase mt-16 mb-10">{t('notes.projects')}</h2>
+        <div class="divide-y divide-gray-200">
           {featured.map((project) => (
             <div class="py-6 first:pt-0 last:pb-0">
-              <h3 class="font-heading font-bold text-slate-900">
+              <h3 class="font-bold text-gray-800">
                 {project.url ? (
-                  <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">
+                  <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-cyan-700 transition-colors">
                     {project.title}
                   </a>
                 ) : project.title}
               </h3>
-              <p class="text-slate-600 text-sm mt-2 leading-relaxed">{project.description}</p>
+              <p class="text-gray-600 text-sm mt-2 leading-relaxed">{project.description}</p>
               <div class="flex flex-wrap gap-1.5 mt-3">
                 {project.tags.map((tag) => (
-                  <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 hover:bg-primary hover:text-white transition-colors">
+                  <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
                     {tag}
                   </a>
                 ))}
@@ -63,25 +65,25 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
       </div>
     </section>
 
-    <section class="py-20 md:py-28 bg-white">
-      <div class="max-w-3xl mx-auto px-6">
-        <h2 class="text-sm text-slate-500 tracking-wide uppercase mb-10">{t('notes.articles')}</h2>
+    <section class="py-16 md:py-20">
+      <div class="max-w-3xl mx-auto px-4">
+        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-10">{t('notes.articles')}</h2>
         {notes.length === 0 ? (
-          <p class="text-slate-500">{t('notes.empty')}</p>
+          <p class="text-gray-500">{t('notes.empty')}</p>
         ) : (
-          <div class="divide-y divide-slate-100">
+          <div class="divide-y divide-gray-200">
             {notes.map((note: CollectionEntry<'notes'>) => (
                 <div class="py-6 first:pt-0 last:pb-0">
                   <a href={translatePath(`/notes/${note.id}`)} class="group block">
-                    <time class="text-xs text-slate-400">{formatDate(note.data.pubDate)}</time>
-                    <h3 class="font-heading font-bold text-slate-900 mt-1 group-hover:text-primary transition-colors">
+                    <time class="text-xs text-gray-400">{formatDate(note.data.pubDate)}</time>
+                    <h3 class="font-bold text-gray-800 mt-1 group-hover:text-cyan-700 transition-colors">
                       {note.data.title}
                     </h3>
-                    <p class="text-slate-600 text-sm mt-1.5 leading-relaxed">{note.data.description}</p>
+                    <p class="text-gray-600 text-sm mt-1.5 leading-relaxed">{note.data.description}</p>
                   </a>
                   <div class="flex flex-wrap gap-1.5 mt-3">
                     {note.data.tags.map((tag: string) => (
-                      <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 hover:bg-primary hover:text-white transition-colors">
+                      <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
                         {tag}
                       </a>
                     ))}

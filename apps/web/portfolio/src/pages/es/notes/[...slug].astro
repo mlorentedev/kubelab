@@ -6,7 +6,7 @@ import { getCollection, render, type CollectionEntry } from 'astro:content';
 import { getLocale, useTranslations, useTranslatedPath, getDateLocale } from '../../../i18n/utils';
 
 export async function getStaticPaths() {
-  const notes = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft))
+  const notes = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'es'))
     .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => a.data.pubDate.valueOf() - b.data.pubDate.valueOf());
 
   return notes.map((note: CollectionEntry<'notes'>, i: number) => ({
@@ -39,42 +39,42 @@ const formattedDate = note.data.pubDate.toLocaleDateString(getDateLocale(lang), 
 
 <BaseLayout title={note.data.title} description={note.data.description} ogType="article">
   <Header />
-  <main>
-    <section class="pt-28 pb-20 md:pt-36 md:pb-24">
-      <div class="max-w-3xl mx-auto px-6">
+  <main id="main-content" class="flex-grow pt-12">
+    <section class="pt-16 pb-16 md:pt-20 md:pb-20">
+      <div class="max-w-3xl mx-auto px-4">
         <article>
           <header class="mb-10">
-            <time class="text-sm text-slate-500">{formattedDate}</time>
-            <h1 class="text-3xl font-heading font-bold text-slate-900 mt-3">{note.data.title}</h1>
+            <time class="text-sm text-gray-500">{formattedDate}</time>
+            <h1 class="text-3xl font-extrabold text-gray-800 mt-3">{note.data.title}</h1>
             <div class="flex flex-wrap gap-2 mt-4">
               {note.data.tags.map((tag: string) => (
-                <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500 border border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-colors">
+                <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500 border border-gray-200 hover:bg-cyan-700 hover:text-white hover:border-cyan-700 transition-colors">
                   {tag}
                 </a>
               ))}
             </div>
           </header>
-          <div class="prose prose-lg max-w-none prose-slate prose-headings:font-heading prose-headings:font-bold prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-800">
+          <div class="prose prose-lg max-w-none prose-headings:font-extrabold prose-headings:text-gray-800 prose-p:text-gray-600 prose-li:text-gray-600 prose-strong:text-gray-800">
             <Content />
           </div>
         </article>
       </div>
     </section>
 
-    <nav class="py-12 md:py-16 bg-white border-t border-slate-100">
-      <div class="max-w-3xl mx-auto px-6">
+    <nav class="py-12 md:py-16 border-t border-gray-200">
+      <div class="max-w-3xl mx-auto px-4">
         <div class="flex items-center justify-between gap-4">
           {prev ? (
             <a href={translatePath(`/notes/${prev.id}`)} class="group flex-1 min-w-0">
-              <span class="text-xs text-slate-400">&larr; {t('note.prev')}</span>
-              <span class="block text-sm font-heading font-bold text-slate-700 group-hover:text-primary transition-colors truncate mt-0.5">{prev.title}</span>
+              <span class="text-xs text-gray-400">&larr; {t('note.prev')}</span>
+              <span class="block text-sm font-bold text-gray-700 group-hover:text-cyan-700 transition-colors truncate mt-0.5">{prev.title}</span>
             </a>
           ) : <div class="flex-1" />}
-          <a href={translatePath('/notes')} class="text-xs text-slate-400 hover:text-primary transition-colors shrink-0 px-2">{t('notes.all')}</a>
+          <a href={translatePath('/notes')} class="text-xs text-gray-400 hover:text-cyan-700 transition-colors shrink-0 px-2">{t('notes.all')}</a>
           {next ? (
             <a href={translatePath(`/notes/${next.id}`)} class="group flex-1 min-w-0 text-right">
-              <span class="text-xs text-slate-400">{t('note.next')} &rarr;</span>
-              <span class="block text-sm font-heading font-bold text-slate-700 group-hover:text-primary transition-colors truncate mt-0.5">{next.title}</span>
+              <span class="text-xs text-gray-400">{t('note.next')} &rarr;</span>
+              <span class="block text-sm font-bold text-gray-700 group-hover:text-cyan-700 transition-colors truncate mt-0.5">{next.title}</span>
             </a>
           ) : <div class="flex-1" />}
         </div>

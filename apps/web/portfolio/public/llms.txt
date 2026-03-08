@@ -8,11 +8,10 @@ Manu Lorente is a platform engineer with 10+ years of experience across Spain, F
 
 ## Site Structure
 
-- / — Homepage: personal story, services, CTA
+- / — Homepage: projects, latest notes, GitHub activity
 - /notes/ — Technical blog posts about platform engineering, homelab, Kubernetes, networking
-- /contact/ — Work with me (consulting)
-- /es/ — Spanish version of all pages
 - /tags/[tag]/ — Posts and projects filtered by technology tag
+- /es/ — Spanish version of all pages (includes newsletter)
 
 ## Key Topics
 
@@ -27,4 +26,4 @@ Platform engineering, Kubernetes (K3s), Infrastructure as Code, Terraform, Ansib
 
 ## Contact
 
-info@mlorente.dev
+hey@mlorente.dev

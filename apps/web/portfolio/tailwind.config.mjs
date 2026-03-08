@@ -5,12 +5,6 @@ export default {
     extend: {
       fontFamily: {
         roboto: ['Roboto', 'sans-serif'],
-        heading: ['Space Grotesk', 'sans-serif'],
-      },
-      colors: {
-        primary: '#0e7490',
-        'primary-dark': '#0c5e73',
-        'primary-light': '#e0f7fa',
       },
       typography: {
         DEFAULT: {
@@ -35,9 +29,37 @@ export default {
               color: '#0e7490',
             },
             pre: {
-              backgroundColor: '#0f172a',
+              backgroundColor: '#1e293b',
               color: '#e2e8f0',
               overflowX: 'auto',
+            },
+            table: {
+              width: '100%',
+              marginTop: '2rem',
+              marginBottom: '2rem',
+              fontSize: '0.875rem',
+              lineHeight: '1.25rem',
+            },
+            thead: {
+              borderBottomWidth: '2px',
+              borderBottomColor: 'var(--tw-prose-th-borders)',
+            },
+            'thead th': {
+              fontWeight: '600',
+              paddingTop: '0.75rem',
+              paddingBottom: '0.75rem',
+              paddingLeft: '0.75rem',
+              paddingRight: '0.75rem',
+            },
+            'tbody td': {
+              paddingTop: '0.75rem',
+              paddingBottom: '0.75rem',
+              paddingLeft: '0.75rem',
+              paddingRight: '0.75rem',
+            },
+            'tbody tr': {
+              borderBottomWidth: '1px',
+              borderBottomColor: 'var(--tw-prose-td-borders)',
             },
           },
         },
