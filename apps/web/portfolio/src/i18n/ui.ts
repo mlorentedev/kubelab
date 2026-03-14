@@ -107,16 +107,16 @@ export const ui = {
     'newsletter.audience3': 'Te interesa el mundo <strong>DevOps/Platform</strong> con ejemplos reales.',
 
     // Lead magnet — NODO (ES — primary monetization funnel)
-    'leadMagnet.pitch1': 'Todo lo que ves aquí — los proyectos, las notas, los errores — está documentado para que mi IA lo recuerde por mí. Cada sesión retomo donde lo dejé. Sin repetir contexto. Sin volver a caer en los mismos fallos.',
-    'leadMagnet.pitch2': 'La tuya probablemente no. Cada sesión empiezas de cero.',
-    'leadMagnet.pitch3': 'En 5 días te enseño el sistema. Funciona con cualquier herramienta. Cualquier proyecto.',
+    'leadMagnet.pitch1': 'Lunes: le explico el proyecto a Copilot. Martes: le explico otro a Claude. Miércoles: Copilot no recuerda el lunes.',
+    'leadMagnet.pitch2': 'Un día creé un fichero de texto. Uno. Y ese error no volvió a pasar.',
+    'leadMagnet.pitch3': 'En 5 días te enseño el sistema que uso. Funciona con cualquier herramienta. Cualquier proyecto.',
     'leadMagnet.button': 'Empezar el curso',
     'leadMagnet.placeholder': 'tu@email.com',
     'leadMagnet.success': '¡Listo! Revisa tu email.',
     'leadMagnet.error': 'Por favor, introduce un email válido.',
     'leadMagnet.comingSoon': 'Próximamente. Apúntalo y te aviso.',
-    'leadMagnet.courseDesc': 'Un curso de 5 días. Un email al día. De cero a un sistema completo de memoria para tu IA. 5-10 minutos cada uno.',
-    'leadMagnet.microNote': '5 días. Te das de baja cuando quieras.',
+    'leadMagnet.courseDesc': '5 días. Un email al día. 5-10 minutos cada uno.',
+    'leadMagnet.microNote': 'Te das de baja cuando quieras.',
 
     // Notes page
     'notes.title': 'Notas',
