@@ -2,6 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
+import SubscribeForm from '../../components/SubscribeForm.astro';
 ---
 
 <BaseLayout
@@ -102,26 +103,12 @@ Al terminar, dame el comando exacto para conectarme por SSH desde mi portátil.<
           </div>
         </div>
 
-        <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto">
-          <form id="rompe-form" class="flex flex-col gap-4" novalidate>
-            <input
-              type="email"
-              name="email"
-              required
-              autocomplete="email"
-              placeholder="tu@email.com"
-              class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
-              aria-label="Email"
-            />
-            <button
-              type="submit"
-              class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
-            >
-              Hazlo tú — Empieza el curso
-            </button>
-            <p id="rompe-msg" class="text-xs text-center hidden"></p>
-          </form>
-        </div>
+        <SubscribeForm
+          formId="rompe-landing"
+          tag="rompe"
+          utmSource="lead_magnet"
+          buttonText="Hazlo tú — Empieza el curso"
+        />
 
         <p class="text-xs text-gray-400 text-center mt-4">
           5 días. Te das de baja cuando quieras.
@@ -133,31 +120,6 @@ Al terminar, dame el comando exacto para conectarme por SSH desde mi portátil.<
 </BaseLayout>
 
 <script>
-  const form = document.getElementById('rompe-form') as HTMLFormElement | null;
-  const msg = document.getElementById('rompe-msg');
-
-  form?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const email = new FormData(form).get('email') as string;
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      if (msg) {
-        msg.textContent = 'Por favor, introduce un email válido.';
-        msg.className = 'text-xs text-center text-red-200';
-      }
-      return;
-    }
-    // TODO: wire to Beehiiv with ROMPE-T1 tag
-    if (msg) {
-      msg.textContent = '¡Listo! Revisa tu email.';
-      msg.className = 'text-xs text-center text-cyan-200';
-    }
-    const button = form.querySelector('button[type="submit"]') as HTMLButtonElement;
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Recibido';
-    }
-  });
-
   const copyBtn = document.getElementById('copy-prompt');
   const promptEl = document.getElementById('ubuntu-prompt');
 
