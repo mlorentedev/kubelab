@@ -1,0 +1,171 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+<BaseLayout
+  title="De cero a HTTPS en 5 días — Método ROMPE"
+  description="Monta tu primer servidor con HTTPS en 5 días. En tu casa, sin cloud, sin pagar. Curso por email."
+>
+  <Header />
+  <main id="main-content" class="flex-grow pt-20">
+    <section class="py-12">
+      <div class="max-w-3xl mx-auto px-4">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">De cero a HTTPS en 5 días</h1>
+        <p class="text-lg text-gray-600 mb-10">
+          Monta tu primer servidor con candado verde. En tu casa. Sin cloud. Sin pagar.
+        </p>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <p class="text-base text-gray-700">
+            Tu servidor está desnudo.
+          </p>
+          <p class="text-base text-gray-700">
+            Todo lo que escribes — contraseñas, configs, tokens —
+            viaja en texto plano. Funciona, sí. Y está completamente expuesto.
+          </p>
+          <p class="text-base text-gray-700">
+            En 5 días lo vestimos. Paso a paso.
+            Rompiendo cosas a propósito para entenderlas.
+          </p>
+        </div>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase">Lo que vas a montar</h2>
+          <div class="divide-y divide-gray-200">
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 1</p>
+              <p class="text-base text-gray-700">Docker + Traefik — los cimientos</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 2</p>
+              <p class="text-base text-gray-700">Reverse proxy + dashboard — sin puertos expuestos</p>
+              <p class="text-xs text-gray-400 mt-1">con un video corto donde lo dibujo en papel</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 3</p>
+              <p class="text-base text-gray-700">HTTPS con candado verde — sin dominio, sin cloud</p>
+              <p class="text-xs text-gray-400 mt-1">con un video corto donde dibujo Encryption / Trust / Identity</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 4</p>
+              <p class="text-base text-gray-700">Monitoring + smoke test + Makefile — el sistema completo</p>
+              <p class="text-xs text-gray-400 mt-1">con un video que conecta todo el stack en un dibujo</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase">Lo que necesitas</h2>
+          <ul class="list-disc list-inside text-base text-gray-700 space-y-2">
+            <li>Un PC viejo, mini PC, o cualquier máquina con Linux</li>
+            <li>Tu portátil</li>
+            <li>15-20 minutos al día durante 5 días</li>
+          </ul>
+
+          <div class="mt-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+            <p class="text-sm text-gray-600 mb-3">
+              ¿No tienes Linux? Copia este prompt, pégalo en ChatGPT, Gemini, Claude o el que uses:
+            </p>
+            <div class="relative">
+              <pre id="ubuntu-prompt" class="text-xs text-gray-500 bg-white p-3 rounded border border-gray-100 overflow-x-auto whitespace-pre-wrap">Quiero instalar Ubuntu Server en un PC que tengo en casa para usarlo como servidor de homelab.
+
+Mi hardware: [describe tu PC: marca, modelo, RAM, disco]
+
+Guíame paso a paso por todo el proceso:
+
+1. Qué versión de Ubuntu Server descargar y de dónde
+2. Cómo flashear el USB desde [mi sistema operativo: Windows/Mac/Linux]
+3. Cómo entrar a la BIOS/UEFI de mi equipo y cambiar el orden de arranque para que inicie desde USB
+4. Configuración durante la instalación
+
+Asegura que:
+- Instala Ubuntu SERVER, no Desktop (no necesito interfaz gráfica)
+- Activa OpenSSH durante la instalación
+- Configura IP estática en mi red local
+- Crea un usuario no-root con sudo
+- El disco se particiona con LVM (para poder redimensionar después)
+- NO instala snaps innecesarios
+
+Al terminar, dame el comando exacto para conectarme por SSH desde mi portátil.</pre>
+              <button
+                id="copy-prompt"
+                class="absolute top-2 right-2 px-2 py-1 text-xs bg-gray-100 text-gray-500 rounded hover:bg-gray-200 transition-colors"
+              >
+                Copiar
+              </button>
+            </div>
+            <p class="text-xs text-gray-400 mt-3">
+              20 minutos. Y acabas de ver cómo funciona el curso: yo te doy los criterios, tú usas la IA para ejecutar.
+            </p>
+          </div>
+        </div>
+
+        <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto">
+          <form id="rompe-form" class="flex flex-col gap-4" novalidate>
+            <input
+              type="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@email.com"
+              class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
+              aria-label="Email"
+            />
+            <button
+              type="submit"
+              class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+            >
+              Hazlo tú — Empieza el curso
+            </button>
+            <p id="rompe-msg" class="text-xs text-center hidden"></p>
+          </form>
+        </div>
+
+        <p class="text-xs text-gray-400 text-center mt-4">
+          5 días. Te das de baja cuando quieras.
+        </p>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>
+
+<script>
+  const form = document.getElementById('rompe-form') as HTMLFormElement | null;
+  const msg = document.getElementById('rompe-msg');
+
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = new FormData(form).get('email') as string;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (msg) {
+        msg.textContent = 'Por favor, introduce un email válido.';
+        msg.className = 'text-xs text-center text-red-200';
+      }
+      return;
+    }
+    // TODO: wire to Beehiiv with ROMPE-T1 tag
+    if (msg) {
+      msg.textContent = '¡Listo! Revisa tu email.';
+      msg.className = 'text-xs text-center text-cyan-200';
+    }
+    const button = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Recibido';
+    }
+  });
+
+  const copyBtn = document.getElementById('copy-prompt');
+  const promptEl = document.getElementById('ubuntu-prompt');
+
+  copyBtn?.addEventListener('click', async () => {
+    if (promptEl) {
+      await navigator.clipboard.writeText(promptEl.textContent || '');
+      copyBtn.textContent = '¡Copiado!';
+      setTimeout(() => { copyBtn.textContent = 'Copiar'; }, 2000);
+    }
+  });
+</script>

@@ -1,0 +1,45 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<BaseLayout
+  title="Consulting — Manu Lorente"
+  description="Platform engineering consulting. Infrastructure, Kubernetes, DevOps — when you need someone who's been there."
+>
+  <Header />
+  <main id="main-content" class="flex-grow pt-20">
+    <section class="py-12">
+      <div class="max-w-3xl mx-auto px-4">
+        <h1 class="text-3xl font-bold text-gray-800 mb-10">Consulting</h1>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <p class="text-base text-gray-700">
+            My job is to make sure you don't need me.
+          </p>
+          <p class="text-base text-gray-700">
+            Everything I know is in my <a href="/notes" class="text-cyan-700 hover:text-cyan-800 transition-colors">notes</a>,
+            my videos, and my repos. Free. Do it yourself.
+          </p>
+          <p class="text-base text-gray-700">
+            If you're stuck on something I can't cover in a 20-minute video — complex architecture, production migration,
+            debugging that's been going on for days — let's talk.
+          </p>
+        </div>
+
+        <div class="border-t border-gray-200 pt-8">
+          <a
+            href="https://calendly.com/mlorentedev/consulting"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-block px-6 py-2 bg-cyan-700 text-white rounded-md text-sm font-medium hover:bg-cyan-800 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300"
+          >
+            Book a call
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>

@@ -3,7 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import Hero from '../components/Hero.astro';
-import { useTranslations, useTranslatedPath, getLocale, getDateLocale } from '../i18n/utils';
+import { useTranslations, useTranslatedPath, getLocale } from '../i18n/utils';
 import { projects } from '../data/portfolio';
 import { getCollection, type CollectionEntry } from 'astro:content';
 
@@ -16,10 +16,6 @@ const featured = projects.filter((p) => p.featured);
 const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'en'))
   .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
   .slice(0, 3);
-
-const dateFormat: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
-const locale = getDateLocale(lang);
-const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
 ---
 
 <BaseLayout>
@@ -29,43 +25,40 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
 
     <section class="py-12">
       <div class="max-w-3xl mx-auto px-4">
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-10">
+        <a href={translatePath('/projects')} class="text-sm text-gray-500 tracking-wide uppercase mb-8 block hover:text-cyan-700 transition-colors">
           {t('home.projects')}
-        </h2>
-        <div class="divide-y divide-gray-200">
+        </a>
+        <a href="https://github.com/mlorentedev" target="_blank" rel="noopener noreferrer">
+          <img
+            src="https://ghchart.rshah.org/0e7490/mlorentedev"
+            alt={t('meta.ghchart.alt')}
+            width="722"
+            height="112"
+            class="w-full mb-10 hover:opacity-80 transition-opacity"
+            loading="lazy"
+          />
+        </a>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           {featured.map((project) => (
-            <div class="py-6 first:pt-0 last:pb-0">
-              <div class="flex items-start justify-between gap-4 mb-2">
-                <h3 class="font-bold text-gray-800">
-                  {project.url ? (
-                    <a
-                      href={project.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="hover:text-cyan-700 transition-colors"
-                    >
-                      {project.title}
-                    </a>
-                  ) : (
-                    project.title
-                  )}
-                </h3>
-                {project.github && (
+            <div class="border border-gray-200 rounded-md p-4 hover:border-cyan-700 transition-colors flex flex-col">
+              <h3 class="font-bold text-gray-800 text-sm leading-snug mb-2">
+                {(project.url || project.github) ? (
                   <a
-                    href={project.github}
+                    href={project.url || project.github}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-sm text-gray-400 hover:text-cyan-700 transition-colors shrink-0"
-                    aria-label={`${project.title} on GitHub`}
+                    class="hover:text-cyan-700 transition-colors"
                   >
-                    GitHub &rarr;
+                    {project.title}
                   </a>
+                ) : (
+                  project.title
                 )}
-              </div>
-              <p class="text-gray-600 text-sm leading-relaxed">{project.description}</p>
-              <div class="flex flex-wrap gap-1.5 mt-3">
+              </h3>
+              <p class="text-gray-600 text-sm leading-relaxed mb-3 flex-grow">{project.description}</p>
+              <div class="flex flex-wrap gap-1.5">
                 {project.tags.map((tag) => (
-                  <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
+                  <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
                     {tag}
                   </a>
                 ))}
@@ -76,51 +69,30 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
       </div>
     </section>
 
-    <section class="py-12">
+    <section class="py-8">
       <div class="max-w-3xl mx-auto px-4">
-        <div class="flex items-center justify-between mb-10">
-          <h2 class="text-sm text-gray-500 tracking-wide uppercase">
-            {t('home.latest')}
-          </h2>
-          <a
-            href={translatePath('/notes')}
-            class="text-sm text-cyan-700 hover:text-cyan-800 transition-colors"
-          >
-            {t('home.allNotes')} &rarr;
-          </a>
-        </div>
-        {notes.length === 0 ? (
-          <p class="text-gray-500">{t('notes.empty')}</p>
-        ) : (
-          <div class="divide-y divide-gray-200">
+        <a href={translatePath('/notes')} class="text-sm text-gray-500 tracking-wide uppercase mb-6 block hover:text-cyan-700 transition-colors">
+          {t('home.latest')}
+        </a>
+        {notes.length > 0 && (
+          <div class="divide-y divide-gray-100">
             {notes.map((note) => (
-              <div class="py-6 first:pt-0 last:pb-0">
-                <a href={translatePath(`/notes/${note.id}`)} class="group block">
-                  <time class="text-xs text-gray-400">{formatDate(note.data.pubDate)}</time>
-                  <h3 class="font-bold text-gray-800 mt-1 group-hover:text-cyan-700 transition-colors">
-                    {note.data.title}
-                  </h3>
-                  <p class="text-gray-600 text-sm mt-1.5 leading-relaxed">{note.data.description}</p>
-                </a>
-              </div>
+              <a href={translatePath(`/notes/${note.id}`)} class="group block py-3 first:pt-0">
+                <span class="text-xs text-gray-500 block tabular-nums">{note.data.pubDate.toISOString().slice(0, 10)}</span>
+                <span class="text-sm text-gray-700 group-hover:text-cyan-700 transition-colors">{note.data.title}</span>
+              </a>
             ))}
           </div>
         )}
+        <a
+          href={translatePath('/notes')}
+          class="text-xs text-gray-500 hover:text-cyan-700 transition-colors mt-4 block"
+        >
+          <span aria-label="See all notes">more</span> &rarr;
+        </a>
       </div>
     </section>
 
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <img
-          src="https://ghchart.rshah.org/0e7490/mlorentedev"
-          alt={t('meta.ghchart.alt')}
-          width="722"
-          height="112"
-          class="w-full"
-          loading="lazy"
-        />
-      </div>
-    </section>
   </main>
   <Footer />
 </BaseLayout>

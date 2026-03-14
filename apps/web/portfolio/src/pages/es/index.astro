@@ -3,23 +3,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import Hero from '../../components/Hero.astro';
-import { useTranslations, useTranslatedPath, getLocale, getDateLocale } from '../../i18n/utils';
-import { projects } from '../../data/portfolio';
-import { getCollection, type CollectionEntry } from 'astro:content';
+import { useTranslations, useTranslatedPath, getLocale } from '../../i18n/utils';
 
 const lang = getLocale(Astro.currentLocale);
 const t = useTranslations(lang);
 const translatePath = useTranslatedPath(lang);
-
-const featured = projects.filter((p) => p.featured);
-
-const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'es'))
-  .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 3);
-
-const dateFormat: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
-const locale = getDateLocale(lang);
-const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
 ---
 
 <BaseLayout>
@@ -27,157 +15,35 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
   <main id="main-content" class="flex-grow pt-12">
     <Hero />
 
-    <section id="newsletter" class="py-12">
+    <section id="lead-magnet" class="py-12">
       <div class="max-w-3xl mx-auto px-4">
         <div class="flex flex-col max-w-3xl mx-auto space-y-4 mb-6">
-          <p class="text-base text-gray-700">
-            No necesitas otro curso. Ni otra certificacion que nunca aplicas.
-            Lo que necesitas es <strong>construir de verdad</strong>: en tu maquina, en tu red, en tu nube.
-          </p>
-          <p class="text-base text-gray-700">
-            Eso es lo que hago. Y eso es lo que comparto aqui.
-          </p>
-          <p class="text-base text-gray-700">
-            Cada semana te mando una nota con <strong>decisiones reales</strong>, errores y soluciones
-            de lo que estoy construyendo. Sin teoria empaquetada. Sin humo.
-          </p>
+          <p class="text-base text-gray-700">{t('leadMagnet.pitch1')}</p>
+          <p class="text-base text-gray-700">{t('leadMagnet.pitch2')}</p>
+          <p class="text-base text-gray-700">{t('leadMagnet.pitch3')}</p>
         </div>
 
         <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto">
-          <form id="newsletter-form" class="flex flex-col gap-4" novalidate>
-            <input
-              type="email"
-              name="email"
-              required
-              autocomplete="email"
-              placeholder={t('newsletter.placeholder')}
-              class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
-              aria-label="Email"
-            />
-            <button
-              type="submit"
-              class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
-            >
-              {t('newsletter.button')}
-            </button>
-            <p id="newsletter-msg" class="text-xs text-center hidden"></p>
+          <form id="lead-magnet-form" class="flex flex-col gap-4" novalidate>
+            <input type="email" name="email" required autocomplete="email" placeholder={t('leadMagnet.placeholder')} class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300" aria-label="Email" />
+            <button type="submit" class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white">{t('leadMagnet.button')}</button>
+            <p id="lead-magnet-msg" class="text-xs text-center hidden"></p>
           </form>
         </div>
 
-        <div class="flex flex-col max-w-3xl mx-auto space-y-4 mt-8">
-          <hr class="border-t border-gray-200" />
-
-          <h3 class="text-lg font-bold text-gray-800">{t('newsletter.whatYouGet')}</h3>
-          <ul class="list-disc list-inside text-base text-gray-700 space-y-2">
-            <li set:html={t('newsletter.benefit1')} />
-            <li set:html={t('newsletter.benefit2')} />
-            <li set:html={t('newsletter.benefit3')} />
-          </ul>
-
-          <hr class="border-t border-gray-200" />
-
-          <h3 class="text-lg font-bold text-gray-800">{t('newsletter.forYouIf')}</h3>
-          <ul class="list-disc list-inside text-base text-gray-700 space-y-2">
-            <li set:html={t('newsletter.audience1')} />
-            <li set:html={t('newsletter.audience2')} />
-            <li set:html={t('newsletter.audience3')} />
-          </ul>
-        </div>
+        <p class="text-sm text-gray-600 mt-6">{t('leadMagnet.courseDesc')}</p>
+        <p class="text-sm text-gray-600 mt-2">{t('leadMagnet.microNote')}</p>
       </div>
     </section>
 
     <section class="py-12">
-      <div class="max-w-3xl mx-auto px-4">
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-10">
-          {t('home.projects')}
-        </h2>
-        <div class="divide-y divide-gray-200">
-          {featured.map((project) => (
-            <div class="py-6 first:pt-0 last:pb-0">
-              <div class="flex items-start justify-between gap-4 mb-2">
-                <h3 class="font-bold text-gray-800">
-                  {project.url ? (
-                    <a
-                      href={project.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="hover:text-cyan-700 transition-colors"
-                    >
-                      {project.title}
-                    </a>
-                  ) : (
-                    project.title
-                  )}
-                </h3>
-                {project.github && (
-                  <a
-                    href={project.github}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-sm text-gray-400 hover:text-cyan-700 transition-colors shrink-0"
-                    aria-label={`${project.title} en GitHub`}
-                  >
-                    GitHub &rarr;
-                  </a>
-                )}
-              </div>
-              <p class="text-gray-600 text-sm leading-relaxed">{project.description}</p>
-              <div class="flex flex-wrap gap-1.5 mt-3">
-                {project.tags.map((tag) => (
-                  <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
-                    {tag}
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <section class="py-12">
-      <div class="max-w-3xl mx-auto px-4">
-        <div class="flex items-center justify-between mb-10">
-          <h2 class="text-sm text-gray-500 tracking-wide uppercase">
-            {t('home.latest')}
-          </h2>
-          <a
-            href={translatePath('/notes')}
-            class="text-sm text-cyan-700 hover:text-cyan-800 transition-colors"
-          >
-            {t('home.allNotes')} &rarr;
-          </a>
-        </div>
-        {notes.length === 0 ? (
-          <p class="text-gray-500">{t('notes.empty')}</p>
-        ) : (
-          <div class="divide-y divide-gray-200">
-            {notes.map((note) => (
-              <div class="py-6 first:pt-0 last:pb-0">
-                <a href={translatePath(`/notes/${note.id}`)} class="group block">
-                  <time class="text-xs text-gray-400">{formatDate(note.data.pubDate)}</time>
-                  <h3 class="font-bold text-gray-800 mt-1 group-hover:text-cyan-700 transition-colors">
-                    {note.data.title}
-                  </h3>
-                  <p class="text-gray-600 text-sm mt-1.5 leading-relaxed">{note.data.description}</p>
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <img
-          src="https://ghchart.rshah.org/0e7490/mlorentedev"
-          alt={t('meta.ghchart.alt')}
-          width="722"
-          height="112"
-          class="w-full"
-          loading="lazy"
-        />
+      <div class="max-w-3xl mx-auto px-4 space-y-4">
+        <p class="text-sm text-gray-500">
+          ¿Qué notas? <a href={translatePath('/notes')} class="text-cyan-700 hover:text-cyan-800 transition-colors">estas</a>
+        </p>
+        <p class="text-sm text-gray-500">
+          ¿Qué proyecto? literalmente el que me ha cambiado la vida. <a href="https://mlorentedev.github.io/kubelab/" target="_blank" rel="noopener noreferrer" class="text-cyan-700 hover:text-cyan-800 transition-colors">este</a>
+        </p>
       </div>
     </section>
   </main>
@@ -185,8 +51,8 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
 </BaseLayout>
 
 <script>
-  const form = document.getElementById('newsletter-form') as HTMLFormElement | null;
-  const msg = document.getElementById('newsletter-msg');
+  const form = document.getElementById('lead-magnet-form') as HTMLFormElement | null;
+  const msg = document.getElementById('lead-magnet-msg');
 
   form?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -198,7 +64,7 @@ const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
       }
       return;
     }
-    // TODO: wire to newsletter provider (beehiiv/Listmonk)
+    // TODO: wire to API Go /api/subscribe with NODO tag
     if (msg) {
       msg.textContent = 'Próximamente. Apúntalo y te aviso.';
       msg.className = 'text-xs text-center text-cyan-200';

@@ -1,0 +1,130 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+<BaseLayout
+  title="Método NODO — Un sistema para que tu IA recuerde todo"
+  description="Un sistema para que tu IA recuerde tu proyecto, tus errores y tus decisiones. Curso de 5 días por email."
+>
+  <Header />
+  <main id="main-content" class="flex-grow pt-20">
+    <section class="py-12">
+      <div class="max-w-3xl mx-auto px-4">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Método NODO</h1>
+        <p class="text-lg text-gray-600 mb-10">
+          Un sistema para que tu IA recuerde todo. Cualquier herramienta. Cualquier proyecto.
+        </p>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <p class="text-base text-gray-700">
+            Lunes: abres Copilot en el trabajo, le explicas el proyecto.
+            Martes: abres Claude en casa, le explicas otro proyecto.
+            Miércoles: vuelves al trabajo. Copilot no recuerda el lunes.
+          </p>
+          <p class="text-base text-gray-700">
+            Un día creé un fichero de texto. Uno.
+            Y ese error no volvió a pasar.
+          </p>
+        </div>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase">Lo que recibes</h2>
+          <div class="divide-y divide-gray-200">
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 0</p>
+              <p class="text-base text-gray-700">Por qué tu IA es inútil (y es culpa tuya)</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 1</p>
+              <p class="text-base text-gray-700">El fichero que me ahorra 20 minutos cada día</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 2</p>
+              <p class="text-base text-gray-700">Un sistema que funciona en cualquier proyecto y herramienta</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 3</p>
+              <p class="text-base text-gray-700">Tu primera sesión donde la IA ya sabe todo</p>
+            </div>
+            <div class="py-3">
+              <p class="text-sm text-gray-400">Día 4</p>
+              <p class="text-base text-gray-700">El sistema completo + plantillas + vault</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase">Para quién es</h2>
+          <ul class="list-disc list-inside text-base text-gray-700 space-y-2">
+            <li>Usas IA para programar (Copilot, Claude, Cursor, Gemini...)</li>
+            <li>Cada sesión empiezas de cero explicando el proyecto</li>
+            <li>Quieres que tu IA sea más útil sin cambiar de herramienta</li>
+          </ul>
+        </div>
+
+        <div class="flex flex-col space-y-4 mb-10">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase">Para quién NO es</h2>
+          <ul class="list-disc list-inside text-base text-gray-700 space-y-2">
+            <li>Buscas un "prompt mágico" que lo resuelve todo</li>
+            <li>No usas IA en tu trabajo diario</li>
+          </ul>
+        </div>
+
+        <div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto">
+          <form id="nodo-form" class="flex flex-col gap-4" novalidate>
+            <input
+              type="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@email.com"
+              class="w-full p-2 text-cyan-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
+              aria-label="Email"
+            />
+            <button
+              type="submit"
+              class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+            >
+              Empezar el curso
+            </button>
+            <p id="nodo-msg" class="text-xs text-center hidden"></p>
+          </form>
+        </div>
+
+        <p class="text-xs text-gray-400 text-center mt-4">
+          5 días. 5-10 minutos cada uno. Funciona con cualquier IA. Te das de baja cuando quieras.
+        </p>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>
+
+<script>
+  const form = document.getElementById('nodo-form') as HTMLFormElement | null;
+  const msg = document.getElementById('nodo-msg');
+
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = new FormData(form).get('email') as string;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (msg) {
+        msg.textContent = 'Por favor, introduce un email válido.';
+        msg.className = 'text-xs text-center text-red-200';
+      }
+      return;
+    }
+    // TODO: wire to Beehiiv with NODO tag
+    if (msg) {
+      msg.textContent = '¡Listo! Revisa tu email.';
+      msg.className = 'text-xs text-center text-cyan-200';
+    }
+    const button = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Recibido';
+    }
+  });
+</script>

@@ -6,9 +6,7 @@ const lang = getLocale(Astro.currentLocale);
 const t = useTranslations(lang);
 const translatePath = useTranslatedPath(lang);
 
-const navItems = [
-  { label: t('nav.notes'), href: translatePath('/notes') },
-];
+const navItems: { label: string; href: string }[] = [];
 
 const currentPath = Astro.url.pathname;
 const otherLangs = Object.entries(languages).filter(([l]) => l !== lang);

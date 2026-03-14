@@ -63,17 +63,37 @@ const displayTag = matchingProjects.find((p) => p.tags.some((t) => t.toLowerCase
       <section class="py-12 md:py-16">
         <div class="max-w-3xl mx-auto px-4">
           <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-8">{t('tags.projects')}</h2>
-          <div class="divide-y divide-gray-200">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             {matchingProjects.map((project) => (
-              <div class="py-5 first:pt-0 last:pb-0">
-                <h3 class="font-bold text-gray-800">
-                  {project.url ? (
-                    <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-cyan-700 transition-colors">
-                      {project.title}
+              <div class="border border-gray-200 rounded-md p-4 hover:border-cyan-700 transition-colors flex flex-col">
+                <div class="flex items-start justify-between gap-3 mb-2">
+                  <h3 class="font-bold text-gray-800 text-sm leading-snug">
+                    {project.url ? (
+                      <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-cyan-700 transition-colors">
+                        {project.title}
+                      </a>
+                    ) : project.title}
+                  </h3>
+                  {project.github && (
+                    <a
+                      href={project.github}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-xs text-gray-400 hover:text-cyan-700 transition-colors shrink-0"
+                      aria-label={`${project.title} on GitHub`}
+                    >
+                      GitHub &rarr;
                     </a>
-                  ) : project.title}
-                </h3>
-                <p class="text-gray-600 text-sm mt-1.5 leading-relaxed">{project.description}</p>
+                  )}
+                </div>
+                <p class="text-gray-600 text-xs leading-relaxed mb-3 flex-grow">{project.description}</p>
+                <div class="flex flex-wrap gap-1.5">
+                  {project.tags.map((tag) => (
+                    <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
+                      {tag}
+                    </a>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -85,15 +105,12 @@ const displayTag = matchingProjects.find((p) => p.tags.some((t) => t.toLowerCase
       <section class="py-12 md:py-16">
         <div class="max-w-3xl mx-auto px-4">
           <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-8">{t('tags.notes')}</h2>
-          <div class="grid md:grid-cols-2 gap-6">
+          <div class="divide-y divide-gray-100">
             {matchingNotes.map((note) => (
-              <NoteCard
-                title={note.data.title}
-                description={note.data.description}
-                pubDate={note.data.pubDate}
-                tags={note.data.tags}
-                slug={note.id}
-              />
+              <a href={translatePath(`/notes/${note.id}`)} class="group block py-3 first:pt-0">
+                <span class="text-xs text-gray-400 block tabular-nums">{note.data.pubDate.toISOString().slice(0, 10)}</span>
+                <span class="text-sm text-gray-700 group-hover:text-cyan-700 transition-colors">{note.data.title}</span>
+              </a>
             ))}
           </div>
         </div>

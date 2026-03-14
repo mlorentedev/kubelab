@@ -11,11 +11,12 @@ export const ui = {
   en: {
     // Nav
     'nav.notes': 'Notes',
+    'nav.consulting': 'Consulting',
     'nav.toggle': 'Toggle menu',
 
     // Hero
-    'hero.title': 'I build systems from hardware to cloud.',
-    'hero.subtitle': '10+ years engineering across four countries. From semiconductor cleanrooms to Kubernetes clusters. I build in public and document everything.',
+    'hero.title': 'Engineer from silicon to cloud',
+    'hero.subtitle': 'My personal site about side hustles, notes, CLIs, and products that boost my productivity and pay the (some) bills',
     'hero.cta': 'Read my notes',
 
     // Home sections
@@ -35,6 +36,18 @@ export const ui = {
     'newsletter.audience1': 'You\'re curious about building your own <strong>homelab</strong>.',
     'newsletter.audience2': 'You want to stop copying tutorials and start <strong>building</strong>.',
     'newsletter.audience3': 'You\'re interested in <strong>DevOps/Platform</strong> with real examples.',
+
+    // Lead magnet — NODO (keys exist for type safety — EN landing has no lead magnet)
+    'leadMagnet.pitch1': 'Everything you see here — the projects, the notes, the errors — is documented so my AI remembers it for me. Each session I pick up where I left off. No repeating context. No falling into the same mistakes.',
+    'leadMagnet.pitch2': 'Yours probably doesn\'t. Every session you start from zero.',
+    'leadMagnet.pitch3': 'In 5 days I\'ll teach you the system. Works with any tool. Any project.',
+    'leadMagnet.button': 'Start the course',
+    'leadMagnet.placeholder': 'you@email.com',
+    'leadMagnet.success': 'Done! Check your email.',
+    'leadMagnet.error': 'Please enter a valid email.',
+    'leadMagnet.comingSoon': 'Coming soon.',
+    'leadMagnet.courseDesc': 'A 5-day course. One email per day. From zero to a complete memory system for your AI. 5-10 minutes each.',
+    'leadMagnet.microNote': '5 days. Unsubscribe anytime.',
 
     // Notes page
     'notes.title': 'Notes',
@@ -61,18 +74,19 @@ export const ui = {
     '404.cta': 'Go home',
 
     // Meta
-    'meta.description': 'Engineer. I build infrastructure and products — from hardware to Kubernetes.',
+    'meta.description': 'Engineer from silicon to cloud. Side hustles, notes, CLIs, and products.',
     'meta.ghchart.alt': "Manu's GitHub contribution chart",
   },
   es: {
     // Nav
     'nav.notes': 'Notas',
+    'nav.consulting': 'Consultoría',
     'nav.toggle': 'Abrir menú',
 
     // Hero
-    'hero.title': 'Construyo sistemas del hardware al cloud.',
-    'hero.subtitle': '10+ años de ingeniería en cuatro países. De la sala limpia de semiconductores a clusters Kubernetes. Construyo en público y lo documento todo.',
-    'hero.cta': 'Suscríbete a mi newsletter',
+    'hero.title': 'Hazlo tú',
+    'hero.subtitle': 'A mí también me creaba ansiedad poder producir cosas que no era ni capaz de imaginar hace 5 años. De hecho, me aterra. Ahora abrazo el cambio',
+    'hero.cta': 'Empieza ahora',
 
     // Home sections
     'home.projects': 'Lo que construyo',
@@ -91,6 +105,18 @@ export const ui = {
     'newsletter.audience1': 'Tienes curiosidad por montar tu propio <strong>homelab</strong>.',
     'newsletter.audience2': 'Quieres dejar de copiar tutoriales y empezar a <strong>construir</strong>.',
     'newsletter.audience3': 'Te interesa el mundo <strong>DevOps/Platform</strong> con ejemplos reales.',
+
+    // Lead magnet — NODO (ES — primary monetization funnel)
+    'leadMagnet.pitch1': 'Todo lo que ves aquí — los proyectos, las notas, los errores — está documentado para que mi IA lo recuerde por mí. Cada sesión retomo donde lo dejé. Sin repetir contexto. Sin volver a caer en los mismos fallos.',
+    'leadMagnet.pitch2': 'La tuya probablemente no. Cada sesión empiezas de cero.',
+    'leadMagnet.pitch3': 'En 5 días te enseño el sistema. Funciona con cualquier herramienta. Cualquier proyecto.',
+    'leadMagnet.button': 'Empezar el curso',
+    'leadMagnet.placeholder': 'tu@email.com',
+    'leadMagnet.success': '¡Listo! Revisa tu email.',
+    'leadMagnet.error': 'Por favor, introduce un email válido.',
+    'leadMagnet.comingSoon': 'Próximamente. Apúntalo y te aviso.',
+    'leadMagnet.courseDesc': 'Un curso de 5 días. Un email al día. De cero a un sistema completo de memoria para tu IA. 5-10 minutos cada uno.',
+    'leadMagnet.microNote': '5 días. Te das de baja cuando quieras.',
 
     // Notes page
     'notes.title': 'Notas',
@@ -117,7 +143,7 @@ export const ui = {
     '404.cta': 'Ir al inicio',
 
     // Meta
-    'meta.description': 'Ingeniero. Construyo infraestructura y productos — del hardware a Kubernetes.',
+    'meta.description': 'Ingeniero. Del silicio a Kubernetes. Infraestructura real, decisiones reales, documentado mientras construyo.',
     'meta.ghchart.alt': 'Contribuciones de Manu en GitHub',
   },
 } as const;
