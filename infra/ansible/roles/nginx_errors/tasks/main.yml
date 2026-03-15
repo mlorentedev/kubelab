@@ -1,0 +1,22 @@
+---
+- name: Check if nginx container exists
+  command: docker inspect {{ nginx_errors_container_name }}
+  register: nginx_check
+  changed_when: false
+  failed_when: false
+
+- name: Start nginx error pages container
+  community.docker.docker_container:
+    name: "{{ nginx_errors_container_name }}"
+    image: "{{ nginx_errors_image }}"
+    state: started
+    restart_policy: "{{ restart_policy }}"
+    networks:
+      - name: "{{ docker_network }}"
+  when: nginx_check.rc != 0
+
+- name: Ensure nginx is running
+  command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' {{ nginx_errors_container_name }}
+  register: nginx_running
+  changed_when: false
+  failed_when: nginx_running.stdout | trim != 'true'

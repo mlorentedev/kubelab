@@ -35,7 +35,15 @@
       no_log: true
 
   roles:
-    # --- Traefik reverse proxy (must be first — other services depend on it) ---
+    # --- Nginx error pages (Traefik error-pages middleware depends on this) ---
+    - role: ../roles/nginx_errors
+      tags: [nginx]
+      vars:
+        docker_network: "{{ config.networking.vps.docker_network }}"
+        restart_policy: "{{ config.global.restart_policy }}"
+        nginx_errors_image: "{{ config.edge.nginx.image }}"
+
+    # --- Traefik reverse proxy ---
     - role: ../roles/traefik_vps
       tags: [traefik]
       vars:
@@ -51,6 +59,9 @@
           - main: "mlorente.dev"
             sans:
               - "*.mlorente.dev"
+          - main: "kubelab.live"
+            sans:
+              - "*.kubelab.live"
         traefik_dashboard_domain: "{{ config.edge.traefik.domain | default('traefik.' + config.global.base_domain) }}"
         traefik_dashboard_auth_users: "{{ config.edge.traefik.dashboard_auth_users | default('') }}"
         traefik_rate_limit_average: "{{ config.edge.traefik.rate_limit_average }}"
@@ -65,10 +76,6 @@
           - name: web
             domain: "{{ config.apps.platform.web.domain }}"
             backend_url: "http://web:{{ config.apps.platform.web.default_port }}"
-            middlewares: [secure-headers@file, rate-limit@file, error-pages]
-          - name: blog
-            domain: "{{ config.apps.platform.blog.domain }}"
-            backend_url: "http://blog:{{ config.apps.platform.blog.default_port }}"
             middlewares: [secure-headers@file, rate-limit@file, error-pages]
           # Core infrastructure services
           - name: portainer

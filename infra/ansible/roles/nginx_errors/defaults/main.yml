@@ -1,0 +1,5 @@
+---
+nginx_errors_image: "nginx:alpine"
+nginx_errors_container_name: "nginx"
+docker_network: "kubelab"
+restart_policy: "unless-stopped"
