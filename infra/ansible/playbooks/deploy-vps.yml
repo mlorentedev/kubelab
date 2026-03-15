@@ -50,7 +50,6 @@
         docker_network: "{{ config.networking.vps.docker_network }}"
         restart_policy: "{{ config.global.restart_policy }}"
         nginx_errors_image: "{{ config.edge.nginx.image }}"
-        nginx_errors_source_dir: "{{ playbook_dir }}/../../edge/nginx"
 
     # --- Traefik reverse proxy ---
     - role: ../roles/traefik_vps

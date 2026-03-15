@@ -1,7 +1,4 @@
 ---
-# Error page source files live in edge/nginx/ (shared by dev, staging, prod).
-# Path passed from playbook as nginx_errors_source_dir to avoid duplication.
-
 - name: Create nginx errors directory
   file:
     path: "{{ item }}"
@@ -11,21 +8,16 @@
     - "{{ nginx_errors_remote_dir }}"
     - "{{ nginx_errors_remote_dir }}/errors"
 
-- name: Resolve source path
-  set_fact:
-    _nginx_src: "{{ nginx_errors_source_dir | realpath }}"
-  delegate_to: localhost
-
 - name: Copy nginx config
   copy:
-    src: "{{ _nginx_src }}/configs/nginx.prod.conf"
+    src: nginx.prod.conf
     dest: "{{ nginx_errors_remote_dir }}/nginx.conf"
     mode: "0644"
   register: nginx_conf
 
 - name: Copy error page assets
   copy:
-    src: "{{ _nginx_src }}/assets/errors/"
+    src: errors/
     dest: "{{ nginx_errors_remote_dir }}/errors/"
     mode: "0644"
   register: nginx_assets
