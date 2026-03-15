@@ -248,7 +248,7 @@ secrets-audit:
 	@$(TOOLKIT) secrets audit
 
 # RPi4 DNS gateway (CoreDNS + Pi-hole) — no K3s, manual deploy via SSH
-RPI4_HOST ?= manu@100.64.0.5
+RPI4_HOST ?= manu@100.64.0.10
 RPI4_COREDNS_DIR ?= ~/coredns
 
 .PHONY: deploy-dns

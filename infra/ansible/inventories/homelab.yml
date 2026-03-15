@@ -30,6 +30,6 @@ all:
     gateway_nodes:
       hosts:
         kubelab-rpi4:
-          ansible_host: 100.64.0.5
+          ansible_host: 100.64.0.10
         kubelab-rpi3:
           ansible_host: 100.64.0.6

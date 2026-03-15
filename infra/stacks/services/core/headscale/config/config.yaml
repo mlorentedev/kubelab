@@ -50,7 +50,7 @@ dns:
       - 1.0.0.1
     split:
       staging.kubelab.live:
-        - 100.64.0.5  # networking.nodes.rpi4.tailscale_ip (CoreDNS for staging only)
+        - 100.64.0.10  # networking.nodes.rpi4.tailscale_ip (CoreDNS for staging only)
   search_domains: []
   extra_records:
     - name: ollama.kubelab.live

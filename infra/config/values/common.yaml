@@ -41,7 +41,7 @@ networking:
       tailscale_ip: "100.64.0.9"
       lan_ip: "172.16.1.12"
     rpi4:
-      tailscale_ip: "100.64.0.5"
+      tailscale_ip: "100.64.0.10"
       lan_ip: "172.16.1.1"
     rpi3:
       tailscale_ip: "100.64.0.6"
