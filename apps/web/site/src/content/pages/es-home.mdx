@@ -1,0 +1,125 @@
+---
+title: "Manu Lorente"
+description: "Infraestructura real, desde el hardware hasta el deployment."
+lang: es
+page: home
+---
+import SubscribeForm from '../../components/SubscribeForm.astro';
+
+Esta te va a sonar si peinas canas como yo:
+
+Había un ciego que lo sabía todo. Cada calle, cada precio, cada trampa de cada posadero entre Salamanca y Toledo.
+
+Pero no veía. Necesitaba al lazarillo, un crío que no sabía nada pero tenía ojos.
+
+El crío aprendió rápido. Aprendió tanto que un día pensó: ya no necesito al ciego. Me sé los caminos, me sé los precios, me sé las trampas.
+
+Se fue solo.
+
+La primera semana fue bien. La segunda, regular. La tercera se perdió en un pueblo que no conocía, le timaron con el vino y durmió en la calle.
+
+Se sabía todo lo que el ciego le había enseñado. Pero no se sabía lo que el ciego no le había enseñado: a pensar cuando el camino no está en el mapa.
+
+---
+
+Bueno, pues un día te levantas, abres el portátil, y resulta que un agente con acceso a 47 MCP servers, conexión a tu repo, tu base de datos y la documentación de medio internet acaba de hacer en una jornada lo que a ti te costaba una semana entera de diseñar, probar, depurar, volver a probar y rezar un poco.
+
+Y lo ha hecho bien. O eso parece.
+
+Te entra una cosa rara. Mezcla de alivio y vértigo. Porque si eso lo hace una máquina... ¿tú qué eres? ¿El que revisa? ¿El que aprueba el PR? ¿El que dice "sí, tiene buena pinta"?
+
+No.
+
+Tú eres el que sabe POR QUÉ eso tiene buena pinta. O por qué no la tiene.
+
+El que detecta que el agente ha elegido una arquitectura que escala fatal. Que ha metido un secret en un ConfigMap. Que el tradeoff que ha tomado te va a costar seis meses de deuda técnica.
+
+Eso no lo hace ningún agente. Eso lo haces tú.
+
+---
+
+La tecnología siempre ha funcionado igual. Cuando avanza tanto que lo de ayer se convierte en commodity, la evolución natural no es competir con ella. Es subir.
+
+De hacer a dirigir. De ejecutar a corregir. De picar código a abstraer sistemas.
+
+Los que picaban HTML a mano no desaparecieron: los buenos se convirtieron en arquitectos frontend. Los que montaban servidores físicos no desaparecieron: los buenos diseñan infraestructura cloud. Y los que hoy piden código a un agente no van a desaparecer: los buenos van a dirigir flotas de agentes con criterio.
+
+Pero hay un detalle. Piensa en potencias.
+
+Si tu base es 10 y el exponente es 3, tienes 1.000. Si tu base es 100, tienes 1.000.000. Los agentes, los MCP, los modelos son el exponente. Multiplican. Pero multiplican lo que hay.
+
+Si tu base es 1, da igual cuántos agentes tengas: 1 elevado a lo que quieras sigue siendo 1. Y si tu base es 0... bueno, ya sabes.
+
+Tu base es lo que entiendes de verdad. No lo que copias. No lo que te funciona sin saber por qué. Lo que entiendes. El criterio. La capacidad de mirar lo que ha generado un agente y saber si es oro o es basura.
+
+Yo llevo años construyendo esa base. 5 máquinas en casa, un cluster Kubernetes real, 40+ servicios en producción. Todo documentado. Todo roto al menos una vez.
+
+Y cada semana escribo sobre eso. Sobre qué decisión tomé, por qué la tomé, y qué pasó cuando salió mal. Infraestructura real, desde el hardware hasta el deployment. Lo que funcionó y lo que no. Sin atajos.
+
+---
+
+<SubscribeForm
+  formId="newsletter-home"
+  tag="direct"
+  buttonText="Vale"
+  placeholder="tu@email.com"
+  successText="¡Listo! Revisa tu email."
+  errorText="Por favor, introduce un email válido."
+/>
+
+---
+
+## Qué recibes
+
+- Un email semanal con lo que estoy construyendo, lo que se rompió y cómo lo arreglé
+- Diagramas dibujados a mano, configs comentadas línea a línea, y prompts de IA que uso de verdad
+- Cosas que no cuento en los vídeos: las decisiones que duelen, los tradeoffs que no son obvios, los errores que cuestan dinero
+
+---
+
+## Esto es para ti si
+
+- Cada lunes copias una config de Stack Overflow y funciona, pero no sabrías explicar por qué
+- Usas agentes e IA para generar código y te preguntas si estás aprendiendo algo o solo delegando
+- Tienes curiosidad por montar tu propio **homelab** o entender la infra que usas en el trabajo
+- Quieres dejar de seguir tutoriales y empezar a **construir con criterio**
+
+<SubscribeForm
+  formId="newsletter-mid"
+  tag="direct"
+  buttonText="Quiero entrar"
+  placeholder="tu@email.com"
+  successText="¡Listo! Revisa tu email."
+  errorText="Por favor, introduce un email válido."
+/>
+
+---
+
+## Preguntas que me hacen
+
+**¿Qué diferencia hay entre esto y tus vídeos?**
+
+Los vídeos enseñan el qué y el cómo. Los emails cuentan el por qué y lo que salió mal. Configs comentadas, diagramas a mano, decisiones que no caben en un vídeo de 20 minutos. Si buscas algo más estructurado, tengo un par de cursos gratuitos de 5 días: [uno sobre IA y contexto](/es/nodo) y [otro para montar infraestructura](/es/rompe).
+
+**¿De qué nivel estamos hablando?**
+
+Si sabes abrir una terminal y tienes curiosidad, sobra. No escribo para arquitectos de soluciones. Escribo para gente que quiere dejar de copiar y empezar a entender por qué las cosas funcionan.
+
+**¿Cuánto tiempo me va a llevar?**
+
+Leer el email, 5 minutos. Aplicar lo que cuento, lo que tú quieras. Puedes simplemente leer o puedes replicar lo que monto. Tú eliges.
+
+**¿Me voy a poder dar de baja?**
+
+Hay un enlace al final de cada email. Un clic y fuera. Sin emails de "¿seguro que quieres irte?".
+
+---
+
+<SubscribeForm
+  formId="newsletter-bottom"
+  tag="direct"
+  buttonText="Suscribirme"
+  placeholder="tu@email.com"
+  successText="¡Listo! Revisa tu email."
+  errorText="Por favor, introduce un email válido."
+/>

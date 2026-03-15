@@ -2,38 +2,23 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'contact' && data.lang === 'en');
+const { Content } = await render(page);
 ---
 
 <BaseLayout
-  title="Contact — Manu Lorente"
-  description="Rent my brain. 55 minutes on infrastructure, Kubernetes, DevOps, or whatever is burning. No slides, no fluff."
+  title={page.data.title}
+  description={page.data.description}
 >
   <Header />
   <main id="main-content" class="flex-grow pt-20">
     <section class="py-12">
-      <div class="max-w-3xl mx-auto px-4">
-        <h1 class="text-3xl font-bold text-gray-800 mb-10">Rent my brain</h1>
+      <div class="max-w-3xl mx-auto px-4 prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-10 prose-a:text-cyan-700 hover:prose-a:text-cyan-800">
+        <Content />
 
-        <div class="flex flex-col space-y-4 mb-10">
-          <p class="text-base text-gray-700">
-            10+ years building systems that don't break — from camera sensors in operating rooms
-            to Kubernetes clusters running real workloads. Hardware, firmware, middleware, cloud. The full stack, literally
-          </p>
-          <p class="text-base text-gray-700">
-            If you need someone to review your architecture, unblock a migration, debug something
-            that's been burning for days, or just validate that your approach isn't insane — let's spend 55 minutes on it
-          </p>
-          <p class="text-base text-gray-700">
-            No slides. No discovery calls. No follow-up sales pitch.
-            You bring the problem, I bring the experience
-          </p>
-          <p class="text-base text-gray-700">
-            Everything else I know is free — in my <a href="/notes" class="text-cyan-700 hover:text-cyan-800 transition-colors">notes</a>,
-            my repos, and my videos. This is for when free isn't enough
-          </p>
-        </div>
-
-        <div class="border-t border-gray-200 pt-8">
+        <div class="border-t border-gray-200 pt-8 not-prose">
           <a
             href="https://calendly.com/mlorentedev/consulting"
             target="_blank"

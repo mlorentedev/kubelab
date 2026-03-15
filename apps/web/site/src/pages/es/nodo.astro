@@ -2,155 +2,21 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import SubscribeForm from '../../components/SubscribeForm.astro';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'nodo' && data.lang === 'es');
+const { Content } = await render(page);
 ---
 
 <BaseLayout
-  title="Método NODO — Un sistema para que tu IA recuerde todo"
-  description="Un sistema para que tu IA recuerde tu proyecto, tus errores y tus decisiones. Curso de 5 días por email."
+  title={page.data.title}
+  description={page.data.description}
 >
   <Header />
   <main id="main-content" class="flex-grow py-16">
     <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">Método NODO</h1>
-        <p class="text-lg text-gray-600 mb-10">
-          Un sistema para que tu IA recuerde tu proyecto, tus errores y tus decisiones. Cualquier herramienta. Cualquier proyecto.
-        </p>
-
-        <div class="flex flex-col space-y-4 mb-10">
-          <p class="text-base text-gray-700">
-            Lunes: abres Copilot en el trabajo, le explicas el proyecto. Martes: abres Claude en casa, le explicas otro.
-          </p>
-          <p class="text-base text-gray-700">
-            Miércoles: vuelves al trabajo. Copilot no recuerda el lunes.
-          </p>
-          <p class="text-base text-gray-700">
-            A mí me pasó con un problema de DNS en mi red VPN. Lo arreglé un martes. El jueves siguiente, otro nodo, mismo problema. La IA me sugirió la misma solución rota.
-          </p>
-          <p class="text-base text-gray-700">
-            Tres veces en diez días. Porque para ella, cada sesión era la primera.
-          </p>
-          <p class="text-base text-gray-700">
-            Un día creé un fichero de texto. Uno. Ahí apunté qué había roto, por qué, y cómo lo arreglé.
-          </p>
-          <p class="text-base text-gray-700">
-            Y ese error no volvió a pasar.
-          </p>
-          <p class="text-base text-gray-700">
-            Cada sesión que abres sin contexto pierdes 20 minutos explicando lo que ya sabes. Son 80 horas al año. Repitiendo lo mismo. A una máquina.
-          </p>
-        </div>
-
-        <SubscribeForm
-          formId="nodo-top"
-          tag="nodo"
-          utmSource="lead_magnet"
-          buttonText="Que mi IA recuerde todo"
-        />
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Lo que recibes</h2>
-        <div class="divide-y divide-gray-200">
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 0</p>
-            <p class="text-base text-gray-700">Por qué tu IA repite los mismos errores y qué tiene que cambiar para que deje de hacerlo.</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 1</p>
-            <p class="text-base text-gray-700">Un fichero de contexto que le dice a tu IA quién eres, en qué trabajas y qué no debe repetir.</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 2</p>
-            <p class="text-base text-gray-700">Cómo usar el mismo sistema en varios proyectos y con distintas herramientas sin duplicar nada.</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 3</p>
-            <p class="text-base text-gray-700">Tu primera sesión donde la IA ya conoce el proyecto, los errores anteriores y las decisiones que tomaste.</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 4</p>
-            <p class="text-base text-gray-700">El sistema completo: plantillas, estructura de documentación y una rutina de 5 minutos para mantenerlo vivo.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Para quién es</h2>
-        <div class="flex flex-col space-y-3 mb-8">
-          <p class="text-base text-gray-700">
-            Cada lunes abres tu IA y piensas "a ver, por dónde íbamos". Has explicado el mismo proyecto 3 veces esta semana a 3 herramientas distintas. Quieres que tu IA sea más útil sin aprender un framework nuevo ni pagar nada.
-          </p>
-        </div>
-
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Para quién NO es</h2>
-        <div class="flex flex-col space-y-3 mb-8">
-          <p class="text-base text-gray-700">
-            Si buscas un prompt mágico que lo resuelva todo, esto no es para ti. Si no usas IA en tu trabajo diario, tampoco.
-          </p>
-        </div>
-
-        <SubscribeForm
-          formId="nodo-mid"
-          tag="nodo"
-          utmSource="lead_magnet"
-          buttonText="Empezar el curso"
-        />
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Preguntas que me hacen</h2>
-
-        <div class="space-y-6 mb-8">
-          <div>
-            <p class="text-base text-gray-700 font-semibold">¿Esto es otro curso de prompts?</p>
-            <p class="text-base text-gray-700">
-              No. Aquí no aprendes a escribir prompts. Aprendes a darle contexto a tu IA para que los prompts dejen de importar.
-            </p>
-          </div>
-          <div>
-            <p class="text-base text-gray-700 font-semibold">¿Necesito cambiar de herramienta?</p>
-            <p class="text-base text-gray-700">
-              No. Funciona con la IA que ya usas. Copilot, Claude, Cursor, Gemini, lo que sea.
-            </p>
-          </div>
-          <div>
-            <p class="text-base text-gray-700 font-semibold">¿Y si solo abro 2 de los 5 emails?</p>
-            <p class="text-base text-gray-700">
-              Cada día funciona solo. El del día 1 ya te ahorra tiempo. Pero si llegas al día 4, tienes el sistema completo.
-            </p>
-          </div>
-        </div>
-
-        <SubscribeForm
-          formId="nodo-bottom"
-          tag="nodo"
-          utmSource="lead_magnet"
-          buttonText="Dejar de repetirme"
-        />
-
-        <p class="text-base text-gray-600 text-center mt-6">
-          Son 5 días. Un email al día. 5-10 minutos cada uno. Si no te convence, te das de baja y te quedas con lo que aprendiste. Sin dramas.
-        </p>
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <p class="text-base text-gray-500">
-          P.D. Funciona con Copilot, Claude, Cursor, Gemini y lo que salga el mes que viene. El sistema es tuyo, no de la herramienta.
-        </p>
+      <div class="max-w-3xl mx-auto px-4 prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-2 prose-h2:text-sm prose-h2:text-gray-500 prose-h2:tracking-wide prose-h2:uppercase prose-li:text-base prose-li:text-gray-700 prose-strong:text-gray-700 prose-a:text-cyan-700 hover:prose-a:text-cyan-800 prose-hr:border-gray-300">
+        <Content />
       </div>
     </section>
   </main>

@@ -2,38 +2,23 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'contact' && data.lang === 'es');
+const { Content } = await render(page);
 ---
 
 <BaseLayout
-  title="Contacto — Manu Lorente"
-  description="Alquila mi cerebro. 55 minutos sobre infraestructura, Kubernetes, DevOps, o lo que te esté quemando."
+  title={page.data.title}
+  description={page.data.description}
 >
   <Header />
   <main id="main-content" class="flex-grow pt-20">
     <section class="py-12">
-      <div class="max-w-3xl mx-auto px-4">
-        <h1 class="text-3xl font-bold text-gray-800 mb-10">Alquila mi cerebro</h1>
+      <div class="max-w-3xl mx-auto px-4 prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-10 prose-a:text-cyan-700 hover:prose-a:text-cyan-800">
+        <Content />
 
-        <div class="flex flex-col space-y-4 mb-10">
-          <p class="text-base text-gray-700">
-            Mi trabajo es que no me necesites
-          </p>
-          <p class="text-base text-gray-700">
-            Todo lo que sé está en mis <a href="/es/notes" class="text-cyan-700 hover:text-cyan-800 transition-colors">notas</a>,
-            en mis vídeos y en mis repos. Gratis. Hazlo tú
-          </p>
-          <p class="text-base text-gray-700">
-            Pero si llevas días peleándote con algo que no se arregla con un tutorial — una migración
-            que da miedo, una arquitectura que no te convence, un sistema que tira pero no sabes por qué —
-            alquílame 55 minutos. Ya he roto eso antes
-          </p>
-          <p class="text-base text-gray-700">
-            Sin presentaciones. Sin reunión previa. Sin venta después.
-            Tú traes el problema, yo pongo el criterio
-          </p>
-        </div>
-
-        <div class="border-t border-gray-200 pt-8">
+        <div class="border-t border-gray-200 pt-8 not-prose">
           <a
             href="https://calendly.com/mlorentedev/consulting"
             target="_blank"

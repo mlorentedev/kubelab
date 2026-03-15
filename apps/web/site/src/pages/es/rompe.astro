@@ -3,96 +3,28 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import SubscribeForm from '../../components/SubscribeForm.astro';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'rompe' && data.lang === 'es');
+const [faq] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'rompe-faq' && data.lang === 'es');
+const { Content } = await render(page);
+const { Content: FaqContent } = await render(faq);
 ---
 
 <BaseLayout
-  title="De cero a HTTPS en 5 días — Método ROMPE"
-  description="Monta tu primer servidor con HTTPS en 5 días. En tu casa, sin cloud, sin pagar. Curso por email."
+  title={page.data.title}
+  description={page.data.description}
 >
   <Header />
   <main id="main-content" class="flex-grow py-16">
     <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">De cero a HTTPS en 5 días</h1>
-        <p class="text-lg text-gray-600 mb-10">
-          Monta tu primer servidor con candado verde. En tu casa. Sin cloud. Sin pagar.
-        </p>
-
-        <div class="flex flex-col space-y-4 mb-10">
-          <p class="text-base text-gray-700">
-            Tienes un proyecto que funciona en tu portátil. O dos servicios levantados por separado que quieres conectar. O un framework que estás aprendiendo y necesitas verlo correr en algo que se parezca a producción de verdad.
-          </p>
-          <p class="text-base text-gray-700">
-            Entre "funciona en local" y "funciona de verdad" hay un abismo.
-          </p>
-          <p class="text-base text-gray-700">
-            Puertos, rutas, certificados, tráfico. Cosas que nadie te explica porque asumen que ya las sabes. O peor: que le preguntes a una IA y copies la respuesta sin entender qué estás pegando.
-          </p>
-          <p class="text-base text-gray-700">
-            Yo pasé por eso. Tenía servicios sueltos, cada uno en su puerto, sin conexión entre ellos. Un puzzle que "funcionaba" si sabías qué IP poner y qué número venía después de los dos puntos.
-          </p>
-          <p class="text-base text-gray-700">
-            El día que quise enseñarle a alguien lo que había montado, me di cuenta de que no tenía un sistema. Tenía un montón de piezas sueltas.
-          </p>
-          <p class="text-base text-gray-700">
-            En 5 días montamos un sistema de verdad. Un servidor con una sola puerta de entrada, servicios accesibles por nombre, HTTPS, y un comando que te dice si todo funciona o no.
-          </p>
-          <p class="text-base text-gray-700">
-            Rompiendo cosas a propósito para entender por qué se rompen.
-          </p>
-        </div>
-
-        <SubscribeForm
-          formId="rompe-top"
-          tag="rompe"
-          utmSource="lead_magnet"
-          buttonText="Hazlo tú"
-        />
+      <div class="max-w-3xl mx-auto px-4 prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-2 prose-h2:text-sm prose-h2:text-gray-500 prose-h2:tracking-wide prose-h2:uppercase prose-li:text-base prose-li:text-gray-700 prose-strong:text-gray-700 prose-em:text-gray-400 prose-em:text-xs prose-a:text-cyan-700 hover:prose-a:text-cyan-800 prose-hr:border-gray-300">
+        <Content />
       </div>
     </section>
 
     <section class="py-8">
       <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Lo que vas a montar</h2>
-        <div class="divide-y divide-gray-200">
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 1</p>
-            <p class="text-base text-gray-700">Instalas Docker y levantas tu primer servicio. Vas a entender qué es realmente un servidor: un proceso que escucha en un puerto. Y qué pasa cuando dos procesos quieren el mismo puerto (spoiler: se pelean).</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 2</p>
-            <p class="text-base text-gray-700">Montas un sistema que organiza todo el tráfico para que tu servidor tenga una sola puerta de entrada. Se acabó acceder por :8080, :3000, :9090. Cada servicio tiene su nombre, no un número.</p>
-            <p class="text-xs text-gray-400 mt-1">con un video corto donde lo dibujo en papel</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 3</p>
-            <p class="text-base text-gray-700">Configuras HTTPS. Candado verde en el navegador. Sin comprar dominio, sin cloud, sin pagar. Y vas a entender por qué "cifrado", "confianza" e "identidad" son tres cosas distintas que todo el mundo confunde.</p>
-            <p class="text-xs text-gray-400 mt-1">con un video corto donde dibujo Encryption / Trust / Identity</p>
-          </div>
-          <div class="py-3">
-            <p class="text-sm text-gray-400">Día 4</p>
-            <p class="text-base text-gray-700">Añades un monitor que vigila tus servicios y un script que comprueba que todo funciona con un solo comando. Porque "funciona" no es una respuesta. "Funciona y puedo demostrarlo" sí lo es.</p>
-            <p class="text-xs text-gray-400 mt-1">con un video que conecta todo el stack en un dibujo</p>
-          </div>
-        </div>
-
-        <p class="text-base text-gray-700 mt-6">
-          Las empresas pagan 60.000€/año a alguien que sabe hacer esto. Tú lo vas a aprender rompiéndolo en tu casa. Gratis.
-        </p>
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Lo que necesitas</h2>
-        <ul class="list-disc list-inside text-base text-gray-700 space-y-2">
-          <li>Un PC viejo, mini PC, o cualquier máquina con Linux</li>
-          <li>Tu portátil</li>
-          <li>15-20 minutos al día durante 5 días</li>
-        </ul>
-
         <div class="mt-6 p-4 bg-gray-50 rounded-md border border-gray-200">
           <p class="text-base text-gray-600 mb-3">
             ¿No tienes Linux? Perfecto. Vas a hacer ahora mismo lo que harás en los 5 días del curso: yo te doy los criterios, tú usas la IA para ejecutar. Copia esto y pégalo en ChatGPT, Gemini, Claude, o el que uses:
@@ -144,50 +76,8 @@ Al terminar, dame el comando exacto para conectarme por SSH desde mi portátil.<
     </section>
 
     <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-4">Preguntas que me hacen</h2>
-
-        <div class="space-y-6 mb-8">
-          <div>
-            <p class="text-base text-gray-700 font-semibold">Ya sé Docker, ¿me aporta algo?</p>
-            <p class="text-base text-gray-700">
-              Si sabes hacer <code class="text-sm bg-gray-100 px-1 rounded">docker compose up</code> pero no sabrías explicar por qué tu servicio no responde cuando cambias el puerto, sí. Aquí no se instala Docker. Se entiende qué pasa debajo.
-            </p>
-          </div>
-          <div>
-            <p class="text-base text-gray-700 font-semibold">¿Y si se me rompe algo y no sé arreglarlo?</p>
-            <p class="text-base text-gray-700">
-              Esa es la idea. Cada día tiene un error que vas a provocar tú. El email te explica cómo diagnosticarlo. Si aun así te atascas, respóndeme y te echo una mano.
-            </p>
-          </div>
-          <div>
-            <p class="text-base text-gray-700 font-semibold">No tengo un PC para esto</p>
-            <p class="text-base text-gray-700">
-              ¿Tienes algo con polvo en un cajón? Perfecto. Si no, un mini PC de segunda mano por 50€ o un VPS de 3€/mes. Cualquier cosa que arranque Linux vale.
-            </p>
-          </div>
-        </div>
-
-        <SubscribeForm
-          formId="rompe-bottom"
-          tag="rompe"
-          utmSource="lead_magnet"
-          buttonText="Hazlo tú"
-        />
-
-        <p class="text-base text-gray-600 text-center mt-6">
-          Son 5 días. Si no te convence, te das de baja y te quedas con lo que montaste. Sin dramas.
-        </p>
-      </div>
-    </section>
-
-    <section class="py-8">
-      <div class="max-w-3xl mx-auto px-4">
-        <hr class="border-gray-300 mb-8" />
-        <p class="text-base text-gray-500">
-          P.D. Lo que vas a montar es exactamente lo que usan Netflix y Uber para organizar el tráfico de sus servidores. Misma idea, diferente escala. Tú lo montas por 0€.
-        </p>
+      <div class="max-w-3xl mx-auto px-4 prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h2:text-sm prose-h2:text-gray-500 prose-h2:tracking-wide prose-h2:uppercase prose-li:text-base prose-li:text-gray-700 prose-strong:text-gray-700 prose-a:text-cyan-700 hover:prose-a:text-cyan-800 prose-hr:border-gray-300">
+        <FaqContent />
       </div>
     </section>
   </main>

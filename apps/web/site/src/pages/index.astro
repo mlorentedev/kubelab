@@ -11,6 +11,8 @@ const lang = getLocale(Astro.currentLocale);
 const t = useTranslations(lang);
 const translatePath = useTranslatedPath(lang);
 
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'home' && data.lang === 'en');
+
 const allProjects = projects;
 
 const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'en'))
