@@ -6,18 +6,6 @@
     "environments": ["prod"]
   },
   {
-    "name": "blog",
-    "zone": "kubelab",
-    "proxied": true,
-    "environments": ["prod"]
-  },
-  {
-    "name": "wiki",
-    "zone": "kubelab",
-    "proxied": true,
-    "environments": ["prod"]
-  },
-  {
     "name": "status",
     "zone": "kubelab",
     "proxied": false,
@@ -86,66 +74,6 @@
   {
     "name": "traefik",
     "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "api",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "grafana",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "loki",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "minio",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "n8n",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "portainer",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "status",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "traefik",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "web",
-    "zone": "mlorente",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "wiki",
-    "zone": "mlorente",
     "proxied": false,
     "environments": ["prod"]
   }

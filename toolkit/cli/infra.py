@@ -639,29 +639,27 @@ def tf_init(env: str = typer.Argument("dev", help="Target environment")) -> None
 
 @terraform_app.command("plan")
 def tf_plan(
-    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment for SOPS credentials")] = "prod",
     out: Annotated[str | None, typer.Option("--out", "-o", help="Save plan to file")] = None,
 ) -> None:
     """
     Create a Terraform execution plan.
 
-    Previews changes without applying them.
+    DNS is global (not per-env). --env only selects which SOPS to decrypt.
+    Uses terraform.tfvars (auto-loaded by Terraform).
     """
-    validate_environment_config(env)
-    logger.section(f"Terraform Plan - {env.upper()}")
+    logger.section("Terraform Plan")
 
     try:
         _check_terraform_setup()
         terraform_dir = settings.terraform_dir
         tf_env = _get_terraform_env(env)
-        tfvars_file = terraform_dir / f"{env}.tfvars"
 
-        output_file = out or f"{env}.tfplan"
+        output_file = out or "dns.tfplan"
+        tfvars_file = terraform_dir / "dns.tfvars"
         cmd_parts = ["terraform", "plan"]
-
         if tfvars_file.exists():
             cmd_parts.extend(["-var-file", str(tfvars_file)])
-
         cmd_parts.extend(["-out", output_file])
         cmd = " ".join(cmd_parts)
 
@@ -680,30 +678,23 @@ def tf_plan(
 
 @terraform_app.command("apply")
 def tf_apply(
-    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment for SOPS credentials")] = "prod",
     plan_file: Annotated[str | None, typer.Option("--plan-file", "-f", help="Plan file to apply")] = None,
     auto_approve: Annotated[bool, typer.Option("--auto-approve", help="Skip interactive approval")] = False,
 ) -> None:
     """
     Apply Terraform configuration changes.
 
-    Executes the plan to modify infrastructure.
+    DNS is global (not per-env). --env only selects which SOPS to decrypt.
     """
-    logger.section(f"Terraform Apply - {env.upper()}")
-
-    # Validate environment and get config
-    env_config = validate_environment_config(env)
+    logger.section("Terraform Apply")
 
     try:
         _check_terraform_setup()
 
-        # Safety check for production
-        if env_config.requires_confirmation and not auto_approve:
-            confirm_dangerous_operation(env_config, "Apply Terraform changes")
-
         terraform_dir = settings.terraform_dir
         tf_env = _get_terraform_env(env)
-        plan_to_apply = plan_file or f"{env}.tfplan"
+        plan_to_apply = plan_file or "dns.tfplan"
 
         # Check if plan file exists
         plan_path = terraform_dir / plan_to_apply

@@ -47,6 +47,9 @@ help:
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make deploy-dns         Deploy CoreDNS config to RPi4 (via SSH)"
+	@echo "  make deploy-headscale   Deploy Headscale config to VPS (via SSH)"
+	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
+	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo "  make dev-app APP=x      Start Astro app dev server (site, astro-site)"
 	@echo "  make build-app APP=x    Build Astro app (static output)"
@@ -258,6 +261,39 @@ deploy-dns:
 	@ssh $(RPI4_HOST) "cd $(RPI4_COREDNS_DIR) && docker compose -f compose.base.yml restart coredns"
 	@echo "✓ CoreDNS restarted on RPi4"
 
+# VPS Headscale — config deploy via SSH (Headscale stays outside K3s per ADR-015)
+VPS_HOST ?= deployer@100.64.0.2
+VPS_HEADSCALE_DIR ?= /opt/headscale
+
+.PHONY: deploy-headscale
+deploy-headscale:
+	@echo "Deploying Headscale config to VPS ($(VPS_HOST))..."
+	@scp infra/stacks/services/core/headscale/config/config.yaml $(VPS_HOST):$(VPS_HEADSCALE_DIR)/config/config.yaml
+	@ssh $(VPS_HOST) "docker restart headscale"
+	@echo "✓ Headscale restarted on VPS"
+
+
+# K8s manifest apply — until Ansible/ArgoCD replaces this (B9/E)
+KUBECONFIG ?= ~/.kube/kubelab-config
+
+.PHONY: k8s-apply
+k8s-apply:
+	@test -n "$(ENV)" || (echo "Usage: make k8s-apply ENV=staging [IMAGE_TAG=0.0.0-dev.abc1234]" && exit 1)
+	@echo "Applying K8s manifests for $(ENV)..."
+	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG)
+	@if [ -n "$(IMAGE_TAG)" ]; then \
+		echo "Updating web image to kubelab-web:$(IMAGE_TAG)..."; \
+		kubectl set image deployment/web web=docker.io/mlorentedev/kubelab-web:$(IMAGE_TAG) -n kubelab --kubeconfig $(KUBECONFIG); \
+	fi
+	@kubectl rollout status deployment/web -n kubelab --kubeconfig $(KUBECONFIG) --timeout=60s
+	@echo "✓ K8s manifests applied for $(ENV)"
+
+.PHONY: k8s-cleanup
+k8s-cleanup:
+	@test -n "$(ENV)" || (echo "Usage: make k8s-cleanup ENV=staging" && exit 1)
+	@echo "Cleaning up orphaned resources in $(ENV)..."
+	@kubectl delete deployment/blog service/blog ingressroute/blog deployment/portfolio service/portfolio ingressroute/portfolio -n kubelab --kubeconfig $(KUBECONFIG) --ignore-not-found
+	@echo "✓ Orphaned resources cleaned"
 
 # -----------------------------------------------------------------------------
 # Deployment Shortcuts
