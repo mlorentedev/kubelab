@@ -1,6 +1,6 @@
 ---
 # Error page source files live in edge/nginx/ (shared by dev, staging, prod).
-# This role copies them to the remote host — zero duplication in the repo.
+# Path passed from playbook as nginx_errors_source_dir to avoid duplication.
 
 - name: Create nginx errors directory
   file:
@@ -13,14 +13,14 @@
 
 - name: Copy nginx config
   copy:
-    src: "{{ inventory_dir }}/../../../edge/nginx/configs/nginx.prod.conf"
+    src: "{{ nginx_errors_source_dir }}/configs/nginx.prod.conf"
     dest: "{{ nginx_errors_remote_dir }}/nginx.conf"
     mode: "0644"
   register: nginx_conf
 
 - name: Copy error page assets
   copy:
-    src: "{{ inventory_dir }}/../../../edge/nginx/assets/errors/"
+    src: "{{ nginx_errors_source_dir }}/assets/errors/"
     dest: "{{ nginx_errors_remote_dir }}/errors/"
     mode: "0644"
   register: nginx_assets

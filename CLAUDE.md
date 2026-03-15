@@ -57,9 +57,11 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 ## Critical gotchas
 
 - **Kustomize namespace override**: HelmChartConfig and cluster-scoped resources must NOT be in kustomization.yaml if it has `namespace:`. Apply separately.
-- **VPS Docker network**: `proxy` (NOT `kubelab`)
-- **VPS ACME storage**: `/letsencrypt/acme.json`
-- **DO NOT** overwrite VPS `traefik.yml` with toolkit-generated version
+- **VPS Docker network**: `kubelab` (migrated from `proxy` in ADR-020 Phase 2b, 2026-03-15)
+- **VPS ACME storage**: `/letsencrypt/acme.json` (mount: `./certs/acme.json:/letsencrypt/acme.json`)
+- **VPS Traefik managed by Ansible**: `traefik_vps` role templates all config from common.yaml. Deploy via `make deploy-vps`. Do NOT edit VPS files manually.
+- **Traefik certResolver name is `letsencrypt`** (NOT `cloudflare` — cloudflare is the DNS challenge provider, not the resolver name)
+- **Headscale v0.28 has no HTTP /health endpoint**: Use `docker inspect --format '{{.State.Health.Status}}'` for health checks, not `curl /health`
 - **Pi-hole v6**: `pihole reloaddns` does NOT reload dnsmasq configs — use `docker restart pihole`
 - **Headscale v0.28**: CLI uses numeric IDs (`--user 2`), routes via `nodes approve-routes`
 - **Authelia on K8s**: MUST set `enableServiceLinks: false` — K8s injects `AUTHELIA_*` env vars that conflict with Authelia config. Also set `automountServiceAccountToken: false` (read-only `/run`).
