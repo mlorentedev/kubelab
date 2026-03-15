@@ -495,6 +495,32 @@ def k8s_status(
 # =============================================================================
 
 
+@ansible_app.command("generate")
+def ansible_generate(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
+) -> None:
+    """Generate Ansible inventory and group_vars from common.yaml (SSOT).
+
+    Reads networking.* from common.yaml and produces inventory + group_vars
+    in infra/ansible/generated/{env}/.
+    """
+    logger.section("Ansible Generate")
+
+    try:
+        from toolkit.features.generator_ansible import ansible_generator
+
+        result = ansible_generator.generate(env)
+        if result.get("success"):
+            for f in result.get("files", []):
+                logger.info(f"  {f}")
+        else:
+            logger.error(f"Generation failed: {result.get('error')}")
+            raise typer.Exit(1) from None
+    except Exception as e:
+        logger.error(f"Ansible generation failed: {e}")
+        raise typer.Exit(1) from None
+
+
 @ansible_app.command("deploy")
 def ansible_deploy(
     env: Annotated[
