@@ -3,4 +3,4 @@ backup_root: "/opt/backups"
 backup_retention: 3
 backup_filesystem_paths: []
 backup_exclude_volumes: []
-backup_timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+backup_timestamp: "{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
