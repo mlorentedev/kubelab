@@ -11,11 +11,21 @@ const lang = getLocale(Astro.currentLocale);
 const t = useTranslations(lang);
 const translatePath = useTranslatedPath(lang);
 
-const featured = projects.filter((p) => p.featured);
+const allProjects = projects;
 
 const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'en'))
   .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
   .slice(0, 3);
+
+const stack = [
+  { label: 'On-Premises', items: 'Linux · Proxmox · Bare metal' },
+  { label: 'Orchestration', items: 'Kubernetes · Docker · Helm' },
+  { label: 'IaC', items: 'Terraform · Ansible' },
+  { label: 'Languages', items: 'Python · Go' },
+  { label: 'Observability', items: 'Prometheus · Grafana · Loki' },
+  { label: 'CI/CD', items: 'GitHub Actions · ArgoCD' },
+  { label: 'Cloud', items: 'AWS' },
+];
 ---
 
 <BaseLayout>
@@ -23,23 +33,23 @@ const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data 
   <main id="main-content" class="flex-grow pt-12">
     <Hero />
 
-    <section class="py-12">
+    <section class="py-10">
       <div class="max-w-3xl mx-auto px-4">
-        <a href={translatePath('/projects')} class="text-sm text-gray-500 tracking-wide uppercase mb-8 block hover:text-cyan-700 transition-colors">
+        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-8">
           {t('home.projects')}
-        </a>
+        </h2>
         <a href="https://github.com/mlorentedev" target="_blank" rel="noopener noreferrer">
           <img
             src="https://ghchart.rshah.org/0e7490/mlorentedev"
             alt={t('meta.ghchart.alt')}
             width="722"
             height="112"
-            class="w-full mb-10 hover:opacity-80 transition-opacity"
+            class="w-full mb-8 hover:opacity-80 transition-opacity"
             loading="lazy"
           />
         </a>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {featured.map((project) => (
+          {allProjects.map((project) => (
             <div class="border border-gray-200 rounded-md p-4 hover:border-cyan-700 transition-colors flex flex-col">
               <h3 class="font-bold text-gray-800 text-sm leading-snug mb-2">
                 {(project.url || project.github) ? (
@@ -65,6 +75,46 @@ const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data 
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="py-10">
+      <div class="max-w-3xl mx-auto px-4">
+        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-6">
+          {t('home.stack')}
+        </h2>
+        <div class="space-y-2">
+          {stack.map(({ label, items }) => (
+            <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+              <span class="text-xs text-gray-500 uppercase tracking-wide sm:w-32 shrink-0">{label}</span>
+              <span class="text-sm text-gray-700">{items}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="py-10">
+      <div class="max-w-3xl mx-auto px-4">
+        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-6">
+          {t('home.community')}
+        </h2>
+        <div class="space-y-3">
+          <div class="flex items-baseline gap-3">
+            <a
+              href="https://community.cncf.io/cloud-native-sevilla/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm text-gray-700 hover:text-cyan-700 transition-colors"
+            >
+              Cloud Native Sevilla
+            </a>
+            <span class="text-xs text-gray-500">CNCF</span>
+          </div>
+          <p class="text-sm text-gray-500">
+            Rower — multi-year national champion, actively competing
+          </p>
         </div>
       </div>
     </section>

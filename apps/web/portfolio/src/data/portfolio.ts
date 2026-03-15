@@ -12,7 +12,6 @@ export const projects: Project[] = [
     title: 'KubeLab',
     description:
       'I wanted to understand how platforms actually work — not just click buttons on managed K8s. So I built one from scratch. 5 physical nodes, K3s, VPN mesh, SSO, full observability. Everything IaC, nothing manual.',
-    url: 'https://mlorentedev.github.io/kubelab/',
     github: 'https://github.com/mlorentedev/kubelab',
     tags: ['Kubernetes', 'Go', 'Python', 'Terraform', 'Ansible'],
     featured: true,
@@ -54,11 +53,11 @@ export const projects: Project[] = [
     featured: false,
   },
   {
-    title: 'youtube-toolkit',
+    title: 'yt-metrics-cli',
     description:
       'YouTube Studio analytics are shallow and locked to your own channel. This CLI pulls metrics for any public channel and exports everything.',
-    url: 'https://mlorentedev.github.io/youtube-toolkit/',
-    github: 'https://github.com/mlorentedev/youtube-toolkit',
+    url: 'https://mlorentedev.github.io/yt-metrics-cli/',
+    github: 'https://github.com/mlorentedev/yt-metrics-cli',
     tags: ['Python', 'CLI', 'YouTube'],
     featured: false,
   },

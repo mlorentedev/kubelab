@@ -16,11 +16,13 @@ export const ui = {
 
     // Hero
     'hero.title': 'Engineer from silicon to cloud',
-    'hero.subtitle': 'My personal site about side hustles, notes, CLIs, and products that boost my productivity and pay the (some) bills',
+    'hero.subtitle': 'My personal site about side hustles, notes, CLIs, and products built across three continents — that boost my productivity and pay the (some) bills.',
     'hero.cta': 'Read my notes',
 
     // Home sections
+    'home.stack': 'What I work with',
     'home.projects': 'What I build',
+    'home.community': 'Community & background',
     'home.latest': 'Latest notes',
     'home.allNotes': 'All notes',
 
@@ -74,7 +76,7 @@ export const ui = {
     '404.cta': 'Go home',
 
     // Meta
-    'meta.description': 'Engineer from silicon to cloud. Side hustles, notes, CLIs, and products.',
+    'meta.description': 'Engineer from silicon to cloud. Infrastructure, Kubernetes, and what breaks in production.',
     'meta.ghchart.alt': "Manu's GitHub contribution chart",
   },
   es: {

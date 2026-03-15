@@ -1,5 +1,5 @@
 export const site = {
-  title: 'Manu Lorente',
+  title: 'Manu Lorente — Engineer from Silicon to Cloud',
   description: 'Engineer. I build infrastructure and products — from hardware to Kubernetes.',
   author: 'Manu Lorente',
   domain: 'mlorente.dev',
