@@ -3,7 +3,7 @@ services:
     container_name: ${APPS_PLATFORM_PORTFOLIO_NAME}
     image: ${REGISTRY}/${APPS_PLATFORM_PORTFOLIO_IMAGE_NAME}:${APPS_PLATFORM_PORTFOLIO_VERSION}
     build:
-      context: ../../../../apps/web/portfolio
+      context: ../../../../apps/web/site
       dockerfile: Dockerfile
     restart: ${RESTART_POLICY}
     healthcheck:

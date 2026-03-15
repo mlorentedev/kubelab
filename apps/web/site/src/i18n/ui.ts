@@ -16,7 +16,7 @@ export const ui = {
 
     // Hero
     'hero.title': 'Engineer from silicon to cloud',
-    'hero.subtitle': 'My personal site about side hustles, notes, CLIs, and products built across three continents — that boost my productivity and pay the (some) bills.',
+    'hero.subtitle': 'My personal site about side hustles, notes, and products built across three continents. This boosts my productivity and pays the (some) bills.',
     'hero.cta': 'Read my notes',
 
     // Home sections
@@ -87,7 +87,7 @@ export const ui = {
 
     // Hero
     'hero.title': 'Hazlo tú',
-    'hero.subtitle': 'A mí también me creaba ansiedad poder producir cosas que no era ni capaz de imaginar hace 5 años. De hecho, me aterra. Ahora abrazo el cambio',
+    'hero.subtitle': 'A mí también me creaba ansiedad poder producir cosas que no era ni capaz de imaginar hace 5 años. De hecho me aterraba. Ahora abrazo el cambio',
     'hero.cta': 'Empieza ahora',
 
     // Home sections

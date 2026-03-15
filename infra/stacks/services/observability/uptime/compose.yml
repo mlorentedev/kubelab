@@ -2,7 +2,7 @@
 # Deploy: scp this file to manu@100.64.0.6:~/uptime-kuma/compose.yml
 #         ssh manu@100.64.0.6 "cd ~/uptime-kuma && docker compose up -d"
 #
-# DNS: Pi-hole (100.64.0.5) required for *.staging.kubelab.live resolution.
+# DNS: Pi-hole (100.64.0.10) required for *.staging.kubelab.live resolution.
 #      Without it, Docker's internal DNS falls back to ISP resolvers which
 #      cannot resolve split-DNS domains.
 services:
@@ -13,7 +13,7 @@ services:
     ports:
       - "3001:3001"
     dns:
-      - 100.64.0.5    # RPi4 Pi-hole (via Tailscale) — resolves *.staging.kubelab.live
+      - 100.64.0.10   # RPi4 Pi-hole (via Tailscale) — resolves *.staging.kubelab.live
       - 1.1.1.1        # Fallback for public domains
     volumes:
       - uptime_kuma_data:/app/data

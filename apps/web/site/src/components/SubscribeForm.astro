@@ -44,10 +44,16 @@ const {
     />
     <button
       type="submit"
-      class="w-full px-4 py-1.5 bg-white text-cyan-700 rounded-md text-sm font-medium hover:bg-cyan-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+      class="w-full px-4 py-2.5 bg-white text-cyan-700 border border-transparent rounded-md text-sm font-medium hover:bg-cyan-700 hover:text-white hover:border-white transition-colors focus:outline-none focus:ring-2 focus:ring-white"
     >
       {buttonText}
     </button>
+    <div class="flex justify-center items-center text-center">
+      <input type="checkbox" id={`privacy-${formId}`} name="privacy_policy" class="mr-2" required />
+      <label for={`privacy-${formId}`} class="text-xs">
+        Acepto la <a href="/legal/privacy" target="_blank" class="text-white underline">política de privacidad</a>
+      </label>
+    </div>
     <p class="subscribe-msg text-xs text-center hidden"></p>
   </form>
 </div>

@@ -1,0 +1,57 @@
+---
+import { languages } from '../i18n/ui';
+import { getLocale, useTranslations, useTranslatedPath, switchLangUrl } from '../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
+
+const navItems: { label: string; href: string }[] = [];
+
+const currentPath = Astro.url.pathname;
+const otherLangs = Object.entries(languages).filter(([l]) => l !== lang);
+---
+
+<header class="bg-cyan-50 text-gray-700 fixed w-full border-b border-cyan-100 z-50">
+  <nav class="px-4 py-3 flex items-center justify-between">
+    <span class="text-lg font-extrabold">
+      <a href={translatePath('/')} class="no-underline hover:text-cyan-700 transition-colors duration-200 focus:outline-none focus:text-cyan-700">
+        Manu Lorente
+      </a>
+    </span>
+
+    <div class="fixed left-1/2 transform -translate-x-1/2 top-1 z-[60]">
+      <a href={translatePath('/')}>
+        <img
+          src="/images/me-2.webp"
+          alt="Manu Lorente"
+          class="w-12 h-auto rounded-full border-[1.5px] border-white shadow-lg"
+        />
+      </a>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      {navItems.map((item) => (
+        <a
+          href={item.href}
+          class:list={[
+            'hover:text-cyan-700 focus:outline-none focus:text-cyan-700 transition-colors duration-200 text-sm',
+            currentPath === item.href || currentPath.startsWith(item.href + '/')
+              ? 'text-cyan-700 font-bold no-underline'
+              : '',
+          ]}
+        >
+          {item.label}
+        </a>
+      ))}
+      {otherLangs.map(([l, label]) => (
+        <a
+          href={switchLangUrl(Astro.url, l as keyof typeof languages)}
+          class="text-xs text-gray-400 hover:text-cyan-700 focus:outline-none focus:text-cyan-700 transition-colors uppercase tracking-wide"
+        >
+          {label}
+        </a>
+      ))}
+    </div>
+  </nav>
+</header>

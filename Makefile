@@ -48,7 +48,7 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make deploy-dns         Deploy CoreDNS config to RPi4 (via SSH)"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
-	@echo "  make dev-app APP=x      Start Astro app dev server (portfolio, astro-site)"
+	@echo "  make dev-app APP=x      Start Astro app dev server (site, astro-site)"
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Quality:"
@@ -217,8 +217,8 @@ restart-dev: down-dev up-dev
 	@echo "✓ Development environment restarted"
 
 # Astro apps (standalone dev, no Docker)
-# Usage: make dev-app APP=portfolio | make build-app APP=portfolio
-APP ?= portfolio
+# Usage: make dev-app APP=site | make build-app APP=site
+APP ?= site
 .PHONY: dev-app
 dev-app:
 	@cd apps/web/$(APP) && npm run dev

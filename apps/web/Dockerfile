@@ -55,7 +55,7 @@ ENV PUBLIC_ENABLE_BLOG=${PUBLIC_ENABLE_BLOG}
 ENV PUBLIC_ENABLE_CONTACT=${PUBLIC_ENABLE_CONTACT}
 ENV BACKEND_URL=${BACKEND_URL}
 
-COPY --chown=node:node astro-site/package.json astro-site/package-lock.json ./
+COPY --chown=node:node site/package.json site/package-lock.json ./
 
 # Switch to non-root user (node:alpine ships with `node` user, UID/GID 1000)
 USER node
@@ -65,7 +65,7 @@ RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
     npm ci --include=dev
 
 # Copy the rest of the source code
-COPY --chown=node:node astro-site/ ./
+COPY --chown=node:node site/ ./
 
 # Build the application (Rollup musl binaries resolved from lockfile)
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 npm run build \

@@ -169,16 +169,16 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: './apps/web/astro-site/package-lock.json'
+          cache-dependency-path: './apps/web/site/package-lock.json'
 
       - name: Install dependencies (web)
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
-        working-directory: './apps/web/astro-site'
+        working-directory: './apps/web/site'
         run: npm ci
 
       - name: Build Astro site
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
-        working-directory: './apps/web/astro-site'
+        working-directory: './apps/web/site'
         run: npm run build
 
       # Security Scanning - Secret Detection
@@ -240,7 +240,7 @@ jobs:
       # Security Scanning - Node.js (Web)
       - name: Run npm audit on web dependencies
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
-        working-directory: './apps/web/astro-site'
+        working-directory: './apps/web/site'
         run: |
           echo "Checking web dependencies for vulnerabilities"
           npm audit --audit-level=moderate || echo "::warning::Vulnerabilities found in npm dependencies"
