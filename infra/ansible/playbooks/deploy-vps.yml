@@ -57,6 +57,7 @@
       vars:
         traefik_image: "{{ config.edge.traefik.image }}"
         docker_network: "{{ config.networking.vps.docker_network }}"
+        base_domain: "{{ config.global.base_domain }}"
         restart_policy: "{{ config.global.restart_policy }}"
         traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
         traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"

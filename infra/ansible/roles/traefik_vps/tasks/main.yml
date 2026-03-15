@@ -71,6 +71,13 @@
     dest: "{{ traefik_dynamic_dir }}/nginx.yml"
     mode: "0644"
 
+- name: Template kubelab.live redirect
+  template:
+    src: app-redirect-kubelab.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/app-redirect-kubelab.yml"
+    mode: "0644"
+  when: base_domain is defined
+
 - name: Template dashboard route
   template:
     src: app-traefik-dashboard.yml.j2
