@@ -1,19 +1,19 @@
-# Headscale control plane — HTTP proxy (Traefik terminates TLS)
-# Headscale v0.28 Noise protocol works over HTTP/HTTPS
+# Headscale control plane — TCP passthrough (Noise protocol needs end-to-end TLS)
+# Ref: apps/web/site/src/content/notes/headscale-self-hosted-tailscale.mdx
 # Deploy: make deploy-traefik-vps
-# Health: https://vpn.kubelab.live/health
-http:
+# NOTE: /health endpoint not accessible through TCP passthrough — monitor via docker healthcheck
+tcp:
   routers:
     headscale:
-      rule: "Host(`vpn.kubelab.live`)"
+      rule: "HostSNI(`vpn.kubelab.live`)"
       entryPoints:
         - websecure
-      service: headscale
+      service: headscale-tcp
       tls:
-        certResolver: letsencrypt
+        passthrough: true
 
   services:
-    headscale:
+    headscale-tcp:
       loadBalancer:
         servers:
-          - url: "http://headscale:8080"
+          - address: "headscale:8080"
