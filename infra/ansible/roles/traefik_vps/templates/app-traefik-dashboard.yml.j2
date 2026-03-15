@@ -1,0 +1,15 @@
+# Managed by Ansible — do not edit manually
+http:
+  routers:
+    traefik-dashboard:
+      rule: "Host(`{{ traefik_dashboard_domain }}`)"
+      entryPoints:
+        - websecure
+      service: api@internal
+      middlewares:
+{% if traefik_dashboard_auth_users %}
+        - auth@file
+{% endif %}
+        - secure-headers@file
+        - rate-limit@file
+        - error-pages

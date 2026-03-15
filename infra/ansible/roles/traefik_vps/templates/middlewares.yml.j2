@@ -1,0 +1,26 @@
+# Managed by Ansible — do not edit manually
+http:
+  middlewares:
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+{% if traefik_dashboard_auth_users %}
+    auth:
+      basicAuth:
+        users:
+          - '{{ traefik_dashboard_auth_users }}'
+{% endif %}
+    rate-limit:
+      rateLimit:
+        average: {{ traefik_rate_limit_average }}
+        burst: {{ traefik_rate_limit_burst }}
+        period: {{ traefik_rate_limit_period }}
+    secure-headers:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true

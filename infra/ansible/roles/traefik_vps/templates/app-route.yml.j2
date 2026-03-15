@@ -1,0 +1,28 @@
+# Managed by Ansible — do not edit manually
+http:
+  routers:
+    {{ route.name }}:
+      rule: "Host(`{{ route.domain }}`)"
+      entryPoints:
+        - websecure
+      service: {{ route.service_name | default(route.name) }}
+{% if route.middlewares is defined %}
+      middlewares:
+{% for mw in route.middlewares %}
+        - {{ mw }}
+{% endfor %}
+{% endif %}
+{% if route.cert_resolver is defined %}
+      tls:
+        certResolver: {{ route.cert_resolver }}
+{% endif %}
+
+{% if route.service_type | default('loadbalancer') == 'internal' %}
+  # Uses internal Traefik service (e.g. api@internal)
+{% else %}
+  services:
+    {{ route.service_name | default(route.name) }}:
+      loadBalancer:
+        servers:
+          - url: "{{ route.backend_url }}"
+{% endif %}

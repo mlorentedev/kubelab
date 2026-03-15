@@ -1,0 +1,50 @@
+---
+# Atomic migration: proxy → kubelab Docker network
+# All containers are connected to the new network BEFORE disconnecting from the old one.
+# This ensures zero downtime — containers are briefly on both networks.
+
+- name: Ensure target network '{{ docker_network }}' exists
+  community.docker.docker_network:
+    name: "{{ docker_network }}"
+    state: present
+    driver: bridge
+
+- name: Get containers on 'proxy' network
+  command: docker network inspect proxy --format '{% raw %}{{range .Containers}}{{.Name}} {{end}}{% endraw %}'
+  register: proxy_containers
+  changed_when: false
+
+- name: Parse container list
+  set_fact:
+    containers_to_migrate: "{{ proxy_containers.stdout.split() | select | list }}"
+
+- name: Show containers to migrate
+  debug:
+    msg: "Migrating {{ containers_to_migrate | length }} containers: {{ containers_to_migrate | join(', ') }}"
+
+# Phase 1: Connect all containers to new network (dual-homed, no downtime)
+- name: Connect containers to '{{ docker_network }}' network
+  command: docker network connect {{ docker_network }} {{ item }}
+  loop: "{{ containers_to_migrate }}"
+  register: connect_result
+  failed_when: connect_result.rc != 0 and 'already exists' not in connect_result.stderr
+  changed_when: connect_result.rc == 0
+
+# Phase 2: Disconnect all containers from old network
+- name: Disconnect containers from 'proxy' network
+  command: docker network disconnect proxy {{ item }}
+  loop: "{{ containers_to_migrate }}"
+  register: disconnect_result
+  failed_when: false
+  changed_when: disconnect_result.rc == 0
+
+# Phase 3: Remove old network
+- name: Remove 'proxy' network
+  community.docker.docker_network:
+    name: proxy
+    state: absent
+    force: true
+
+- name: Network migration complete
+  debug:
+    msg: "Migrated {{ containers_to_migrate | length }} containers from 'proxy' to '{{ docker_network }}'"

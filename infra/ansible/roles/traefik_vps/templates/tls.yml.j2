@@ -1,0 +1,9 @@
+# Managed by Ansible — do not edit manually
+tls:
+  options:
+    default:
+      minVersion: {{ traefik_tls_min_version }}
+      cipherSuites:
+{% for cipher in traefik_tls_cipher_suites %}
+        - {{ cipher }}
+{% endfor %}

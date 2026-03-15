@@ -21,7 +21,85 @@
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
 
+    - name: Decrypt SOPS secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_output
+      delegate_to: localhost
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Load secrets
+      set_fact:
+        secrets: "{{ sops_output.stdout | from_yaml }}"
+      no_log: true
+
   roles:
+    # --- Traefik reverse proxy (must be first — other services depend on it) ---
+    - role: ../roles/traefik_vps
+      tags: [traefik]
+      vars:
+        traefik_image: "{{ config.edge.traefik.image }}"
+        docker_network: "{{ config.networking.vps.docker_network }}"
+        restart_policy: "{{ config.global.restart_policy }}"
+        traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"
+        traefik_dns_provider: "{{ config.edge.traefik.dns_provider }}"
+        traefik_dns_delay_before_check: "{{ config.edge.traefik.dns_delay_before_check }}"
+        traefik_cf_dns_api_token: "{{ secrets.cloudflare.api_token }}"
+        traefik_acme_domains:
+          - main: "mlorente.dev"
+            sans:
+              - "*.mlorente.dev"
+        traefik_dashboard_domain: "{{ config.edge.traefik.domain | default('traefik.' + config.global.base_domain) }}"
+        traefik_dashboard_auth_users: "{{ config.edge.traefik.dashboard_auth_users | default('') }}"
+        traefik_rate_limit_average: "{{ config.edge.traefik.rate_limit_average }}"
+        traefik_rate_limit_burst: "{{ config.edge.traefik.rate_limit_burst }}"
+        traefik_rate_limit_period: "{{ config.edge.traefik.rate_limit_period }}"
+        traefik_service_routes:
+          # Platform apps (Docker containers on VPS)
+          - name: api
+            domain: "{{ config.apps.platform.api.domain }}"
+            backend_url: "http://api:{{ config.apps.platform.api.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          - name: web
+            domain: "{{ config.apps.platform.web.domain }}"
+            backend_url: "http://web:{{ config.apps.platform.web.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          - name: blog
+            domain: "{{ config.apps.platform.blog.domain }}"
+            backend_url: "http://blog:{{ config.apps.platform.blog.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          # Core infrastructure services
+          - name: portainer
+            domain: "{{ config.apps.services.core.portainer.domain }}"
+            backend_url: "http://portainer:{{ config.apps.services.core.portainer.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          - name: n8n
+            domain: "{{ config.apps.services.core.n8n.domain }}"
+            backend_url: "http://n8n:{{ config.apps.services.core.n8n.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          # Observability
+          - name: grafana
+            domain: "{{ config.apps.services.observability.grafana.domain }}"
+            backend_url: "http://grafana:{{ config.apps.services.observability.grafana.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          - name: loki
+            domain: "{{ config.apps.services.observability.loki.domain }}"
+            backend_url: "http://loki:{{ config.apps.services.observability.loki.default_port }}"
+            middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          # Uptime Kuma lives on RPi3, proxied via Tailscale
+          - name: status
+            domain: "{{ config.apps.services.observability.uptime_kuma.domain }}"
+            backend_url: "http://{{ config.networking.nodes.rpi3.tailscale_ip }}:{{ config.apps.services.observability.uptime_kuma.default_port }}"
+            cert_resolver: letsencrypt
+          # Headscale (separate cert domain — vpn.kubelab.live)
+          - name: headscale
+            domain: "{{ config.apps.services.core.headscale.domain }}"
+            backend_url: "http://headscale:{{ config.apps.services.core.headscale.default_port }}"
+            cert_resolver: letsencrypt
+
+    # --- Headscale VPN control plane ---
     - role: ../roles/headscale
       tags: [headscale]
       vars:
@@ -43,12 +121,3 @@
           - name: "jetson.{{ config.global.base_domain }}"
             type: A
             value: "{{ config.networking.nodes.jetson.tailscale_ip }}"
-
-    - role: ../roles/traefik_routes
-      tags: [traefik, routes]
-      vars:
-        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
-        headscale_backend_port: "{{ config.apps.services.core.headscale.default_port }}"
-        traefik_cert_resolver: "{{ config.edge.traefik.cert_resolver }}"
-        uptime_kuma_domain: "{{ config.apps.services.observability.uptime_kuma.domain }}"
-        uptime_kuma_backend_url: "http://{{ config.networking.nodes.rpi3.tailscale_ip }}:{{ config.apps.services.observability.uptime_kuma.default_port }}"

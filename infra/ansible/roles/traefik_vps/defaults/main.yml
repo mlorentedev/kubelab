@@ -1,0 +1,60 @@
+---
+traefik_image: "traefik:v3.6"
+traefik_remote_dir: "/opt/traefik"
+traefik_dynamic_dir: "{{ traefik_remote_dir }}/dynamic"
+traefik_certs_dir: "{{ traefik_remote_dir }}/certs"
+traefik_logs_dir: "{{ traefik_remote_dir }}/logs"
+
+docker_network: "kubelab"
+restart_policy: "unless-stopped"
+
+# Entrypoints
+traefik_http_port: 80
+traefik_https_port: 443
+traefik_dashboard_port: 8080
+
+# ACME / Let's Encrypt
+traefik_acme_email: ""
+traefik_acme_server: "https://acme-v02.api.letsencrypt.org/directory"
+traefik_acme_storage: "/letsencrypt/acme.json"
+traefik_dns_provider: "cloudflare"
+traefik_dns_delay_before_check: 30
+traefik_dns_resolvers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+
+# Wildcard cert domains
+traefik_acme_domains: []
+
+# Cloudflare API token (from SOPS via playbook)
+traefik_cf_dns_api_token: ""
+
+# Access log
+traefik_access_log_max_size: 50
+traefik_access_log_max_backups: 3
+
+# Rate limiting
+traefik_rate_limit_average: 50
+traefik_rate_limit_burst: 25
+traefik_rate_limit_period: "1s"
+
+# Dashboard auth (basicAuth hash)
+traefik_dashboard_auth_users: ""
+
+# TLS
+traefik_tls_min_version: "VersionTLS12"
+traefik_tls_cipher_suites:
+  - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+  - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+  - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+  - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+  - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+  - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+
+# Dynamic routes — populated from playbook
+# Each entry: { name, domain, backend_url, middlewares (optional), cert_resolver (optional) }
+traefik_service_routes: []
+
+# Special routes
+traefik_dashboard_domain: ""
+traefik_error_pages_backend: "http://nginx:80"
