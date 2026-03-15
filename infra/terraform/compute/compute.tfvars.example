@@ -1,0 +1,8 @@
+# Copy to compute.tfvars and fill in values
+# hetzner_api_token is injected via TF_VAR from SOPS — do not hardcode here
+
+server_name     = "kubelab-vps"
+server_type     = "cax11"       # ARM 2 vCPU, 4GB RAM, 40GB disk
+server_location = "fsn1"        # Falkenstein, Germany
+server_image    = "ubuntu-24.04"
+deploy_user     = "deployer"

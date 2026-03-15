@@ -48,6 +48,7 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make deploy-vps         Deploy VPS services (Headscale + Traefik routes)"
 	@echo "  make deploy-dns         Deploy CoreDNS + Pi-hole to RPi4"
+	@echo "  make backup-vps         Backup VPS Docker volumes and configs"
 	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
 	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
@@ -268,6 +269,10 @@ deploy-vps:
 .PHONY: deploy-dns
 deploy-dns:
 	@$(TOOLKIT) infra ansible run -p deploy-dns -e prod
+
+.PHONY: backup-vps
+backup-vps:
+	@$(TOOLKIT) infra ansible run -p backup -e prod
 
 # K8s manifest apply — until Ansible/ArgoCD replaces this (B9/E)
 KUBECONFIG ?= ~/.kube/kubelab-config

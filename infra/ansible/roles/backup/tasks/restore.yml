@@ -1,0 +1,58 @@
+---
+# Restore from a specific backup
+# Usage: ansible-playbook restore.yml -e backup_id=20260303_022550
+
+- name: Validate backup exists
+  stat:
+    path: "{{ backup_root }}/{{ backup_id }}"
+  register: backup_dir
+
+- name: Fail if backup not found
+  fail:
+    msg: "Backup '{{ backup_id }}' not found at {{ backup_root }}/{{ backup_id }}"
+  when: not backup_dir.stat.exists
+
+- name: List backup contents
+  find:
+    paths: "{{ backup_root }}/{{ backup_id }}"
+    patterns: "*.tar.gz"
+  register: backup_files
+
+- name: Show what will be restored
+  debug:
+    msg: "Restoring {{ backup_files.files | length }} archives from {{ backup_id }}"
+
+- name: Stop running containers
+  command: docker compose down
+  args:
+    chdir: "{{ item }}"
+  loop: "{{ restore_compose_dirs | default([]) }}"
+  failed_when: false
+
+- name: Restore filesystem paths
+  unarchive:
+    src: "{{ backup_root }}/{{ backup_id }}/{{ item | replace('/', '-') | regex_replace('^-', '') }}.tar.gz"
+    dest: "{{ item | dirname }}"
+    remote_src: true
+  loop: "{{ backup_filesystem_paths }}"
+  failed_when: false
+
+- name: Restore Docker volumes
+  command: >-
+    docker run --rm
+    -v {{ item }}:/target
+    -v {{ backup_root }}/{{ backup_id }}:/backup:ro
+    alpine sh -c "cd /target && tar xzf /backup/{{ item }}.tar.gz"
+  loop: "{{ volumes_to_restore | default([]) }}"
+  failed_when: false
+
+- name: Start containers
+  command: docker compose up -d
+  args:
+    chdir: "{{ item }}"
+  loop: "{{ restore_compose_dirs | default([]) }}"
+  failed_when: false
+
+- name: Report restore result
+  debug:
+    msg: "Restore from {{ backup_id }} complete. Verify services manually."

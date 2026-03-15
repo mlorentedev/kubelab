@@ -1,0 +1,39 @@
+---
+- name: Restore VPS from backup
+  hosts: vps
+  gather_facts: true
+
+  vars:
+    deploy_env: prod
+    # Pass backup_id via CLI: -e backup_id=20260303_022550
+    backup_id: ""
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+    - name: Validate backup_id provided
+      fail:
+        msg: "Must provide backup_id: -e backup_id=20260303_022550"
+      when: backup_id == ""
+
+  tasks:
+    - name: Restore from backup
+      include_tasks: ../roles/backup/tasks/restore.yml
+      vars:
+        backup_root: "{{ config.networking.vps.backup.root }}"
+        backup_filesystem_paths: "{{ config.networking.vps.backup.filesystem_paths }}"
+        restore_compose_dirs:
+          - /opt/headscale
+          - /opt/traefik
