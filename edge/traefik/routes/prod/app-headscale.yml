@@ -1,0 +1,19 @@
+# Headscale control plane — HTTP proxy (Traefik terminates TLS)
+# Headscale v0.28 Noise protocol works over HTTP/HTTPS
+# Deploy: make deploy-traefik-vps
+# Health: https://vpn.kubelab.live/health
+http:
+  routers:
+    headscale:
+      rule: "Host(`vpn.kubelab.live`)"
+      entryPoints:
+        - websecure
+      service: headscale
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    headscale:
+      loadBalancer:
+        servers:
+          - url: "http://headscale:8080"

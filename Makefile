@@ -48,6 +48,7 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make deploy-dns         Deploy CoreDNS config to RPi4 (via SSH)"
 	@echo "  make deploy-headscale   Deploy Headscale config to VPS (via SSH)"
+	@echo "  make deploy-traefik-vps Deploy Traefik dynamic routes to VPS (via SSH)"
 	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
 	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
@@ -271,6 +272,15 @@ deploy-headscale:
 	@scp infra/stacks/services/core/headscale/config/config.yaml $(VPS_HOST):$(VPS_HEADSCALE_DIR)/config/config.yaml
 	@ssh $(VPS_HOST) "docker restart headscale"
 	@echo "✓ Headscale restarted on VPS"
+
+# VPS Traefik dynamic routes — deploy all route configs via SSH
+VPS_TRAEFIK_DIR ?= /opt/traefik/dynamic
+
+.PHONY: deploy-traefik-vps
+deploy-traefik-vps:
+	@echo "Deploying Traefik dynamic routes to VPS ($(VPS_HOST))..."
+	@scp edge/traefik/routes/prod/*.yml $(VPS_HOST):$(VPS_TRAEFIK_DIR)/
+	@echo "✓ Traefik routes deployed (hot-reload, no restart needed)"
 
 
 # K8s manifest apply — until Ansible/ArgoCD replaces this (B9/E)
