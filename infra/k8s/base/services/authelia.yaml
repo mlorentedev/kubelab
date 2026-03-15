@@ -92,7 +92,7 @@ data:
         # Public apps (no auth)
         - domain: 'staging.kubelab.live'
           policy: bypass
-        - domain: 'blog.staging.kubelab.live'
+        - domain: 'staging.mlorente.dev'
           policy: bypass
         - domain: 'api.staging.kubelab.live'
           policy: bypass

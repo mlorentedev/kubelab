@@ -39,7 +39,7 @@ export const ui = {
     'newsletter.audience2': 'You want to stop copying tutorials and start <strong>building</strong>.',
     'newsletter.audience3': 'You\'re interested in <strong>DevOps/Platform</strong> with real examples.',
 
-    // Lead magnet — NODO (keys exist for type safety — EN landing has no lead magnet)
+    // Lead magnet — NODO (DEFERRED 2026-03-15: keys unused post-MDX migration, kept for future NODO activation)
     'leadMagnet.pitch1': 'Everything you see here — the projects, the notes, the errors — is documented so my AI remembers it for me. Each session I pick up where I left off. No repeating context. No falling into the same mistakes.',
     'leadMagnet.pitch2': 'Yours probably doesn\'t. Every session you start from zero.',
     'leadMagnet.pitch3': 'In 5 days I\'ll teach you the system. Works with any tool. Any project.',
@@ -110,7 +110,7 @@ export const ui = {
     'newsletter.audience2': 'Quieres dejar de copiar tutoriales y empezar a <strong>construir</strong>.',
     'newsletter.audience3': 'Te interesa el mundo <strong>DevOps/Platform</strong> con ejemplos reales.',
 
-    // Lead magnet — NODO (ES — primary monetization funnel)
+    // Lead magnet — NODO (DEFERRED 2026-03-15: keys unused post-MDX migration, kept for future NODO activation)
     'leadMagnet.pitch1': 'Lunes: le explico el proyecto a Copilot. Martes: le explico otro a Claude. Miércoles: Copilot no recuerda el lunes.',
     'leadMagnet.pitch2': 'Un día creé un fichero de texto. Uno. Y ese error no volvió a pasar.',
     'leadMagnet.pitch3': 'En 5 días te enseño el sistema que uso. Funciona con cualquier herramienta. Cualquier proyecto.',

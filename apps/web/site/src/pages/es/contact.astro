@@ -15,10 +15,12 @@ const { Content } = await render(page);
   <Header />
   <main id="main-content" class="flex-grow pt-20">
     <section class="py-12">
-      <div class="max-w-3xl mx-auto px-4 prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-10 prose-a:text-cyan-700 hover:prose-a:text-cyan-800">
-        <Content />
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-10 prose-a:text-cyan-700 hover:prose-a:text-cyan-800">
+          <Content />
+        </div>
 
-        <div class="border-t border-gray-200 pt-8 not-prose">
+        <div class="border-t border-gray-200 pt-8">
           <a
             href="https://calendly.com/mlorentedev/consulting"
             target="_blank"

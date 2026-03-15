@@ -44,18 +44,6 @@ data:
   SITE_KEYWORDS: "devops, cloud, kubernetes, aws, azure, python, go"
   SITE_MAIL: "info@mlorente.dev"
   SITE_TITLE: "Manu Lorente"
-  SITE_URL: "https://web.staging.kubelab.live"
+  SITE_URL: "https://staging.mlorente.dev"
   TWITTER_URL: "https://x.com/mlorentedev"
   YOUTUBE_URL: "https://www.youtube.com/@mlorentedev"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: blog-config
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: blog
-    app.kubernetes.io/part-of: kubelab
-    app.kubernetes.io/managed-by: toolkit
-data:
-  ENVIRONMENT: "staging"

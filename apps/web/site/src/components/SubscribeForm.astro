@@ -22,7 +22,7 @@ const {
 } = Astro.props;
 ---
 
-<div class="bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto">
+<div class="not-prose bg-cyan-700 text-white p-4 rounded-md max-w-xs mx-auto">
   <form
     id={formId}
     class="flex flex-col gap-4"
@@ -50,7 +50,7 @@ const {
     </button>
     <div class="flex justify-center items-center text-center">
       <input type="checkbox" id={`privacy-${formId}`} name="privacy_policy" class="mr-2" required />
-      <label for={`privacy-${formId}`} class="text-xs">
+      <label for={`privacy-${formId}`} class="text-xs text-white">
         Acepto la <a href="/legal/privacy" target="_blank" class="text-white underline">política de privacidad</a>
       </label>
     </div>

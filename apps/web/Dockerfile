@@ -1,13 +1,12 @@
-# ---------- Build Stage — CI v2 (build-args from YAML config) ----------
+# ---------- Build Stage — Static site (Astro output: 'static') ----------
+# CI context: ./apps/web — files copied from site/ subdirectory
 FROM node:22-alpine AS build
 
-# Declare build arguments for multi-arch support
 ARG TARGETPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
 
-# Astro-specific build arguments (passed from docker-compose)
-ARG PUBLIC_ALLOWED_HOSTS
+# Astro build arguments (injected by CI from values/*.yaml)
 ARG PUBLIC_SITE_TITLE
 ARG PUBLIC_SITE_DESCRIPTION
 ARG PUBLIC_SITE_DOMAIN
@@ -22,89 +21,53 @@ ARG PUBLIC_CALENDLY_URL
 ARG PUBLIC_BUY_ME_A_COFFEE_URL
 ARG PUBLIC_GOOGLE_ANALYTICS_ID
 ARG PUBLIC_GOOGLE_TAG_MANAGER_ID
-ARG PUBLIC_ENABLE_HOMELABS
-ARG PUBLIC_ENABLE_BLOG
-ARG PUBLIC_ENABLE_CONTACT
 ARG BACKEND_URL
-
-# System packages (requires root)
-RUN apk update && apk upgrade --no-cache && \
-    apk add --no-cache curl
 
 WORKDIR /app
 RUN chown node:node /app
 
-# Make Astro-specific build arguments available as environment variables for the build process
-ENV PUBLIC_ALLOWED_HOSTS=${PUBLIC_ALLOWED_HOSTS}
-ENV PUBLIC_SITE_TITLE=${PUBLIC_SITE_TITLE}
-ENV PUBLIC_SITE_DESCRIPTION=${PUBLIC_SITE_DESCRIPTION}
-ENV PUBLIC_SITE_DOMAIN=${PUBLIC_SITE_DOMAIN}
-ENV PUBLIC_SITE_URL=${PUBLIC_SITE_URL}
-ENV PUBLIC_SITE_MAIL=${PUBLIC_SITE_MAIL}
-ENV PUBLIC_SITE_AUTHOR=${PUBLIC_SITE_AUTHOR}
-ENV PUBLIC_SITE_KEYWORDS=${PUBLIC_SITE_KEYWORDS}
-ENV PUBLIC_TWITTER_URL=${PUBLIC_TWITTER_URL}
-ENV PUBLIC_YOUTUBE_URL=${PUBLIC_YOUTUBE_URL}
-ENV PUBLIC_GITHUB_URL=${PUBLIC_GITHUB_URL}
-ENV PUBLIC_CALENDLY_URL=${PUBLIC_CALENDLY_URL}
-ENV PUBLIC_BUY_ME_A_COFFEE_URL=${PUBLIC_BUY_ME_A_COFFEE_URL}
-ENV PUBLIC_GOOGLE_ANALYTICS_ID=${PUBLIC_GOOGLE_ANALYTICS_ID}
-ENV PUBLIC_GOOGLE_TAG_MANAGER_ID=${PUBLIC_GOOGLE_TAG_MANAGER_ID}
-ENV PUBLIC_ENABLE_HOMELABS=${PUBLIC_ENABLE_HOMELABS}
-ENV PUBLIC_ENABLE_BLOG=${PUBLIC_ENABLE_BLOG}
-ENV PUBLIC_ENABLE_CONTACT=${PUBLIC_ENABLE_CONTACT}
-ENV BACKEND_URL=${BACKEND_URL}
+# Make build arguments available as env vars for Astro static build
+ENV PUBLIC_SITE_TITLE=${PUBLIC_SITE_TITLE} \
+    PUBLIC_SITE_DESCRIPTION=${PUBLIC_SITE_DESCRIPTION} \
+    PUBLIC_SITE_DOMAIN=${PUBLIC_SITE_DOMAIN} \
+    PUBLIC_SITE_URL=${PUBLIC_SITE_URL} \
+    PUBLIC_SITE_MAIL=${PUBLIC_SITE_MAIL} \
+    PUBLIC_SITE_AUTHOR=${PUBLIC_SITE_AUTHOR} \
+    PUBLIC_SITE_KEYWORDS=${PUBLIC_SITE_KEYWORDS} \
+    PUBLIC_TWITTER_URL=${PUBLIC_TWITTER_URL} \
+    PUBLIC_YOUTUBE_URL=${PUBLIC_YOUTUBE_URL} \
+    PUBLIC_GITHUB_URL=${PUBLIC_GITHUB_URL} \
+    PUBLIC_CALENDLY_URL=${PUBLIC_CALENDLY_URL} \
+    PUBLIC_BUY_ME_A_COFFEE_URL=${PUBLIC_BUY_ME_A_COFFEE_URL} \
+    PUBLIC_GOOGLE_ANALYTICS_ID=${PUBLIC_GOOGLE_ANALYTICS_ID} \
+    PUBLIC_GOOGLE_TAG_MANAGER_ID=${PUBLIC_GOOGLE_TAG_MANAGER_ID} \
+    BACKEND_URL=${BACKEND_URL}
 
 COPY --chown=node:node site/package.json site/package-lock.json ./
 
-# Switch to non-root user (node:alpine ships with `node` user, UID/GID 1000)
 USER node
 
-# Install ALL dependencies (including dev) needed for the build
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
     npm ci --include=dev
 
-# Copy the rest of the source code
 COPY --chown=node:node site/ ./
 
-# Build the application (Rollup musl binaries resolved from lockfile)
-RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 npm run build \
- && npm audit --omit=dev --audit-level=high || true
+RUN npm run build
 
-#---------- Runtime Stage ----------
-FROM node:22-alpine AS runtime
+# ---------- Runtime Stage — Nginx static serving ----------
+FROM nginx:1.27-alpine
 
-RUN apk update && apk upgrade --no-cache
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup && \
+    chown -R appuser:appgroup /var/cache/nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && chown appuser:appgroup /var/run/nginx.pid
 
-WORKDIR /app
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY site/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Environment variables for runtime
-ENV HOST=0.0.0.0 \
-    NODE_ENV=production \
-    npm_config_omit=optional \
-    ROLLUP_NATIVE_DISABLE=true
+USER 1001
 
-# Copy built files and package files from build stage
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/package.json ./
-COPY --from=build /app/package-lock.json ./
+EXPOSE 8080
 
-#Install ONLY production dependencies
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev && \
-    npm cache clean --force
-
-# Install curl for health checks
-RUN apk add --no-cache curl
-
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S astro -u 1001 -G nodejs && \
-    chown -R astro:nodejs /app
-
-USER astro
-
-EXPOSE 4321
-
-# Start the application
-CMD ["node", "./dist/server/entry.mjs"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:8080/ || exit 1

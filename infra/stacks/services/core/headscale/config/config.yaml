@@ -59,6 +59,9 @@ dns:
     - name: jetson.kubelab.live
       type: A
       value: 100.64.0.8    # networking.nodes.jet1.tailscale_ip
+    - name: staging.mlorente.dev
+      type: A
+      value: 100.64.0.4    # networking.nodes.k3s_server.tailscale_ip
 
 # Database (SQLite — correct for homelab scale)
 database:
