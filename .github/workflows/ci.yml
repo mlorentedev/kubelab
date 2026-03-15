@@ -59,7 +59,6 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     outputs:
-      blog: ${{ steps.filter.outputs.blog }}
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
       any_changed: ${{ steps.check.outputs.any_changed }}
@@ -76,10 +75,6 @@ jobs:
             ${{ github.event.before != '0000000000000000000000000000000000000000'
             && github.event.before || github.sha }}
           filters: |
-            blog:
-              - 'apps/blog/jekyll-site/**'
-              - 'apps/blog/Dockerfile'
-              - 'infra/stacks/apps/blog/**'
             api:
               - 'apps/api/src/**'
               - 'apps/api/go.mod'
@@ -87,18 +82,17 @@ jobs:
               - 'apps/api/Dockerfile'
               - 'infra/stacks/apps/api/**'
             web:
-              - 'apps/web/astro-site/**'
+              - 'apps/web/site/**'
               - 'apps/web/Dockerfile'
               - 'infra/stacks/apps/web/**'
 
       - name: Check if any app changed
         id: check
         env:
-          BLOG: ${{ steps.filter.outputs.blog }}
           API: ${{ steps.filter.outputs.api }}
           WEB: ${{ steps.filter.outputs.web }}
         run: |
-          if [[ "$BLOG" == "true" || "$API" == "true" || "$WEB" == "true" ]]; then
+          if [[ "$API" == "true" || "$WEB" == "true" ]]; then
             echo "any_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "any_changed=false" >> "$GITHUB_OUTPUT"
@@ -107,25 +101,14 @@ jobs:
       - name: List changed apps
         id: list
         env:
-          BLOG: ${{ steps.filter.outputs.blog }}
           API: ${{ steps.filter.outputs.api }}
           WEB: ${{ steps.filter.outputs.web }}
         run: |
           apps=()
-          [[ "$BLOG" == "true" ]] && apps+=("blog")
           [[ "$API" == "true" ]] && apps+=("api")
           [[ "$WEB" == "true" ]] && apps+=("web")
           apps_json=$(printf '%s\n' "${apps[@]}" | jq -R . | jq -c -s .)
           echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
-
-  blog-pipeline:
-    name: Blog
-    needs: detect-changes
-    if: needs.detect-changes.outputs.blog == 'true'
-    uses: ./.github/workflows/ci-pipeline.yml
-    with:
-      app: blog
-    secrets: inherit
 
   api-pipeline:
     name: API
