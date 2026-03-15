@@ -11,16 +11,21 @@
     - "{{ nginx_errors_remote_dir }}"
     - "{{ nginx_errors_remote_dir }}/errors"
 
+- name: Resolve source path
+  set_fact:
+    _nginx_src: "{{ nginx_errors_source_dir | realpath }}"
+  delegate_to: localhost
+
 - name: Copy nginx config
   copy:
-    src: "{{ nginx_errors_source_dir }}/configs/nginx.prod.conf"
+    src: "{{ _nginx_src }}/configs/nginx.prod.conf"
     dest: "{{ nginx_errors_remote_dir }}/nginx.conf"
     mode: "0644"
   register: nginx_conf
 
 - name: Copy error page assets
   copy:
-    src: "{{ nginx_errors_source_dir }}/assets/errors/"
+    src: "{{ _nginx_src }}/assets/errors/"
     dest: "{{ nginx_errors_remote_dir }}/errors/"
     mode: "0644"
   register: nginx_assets
