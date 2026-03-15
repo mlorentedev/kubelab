@@ -30,7 +30,7 @@ help:
 	@echo "=== KubeLab ==="
 	@echo ""
 	@echo "Bootstrap:"
-	@echo "  make setup              Install Poetry, dependencies, and toolkit"
+	@echo "  make setup              Install Poetry, dependencies, toolkit, and Ansible collections"
 	@echo "  make setup-local-dns    Add local DNS entries to /etc/hosts"
 	@echo ""
 	@echo "Development:"
@@ -46,9 +46,8 @@ help:
 	@echo "  make secrets-jwks ENV=x Generate OIDC JWKS RSA key for an env"
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
 	@echo "  make secrets-audit      Audit secrets across all environments"
-	@echo "  make deploy-dns         Deploy CoreDNS config to RPi4 (via SSH)"
-	@echo "  make deploy-headscale   Deploy Headscale config to VPS (via SSH)"
-	@echo "  make deploy-traefik-vps Deploy Traefik dynamic routes to VPS (via SSH)"
+	@echo "  tk infra ansible run -p deploy-vps    Deploy VPS (Headscale + Traefik routes)"
+	@echo "  tk infra ansible run -p deploy-dns    Deploy CoreDNS + Pi-hole to RPi4"
 	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
 	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
@@ -80,7 +79,7 @@ help:
 # Bootstrap
 # -----------------------------------------------------------------------------
 .PHONY: setup
-setup: setup-python setup-poetry setup-dependencies setup-sops setup-certs
+setup: setup-python setup-poetry setup-dependencies setup-sops setup-certs setup-ansible
 	@echo "✓ Setup complete. Run 'toolkit --help' to see available commands"
 
 .PHONY: setup-python
@@ -115,6 +114,16 @@ setup-certs:
 	@$(TOOLKIT) tools certs generate --env dev
 	@mkcert -install >/dev/null 2>&1 || true
 	@echo "✓ TLS certificates configured"
+
+.PHONY: setup-ansible
+setup-ansible:
+	@if command -v ansible-galaxy >/dev/null 2>&1; then \
+		echo "Installing Ansible Galaxy collections..."; \
+		ansible-galaxy collection install -r infra/ansible/requirements.yml >/dev/null 2>&1; \
+		echo "✓ Ansible collections installed"; \
+	else \
+		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible)"; \
+	fi
 
 .PHONY: regen-certs
 regen-certs:
@@ -250,38 +259,6 @@ secrets-hash:
 .PHONY: secrets-audit
 secrets-audit:
 	@$(TOOLKIT) secrets audit
-
-# RPi4 DNS gateway (CoreDNS + Pi-hole) — no K3s, manual deploy via SSH
-RPI4_HOST ?= manu@100.64.0.10
-RPI4_COREDNS_DIR ?= ~/coredns
-
-.PHONY: deploy-dns
-deploy-dns:
-	@echo "Deploying CoreDNS config to RPi4 ($(RPI4_HOST))..."
-	@scp edge/dns-gateway/Corefile $(RPI4_HOST):$(RPI4_COREDNS_DIR)/
-	@ssh $(RPI4_HOST) "cd $(RPI4_COREDNS_DIR) && docker compose -f compose.base.yml restart coredns"
-	@echo "✓ CoreDNS restarted on RPi4"
-
-# VPS Headscale — config deploy via SSH (Headscale stays outside K3s per ADR-015)
-VPS_HOST ?= deployer@100.64.0.2
-VPS_HEADSCALE_DIR ?= /opt/headscale
-
-.PHONY: deploy-headscale
-deploy-headscale:
-	@echo "Deploying Headscale config to VPS ($(VPS_HOST))..."
-	@scp infra/stacks/services/core/headscale/config/config.yaml $(VPS_HOST):$(VPS_HEADSCALE_DIR)/config/config.yaml
-	@ssh $(VPS_HOST) "docker restart headscale"
-	@echo "✓ Headscale restarted on VPS"
-
-# VPS Traefik dynamic routes — deploy all route configs via SSH
-VPS_TRAEFIK_DIR ?= /opt/traefik/dynamic
-
-.PHONY: deploy-traefik-vps
-deploy-traefik-vps:
-	@echo "Deploying Traefik dynamic routes to VPS ($(VPS_HOST))..."
-	@scp edge/traefik/routes/prod/*.yml $(VPS_HOST):$(VPS_TRAEFIK_DIR)/
-	@echo "✓ Traefik routes deployed (hot-reload, no restart needed)"
-
 
 # K8s manifest apply — until Ansible/ArgoCD replaces this (B9/E)
 KUBECONFIG ?= ~/.kube/kubelab-config

@@ -499,10 +499,11 @@ def k8s_status(
 def ansible_generate(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
 ) -> None:
-    """Generate Ansible inventory and group_vars from common.yaml (SSOT).
+    """Generate Ansible inventory from common.yaml (SSOT).
 
-    Reads networking.* from common.yaml and produces inventory + group_vars
-    in infra/ansible/generated/{env}/.
+    Reads networking.* from common.yaml and produces inventory
+    in infra/ansible/generated/{env}/. Playbooks load config
+    directly via include_vars (ADR-020 Rev2).
     """
     logger.section("Ansible Generate")
 
@@ -518,6 +519,52 @@ def ansible_generate(
             raise typer.Exit(1) from None
     except Exception as e:
         logger.error(f"Ansible generation failed: {e}")
+        raise typer.Exit(1) from None
+
+
+@ansible_app.command("run")
+def ansible_run(
+    playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
+    limit: Annotated[str | None, typer.Option("--limit", "-l", help="Limit to specific hosts")] = None,
+    tags: Annotated[str | None, typer.Option("--tags", "-t", help="Run only tagged tasks")] = None,
+    check: Annotated[bool, typer.Option("--check", help="Dry-run mode (no changes)")] = False,
+) -> None:
+    """Run an Ansible playbook against the generated inventory.
+
+    Loads SSOT config via include_vars at playbook level (ADR-020 Rev2).
+    Inventory is generated from common.yaml networking.* section.
+    """
+    logger.section(f"Ansible Run — {playbook} ({env})")
+
+    ansible_dir = settings.ansible_dir
+    inventory = ansible_dir / "generated" / env / "hosts.yml"
+    playbook_path = ansible_dir / "playbooks" / f"{playbook}.yml"
+
+    if not inventory.exists():
+        logger.error(f"Inventory not found: {inventory}")
+        logger.info("Run 'toolkit infra ansible generate --env {env}' first")
+        raise typer.Exit(1) from None
+
+    if not playbook_path.exists():
+        logger.error(f"Playbook not found: {playbook_path}")
+        raise typer.Exit(1) from None
+
+    cmd = f"ansible-playbook {playbook_path} -i {inventory} -e deploy_env={env}"
+    if limit:
+        cmd += f" --limit {limit}"
+    if tags:
+        cmd += f" --tags {tags}"
+    if check:
+        cmd += " --check"
+
+    logger.info(f"Running: {cmd}")
+    result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+
+    if result.returncode == 0:
+        logger.success(f"Playbook '{playbook}' completed successfully")
+    else:
+        logger.error(f"Playbook '{playbook}' failed")
         raise typer.Exit(1) from None
 
 

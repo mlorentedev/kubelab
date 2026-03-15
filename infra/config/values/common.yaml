@@ -24,6 +24,7 @@ networking:
     tailscale_ip: "100.64.0.2"
     ssh_user: "deployer"
     ansible_groups: ["vps", "docker_hosts"]
+    docker_network: "proxy"  # Stays "proxy" until Traefik VPS role migrates all containers atomically
     backup:
       root: "/opt/backups"
       retention: 3

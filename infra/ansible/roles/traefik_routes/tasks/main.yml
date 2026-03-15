@@ -1,0 +1,19 @@
+---
+- name: Ensure Traefik dynamic config directory exists
+  file:
+    path: "{{ traefik_dynamic_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Template Headscale route
+  template:
+    src: app-headscale.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/app-headscale.yml"
+    mode: "0644"
+
+- name: Template Uptime Kuma route
+  template:
+    src: app-status.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/app-status.yml"
+    mode: "0644"
+  when: uptime_kuma_backend_url != ""

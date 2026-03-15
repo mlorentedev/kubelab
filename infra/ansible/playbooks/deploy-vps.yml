@@ -1,0 +1,54 @@
+---
+- name: Deploy VPS infrastructure services
+  hosts: vps
+  gather_facts: false
+
+  vars:
+    deploy_env: prod  # VPS is prod-only — override with -e deploy_env=X if needed
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+  roles:
+    - role: ../roles/headscale
+      tags: [headscale]
+      vars:
+        headscale_image: "{{ config.apps.services.core.headscale.image }}"
+        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
+        headscale_listen_port: "{{ config.apps.services.core.headscale.default_port }}"
+        headscale_stun_port: "{{ config.apps.services.core.headscale.stun_port }}"
+        vps_public_ip: "{{ config.networking.vps.public_ip }}"
+        docker_network: "{{ config.networking.vps.docker_network }}"
+        restart_policy: "{{ config.global.restart_policy }}"
+        tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
+        headscale_dns_split:
+          staging.kubelab.live:
+            - "{{ config.networking.nodes.rpi4.tailscale_ip }}"
+        headscale_dns_extra_records:
+          - name: "ollama.{{ config.global.base_domain }}"
+            type: A
+            value: "{{ config.networking.nodes.beelink.tailscale_ip }}"
+          - name: "jetson.{{ config.global.base_domain }}"
+            type: A
+            value: "{{ config.networking.nodes.jetson.tailscale_ip }}"
+
+    - role: ../roles/traefik_routes
+      tags: [traefik, routes]
+      vars:
+        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
+        headscale_backend_port: "{{ config.apps.services.core.headscale.default_port }}"
+        traefik_cert_resolver: "{{ config.edge.traefik.cert_resolver }}"
+        uptime_kuma_domain: "{{ config.apps.services.observability.uptime_kuma.domain }}"
+        uptime_kuma_backend_url: "http://{{ config.networking.nodes.rpi3.tailscale_ip }}:{{ config.apps.services.observability.uptime_kuma.default_port }}"

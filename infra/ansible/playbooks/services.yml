@@ -1,0 +1,4 @@
+---
+# All Layer 2 infrastructure services
+- import_playbook: deploy-vps.yml
+- import_playbook: deploy-dns.yml

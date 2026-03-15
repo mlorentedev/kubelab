@@ -1,0 +1,51 @@
+---
+- name: Create Headscale directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ headscale_remote_dir }}"
+    - "{{ headscale_config_dir }}"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ headscale_remote_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: headscale_compose
+
+- name: Template Headscale config
+  template:
+    src: config.yaml.j2
+    dest: "{{ headscale_config_dir }}/config.yaml"
+    mode: "0644"
+  register: headscale_config
+
+- name: Ensure Docker network exists
+  community.docker.docker_network:
+    name: "{{ docker_network }}"
+    state: present
+    driver: bridge
+
+- name: Pull Headscale image
+  command: docker compose -f {{ headscale_remote_dir }}/docker-compose.yml pull
+  changed_when: false
+
+- name: Start Headscale
+  command: docker compose -f {{ headscale_remote_dir }}/docker-compose.yml up -d
+  register: headscale_start
+  changed_when: "'Started' in headscale_start.stderr or 'Created' in headscale_start.stderr"
+
+- name: Restart Headscale on config change
+  command: docker compose -f {{ headscale_remote_dir }}/docker-compose.yml restart
+  when: headscale_config.changed or headscale_compose.changed
+  notify: wait for headscale
+
+- name: Wait for Headscale to be healthy
+  command: docker inspect --format '{{ '{{' }}.State.Health.Status{{ '}}' }}' headscale
+  register: headscale_health
+  retries: 12
+  delay: 5
+  until: headscale_health.stdout | trim == 'healthy'
+  changed_when: false

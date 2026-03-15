@@ -1,0 +1,64 @@
+---
+- name: Create CoreDNS directory
+  file:
+    path: "{{ coredns_remote_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ coredns_remote_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: coredns_compose
+
+- name: Template Corefile
+  template:
+    src: Corefile.j2
+    dest: "{{ coredns_remote_dir }}/Corefile"
+    mode: "0644"
+  register: corefile
+
+- name: Template pihole-forwarding.conf
+  template:
+    src: pihole-forwarding.conf.j2
+    dest: "{{ coredns_remote_dir }}/pihole-forwarding.conf"
+    mode: "0644"
+  register: pihole_conf
+
+- name: Pull images
+  command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
+  changed_when: false
+
+- name: Start DNS stack
+  command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml up -d
+  register: dns_start
+  changed_when: "'Started' in dns_start.stderr or 'Created' in dns_start.stderr"
+
+- name: Restart CoreDNS on config change
+  command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml restart coredns
+  when: corefile.changed
+  notify: verify coredns
+
+# Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs
+- name: Restart Pi-hole on config change
+  command: docker restart pihole
+  when: pihole_conf.changed
+  notify: verify pihole
+
+- name: Wait for CoreDNS
+  command: dig @127.0.0.1 -p {{ coredns_port }} {{ service_domains.vpn | default(base_domain) }} +short
+  register: coredns_test
+  retries: 6
+  delay: 5
+  until: coredns_test.rc == 0
+  changed_when: false
+
+- name: Wait for Pi-hole
+  uri:
+    url: "http://127.0.0.1:{{ pihole_web_port }}/admin/"
+    status_code: [200, 302]
+  register: pihole_test
+  retries: 6
+  delay: 5
+  until: pihole_test.status in [200, 302]

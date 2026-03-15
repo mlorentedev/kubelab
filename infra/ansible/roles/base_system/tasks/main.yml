@@ -1,0 +1,64 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: not (legacy_python | default(false))
+
+- name: Install base packages
+  apt:
+    name: "{{ base_packages }}"
+    state: present
+  when: not (legacy_python | default(false))
+
+- name: Install base packages (legacy Python host)
+  raw: apt-get update && apt-get install -y {{ base_packages | join(' ') }}
+  when: legacy_python | default(false)
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+  when: not (legacy_python | default(false))
+
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  when: inventory_hostname != ansible_hostname | default('')
+
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+  when: firewall_enabled and not (legacy_python | default(false))
+
+- name: Set UFW default deny incoming
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+  when: firewall_enabled and not (legacy_python | default(false))
+
+- name: Set UFW default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+  when: firewall_enabled and not (legacy_python | default(false))
+
+- name: Allow firewall ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ firewall_allowed_ports }}"
+  when: firewall_enabled and not (legacy_python | default(false))
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+  when: firewall_enabled and not (legacy_python | default(false))
+  notify: restart ufw
+
+- name: Create deploy base directory
+  file:
+    path: "{{ deploy_base_dir }}"
+    state: directory
+    mode: "0755"

@@ -1,0 +1,10 @@
+---
+# Ansible Galaxy collections required by kubelab roles
+# Install: ansible-galaxy collection install -r infra/ansible/requirements.yml
+collections:
+  - name: community.docker
+    version: ">=5.0.0"
+  - name: community.general
+    version: ">=12.0.0"
+  - name: ansible.posix
+    version: ">=2.0.0"

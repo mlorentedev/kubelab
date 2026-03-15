@@ -1,0 +1,5 @@
+# Managed by Ansible — do not edit manually
+# Pi-hole conditional forwarding to CoreDNS
+# All *.{{ base_domain }} queries → CoreDNS on host port {{ coredns_port }}
+# Uses Docker bridge gateway (not 127.0.0.1 — Pi-hole runs in Docker)
+server=/{{ base_domain }}/172.17.0.1#{{ coredns_port }}

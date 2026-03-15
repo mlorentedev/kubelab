@@ -1,0 +1,17 @@
+# Managed by Ansible — do not edit manually
+# Uptime Kuma status page — proxied from VPS via Tailscale
+http:
+  routers:
+    status:
+      rule: "Host(`{{ uptime_kuma_domain }}`)"
+      entryPoints:
+        - websecure
+      service: status
+      tls:
+        certResolver: {{ traefik_cert_resolver }}
+
+  services:
+    status:
+      loadBalancer:
+        servers:
+          - url: "{{ uptime_kuma_backend_url }}"

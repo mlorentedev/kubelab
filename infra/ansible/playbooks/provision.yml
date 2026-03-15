@@ -1,0 +1,39 @@
+---
+- name: Bootstrap infrastructure nodes
+  hosts: all
+  become: true
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+  roles:
+    - role: ../roles/base_system
+      tags: [base, packages]
+      vars:
+        system_timezone: "{{ config.global.timezone }}"
+
+    - role: ../roles/ssh_hardening
+      tags: [ssh, security]
+
+    - role: ../roles/docker
+      tags: [docker]
+      vars:
+        docker_network: "{{ config.networking.vps.docker_network | default(config.network_name) }}"
+      when: "'docker_hosts' in group_names"
+
+    - role: ../roles/tailscale
+      tags: [tailscale, vpn]
+      vars:
+        tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"

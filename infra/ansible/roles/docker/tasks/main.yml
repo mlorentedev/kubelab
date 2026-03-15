@@ -70,10 +70,7 @@
     name: "{{ item }}"
     state: present
     driver: bridge
-  loop:
-    - "{{ docker.network }}"
-    - monitoring
-    - storage
+  loop: "{{ [docker_network] + docker_additional_networks }}"
   become_user: "{{ ansible_user }}"
 
 - name: Start and enable Docker
@@ -96,8 +93,8 @@
       {
         "log-driver": "json-file",
         "log-opts": {
-          "max-size": "{{ logging.max_size | default('10m') }}",
-          "max-file": "{{ logging.max_files | default('3') }}"
+          "max-size": "{{ docker_log_max_size }}",
+          "max-file": "{{ docker_log_max_files }}"
         },
         "storage-driver": "overlay2",
         "live-restore": true,
@@ -107,8 +104,8 @@
         "fixed-cidr": "172.17.0.0/16",
         "default-address-pools": [
           {
-            "base": "172.80.0.0/12",
-            "size": 24
+            "base": "{{ docker_address_pool_base }}",
+            "size": {{ docker_address_pool_size }}
           }
         ]
       }

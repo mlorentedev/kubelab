@@ -1,0 +1,11 @@
+---
+traefik_dynamic_dir: "/opt/traefik/dynamic"
+traefik_cert_resolver: "letsencrypt"
+
+# Headscale route
+headscale_domain: "vpn.example.com"
+headscale_backend_port: 8080
+
+# Uptime Kuma route (proxied through VPS)
+uptime_kuma_domain: "status.example.com"
+uptime_kuma_backend_url: ""
