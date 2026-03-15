@@ -1,5 +1,6 @@
 ---
 nginx_errors_image: "nginx:alpine"
 nginx_errors_container_name: "nginx"
+nginx_errors_remote_dir: "/opt/nginx-errors"
 docker_network: "kubelab"
 restart_policy: "unless-stopped"

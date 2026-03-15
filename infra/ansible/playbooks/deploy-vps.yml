@@ -21,17 +21,25 @@
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
 
-    - name: Decrypt SOPS secrets (controller-side)
+    - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
-      register: sops_output
+      register: sops_common
       delegate_to: localhost
       changed_when: false
       check_mode: false
       no_log: true
 
-    - name: Load secrets
+    - name: Decrypt env secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
+      register: sops_env
+      delegate_to: localhost
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Merge secrets (env overrides common)
       set_fact:
-        secrets: "{{ sops_output.stdout | from_yaml }}"
+        secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
 
   roles:
@@ -63,7 +71,7 @@
             sans:
               - "*.kubelab.live"
         traefik_dashboard_domain: "{{ config.edge.traefik.domain | default('traefik.' + config.global.base_domain) }}"
-        traefik_dashboard_auth_users: "{{ config.edge.traefik.dashboard_auth_users | default('') }}"
+        traefik_dashboard_auth_users: "{{ secrets.basic_auth.credentials | default('') }}"
         traefik_rate_limit_average: "{{ config.edge.traefik.rate_limit_average }}"
         traefik_rate_limit_burst: "{{ config.edge.traefik.rate_limit_burst }}"
         traefik_rate_limit_period: "{{ config.edge.traefik.rate_limit_period }}"

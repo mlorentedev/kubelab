@@ -1,11 +1,37 @@
 ---
-- name: Check if nginx container exists
-  command: docker inspect {{ nginx_errors_container_name }}
-  register: nginx_check
-  changed_when: false
-  failed_when: false
+# Error page source files live in edge/nginx/ (shared by dev, staging, prod).
+# This role copies them to the remote host — zero duplication in the repo.
 
-- name: Start nginx error pages container
+- name: Create nginx errors directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ nginx_errors_remote_dir }}"
+    - "{{ nginx_errors_remote_dir }}/errors"
+
+- name: Copy nginx config
+  copy:
+    src: "{{ inventory_dir }}/../../../edge/nginx/configs/nginx.prod.conf"
+    dest: "{{ nginx_errors_remote_dir }}/nginx.conf"
+    mode: "0644"
+  register: nginx_conf
+
+- name: Copy error page assets
+  copy:
+    src: "{{ inventory_dir }}/../../../edge/nginx/assets/errors/"
+    dest: "{{ nginx_errors_remote_dir }}/errors/"
+    mode: "0644"
+  register: nginx_assets
+
+- name: Remove existing container (if config changed)
+  community.docker.docker_container:
+    name: "{{ nginx_errors_container_name }}"
+    state: absent
+  when: nginx_conf.changed or nginx_assets.changed
+
+- name: Run nginx error pages container
   community.docker.docker_container:
     name: "{{ nginx_errors_container_name }}"
     image: "{{ nginx_errors_image }}"
@@ -13,10 +39,6 @@
     restart_policy: "{{ restart_policy }}"
     networks:
       - name: "{{ docker_network }}"
-  when: nginx_check.rc != 0
-
-- name: Ensure nginx is running
-  command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' {{ nginx_errors_container_name }}
-  register: nginx_running
-  changed_when: false
-  failed_when: nginx_running.stdout | trim != 'true'
+    volumes:
+      - "{{ nginx_errors_remote_dir }}/nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "{{ nginx_errors_remote_dir }}/errors:/usr/share/nginx/html/errors:ro"
