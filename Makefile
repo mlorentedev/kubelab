@@ -46,8 +46,8 @@ help:
 	@echo "  make secrets-jwks ENV=x Generate OIDC JWKS RSA key for an env"
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
 	@echo "  make secrets-audit      Audit secrets across all environments"
-	@echo "  tk infra ansible run -p deploy-vps    Deploy VPS (Headscale + Traefik routes)"
-	@echo "  tk infra ansible run -p deploy-dns    Deploy CoreDNS + Pi-hole to RPi4"
+	@echo "  make deploy-vps         Deploy VPS services (Headscale + Traefik routes)"
+	@echo "  make deploy-dns         Deploy CoreDNS + Pi-hole to RPi4"
 	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
 	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
@@ -259,6 +259,15 @@ secrets-hash:
 .PHONY: secrets-audit
 secrets-audit:
 	@$(TOOLKIT) secrets audit
+
+# Infrastructure deploys (Ansible — ADR-020 Phase 2)
+.PHONY: deploy-vps
+deploy-vps:
+	@$(TOOLKIT) infra ansible run -p deploy-vps -e prod
+
+.PHONY: deploy-dns
+deploy-dns:
+	@$(TOOLKIT) infra ansible run -p deploy-dns -e prod
 
 # K8s manifest apply — until Ansible/ArgoCD replaces this (B9/E)
 KUBECONFIG ?= ~/.kube/kubelab-config
