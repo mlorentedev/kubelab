@@ -91,7 +91,9 @@ export const ui = {
     'hero.cta': 'Empieza ahora',
 
     // Home sections
+    'home.stack': 'Con qué trabajo',
     'home.projects': 'Lo que construyo',
+    'home.community': 'Comunidad y más',
     'home.latest': 'Últimas notas',
     'home.allNotes': 'Todas las notas',
 
