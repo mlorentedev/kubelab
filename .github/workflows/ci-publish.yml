@@ -66,15 +66,10 @@ jobs:
           echo "Branch: $BRANCH_NAME"
 
           case "$DOCKER_VERSION" in
-            *-dev.*)
+            dev.*)
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
-              TAG_TYPE="pre-release"
-              ;;
-            *-rc.*)
-              FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
-              TAG_TYPE="release-candidate"
+              TAG_TYPE="dev"
               ;;
             *)
               FINAL_TAG="$DOCKER_VERSION"
