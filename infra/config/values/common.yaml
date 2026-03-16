@@ -265,26 +265,8 @@ apps:
       enable_homelabs: true
       enable_contact: true
 
-    portfolio:
-      name: portfolio
-      domain: mlorente.dev
-      image_name: kubelab-portfolio
-      version: dev
-      enable_auth: false
-      auth_level: bypass
-      default_port: 8080
-      health_path: /
-
-    blog:
-      name: blog
-      domain: blog.kubelab.live
-      image_name: kubelab-blog
-      version: dev
-      enable_auth: false
-      auth_level: bypass
-      default_port: 4000
-      health_path: /
-
+    # portfolio: removed — renamed to web (WEB-001, 2026-03-15)
+    # blog: removed — killed (2026-03-15)
     # wiki: removed — integrated in toolkit as `kubelab docs` (see B1/TOOLKIT-008)
 
   # Third-party services
