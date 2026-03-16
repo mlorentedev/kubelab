@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.0.0...errors-v1.0.1) (2026-03-16)
+
+
+### Bug Fixes
+
+* **errors:** inline image, remove cyan bar ([#108](https://github.com/mlorentedev/kubelab/issues/108)) ([57b88ef](https://github.com/mlorentedev/kubelab/commit/57b88ef0965a9c8ae74a6c69710914b17e349f2c))
+
 ## 1.0.0 (2026-03-16)
 
 
