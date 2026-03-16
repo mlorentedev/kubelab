@@ -1,0 +1,110 @@
+# =============================================================================
+# KubeLab Umbrella Chart — Staging defaults
+# Structure mirrors infra/config/values/common.yaml
+# =============================================================================
+
+global:
+  baseDomain: staging.kubelab.live
+  registry: docker.io/mlorentedev
+
+# -----------------------------------------------------------------------------
+# Custom apps (via kubelab-app generic chart)
+# -----------------------------------------------------------------------------
+kubelab-app:
+  apps:
+    errors:
+      enabled: true
+      component: edge
+      image:
+        repository: docker.io/mlorentedev/kubelab-errors
+        tag: dev
+      containerPort: 8080
+      replicas: 1
+      healthCheck:
+        path: /health
+      resources:
+        limits:
+          memory: 64Mi
+          cpu: "0.1"
+        requests:
+          memory: 32Mi
+          cpu: "0.05"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+      ingress:
+        enabled: false  # errors is accessed via middleware, not direct ingress
+      middleware:
+        name: error-pages
+        status:
+          - "403"
+          - "404"
+          - "408"
+          - "429"
+          - "500-503"
+        query: "/errors/{status}.html"
+      catchAll:
+        match: "HostRegexp(`.+\\.staging\\.kubelab\\.live`) || Host(`staging.kubelab.live`)"
+        certResolver: letsencrypt
+        domains:
+          - main: staging.kubelab.live
+            sans:
+              - "*.staging.kubelab.live"
+
+    api:
+      enabled: true
+      component: app
+      image:
+        repository: docker.io/mlorentedev/kubelab-api
+        tag: dev
+      containerPort: 8080
+      replicas: 1
+      healthCheck:
+        path: /health
+      envFrom:
+        - type: configMapRef
+          name: api-config
+        - type: secretRef
+          name: api-secrets
+      resources:
+        limits:
+          memory: 256Mi
+          cpu: "0.5"
+        requests:
+          memory: 128Mi
+          cpu: "0.25"
+      ingress:
+        enabled: true
+        domain: api.staging.kubelab.live
+        middlewares:
+          - error-pages
+          - secure-headers
+
+    web:
+      enabled: true
+      component: app
+      image:
+        repository: docker.io/mlorentedev/kubelab-web
+        tag: dev
+      containerPort: 4321
+      replicas: 1
+      healthCheck:
+        path: /
+      envFrom:
+        - type: configMapRef
+          name: web-config
+      resources:
+        limits:
+          memory: 256Mi
+          cpu: "0.5"
+        requests:
+          memory: 128Mi
+          cpu: "0.25"
+      ingress:
+        enabled: true
+        domain: staging.mlorente.dev
+        middlewares:
+          - error-pages
+          - secure-headers

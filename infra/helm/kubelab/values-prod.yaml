@@ -1,0 +1,31 @@
+# =============================================================================
+# KubeLab Umbrella Chart — Prod overrides
+# Only values that differ from staging (values.yaml)
+# =============================================================================
+
+global:
+  baseDomain: kubelab.live
+
+kubelab-app:
+  apps:
+    errors:
+      image:
+        tag: latest  # Pinned by release-please on release
+      catchAll:
+        match: "HostRegexp(`.+\\.kubelab\\.live`) || Host(`kubelab.live`)"
+        domains:
+          - main: kubelab.live
+            sans:
+              - "*.kubelab.live"
+
+    api:
+      image:
+        tag: latest
+      ingress:
+        domain: api.kubelab.live
+
+    web:
+      image:
+        tag: latest
+      ingress:
+        domain: mlorente.dev

@@ -5,10 +5,9 @@ namespace: kubelab
 
 resources:
   - namespace.yaml
-  # portfolio.yaml removed 2026-03-15: unified under 'web' in overlays
+  # api, web, errors: managed by Helm (ADR-021). DO NOT add here.
   - external/ollama.yaml
   - external/uptime-kuma.yaml
-  - edge/errors.yaml
   - edge/secure-headers.yaml
   - services/grafana.yaml
   - services/loki.yaml

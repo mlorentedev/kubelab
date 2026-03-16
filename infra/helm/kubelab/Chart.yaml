@@ -1,0 +1,13 @@
+apiVersion: v2
+name: kubelab
+description: KubeLab IDP — umbrella chart for all K8s workloads
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies: []
+  # H2: third-party services added here as dependencies
+  # - name: grafana
+  #   version: "8.x.x"
+  #   repository: https://grafana.github.io/helm-charts
+  #   condition: grafana.enabled

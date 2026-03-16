@@ -51,7 +51,8 @@ help:
 	@echo "  make provision-rpi4     Provision RPi4 gateway (base, ssh, docker, tailscale, coredns)"
 	@echo "  make deploy-k3s ENV=x   Deploy K3s cluster (ENV=staging|prod)"
 	@echo "  make backup-vps         Backup VPS Docker volumes and configs"
-	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
+	@echo "  make deploy-k8s ENV=x   Deploy ALL K8s workloads (Helm + legacy kustomize)"
+	@echo "  make helm-template ENV=x Render Helm templates (dry-run)"
 	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo "  make dev-app APP=x      Start Astro app dev server (site, astro-site)"
@@ -285,27 +286,53 @@ deploy-k3s:
 backup-vps:
 	@$(TOOLKIT) infra ansible run -p backup -e prod
 
-# K8s manifest apply — until Ansible/ArgoCD replaces this (B9/E)
+# Helm deploy (ADR-021 — replaces kubectl apply -k)
 KUBECONFIG ?= ~/.kube/kubelab-config
+HELM_CHART = infra/helm/kubelab
 
-.PHONY: k8s-apply
-k8s-apply:
-	@test -n "$(ENV)" || (echo "Usage: make k8s-apply ENV=staging [IMAGE_TAG=0.0.0-dev.abc1234]" && exit 1)
-	@echo "Applying K8s manifests for $(ENV)..."
-	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG)
-	@if [ -n "$(IMAGE_TAG)" ]; then \
-		echo "Updating web image to kubelab-web:$(IMAGE_TAG)..."; \
-		kubectl set image deployment/web web=docker.io/mlorentedev/kubelab-web:$(IMAGE_TAG) -n kubelab --kubeconfig $(KUBECONFIG); \
+.PHONY: helm-deploy
+helm-deploy:
+	@test -n "$(ENV)" || (echo "Usage: make helm-deploy ENV=staging|prod" && exit 1)
+	@echo "Deploying KubeLab via Helm ($(ENV))..."
+	@if [ "$(ENV)" = "prod" ]; then \
+		helm upgrade --install kubelab $(HELM_CHART) \
+			-f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+	else \
+		helm upgrade --install kubelab $(HELM_CHART) \
+			-f $(HELM_CHART)/values.yaml \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
 	fi
-	@kubectl rollout status deployment/web -n kubelab --kubeconfig $(KUBECONFIG) --timeout=60s
-	@echo "✓ K8s manifests applied for $(ENV)"
 
-.PHONY: k8s-cleanup
-k8s-cleanup:
-	@test -n "$(ENV)" || (echo "Usage: make k8s-cleanup ENV=staging" && exit 1)
-	@echo "Cleaning up orphaned resources in $(ENV)..."
-	@kubectl delete deployment/blog service/blog ingressroute/blog deployment/portfolio service/portfolio ingressroute/portfolio -n kubelab --kubeconfig $(KUBECONFIG) --ignore-not-found
-	@echo "✓ Orphaned resources cleaned"
+.PHONY: helm-template
+helm-template:
+	@test -n "$(ENV)" || (echo "Usage: make helm-template ENV=staging|prod" && exit 1)
+	@if [ "$(ENV)" = "prod" ]; then \
+		helm template kubelab $(HELM_CHART) -f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml; \
+	else \
+		helm template kubelab $(HELM_CHART) -f $(HELM_CHART)/values.yaml; \
+	fi
+
+# K8s deploy — Helm for piloted apps + legacy kustomize for remaining services
+# When H2 is complete, k8s-apply is removed and deploy-k8s becomes helm-deploy only
+
+.PHONY: deploy-k8s
+deploy-k8s:
+	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
+	@echo "=== Deploying K8s workloads ($(ENV)) ==="
+	@echo "[1/2] Helm (api, web, errors)..."
+	@if [ "$(ENV)" = "prod" ]; then \
+		helm upgrade --install kubelab $(HELM_CHART) \
+			-f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+	else \
+		helm upgrade --install kubelab $(HELM_CHART) \
+			-f $(HELM_CHART)/values.yaml \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+	fi
+	@echo "[2/2] Kustomize (legacy services)..."
+	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG)
+	@echo "✓ All K8s workloads deployed for $(ENV)"
 
 # -----------------------------------------------------------------------------
 # Deployment Shortcuts

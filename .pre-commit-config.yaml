@@ -12,7 +12,7 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
         args: ['--unsafe']  # Allow custom YAML tags
-        exclude: 'infra/ansible/templates/'
+        exclude: 'infra/ansible/templates/|infra/helm/.*/templates/'
       - id: check-json
         exclude: 'apps/blog/jekyll-site/'
       - id: check-added-large-files
@@ -86,6 +86,7 @@ repos:
     rev: v1.37.1
     hooks:
       - id: yamllint
+        exclude: '(infra/helm/.*/templates/|infra/ansible/|apps/blog/|apps/wiki/|infra/config/secrets/)'
         args:
           - '-d'
           - >-
@@ -96,7 +97,6 @@ repos:
               truthy: {check-keys: false},
               comments-indentation: disable
             }}
-        exclude: '(infra/ansible/|apps/blog/jekyll-site/|apps/wiki/mkdocs\.yml|infra/config/secrets/)'
 
   # Dockerfile linting
   - repo: https://github.com/hadolint/hadolint

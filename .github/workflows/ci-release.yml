@@ -2,22 +2,21 @@
 name: Create Global Release Bundle
 
 on:
-  # Trigger automatically after CI pipeline completes successfully
   workflow_run:
     workflows: ["CI"]
     types:
       - completed
     branches:
       - master
-
-  # Allow manual trigger for emergency releases
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   create-global-release:
     name: Create Release Bundle
     runs-on: ubuntu-latest
-    # Run if triggered by successful workflow_run OR manual dispatch
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository

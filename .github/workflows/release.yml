@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  security-events: write
 
 jobs:
   release-please:
@@ -16,11 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
-      api_released: ${{ steps.release.outputs['apps/api--release_created'] }}
+      api_release_created: ${{ steps.release.outputs['apps/api--release_created'] }}
       api_version: ${{ steps.release.outputs['apps/api--version'] }}
-      web_released: ${{ steps.release.outputs['apps/web--release_created'] }}
+      web_release_created: ${{ steps.release.outputs['apps/web--release_created'] }}
       web_version: ${{ steps.release.outputs['apps/web--version'] }}
-      errors_released: ${{ steps.release.outputs['edge/errors--release_created'] }}
+      errors_release_created: ${{ steps.release.outputs['edge/errors--release_created'] }}
       errors_version: ${{ steps.release.outputs['edge/errors--version'] }}
     steps:
       - uses: googleapis/release-please-action@v4
@@ -30,11 +31,15 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Build + push stable Docker images for released packages
+      - name: Log release outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$OUTPUTS"
+
   publish-api:
     name: Publish API
     needs: release-please
-    if: needs.release-please.outputs.api_released == 'true'
+    if: needs.release-please.outputs.api_release_created == 'true'
     uses: ./.github/workflows/ci-publish.yml
     with:
       app: api
@@ -46,20 +51,19 @@ jobs:
   publish-web:
     name: Publish Web
     needs: release-please
-    if: needs.release-please.outputs.web_released == 'true'
+    if: needs.release-please.outputs.web_release_created == 'true'
     uses: ./.github/workflows/ci-publish.yml
     with:
       app: web
       tag: ${{ needs.release-please.outputs.web_version }}
       sha: ${{ github.sha }}
       context: ./apps/web
-      extra_build_args: ""
     secrets: inherit
 
   publish-errors:
     name: Publish Errors
     needs: release-please
-    if: needs.release-please.outputs.errors_released == 'true'
+    if: needs.release-please.outputs.errors_release_created == 'true'
     uses: ./.github/workflows/ci-publish.yml
     with:
       app: errors

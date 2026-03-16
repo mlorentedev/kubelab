@@ -1,0 +1,55 @@
+{{- range $name, $app := .Values.apps }}
+{{- if $app.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubelab-app.labels" (dict "name" $name "component" ($app.component | default "app")) | nindent 4 }}
+spec:
+  replicas: {{ $app.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "kubelab-app.selectorLabels" (dict "name" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubelab-app.labels" (dict "name" $name "component" ($app.component | default "app")) | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: "{{ $app.image.repository }}:{{ $app.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ $app.containerPort }}
+              protocol: TCP
+          {{- if $app.healthCheck }}
+          livenessProbe:
+            httpGet:
+              path: {{ $app.healthCheck.path }}
+              port: http
+            initialDelaySeconds: {{ $app.healthCheck.livenessDelay | default 5 }}
+            periodSeconds: {{ $app.healthCheck.livenessPeriod | default 30 }}
+          readinessProbe:
+            httpGet:
+              path: {{ $app.healthCheck.path }}
+              port: http
+            initialDelaySeconds: {{ $app.healthCheck.readinessDelay | default 3 }}
+            periodSeconds: {{ $app.healthCheck.readinessPeriod | default 10 }}
+          {{- end }}
+          {{- if $app.envFrom }}
+          envFrom:
+            {{- range $app.envFrom }}
+            - {{ .type }}:
+                name: {{ .name }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml $app.resources | nindent 12 }}
+          {{- if $app.securityContext }}
+          securityContext:
+            {{- toYaml $app.securityContext | nindent 12 }}
+          {{- end }}
+{{- end }}
+{{- end }}

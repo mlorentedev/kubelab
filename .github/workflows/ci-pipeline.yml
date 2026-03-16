@@ -80,13 +80,23 @@ jobs:
           BRANCH: ${{ github.ref_name }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
+          SOURCE_DIR="${{ steps.changes.outputs.source_dir }}"
+          VERSION_FILE="${SOURCE_DIR}/version.txt"
+
+          # Read current version from version.txt (managed by release-please)
+          if [ -f "$VERSION_FILE" ]; then
+            BASE_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+          else
+            BASE_VERSION="0.0.0"
+          fi
+
           if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
             # Master builds are handled by release.yml — skip here
             echo "version=skip" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping Docker build on master (release-please handles stable releases)"
           else
-            # Feature branches: dev build with run number for ordering
-            FINAL_VERSION="dev.${RUN_NUMBER}"
+            # Feature branches: release candidate (e.g., 0.1.0-rc.142)
+            FINAL_VERSION="${BASE_VERSION}-rc.${RUN_NUMBER}"
             echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
             echo "::notice::[DEV] Feature build: $FINAL_VERSION"
           fi
@@ -96,7 +106,7 @@ jobs:
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: '1.25'
           cache-dependency-path: './apps/api/src/go.sum'
 
       - name: Lint API code
@@ -140,9 +150,9 @@ jobs:
       # Security Scanning - Python (toolkit)
       - name: Set up Python for security scanning
         if: steps.changes.outputs.should_build == 'true'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install Python security tools
         if: steps.changes.outputs.should_build == 'true'
