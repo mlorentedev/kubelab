@@ -87,7 +87,7 @@ jobs:
               - 'apps/web/Dockerfile'
               - 'infra/stacks/apps/web/**'
             errors:
-              - 'apps/errors/**'
+              - 'edge/errors/**'
               - 'infra/stacks/edge/errors/**'
 
       - name: Check if any app changed

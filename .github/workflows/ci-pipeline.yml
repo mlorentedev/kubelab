@@ -236,7 +236,7 @@ jobs:
               echo "context=./apps/web" >> "$GITHUB_OUTPUT"
               ;;
             errors)
-              echo "context=./apps/errors" >> "$GITHUB_OUTPUT"
+              echo "context=./edge/errors" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "::error::Unsupported app: ${{ inputs.app }}"

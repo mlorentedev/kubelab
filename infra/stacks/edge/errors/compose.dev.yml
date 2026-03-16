@@ -1,5 +1,5 @@
 services:
   errors:
     build:
-      context: ../../../../apps/errors
+      context: ../../../../edge/errors
       dockerfile: Dockerfile

@@ -48,6 +48,7 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make deploy-vps         Deploy VPS services (Headscale + Traefik routes)"
 	@echo "  make deploy-dns         Deploy CoreDNS + Pi-hole to RPi4"
+	@echo "  make provision-rpi4     Provision RPi4 gateway (base, ssh, docker, tailscale, coredns)"
 	@echo "  make deploy-k3s ENV=x   Deploy K3s cluster (ENV=staging|prod)"
 	@echo "  make backup-vps         Backup VPS Docker volumes and configs"
 	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
@@ -270,6 +271,10 @@ deploy-vps:
 .PHONY: deploy-dns
 deploy-dns:
 	@$(TOOLKIT) infra ansible run -p deploy-dns -e prod
+
+.PHONY: provision-rpi4
+provision-rpi4:
+	@$(TOOLKIT) infra ansible run -p provision-rpi4 -e prod -K
 
 .PHONY: deploy-k3s
 deploy-k3s:
