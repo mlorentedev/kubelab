@@ -96,7 +96,7 @@ jobs:
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: '1.25'
           cache-dependency-path: './apps/api/src/go.sum'
 
       - name: Lint API code
@@ -140,9 +140,9 @@ jobs:
       # Security Scanning - Python (toolkit)
       - name: Set up Python for security scanning
         if: steps.changes.outputs.should_build == 'true'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install Python security tools
         if: steps.changes.outputs.should_build == 'true'
