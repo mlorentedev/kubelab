@@ -1,0 +1,458 @@
+/ ===== Minimal Wiki Theme - Tailwind-inspired ===== /
+
+/ CSS Custom Properties - Tailwind-like design tokens /
+:root {
+  / Typography /
+  --font-family-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", monospace;
+
+  / Color Palette - Teal/Cyan Theme () /
+  --color-slate-: ffdfa;
+  --color-slate-: ccfbf;
+  --color-slate-: fe;
+  --color-slate-: eead;
+  --color-slate-: ddbf;
+  --color-slate-: ba;
+  --color-slate-: d;
+  --color-slate-: fe;
+  --color-slate-: e;
+  --color-slate-: ea;
+
+  / Teal accent colors based on  /
+  --color-teal-: ffdfa;
+  --color-teal-: ccfbf;
+  --color-teal-: fe;
+  --color-teal-: eead;
+  --color-teal-: ddbf;
+  --color-teal-: ;
+  --color-teal-: ;
+  --color-teal-: d;
+  --color-teal-: a;
+  --color-teal-: bf;
+
+  --color-cyan-: dee;
+  --color-cyan-: acc;
+  --color-cyan-: a;
+
+  / MkDocs Material variable overrides /
+  --md-text-font: var(--font-family-sans);
+  --md-code-font: var(--font-family-mono);
+  --md-primary-fg-color: var(--color-teal-);
+  --md-primary-fg-color--light: var(--color-teal-);
+  --md-primary-fg-color--dark: var(--color-teal-);
+  --md-accent-fg-color: var(--color-teal-);
+  --md-accent-fg-color--transparent: rgba(, , , .);
+
+  / Spacing - Tailwind scale /
+  --spacing-px: px;
+  --spacing-: ;
+  --spacing-: .rem;
+  --spacing-: .rem;
+  --spacing-: .rem;
+  --spacing-: rem;
+  --spacing-: .rem;
+  --spacing-: rem;
+  --spacing-: rem;
+
+  / Shadows - Tailwind-inspired /
+  --shadow-sm:  px px  rgb(   / .);
+  --shadow:  px px  rgb(   / .),  px px -px rgb(   / .);
+  --shadow-md:  px px -px rgb(   / .),  px px -px rgb(   / .);
+  --shadow-lg:  px px -px rgb(   / .),  px px -px rgb(   / .);
+
+  / Border Radius /
+  --rounded-sm: .rem;
+  --rounded: .rem;
+  --rounded-md: .rem;
+  --rounded-lg: .rem;
+  --rounded-xl: .rem;
+}
+
+/ Reset and Base Styles /
+ {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/ Layout Improvements /
+.md-grid {
+  max-width: px;
+}
+
+.md-content__inner {
+  margin: ;
+  padding-top: var(--spacing-);
+}
+
+/ Header - Minimal Design /
+.md-header {
+  background: linear-gradient(deg, var(--color-teal-) %, var(--color-teal-) %);
+  border-bottom: px solid var(--color-teal-);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(px);
+}
+
+.md-header__title {
+  font-weight: ;
+  font-size: .rem;
+  color: white;
+}
+
+/ Navigation - Clean & Minimal /
+.md-nav__link {
+  font-size: .rem;
+  font-weight: ;
+  color: var(--color-slate-);
+  transition: all .s ease;
+  border-radius: var(--rounded);
+  padding: var(--spacing-) var(--spacing-);
+}
+
+.md-nav__link:hover {
+  color: var(--color-teal-);
+  background-color: var(--color-teal-);
+  transform: translateX(px);
+}
+
+.md-nav__item--active > .md-nav__link {
+  color: var(--color-teal-);
+  font-weight: ;
+  background-color: var(--md-accent-fg-color--transparent);
+}
+
+/ Typography - Tailwind-inspired /
+.md-typeset h {
+  font-weight: ;
+  font-size: .rem;
+  color: var(--color-teal-);
+  margin-bottom: var(--spacing-);
+  padding-bottom: var(--spacing-);
+  border-bottom: px solid var(--color-teal-);
+}
+
+.md-typeset h {
+  font-weight: ;
+  font-size: .rem;
+  color: var(--color-teal-);
+  margin-top: var(--spacing-);
+  margin-bottom: var(--spacing-);
+  position: relative;
+  padding-left: var(--spacing-);
+}
+
+.md-typeset h::before {
+  content: '';
+  position: absolute;
+  left: ;
+  top: ;
+  bottom: ;
+  width: px;
+  background: var(--color-teal-);
+  border-radius: var(--rounded);
+}
+
+.md-typeset h {
+  font-weight: ;
+  font-size: .rem;
+  color: var(--color-teal-);
+  margin-top: var(--spacing-);
+  margin-bottom: var(--spacing-);
+}
+
+.md-typeset p {
+  color: var(--color-teal-);
+  line-height: .;
+}
+
+/ Code Blocks - Minimal Style /
+.md-typeset pre {
+  border-radius: var(--rounded-lg);
+  box-shadow: var(--shadow);
+  border: px solid var(--color-slate-);
+  background-color: var(--color-slate-);
+}
+
+.md-typeset code {
+  background-color: var(--md-accent-fg-color--transparent);
+  color: var(--color-teal-);
+  padding: var(--spacing-) var(--spacing-);
+  border-radius: var(--rounded);
+  font-size: .em;
+  font-weight: ;
+}
+
+/ Links /
+.md-typeset a {
+  color: var(--color-teal-);
+  text-decoration: none;
+  font-weight: ;
+  transition: color .s ease;
+}
+
+.md-typeset a:hover {
+  color: var(--color-teal-);
+  text-decoration: underline;
+  text-decoration-color: var(--color-teal-);
+  text-underline-offset: px;
+}
+
+/ Tables - Clean Style /
+.md-typeset table:not([class]) {
+  border-radius: var(--rounded-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: px solid var(--color-slate-);
+}
+
+.md-typeset table:not([class]) th {
+  background: linear-gradient(deg, var(--color-slate-), var(--color-slate-));
+  color: var(--color-slate-);
+  font-weight: ;
+  font-size: .rem;
+  text-transform: uppercase;
+  letter-spacing: .em;
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background-color: var(--md-accent-fg-color--transparent);
+}
+
+/ Cards - Minimal Design /
+.card {
+  background: white;
+  border: px solid var(--color-slate-);
+  border-radius: var(--rounded-xl);
+  padding: var(--spacing-);
+  box-shadow: var(--shadow);
+  transition: all .s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: ;
+  left: ;
+  right: ;
+  height: px;
+  background: var(--color-teal-);
+}
+
+.card:hover {
+  transform: translateY(-px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card h {
+  margin:   var(--spacing-) ;
+  font-size: .rem;
+  font-weight: ;
+  color: var(--color-slate-);
+}
+
+/ Responsive Grid /
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(px, fr));
+  gap: var(--spacing-);
+  margin: var(--spacing-) ;
+}
+
+/ Search /
+.md-search__form {
+  border-radius: var(--rounded-lg);
+  box-shadow: var(--shadow);
+  border: px solid rgba(, , , .);
+}
+
+.md-search__input {
+  border-radius: var(--rounded-lg);
+  font-weight: ;
+}
+
+/ Footer /
+.md-footer {
+  background: linear-gradient(deg, var(--color-slate-) %, var(--color-slate-) %);
+  border-top: px solid var(--color-slate-);
+}
+
+/ Mobile-first responsive design /
+@media (max-width: px) {
+  .md-grid {
+    max-width: %;
+    padding:  var(--spacing-);
+  }
+}
+
+@media (max-width: px) {
+  :root {
+    --spacing-: .rem; / Reduce spacing on mobile /
+  }
+
+  .md-typeset h {
+    font-size: .rem;
+    margin-bottom: var(--spacing-);
+  }
+
+  .md-typeset h {
+    font-size: .rem;
+    margin-top: var(--spacing-);
+    margin-bottom: var(--spacing-);
+  }
+
+  .md-typeset h {
+    font-size: .rem;
+    margin-top: var(--spacing-);
+  }
+
+  .cards {
+    grid-template-columns: fr;
+    gap: var(--spacing-);
+    margin: var(--spacing-) ;
+  }
+
+  .card {
+    padding: var(--spacing-);
+  }
+
+  .md-content__inner {
+    padding-top: var(--spacing-);
+    padding-left: var(--spacing-);
+    padding-right: var(--spacing-);
+  }
+
+  .md-nav__link {
+    font-size: .rem;
+    padding: var(--spacing-);
+  }
+
+  / Make tables horizontally scrollable on mobile /
+  .md-typeset table:not([class]) {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  / Hero section mobile adjustments /
+  .hero-section {
+    padding: rem  !important;
+  }
+
+  .hero-section h {
+    font-size: rem !important;
+  }
+
+  .hero-section p {
+    font-size: rem !important;
+    margin-bottom: .rem !important;
+  }
+
+  .hero-section div[style="display: flex"] {
+    flex-direction: column !important;
+    align-items: center;
+  }
+
+  .hero-section a {
+    width: % !important;
+    max-width: px;
+    text-align: center;
+  }
+}
+
+@media (max-width: px) {
+  .md-typeset h {
+    font-size: .rem;
+  }
+
+  .md-typeset h {
+    font-size: .rem;
+  }
+
+  .md-typeset h {
+    font-size: .rem;
+  }
+
+  .md-nav__link {
+    font-size: .rem;
+    padding: var(--spacing-) var(--spacing-);
+  }
+
+  .md-content__inner {
+    padding-left: var(--spacing-);
+    padding-right: var(--spacing-);
+  }
+
+  .card {
+    padding: var(--spacing-);
+  }
+
+  / Smaller hero on very small screens /
+  .hero-section {
+    padding: .rem  !important;
+  }
+
+  .hero-section h {
+    font-size: .rem !important;
+  }
+
+  .hero-section svg {
+    width: px !important;
+    height: px !important;
+  }
+
+  .hero-section div[style="max-width: px"] {
+    padding:  rem !important;
+  }
+}
+
+/ Touch-friendly navigation /
+@media (hover: none) and (pointer: coarse) {
+  .md-nav__link {
+    padding: var(--spacing-);
+    font-size: .rem;
+  }
+
+  .card:hover {
+    transform: none; / Disable hover animations on touch devices /
+  }
+
+  .md-nav__link:hover {
+    transform: none;
+  }
+}
+
+
+/ Animation utilities /
+@keyframes fadeInUp {
+  from {
+    opacity: ;
+    transform: translateY(px);
+  }
+  to {
+    opacity: ;
+    transform: translateY();
+  }
+}
+
+.md-content__inner >  {
+  animation: fadeInUp .s ease-out;
+}
+
+/ Utility classes - Tailwind inspired /
+.text-center { text-align: center; }
+.font-bold { font-weight: ; }
+.font-semibold { font-weight: ; }
+.font-medium { font-weight: ; }
+.text-sm { font-size: .rem; }
+.text-lg { font-size: .rem; }
+.text-xl { font-size: .rem; }
+.mt- { margin-top: var(--spacing-); }
+.mb- { margin-bottom: var(--spacing-); }
+.p- { padding: var(--spacing-); }
+.rounded { border-radius: var(--rounded); }
+.shadow { box-shadow: var(--shadow); }
+.border { border: px solid var(--color-slate-); }

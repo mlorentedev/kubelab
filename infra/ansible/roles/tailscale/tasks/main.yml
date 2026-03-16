@@ -1,0 +1,60 @@
+---
+- name: Check if Tailscale is installed
+  command: tailscale version
+  register: tailscale_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Tailscale
+  shell: curl -fsSL https://tailscale.com/install.sh | sh
+  args:
+    creates: /usr/bin/tailscale
+  when: tailscale_check.rc != 0
+
+- name: Enable and start tailscaled
+  systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+
+- name: Check Tailscale status
+  command: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Build Tailscale up command
+  set_fact:
+    tailscale_up_cmd: >-
+      tailscale up
+      --login-server={{ tailscale_headscale_url }}
+      --accept-dns={{ tailscale_accept_dns | lower }}
+      --accept-routes={{ tailscale_accept_routes | lower }}
+      {% if tailscale_advertise_routes %}--advertise-routes={{ tailscale_advertise_routes }}{% endif %}
+      {% if tailscale_auth_key %}--authkey={{ tailscale_auth_key }}{% endif %}
+
+- name: Register with Headscale
+  command: "{{ tailscale_up_cmd }}"
+  when: >
+    tailscale_auth_key != '' and
+    (tailscale_status.rc != 0 or
+     (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+  register: tailscale_register
+  changed_when: tailscale_register.rc == 0
+
+- name: Show manual auth instructions
+  debug:
+    msg: >-
+      Tailscale is installed but not registered. Run manually on this host:
+      {{ tailscale_up_cmd }}
+      Then approve the node in Headscale.
+  when: >
+    tailscale_auth_key == '' and
+    (tailscale_status.rc != 0 or
+     (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+
+- name: Verify Tailscale connectivity
+  command: tailscale status
+  register: tailscale_verify
+  changed_when: false
+  failed_when: false

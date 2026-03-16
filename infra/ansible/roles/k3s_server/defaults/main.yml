@@ -1,0 +1,32 @@
+---
+# K3s install — environment-specific values come from playbook (SSOT: config.k3s.*)
+k3s_version: ""
+k3s_install_script_url: "https://get.k3s.io"
+k3s_install_script_path: "/tmp/k3s-install.sh"
+
+# Server config
+k3s_tls_san: []           # Built by playbook from config.networking.*
+k3s_kubeconfig_mode: "0600"
+k3s_node_labels: []
+
+# Traefik HelmChartConfig — ports from SSOT (config.k3s.traefik.*)
+k3s_configure_traefik: true
+k3s_traefik_http_port: 80
+k3s_traefik_https_port: 443
+
+# Traefik ACME (Let's Encrypt) — from SSOT (config.edge.traefik.*)
+k3s_traefik_acme_enabled: false
+k3s_traefik_acme_email: ""
+k3s_traefik_acme_dns_provider: "cloudflare"
+k3s_traefik_acme_dns_resolvers: "1.1.1.1:53,8.8.8.8:53"
+k3s_traefik_acme_secret_name: "cloudflare-api-token"
+
+# Kubeconfig fetch to controller
+k3s_fetch_kubeconfig: false
+k3s_kubeconfig_local_path: "~/.kube/k3s-config"
+k3s_api_address: "{{ ansible_host }}"
+
+# Readiness tuning
+k3s_readiness_retries: 30
+k3s_readiness_delay: 10
+k3s_token_wait_timeout: 120

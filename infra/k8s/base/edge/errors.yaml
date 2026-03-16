@@ -1,0 +1,122 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: errors
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: errors
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: errors
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: errors
+        app.kubernetes.io/component: edge
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      containers:
+        - name: errors
+          # common.yaml: edge.errors.image_name / edge.errors.version
+          image: docker.io/mlorentedev/kubelab-errors:dev
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 64Mi
+              cpu: "0.1"
+            requests:
+              memory: 32Mi
+              cpu: "0.05"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: errors
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: errors
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: errors
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: error-pages
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: errors
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  errors:
+    status:
+      - "400-401"
+      - "403"
+      - "408"
+      - "429"
+      - "500-503"
+    service:
+      name: errors
+      port: 80
+    query: "/errors/{status}.html"
+---
+# Catch-all route: any unmatched *.staging.kubelab.live -> error page
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: catch-all
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: errors
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostRegexp(`.+\.staging\.kubelab\.live`)
+      kind: Rule
+      priority: 1
+      services:
+        - name: errors
+          port: 80
+  tls:
+    certResolver: letsencrypt
+    domains:
+      - main: "staging.kubelab.live"
+        sans:
+          - "*.staging.kubelab.live"

@@ -1,0 +1,67 @@
+{% for app in apps %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ app.name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app.name }}
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ app.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ app.name }}
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      containers:
+        - name: {{ app.name }}
+          image: {{ app.image }}
+          ports:
+            - name: http
+              containerPort: {{ app.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ app.name }}-config
+{% if app.has_secrets %}
+            - secretRef:
+                name: {{ app.name }}-secrets
+{% endif %}
+{% if app.health_path %}
+          livenessProbe:
+            httpGet:
+              path: {{ app.health_path }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ app.health_path }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+{% endif %}
+          resources:
+            limits:
+              memory: {{ app.resources.memory_limit }}
+              cpu: "{{ app.resources.cpu_limit }}"
+            requests:
+              memory: {{ app.resources.memory_request }}
+              cpu: "{{ app.resources.cpu_request }}"
+{% endfor %}

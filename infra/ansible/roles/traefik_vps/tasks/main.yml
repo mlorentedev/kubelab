@@ -1,0 +1,126 @@
+---
+- name: Create Traefik directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ traefik_remote_dir }}"
+    - "{{ traefik_dynamic_dir }}"
+    - "{{ traefik_certs_dir }}"
+    - "{{ traefik_logs_dir }}"
+
+# --- Network migration (proxy → kubelab) ---
+- name: Check if legacy 'proxy' network exists
+  command: docker network inspect proxy
+  register: proxy_network
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Migrate network (proxy → kubelab)
+  include_tasks: migrate_network.yml
+  when: proxy_network.rc == 0
+
+# --- Ensure target network exists ---
+- name: Ensure Docker network exists
+  community.docker.docker_network:
+    name: "{{ docker_network }}"
+    state: present
+    driver: bridge
+
+# --- Template configs ---
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ traefik_remote_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: traefik_compose
+
+- name: Template traefik.yml (static config)
+  template:
+    src: traefik.yml.j2
+    dest: "{{ traefik_remote_dir }}/traefik.yml"
+    mode: "0644"
+  register: traefik_static
+
+- name: Create acme.json if not exists
+  file:
+    path: "{{ traefik_certs_dir }}/acme.json"
+    state: touch
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+
+# --- Template dynamic configs ---
+- name: Template middlewares
+  template:
+    src: middlewares.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/middlewares.yml"
+    mode: "0644"
+
+- name: Template TLS options
+  template:
+    src: tls.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/tls.yml"
+    mode: "0644"
+
+- name: Template error pages
+  template:
+    src: errors.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/errors.yml"
+    mode: "0644"
+
+- name: Template kubelab.live redirect
+  template:
+    src: app-redirect-kubelab.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/app-redirect-kubelab.yml"
+    mode: "0644"
+  when: base_domain is defined
+
+- name: Template dashboard route
+  template:
+    src: app-traefik-dashboard.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/app-traefik-dashboard.yml"
+    mode: "0644"
+  when: traefik_dashboard_domain != ""
+
+- name: Template service routes
+  template:
+    src: app-route.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/app-{{ route.name }}.yml"
+    mode: "0644"
+  loop: "{{ traefik_service_routes }}"
+  loop_control:
+    loop_var: route
+
+# --- Remove legacy .env file ---
+- name: Remove legacy .env file
+  file:
+    path: "{{ traefik_remote_dir }}/.env"
+    state: absent
+
+# --- Deploy ---
+- name: Pull Traefik image
+  command: docker compose -f {{ traefik_remote_dir }}/docker-compose.yml pull
+  changed_when: false
+
+- name: Restart Traefik on config change
+  command: docker compose -f {{ traefik_remote_dir }}/docker-compose.yml up -d --force-recreate
+  when: traefik_compose.changed or traefik_static.changed
+  notify: wait for traefik
+
+- name: Start Traefik (if not running)
+  command: docker compose -f {{ traefik_remote_dir }}/docker-compose.yml up -d
+  register: traefik_start
+  changed_when: "'Started' in traefik_start.stderr or 'Created' in traefik_start.stderr"
+  when: not (traefik_compose.changed or traefik_static.changed)
+
+- name: Wait for Traefik to respond
+  uri:
+    url: "http://127.0.0.1:{{ traefik_dashboard_port }}/ping"
+    status_code: 200
+  register: traefik_health
+  retries: 12
+  delay: 5
+  until: traefik_health.status == 200

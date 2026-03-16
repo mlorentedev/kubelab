@@ -1,0 +1,75 @@
+---
+import CalendlyForm from '../../components/forms/booking/CalendlyForm.astro';
+import ContactLayout from '../../layouts/ContactLayout.astro';
+import { env } from '../../data/env';
+
+const contactTitle = 'Resérvame tu tiempo';
+const contactSubtitle = 'Sea lo que fuere que necesites, este es tu sitio';
+
+const calendlyURL = env.RRSS.CALENDLY;
+const calendlyTextColor = '#424242';
+const calendlyPrimaryColor = '#0097a7';
+const calendlyButtonText = 'Quiero una videollamada';
+---
+
+<ContactLayout contactTitle={contactTitle} contactSubtitle={contactSubtitle}>
+  <div class="max-w-4xl mx-auto">
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+      <CalendlyForm
+        url={calendlyURL}
+        text={calendlyButtonText}
+        color={calendlyPrimaryColor}
+        textColor={calendlyTextColor}
+        hideEventDetails="true"
+        hideGdprBanner="true"
+      />
+      <h2 class="text-xl font-semibold mb-4">Incluye:</h2>
+      <ul class="space-y-3">
+        <li class="flex items-center">
+          <svg
+            class="w-5 h-5 text-green-500 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"
+            ></path>
+          </svg>
+          Sesión personalizada de 45 minutos
+        </li>
+        <li class="flex items-center">
+          <svg
+            class="w-5 h-5 text-green-500 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"
+            ></path>
+          </svg>
+          Seguimiento por email
+        </li>
+        <li class="flex items-center">
+          <svg
+            class="w-5 h-5 text-green-500 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"
+            ></path>
+          </svg>
+          La grabación de la sesión
+        </li>
+      </ul>
+      <h3 class="text-xl font-semibold mt-4">Este es el proceso:</h3>
+      <ol class="list-decimal list-inside space-y-3">
+        <li>Elige una fecha y hora del calendario que te aparecerá</li>
+        <li>Te hago unas preguntas para conocerte mejor</li>
+        <li>Haces el pago de forma segura</li>
+        <li>Recibirás por email un enlace a la sesión de Google Meet donde nos encontraremos</li>
+        <li>Recibirás un recordatorio por email 24 horas antes de la sesión</li>
+      </ol>
+    </div>
+  </div>
+</ContactLayout>

@@ -1,0 +1,26 @@
+import { defineCollection, z } from 'astro:content';
+import { glob } from 'astro/loaders';
+
+const notes = defineCollection({
+  loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/notes' }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    pubDate: z.coerce.date(),
+    tags: z.array(z.string()).default([]),
+    lang: z.enum(['en', 'es']).default('en'),
+    draft: z.boolean().default(false),
+  }),
+});
+
+const pages = defineCollection({
+  loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/pages' }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    lang: z.enum(['en', 'es']).default('en'),
+    page: z.string(),
+  }),
+});
+
+export const collections = { notes, pages };

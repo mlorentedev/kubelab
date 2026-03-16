@@ -1,0 +1,26 @@
+services:
+  portainer:
+    container_name: ${APPS_SERVICES_CORE_PORTAINER_NAME}
+    image: ${APPS_SERVICES_CORE_PORTAINER_IMAGE}
+    restart: ${RESTART_POLICY}
+    ports:
+      - "${APPS_SERVICES_CORE_PORTAINER_EXTERNAL_PORT}:${APPS_SERVICES_CORE_PORTAINER_DEFAULT_PORT}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "/portainer", "--version"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+
+volumes:
+  portainer_data:
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

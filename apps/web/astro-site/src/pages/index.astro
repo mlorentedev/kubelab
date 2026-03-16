@@ -1,0 +1,16 @@
+---
+import IndexLayout from '../layouts/IndexLayout.astro';
+import SubscribeForm from '../components/forms/subscribe/SubscribeForm.astro';
+
+import Introduction from '../content/introduction.mdx';
+
+const { lang } = Astro.props;
+
+const homeTitle = 'Te enseñaron a programar';
+const homeSubtitle = 'Pero eso no basta';
+---
+
+<IndexLayout title={homeTitle} description={homeSubtitle} lang={lang}>
+  <Introduction />
+  <SubscribeForm />
+</IndexLayout>

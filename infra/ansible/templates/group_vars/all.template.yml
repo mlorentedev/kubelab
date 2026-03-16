@@ -1,0 +1,208 @@
+ Global variables for {{ENVIRONMENT}} environment
+ This file contains consolidated variables from the original complex structure
+
+---
+ Environment configuration
+domain: {{DOMAIN}}
+project_name: {{PROJECT_NAME}}
+deploy_path: {{DEPLOY_PATH}}
+
+ Project structure (integration with existing setup)
+project_root_local: "{{ playbook_dir | dirname | dirname | dirname }}"
+
+ Local paths (aligned with infra/stacks/ structure)
+apps_local: "{{ project_root_local }}/apps"
+stacks_local: "{{ project_root_local }}/infra/stacks"
+stacks_apps_local: "{{ stacks_local }}/apps"
+stacks_services_local: "{{ stacks_local }}/services"
+stacks_edge_local: "{{ stacks_local }}/edge"
+edge_traefik_local: "{{ project_root_local }}/edge/traefik"
+
+ Remote deployment paths
+apps_remote: "{{ deploy_path }}/apps"
+stacks_remote: "{{ deploy_path }}/infra/stacks"
+traefik_remote: "/opt/traefik"
+
+ Infrastructure configuration
+infrastructure_type: "docker-compose"
+
+ Network configuration
+network:
+  http_port: {{HTTP_PORT}}
+  https_port: {{HTTPS_PORT}}
+  docker_network: {{DOCKER_NETWORK}}
+
+ SSL/TLS configuration
+tls:
+  enabled: "{{ not (disable_https | bool) }}"
+  disable_https: {{DISABLE_HTTPS}}
+  acme_email: {{ACME_EMAIL}}
+  acme_server: {{ACME_SERVER}}
+  cert_resolver: {{CERT_RESOLVER}}
+
+ Docker configuration
+docker:
+  network: {{DOCKER_NETWORK}}
+  compose_version: ".."
+  data_root: "{{ deploy_path }}/docker-data"
+
+ Traefik configuration
+traefik:
+  image: "traefik:v."
+  dashboard_enabled: {{TRAEFIK_DASHBOARD}}
+  insecure_mode: {{TRAEFIK_INSECURE}}
+  config_dir: "{{ traefik_remote }}"
+
+ Resource limits (environment-specific)
+resource_limits:
+  memory_default: {{MEMORY_LIMIT_DEFAULT}}
+  memory_heavy: {{MEMORY_LIMIT_HEAVY}}
+  cpu_default: {{CPU_LIMIT_DEFAULT}}
+  cpu_heavy: {{CPU_LIMIT_HEAVY}}
+
+ Security configuration
+security:
+  firewall_enabled: {{FIREWALL_ENABLED}}
+  auth_credentials: "{{MAIN_AUTHENTICATION_CREDENTIALS}}"
+  failban_enabled: "{{ environment == 'prod' }}"
+
+ Backup configuration
+backup:
+  enabled: {{BACKUP_ENABLED}}
+  path: "{{ deploy_path }}/backups"
+  retention_days:
+  schedule: "    "   Daily at  AM
+
+ Monitoring configuration
+monitoring:
+  enabled: {{MONITORING_ENABLED}}
+  grafana_admin_password: {{GRAFANA_ADMIN_PASSWORD}}
+  retention_days:
+
+ Notification settings
+notifications:
+  admin_email: {{ADMIN_EMAIL}}
+  smtp_server: {{SMTP_SERVER}}
+
+ Application deployment configuration
+deployment:
+   Core applications (always deployed)
+  core_apps:
+    - web
+    - api
+    - blog
+
+   Environment-specific services
+  staging_services:
+    - portainer
+    - grafana
+    - loki
+    - uptime
+    - authelia
+    - crowdsec
+    - minio
+
+  prod_services:
+    - portainer
+    - grafana
+    - loki
+    - uptime
+    - authelia
+    - crowdsec
+    - minio
+    - calcom
+    - immich
+    - docmost
+    - vaultwarden
+    - gitea
+    - headscale
+
+   Service categories for selective deployment
+  core_services:
+    - portainer
+    - gitea
+    - vaultwarden
+    - headscale
+
+  security_services:
+    - authelia
+    - crowdsec
+
+  data_services:
+    - minio
+    - docmost
+
+  observability_services:
+    - grafana
+    - loki
+    - uptime
+
+  misc_services:
+    - calcom
+    - immich
+
+  ai_services:
+    - ollama
+
+ Application port mappings (for health checks and service discovery)
+app_ports:
+  web:
+  api:
+  blog:
+  grafana:
+  loki:
+  uptime:
+  portainer:
+  authelia:
+  crowdsec:
+  minio:
+
+ Health check configuration
+health_check:
+  timeout:
+  retries:
+  delay:
+  endpoints:
+    web: "/"
+    api: "/health"
+    blog: "/"
+    grafana: "/api/health"
+    uptime: "/"
+    portainer: "/api/system/status"
+    authelia: "/api/health"
+    minio: "/minio/health/live"
+
+ Deployment workflow configuration
+workflow:
+  backup_before_deploy: true
+  health_check_after_deploy: true
+  rollback_on_failure: false   Manual rollback for safety
+  wait_between_services:     seconds
+  deployment_timeout:        minutes
+
+ Log configuration
+logging:
+  level: "{{ 'DEBUG' if environment == 'staging' else 'INFO' }}"
+  max_size: "m"
+  max_files:
+  driver: "json-file"
+
+ Firewall configuration
+firewall:
+  enabled: {{FIREWALL_ENABLED}}
+  allowed_ports:
+    -      SSH
+    -      HTTP
+    -     HTTPS
+  ssh_rate_limit: "/min"
+
+ DNS configuration (environment-specific)
+dns:
+  staging:
+    provider: coredns
+    primary: "{{DNS_RESOLVER_}}"
+    secondary: "{{DNS_RESOLVER_}}"
+  prod:
+    provider: external
+    primary: "{{DNS_RESOLVER_}}"
+    secondary: "{{DNS_RESOLVER_}}"

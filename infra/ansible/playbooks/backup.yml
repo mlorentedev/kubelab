@@ -1,0 +1,31 @@
+---
+- name: Backup VPS Docker volumes and configs
+  hosts: vps
+  gather_facts: true
+
+  vars:
+    deploy_env: prod
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+  roles:
+    - role: ../roles/backup
+      tags: [backup]
+      vars:
+        backup_root: "{{ config.networking.vps.backup.root }}"
+        backup_retention: "{{ config.networking.vps.backup.retention }}"
+        backup_filesystem_paths: "{{ config.networking.vps.backup.filesystem_paths }}"
+        backup_exclude_volumes: "{{ config.networking.vps.backup.exclude_volumes }}"

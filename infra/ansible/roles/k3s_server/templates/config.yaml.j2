@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+write-kubeconfig-mode: "{{ k3s_kubeconfig_mode }}"
+{% if k3s_tls_san | length > 0 %}
+tls-san:
+{% for san in k3s_tls_san %}
+  - "{{ san }}"
+{% endfor %}
+{% endif %}
+{% if k3s_node_labels | length > 0 %}
+node-label:
+{% for label in k3s_node_labels %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}

@@ -1,0 +1,68 @@
+---
+- name: Setup infrastructure for {{ENVIRONMENT}} environment
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    setup_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+
+  pre_tasks:
+    - name: Display setup information
+      debug:
+        msg:
+          - "===   Infrastructure Setup ==="
+          - "Environment: {{ environment }}"
+          - "Infrastructure Type: Docker Compose"
+          - "Target: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Architecture: {{ ansible_architecture }}"
+
+    - name: Check if setup was already completed
+      stat:
+        path: "{{ deploy_path }}/.setup_completed"
+      register: setup_completed
+
+    - name: Skip setup if already completed
+      meta: end_play
+      when:
+        - setup_completed.stat.exists
+        - not (force_setup | default(false))
+
+  roles:
+      - role: system_setup
+        tags: [system, packages, firewall]
+
+      - role: docker
+        tags: [docker, containers]
+
+      - role: project_setup
+        tags: [project, directories, network]
+
+  post_tasks:
+    - name: Mark setup as completed
+      copy:
+        content: |
+           Setup completed information
+          Environment: {{ environment }}
+          Infrastructure: Docker Compose
+          Timestamp: {{ setup_timestamp }}
+          Ansible User: {{ ansible_user }}
+          Deploy Path: {{ deploy_path }}
+          Domain: {{ domain }}
+        dest: "{{ deploy_path }}/.setup_completed"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: ''
+
+    - name: Display setup completion
+      debug:
+        msg:
+          - "===  Infrastructure Setup Complete ==="
+          - "Infrastructure Type: Docker Compose"
+          - "Deploy Path: {{ deploy_path }}"
+          - "Docker Networks Created: {{ docker.network }}, monitoring, storage"
+          - "SSL Certificate Storage: /opt/traefik/certs/"
+          - ""
+          - " Verification Commands:"
+          - "  - Docker: docker --version && docker compose version"
+          - "  - Network: docker network ls"

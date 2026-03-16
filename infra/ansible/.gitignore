@@ -1,0 +1,241 @@
+ ===========================================
+ Ansible Infrastructure .gitignore
+ Optimized for CubeLab deployment
+ ===========================================
+
+ Generated Ansible configurations (NEVER commit these)
+generated/
+/generated/
+
+ Ansible runtime files
+.retry
+.log
+ansible.log
+facts_cache/
+.ansible/
+
+ Secrets and sensitive files (CRITICAL - NEVER commit these)
+.vault_pass
+.vault
+.env.local
+.env.secret
+vault.yml
+vault.yaml
+/vault.
+
+ SSH keys and certificates (SECURITY CRITICAL)
+.pem
+.key
+.crt
+.csr
+id_rsa
+id_ed
+.p
+.pfx
+
+ Backup files and directories
+.bak
+.backup
+~
+backups/
+/backups/
+.backup/
+
+ Temporary files and caches
+.tmp/
+temp/
+tmp/
+.tmp
+.temp
+.cache/
+cache/
+
+ OS specific files
+.DS_Store
+.DS_Store?
+._
+.Spotlight-V
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+ Editor and IDE files
+.swp
+.swo
+~
+.vscode/
+.idea/
+.sublime-project
+.sublime-workspace
+.vim/
+.emacs.d/
+
+ Python runtime files
+__pycache__/
+.py[cod]
+$py.class
+.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib/
+parts/
+sdist/
+var/
+wheels/
+.egg-info/
+.installed.cfg
+.egg
+MANIFEST
+
+ Python virtual environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.
+.cache
+nosetests.xml
+coverage.xml
+.cover
+.hypothesis/
+.pytest_cache/
+
+ Docker and container files (sensitive volumes)
+docker-compose.override.yml
+docker-compose.override.yaml
+.dockerignore.local
+volumes/
+
+ Kubernetes sensitive files
+kubeconfig
+.kubeconfig
+kube-config
+.kube/config.backup
+
+ Terraform state files (if any)
+.tfstate
+.tfstate.
+.terraform/
+.terraform.lock.hcl
+
+ Logs and monitoring data
+logs/
+.log.
+.out
+.err
+monitoring/
+metrics/
+
+ Package manager files
+node_modules/
+.npm
+.yarn/
+yarn-error.log
+
+ Runtime and process files
+.pid
+nohup.out
+
+ Test and coverage files
+.coverage
+htmlcov/
+.nyc_output/
+coverage/
+
+ Local development overrides
+.env.development.local
+.env.test.local
+.env.production.local
+docker-compose.local.yml
+docker-compose.dev.override.yml
+
+ Database files (if any local DBs)
+.db
+.sqlite
+.sqlite
+
+ Certificate authority files
+ca.crt
+ca.key
+ca.pem
+
+ Local configuration overrides
+local.yml
+local.yaml
+/local.
+
+ ===========================================
+ KEEP THESE FILES (Do NOT ignore)
+ ===========================================
+ The following patterns ensure important
+ files are NOT ignored even if they match
+ patterns above
+
+ Keep template files (these should be committed)
+!templates/
+!/.template.
+!templates//
+
+ Keep environment example files
+!.env.example
+!.env..example
+!/.env.example
+!/.env..example
+
+ Keep the main environment files (these contain placeholders, not secrets)
+.env.staging
+.env.prod
+.env.staging.example
+.env.prod.example
+
+ Keep documentation
+!README.md
+!CHANGELOG.md
+!LICENSE
+!/.md
+
+ Keep configuration files
+!requirements.txt
+!requirements.yml
+!ansible.cfg.example
+!Makefile
+!Taskfile.yml
+
+ Keep scripts
+!.sh
+!scripts/
+!scripts//
+
+ ===========================================
+ ENVIRONMENT SPECIFIC
+ ===========================================
+
+ Local testing directories
+test-output/
+test-results/
+.test/
+
+ Ansible Galaxy collections (usually installed globally)
+collections/ansible_collections/
+
+ Local inventory files (may contain sensitive IPs)
+inventory.local.
+hosts.local.
+
+ Dynamic inventory scripts with credentials
+inventory_.py
+!inventory_example.py

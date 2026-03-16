@@ -1,0 +1,151 @@
+ Main deployment playbook for {{ENVIRONMENT}} environment
+ Entry point for complete deployment workflow
+
+---
+- name: Deploy {{PROJECT_NAME}} to {{ENVIRONMENT}} environment
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    deployment_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    deployment_id: "{{ environment }}-{{ deployment_timestamp }}"
+    backup_dir: "{{ backup.path }}/{{ deployment_timestamp }}"
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "=== {{PROJECT_NAME}} Deployment ==="
+          - "Environment: {{ environment }}"
+          - "Infrastructure: Docker Compose"
+          - "Domain: {{ domain }}"
+          - "Deployment ID: {{ deployment_id }}"
+          - "Timestamp: {{ deployment_timestamp }}"
+          - "Target: {{ inventory_hostname }}"
+          - "Deploy Path: {{ deploy_path }}"
+
+    - name: Validate environment configuration
+      assert:
+        that:
+          - environment in ['staging', 'prod']
+          - domain is defined
+          - deploy_path is defined
+        fail_msg: "Invalid environment configuration"
+        success_msg: "Environment configuration validated"
+
+    - name: Create deployment directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: ''
+      loop:
+        - "{{ deploy_path }}/deployments/{{ deployment_id }}"
+        - "{{ backup_dir }}"
+        - "{{ deploy_path }}/logs"
+
+    - name: Create pre-deployment backup (if enabled)
+      include_playbook: backup.yml
+      when: backup.enabled | bool
+      tags: [backup, pre-deploy]
+
+  tasks:
+    - name: Setup system infrastructure
+      import_role:
+        name: system_setup
+      become: true
+      tags: [setup, infrastructure, system]
+
+    - name: Setup Docker
+      import_role:
+        name: docker
+      become: true
+      tags: [setup, docker]
+
+    - name: Deploy Traefik reverse proxy
+      import_role:
+        name: traefik
+      become: false
+      tags: [deploy, traefik, proxy]
+
+    - name: Deploy core applications and services
+      include_role:
+        name: docker_service
+      vars:
+        service_name: "{{ item }}"
+      loop: "{{ deployment.core_apps + (deployment.staging_services if environment == 'staging' else deployment.prod_services) }}"
+      tags: [deploy, apps, services]
+
+  post_tasks:
+    - name: Wait for services to stabilize
+      pause:
+        seconds: "{{ workflow.wait_between_services | default() }}"
+
+    - name: Verify deployment health
+      import_role:
+        name: health_check
+      when: workflow.health_check_after_deploy | default(true) | bool
+      tags: [verify, health-check]
+
+    - name: Create deployment record
+      copy:
+        content: |
+           {{PROJECT_NAME}} Deployment Record
+           Generated: {{ ansible_date_time.iso }}
+
+           Deployment Information
+          Environment: {{ environment }}
+          Infrastructure: Docker Compose
+          Domain: {{ domain }}
+          Deployment ID: {{ deployment_id }}
+          Status: {{ 'Success' if ansible_failed_result is not defined else 'Failed' }}
+
+           Services Deployed
+          {% if environment == 'staging' %}
+          Core Apps: {{ deployment.core_apps | join(', ') }}
+          Services: {{ deployment.staging_services | join(', ') }}
+          {% else %}
+          Core Apps: {{ deployment.core_apps | join(', ') }}
+          Services: {{ deployment.prod_services | join(', ') }}
+          {% endif %}
+
+           Deployment Paths
+          Deploy Path: {{ deploy_path }}
+          Backup Directory: {{ backup_dir }}
+          Configuration: {{ deploy_path }}/deployments/{{ deployment_id }}
+
+           Health Status
+          {% for app in deployment.core_apps %}
+          - {{ app }}: {{ ' Healthy' if app_health[app] is defined and app_health[app] else ' Unhealthy' }}
+          {% endfor %}
+
+           Useful Commands
+           Check logs
+          docker logs {{ deployment.core_apps[] }}
+
+           Restart service
+          cd {{ apps_remote }}/{{ deployment.core_apps[] }} && docker compose restart
+
+        dest: "{{ deploy_path }}/deployments/{{ deployment_id }}/deployment.log"
+        mode: ''
+
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "===  Deployment Complete ==="
+          - " {{ environment | upper }} deployment completed successfully!"
+          - " Domain: https://{{ domain }}"
+          - " Dashboard: https://{{ domain }}/dashboard/"
+          - " Deployment ID: {{ deployment_id }}"
+          - " Logs: {{ deploy_path }}/deployments/{{ deployment_id }}/"
+          - "  Infrastructure: Docker Compose"
+          - ""
+          - " Next Steps:"
+          - "  - Monitor: ansible-playbook -i hosts.yml main.yml --tags verify"
+          - "  - Backup: ansible-playbook -i hosts.yml backup.yml"
+          - "  - Rollback: ansible-playbook -i hosts.yml rollback.yml"
+
+  handlers:
+    - name: restart deployment
+      debug:
+        msg: "Restarting deployment due to configuration changes"

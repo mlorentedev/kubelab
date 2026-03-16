@@ -1,0 +1,32 @@
+---
+# --- Legacy cleanup (nginx → errors migration) ---
+- name: Remove legacy nginx container
+  community.docker.docker_container:
+    name: "{{ errors_legacy_container_name }}"
+    state: absent
+  ignore_errors: true
+
+- name: Remove legacy Traefik dynamic config for nginx
+  file:
+    path: "{{ errors_legacy_traefik_config }}"
+    state: absent
+
+# --- Deploy errors container ---
+- name: Run error pages container
+  community.docker.docker_container:
+    name: "{{ errors_container_name }}"
+    image: "{{ errors_image }}"
+    state: started
+    restart_policy: "{{ restart_policy }}"
+    pull: true
+    networks:
+      - name: "{{ docker_network }}"
+    published_ports: []
+    exposed_ports:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

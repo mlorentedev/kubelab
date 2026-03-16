@@ -1,0 +1,11 @@
+services:
+  web:
+    build:
+      target: build
+    user: "${UID:-1000}:${GID:-1000}"
+    command: ["npm", "run", "dev", "--", "--host"]
+    volumes:
+      - ../../../../apps/web/astro-site:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development

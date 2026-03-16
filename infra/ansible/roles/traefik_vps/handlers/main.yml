@@ -1,0 +1,9 @@
+---
+- name: wait for traefik
+  uri:
+    url: "http://127.0.0.1:{{ traefik_dashboard_port }}/ping"
+    status_code: 200
+  register: traefik_health
+  retries: 12
+  delay: 5
+  until: traefik_health.status == 200

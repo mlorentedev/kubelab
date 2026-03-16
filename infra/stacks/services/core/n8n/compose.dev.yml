@@ -1,0 +1,3 @@
+services:
+  n8n:
+    restart: unless-stopped

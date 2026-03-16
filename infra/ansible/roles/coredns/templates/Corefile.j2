@@ -1,0 +1,63 @@
+# Managed by Ansible — do not edit manually
+# Source: infra/ansible/roles/coredns/templates/Corefile.j2
+
+{{ staging_domain }} {
+    hosts {
+        {{ node_ips.k3s_server }} {{ staging_domain }}
+        {{ node_ips.k3s_server }} api.{{ staging_domain }}
+        {{ node_ips.k3s_server }} web.{{ staging_domain }}
+        {{ node_ips.k3s_server }} blog.{{ staging_domain }}
+        {{ node_ips.k3s_server }} grafana.{{ staging_domain }}
+        {{ node_ips.k3s_server }} traefik.{{ staging_domain }}
+        {{ node_ips.k3s_server }} auth.{{ staging_domain }}
+        {{ node_ips.k3s_server }} status.{{ staging_domain }}
+        {{ node_ips.k3s_server }} gitea.{{ staging_domain }}
+        {{ node_ips.k3s_server }} n8n.{{ staging_domain }}
+        {{ node_ips.k3s_server }} minio.{{ staging_domain }}
+        {{ node_ips.k3s_server }} console.minio.{{ staging_domain }}
+        {{ node_ips.k3s_server }} loki.{{ staging_domain }}
+        {{ node_ips.k3s_server }} portainer.{{ staging_domain }}
+        fallthrough
+    }
+    template IN A {{ staging_domain }} {
+        match .*\.staging\.kubelab\.live
+        answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ node_ips.k3s_server }}"
+        fallthrough
+    }
+    log
+    errors
+}
+
+{{ base_domain }} {
+    hosts {
+        # Bare-metal services: individual Tailscale IPs
+        {{ node_ips.rpi3 }} {{ service_domains.status }}
+        {{ node_ips.beelink }} {{ service_domains.ollama | default('ollama.' + base_domain) }}
+        {{ node_ips.jetson }} {{ service_domains.jetson | default('jetson.' + base_domain) }}
+        # K3s prod services: VPS Tailscale IP
+        {{ node_ips.vps }} {{ base_domain }}
+        {{ node_ips.vps }} api.{{ base_domain }}
+        {{ node_ips.vps }} web.{{ base_domain }}
+        {{ node_ips.vps }} blog.{{ base_domain }}
+        {{ node_ips.vps }} auth.{{ base_domain }}
+        {{ node_ips.vps }} grafana.{{ base_domain }}
+        {{ node_ips.vps }} loki.{{ base_domain }}
+        {{ node_ips.vps }} gitea.{{ base_domain }}
+        {{ node_ips.vps }} n8n.{{ base_domain }}
+        {{ node_ips.vps }} minio.{{ base_domain }}
+        {{ node_ips.vps }} console.minio.{{ base_domain }}
+        # Headscale MUST use public IP — bootstrap dependency
+        {{ vps_public_ip }} {{ service_domains.vpn }}
+        fallthrough
+    }
+    forward . 1.1.1.1 8.8.8.8
+    log
+    errors
+}
+
+. {
+    forward . 1.1.1.1 8.8.8.8
+    cache 30
+    log
+    errors
+}

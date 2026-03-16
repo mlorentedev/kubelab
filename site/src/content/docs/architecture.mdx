@@ -1,0 +1,56 @@
+---
+title: Architecture
+description: KubeLab cluster architecture — nodes, networking, and service topology.
+---
+
+## Topology
+
+```
+                    ┌─────────────────────────┐
+                    │   VPS Hetzner (ARM)      │
+                    │   Docker Compose (prod)  │
+                    │   Headscale coordinator  │
+                    └────────┬────────────────┘
+                             │ Tailscale VPN
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+  ┌───────┴───────┐  ┌──────┴──────┐  ┌───────┴───────┐
+  │ k3s-server    │  │ agent-1     │  │ agent-2       │
+  │ 172.16.1.10   │  │ 172.16.1.11 │  │ 172.16.1.12   │
+  │ Acemagic-1 VM │  │ Acemagic-1  │  │ Acemagic-2 VM │
+  └───────────────┘  └─────────────┘  └───────────────┘
+          │
+  ┌───────┴───────┐  ┌─────────────┐  ┌───────────────┐
+  │ RPi 4         │  │ Beelink     │  │ Jetson Nano   │
+  │ Pi-hole       │  │ Ollama      │  │ llama.cpp     │
+  │ CoreDNS       │  │ bare metal  │  │ GPU inference │
+  │ 172.16.1.1    │  │ 172.16.1.3  │  │ 172.16.1.4    │
+  └───────────────┘  └─────────────┘  └───────────────┘
+```
+
+## Networking
+
+- **LAN**: 172.16.1.0/24 — all physical nodes
+- **Headscale**: 100.64.0.0/24 — VPN overlay across all locations
+- **DNS**: Pi-hole (ad blocking) → CoreDNS (service discovery) → Cloudflare (public)
+- **Ingress**: Traefik on K3s with automatic TLS via Let's Encrypt
+- **Split DNS**: `*.staging.kubelab.live` resolves to K3s via VPN, production uses Cloudflare
+
+## IaC Pipeline
+
+| Layer | Tool | Source of truth |
+|-------|------|-----------------|
+| DNS | Terraform | `infra/terraform/dns/` |
+| Node provisioning | Ansible | `infra/ansible/` |
+| K8s manifests | Kustomize | `infra/k8s/base/` + overlays |
+| Secrets | SOPS + toolkit | `infra/config/values/*.enc.yaml` |
+| Config values | YAML | `infra/config/values/common.yaml` |
+
+## Auth Flow
+
+All HTTP services go through Traefik → Authelia forward-auth middleware. Authelia provides:
+
+- OIDC provider for Grafana, MinIO, and future services
+- Two-factor authentication (TOTP)
+- Access control policies per subdomain
+- Session persistence via Redis

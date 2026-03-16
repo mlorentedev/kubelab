@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kubelab
+
+resources:
+  - namespace.yaml
+  # portfolio.yaml removed 2026-03-15: unified under 'web' in overlays
+  - external/ollama.yaml
+  - external/uptime-kuma.yaml
+  - edge/errors.yaml
+  - edge/secure-headers.yaml
+  - services/grafana.yaml
+  - services/loki.yaml
+  - services/vector.yaml
+  - services/redis.yaml
+  - services/authelia.yaml
+  - services/crowdsec.yaml
+  - services/gitea.yaml
+  - services/n8n.yaml
+  - services/minio.yaml
+
+configMapGenerator:
+  - name: authelia-assets
+    namespace: kubelab
+    files:
+      - services/authelia-assets/logo.png
+      - services/authelia-assets/favicon.ico
+    options:
+      disableNameSuffixHash: true
+
+  - name: grafana-dashboards
+    namespace: kubelab
+    files:
+      - services/grafana-dashboards/kubelab-logs-overview.json
+    options:
+      disableNameSuffixHash: true

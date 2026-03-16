@@ -1,0 +1,145 @@
+# Pre-commit hooks for mlorente.dev
+# Install: poetry run pre-commit install
+# Run manually: poetry run pre-commit run --all-files
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom YAML tags
+        exclude: 'infra/ansible/templates/'
+      - id: check-json
+        exclude: 'apps/blog/jekyll-site/'
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: detect-private-key
+      - id: check-executables-have-shebangs
+
+  # Python formatting and linting (ruff replaces black + isort + flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.7
+    hooks:
+      - id: ruff-format
+        files: ^toolkit/
+      - id: ruff
+        args: [--fix]
+        files: ^toolkit/
+
+  # Python type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.0
+    hooks:
+      - id: mypy
+        files: ^toolkit/
+        args: [--ignore-missing-imports]
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - pydantic
+          - pydantic-settings
+          - python-dotenv
+          - typer
+          - rich
+          - jinja2
+          - argon2-cffi
+          - cryptography
+
+  # Secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  # Custom checks for project consistency
+  - repo: local
+    hooks:
+      # Check for env file commits
+      - id: check-env-files
+        name: Safety net - prevent accidental .env file commits
+        entry: >-
+          bash -c 'git diff --cached --name-only |
+          grep -E "\.env\.(dev|staging|prod)$" |
+          grep -v ".example$" &&
+          echo "Attempting to commit real .env file! Config lives in values/*.yaml" &&
+          exit 1 || true'
+        language: system
+        pass_filenames: false
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.46.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']
+        exclude: 'CHANGELOG.md'
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.37.1
+    hooks:
+      - id: yamllint
+        args:
+          - '-d'
+          - >-
+            {extends: default,
+            rules: {
+              line-length: {max: 130},
+              document-start: disable,
+              truthy: {check-keys: false},
+              comments-indentation: disable
+            }}
+        exclude: '(infra/ansible/|apps/blog/jekyll-site/|apps/wiki/mkdocs\.yml|infra/config/secrets/)'
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint-docker
+        args:
+          - '--ignore'
+          - 'DL3008'
+          - '--ignore'
+          - 'DL3013'
+          - '--ignore'
+          - 'DL3015'
+          - '--ignore'
+          - 'DL3018'
+          - '--ignore'
+          - 'DL3028'
+          - '--ignore'
+          - 'DL3042'
+          - '--ignore'
+          - 'DL3059'
+          - '--ignore'
+          - 'DL3062'
+          - '--ignore'
+          - 'DL3016'
+          - '--ignore'
+          - 'DL4006'
+
+# Global configuration
+default_language_version:
+  python: python3.12
+
+# Files to exclude
+exclude: |
+  (?x)^(
+      \.archive/.*|
+      \.bckp/.*|
+      \.tmp/.*|
+      \.claude/.*|
+      \.vscode/.*|
+      apps/wiki/site/.*|
+      \.git/.*|
+      \.venv/.*|
+      node_modules/.*|
+      __pycache__/.*
+  )$

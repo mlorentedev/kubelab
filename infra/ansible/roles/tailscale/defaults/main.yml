@@ -1,0 +1,6 @@
+---
+tailscale_headscale_url: ""
+tailscale_accept_dns: true
+tailscale_accept_routes: false
+tailscale_advertise_routes: ""
+tailscale_auth_key: ""

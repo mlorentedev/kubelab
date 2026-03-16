@@ -1,0 +1,105 @@
+---
+title: "K3s vs K8s: Why Lightweight Wins at Home"
+description: "I have 12GB of RAM per node. Full Kubernetes would eat half of it before I deploy a single pod. Here's why K3s is the only sane choice for a homelab."
+pubDate: 2025-01-13
+tags: ["kubernetes", "homelab"]
+draft: false
+lang: en
+---
+
+I have 12GB of RAM per node. Two Acemagic mini PCs running Proxmox, each hosting a K3s VM. A third node on an Acemagic-2 for heavier workloads. Every megabyte that goes to control plane overhead is a megabyte I can't give to Grafana, Loki, or Authelia.
+
+Full Kubernetes would eat half my resources just sitting there, doing nothing useful.
+
+## The numbers that made the decision
+
+Before I committed to K3s, I ran both options on a test VM. Same hardware, same base OS, nothing deployed except the control plane itself.
+
+| Component | Full K8s (kubeadm) | K3s |
+|-----------|-------------------|-----|
+| API server | ~300 MB | Included in k3s binary |
+| etcd | ~200-400 MB | SQLite (negligible) |
+| Controller manager | ~100 MB | Included |
+| Scheduler | ~50 MB | Included |
+| kube-proxy | ~30 MB | Included (iptables) |
+| **Total control plane** | **~700 MB - 1.2 GB** | **~400-500 MB** |
+| Disk footprint | ~800 MB+ | ~200 MB single binary |
+
+On a 64GB workstation, that 700 MB difference is noise. On a 12GB Proxmox host running two VMs, it's the difference between running my full stack or running out of memory when Loki ingests a busy day of logs.
+
+## What K3s actually removes
+
+K3s isn't a fork of Kubernetes. It's Kubernetes, compiled into a single binary with specific components swapped or removed. Understanding what's gone matters more than knowing what's left.
+
+**etcd replaced with SQLite.** This is the big one. etcd is a distributed consensus store designed for multi-master HA setups. It's powerful, it's battle-tested, and it's completely unnecessary when your "cluster" is three nodes in a closet. SQLite handles the same workload at a fraction of the memory cost. K3s also supports external databases (PostgreSQL, MySQL) if you outgrow SQLite, but I haven't come close.
+
+**Cloud controller manager removed.** The cloud controller integrates Kubernetes with AWS, GCP, Azure APIs for provisioning load balancers, volumes, and nodes. I don't have a cloud API. I have a power strip.
+
+**In-tree storage drivers stripped.** K3s removes the old in-tree volume plugins for cloud providers. If I need persistent storage, I use local-path-provisioner (bundled) or add Longhorn later. No GCEPersistentDisk driver wasting binary space.
+
+**Bundled Flannel CNI.** Instead of making you pick a CNI plugin, K3s ships with Flannel using VXLAN. For a 3-node cluster on a flat LAN, this is perfectly adequate. I don't need Calico's network policies or Cilium's eBPF observability. Not yet, anyway.
+
+**Bundled Traefik.** K3s ships with Traefik as the default ingress controller. I actually use this one. My `HelmChartConfig` in `kube-system` customizes it with Cloudflare DNS challenge for Let's Encrypt and HTTP-to-HTTPS redirects:
+
+```yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    additionalArguments:
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+```
+
+Most K3s guides tell you to disable the built-in Traefik and install your own. I tried that. Then I realized I was installing the exact same Traefik, just with more steps. The `HelmChartConfig` CRD lets you customize the bundled one without replacing it.
+
+## The trade-offs nobody mentions
+
+K3s isn't free. You're making real trade-offs.
+
+**No HA control plane out of the box.** With full K8s, you can run 3 etcd nodes and 3 API servers behind a load balancer. K3s with SQLite is a single point of failure. If my server node VM dies, the cluster is down until I restart it.
+
+For a homelab, this is fine. My SLA is "I'll fix it when I notice." If you're running production workloads for paying customers on K3s with SQLite, you have bigger problems than your choice of Kubernetes distribution.
+
+**Embedded components are harder to version independently.** When Traefik ships a security patch, I can't just update Traefik. I wait for the next K3s release that bundles the fix, or I disable the embedded Traefik and manage my own. So far, K3s releases have been fast enough that this hasn't been an issue.
+
+**Less community tooling assumes K3s.** Helm charts, operators, and monitoring stacks are tested against kubeadm or managed K8s. K3s works with almost everything, but occasionally you hit an edge case where something expects a different path or a different default.
+
+## When K3s is not enough
+
+If you need multi-master HA with automatic failover, K3s can do it (with an external database or embedded etcd mode), but at that point you're adding back the complexity you removed. Might as well use kubeadm or a managed service.
+
+If you need strict network policy enforcement, Flannel doesn't support NetworkPolicy resources. You'd need to swap in Calico or Cilium, which K3s supports but doesn't bundle.
+
+If you're running more than ~20 nodes, SQLite will start to show its limits. The K3s docs recommend an external database past that point.
+
+None of these apply to a 3-node homelab with 36GB total RAM.
+
+## The install that convinced me
+
+The entire K3s server install is one command:
+
+```bash
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.34.4+k3s1" sh -s - server \
+  --write-kubeconfig-mode 644 \
+  --disable servicelb
+```
+
+Agents join with one more:
+
+```bash
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.34.4+k3s1" \
+  K3S_URL=https://172.16.1.10:6443 \
+  K3S_TOKEN="<server-token>" sh -s - agent
+```
+
+Two commands, three nodes, a working cluster. No certificates to generate, no kubeadm init/join dance, no etcd cluster to bootstrap.
+
+I had pods running in under ten minutes. On full K8s with kubeadm, I'd still be debugging certificate issues.
+
+If you're running Kubernetes at home with less than 32GB of total RAM, and you're using full K8s, you're burning resources on control plane overhead that could be running your actual workloads. K3s gives you the same API, the same kubectl, the same ecosystem -- minus the parts that only matter at scale you'll never reach in a closet.

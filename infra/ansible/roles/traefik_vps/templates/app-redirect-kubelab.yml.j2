@@ -1,0 +1,20 @@
+# Managed by Ansible — do not edit manually
+# kubelab.live → 301 redirect to mlorente.dev
+http:
+  routers:
+    kubelab-redirect:
+      rule: "Host(`{{ base_domain }}`)"
+      entryPoints:
+        - websecure
+      service: noop@internal
+      middlewares:
+        - kubelab-redirect
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    kubelab-redirect:
+      redirectRegex:
+        regex: "^https://{{ base_domain }}/(.*)"
+        replacement: "https://mlorente.dev/${1}"
+        permanent: true

@@ -1,0 +1,5 @@
+services:
+  errors:
+    build:
+      context: ../../../../edge/errors
+      dockerfile: Dockerfile

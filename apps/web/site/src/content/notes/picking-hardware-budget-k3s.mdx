@@ -1,0 +1,83 @@
+---
+title: "Picking Hardware for a Budget K3s Cluster"
+description: "Everyone says 'just use an old PC.' Nobody tells you why that's bad advice for a K3s cluster that needs to run 24/7. Here's what actually matters — and what I bought."
+pubDate: 2024-12-23
+tags: ["homelab", "hardware"]
+draft: false
+lang: en
+---
+
+"Just use an old desktop." I see this advice everywhere in homelab forums, and it's not wrong exactly — but it misses the point for anyone building a cluster they plan to keep running.
+
+An old desktop tower draws 80-150W idle. It sounds like a jet engine. It takes up half a desk. Multiply that by three nodes and you've got a space heater that costs you 30-40 EUR per month in electricity. For a learning project, those numbers matter.
+
+## What actually matters for K3s
+
+I spent a few weeks researching before buying anything, and here's what I landed on — ranked by importance for a lightweight Kubernetes distribution like K3s.
+
+**RAM is king.** Kubernetes is a memory hog. The control plane alone (API server, etcd, scheduler, controller-manager) wants 1-2GB on K3s. Add a few workloads — Traefik, Grafana, Loki, an auth server, a couple of apps — and you're at 6-8GB before you've done anything ambitious. I initially specced my cluster for 16GB nodes. I was wrong about what I actually had (more on that below). But the principle holds: buy as much RAM as your budget allows.
+
+**CPU barely matters.** Modern mini PCs ship with N95 or N100 Intel processors. Four cores, decent single-thread performance. For K3s workloads, this is more than enough. Kubernetes scheduling is not CPU-bound for most homelab use cases.
+
+**NVMe over SD cards. Always.** Raspberry Pis boot from SD cards by default, and SD cards die under sustained write loads. etcd writes constantly. Log aggregation writes constantly. I've seen homelab builds lose their entire cluster state because an SD card corrupted after a few months. Any node running etcd needs real storage — NVMe or at minimum a USB SSD.
+
+**Power draw is a recurring cost.** A mini PC drawing 10-15W costs about 3 EUR per month in electricity (at German rates). An old desktop drawing 100W costs 25 EUR per month. Over a year, that's 264 EUR you could have spent on better hardware.
+
+## The shopping list
+
+Here's what I ended up with:
+
+| Node | Role | CPU | RAM | Storage | Power | Cost |
+|------|------|-----|-----|---------|-------|------|
+| Acemagic S1 #1 | K3s server + agent (Proxmox) | N95 4C | 12GB | 256GB NVMe | ~12W | ~200 EUR |
+| Acemagic S1 #2 | K3s agent (Proxmox) | N95 4C | 12GB | 256GB NVMe | ~12W | ~200 EUR |
+| Beelink Mini S | Ollama / LLM inference | N100 4C | 8GB | 256GB NVMe | ~10W | ~150 EUR |
+| RPi 4 (8GB) | DNS gateway (Pi-hole, CoreDNS) | BCM2711 4C | 8GB | 64GB SD + USB SSD | ~5W | ~80 EUR |
+| RPi 3 (1GB) | External monitoring (Uptime Kuma) | BCM2837 4C | 1GB | 32GB SD | ~3W | ~50 EUR |
+| Jetson Nano | Edge LLM inference | Maxwell 128C GPU | 4GB | 64GB SD | ~10W | Owned |
+
+Total: around 680 EUR for a 6-node setup that draws under 55W combined.
+
+## The specs lie
+
+Here's my first real lesson. I documented the Acemagic mini PCs as having 16GB of RAM. I was working from the product listing and my own notes. I was wrong.
+
+```bash
+$ ssh acemagic-1 "free -h"
+              total        used        free
+Mem:           11Gi       3.2Gi       7.8Gi
+```
+
+12GB. Not 16. The RPi 4 I listed as 4GB? Also wrong — it's the 8GB model. I'd been planning VM allocations based on numbers that didn't match the physical hardware.
+
+Documents lie. `free -h` doesn't.
+
+This cost me a full evening of replanning VM resource allocation. The 4GB difference on each Acemagic meant I had to squeeze K3s VMs tighter than planned — 4GB for the server VM, 6GB for the agent VM, with 2GB left for Proxmox overhead. It works, but there's no slack.
+
+## Why mini PCs and not Raspberry Pis
+
+I see a lot of K3s clusters built entirely on Raspberry Pis. They look great in photos. They're terrible for actually running workloads.
+
+A Pi 4 with 8GB of RAM tops out around there — no upgrade path. It boots from an SD card by default (fragile). Its I/O throughput is limited by USB 3.0, even with an external SSD. And the ARM architecture means you'll spend hours debugging container image compatibility for anything that doesn't publish multi-arch builds.
+
+Pis are excellent for single-purpose infrastructure tasks. My RPi 4 runs Pi-hole and CoreDNS. It handles DNS queries. That's it. It's perfect for that.
+
+But for K3s nodes that need to run arbitrary workloads, mini PCs with x86_64 processors, real NVMe storage, and upgradeable RAM are a better investment. The price difference is marginal — 200 EUR for an Acemagic versus 80 EUR for a Pi 4, but with 3x the useful capacity.
+
+## Role allocation matters early
+
+Don't just buy hardware and figure out roles later. I mapped out the roles before I ordered anything:
+
+- **Acemagic x2**: Proxmox hosts running K3s VMs. This is the cluster. One runs the server node + an agent, the other runs a dedicated agent for heavier workloads.
+- **Beelink**: Bare metal Ollama. LLM inference needs direct hardware access, not the overhead of a VM and container.
+- **RPi 4**: Network gateway. DNS, VPN coordination. It sits between the internet and the cluster.
+- **RPi 3**: External monitoring. It pings services from outside the VPN to catch outages that internal monitoring would miss.
+- **Jetson Nano**: Edge inference experiments. Independent from the cluster.
+
+Every node has one clear purpose. No node does two unrelated things. When something breaks — and something always breaks — you know exactly where to look.
+
+## What I'd change
+
+If I were starting over with the same budget, I'd spend the RPi 3 money (50 EUR) on an extra 8GB RAM stick for one of the Acemagics, if they supported it. 1GB of RAM on a Pi 3 barely runs Uptime Kuma. It can't run anything else. I keep it because I already had it, but it's the weakest link in the setup.
+
+I'd also buy the Acemagics with 16GB from the start, even if it costs 50 EUR more each. The 12GB ceiling is the one constraint I keep hitting. RAM is the resource you can't fake, and Kubernetes always wants more.

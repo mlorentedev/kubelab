@@ -1,0 +1,15 @@
+---
+import AboutLayout from '../layouts/AboutLayout.astro';
+import AboutContent from '../content/about.mdx';
+
+const heroImage = '/images/colorado.webp';
+
+const aboutTitle = 'Sobre mí';
+const aboutSubtitle = 'Y por qué hago lo que hago';
+
+const { lang } = Astro.props;
+---
+
+<AboutLayout title={aboutTitle} description={aboutSubtitle} heroImage={heroImage} lang={lang}>
+  <AboutContent />
+</AboutLayout>

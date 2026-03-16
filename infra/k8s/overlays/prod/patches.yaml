@@ -1,0 +1,437 @@
+---
+# Override base grafana-config with prod domain
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: kubelab
+data:
+  GF_SERVER_ROOT_URL: "https://grafana.kubelab.live"
+  GF_LOG_LEVEL: "info"
+---
+# Override base authelia-config with prod domains and policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authelia-config
+  namespace: kubelab
+data:
+  configuration.yml: |
+    # ==========================================================================
+    # Authelia — Production (ForwardAuth + OIDC for MinIO)
+    # ==========================================================================
+    theme: dark
+    default_2fa_method: totp
+
+    server:
+      address: 'tcp://:9091'
+      asset_path: /config/assets
+      buffers:
+        read: 4096
+        write: 4096
+
+    log:
+      level: info
+      format: json
+
+    # ---- Authentication Backend ----
+    authentication_backend:
+      file:
+        path: /config/users_database.yml
+        watch: true
+        password:
+          algorithm: argon2
+          argon2:
+            variant: argon2id
+            iterations: 3
+            memory: 65536
+            parallelism: 4
+            key_length: 32
+            salt_length: 16
+
+    # ---- TOTP ----
+    totp:
+      issuer: kubelab.live
+      algorithm: sha1
+      digits: 6
+      period: 30
+      skew: 1
+      secret_size: 32
+
+    # ---- WebAuthn ----
+    webauthn:
+      attestation_conveyance_preference: indirect
+      user_verification: preferred
+      timeout: 60s
+
+    # ---- Access Control ----
+    # Service distribution per ADR-012:
+    #   PUBLIC (bypass): mlorente.dev, api, status, wiki
+    #   PROTECTED (one_factor): grafana, traefik
+    #   OWN AUTH (bypass): gitea, n8n, console.minio
+    #   INTERNAL (no ingress): loki, vector, redis, crowdsec
+    access_control:
+      default_policy: deny
+
+      networks:
+        - name: internal
+          networks:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+        - name: vpn
+          networks:
+            - '100.64.0.0/10'  # Must match networking.tailscale_cidr
+
+      rules:
+        # Authelia portal (always bypass — login page)
+        - domain: 'auth.kubelab.live'
+          policy: bypass
+
+        # PUBLIC apps (no auth required)
+        - domain: 'mlorente.dev'
+          policy: bypass
+        - domain: 'api.kubelab.live'
+          policy: bypass
+        - domain: 'status.kubelab.live'
+          policy: bypass
+        - domain: 'wiki.kubelab.live'
+          policy: bypass
+
+        # OIDC-enabled services (bypass forward-auth — OIDC handles login)
+        - domain: 'console.minio.kubelab.live'
+          policy: bypass
+        - domain: 'minio.kubelab.live'
+          policy: bypass
+        - domain: 'gitea.kubelab.live'
+          policy: bypass
+
+        # PROTECTED services (one_factor via Authelia forward-auth)
+        - domain: 'n8n.kubelab.live'
+          policy: one_factor (Authelia one-factor)
+        - domain: 'grafana.kubelab.live'
+          policy: one_factor
+        - domain: 'traefik.kubelab.live'
+          policy: one_factor
+
+        # VPN users get one_factor for everything else
+        - domain: '*.kubelab.live'
+          policy: one_factor
+          networks:
+            - vpn
+            - internal
+
+    # ---- Session ----
+    session:
+      name: authelia_session
+      same_site: lax
+      inactivity: 1h
+      expiration: 8h
+      remember_me: 1M
+
+      cookies:
+        - domain: kubelab.live
+          authelia_url: https://auth.kubelab.live
+          default_redirection_url: https://mlorente.dev
+
+      redis:
+        host: redis
+        port: 6379
+        database_index: 0
+
+    # ---- Storage ----
+    storage:
+      local:
+        path: /data/db.sqlite3
+
+    # ---- Regulation ----
+    regulation:
+      max_retries: 3
+      find_time: 2m
+      ban_time: 5m
+
+    # ---- Notifier (Gmail SMTP) ----
+    notifier:
+      disable_startup_check: false
+      smtp:
+        address: submission://smtp.gmail.com:587
+        username: mlorentedev@gmail.com
+        sender: "Authelia <mlorentedev@gmail.com>"
+        identifier: auth.kubelab.live
+        subject: "[Authelia] {title}"
+        disable_require_tls: false
+        disable_html_emails: false
+        tls:
+          server_name: smtp.gmail.com
+          skip_verify: false
+
+    # ---- OIDC Identity Provider (MinIO SSO) ----
+    identity_providers:
+      oidc:
+        hmac_secret: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
+        issuer_private_key: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE
+        clients:
+          - client_id: minio
+            client_name: MinIO
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$44uPoJIoiASyqyTQF67Ybg$MTAK3CL+z0o/Qqe7ePbjZy35jhJuRsXLYpdS271xmdo'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://console.minio.kubelab.live/oauth_callback
+            scopes:
+              - openid
+              - profile
+              - email
+            consent_mode: implicit
+---
+# Override base grafana IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`grafana.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: authelia
+        - name: error-pages
+      services:
+        - name: grafana
+          port: 3000
+  tls:
+    certResolver: letsencrypt
+---
+# Override base authelia IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authelia
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`auth.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: authelia
+          port: 9091
+  tls:
+    certResolver: letsencrypt
+---
+# Override base loki IngressRoute — internal only in prod (no public access)
+# Route to a non-existent domain so it never matches real traffic
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loki
+  namespace: kubelab
+  annotations:
+    kubelab.dev/note: "Loki is internal-only in prod — no public ingress"
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`loki.internal.kubelab.local`)
+      kind: Rule
+      middlewares:
+        - name: authelia
+      services:
+        - name: loki
+          port: 3100
+  tls:
+    certResolver: letsencrypt
+---
+# Override base gitea ConfigMap with prod domain
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-config
+  namespace: kubelab
+data:
+  GITEA__database__DB_TYPE: "sqlite3"
+  GITEA__server__DOMAIN: "gitea.kubelab.live"
+  GITEA__server__ROOT_URL: "https://gitea.kubelab.live/"
+  GITEA__server__SSH_PORT: "30222"
+  GITEA__server__SSH_LISTEN_PORT: "2222"
+  GITEA__server__SSH_DOMAIN: "gitea.kubelab.live"
+  GITEA__service__DISABLE_REGISTRATION: "true"
+  GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
+  GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
+  GITEA__log__MODE: "console"
+  GITEA__log__LEVEL: "Warn"
+---
+# Override base gitea IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gitea
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`gitea.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+      services:
+        - name: gitea
+          port: 3000
+  tls:
+    certResolver: letsencrypt
+---
+# Override base n8n ConfigMap with prod domain
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: n8n-config
+  namespace: kubelab
+data:
+  N8N_HOST: "n8n.kubelab.live"
+  N8N_PROTOCOL: "https"
+  N8N_PORT: "5678"
+  WEBHOOK_URL: "https://n8n.kubelab.live/"
+  DB_TYPE: "sqlite"
+  GENERIC_TIMEZONE: "Europe/Madrid"
+  N8N_LOG_LEVEL: "warn"
+  N8N_LOG_OUTPUT: "console"
+---
+# Override base n8n IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: n8n
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`n8n.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: authelia
+        - name: error-pages
+      services:
+        - name: n8n
+          port: 5678
+  tls:
+    certResolver: letsencrypt
+---
+# Override base minio ConfigMap with prod domain
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-config
+  namespace: kubelab
+data:
+  MINIO_SERVER_URL: "http://minio:9000"
+  MINIO_BROWSER_REDIRECT_URL: "https://console.minio.kubelab.live"
+  MINIO_IDENTITY_OPENID_CONFIG_URL: "https://auth.kubelab.live/.well-known/openid-configuration"
+  MINIO_IDENTITY_OPENID_CLIENT_ID: "minio"
+  MINIO_IDENTITY_OPENID_DISPLAY_NAME: "Authelia"
+  MINIO_IDENTITY_OPENID_SCOPES: "openid,profile,email"
+  MINIO_IDENTITY_OPENID_REDIRECT_URI: "https://console.minio.kubelab.live/oauth_callback"
+---
+# Override base minio API IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: minio-api
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`minio.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+      services:
+        - name: minio
+          port: 9000
+  tls:
+    certResolver: letsencrypt
+---
+# Override base minio console IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: minio-console
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`console.minio.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+      services:
+        - name: minio
+          port: 9001
+  tls:
+    certResolver: letsencrypt
+---
+# Override base uptime-kuma IngressRoute with prod domain
+# RPi3 Tailscale IP stays the same — EndpointSlice doesn't need override
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: uptime-kuma
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`status.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+      services:
+        - name: uptime-kuma
+          port: 3001
+  tls:
+    certResolver: letsencrypt
+---
+# Override base catch-all IngressRoute with prod wildcard cert
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: catch-all
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostRegexp(`.+\.kubelab\.live`)
+      kind: Rule
+      priority: 1
+      services:
+        - name: errors
+          port: 80
+  tls:
+    certResolver: letsencrypt
+    domains:
+      - main: "kubelab.live"
+        sans:
+          - "*.kubelab.live"

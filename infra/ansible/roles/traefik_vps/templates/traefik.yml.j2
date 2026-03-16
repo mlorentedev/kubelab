@@ -1,0 +1,73 @@
+# Managed by Ansible — do not edit manually
+api:
+  dashboard: true
+  insecure: false
+
+ping: {}
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  filePath: "/logs/access.log"
+  format: json
+  fields:
+    headers:
+      defaultMode: keep
+      names:
+        User-Agent: keep
+        Authorization: drop
+        Content-Type: keep
+
+entryPoints:
+  web:
+    address: :{{ traefik_http_port }}
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":{{ traefik_https_port }}"
+    http:
+      tls:
+        certResolver: letsencrypt
+        options: default
+{% if traefik_acme_domains %}
+        domains:
+{% for domain_entry in traefik_acme_domains %}
+          - main: "{{ domain_entry.main }}"
+{% if domain_entry.sans is defined %}
+            sans:
+{% for san in domain_entry.sans %}
+              - "{{ san }}"
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+providers:
+  docker:
+    endpoint: unix:///var/run/docker.sock
+    exposedByDefault: false
+    network: {{ docker_network }}
+
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      caServer: {{ traefik_acme_server }}
+      email: {{ traefik_acme_email }}
+      storage: "{{ traefik_acme_storage }}"
+      dnsChallenge:
+        provider: {{ traefik_dns_provider }}
+        delayBeforeCheck: "{{ traefik_dns_delay_before_check }}"
+        resolvers:
+{% for resolver in traefik_dns_resolvers %}
+          - {{ resolver }}
+{% endfor %}

@@ -1,0 +1,16 @@
+---
+import { getLocale, useTranslations, useTranslatedPath } from '../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
+
+const isEs = lang === 'es';
+const ctaHref = isEs ? '#newsletter-home' : translatePath('/notes');
+---
+
+<div class="max-w-3xl mx-auto p-2 text-center text-gray-800">
+  <h1 class="text-6xl font-extrabold">{t('hero.title')}</h1>
+  <hr class="my-2 border-gray-300" />
+  <p class="text-lg text-gray-500 mt-2">{t('hero.subtitle')}</p>
+</div>

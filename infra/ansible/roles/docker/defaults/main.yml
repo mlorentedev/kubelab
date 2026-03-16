@@ -1,0 +1,9 @@
+---
+docker_network: "kubelab"
+docker_additional_networks:
+  - monitoring
+  - storage
+docker_log_max_size: "10m"
+docker_log_max_files: "3"
+docker_address_pool_base: "172.80.0.0/12"
+docker_address_pool_size: 24

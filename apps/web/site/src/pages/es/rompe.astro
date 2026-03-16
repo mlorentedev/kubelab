@@ -1,0 +1,102 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import SubscribeForm from '../../components/SubscribeForm.astro';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'rompe' && data.lang === 'es');
+const [faq] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'rompe-faq' && data.lang === 'es');
+const { Content } = await render(page);
+const { Content: FaqContent } = await render(faq);
+---
+
+<BaseLayout
+  title={page.data.title}
+  description={page.data.description}
+>
+  <Header />
+  <main id="main-content" class="flex-grow py-16">
+    <section class="py-8">
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h1:text-3xl prose-h1:mb-2 prose-h2:text-sm prose-h2:text-gray-500 prose-h2:tracking-wide prose-h2:uppercase prose-li:text-base prose-li:text-gray-700 prose-strong:text-gray-700 prose-em:text-gray-400 prose-em:text-xs prose-a:text-cyan-700 hover:prose-a:text-cyan-800 prose-hr:border-gray-300">
+          <Content />
+        </div>
+      </div>
+    </section>
+
+    <section class="py-8">
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="mt-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+          <p class="text-base text-gray-600 mb-3">
+            ¿No tienes Linux? Perfecto. Vas a hacer ahora mismo lo que harás en los 5 días del curso: yo te doy los criterios, tú usas la IA para ejecutar. Copia esto y pégalo en ChatGPT, Gemini, Claude, o el que uses:
+          </p>
+          <div class="relative">
+            <pre id="ubuntu-prompt" class="text-xs text-gray-500 bg-white p-3 rounded border border-gray-100 overflow-x-auto whitespace-pre-wrap">Quiero instalar Ubuntu Server en un PC que tengo en casa para usarlo como servidor de homelab.
+
+Mi hardware: [describe tu PC: marca, modelo, RAM, disco]
+
+Guíame paso a paso por todo el proceso:
+
+1. Qué versión de Ubuntu Server descargar y de dónde
+2. Cómo flashear el USB desde [mi sistema operativo: Windows/Mac/Linux]
+3. Cómo entrar a la BIOS/UEFI de mi equipo y cambiar el orden de arranque para que inicie desde USB
+4. Configuración durante la instalación
+
+Asegura que:
+- Instala Ubuntu SERVER, no Desktop (no necesito interfaz gráfica)
+- Activa OpenSSH durante la instalación
+- Configura IP estática en mi red local
+- Crea un usuario no-root con sudo
+- El disco se particiona con LVM (para poder redimensionar después)
+- NO instala snaps innecesarios
+
+Al terminar, dame el comando exacto para conectarme por SSH desde mi portátil.</pre>
+            <button
+              id="copy-prompt"
+              class="absolute top-2 right-2 px-2 py-1 text-xs bg-gray-100 text-gray-500 rounded hover:bg-gray-200 transition-colors"
+            >
+              Copiar
+            </button>
+          </div>
+          <p class="text-base text-gray-500 mt-3">
+            20 minutos. Y acabas de ver cómo funciona el curso: yo te doy los criterios, tú usas la IA para ejecutar.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-8">
+      <div class="max-w-3xl mx-auto px-4">
+        <SubscribeForm
+          formId="rompe-mid"
+          tag="rompe"
+          utmSource="lead_magnet"
+          buttonText="Empieza a romper"
+        />
+      </div>
+    </section>
+
+    <section class="py-8">
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:font-bold prose-headings:text-gray-800 prose-h2:text-sm prose-h2:text-gray-500 prose-h2:tracking-wide prose-h2:uppercase prose-li:text-base prose-li:text-gray-700 prose-strong:text-gray-700 prose-a:text-cyan-700 hover:prose-a:text-cyan-800 prose-hr:border-gray-300">
+          <FaqContent />
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>
+
+<script>
+  const copyBtn = document.getElementById('copy-prompt');
+  const promptEl = document.getElementById('ubuntu-prompt');
+
+  copyBtn?.addEventListener('click', async () => {
+    if (promptEl) {
+      await navigator.clipboard.writeText(promptEl.textContent || '');
+      copyBtn.textContent = '¡Copiado!';
+      setTimeout(() => { copyBtn.textContent = 'Copiar'; }, 2000);
+    }
+  });
+</script>

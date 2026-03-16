@@ -1,0 +1,4 @@
+---
+# Full stack — Layer 1 (OS bootstrap) + Layer 2 (services)
+- import_playbook: provision.yml
+- import_playbook: services.yml

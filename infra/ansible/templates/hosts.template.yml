@@ -1,0 +1,48 @@
+ Ansible Inventory for {{ENVIRONMENT}} Environment
+
+all:
+  hosts:
+    {{ENVIRONMENT}}-server:
+       Connection settings
+      ansible_host: {{HOST}}
+      ansible_user: {{SSH_USER}}
+      ansible_port: {{HOST_PORT}}
+      ansible_ssh_private_key_file: {{SSH_KEY}}
+      ansible_python_interpreter: /usr/bin/python
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+       Environment metadata
+      environment: {{ENVIRONMENT}}
+      deploy_path: {{DEPLOY_PATH}}
+      domain: {{DOMAIN}}
+
+       Infrastructure type detection
+      infrastructure_type: "docker-compose"
+      use_docker_compose: "{{ environment == 'prod' }}"
+
+  children:
+     Infrastructure-specific groups
+    docker_hosts:
+      hosts:
+        {{ENVIRONMENT}}-server:
+      vars:
+        docker_compose_version: ".."
+        docker_network: "{{DOCKER_NETWORK}}"
+        docker_data_root: "{{ deploy_path }}/docker-data"
+
+    core_apps:
+      hosts:
+        {{ENVIRONMENT}}-server:
+      vars:
+        app_category: core
+        deploy_apps:
+          - web
+          - api
+          - blog
+
+    services:
+      hosts:
+        {{ENVIRONMENT}}-server:
+      vars:
+        app_category: services
+        deploy_services: "{{ staging_services if environment == 'staging' else prod_services }}"

@@ -1,0 +1,38 @@
+# Managed by Ansible — do not edit manually
+# Source: infra/ansible/roles/ssh_hardening/templates/sshd_config.j2
+
+Port {{ ssh_port }}
+AddressFamily any
+ListenAddress 0.0.0.0
+
+# Authentication
+PermitRootLogin {{ ssh_permit_root_login }}
+PubkeyAuthentication {{ ssh_pubkey_authentication }}
+PasswordAuthentication {{ ssh_password_authentication }}
+ChallengeResponseAuthentication no
+MaxAuthTries {{ ssh_max_auth_tries }}
+
+# Session
+ClientAliveInterval {{ ssh_client_alive_interval }}
+ClientAliveCountMax {{ ssh_client_alive_count_max }}
+LoginGraceTime 30
+
+# Security
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitTunnel no
+PermitUserEnvironment no
+
+# Logging
+SyslogFacility AUTH
+LogLevel INFO
+
+# Subsystems
+Subsystem sftp /usr/lib/openssh/sftp-server
+
+# Accept locale-related environment variables
+AcceptEnv LANG LC_*
+
+# Use PAM
+UsePAM yes

@@ -1,0 +1,43 @@
+---
+- name: Deploy DNS gateway (CoreDNS + Pi-hole)
+  hosts: gateway
+  gather_facts: false
+
+  vars:
+    deploy_env: prod  # RPi4 DNS gateway serves all envs — prod config is the baseline
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+  roles:
+    - role: ../roles/coredns
+      tags: [dns, coredns]
+      vars:
+        base_domain: "{{ config.global.base_domain }}"
+        staging_domain: "staging.{{ config.global.base_domain }}"
+        vps_public_ip: "{{ config.networking.vps.public_ip }}"
+        restart_policy: "{{ config.global.restart_policy }}"
+        node_ips:
+          vps: "{{ config.networking.vps.tailscale_ip }}"
+          k3s_server: "{{ config.networking.nodes.k3s_server.tailscale_ip }}"
+          rpi3: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
+          rpi4: "{{ config.networking.nodes.rpi4.tailscale_ip }}"
+          beelink: "{{ config.networking.nodes.beelink.tailscale_ip }}"
+          jetson: "{{ config.networking.nodes.jetson.tailscale_ip }}"
+        service_domains:
+          vpn: "{{ config.apps.services.core.headscale.domain }}"
+          status: "{{ config.apps.services.observability.uptime_kuma.domain }}"
+          ollama: "ollama.{{ config.global.base_domain }}"
+          jetson: "jetson.{{ config.global.base_domain }}"

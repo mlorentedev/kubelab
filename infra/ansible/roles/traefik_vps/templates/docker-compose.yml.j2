@@ -1,0 +1,24 @@
+# Managed by Ansible — do not edit manually
+services:
+  traefik:
+    image: {{ traefik_image }}
+    container_name: traefik
+    restart: {{ restart_policy }}
+    environment:
+      - CF_DNS_API_TOKEN={{ traefik_cf_dns_api_token }}
+    ports:
+      - "{{ traefik_http_port }}:80"
+      - "{{ traefik_https_port }}:443"
+      - "{{ traefik_dashboard_port }}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./certs/acme.json:{{ traefik_acme_storage }}
+      - ./dynamic:/etc/traefik/dynamic
+      - ./logs:/logs
+    networks:
+      - {{ docker_network }}
+
+networks:
+  {{ docker_network }}:
+    external: true

@@ -1,0 +1,80 @@
+[
+  {
+    "name": "api",
+    "zone": "kubelab",
+    "proxied": true,
+    "environments": ["prod"]
+  },
+  {
+    "name": "status",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "auth",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "vpn",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "grafana",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "loki",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "portainer",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "gitea",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "n8n",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "minio",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "console.minio",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "crowdsec",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
+    "name": "traefik",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  }
+]

@@ -1,0 +1,20 @@
+ Environment files
+.env
+.env.
+!.env.example
+!.env..example
+
+ Compose overrides and generated configs
+/docker-compose.override.yml
+/.bak
+/.tmp
+/.swp
+certs/
+
+ Logs and state
+logs/
+.log
+
+ OS and editor files
+.DS_Store
+Thumbs.db

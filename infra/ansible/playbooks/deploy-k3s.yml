@@ -1,0 +1,137 @@
+---
+# =============================================================================
+# K3s Cluster Deployment — ADR-020 Phase 3
+#
+# Usage:
+#   make deploy-k3s ENV=staging          # Homelab cluster (server + agents)
+#   make deploy-k3s ENV=prod             # VPS single-node (server only)
+#   toolkit infra ansible run -p deploy-k3s -e staging --tags k3s-server
+# =============================================================================
+
+# --- Play 1: K3s Server ---
+- name: Deploy K3s server
+  hosts: k3s_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    deploy_env: staging
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Decrypt env secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
+      register: sops_env
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Merge secrets (env overrides common)
+      set_fact:
+        secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+
+    - name: Build TLS SAN list from inventory
+      set_fact:
+        _k3s_tls_san: >-
+          {{ [ansible_host] +
+             ([hostvars[inventory_hostname].lan_ip] if hostvars[inventory_hostname].lan_ip is defined else []) +
+             ([hostvars[inventory_hostname].public_ip] if hostvars[inventory_hostname].public_ip is defined else []) }}
+
+  roles:
+    - role: ../roles/k3s_server
+      tags: [k3s, k3s-server]
+      vars:
+        k3s_version: "{{ config.k3s.version }}"
+        k3s_install_script_url: "{{ config.k3s.install_script_url }}"
+        k3s_tls_san: "{{ _k3s_tls_san }}"
+        k3s_configure_traefik: true
+        k3s_traefik_http_port: "{{ config.k3s.traefik.http_port }}"
+        k3s_traefik_https_port: "{{ config.k3s.traefik.https_port }}"
+        k3s_traefik_acme_enabled: true
+        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
+        k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
+        k3s_fetch_kubeconfig: true
+        k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
+        k3s_api_address: "{{ ansible_host }}"
+
+# --- Play 2: K3s Agents ---
+- name: Deploy K3s agents
+  hosts: k3s_agents
+  become: true
+  gather_facts: true
+
+  vars:
+    deploy_env: staging
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+  roles:
+    - role: ../roles/k3s_agent
+      tags: [k3s, k3s-agent]
+      vars:
+        k3s_version: "{{ config.k3s.version }}"
+        k3s_install_script_url: "{{ config.k3s.install_script_url }}"
+        k3s_server_url: "https://{{ hostvars[groups['k3s_servers'][0]].ansible_host }}:{{ config.k3s.api_port }}"
+        k3s_join_token: "{{ hostvars[groups['k3s_servers'][0]].k3s_join_token }}"
+
+# --- Play 3: Verify cluster ---
+- name: Verify K3s cluster health
+  hosts: k3s_servers
+  become: true
+  gather_facts: false
+  tags: [k3s, verify]
+
+  tasks:
+    - name: Get cluster nodes
+      command: k3s kubectl get nodes -o wide
+      register: k3s_nodes
+      changed_when: false
+
+    - name: Show cluster status
+      debug:
+        msg: "{{ k3s_nodes.stdout_lines }}"
+
+    - name: Verify all nodes are Ready
+      command: k3s kubectl get nodes --no-headers
+      register: k3s_node_status
+      changed_when: false
+      failed_when: "'NotReady' in k3s_node_status.stdout"

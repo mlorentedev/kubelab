@@ -1,0 +1,26 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import Hero from '../../components/Hero.astro';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'home' && data.lang === 'es');
+const { Content } = await render(page);
+---
+
+<BaseLayout>
+  <Header />
+  <main id="main-content" class="flex-grow py-16">
+    <Hero />
+
+    <section class="py-8">
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 prose-headings:text-lg prose-headings:font-bold prose-headings:text-gray-800 prose-li:text-base prose-li:text-gray-700 prose-strong:text-gray-700 prose-a:text-cyan-700 hover:prose-a:text-cyan-800 prose-hr:border-gray-300">
+          <Content />
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>

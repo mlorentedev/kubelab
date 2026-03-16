@@ -1,0 +1,28 @@
+# Managed by Ansible — do not edit manually
+# Source: infra/ansible/roles/headscale/templates/docker-compose.yml.j2
+services:
+  headscale:
+    container_name: headscale
+    image: {{ headscale_image }}
+    restart: {{ restart_policy }}
+    command: serve
+    ports:
+      - "{{ headscale_stun_port }}:3478/udp"
+    volumes:
+      - ./config:/etc/headscale:ro
+      - headscale_data:/var/lib/headscale
+    networks:
+      - {{ docker_network }}
+    healthcheck:
+      test: ["CMD", "headscale", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  headscale_data:
+
+networks:
+  {{ docker_network }}:
+    external: true

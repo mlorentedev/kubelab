@@ -1,0 +1,311 @@
+ Rollback playbook for {{ENVIRONMENT}} environment
+ Restores previous deployment from backup
+
+---
+- name: Rollback deployment
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    rollback_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    backup_date: "{{ backup_date | mandatory }}"
+    backup_dir: "{{ backup.path }}/{{ backup_date }}"
+    rollback_dir: "{{ deploy_path }}/rollbacks/{{ rollback_timestamp }}"
+
+  pre_tasks:
+    - name: Display rollback information
+      debug:
+        msg:
+          - "===  Rolling Back Deployment ==="
+          - "Environment: {{ environment }}"
+          - "Infrastructure: Docker Compose"
+          - "Backup Date: {{ backup_date }}"
+          - "Backup Directory: {{ backup_dir }}"
+          - "Rollback Directory: {{ rollback_dir }}"
+
+    - name: Validate backup exists
+      stat:
+        path: "{{ backup_dir }}"
+      register: backup_exists
+      failed_when: not backup_exists.stat.exists
+
+    - name: Verify backup manifest
+      stat:
+        path: "{{ backup_dir }}/BACKUP_MANIFEST.md"
+      register: backup_manifest
+      failed_when: not backup_manifest.stat.exists
+
+    - name: Confirm rollback (interactive)
+      pause:
+        prompt: |
+
+            WARNING: This will rollback your deployment to {{ backup_date }}.
+
+          Current services will be stopped and replaced with the backup version.
+          This operation cannot be undone automatically.
+
+          Are you sure you want to continue? (yes/no)
+      register: rollback_confirmation
+      when: not (force_rollback | default(false))
+
+    - name: Check rollback confirmation
+      fail:
+        msg: "Rollback cancelled by user"
+      when:
+        - not (force_rollback | default(false))
+        - rollback_confirmation.user_input | lower != 'yes'
+
+    - name: Create rollback directory
+      file:
+        path: "{{ rollback_dir }}"
+        state: directory
+        mode: ''
+
+    - name: Backup current state before rollback
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ rollback_dir }}/{{ item.dest }}"
+        remote_src: yes
+      loop:
+        - { src: "{{ apps_remote }}/", dest: "current-apps/" }
+        - { src: "/opt/traefik/", dest: "current-traefik/" }
+      ignore_errors: true
+
+  tasks:
+     Stop current services
+    - name: Stop current services
+      block:
+        - name: Stop Docker services
+          shell: |
+            cd {{ item }} && docker compose down || true
+          loop:
+            - "{{ apps_remote }}/blog"
+            - "{{ apps_remote }}/web"
+            - "{{ apps_remote }}/api"
+            - "{{ apps_remote }}/nn"
+            - "{{ apps_remote }}/wiki"
+            - "/opt/traefik"
+          ignore_errors: true
+      tags: [stop, cleanup]
+
+     Restore Traefik configuration
+    - name: Restore Traefik configuration
+      block:
+        - name: Remove current Traefik configuration
+          file:
+            path: "/opt/traefik"
+            state: absent
+
+        - name: Restore Traefik from backup
+          copy:
+            src: "{{ backup_dir }}/traefik/"
+            dest: "/opt/traefik/"
+            remote_src: yes
+            mode: preserve
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+
+        - name: Ensure correct permissions on acme.json
+          file:
+            path: "/opt/traefik/certs/acme.json"
+            mode: ''
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+      tags: [traefik, ssl]
+
+     Restore application configurations
+    - name: Restore application configurations
+      block:
+        - name: Remove current application configurations
+          file:
+            path: "{{ apps_remote }}"
+            state: absent
+
+        - name: Recreate apps directory
+          file:
+            path: "{{ apps_remote }}"
+            state: directory
+            mode: ''
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+
+        - name: Restore core applications from backup
+          copy:
+            src: "{{ backup_dir }}/apps/{{ item }}/"
+            dest: "{{ apps_remote }}/{{ item }}/"
+            remote_src: yes
+            mode: preserve
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+          loop: "{{ deployment.core_apps }}"
+          ignore_errors: true
+
+        - name: Restore worker applications from backup
+          copy:
+            src: "{{ backup_dir }}/apps/workers/{{ item }}/"
+            dest: "{{ workers_remote }}/{{ item }}/"
+            remote_src: yes
+            mode: preserve
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+          loop: "{{ deployment.worker_apps }}"
+          ignore_errors: true
+      tags: [apps, restore]
+
+     Restore service configurations
+    - name: Restore service configurations
+      block:
+        - name: Remove current service configurations
+          file:
+            path: "{{ services_remote }}"
+            state: absent
+
+        - name: Recreate services directory
+          file:
+            path: "{{ services_remote }}"
+            state: directory
+            mode: ''
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+
+        - name: Restore services from backup
+          copy:
+            src: "{{ backup_dir }}/services/{{ item }}/"
+            dest: "{{ services_remote }}/{{ item }}/"
+            remote_src: yes
+            mode: preserve
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+          loop: "{{ deployment.staging_services if environment == 'staging' else deployment.prod_services }}"
+          ignore_errors: true
+      tags: [services, restore]
+
+     Infrastructure-specific restoration
+    - name: Restore Docker Compose files
+      copy:
+        src: "{{ backup_dir }}/compose/"
+        dest: "{{ compose_remote }}/"
+        remote_src: yes
+        mode: preserve
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      ignore_errors: true
+      tags: [docker, compose]
+
+     Restore Docker volumes (if available)
+    - name: Restore Docker volumes
+      block:
+        - name: Find volume backups
+          find:
+            paths: "{{ backup_dir }}/volumes"
+            patterns: ".tar.gz"
+          register: volume_backups
+          ignore_errors: true
+
+        - name: Restore Docker volumes from backup
+          shell: |
+            docker run --rm -v {{ item.path | basename | regex_replace('\\.tar\\.gz$', '') }}:/target -v {{ backup_dir }}/volumes:/backup alpine \
+            sh -c "cd /target && tar xzf /backup/{{ item.path | basename }}"
+          loop: "{{ volume_backups.files }}"
+          ignore_errors: true
+          when: volume_backups.files is defined
+      tags: [docker, volumes]
+
+     Start restored services
+    - name: Start restored services
+      block:
+        - name: Start Traefik
+          shell: |
+            cd /opt/traefik && docker compose up -d
+          environment:
+            DOMAIN: "{{ domain }}"
+          ignore_errors: true
+
+        - name: Wait for Traefik to start
+          pause:
+            seconds:
+
+        - name: Start Docker applications
+          shell: |
+            cd {{ apps_remote }}/{{ item }} && docker compose up -d
+          loop: "{{ deployment.core_apps }}"
+          environment:
+            DOMAIN: "{{ domain }}"
+          ignore_errors: true
+
+        - name: Start Docker services
+          shell: |
+            cd {{ services_remote }}/{{ item }} && docker compose up -d
+          loop: "{{ deployment.prod_services }}"
+          environment:
+            DOMAIN: "{{ domain }}"
+          ignore_errors: true
+      tags: [start, services]
+
+  post_tasks:
+    - name: Wait for services to start
+      pause:
+        seconds:
+
+    - name: Verify rollback health
+      uri:
+        url: "https://{{ domain }}"
+        method: GET
+        status_code:
+        timeout:
+      register: rollback_health
+      ignore_errors: true
+
+    - name: Create rollback record
+      copy:
+        content: |
+           Rollback Record - {{ environment }}
+
+          Rollback Timestamp: {{ rollback_timestamp }}
+          Restored From Backup: {{ backup_date }}
+          Infrastructure: Docker Compose
+          Domain: {{ domain }}
+          Status: {{ 'Success' if rollback_health.status ==  else 'Needs Verification' }}
+
+           Rollback Details
+          -  Traefik configuration restored
+          -  Application configurations restored ({{ deployment.core_apps | length }} apps)
+          -  Service configurations restored ({{ (deployment.staging_services if environment == 'staging' else deployment.prod_services) | length }} services)
+          -  Docker Compose files restored
+
+           Health Check
+          - Primary Site: {{ 'Healthy' if rollback_health.status ==  else 'Needs Check' }}
+
+           Current State Backup
+          Current state before rollback saved to: {{ rollback_dir }}
+
+           Verification Commands
+          ```bash
+           Check services
+          docker ps
+
+           Check health
+          curl -I https://{{ domain }}
+
+           View logs
+          docker logs blog
+          ```
+        dest: "{{ rollback_dir }}/ROLLBACK_RECORD.md"
+        mode: ''
+
+    - name: Display rollback completion
+      debug:
+        msg:
+          - "=== {{ '' if rollback_health.status ==  else '' }} Rollback Complete ==="
+          - " Restored from backup: {{ backup_date }}"
+          - " Domain: {{ domain }} ({{ 'Healthy' if rollback_health.status ==  else 'Needs Verification' }})"
+          - " Current state backed up to: {{ rollback_dir }}"
+          - " Infrastructure: Docker Compose"
+          - ""
+          - " Verification Steps:"
+          - "  . Check site: https://{{ domain }}"
+          - "  . Check dashboard: https://{{ domain }}/dashboard/"
+          - "  . Check containers: docker ps"
+          - ""
+          - "{{ ' Rollback appears successful!' if rollback_health.status ==  else '  Please verify services manually.' }}"

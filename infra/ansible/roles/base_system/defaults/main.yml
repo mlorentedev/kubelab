@@ -1,0 +1,31 @@
+---
+base_packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - vim
+  - jq
+  - unzip
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - python3-pip
+  - apt-transport-https
+  - software-properties-common
+  - iotop
+  - sysstat
+  - ncdu
+  - net-tools
+  - dnsutils
+
+system_timezone: "Europe/Madrid"
+
+firewall_enabled: true
+firewall_allowed_ports:
+  - { port: 22, proto: tcp }
+  - { port: 80, proto: tcp }
+  - { port: 443, proto: tcp }
+  - { port: 41641, proto: udp }
+
+deploy_base_dir: "/opt"

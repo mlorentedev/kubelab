@@ -1,0 +1,10 @@
+services:
+  cloudflared:
+    deploy:
+      resources:
+        limits:
+          cpus: "${EDGE_CLOUDFLARED_CPU_LIMIT}"
+          memory: ${EDGE_CLOUDFLARED_MEMORY_LIMIT}
+        reservations:
+          cpus: "${EDGE_CLOUDFLARED_CPU_RESERVATION}"
+          memory: ${EDGE_CLOUDFLARED_MEMORY_RESERVATION}

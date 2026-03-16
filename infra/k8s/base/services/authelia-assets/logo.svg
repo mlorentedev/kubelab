@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3F51B5"/>
+      <stop offset="50%" style="stop-color:#1A237E"/>
+      <stop offset="100%" style="stop-color:#0E7490"/>
+    </linearGradient>
+    <linearGradient id="hex" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5C6BC0"/>
+      <stop offset="100%" style="stop-color:#0E7490"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hexagon icon (K8s reference) -->
+  <polygon points="50,8 88,28 88,68 50,88 12,68 12,28"
+    fill="url(#hex)" stroke="#7986CB" stroke-width="2"/>
+
+  <!-- K inside hexagon -->
+  <text x="50" y="58" font-family="JetBrains Mono, Fira Code, monospace"
+    font-size="38" font-weight="700" fill="white" text-anchor="middle"
+    dominant-baseline="central" letter-spacing="-1">K</text>
+
+  <!-- KUBELAB text -->
+  <text x="115" y="56" font-family="JetBrains Mono, Fira Code, monospace"
+    font-size="44" font-weight="700" fill="#E8EAF6" letter-spacing="3">KUBELAB</text>
+
+  <!-- Subtitle -->
+  <text x="117" y="78" font-family="JetBrains Mono, Fira Code, monospace"
+    font-size="11" fill="#7986CB" letter-spacing="5">INTERNAL DEVELOPER PLATFORM</text>
+</svg>

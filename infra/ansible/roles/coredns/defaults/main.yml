@@ -1,0 +1,16 @@
+---
+coredns_image: "coredns/coredns:1.12.1"
+pihole_image: "pihole/pihole:latest"
+coredns_remote_dir: "~/coredns"
+coredns_port: 5353
+pihole_port: 53
+pihole_web_port: 80
+pihole_timezone: "America/Denver"
+restart_policy: "unless-stopped"
+
+# Populated from playbook mapping
+base_domain: "kubelab.live"
+staging_domain: "staging.kubelab.live"
+node_ips: {}
+service_domains: {}
+vps_public_ip: ""

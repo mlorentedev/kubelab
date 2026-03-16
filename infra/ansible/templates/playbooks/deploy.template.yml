@@ -1,0 +1,139 @@
+ Docker Compose deployment playbook
+
+---
+- name: Deploy applications and services
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    deployment_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    backup_dir: "{{ backup.path }}/{{ deployment_timestamp }}"
+
+  pre_tasks:
+    - name: Display deployment strategy
+      debug:
+        msg:
+          - "=== Application Deployment ==="
+          - "Strategy: Docker Compose"
+          - "Core Apps: {{ deployment.core_apps | join(', ') }}"
+          - "Services: {{ deployment.staging_services if environment == 'staging' else deployment.prod_services | join(', ') }}"
+          - "Workers: {{ deployment.worker_apps | join(', ') }}"
+
+    - name: Create deployment backup
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: ''
+
+  tasks:
+    - name: Deploy Traefik reverse proxy
+      import_role:
+        name: traefik
+      tags: [traefik, proxy, ingress]
+
+    - name: Deploy core applications with Docker Compose
+      include_role:
+        name: docker_app
+      vars:
+        app_name: "{{ item }}"
+      loop: "{{ deployment.core_apps }}"
+      tags: [docker, apps]
+
+    - name: Deploy worker applications with Docker Compose
+      include_role:
+        name: docker_app
+      vars:
+        app_name: "{{ item }}"
+        app_type: worker
+      loop: "{{ deployment.worker_apps }}"
+      tags: [docker, workers]
+
+    - name: Deploy services with Docker Compose
+      include_role:
+        name: docker_service
+      vars:
+        service_name: "{{ item }}"
+      loop: "{{ deployment.staging_services if environment == 'staging' else deployment.prod_services }}"
+      when: monitoring.enabled | default(true) | bool
+      tags: [docker, services]
+
+  post_tasks:
+    - name: Wait for all services to start
+      pause:
+        seconds: "{{ workflow.wait_between_services | default() }}"
+
+    - name: Verify deployment health
+      import_role:
+        name: health_check
+      tags: [health-check, verify]
+
+    - name: Display container/pod status
+      block:
+        - name: Get Docker container status
+          shell: docker ps --format "table {% raw %}{{.Names}}\t{{.Status}}\t{{.Ports}}{% endraw %}"
+          register: container_status
+
+        - name: Display status information
+          debug:
+            msg: "{{ container_status.stdout_lines }}"
+
+    - name: Create deployment summary
+      copy:
+        content: |
+           Deployment Summary - {{ environment }}
+
+          Timestamp: {{ deployment_timestamp }}
+          Infrastructure: Docker Compose
+          Domain: {{ domain }}
+          Status: {{ 'Success' if deployment_failed is not defined else 'Failed' }}
+
+           Applications Deployed
+          {% for app in deployment.core_apps %}
+          - OK {{ app }}
+          {% endfor %}
+
+           Services Deployed
+          {% set services = deployment.staging_services if environment == 'staging' else deployment.prod_services %}
+          {% for service in services %}
+          - OK {{ service }}
+          {% endfor %}
+
+           Access URLs
+          - Main Site: https://{{ domain }}
+          - Traefik Dashboard: https://{{ domain }}/dashboard/
+          - API: https://api.{{ domain }}
+          {% if 'grafana' in services %}
+          - Grafana: https://grafana.{{ domain }}
+          {% endif %}
+          {% if 'portainer' in services %}
+          - Portainer: https://portainer.{{ domain }}
+          {% endif %}
+
+           Quick Commands
+
+           Health Check
+          ```bash
+          ansible-playbook -i hosts.yml main.yml --tags verify
+          ```
+
+           View Logs
+          ```bash
+          docker logs -f blog
+          ```
+
+           Restart Service
+          ```bash
+          cd {{ apps_remote }}/blog && docker compose restart
+          ```
+        dest: "{{ deploy_path }}/deployments/deployment-{{ deployment_timestamp }}.md"
+        mode: ''
+
+    - name: Display deployment success message
+      debug:
+        msg:
+          - "===  Deployment Successful ==="
+          - "All {{ (deployment.core_apps | length) + ((deployment.staging_services if environment == 'staging' else deployment.prod_services) | length) }} services deployed"
+          - "Primary URL: https://{{ domain }}"
+          - "Dashboard: https://{{ domain }}/dashboard/"
+          - "Summary: {{ deploy_path }}/deployments/deployment-{{ deployment_timestamp }}.md"

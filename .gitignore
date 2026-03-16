@@ -1,25 +1,121 @@
-# build output
+# Project artifacts
+_site/
+.sass-cache/
+.vagrant/
+.tmp/
+.bckp/
 dist/
+bin/
+output/
 
-# generated types
-.astro/
+# Build artifacts
+*.pyc
+__pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.test
+*.tmp
 
-# dependencies
+# Dependencies
 node_modules/
+.venv/
+.venv*/
+venv/
+vendor/
 
-# logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# environment variables
-.env
-.env.production
-
-# macOS-specific files
-.DS_Store
-
-# jetbrains setting folder
+# IDE & Editors
+.vscode/
 .idea/
+*.swp
+*.swo
+*~
 
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.bak
+.cache/
+
+# Archives (old code)
+.archive/
+
+# Testing & Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.pytest_cache/
+*.cover
+*.prof
+
+# Type checking & Linting
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Poetry
+poetry.lock
+
+# Ruby / Jekyll
+Gemfile.lock
+beautiful-jekyll-theme-*.gem
+*.jekyll-cache
+
+# Drawio
+*.bkp
+
+# Environment files — ignore real values, keep examples
+.env
+.env.local
+.env.dev
+.env.staging
+.env.prod
+.env.*
+!.env.example
+!.env.*.example
+infra/config/env/.env.*
+!infra/config/env/.env.*.example
+
+# Secrets & Certificates (includes Authelia JWKS keys)
+certbot/
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Logs
+logs/
+*.log
+
+# AI assistants
+.claude/
+.chat/
+AGENTS.md
+GEMINI.md
+MEMORY.md
+
+# Uptime Kuma backups (binary SQLite, use `toolkit monitoring backup` to pull)
+infra/config/uptime-kuma/*.db
+
+# Docker overrides
+docker-compose.override.yml
+
+# Docker-created artifacts (volume mount directories)
+# Prevent accidental directory creation by Docker when volume sources don't exist
+apps/**/.env.*/
+apps/**/loki/
+apps/**/vector.toml/
+apps/**/nginx.conf/
+
+# Wiki build output
+apps/wiki/generated_docs
+
+# Security scanning
+.cache_ggshield

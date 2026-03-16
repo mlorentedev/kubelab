@@ -1,0 +1,176 @@
+---
+- name: Initialize health check results
+  set_fact:
+    health_results: {}
+
+- name: Health check core applications
+  block:
+    - name: Check core app health
+      uri:
+        url: "http://localhost:{{ app_ports[item] }}{{ health_check.endpoints[item] | default('/') }}"
+        method: GET
+        status_code: 200
+        timeout: "{{ health_check.timeout | default(30) }}"
+      register: app_health_check
+      loop: "{{ deployment.core_apps }}"
+      ignore_errors: true
+
+    - name: Store app health results
+      set_fact:
+        health_results: "{{ health_results | combine({item.item: item.status == 200}) }}"
+      loop: "{{ app_health_check.results }}"
+  tags: [apps]
+
+- name: Health check services
+  block:
+    - name: Check service health
+      uri:
+        url: "http://localhost:{{ app_ports[item] }}{{ health_check.endpoints[item] | default('/') }}"
+        method: GET
+        status_code: 200
+        timeout: "{{ health_check.timeout | default(30) }}"
+      register: service_health_check
+      loop: "{{ deployment.staging_services if environment == 'staging' else deployment.prod_services }}"
+      ignore_errors: true
+      when: app_ports[item] is defined
+
+    - name: Store service health results
+      set_fact:
+        health_results: "{{ health_results | combine({item.item: item.status == 200}) }}"
+      loop: "{{ service_health_check.results | default([]) }}"
+  tags: [services]
+
+- name: External health checks
+  block:
+    - name: Check main domain
+      uri:
+        url: "https://{{ domain }}"
+        method: GET
+        status_code: 200
+        timeout: 30
+        validate_certs: no
+      register: domain_health
+      ignore_errors: true
+
+    - name: Check API endpoint
+      uri:
+        url: "https://api.{{ domain }}/health"
+        method: GET
+        status_code: 200
+        timeout: 30
+        validate_certs: no
+      register: api_health
+      ignore_errors: true
+      when: "'api' in deployment.core_apps"
+
+    - name: Check Traefik dashboard
+      uri:
+        url: "https://{{ domain }}/dashboard/"
+        method: GET
+        status_code: 200
+        timeout: 30
+        validate_certs: no
+      register: traefik_health
+      ignore_errors: true
+      when: traefik.dashboard_enabled | default(true) | bool
+  tags: [external]
+
+- name: Generate health report
+  set_fact:
+    health_report:
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      environment: "{{ environment }}"
+      infrastructure: "Docker Compose"
+      domain: "{{ domain }}"
+      overall_status: "{{ 'healthy' if (health_results.values() | list | select('equalto', true) | list | length) == (health_results.values() | list | length) else 'degraded' }}"
+      services:
+        core_apps: "{{ dict(deployment.core_apps | zip(deployment.core_apps | map('extract', health_results) | list)) }}"
+        services: "{{ dict((deployment.staging_services if environment == 'staging' else deployment.prod_services) | zip((deployment.staging_services if environment == 'staging' else deployment.prod_services) | map('extract', health_results) | list)) }}"
+      external:
+        domain: "{{ domain_health.status == 200 if domain_health is defined else false }}"
+        api: "{{ api_health.status == 200 if api_health is defined else false }}"
+        traefik_dashboard: "{{ traefik_health.status == 200 if traefik_health is defined else false }}"
+
+- name: Display health check summary
+  debug:
+    msg: "{{ lookup('template', 'inline', source=summary_tpl) }}"
+  vars:
+    summary_tpl: |
+      === Health Check Summary ===
+      Overall Status: {{ 'Healthy' if health_report.overall_status == 'healthy' else 'Degraded' }}
+      Environment: {{ environment | upper }}
+      Domain: {{ domain }}
+
+      Core Applications:
+      {% for app, status in health_report.services.core_apps.items() %}
+        {{ 'OK' if status else 'FAIL' }} {{ app }}
+      {% endfor %}
+
+      Services:
+      {% for service, status in health_report.services.services.items() %}
+        {{ 'OK' if status else 'FAIL' }} {{ service }}
+      {% endfor %}
+
+      External Endpoints:
+        {{ 'OK' if health_report.external.domain else 'FAIL' }} Main Site: https://{{ domain }}
+      {% if health_report.external.api %}
+        {{ 'OK' if health_report.external.api else 'FAIL' }} API: https://api.{{ domain }}/health
+      {% endif %}
+      {% if health_report.external.traefik_dashboard %}
+        {{ 'OK' if health_report.external.traefik_dashboard else 'FAIL' }} Traefik: https://{{ domain }}/dashboard/
+      {% endif %}
+
+
+- name: Save health report
+  copy:
+    content: |
+      # Health Check Report - {{ environment | upper }}
+
+      **Generated:** {{ health_report.timestamp }}
+      **Environment:** {{ health_report.environment }}
+      **Infrastructure:** {{ health_report.infrastructure }}
+      **Overall Status:** {{ health_report.overall_status | upper }}
+
+      ## Core Applications
+      {% for app, status in health_report.services.core_apps.items() %}
+      - {{ '✅' if status else '❌' }} **{{ app }}**: {{ 'Healthy' if status else 'Unhealthy' }}
+      {% endfor %}
+
+      ## Services
+      {% for service, status in health_report.services.services.items() %}
+      - {{ '✅' if status else '❌' }} **{{ service }}**: {{ 'Healthy' if status else 'Unhealthy' }}
+      {% endfor %}
+
+      ## External Endpoints
+      - {{ '✅' if health_report.external.domain else '❌' }} **Main Site**: https://{{ domain }}
+      {% if 'api' in deployment.core_apps %}
+      - {{ '✅' if health_report.external.api else '❌' }} **API**: https://api.{{ domain }}/health
+      {% endif %}
+      {% if traefik.dashboard_enabled %}
+      - {{ '✅' if health_report.external.traefik_dashboard else '❌' }} **Traefik Dashboard**: https://{{ domain }}/dashboard/
+      {% endif %}
+
+      ## Troubleshooting
+
+      For unhealthy services, check:
+
+      ### Logs
+      ```bash
+      # Docker logs
+      docker logs <service-name>
+      ```
+
+      ### Service Status
+      ```bash
+      # Docker status
+      docker ps
+      docker inspect <container-name>
+      ```
+
+      ### Restart Service
+      ```bash
+      # Restart Docker service
+      cd {{ apps_remote }}/<service-name> && docker compose restart
+      ```
+    dest: "{{ deploy_path }}/logs/health-check-{{ ansible_date_time.epoch }}.md"
+    mode: '0644'

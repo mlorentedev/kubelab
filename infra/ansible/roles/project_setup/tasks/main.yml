@@ -1,0 +1,28 @@
+- name: Create project directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - "{{ deploy_path }}"
+    - "{{ deploy_path }}/apps"
+    - "{{ deploy_path }}/services"
+    - "{{ deploy_path }}/workers"
+    - "{{ deploy_path }}/backups"
+    - "{{ deploy_path }}/logs"
+    - "{{ deploy_path }}/deployments"
+    - "{{ deploy_path }}/compose"
+    - "/opt/traefik"
+    - "/opt/traefik/dynamic"
+    - "/opt/traefik/logs"
+    - "/opt/traefik/certs"
+
+- name: Initialize acme.json for SSL certificates
+  file:
+    path: "/opt/traefik/certs/acme.json"
+    state: touch
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'

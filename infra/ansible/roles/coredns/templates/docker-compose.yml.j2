@@ -1,0 +1,42 @@
+# Managed by Ansible — do not edit manually
+# Source: infra/ansible/roles/coredns/templates/docker-compose.yml.j2
+services:
+  pihole:
+    container_name: pihole
+    image: {{ pihole_image }}
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ pihole_port }}:53/udp"
+      - "{{ pihole_port }}:53/tcp"
+      - "{{ pihole_web_port }}:80/tcp"
+    volumes:
+      - pihole_data:/etc/pihole
+      - ./pihole-forwarding.conf:/etc/dnsmasq.d/pihole-forwarding.conf:ro
+    environment:
+      - TZ={{ pihole_timezone }}
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "localhost", "+short"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  coredns:
+    container_name: coredns
+    image: {{ coredns_image }}
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ coredns_port }}:53/udp"
+      - "{{ coredns_port }}:53/tcp"
+    volumes:
+      - ./Corefile:/etc/coredns/Corefile:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "-p", "53", "{{ service_domains.vpn | default(base_domain) }}", "+short"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  pihole_data:

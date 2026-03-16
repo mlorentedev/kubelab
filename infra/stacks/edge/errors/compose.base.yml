@@ -1,0 +1,18 @@
+services:
+  errors:
+    image: ${REGISTRY}/${EDGE_ERRORS_IMAGE_NAME}:${EDGE_ERRORS_VERSION}
+    container_name: ${EDGE_ERRORS_NAME}
+    restart: ${RESTART_POLICY}
+    expose:
+      - "${EDGE_ERRORS_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${EDGE_ERRORS_PORT}${EDGE_ERRORS_HEALTH_PATH} || exit 1"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
+      start_period: ${HEALTHCHECK_START_PERIOD}
+
+networks:
+  default:
+    name: ${NETWORK_NAME}
+    external: true

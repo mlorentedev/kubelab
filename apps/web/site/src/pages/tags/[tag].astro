@@ -1,0 +1,121 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+
+import { getCollection, type CollectionEntry } from 'astro:content';
+import { projects, type Project } from '../../data/portfolio';
+import { getLocale, useTranslations, useTranslatedPath } from '../../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
+
+export async function getStaticPaths() {
+  const notes = await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'en');
+
+  const tagSet = new Set<string>();
+  for (const project of projects) {
+    for (const tag of project.tags) tagSet.add(tag.toLowerCase());
+  }
+  for (const note of notes) {
+    for (const tag of note.data.tags) tagSet.add(tag.toLowerCase());
+  }
+
+  return [...tagSet].map((tag) => ({
+    params: { tag },
+    props: {
+      tag,
+      matchingProjects: projects.filter((p) =>
+        p.tags.some((t) => t.toLowerCase() === tag)
+      ),
+      matchingNotes: notes
+        .filter((n: CollectionEntry<'notes'>) => n.data.tags.some((t: string) => t.toLowerCase() === tag))
+        .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()),
+    },
+  }));
+}
+
+interface Props {
+  tag: string;
+  matchingProjects: Project[];
+  matchingNotes: CollectionEntry<'notes'>[];
+}
+
+const { tag, matchingProjects, matchingNotes } = Astro.props;
+const displayTag = matchingProjects.find((p) => p.tags.some((t) => t.toLowerCase() === tag))
+  ?.tags.find((t) => t.toLowerCase() === tag)
+  || matchingNotes[0]?.data.tags.find((t: string) => t.toLowerCase() === tag)
+  || tag;
+---
+
+<BaseLayout title={`${displayTag}`} description={`${t('tags.projects')} & ${t('tags.notes')} — ${displayTag}.`}>
+  <Header />
+  <main id="main-content" class="flex-grow pt-12">
+    <section class="pt-12 pb-6 md:pt-16 md:pb-10">
+      <div class="max-w-3xl mx-auto px-4">
+        <a href={translatePath('/notes')} class="text-sm text-gray-400 hover:text-cyan-700 transition-colors">&larr; {t('tags.all')}</a>
+        <h1 class="text-2xl font-extrabold text-gray-800 mt-4">{displayTag}</h1>
+      </div>
+    </section>
+
+    {matchingProjects.length > 0 && (
+      <section class="py-12 md:py-16">
+        <div class="max-w-3xl mx-auto px-4">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-8">{t('tags.projects')}</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {matchingProjects.map((project) => (
+              <div class="border border-gray-200 rounded-md p-4 hover:border-cyan-700 transition-colors flex flex-col">
+                <div class="flex items-start justify-between gap-3 mb-2">
+                  <h3 class="font-bold text-gray-800 text-sm leading-snug">
+                    {project.url ? (
+                      <a href={project.url} target="_blank" rel="noopener noreferrer" class="hover:text-cyan-700 transition-colors">
+                        {project.title}
+                      </a>
+                    ) : project.title}
+                  </h3>
+                  {project.github && (
+                    <a
+                      href={project.github}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-xs text-gray-400 hover:text-cyan-700 transition-colors shrink-0"
+                      aria-label={`${project.title} on GitHub`}
+                    >
+                      GitHub &rarr;
+                    </a>
+                  )}
+                </div>
+                <p class="text-gray-600 text-xs leading-relaxed mb-3 flex-grow">{project.description}</p>
+                <div class="flex flex-wrap gap-1.5">
+                  {project.tags.map((tag) => (
+                    <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
+                      {tag}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    )}
+
+    {matchingNotes.length > 0 && (
+      <section class="py-12 md:py-16">
+        <div class="max-w-3xl mx-auto px-4">
+          <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-8">{t('tags.notes')}</h2>
+          <div class="divide-y divide-gray-100">
+            {matchingNotes.map((note) => (
+              <a href={translatePath(`/notes/${note.id}`)} class="group block py-3 first:pt-0">
+                <span class="text-xs text-gray-400 block tabular-nums">{note.data.pubDate.toISOString().slice(0, 10)}</span>
+                <span class="text-sm text-gray-700 group-hover:text-cyan-700 transition-colors">{note.data.title}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+    )}
+  </main>
+  <Footer />
+</BaseLayout>

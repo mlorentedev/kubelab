@@ -1,0 +1,79 @@
+---
+- name: Create backup directory
+  file:
+    path: "{{ backup_root }}/{{ backup_timestamp }}"
+    state: directory
+    mode: "0755"
+
+# Filesystem paths (Traefik config, Headscale config, etc.)
+- name: Backup filesystem paths
+  archive:
+    path: "{{ item }}"
+    dest: "{{ backup_root }}/{{ backup_timestamp }}/{{ item | replace('/', '-') | regex_replace('^-', '') }}.tar.gz"
+    format: gz
+  loop: "{{ backup_filesystem_paths }}"
+  when: backup_filesystem_paths | length > 0
+  register: fs_backup
+  failed_when: false
+
+- name: Discover Docker volumes
+  command: docker volume ls --format '{{ '{{' }}.Name{{ '}}' }}'
+  register: docker_volumes
+  changed_when: false
+
+- name: Filter excluded volumes
+  set_fact:
+    volumes_to_backup: "{{ docker_volumes.stdout_lines | difference(backup_exclude_volumes) }}"
+
+- name: Backup Docker volumes
+  command: >-
+    docker run --rm
+    -v {{ item }}:/source:ro
+    -v {{ backup_root }}/{{ backup_timestamp }}:/backup
+    alpine tar czf /backup/{{ item }}.tar.gz -C /source .
+  loop: "{{ volumes_to_backup }}"
+  register: vol_backup
+  failed_when: false
+
+- name: Write backup manifest
+  copy:
+    content: |
+      KubeLab Backup — {{ backup_timestamp }}
+      Host: {{ inventory_hostname }}
+      Filesystem paths: {{ backup_filesystem_paths | length }}
+      Docker volumes: {{ volumes_to_backup | length }}
+      Excluded: {{ backup_exclude_volumes | join(', ') }}
+
+      Files:
+      {% for path in backup_filesystem_paths %}
+        {{ path | replace('/', '-') | regex_replace('^-', '') }}.tar.gz
+      {% endfor %}
+      {% for vol in volumes_to_backup %}
+        {{ vol }}.tar.gz
+      {% endfor %}
+    dest: "{{ backup_root }}/{{ backup_timestamp }}/manifest.txt"
+    mode: "0644"
+
+- name: Show backup size
+  command: du -sh {{ backup_root }}/{{ backup_timestamp }}
+  register: backup_size
+  changed_when: false
+
+- name: Report backup result
+  debug:
+    msg: "Backup complete: {{ backup_size.stdout }}"
+
+# Retention — keep only the last N backups
+- name: List all backups
+  find:
+    paths: "{{ backup_root }}"
+    file_type: directory
+    recurse: false
+  register: all_backups
+
+- name: Remove old backups beyond retention
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ (all_backups.files | sort(attribute='path'))[:-backup_retention] }}"
+  when: all_backups.files | length > backup_retention

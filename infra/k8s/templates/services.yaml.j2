@@ -1,0 +1,21 @@
+{% for app in apps %}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ app.name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app.name }}
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ app.name }}
+  ports:
+    - name: http
+      port: {{ app.port }}
+      targetPort: http
+      protocol: TCP
+{% endfor %}

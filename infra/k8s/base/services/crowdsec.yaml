@@ -1,0 +1,299 @@
+---
+# Log acquisition config — no sources in base; extend per-overlay if needed
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-acquis
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+data:
+  acquis.yaml: |
+    # File source pointing to an emptyDir volume — satisfies CrowdSec's
+    # "at least one datasource" requirement while running as LAPI-only.
+    # Replace with real Traefik log path to enable actual log parsing.
+    filenames:
+      - /var/log/traefik/access.log
+    labels:
+      type: traefik
+---
+# Whitelist for Tailscale VPN subnet — prevents CrowdSec from creating
+# ban decisions for internal traffic coming through the VPN mesh.
+# Source of truth: networking.tailscale_cidr in infra/config/values/common.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-whitelist
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+data:
+  tailscale-whitelist.yaml: |
+    name: local/tailscale-whitelist
+    description: "Whitelist Tailscale VPN subnet"
+    whitelist:
+      reason: "Tailscale VPN internal traffic"
+      cidr:
+        - "100.64.0.0/10"  # Must match networking.tailscale_cidr
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-db
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Mi
+---
+# CrowdSec LAPI agent
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crowdsec
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crowdsec
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crowdsec
+        app.kubernetes.io/component: security
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: inject-whitelist
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /etc/crowdsec/postoverflows/s01-whitelist
+              cp /whitelist/tailscale-whitelist.yaml /etc/crowdsec/postoverflows/s01-whitelist/
+          volumeMounts:
+            - name: config
+              mountPath: /etc/crowdsec
+            - name: whitelist
+              mountPath: /whitelist
+              readOnly: true
+      containers:
+        - name: crowdsec
+          image: crowdsecurity/crowdsec:latest
+          ports:
+            - name: lapi
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 6060
+              protocol: TCP
+          env:
+            - name: GID
+              value: "1000"
+            - name: COLLECTIONS
+              value: "crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/linux"
+            - name: BOUNCER_KEY_crowdsec-bouncer
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-bouncer
+                  key: api-key
+          volumeMounts:
+            - name: acquis
+              mountPath: /etc/crowdsec/acquis.yaml
+              subPath: acquis.yaml
+              readOnly: true
+            - name: db
+              mountPath: /var/lib/crowdsec/data
+            - name: config
+              mountPath: /etc/crowdsec
+            - name: traefik-logs
+              mountPath: /var/log/traefik
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: lapi
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: lapi
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              memory: 256Mi
+              cpu: "0.5"
+            requests:
+              memory: 128Mi
+              cpu: "0.1"
+      volumes:
+        - name: acquis
+          configMap:
+            name: crowdsec-acquis
+        - name: whitelist
+          configMap:
+            name: crowdsec-whitelist
+        - name: db
+          persistentVolumeClaim:
+            claimName: crowdsec-db
+        - name: config
+          persistentVolumeClaim:
+            claimName: crowdsec-config
+        - name: traefik-logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crowdsec
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: crowdsec
+  ports:
+    - name: lapi
+      port: 8080
+      targetPort: lapi
+      protocol: TCP
+---
+# CrowdSec Traefik bouncer (forwardAuth sidecar)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crowdsec-bouncer
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec-bouncer
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crowdsec-bouncer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crowdsec-bouncer
+        app.kubernetes.io/component: security
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: crowdsec-bouncer
+          image: fbonalair/traefik-crowdsec-bouncer:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: CROWDSEC_AGENT_HOST
+              value: crowdsec.kubelab.svc.cluster.local:8080
+            - name: GIN_MODE
+              value: release
+            - name: CROWDSEC_BOUNCER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-bouncer
+                  key: api-key
+          livenessProbe:
+            httpGet:
+              path: /api/v1/ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              memory: 64Mi
+              cpu: "0.2"
+            requests:
+              memory: 32Mi
+              cpu: "0.05"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crowdsec-bouncer
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec-bouncer
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: crowdsec-bouncer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+# Traefik ForwardAuth Middleware → bouncer
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: crowdsec-bouncer
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: crowdsec-bouncer
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: kubelab
+spec:
+  forwardAuth:
+    address: http://crowdsec-bouncer.kubelab.svc.cluster.local:8080/api/v1/forwardAuth
+    trustForwardHeader: true

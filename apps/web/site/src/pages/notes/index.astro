@@ -1,0 +1,55 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { getCollection, type CollectionEntry } from 'astro:content';
+
+import { getLocale, useTranslations, useTranslatedPath, getDateLocale } from '../../i18n/utils';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
+
+const notes: CollectionEntry<'notes'>[] = (await getCollection('notes', ({ data }: CollectionEntry<'notes'>) => !data.draft && data.lang === 'en'))
+  .sort((a: CollectionEntry<'notes'>, b: CollectionEntry<'notes'>) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+const dateFormat: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+const locale = getDateLocale(lang);
+const formatDate = (d: Date) => d.toLocaleDateString(locale, dateFormat);
+---
+
+<BaseLayout title="What I think" description={t('notes.description')}>
+  <Header />
+  <main id="main-content" class="flex-grow pt-12">
+    <section class="pt-8 pb-12 md:pt-10 md:pb-14">
+      <div class="max-w-3xl mx-auto px-4">
+        <h2 class="text-sm text-gray-500 tracking-wide uppercase mb-10">{t('notes.articles')}</h2>
+        {notes.length === 0 ? (
+          <p class="text-gray-500">{t('notes.empty')}</p>
+        ) : (
+          <div class="divide-y divide-gray-200">
+            {notes.map((note: CollectionEntry<'notes'>) => (
+                <div class="py-6 first:pt-0 last:pb-0">
+                  <a href={translatePath(`/notes/${note.id}`)} class="group block">
+                    <time class="text-xs text-gray-400">{formatDate(note.data.pubDate)}</time>
+                    <h3 class="font-bold text-gray-800 mt-1 group-hover:text-cyan-700 transition-colors">
+                      {note.data.title}
+                    </h3>
+                    <p class="text-gray-600 text-sm mt-1.5 leading-relaxed">{note.data.description}</p>
+                  </a>
+                  <div class="flex flex-wrap gap-1.5 mt-3">
+                    {note.data.tags.map((tag: string) => (
+                      <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
+                        {tag}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>

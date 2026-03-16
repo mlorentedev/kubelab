@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+server: "{{ k3s_server_url }}"
+token: "{{ k3s_join_token }}"
+{% if k3s_node_labels | length > 0 %}
+node-label:
+{% for label in k3s_node_labels %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}

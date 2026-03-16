@@ -1,0 +1,63 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { useTranslatedPath, getLocale, useTranslations } from '../i18n/utils';
+import { projects } from '../data/portfolio';
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+const lang = getLocale(Astro.currentLocale);
+const t = useTranslations(lang);
+const translatePath = useTranslatedPath(lang);
+
+const featured = projects.filter((p) => p.featured);
+const other = projects.filter((p) => !p.featured);
+
+const [page] = await getCollection('pages', ({ data }: CollectionEntry<'pages'>) => data.page === 'projects' && data.lang === 'en');
+const { Content } = await render(page);
+---
+
+<BaseLayout title={page.data.title} description={page.data.description}>
+  <Header />
+  <main id="main-content" class="flex-grow pt-12">
+    <section class="pt-8 pb-12 md:pt-10 md:pb-14">
+      <div class="max-w-3xl mx-auto px-4">
+        <div class="prose prose-base max-w-none prose-p:text-base prose-p:text-gray-700 mb-10">
+          <Content />
+        </div>
+        <a href="https://github.com/mlorentedev" target="_blank" rel="noopener noreferrer">
+          <img
+            src="https://ghchart.rshah.org/0e7490/mlorentedev"
+            alt={t('meta.ghchart.alt')}
+            width="722"
+            height="112"
+            class="w-full mb-10 hover:opacity-80 transition-opacity"
+            loading="lazy"
+          />
+        </a>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[...featured, ...other].map((project) => (
+            <div class="border border-gray-200 rounded-md p-4 hover:border-cyan-700 transition-colors flex flex-col">
+              <h3 class="font-bold text-gray-800 text-sm leading-snug mb-2">
+                {(project.url || project.github) ? (
+                  <a href={project.url || project.github} target="_blank" rel="noopener noreferrer" class="hover:text-cyan-700 transition-colors">
+                    {project.title}
+                  </a>
+                ) : project.title}
+              </h3>
+              <p class="text-gray-600 text-sm leading-relaxed mb-3 flex-grow">{project.description}</p>
+              <div class="flex flex-wrap gap-1.5">
+                {project.tags.map((tag) => (
+                  <a href={translatePath(`/tags/${tag.toLowerCase()}`)} class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-cyan-700 hover:text-white transition-colors">
+                    {tag}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>

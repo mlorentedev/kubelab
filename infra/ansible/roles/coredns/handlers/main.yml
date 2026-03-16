@@ -1,0 +1,9 @@
+---
+- name: verify coredns
+  command: dig @127.0.0.1 -p {{ coredns_port }} {{ service_domains.vpn | default(base_domain) }} +short
+  changed_when: false
+
+- name: verify pihole
+  uri:
+    url: "http://127.0.0.1:{{ pihole_web_port }}/admin/"
+    status_code: [200, 302]

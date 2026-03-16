@@ -1,0 +1,283 @@
+---
+name: CI + Build for App
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+    outputs:
+      docker_version:
+        description: "Generated Docker version for this app"
+        value: ${{ jobs.app-pipeline.outputs.docker_version }}
+      sha_short:
+        description: "Short SHA"
+        value: ${{ jobs.app-pipeline.outputs.sha_short }}
+      context:
+        description: "Docker build context"
+        value: ${{ jobs.app-pipeline.outputs.context }}
+      should_build:
+        description: "Whether the app should be built"
+        value: ${{ jobs.app-pipeline.outputs.should_build }}
+      extra_build_args:
+        description: "Extra build args for Docker (web app PUBLIC_* vars)"
+        value: ${{ jobs.app-pipeline.outputs.extra_build_args }}
+
+
+jobs:
+  app-pipeline:
+    name: CI + Build for ${{ inputs.app }}
+    runs-on: ubuntu-latest
+    outputs:
+      docker_version: ${{ steps.docker_version.outputs.version }}
+      sha_short: ${{ steps.short_sha.outputs.sha }}
+      context: ${{ steps.context.outputs.context }}
+      should_build: ${{ steps.changes.outputs.should_build }}
+      extra_build_args: ${{ steps.web_build_args.outputs.args }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Validate app and detect changes
+        id: changes
+        run: |
+          APP="${{ inputs.app }}"
+          echo "Validating app: $APP"
+
+          # Resolve source directory (edge services vs platform apps)
+          case "$APP" in
+            errors) SOURCE_DIR="edge/$APP" ;;
+            *)      SOURCE_DIR="apps/$APP" ;;
+          esac
+
+          if [ ! -d "$SOURCE_DIR" ]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Source directory $SOURCE_DIR does not exist, skipping"
+            exit 0
+          fi
+
+          if [ ! -f "$SOURCE_DIR/Dockerfile" ]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Dockerfile not found in $SOURCE_DIR"
+            exit 0
+          fi
+
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "source_dir=$SOURCE_DIR" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------------------
+      # VERSIONING — release-please handles stable versions on master.
+      # Feature branches build :dev images for testing.
+      # ------------------------------------------------------------------------
+      - name: Determine Docker Tag
+        id: docker_version
+        if: steps.changes.outputs.should_build == 'true'
+        env:
+          BRANCH: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            # Master builds are handled by release.yml — skip here
+            echo "version=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Docker build on master (release-please handles stable releases)"
+          else
+            # Feature branches: dev build with run number for ordering
+            FINAL_VERSION="dev.${RUN_NUMBER}"
+            echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
+            echo "::notice::[DEV] Feature build: $FINAL_VERSION"
+          fi
+
+      # API
+      - name: Set up Go (for api)
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.21
+          cache-dependency-path: './apps/api/src/go.sum'
+
+      - name: Lint API code
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        working-directory: ./apps/api/src
+        run: go vet ./...
+
+      - name: Build API binary
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        working-directory: ./apps/api/src
+        run: go build -o api-binary ./cmd/server
+
+      # Web
+      - name: Set up Node.js (for web)
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './apps/web/site/package-lock.json'
+
+      - name: Install dependencies (web)
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
+        working-directory: './apps/web/site'
+        run: npm ci
+
+      - name: Build Astro site
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
+        working-directory: './apps/web/site'
+        run: npm run build
+
+      # Security Scanning - Secret Detection
+      - name: Run gitleaks secret scanner
+        if: steps.changes.outputs.should_build == 'true'
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_SUMMARY: true
+
+      # Security Scanning - Python (toolkit)
+      - name: Set up Python for security scanning
+        if: steps.changes.outputs.should_build == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python security tools
+        if: steps.changes.outputs.should_build == 'true'
+        run: |
+          pip install --upgrade pip
+          pip install bandit[toml] pip-audit
+
+      - name: Run bandit SAST scanner on toolkit
+        if: steps.changes.outputs.should_build == 'true'
+        run: |
+          echo "Running bandit on toolkit/"
+          bandit -r toolkit/ -f json -o bandit-report.json || true
+          bandit -r toolkit/ || true
+
+      - name: Run pip-audit on toolkit dependencies
+        if: steps.changes.outputs.should_build == 'true'
+        run: |
+          echo "Checking toolkit dependencies for vulnerabilities"
+          pip-audit --desc --require pyproject.toml || echo "::warning::Vulnerabilities found in Python dependencies"
+
+      # Security Scanning - Go (API)
+      - name: Install gosec for API
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec SAST scanner on API
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        working-directory: ./apps/api/src
+        run: |
+          echo "Running gosec on API code"
+          gosec -fmt json -out gosec-report.json ./... || true
+          gosec ./... || true
+
+      - name: Run govulncheck on API
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        working-directory: ./apps/api/src
+        run: |
+          echo "Checking API dependencies for vulnerabilities"
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || echo "::warning::Vulnerabilities found in Go dependencies"
+
+      # Security Scanning - Node.js (Web)
+      - name: Run npm audit on web dependencies
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
+        working-directory: './apps/web/site'
+        run: |
+          echo "Checking web dependencies for vulnerabilities"
+          npm audit --audit-level=moderate || echo "::warning::Vulnerabilities found in npm dependencies"
+
+      - name: Determine Docker context
+        id: context
+        run: |
+          case "${{ inputs.app }}" in
+            api)
+              echo "context=./apps/api" >> "$GITHUB_OUTPUT"
+              ;;
+            web)
+              echo "context=./apps/web" >> "$GITHUB_OUTPUT"
+              ;;
+            errors)
+              echo "context=./edge/errors" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Unsupported app: ${{ inputs.app }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Extract web build args from config
+        id: web_build_args
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'web'
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            ENV_FILE="infra/config/values/prod.yaml"
+          else
+            ENV_FILE="infra/config/values/staging.yaml"
+          fi
+          COMMON="infra/config/values/common.yaml"
+
+          # Helper: read from env yaml first, fall back to common yaml
+          get_val() {
+            local val
+            val=$(yq "$1" "$ENV_FILE" 2>/dev/null)
+            if [ "$val" = "null" ] || [ -z "$val" ]; then
+              val=$(yq "$1" "$COMMON" 2>/dev/null)
+            fi
+            echo "$val"
+          }
+
+          WEB=".apps.platform.web"
+          ARGS=""
+          ARGS+="PUBLIC_SITE_TITLE=$(get_val "${WEB}.site_title")"$'\n'
+          ARGS+="PUBLIC_SITE_DESCRIPTION=$(get_val "${WEB}.site_description")"$'\n'
+          ARGS+="PUBLIC_SITE_DOMAIN=$(get_val "${WEB}.site_domain")"$'\n'
+          ARGS+="PUBLIC_SITE_URL=$(get_val "${WEB}.site_url")"$'\n'
+          ARGS+="PUBLIC_SITE_MAIL=$(get_val "${WEB}.site_mail")"$'\n'
+          ARGS+="PUBLIC_SITE_AUTHOR=$(get_val "${WEB}.site_author")"$'\n'
+          ARGS+="PUBLIC_SITE_KEYWORDS=$(get_val "${WEB}.site_keywords")"$'\n'
+          ARGS+="PUBLIC_TWITTER_URL=$(get_val "${WEB}.twitter_url")"$'\n'
+          ARGS+="PUBLIC_YOUTUBE_URL=$(get_val "${WEB}.youtube_url")"$'\n'
+          ARGS+="PUBLIC_GITHUB_URL=$(get_val "${WEB}.github_url")"$'\n'
+          ARGS+="PUBLIC_CALENDLY_URL=$(get_val "${WEB}.calendly_url")"$'\n'
+          ARGS+="PUBLIC_BUY_ME_A_COFFEE_URL=$(get_val "${WEB}.buy_me_a_coffee_url")"$'\n'
+          ARGS+="PUBLIC_GOOGLE_ANALYTICS_ID=$(get_val "${WEB}.google_analytics_id")"$'\n'
+          ARGS+="PUBLIC_GOOGLE_TAG_MANAGER_ID=$(get_val "${WEB}.google_tag_manager_id")"$'\n'
+          ARGS+="PUBLIC_ENABLE_BLOG=$(get_val "${WEB}.enable_blog")"$'\n'
+          ARGS+="PUBLIC_ENABLE_HOMELABS=$(get_val "${WEB}.enable_homelabs")"$'\n'
+          ARGS+="PUBLIC_ENABLE_CONTACT=$(get_val "${WEB}.enable_contact")"$'\n'
+          ARGS+="PUBLIC_ALLOWED_HOSTS=$(get_val "${WEB}.allowed_hosts")"$'\n'
+          ARGS+="BACKEND_URL=$(get_val "${WEB}.backend_url")"
+
+          {
+            echo "args<<ENDOFARGS"
+            echo "$ARGS"
+            echo "ENDOFARGS"
+          } >> "$GITHUB_OUTPUT"
+
+      # Stable tags handled by release-please (release.yml)
+      - name: Extract short SHA
+        id: short_sha
+        if: steps.changes.outputs.should_build == 'true'
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  call-publish:
+    name: Build and Push Docker Image for ${{ inputs.app }}
+    needs: app-pipeline
+    if: needs.app-pipeline.outputs.should_build == 'true' && needs.app-pipeline.outputs.docker_version != 'skip'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: ${{ inputs.app }}
+      tag: ${{ needs.app-pipeline.outputs.docker_version }}
+      sha: ${{ needs.app-pipeline.outputs.sha_short }}
+      context: ${{ needs.app-pipeline.outputs.context }}
+      extra_build_args: ${{ needs.app-pipeline.outputs.extra_build_args }}
+    secrets: inherit
+
+  # GitOps update + tagging handled by release-please (release.yml)

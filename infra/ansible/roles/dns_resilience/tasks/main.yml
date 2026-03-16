@@ -1,0 +1,35 @@
+---
+# For nodes with Python 3.7+ (blockinfile = idempotent, managed block)
+- name: Ensure critical infrastructure DNS in /etc/hosts
+  blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} KUBELAB DNS RESILIENCE (managed by Ansible)"
+    block: |
+      {{ headscale_ip }} {{ headscale_domain }}
+    state: present
+  become: true
+  when: not (legacy_python | default(false))
+
+# For legacy nodes (Python <3.7, e.g. Jetson JetPack/Ubuntu 18.04)
+# Uses raw module (no Python required). grep -q makes it idempotent.
+- name: Ensure critical infrastructure DNS in /etc/hosts (legacy)
+  raw: >
+    grep -q '{{ headscale_ip }} {{ headscale_domain }}' /etc/hosts
+    || echo '# BEGIN KUBELAB DNS RESILIENCE (managed by Ansible)\n{{ headscale_ip }} {{ headscale_domain }}\n# END KUBELAB DNS RESILIENCE (managed by Ansible)' | sudo tee -a /etc/hosts > /dev/null
+  changed_when: false
+  when: legacy_python | default(false)
+
+- name: Verify DNS resolution works
+  raw: getent hosts {{ headscale_domain }}
+  register: dns_check
+  changed_when: false
+
+- name: Display resolution result
+  debug:
+    msg: "{{ headscale_domain }} resolves to: {{ dns_check.stdout | default(dns_check.stdout_lines | default(['unknown'])) }}"
+  when: not (legacy_python | default(false))
+
+- name: Display resolution result (legacy)
+  raw: "echo '{{ headscale_domain }} resolution:' && getent hosts {{ headscale_domain }}"
+  changed_when: false
+  when: legacy_python | default(false)

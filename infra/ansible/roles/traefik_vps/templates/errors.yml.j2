@@ -1,0 +1,19 @@
+# Managed by Ansible — do not edit manually
+http:
+  middlewares:
+    error-pages:
+      errors:
+        status:
+          - "400-401"
+          - "403"
+          - "408"
+          - "429"
+          - "500-503"
+        service: errors
+        query: "/errors/{status}.html"
+
+  services:
+    errors:
+      loadBalancer:
+        servers:
+          - url: "{{ traefik_error_pages_backend }}"
