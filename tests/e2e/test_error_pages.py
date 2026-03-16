@@ -21,10 +21,10 @@ def _find_target(
 ) -> ServiceHealthConfig | None:
     """Find a service that returns 404 for unknown paths.
 
-    Prefers api/web/blog (return 404 for unknown paths) over SPAs like
+    Prefers api/web (return 404 for unknown paths) over SPAs like
     authelia/grafana (return 200 for everything — can't trigger error-pages).
     """
-    for name in ("api", "web", "blog", "loki"):
+    for name in ("api", "web", "loki"):
         svc = services_by_name.get(name)
         if not svc:
             continue
