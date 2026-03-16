@@ -3,9 +3,9 @@ name: CI
 
 on:
   push:
-    branches: [master, develop, 'feature/**', 'hotfix/**']
+    branches: [master, 'feature/**', 'fix/**', 'hotfix/**', 'chore/**']
   pull_request:
-    branches: [master, develop]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -22,21 +22,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate branch name
-        if: github.event_name == 'push' && !contains(fromJSON('["master", "develop"]'), github.ref_name)
+        if: github.event_name == 'push' && github.ref_name != 'master'
         run: |
-          if [[ ! "${{ github.ref_name }}" =~ ^(feature|hotfix)/.+ ]]; then
-            echo "::error::Branch name must match feature/* or hotfix/*"
-            exit 1
-          fi
-
-      - name: Validate merge rules
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [[ "$BASE_REF" == "master" && "$HEAD_REF" != "develop" ]]; then
-            echo "::error::PRs to master are only allowed from develop"
+          if [[ ! "${{ github.ref_name }}" =~ ^(feature|fix|hotfix|chore)/.+ ]]; then
+            echo "::error::Branch name must match feature/*, fix/*, hotfix/*, or chore/*"
             exit 1
           fi
 

@@ -48,25 +48,26 @@ jobs:
           APP="${{ inputs.app }}"
           echo "Validating app: $APP"
 
-          if [ ! -d "apps/$APP" ]; then
+          # Resolve source directory (edge services vs platform apps)
+          case "$APP" in
+            errors) SOURCE_DIR="edge/$APP" ;;
+            *)      SOURCE_DIR="apps/$APP" ;;
+          esac
+
+          if [ ! -d "$SOURCE_DIR" ]; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::App directory apps/$APP does not exist, skipping"
+            echo "::warning::Source directory $SOURCE_DIR does not exist, skipping"
             exit 0
           fi
 
-          if [ ! -f "apps/$APP/Dockerfile" ]; then
+          if [ ! -f "$SOURCE_DIR/Dockerfile" ]; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Dockerfile not found for app $APP"
+            echo "::error::Dockerfile not found in $SOURCE_DIR"
             exit 0
           fi
 
-          if ! ls infra/stacks/apps/$APP/compose*.yml 1> /dev/null 2>&1; then
-            echo "::warning::No compose files found for app $APP in infra/stacks/apps/$APP/"
-            echo "This is not critical but may affect deployment"
-          fi
-
-          # If we get here, we should build
           echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "source_dir=$SOURCE_DIR" >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------------
       # VERSIONING STRATEGY (GitFlow)
@@ -79,12 +80,12 @@ jobs:
           # Prefix to distinguish apps in monorepo (e.g., "api-v1.0.0")
           tag_prefix: "${{ inputs.app }}-v"
           # Folder to watch for changes
-          change_path: "apps/${{ inputs.app }}"
+          change_path: "${{ steps.changes.outputs.source_dir }}"
           # Branch definition
           branch: "master"
           # Version format for releases
           version_format: "${major}.${minor}.${patch}"
-          # Bump version on every commit for 'develop' to ensure unique RCs
+          # Bump version on every commit to ensure unique RC numbers
           bump_each_commit: true
           # Search commit messages for 'fix:', 'feat:', etc.
           search_commit_body: true
@@ -105,21 +106,12 @@ jobs:
 
           if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
             # [PROD] Main Branch -> Stable Release (e.g., 1.2.0)
-            # Uses the clean semantic version calculated by the action
             FINAL_VERSION="$SEMVER"
-            echo "::notice::🚀 [PROD] Detected Stable Release: $FINAL_VERSION"
-
-          elif [[ "$BRANCH" == "develop" ]]; then
-            # [STAGING] Develop Branch -> Release Candidate (e.g., 1.2.0-rc.5)
-            # We append -rc.increment to the semantic base
-            FINAL_VERSION="${SEMVER}-rc.${INCREMENT}"
-            echo "::notice::🧪 [STAGING] Detected Release Candidate: $FINAL_VERSION"
-
+            echo "::notice::[PROD] Stable Release: $FINAL_VERSION"
           else
-            # [DEV] Feature/Hotfix Branches -> Immutable Dev Build (e.g., 0.0.0-dev.a1b2c3d)
-            # Purely based on SHA to avoid polluting SemVer history
-            FINAL_VERSION="0.0.0-dev.${SHORT_SHA}"
-            echo "::notice::🚧 [DEV] Detected Feature Build: $FINAL_VERSION"
+            # [RC] Feature/Fix/Hotfix Branches -> Release Candidate (e.g., 1.3.0-rc.42)
+            FINAL_VERSION="${SEMVER}-rc.${INCREMENT}"
+            echo "::notice::[RC] Release Candidate: $FINAL_VERSION"
           fi
 
           echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
@@ -251,10 +243,8 @@ jobs:
           BRANCH="${{ github.ref_name }}"
           if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
             ENV_FILE="infra/config/values/prod.yaml"
-          elif [[ "$BRANCH" == "develop" ]]; then
-            ENV_FILE="infra/config/values/staging.yaml"
           else
-            ENV_FILE="infra/config/values/dev.yaml"
+            ENV_FILE="infra/config/values/staging.yaml"
           fi
           COMMON="infra/config/values/common.yaml"
 
@@ -341,10 +331,10 @@ jobs:
     name: GitOps Update (${{ inputs.app }})
     needs: [app-pipeline, call-publish]
     runs-on: ubuntu-latest
-    # Only run on main/develop — feature branches are developer-owned, no CI auto-commits
+    # Only run on main — feature branches are developer-owned, no CI auto-commits
     if: >-
       needs.app-pipeline.outputs.should_build == 'true' &&
-      (github.ref_name == 'master' || github.ref_name == 'main' || github.ref_name == 'develop')
+      (github.ref_name == 'master' || github.ref_name == 'main')
     permissions:
       contents: write  # Required to push changes to repo
     steps:
@@ -364,12 +354,9 @@ jobs:
           if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
             TARGET_FILE="infra/config/values/prod.yaml"
             ENV_NAME="PROD"
-          elif [[ "$BRANCH" == "develop" ]]; then
-            TARGET_FILE="infra/config/values/staging.yaml"
-            ENV_NAME="STAGING"
           else
-            TARGET_FILE="infra/config/values/dev.yaml"
-            ENV_NAME="DEV"
+            echo "::warning::GitOps update only runs on master"
+            exit 0
           fi
 
           echo "::notice::🔄 Updating $ENV_NAME config ($TARGET_FILE) for $APP to $VERSION"
