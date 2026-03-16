@@ -95,8 +95,8 @@ jobs:
             echo "version=skip" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping Docker build on master (release-please handles stable releases)"
           else
-            # Feature branches: version-aware dev build (e.g., 0.1.0-dev.142)
-            FINAL_VERSION="${BASE_VERSION}-dev.${RUN_NUMBER}"
+            # Feature branches: release candidate (e.g., 0.1.0-rc.142)
+            FINAL_VERSION="${BASE_VERSION}-rc.${RUN_NUMBER}"
             echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
             echo "::notice::[DEV] Feature build: $FINAL_VERSION"
           fi
