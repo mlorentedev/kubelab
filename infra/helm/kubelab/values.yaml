@@ -18,6 +18,7 @@ kubelab-app:
       image:
         repository: docker.io/mlorentedev/kubelab-errors
         tag: dev
+        pullPolicy: Always
       containerPort: 8080
       replicas: 1
       healthCheck:
@@ -59,6 +60,7 @@ kubelab-app:
       image:
         repository: docker.io/mlorentedev/kubelab-api
         tag: dev
+        pullPolicy: Always
       containerPort: 8080
       replicas: 1
       healthCheck:
@@ -88,7 +90,8 @@ kubelab-app:
       image:
         repository: docker.io/mlorentedev/kubelab-web
         tag: dev
-      containerPort: 4321
+        pullPolicy: Always
+      containerPort: 8080
       replicas: 1
       healthCheck:
         path: /
