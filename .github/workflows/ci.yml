@@ -66,18 +66,11 @@ jobs:
             && github.event.before || github.sha }}
           filters: |
             api:
-              - 'apps/api/src/**'
-              - 'apps/api/go.mod'
-              - 'apps/api/go.sum'
-              - 'apps/api/Dockerfile'
-              - 'infra/stacks/apps/api/**'
+              - 'apps/api/**'
             web:
-              - 'apps/web/site/**'
-              - 'apps/web/Dockerfile'
-              - 'infra/stacks/apps/web/**'
+              - 'apps/web/**'
             errors:
               - 'edge/errors/**'
-              - 'infra/stacks/edge/errors/**'
 
       - name: Check if any app changed
         id: check
