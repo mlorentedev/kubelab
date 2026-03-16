@@ -264,7 +264,7 @@ class PlatformSettings(BaseSettings):
     # Ports (from env)
     api_port: int = 8080
     web_port: int = 3000
-    blog_port: int = 4000
+
     wiki_port: int = 8000
 
     # Endpoints (computed)
@@ -275,10 +275,6 @@ class PlatformSettings(BaseSettings):
     @property
     def web_endpoint(self) -> str:
         return f"{self.protocol}://{self.base_domain}"
-
-    @property
-    def blog_endpoint(self) -> str:
-        return f"{self.protocol}://blog.{self.base_domain}"
 
     @property
     def wiki_endpoint(self) -> str:

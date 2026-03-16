@@ -9,11 +9,20 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  security-events: write
 
 jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      api_release_created: ${{ steps.release.outputs['apps/api--release_created'] }}
+      api_version: ${{ steps.release.outputs['apps/api--version'] }}
+      web_release_created: ${{ steps.release.outputs['apps/web--release_created'] }}
+      web_version: ${{ steps.release.outputs['apps/web--version'] }}
+      errors_release_created: ${{ steps.release.outputs['edge/errors--release_created'] }}
+      errors_version: ${{ steps.release.outputs['edge/errors--version'] }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -21,3 +30,44 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Log release outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$OUTPUTS"
+
+  publish-api:
+    name: Publish API
+    needs: release-please
+    if: needs.release-please.outputs.api_release_created == 'true'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: api
+      tag: ${{ needs.release-please.outputs.api_version }}
+      sha: ${{ github.sha }}
+      context: ./apps/api
+    secrets: inherit
+
+  publish-web:
+    name: Publish Web
+    needs: release-please
+    if: needs.release-please.outputs.web_release_created == 'true'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: web
+      tag: ${{ needs.release-please.outputs.web_version }}
+      sha: ${{ github.sha }}
+      context: ./apps/web
+    secrets: inherit
+
+  publish-errors:
+    name: Publish Errors
+    needs: release-please
+    if: needs.release-please.outputs.errors_release_created == 'true'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: errors
+      tag: ${{ needs.release-please.outputs.errors_version }}
+      sha: ${{ github.sha }}
+      context: ./edge/errors
+    secrets: inherit

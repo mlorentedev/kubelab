@@ -112,7 +112,7 @@ jobs:
 
       # Security Scanning - Docker Image with Trivy
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.39.0
         with:
           image-ref: ${{ steps.docker_tags.outputs.full_image }}
           format: 'sarif'
@@ -127,7 +127,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Run Trivy vulnerability scanner (table output)
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.39.0
         with:
           image-ref: ${{ steps.docker_tags.outputs.full_image }}
           format: 'table'

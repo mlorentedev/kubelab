@@ -45,7 +45,7 @@ class Components:
     """
 
     # Platform apps (apps.platform.*)
-    PLATFORM_APPS: Sequence[str] = ("api", "web", "blog", "wiki", "workers")
+    PLATFORM_APPS: Sequence[str] = ("api", "web")
 
     # Edge services (edge.*)
     EDGE: Sequence[str] = ("traefik", "errors", "dns-gateway", "cloudflared")
