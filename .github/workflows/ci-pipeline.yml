@@ -70,63 +70,26 @@ jobs:
           echo "source_dir=$SOURCE_DIR" >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------------
-      # VERSIONING STRATEGY
+      # VERSIONING — release-please handles stable versions on master.
+      # Feature branches build :dev images for testing.
       # ------------------------------------------------------------------------
-      - name: Ensure baseline tag exists
-        if: steps.changes.outputs.should_build == 'true'
-        run: |
-          TAG_PREFIX="${{ inputs.app }}-v"
-          if ! git tag -l "${TAG_PREFIX}*" | grep -q .; then
-            echo "::notice::No tags found for ${TAG_PREFIX}*, creating baseline ${TAG_PREFIX}0.0.0"
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag -a "${TAG_PREFIX}0.0.0" -m "Baseline tag for ${{ inputs.app }}"
-            git push origin "${TAG_PREFIX}0.0.0"
-          fi
-
-      - name: Calculate Semantic Version
-        id: semver
-        if: steps.changes.outputs.should_build == 'true'
-        uses: paulhatch/semantic-version@v5.4.0
-        with:
-          # Prefix to distinguish apps in monorepo (e.g., "api-v1.0.0")
-          tag_prefix: "${{ inputs.app }}-v"
-          # Folder to watch for changes
-          change_path: "${{ steps.changes.outputs.source_dir }}"
-          # Branch definition
-          branch: "master"
-          # Version format for releases
-          version_format: "${major}.${minor}.${patch}"
-          # Bump version on every commit to ensure unique RC numbers
-          bump_each_commit: true
-          # Search commit messages for 'fix:', 'feat:', etc.
-          search_commit_body: true
-
-      - name: Determine Final Docker Tag
+      - name: Determine Docker Tag
         id: docker_version
         if: steps.changes.outputs.should_build == 'true'
+        env:
+          BRANCH: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          APP="${{ inputs.app }}"
-          BRANCH="${{ github.ref_name }}"
-          SEMVER="${{ steps.semver.outputs.version }}"
-          INCREMENT="${{ steps.semver.outputs.increment }}"
-          SHORT_SHA=$(git rev-parse --short HEAD)
-
-          # -----------------------------------------------------------
-          # STRATEGY DEFINITION
-          # -----------------------------------------------------------
-
           if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
-            # [PROD] Main Branch -> Stable Release (e.g., 1.2.0)
-            FINAL_VERSION="$SEMVER"
-            echo "::notice::[PROD] Stable Release: $FINAL_VERSION"
+            # Master builds are handled by release.yml — skip here
+            echo "version=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Docker build on master (release-please handles stable releases)"
           else
-            # [RC] Feature/Fix/Hotfix Branches -> Release Candidate (e.g., 1.3.0-rc.42)
-            FINAL_VERSION="${SEMVER}-rc.${INCREMENT}"
-            echo "::notice::[RC] Release Candidate: $FINAL_VERSION"
+            # Feature branches: dev build with run number for ordering
+            FINAL_VERSION="dev.${RUN_NUMBER}"
+            echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
+            echo "::notice::[DEV] Feature build: $FINAL_VERSION"
           fi
-
-          echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
 
       # API
       - name: Set up Go (for api)
@@ -298,26 +261,7 @@ jobs:
             echo "ENDOFARGS"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create git tag for stable releases
-        if: >-
-          steps.changes.outputs.should_build == 'true' &&
-          steps.docker_version.outputs.version != 'skip' &&
-          (github.ref_name == 'master' || github.ref_name == 'main')
-        run: |
-          APP="${{ inputs.app }}"
-          VERSION="${{ steps.docker_version.outputs.version }}"
-          APP_TAG="${APP}-v${VERSION}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if git rev-parse "refs/tags/$APP_TAG" >/dev/null 2>&1; then
-            echo "::warning::App tag $APP_TAG already exists, skipping"
-          else
-            git tag -a "$APP_TAG" -m "Release $APP v$VERSION"
-            git push origin "$APP_TAG"
-            echo "::notice::Created stable release tag: $APP_TAG"
-          fi
+      # Stable tags handled by release-please (release.yml)
       - name: Extract short SHA
         id: short_sha
         if: steps.changes.outputs.should_build == 'true'
@@ -336,79 +280,4 @@ jobs:
       extra_build_args: ${{ needs.app-pipeline.outputs.extra_build_args }}
     secrets: inherit
 
-  # ------------------------------------------------------------------------
-  # GITOPS: INFRASTRUCTURE UPDATE
-  # ------------------------------------------------------------------------
-  update-infrastructure:
-    name: GitOps Update (${{ inputs.app }})
-    needs: [app-pipeline, call-publish]
-    runs-on: ubuntu-latest
-    # Only run on main — feature branches are developer-owned, no CI auto-commits
-    if: >-
-      needs.app-pipeline.outputs.should_build == 'true' &&
-      (github.ref_name == 'master' || github.ref_name == 'main')
-    permissions:
-      contents: write  # Required to push changes to repo
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-
-      - name: Update Environment Config
-        id: update_yaml
-        run: |
-          APP="${{ inputs.app }}"
-          VERSION="${{ needs.app-pipeline.outputs.docker_version }}"
-          BRANCH="${{ github.ref_name }}"
-
-          # Determine which file to update based on Branch Strategy
-          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
-            TARGET_FILE="infra/config/values/prod.yaml"
-            ENV_NAME="PROD"
-          else
-            echo "::warning::GitOps update only runs on master"
-            exit 0
-          fi
-
-          echo "::notice::🔄 Updating $ENV_NAME config ($TARGET_FILE) for $APP to $VERSION"
-
-          # Resolve config path based on app type
-          case "$APP" in
-            errors) CONFIG_PATH=".edge.errors.version" ;;
-            *)      CONFIG_PATH=".apps.platform.${APP}.version" ;;
-          esac
-
-          yq -i "${CONFIG_PATH} = \"${VERSION}\"" "$TARGET_FILE"
-
-          # Verify change
-          NEW_VAL=$(yq "${CONFIG_PATH}" "$TARGET_FILE")
-          echo "::notice::✅ Verification: $APP is now set to $NEW_VAL in $TARGET_FILE"
-
-          echo "file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
-
-      - name: Commit and Push Changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: >-
-            chore(infra): update ${{ inputs.app }} version to
-            ${{ needs.app-pipeline.outputs.docker_version }} [skip ci]
-          file_pattern: "${{ steps.update_yaml.outputs.file }}"
-          branch: ${{ github.head_ref || github.ref_name }}
-
-      - name: Tag Version in Git
-        if: github.ref_name == 'main' || github.ref_name == 'master'
-        run: |
-          APP="${{ inputs.app }}"
-          VERSION="${{ needs.app-pipeline.outputs.docker_version }}"
-          TAG_NAME="${APP}-v${VERSION}"
-
-          echo "::notice::🏷️ Creating Git Tag: $TAG_NAME"
-
-          # Check if tag already exists to avoid errors
-          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "::warning::Tag $TAG_NAME already exists. Skipping."
-          else
-            git tag "$TAG_NAME"
-            git push origin "$TAG_NAME"
-          fi
+  # GitOps update + tagging handled by release-please (release.yml)
