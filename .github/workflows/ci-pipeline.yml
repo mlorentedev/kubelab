@@ -361,12 +361,16 @@ jobs:
 
           echo "::notice::🔄 Updating $ENV_NAME config ($TARGET_FILE) for $APP to $VERSION"
 
-          # Use yq (installed by default in ubuntu-latest) to update yaml
-          # We construct the path: apps.<app_name>.version
-          yq -i ".apps.${APP}.version = \"${VERSION}\"" "$TARGET_FILE"
+          # Resolve config path based on app type
+          case "$APP" in
+            errors) CONFIG_PATH=".edge.errors.version" ;;
+            *)      CONFIG_PATH=".apps.platform.${APP}.version" ;;
+          esac
+
+          yq -i "${CONFIG_PATH} = \"${VERSION}\"" "$TARGET_FILE"
 
           # Verify change
-          NEW_VAL=$(yq ".apps.${APP}.version" "$TARGET_FILE")
+          NEW_VAL=$(yq "${CONFIG_PATH}" "$TARGET_FILE")
           echo "::notice::✅ Verification: $APP is now set to $NEW_VAL in $TARGET_FILE"
 
           echo "file=$TARGET_FILE" >> "$GITHUB_OUTPUT"

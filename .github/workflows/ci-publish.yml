@@ -94,7 +94,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context }}
-          file: ./apps/${{ inputs.app }}/Dockerfile
+          file: ${{ inputs.context }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.docker_tags.outputs.tags }}

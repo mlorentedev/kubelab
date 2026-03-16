@@ -9,7 +9,6 @@ on:
       - completed
     branches:
       - master
-      - develop
 
   # Allow manual trigger for emergency releases
   workflow_dispatch:
@@ -18,8 +17,8 @@ jobs:
   create-global-release:
     name: Create Release Bundle
     runs-on: ubuntu-latest
-    # Only run if the triggering workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Run if triggered by successful workflow_run OR manual dispatch
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,13 +44,6 @@ jobs:
             IS_PRERELEASE="false"
             CONFIG_FILE="infra/config/values/prod.yaml"
             echo "::notice::🚀 Preparing Stable Release: $RELEASE_TAG"
-
-          elif [[ "$BRANCH" == "develop" ]]; then
-            # Release Candidate
-            RELEASE_TAG="v${DATE_TAG}-rc.${SHORT_SHA}"
-            IS_PRERELEASE="true"
-            CONFIG_FILE="infra/config/values/staging.yaml"
-            echo "::notice::🧪 Preparing Release Candidate: $RELEASE_TAG"
 
           else
             echo "::warning::Skipping global release for branch $BRANCH"
