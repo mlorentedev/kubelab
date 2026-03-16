@@ -85,10 +85,17 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **RPi4 Tailscale flags**: `--login-server=https://vpn.kubelab.live --accept-dns=false --advertise-routes=172.16.1.0/24`. All three are required. `tailscale-watchdog.timer` auto-reconnects every 5 min.
 - **External services through K3s Traefik**: Bare-metal services (Uptime Kuma, Ollama) use Service + EndpointSlice in `infra/k8s/base/external/`. Label: `kubelab.live/location: external`.
 - **yamllint directives inside `|` blocks don't work**: `# yamllint disable` is string content inside literal block scalars, not a YAML comment. yamllint max line-length is 130 (accommodates argon2 hashes).
+- **Trunk-based development**: `master` is the only permanent branch. Feature branches use `feature/`, `fix/`, `hotfix/`, `chore/` prefixes. All PRs squash-merge to master. No `develop` branch.
+- **RC versioning**: Feature branches produce `{next-version}-rc.{N}` Docker tags. Master produces stable `{version}` tags. No more `0.0.0-dev.{sha}` builds.
+- **Errors service lives in `edge/errors/`** (not `apps/`). It's an edge service, not a platform app. CI path filter reflects this.
+- **K3s HelmChartConfig managed by Ansible**: Template at `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2`. Includes ACME config. Do NOT create static HelmChartConfig in `infra/k8s/`.
+- **K3s deploy requires sudo**: `make deploy-k3s ENV=x` passes `-K` for become password on homelab nodes. VPS uses NOPASSWD.
+- **Pattern C ports are in prod.yaml only**: common.yaml has 80/443 (default). prod.yaml overrides to 8080/8443 for side-by-side validation. Do NOT put alternate ports in common.yaml.
 
 ## Workflow rules
 
-- **Commits**: User commits manually. Provide commit message, never run `git commit`.
+- **Commits**: User commits manually or via Claude when explicitly requested. Never commit autonomously.
+- **Branching**: Trunk-based development. `master` only. PRs with squash merge. See CI workflows.
 - **IaC-first**: Version-controlled config > declarative > automated > manual.
 - **Source of truth**: `infra/config/values/*.yaml` (never .env files)
 - **VPS is ARM**: Multi-arch Docker builds (amd64+arm64) required.
@@ -97,13 +104,18 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 ## Key paths (repo)
 
 ```
-infra/k8s/                 — K8s manifests (base + overlays)
-infra/config/values/       — Environment config (dev/staging/prod)
-infra/stacks/              — Docker Compose stacks (local dev)
-edge/                      — Traefik, DNS gateway configs
-toolkit/                   — Python CLI (will become kubelab-cli)
-apps/                      — Application source (api, web, blog)
-.github/workflows/         — CI pipeline
+infra/k8s/                         — K8s manifests (base + overlays)
+infra/config/values/               — Environment config (dev/staging/prod)
+infra/stacks/                      — Docker Compose stacks (local dev)
+infra/ansible/roles/k3s_server/    — K3s server provisioning (ADR-020 Phase 3)
+infra/ansible/roles/k3s_agent/     — K3s agent provisioning
+infra/ansible/roles/errors/        — Error pages container (VPS)
+infra/helm/                        — Helm charts (ADR-021, future)
+edge/                              — Traefik, DNS gateway configs
+edge/errors/                       — Error pages source (Dockerfile + HTML)
+toolkit/                           — Python CLI (will become kubelab-cli)
+apps/                              — Application source (api, web, blog)
+.github/workflows/                 — CI pipeline
 ```
 
 ## Vault location
