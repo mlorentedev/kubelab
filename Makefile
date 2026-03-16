@@ -48,6 +48,7 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make deploy-vps         Deploy VPS services (Headscale + Traefik routes)"
 	@echo "  make deploy-dns         Deploy CoreDNS + Pi-hole to RPi4"
+	@echo "  make deploy-k3s ENV=x   Deploy K3s cluster (ENV=staging|prod)"
 	@echo "  make backup-vps         Backup VPS Docker volumes and configs"
 	@echo "  make k8s-apply ENV=x    Apply K8s manifests (ENV=staging|prod, IMAGE_TAG=optional)"
 	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
@@ -175,15 +176,15 @@ config-generate:
 
 .PHONY: build-dev
 build-dev:
-	@$(TOOLKIT) services build blog --env dev --no-cache
 	@$(TOOLKIT) services build api --env dev --no-cache
 	@$(TOOLKIT) services build web --env dev --no-cache
+	@$(TOOLKIT) services build errors --env dev --no-cache
 	@echo "✓ Development services built"
 
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		blog api web nginx portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api web errors portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -191,7 +192,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		blog api web nginx portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api web errors portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -216,7 +217,7 @@ dev-full-reset: dev-full-clean credentials-generate
 	@read -p "" # Pauses execution until user presses Enter
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik portainer gitea n8n uptime loki grafana api web blog minio github-runner --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik portainer gitea n8n uptime loki grafana api web errors minio github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
 	@echo ""
 	@echo "--- Post-start manual steps ---"
@@ -261,7 +262,7 @@ secrets-hash:
 secrets-audit:
 	@$(TOOLKIT) secrets audit
 
-# Infrastructure deploys (Ansible — ADR-020 Phase 2)
+# Infrastructure deploys (Ansible — ADR-020 Phase 2+3)
 .PHONY: deploy-vps
 deploy-vps:
 	@$(TOOLKIT) infra ansible run -p deploy-vps -e prod
@@ -269,6 +270,11 @@ deploy-vps:
 .PHONY: deploy-dns
 deploy-dns:
 	@$(TOOLKIT) infra ansible run -p deploy-dns -e prod
+
+.PHONY: deploy-k3s
+deploy-k3s:
+	@test -n "$(ENV)" || (echo "Usage: make deploy-k3s ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra ansible run -p deploy-k3s -e $(ENV) -K
 
 .PHONY: backup-vps
 backup-vps:

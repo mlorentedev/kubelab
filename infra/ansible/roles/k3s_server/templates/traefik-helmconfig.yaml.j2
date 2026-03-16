@@ -1,0 +1,30 @@
+{{ ansible_managed | comment }}
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      web:
+        exposedPort: {{ k3s_traefik_http_port }}
+      websecure:
+        exposedPort: {{ k3s_traefik_https_port }}
+{% if k3s_traefik_acme_enabled %}
+    additionalArguments:
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider={{ k3s_traefik_acme_dns_provider }}"
+      - "--certificatesresolvers.letsencrypt.acme.email={{ k3s_traefik_acme_email }}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers={{ k3s_traefik_acme_dns_resolvers }}"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
+    env:
+      - name: CF_DNS_API_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: {{ k3s_traefik_acme_secret_name }}
+            key: api-token
+{% endif %}

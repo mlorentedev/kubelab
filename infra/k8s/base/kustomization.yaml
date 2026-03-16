@@ -8,7 +8,7 @@ resources:
   # portfolio.yaml removed 2026-03-15: unified under 'web' in overlays
   - external/ollama.yaml
   - external/uptime-kuma.yaml
-  - edge/nginx-errors.yaml
+  - edge/errors.yaml
   - edge/secure-headers.yaml
   - services/grafana.yaml
   - services/loki.yaml

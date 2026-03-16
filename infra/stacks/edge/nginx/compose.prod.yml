@@ -1,7 +1,0 @@
-services:
-  nginx-errors:
-    deploy:
-      resources:
-        limits:
-          cpus: ${EDGE_NGINX_RESOURCES_CPU_LIMIT}
-          memory: ${EDGE_NGINX_RESOURCES_MEMORY_LIMIT}

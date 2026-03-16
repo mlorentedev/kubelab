@@ -47,15 +47,3 @@ data:
   SITE_URL: "https://mlorente.dev"
   TWITTER_URL: "https://x.com/mlorentedev"
   YOUTUBE_URL: "https://www.youtube.com/@mlorentedev"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: blog-config
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: blog
-    app.kubernetes.io/part-of: kubelab
-    app.kubernetes.io/managed-by: toolkit
-data:
-  ENVIRONMENT: "prod"

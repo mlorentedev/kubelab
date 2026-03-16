@@ -106,8 +106,8 @@ class TestExtractServiceConfigs:
                     "health_path": "/ping",
                     "enable_auth": True,
                 },
-                "nginx": {
-                    "name": "nginx-errors",
+                "errors": {
+                    "name": "errors",
                     "health_path": "/health",
                     # No domain — should be skipped
                 },
@@ -139,8 +139,7 @@ class TestExtractServiceConfigs:
         checker = HealthChecker.__new__(HealthChecker)
         configs = checker._extract_service_configs(self._make_config())
         names = [c.name for c in configs]
-        assert "nginx" not in names
-        assert "nginx-errors" not in names
+        assert "errors" not in names
 
     def test_categories_assigned(self) -> None:
         checker = HealthChecker.__new__(HealthChecker)

@@ -116,6 +116,6 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     # -- Data --
     "minio": ServiceExpectation(),
     # -- Edge --
-    # nginx-errors is Traefik's internal error page backend, not a user-facing service.
+    # errors is Traefik's internal error page backend, not a user-facing service.
     # It has no public route — Traefik references it internally for custom 404/502 pages.
 }

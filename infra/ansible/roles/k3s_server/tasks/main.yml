@@ -1,0 +1,114 @@
+---
+# --- Pre-checks ---
+- name: Validate required variables
+  assert:
+    that:
+      - k3s_version | length > 0
+      - k3s_tls_san | length > 0
+    fail_msg: "k3s_version and k3s_tls_san must be provided from playbook (SSOT)"
+
+- name: Check if K3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Get installed K3s version
+  command: k3s --version
+  register: k3s_installed_version
+  changed_when: false
+  failed_when: false
+  when: k3s_binary.stat.exists
+
+- name: Determine if install is required
+  set_fact:
+    k3s_install_required: >-
+      {{ not k3s_binary.stat.exists or
+         k3s_version not in (k3s_installed_version.stdout | default('')) }}
+
+# --- Config ---
+- name: Create K3s config directory
+  file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: "0755"
+
+- name: Template K3s server config
+  template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    mode: "0600"
+  register: k3s_config
+  notify: Restart K3s server
+
+# --- Install ---
+- name: Download K3s install script
+  get_url:
+    url: "{{ k3s_install_script_url }}"
+    dest: "{{ k3s_install_script_path }}"
+    mode: "0755"
+  when: k3s_install_required
+
+- name: Run K3s server install
+  command: "{{ k3s_install_script_path }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+  changed_when: true
+  when: k3s_install_required
+
+# --- Readiness ---
+- name: Ensure K3s service is started and enabled
+  systemd:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: Wait for K3s API to be ready
+  command: k3s kubectl get nodes --no-headers
+  register: k3s_ready
+  retries: "{{ k3s_readiness_retries }}"
+  delay: "{{ k3s_readiness_delay }}"
+  until: k3s_ready.rc == 0
+  changed_when: false
+
+# --- Traefik HelmChartConfig (Pattern C — ADR-015) ---
+- name: Template Traefik HelmChartConfig
+  template:
+    src: traefik-helmconfig.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+    mode: "0644"
+  when: k3s_configure_traefik
+
+# --- Join token (for agents) ---
+- name: Wait for node token file
+  wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    state: present
+    timeout: "{{ k3s_token_wait_timeout }}"
+
+- name: Read join token
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token_raw
+  no_log: true
+
+- name: Export join token as host fact
+  set_fact:
+    k3s_join_token: "{{ k3s_token_raw.content | b64decode | trim }}"
+    cacheable: true
+  no_log: true
+
+# --- Kubeconfig fetch ---
+- name: Fetch kubeconfig from server
+  slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: k3s_kubeconfig_raw
+  when: k3s_fetch_kubeconfig
+
+- name: Write kubeconfig to controller (rewrite server URL)
+  copy:
+    content: "{{ k3s_kubeconfig_raw.content | b64decode | replace('127.0.0.1', k3s_api_address) }}"
+    dest: "{{ k3s_kubeconfig_local_path }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: k3s_fetch_kubeconfig

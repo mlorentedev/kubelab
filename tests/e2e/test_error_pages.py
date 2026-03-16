@@ -1,4 +1,4 @@
-"""E2E: Custom error page validation — verifies nginx-errors renders custom pages."""
+"""E2E: Custom error page validation — verifies errors service renders custom pages."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class TestCustomErrorPages:
 
         ct = r.headers.get("content-type", "")
         assert "text/html" in ct, (
-            f"Expected HTML error page from nginx-errors, got content-type: '{ct}'. "
+            f"Expected HTML error page from errors service, got content-type: '{ct}'. "
             "Verify error-pages middleware is applied to the IngressRoute/Traefik route."
         )
 

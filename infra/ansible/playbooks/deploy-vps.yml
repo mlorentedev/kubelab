@@ -43,13 +43,13 @@
       no_log: true
 
   roles:
-    # --- Nginx error pages (Traefik error-pages middleware depends on this) ---
-    - role: ../roles/nginx_errors
-      tags: [nginx]
+    # --- Error pages (Traefik error-pages middleware depends on this) ---
+    - role: ../roles/errors
+      tags: [errors]
       vars:
         docker_network: "{{ config.networking.vps.docker_network }}"
         restart_policy: "{{ config.global.restart_policy }}"
-        nginx_errors_image: "{{ config.edge.nginx.image }}"
+        errors_image: "{{ config.registry }}/{{ config.edge.errors.image_name }}:{{ config.edge.errors.version }}"
 
     # --- Traefik reverse proxy ---
     - role: ../roles/traefik_vps

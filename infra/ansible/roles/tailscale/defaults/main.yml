@@ -1,5 +1,5 @@
 ---
-tailscale_headscale_url: "https://vpn.example.com"
+tailscale_headscale_url: ""
 tailscale_accept_dns: true
 tailscale_accept_routes: false
 tailscale_advertise_routes: ""

@@ -1,5 +1,5 @@
 ---
-traefik_image: "traefik:v3.6"
+traefik_image: ""
 traefik_remote_dir: "/opt/traefik"
 traefik_dynamic_dir: "{{ traefik_remote_dir }}/dynamic"
 traefik_certs_dir: "{{ traefik_remote_dir }}/certs"
@@ -15,13 +15,11 @@ traefik_dashboard_port: 8080
 
 # ACME / Let's Encrypt
 traefik_acme_email: ""
-traefik_acme_server: "https://acme-v02.api.letsencrypt.org/directory"
+traefik_acme_server: ""
 traefik_acme_storage: "/letsencrypt/acme.json"
 traefik_dns_provider: "cloudflare"
 traefik_dns_delay_before_check: 30
-traefik_dns_resolvers:
-  - "1.1.1.1:53"
-  - "8.8.8.8:53"
+traefik_dns_resolvers: []
 
 # Wildcard cert domains
 traefik_acme_domains: []
@@ -57,4 +55,4 @@ traefik_service_routes: []
 
 # Special routes
 traefik_dashboard_domain: ""
-traefik_error_pages_backend: "http://nginx:80"
+traefik_error_pages_backend: ""

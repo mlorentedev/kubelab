@@ -36,22 +36,3 @@ spec:
       port: 4321
       targetPort: http
       protocol: TCP
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: blog
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: blog
-    app.kubernetes.io/part-of: kubelab
-    app.kubernetes.io/managed-by: toolkit
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: blog
-  ports:
-    - name: http
-      port: 4000
-      targetPort: http
-      protocol: TCP

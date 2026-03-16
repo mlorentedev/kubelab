@@ -529,6 +529,7 @@ def ansible_run(
     limit: Annotated[str | None, typer.Option("--limit", "-l", help="Limit to specific hosts")] = None,
     tags: Annotated[str | None, typer.Option("--tags", "-t", help="Run only tagged tasks")] = None,
     check: Annotated[bool, typer.Option("--check", help="Dry-run mode (no changes)")] = False,
+    become_ask_pass: Annotated[bool, typer.Option("--ask-become-pass", "-K", help="Ask for sudo password")] = False,
 ) -> None:
     """Run an Ansible playbook against the generated inventory.
 
@@ -557,6 +558,8 @@ def ansible_run(
         cmd += f" --tags {tags}"
     if check:
         cmd += " --check"
+    if become_ask_pass:
+        cmd += " --ask-become-pass"
 
     logger.info(f"Running: {cmd}")
     result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)

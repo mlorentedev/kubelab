@@ -67,8 +67,8 @@
 
 - name: Template error pages
   template:
-    src: nginx.yml.j2
-    dest: "{{ traefik_dynamic_dir }}/nginx.yml"
+    src: errors.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/errors.yml"
     mode: "0644"
 
 - name: Template kubelab.live redirect

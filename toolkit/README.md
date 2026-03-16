@@ -105,7 +105,7 @@ GITEA_PATH=./services/core/gitea
 PORTAINER_PATH=./services/core/portainer
 
  === EDGE SERVICES PATHS ===
-NGINX_PATH=./edge/nginx
+ERRORS_PATH=./infra/stacks/edge/errors
 TRAEFIK_PATH=./edge/traefik
 ```
 

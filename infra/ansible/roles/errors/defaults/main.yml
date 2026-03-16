@@ -1,0 +1,9 @@
+---
+errors_image: ""
+errors_container_name: "errors"
+docker_network: "kubelab"
+restart_policy: "unless-stopped"
+
+# Legacy cleanup (nginx → errors migration)
+errors_legacy_container_name: "nginx"
+errors_legacy_traefik_config: "/opt/traefik/dynamic/nginx.yml"

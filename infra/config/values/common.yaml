@@ -17,6 +17,7 @@ global:
 # should reference these values — never hardcode IPs elsewhere.
 networking:
   tailscale_cidr: "100.64.0.0/10"
+  ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
   vps:
     hostname: "kubelab-vps"
@@ -111,13 +112,25 @@ deploy:
   rollback_delay: 5s
 
 # ===========================================================================
+# K3S CLUSTER
+# ===========================================================================
+k3s:
+  version: "v1.34.4+k3s1"
+  api_port: 6443
+  install_script_url: "https://get.k3s.io"
+  traefik:
+    http_port: 80
+    https_port: 443
+
+# ===========================================================================
 # EDGE SERVICES (Reverse Proxy, Gateway, CDN)
 # ===========================================================================
 edge:
-  nginx:
-    name: nginx-errors
-    image: nginx:alpine
-    port: 80
+  errors:
+    name: errors
+    image_name: kubelab-errors
+    version: dev
+    port: 8080
     health_path: /health
     resources:
       cpu_limit: "0.25"
@@ -177,6 +190,15 @@ edge:
     rate_limit_average: 50
     rate_limit_burst: 25
     rate_limit_period: 1s
+    # ACME
+    acme_server: "https://acme-v02.api.letsencrypt.org/directory"
+    acme_domains:
+      - main: mlorente.dev
+        sans:
+          - "*.mlorente.dev"
+      - main: kubelab.live
+        sans:
+          - "*.kubelab.live"
     # Resources
     resources:
       cpu_limit: "1.0"

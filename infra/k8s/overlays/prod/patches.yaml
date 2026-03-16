@@ -66,7 +66,7 @@ data:
 
     # ---- Access Control ----
     # Service distribution per ADR-012:
-    #   PUBLIC (bypass): mlorente.dev, api, blog, status, wiki
+    #   PUBLIC (bypass): mlorente.dev, api, status, wiki
     #   PROTECTED (one_factor): grafana, traefik
     #   OWN AUTH (bypass): gitea, n8n, console.minio
     #   INTERNAL (no ingress): loki, vector, redis, crowdsec
@@ -92,8 +92,6 @@ data:
         - domain: 'mlorente.dev'
           policy: bypass
         - domain: 'api.kubelab.live'
-          policy: bypass
-        - domain: 'blog.kubelab.live'
           policy: bypass
         - domain: 'status.kubelab.live'
           policy: bypass
@@ -429,7 +427,7 @@ spec:
       kind: Rule
       priority: 1
       services:
-        - name: nginx-errors
+        - name: errors
           port: 80
   tls:
     certResolver: letsencrypt

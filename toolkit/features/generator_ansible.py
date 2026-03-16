@@ -118,7 +118,7 @@ class AnsibleGenerator(BaseGenerator):
                 "vars": {
                     "ansible_ssh_private_key_file": ssh_key,
                     "ansible_ssh_common_args": "-o StrictHostKeyChecking=no",
-                    "ansible_python_interpreter": "/usr/bin/python3",
+                    "ansible_python_interpreter": "auto_silent",
                 },
                 "children": {},
             }

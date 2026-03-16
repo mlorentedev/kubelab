@@ -16,7 +16,7 @@ tests/e2e/
 ├── test_tls_routing.py      # TLS cert validity, HTTPS redirect, unknown host routing
 ├── test_api_validation.py   # API input validation (400 on bad input)
 ├── test_security_headers.py # Traefik security headers (X-Frame-Options, HSTS, etc.)
-├── test_error_pages.py      # Custom nginx-errors 404 page validation
+├── test_error_pages.py      # Custom errors service 404 page validation
 ├── test_observability.py    # Grafana API, Loki readiness
 ├── test_crowdsec.py         # CrowdSec bouncer pass-through and health
 └── README.md

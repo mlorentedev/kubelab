@@ -42,10 +42,6 @@ apps:
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
       email_secure: true
-    portfolio:
-      domain: portfolio.staging.kubelab.live
-    blog:
-      domain: blog.staging.kubelab.live
     web:
       backend_url: "https://api.staging.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live"
@@ -87,8 +83,6 @@ apps:
         domain: minio.staging.kubelab.live
         console_domain: console.minio.staging.kubelab.live
   web:
-    version: 0.0.0-rc.0
-  blog:
     version: 0.0.0-rc.0
   api:
     version: 0.0.0-rc.0

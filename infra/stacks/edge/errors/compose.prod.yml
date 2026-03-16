@@ -1,0 +1,7 @@
+services:
+  errors:
+    deploy:
+      resources:
+        limits:
+          cpus: ${EDGE_ERRORS_RESOURCES_CPU_LIMIT}
+          memory: ${EDGE_ERRORS_RESOURCES_MEMORY_LIMIT}

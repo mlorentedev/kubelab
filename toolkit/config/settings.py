@@ -215,8 +215,8 @@ class PlatformSettings(BaseSettings):
         return self.project_root / PATH_STRUCTURES.EDGE_TRAEFIK
 
     @property
-    def nginx_dir(self) -> Path:
-        return self.project_root / PATH_STRUCTURES.EDGE_NGINX
+    def errors_dir(self) -> Path:
+        return self.project_root / PATH_STRUCTURES.EDGE_ERRORS
 
     @property
     def tmp_dir(self) -> Path:

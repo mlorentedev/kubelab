@@ -48,7 +48,7 @@ class Components:
     PLATFORM_APPS: Sequence[str] = ("api", "web", "blog", "wiki", "workers")
 
     # Edge services (edge.*)
-    EDGE: Sequence[str] = ("traefik", "nginx", "dns-gateway", "cloudflared")
+    EDGE: Sequence[str] = ("traefik", "errors", "dns-gateway", "cloudflared")
 
     # Core infrastructure services (apps.services.core.*)
     SERVICES_CORE: Sequence[str] = ("portainer", "n8n", "gitea", "vaultwarden", "headscale")
@@ -139,7 +139,7 @@ class PathStructures:
     # Edge services (within stacks)
     EDGE_DIR: str = "infra/stacks/edge"
     EDGE_TRAEFIK: str = "infra/stacks/edge/traefik"
-    EDGE_NGINX: str = "infra/stacks/edge/nginx"
+    EDGE_ERRORS: str = "infra/stacks/edge/errors"
 
     # Configuration
     CONFIG_VALUES_DIR: str = "infra/config/values"

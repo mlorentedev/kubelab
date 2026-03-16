@@ -21,7 +21,7 @@ def _testable_domains(
     """Extract unique domains for services expected to work in this environment.
 
     Filters out:
-    - Services not in EXPECTATIONS (internal, like nginx-errors)
+    - Services not in EXPECTATIONS (internal, like errors)
     - Services with skip_in_envs matching the current env (no IngressRoute)
     """
     seen: set[str] = set()
@@ -132,7 +132,7 @@ class TestUnknownHostRouting:
         http_client_follow: httpx.Client,
         env: str,
     ) -> None:
-        """Unknown subdomains on staging should return nginx-errors custom 404 page."""
+        """Unknown subdomains on staging should return errors custom 404 page."""
         if env == "dev":
             pytest.skip("No catch-all IngressRoute in dev")
         if env != "staging":
@@ -150,5 +150,5 @@ class TestUnknownHostRouting:
             f"Expected 404 for unknown host, got {r.status_code}"
         )
         assert "página no encontrada" in r.text.lower(), (
-            "Unknown host should show nginx-errors custom 404 page"
+            "Unknown host should show errors custom 404 page"
         )

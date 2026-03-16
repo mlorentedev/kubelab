@@ -23,7 +23,6 @@ protocol: https
 endpoints:
   api: http://api:8080
   web: http://web:4321
-  portfolio: http://portfolio:8080
   blog: http://blog:4000
 # ==========================================================================
 # EDGE SETTINGS
@@ -61,8 +60,6 @@ apps:
       site_url: http://mlorente.test
       google_analytics_id: ""
       google_tag_manager_id: ""
-    portfolio:
-      domain: portfolio.kubelab.test
     blog:
       domain: blog.kubelab.test
       enable_livereload: true

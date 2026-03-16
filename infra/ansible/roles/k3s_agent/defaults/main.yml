@@ -1,0 +1,16 @@
+---
+# K3s install — environment-specific values come from playbook (SSOT: config.k3s.*)
+k3s_version: ""
+k3s_install_script_url: "https://get.k3s.io"
+k3s_install_script_path: "/tmp/k3s-install.sh"
+
+# Agent connection — must be provided by playbook
+k3s_server_url: ""
+k3s_join_token: ""
+
+# Node config
+k3s_node_labels: []
+
+# Readiness tuning
+k3s_readiness_retries: 30
+k3s_readiness_delay: 10

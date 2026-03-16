@@ -325,11 +325,11 @@ class TraefikGenerator(BaseGenerator):
                 "DOMAIN": env_vars.get("BASE_DOMAIN", "") or env_vars.get("GLOBAL_BASE_DOMAIN", ""),
                 # Template uses DOCKER_NETWORK, we have NETWORK_NAME
                 "DOCKER_NETWORK": env_vars.get("NETWORK_NAME", ""),
-                # Nginx service reference (for error-pages middleware)
-                "APP_NGINX_NAME": env_vars.get("EDGE_NGINX_NAME", ""),
-                "APP_NGINX_PORT": env_vars.get("EDGE_NGINX_PORT", ""),
+                # Errors service reference (for error-pages middleware)
+                "APP_ERRORS_NAME": env_vars.get("EDGE_ERRORS_NAME", ""),
+                "APP_ERRORS_PORT": env_vars.get("EDGE_ERRORS_PORT", ""),
                 "EDGE_TRAEFIK_DOMAIN": env_vars.get("EDGE_TRAEFIK_DOMAIN", ""),
-                "EDGE_NGINX_DOMAIN": env_vars.get("EDGE_NGINX_DOMAIN", ""),
+                "EDGE_ERRORS_DOMAIN": env_vars.get("EDGE_ERRORS_DOMAIN", ""),
                 # Authelia compatibility aliases (for middlewares template)
                 "APPS_AUTHELIA_NAME": env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia"),
                 "APPS_AUTHELIA_DEFAULT_PORT": env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_PORT", "9091"),

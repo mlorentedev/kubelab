@@ -1,6 +1,6 @@
 ---
-headscale_image: "headscale/headscale:latest"
-headscale_domain: "vpn.example.com"
+headscale_image: ""
+headscale_domain: ""
 headscale_listen_port: 8080
 headscale_stun_port: 3478
 headscale_remote_dir: "/opt/headscale"
