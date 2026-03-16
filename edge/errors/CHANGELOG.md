@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/mlorentedev/kubelab/compare/errors-v1.0.1...errors-v1.1.0) (2026-03-16)
+
+
+### Features
+
+* **errors:** rebuild with inline image and no text ([#111](https://github.com/mlorentedev/kubelab/issues/111)) ([34159cf](https://github.com/mlorentedev/kubelab/commit/34159cff63dd50a8487b35f86fc9511d76893b7d))
+
 ## [1.0.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.0.0...errors-v1.0.1) (2026-03-16)
 
 
