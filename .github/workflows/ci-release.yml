@@ -50,9 +50,9 @@ jobs:
             exit 0
           fi
 
-          # Check if tag exists, append increment if needed
+          # If tag exists, use timestamp for uniqueness
           if git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            RELEASE_TAG="${RELEASE_TAG}-1"
+            RELEASE_TAG="v$(date +'%Y.%m.%d-%H%M%S')"
           fi
 
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
