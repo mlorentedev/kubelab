@@ -90,10 +90,10 @@ jobs:
             BASE_VERSION="0.0.0"
           fi
 
-          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
-            # Master builds are handled by release.yml — skip here
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" || "$BRANCH" == release-please--* ]]; then
+            # Master + release-please branches: skip Docker (release.yml handles stable builds)
             echo "version=skip" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Docker build on master (release-please handles stable releases)"
+            echo "::notice::Skipping Docker build (release-please handles stable releases)"
           else
             # Feature branches: release candidate (e.g., 0.1.0-rc.142)
             FINAL_VERSION="${BASE_VERSION}-rc.${RUN_NUMBER}"
