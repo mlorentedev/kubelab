@@ -3,7 +3,7 @@
   "separate-pull-requests": true,
   "include-component-in-tag": true,
   "include-v-in-tag": true,
-  "tag-separator": "-v",
+  "tag-separator": "-",
   "changelog-sections": [
     {"type": "feat", "section": "Features"},
     {"type": "fix", "section": "Bug Fixes"},

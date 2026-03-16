@@ -67,10 +67,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         content_type="text/html",
         body_contains="<html",
     ),
-    "blog": ServiceExpectation(
-        content_type="text/html",
-        body_contains="<html",
-    ),
+    # blog: removed 2026-03-15
     # -- Security --
     "authelia": ServiceExpectation(
         content_type="text/html",
@@ -111,7 +108,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         auth_protected=True,
     ),
     "headscale": ServiceExpectation(
-        skip_in_envs=("dev",),  # VPN coordinator on VPS, not reachable from dev LAN
+        skip_in_envs=("dev", "staging"),  # VPN on VPS only
     ),
     # -- Data --
     "minio": ServiceExpectation(),
