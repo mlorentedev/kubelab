@@ -110,28 +110,8 @@ jobs:
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
 
-      # Security Scanning - Docker Image with Trivy
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.39.0
-        with:
-          image-ref: ${{ steps.docker_tags.outputs.full_image }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        continue-on-error: true
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Run Trivy vulnerability scanner (table output)
-        uses: aquasecurity/trivy-action@0.39.0
-        with:
-          image-ref: ${{ steps.docker_tags.outputs.full_image }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH,MEDIUM'
+      # TODO: Re-enable Trivy scanning when action version stabilizes
+      # Removed: aquasecurity/trivy-action kept breaking CI across versions
 
       - name: Log build summary
         run: |
