@@ -1,0 +1,188 @@
+---
+name: Cleanup RC Tags
+
+on:
+  pull_request:
+    branches: [master]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      changed_apps: ${{ steps.list.outputs.apps }}
+      any_changed: ${{ steps.check.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+            errors:
+              - 'edge/errors/**'
+
+      - name: Check if any app changed
+        id: check
+        env:
+          API: ${{ steps.filter.outputs.api }}
+          WEB: ${{ steps.filter.outputs.web }}
+          ERRORS: ${{ steps.filter.outputs.errors }}
+        run: |
+          if [[ "$API" == "true" || "$WEB" == "true" \
+            || "$ERRORS" == "true" ]]; then
+            echo "any_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: List changed apps
+        id: list
+        env:
+          API: ${{ steps.filter.outputs.api }}
+          WEB: ${{ steps.filter.outputs.web }}
+          ERRORS: ${{ steps.filter.outputs.errors }}
+        run: |
+          apps=()
+          [[ "$API" == "true" ]] && apps+=("api")
+          [[ "$WEB" == "true" ]] && apps+=("web")
+          [[ "$ERRORS" == "true" ]] && apps+=("errors")
+          apps_json=$(printf '%s\n' "${apps[@]}" \
+            | jq -R . | jq -c -s .)
+          echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
+
+  cleanup-rc-tags:
+    name: Cleanup RC Tags
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any_changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
+    steps:
+      - name: Authenticate with Docker Hub
+        id: auth
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          TOKEN=$(curl -s -X POST \
+            "https://hub.docker.com/v2/users/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${DOCKERHUB_USERNAME}\",\
+          \"password\":\"${DOCKERHUB_TOKEN}\"}" \
+            | jq -r '.token')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Failed to authenticate"
+            exit 1
+          fi
+
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> "$GITHUB_OUTPUT"
+
+      - name: Delete RC tags for changed apps
+        env:
+          HUB_TOKEN: ${{ steps.auth.outputs.token }}
+          CHANGED_APPS: ${{ needs.detect-changes.outputs.changed_apps }}
+          NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          {
+            echo "## RC Tag Cleanup Summary"
+            echo ""
+            echo "**PR:** #${PR_NUMBER}"
+            if [ "$PR_MERGED" = "true" ]; then
+              echo "**Status:** Merged"
+            else
+              echo "**Status:** Closed"
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          TOTAL_DELETED=0
+
+          for APP in $(echo "$CHANGED_APPS" | jq -r '.[]'); do
+            REPO="${REGISTRY_PREFIX}-${APP}"
+            echo "--- Processing ${NAMESPACE}/${REPO} ---"
+            echo "### ${REPO}" >> "$GITHUB_STEP_SUMMARY"
+
+            # Paginate through all tags
+            PAGE=1
+            RC_TAGS=()
+            while true; do
+              URL="https://hub.docker.com/v2/repositories"
+              URL="${URL}/${NAMESPACE}/${REPO}/tags"
+              RESPONSE=$(curl -s \
+                "${URL}/?page_size=100&page=${PAGE}" \
+                -H "Authorization: Bearer ${HUB_TOKEN}")
+
+              TAGS=$(echo "$RESPONSE" \
+                | jq -r '.results[]?.name // empty' \
+                | grep -E '\-rc\.' || true)
+
+              if [ -n "$TAGS" ]; then
+                while IFS= read -r tag; do
+                  RC_TAGS+=("$tag")
+                done <<< "$TAGS"
+              fi
+
+              NEXT=$(echo "$RESPONSE" \
+                | jq -r '.next // empty')
+              if [ -z "$NEXT" ] || [ "$NEXT" = "null" ]; then
+                break
+              fi
+              PAGE=$((PAGE + 1))
+            done
+
+            if [ ${#RC_TAGS[@]} -eq 0 ]; then
+              echo "No RC tags found for ${REPO}"
+              echo "No RC tags found." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            echo "Found ${#RC_TAGS[@]} RC tag(s) to delete"
+            DELETED=0
+            FAILED=0
+
+            for TAG in "${RC_TAGS[@]}"; do
+              URL="https://hub.docker.com/v2/repositories"
+              URL="${URL}/${NAMESPACE}/${REPO}/tags/${TAG}/"
+              HTTP_CODE=$(curl -s -o /dev/null \
+                -w "%{http_code}" -X DELETE "${URL}" \
+                -H "Authorization: Bearer ${HUB_TOKEN}")
+
+              if [ "$HTTP_CODE" -eq 204 ] \
+                || [ "$HTTP_CODE" -eq 404 ]; then
+                echo "  Deleted: ${TAG}"
+                DELETED=$((DELETED + 1))
+              else
+                echo "  Failed: ${TAG} (HTTP ${HTTP_CODE})"
+                FAILED=$((FAILED + 1))
+              fi
+            done
+
+            TOTAL_DELETED=$((TOTAL_DELETED + DELETED))
+            {
+              echo "Deleted ${DELETED}/${#RC_TAGS[@]} tags"
+              if [ "$FAILED" -gt 0 ]; then
+                echo "(${FAILED} failed)"
+              fi
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          {
+            echo "---"
+            echo "**Total deleted: ${TOTAL_DELETED}**"
+          } >> "$GITHUB_STEP_SUMMARY"
