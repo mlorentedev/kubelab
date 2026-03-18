@@ -16,6 +16,7 @@ global:
 # All consumers (K8s manifests, Ansible, Corefile, tests, toolkit)
 # should reference these values — never hardcode IPs elsewhere.
 networking:
+  lan_cidr: "172.16.1.0/24"
   tailscale_cidr: "100.64.0.0/10"
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
@@ -36,24 +37,20 @@ networking:
         - "jekyll-staging-data"
         - "jekyll-staging-site-data"
   nodes:
-    k3s_server:
-      hostname: "k3s-server"
-      tailscale_ip: "100.64.0.4"
-      lan_ip: "172.16.1.10"
+    # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
+    # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed
+    ace1:
+      hostname: "ace1"
+      tailscale_ip: "100.64.0.4"  # placeholder — assigned by Headscale after registration
+      lan_ip: "172.16.1.2"
       ssh_user: "manu"
-      ansible_groups: ["k3s_servers", "docker_hosts"]
-    k3s_agent_1:
-      hostname: "k3s-agent-1"
-      tailscale_ip: "100.64.0.7"
-      lan_ip: "172.16.1.11"
+      ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
+    ace2:
+      hostname: "ace2"
+      tailscale_ip: "100.64.0.5"
+      lan_ip: "172.16.1.5"
       ssh_user: "manu"
-      ansible_groups: ["k3s_agents"]
-    k3s_agent_2:
-      hostname: "k3s-agent-2"
-      tailscale_ip: "100.64.0.9"
-      lan_ip: "172.16.1.12"
-      ssh_user: "manu"
-      ansible_groups: ["k3s_agents"]
+      ansible_groups: ["platform_nodes", "docker_hosts", "minipc"]
     rpi4:
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
@@ -315,6 +312,9 @@ apps:
         name: headscale
         image: headscale/headscale:v0.28.0
         domain: vpn.kubelab.live
+        # Headscale v0.28 CLI uses numeric user IDs (not names)
+        # Users: 1=manu (personal), 2=kubelab (infra nodes), 3=work (Windows PCs)
+        infra_user_id: 2
         enable_auth: false
         auth_level: bypass
         default_port: 8080

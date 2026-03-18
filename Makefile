@@ -46,17 +46,19 @@ help:
 	@echo "  make secrets-jwks ENV=x Generate OIDC JWKS RSA key for an env"
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
 	@echo "  make secrets-audit      Audit secrets across all environments"
-	@echo "  make deploy-vps         Deploy VPS services (Headscale + Traefik routes)"
-	@echo "  make deploy-dns         Deploy CoreDNS + Pi-hole to RPi4"
-	@echo "  make provision-rpi4     Provision RPi4 gateway (base, ssh, docker, tailscale, coredns)"
-	@echo "  make deploy-k3s ENV=x   Deploy K3s cluster (ENV=staging|prod)"
-	@echo "  make backup-vps         Backup VPS Docker volumes and configs"
-	@echo "  make deploy-k8s ENV=x   Deploy ALL K8s workloads (Helm + legacy kustomize)"
-	@echo "  make helm-template ENV=x Render Helm templates (dry-run)"
-	@echo "  make k8s-cleanup ENV=x  Remove orphaned K8s resources"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo "  make dev-app APP=x      Start Astro app dev server (site, astro-site)"
 	@echo "  make build-app APP=x    Build Astro app (static output)"
+	@echo ""
+	@echo "Infrastructure (Ansible):"
+	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi4)"
+	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s)"
+	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
+	@echo ""
+	@echo "Kubernetes:"
+	@echo "  make deploy-k8s ENV=x   Deploy ALL K8s workloads (Helm + legacy kustomize)"
+	@echo "  make helm-deploy ENV=x  Deploy via Helm only"
+	@echo "  make helm-template ENV=x Render Helm templates (dry-run)"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
@@ -64,14 +66,10 @@ help:
 	@echo "  make format             Ruff formatting (auto-fix)"
 	@echo "  make type               Mypy type checking"
 	@echo "  make test               Run pytest suite (unit/integration only)"
-	@echo "  make test-e2e           Run e2e tests (ENV=dev|staging|prod)"
-	@echo "  make test-infra         Run infra tests (ENV=staging|prod, requires VPN)"
+	@echo "  make test-e2e ENV=x     Run e2e tests (ENV=dev|staging|prod)"
+	@echo "  make test-infra ENV=x   Run infra tests (ENV=staging|prod, requires VPN)"
 	@echo "  make validate           Validate toolkit config"
 	@echo "  make smoke-test         Health check running services"
-	@echo ""
-	@echo "Deployment:"
-	@echo "  make deploy-staging     Deploy to staging environment"
-	@echo "  make deploy-prod        Deploy to production environment"
 	@echo ""
 	@echo "Toolkit CLI (use directly for most operations):"
 	@echo "  toolkit services up web          Start web app"
@@ -264,27 +262,48 @@ secrets-hash:
 secrets-audit:
 	@$(TOOLKIT) secrets audit
 
-# Infrastructure deploys (Ansible — ADR-020 Phase 2+3)
-.PHONY: deploy-vps
-deploy-vps:
-	@$(TOOLKIT) infra ansible run -p deploy-vps -e prod
+# -----------------------------------------------------------------------------
+# Infrastructure (Ansible)
+# -----------------------------------------------------------------------------
+# Usage:
+#   make provision NODE=ace1 ENV=staging               Normal (uses Tailscale IP)
+#   make provision NODE=ace1 ENV=staging BOOTSTRAP=1   First run (uses LAN IP from common.yaml)
+#   make deploy TARGET=vps ENV=prod
+#   make deploy TARGET=k3s ENV=staging
+#   make backup ENV=prod
 
-.PHONY: deploy-dns
-deploy-dns:
-	@$(TOOLKIT) infra ansible run -p deploy-dns -e prod
+# LAN CIDR from common.yaml (SSOT) — used by BOOTSTRAP to bypass Tailscale routing
+_LAN_CIDR = $(shell python3 -c "import yaml; c=yaml.safe_load(open('infra/config/values/common.yaml')); print(c['networking']['lan_cidr'])" 2>/dev/null)
 
-.PHONY: provision-rpi4
-provision-rpi4:
-	@$(TOOLKIT) infra ansible run -p provision-rpi4 -e prod -K
+.PHONY: provision
+provision:
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 ENV=staging|prod [BOOTSTRAP=1]" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 ENV=staging|prod [BOOTSTRAP=1]" && exit 1)
+	@if [ -n "$(BOOTSTRAP)" ]; then \
+		echo "=== Bootstrap: LAN route priority over Tailscale (sudo required) ==="; \
+		sudo ip rule add to $(_LAN_CIDR) lookup main priority 100 2>/dev/null || true; \
+		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
+		$(TOOLKIT) infra ansible generate --env $(ENV) --bootstrap; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(ENV) -K; \
+		_exit=$$?; \
+		echo "=== Restoring: removing LAN route priority ==="; \
+		sudo ip rule del to $(_LAN_CIDR) lookup main priority 100 2>/dev/null || true; \
+		echo "=== Restoring: inventory with Tailscale IPs ==="; \
+		$(TOOLKIT) infra ansible generate --env $(ENV); \
+		exit $$_exit; \
+	else \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(ENV) -K; \
+	fi
 
-.PHONY: deploy-k3s
-deploy-k3s:
-	@test -n "$(ENV)" || (echo "Usage: make deploy-k3s ENV=staging|prod" && exit 1)
-	@$(TOOLKIT) infra ansible run -p deploy-k3s -e $(ENV) -K
+.PHONY: deploy
+deploy:
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s ENV=staging|prod" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) -K
 
-.PHONY: backup-vps
-backup-vps:
-	@$(TOOLKIT) infra ansible run -p backup -e prod
+.PHONY: backup
+backup:
+	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
 
 # Helm deploy (ADR-021 — replaces kubectl apply -k)
 KUBECONFIG ?= ~/.kube/kubelab-config
@@ -333,17 +352,6 @@ deploy-k8s:
 	@echo "[2/2] Kustomize (legacy services)..."
 	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG)
 	@echo "✓ All K8s workloads deployed for $(ENV)"
-
-# -----------------------------------------------------------------------------
-# Deployment Shortcuts
-# -----------------------------------------------------------------------------
-.PHONY: deploy-staging
-deploy-staging:
-	@ENVIRONMENT=staging $(TOOLKIT) deployment deploy --env staging
-
-.PHONY: deploy-prod
-deploy-prod:
-	@ENVIRONMENT=prod $(TOOLKIT) deployment deploy --env prod
 
 # -----------------------------------------------------------------------------
 # Validation & Testing

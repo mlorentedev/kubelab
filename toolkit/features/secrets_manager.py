@@ -276,6 +276,75 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("minio", "authelia"),
         rotate_note="Must also regenerate authelia.oidc_client_secret_minio_hash.",
     ),
+    # =========================================================================
+    # Infrastructure (external — not auto-generated, but must exist in SOPS)
+    # =========================================================================
+    SecretSpec(
+        key_path="cloudflare.api_token",
+        description="Cloudflare DNS API token (ACME certs + Terraform DNS)",
+        kind=SecretKind.EXTERNAL,
+        services=("traefik", "terraform"),
+        rotate_note="Re-provision K3s nodes (Ansible) + re-run terraform apply. Both read from SOPS.",
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.github_runner.token",
+        description="GitHub PAT for self-hosted Actions runner registration",
+        kind=SecretKind.EXTERNAL,
+        services=("github-runner",),
+        rotate_note="Re-provision ace2 (Ansible). Token must have repo + workflow scope.",
+    ),
+    # =========================================================================
+    # Platform API (external — user-provided credentials)
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.platform.api.email_user",
+        description="SMTP username (shared: API emails + Authelia notifications)",
+        kind=SecretKind.EXTERNAL,
+        services=("api", "authelia"),
+        rotate_note="apply-secrets for api-secrets + authelia-secrets, restart both.",
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.email_pass",
+        description="SMTP app password (shared: API emails + Authelia notifications)",
+        kind=SecretKind.EXTERNAL,
+        services=("api", "authelia"),
+        rotate_note="apply-secrets for api-secrets + authelia-secrets, restart both.",
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.email_from",
+        description="SMTP sender address (From header)",
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets.",
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.beehiiv_api_key",
+        description="Beehiiv newsletter API key",
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets. Regenerate in Beehiiv dashboard.",
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.beehiiv_pub_id",
+        description="Beehiiv publication ID",
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets.",
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.zoho_client_id",
+        description="Zoho OAuth client ID",
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets. Regenerate in Zoho API console.",
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.zoho_client_secret",
+        description="Zoho OAuth client secret",
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets. Regenerate in Zoho API console.",
+    ),
 ]
 
 # Build lookup by key_path for quick access
@@ -320,17 +389,26 @@ class SecretsManager:
     # ── Audit ────────────────────────────────────────────────────────────────
 
     def audit(self, env: str) -> AuditResult:
-        """Check which secrets exist/missing in a SOPS vault for an environment."""
+        """Check which secrets exist/missing in a SOPS vault for an environment.
+
+        Merges common.enc.yaml + {env}.enc.yaml (env overrides common),
+        mirroring the same merge order as ConfigurationManager.get_merged_config().
+        """
         cm = self._cm(env)
-        secrets_file = cm.secrets_path / f"{env}.enc.yaml"
+        env_file = cm.secrets_path / f"{env}.enc.yaml"
+        common_file = cm.secrets_path / "common.enc.yaml"
 
-        if not secrets_file.exists():
-            return AuditResult(
-                env=env,
-                missing=[s.key_path for s in SECRET_CATALOG if env in s.envs],
-            )
+        # Merge common + env (same order as get_merged_config)
+        decrypted: dict[str, Any] = {}
+        if common_file.exists():
+            common_secrets = cm._decrypt_sops(common_file)
+            if common_secrets:
+                cm._deep_update(decrypted, common_secrets)
+        if env_file.exists():
+            env_secrets = cm._decrypt_sops(env_file)
+            if env_secrets:
+                cm._deep_update(decrypted, env_secrets)
 
-        decrypted = cm._decrypt_sops(secrets_file)
         if not decrypted:
             return AuditResult(
                 env=env,

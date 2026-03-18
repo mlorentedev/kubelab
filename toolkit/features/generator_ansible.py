@@ -20,7 +20,7 @@ class AnsibleGenerator(BaseGenerator):
     This generator only produces the dynamic inventory (hosts.yml).
     """
 
-    def generate(self, env: str) -> dict[str, Any]:
+    def generate(self, env: str, bootstrap: bool = False) -> dict[str, Any]:
         """Generate Ansible inventory from SSOT config.
 
         Reads networking.* from common.yaml and produces:
@@ -28,11 +28,15 @@ class AnsibleGenerator(BaseGenerator):
 
         Args:
             env: Environment name (dev, staging, prod)
+            bootstrap: If True, use lan_ip as ansible_host instead of
+                tailscale_ip. Use for first-time provisioning before
+                Tailscale is configured on target nodes.
 
         Returns:
             Dictionary with success status and list of generated files
         """
-        logger.info(f"Generating Ansible inventory for {env}")
+        mode = "bootstrap (LAN IPs)" if bootstrap else "normal (Tailscale IPs)"
+        logger.info(f"Generating Ansible inventory for {env} — {mode}")
 
         ansible_dir = self.project_root / PATH_STRUCTURES.INFRA_ANSIBLE
         output_dir = ansible_dir / "generated" / env
@@ -47,7 +51,7 @@ class AnsibleGenerator(BaseGenerator):
 
             # Generate inventory
             inventory_path = output_dir / "hosts.yml"
-            self._generate_inventory(networking, inventory_path)
+            self._generate_inventory(networking, inventory_path, bootstrap=bootstrap)
             generated_files.append(str(inventory_path))
 
             logger.success(f"Generated {len(generated_files)} Ansible files for {env}")
@@ -57,8 +61,15 @@ class AnsibleGenerator(BaseGenerator):
             logger.error(f"Failed to generate Ansible config: {e}")
             return {"success": False, "error": str(e)}
 
-    def _generate_inventory(self, networking: dict[str, Any], output_path: Path) -> None:
-        """Generate Ansible inventory YAML from networking config."""
+    def _generate_inventory(self, networking: dict[str, Any], output_path: Path, bootstrap: bool = False) -> None:
+        """Generate Ansible inventory YAML from networking config.
+
+        Args:
+            networking: The networking section from common.yaml
+            output_path: Path to write the inventory YAML
+            bootstrap: If True, use lan_ip as ansible_host for homelab nodes
+                (VPS always uses tailscale_ip — it's already on the mesh)
+        """
         vps = networking.get("vps", {})
         nodes = networking.get("nodes", {})
         ssh_key = networking.get("ssh_key", "~/.ssh/id_ed25519")
@@ -66,7 +77,7 @@ class AnsibleGenerator(BaseGenerator):
         # Collect all nodes (VPS + homelab nodes)
         all_nodes: list[dict[str, Any]] = []
 
-        # VPS
+        # VPS — always uses Tailscale IP (already on the mesh, not being provisioned)
         if vps:
             all_nodes.append(
                 {
@@ -78,11 +89,15 @@ class AnsibleGenerator(BaseGenerator):
                 }
             )
 
-        # Homelab nodes
+        # Homelab nodes — bootstrap uses lan_ip, normal uses tailscale_ip
         for _node_key, node in nodes.items():
+            if bootstrap and node.get("lan_ip"):
+                host_ip = node["lan_ip"]
+            else:
+                host_ip = node.get("tailscale_ip")
             entry: dict[str, Any] = {
                 "hostname": node.get("hostname", _node_key),
-                "ansible_host": node.get("tailscale_ip"),
+                "ansible_host": host_ip,
                 "ansible_user": node.get("ssh_user", "manu"),
                 "groups": node.get("ansible_groups", []),
             }

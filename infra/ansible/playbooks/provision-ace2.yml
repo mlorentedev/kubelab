@@ -1,0 +1,162 @@
+---
+# =============================================================================
+# ace2 Provisioning — Platform Node
+#
+# Full provisioning: base system, SSH hardening, Docker, Tailscale,
+# then deploys MinIO (object storage) + GitHub Actions self-hosted runner.
+#
+# Usage:
+#   make provision NODE=ace2 ENV=staging
+#   toolkit infra ansible run -p provision-ace2 -e staging -K
+#   toolkit infra ansible run -p provision-ace2 -e staging -K --tags services
+#
+# First run (before Tailscale): use BOOTSTRAP=1 to auto-use LAN IP
+#   make provision NODE=ace2 ENV=staging BOOTSTRAP=1
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight validation (no changes to target)
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate ace2 connectivity"
+  hosts: ace2
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Verify SSH + Python connectivity
+      ansible.builtin.ping:
+
+    - name: Verify become (sudo) works
+      command: sudo -n true
+      become: true
+      changed_when: false
+
+    - name: Verify SSH private key exists on controller
+      stat:
+        path: "{{ _ssh_key_path }}"
+      delegate_to: localhost
+      register: _ssh_key
+      failed_when: not _ssh_key.stat.exists
+      vars:
+        _ssh_key_path: "{{ ansible_ssh_private_key_file | default('~/.ssh/id_ed25519') }}"
+
+    - name: Verify target has internet (apt, Docker, Tailscale need it)
+      command: curl -sf --connect-timeout 5 https://get.docker.com -o /dev/null
+      changed_when: false
+
+    - name: Verify VPS reachable (needed for Headscale pre-auth key)
+      command: ssh -o ConnectTimeout=5 -o BatchMode=yes deployer@100.64.0.2 echo ok
+      delegate_to: localhost
+      changed_when: false
+      register: _vps_check
+      failed_when: _vps_check.rc != 0
+
+# ---------------------------------------------------------------------------
+# Play 1: Full provisioning
+# ---------------------------------------------------------------------------
+- name: Provision ace2 — Platform services node
+  hosts: ace2
+  become: true
+  gather_facts: true
+
+  vars:
+    deploy_env: staging
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Decrypt env secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
+      register: sops_env
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Merge secrets (env overrides common)
+      set_fact:
+        secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+
+    - name: Generate Headscale pre-auth key (via VPS)
+      command: >
+        docker exec headscale headscale preauthkeys create
+        --user {{ config.apps.services.core.headscale.infra_user_id }} --reusable --expiration 1h
+      delegate_to: kubelab-vps
+      become: false
+      changed_when: false
+      register: _headscale_preauth
+      tags: [tailscale]
+
+    - name: Set Tailscale auth key fact
+      set_fact:
+        _tailscale_auth_key: "{{ _headscale_preauth.stdout | trim }}"
+      no_log: true
+      tags: [tailscale]
+
+    - name: Allow MinIO ports on Tailscale interface
+      community.general.ufw:
+        rule: allow
+        interface_in: tailscale0
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "{{ config.apps.services.data.minio.default_port_api }}"
+        - "{{ config.apps.services.data.minio.default_port_console }}"
+
+  roles:
+    - role: ../roles/base_system
+      tags: [base]
+      vars:
+        system_timezone: "{{ config.global.timezone }}"
+
+    - role: ../roles/ssh_hardening
+      tags: [ssh]
+
+    - role: ../roles/docker
+      tags: [docker]
+
+    - role: ../roles/tailscale
+      tags: [tailscale]
+      vars:
+        tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
+        tailscale_accept_routes: true
+        tailscale_auth_key: "{{ _tailscale_auth_key | default('') }}"
+
+    - role: ../roles/minipc2_services
+      tags: [services, minio, runner]
+      vars:
+        restart_policy: "{{ config.global.restart_policy }}"
+        minio_image: "{{ config.apps.services.data.minio.image }}"
+        minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
+        minio_console_port: "{{ config.apps.services.data.minio.default_port_console }}"
+        minio_root_user: "{{ secrets.apps.services.data.minio.root_user }}"
+        minio_root_password: "{{ secrets.apps.services.data.minio.root_password }}"
+        runner_image: "{{ config.apps.services.automation.github_runner.image }}"
+        runner_repo_url: "{{ config.apps.services.automation.github_runner.repo_url }}"
+        runner_access_token: "{{ secrets.apps.services.automation.github_runner.token }}"
+        runner_group: "{{ config.apps.services.automation.github_runner.runner_group }}"
+        runner_labels: "{{ config.apps.services.automation.github_runner.labels }}"
+        runner_cpu_limit: "{{ config.apps.services.automation.github_runner.resources.cpu_limit }}"
+        runner_memory_limit: "{{ config.apps.services.automation.github_runner.resources.memory_limit }}"

@@ -1,0 +1,55 @@
+# {{ ansible_managed }}
+# MiniPC2 Platform Services — MinIO + GitHub Actions Runner
+services:
+  minio:
+    image: {{ minio_image }}
+    container_name: minio
+    command: server /data --console-address ":{{ minio_console_port }}"
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ minio_api_port }}:{{ minio_api_port }}"
+      - "{{ minio_console_port }}:{{ minio_console_port }}"
+    environment:
+      MINIO_ROOT_USER: "{{ minio_root_user }}"
+      MINIO_ROOT_PASSWORD: "{{ minio_root_password }}"
+    volumes:
+      - {{ minipc2_minio_data_dir }}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ minio_api_port }}/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - kubelab
+
+  github-runner:
+    image: {{ runner_image }}
+    container_name: github-runner
+    restart: {{ restart_policy }}
+    environment:
+      REPO_URL: "{{ runner_repo_url }}"
+      RUNNER_NAME: "kubelab-ace2"
+      ACCESS_TOKEN: "{{ runner_access_token }}"
+      RUNNER_WORKDIR: /tmp/runner
+      RUNNER_GROUP: "{{ runner_group }}"
+      LABELS: "{{ runner_labels }}"
+      EPHEMERAL: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runner_data:/tmp/runner
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ runner_cpu_limit }}"
+          memory: "{{ runner_memory_limit }}"
+    networks:
+      - kubelab
+
+volumes:
+  runner_data:
+    name: github_runner_data
+
+networks:
+  kubelab:
+    name: kubelab
+    external: true

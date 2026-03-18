@@ -33,14 +33,24 @@
       {% if tailscale_advertise_routes %}--advertise-routes={{ tailscale_advertise_routes }}{% endif %}
       {% if tailscale_auth_key %}--authkey={{ tailscale_auth_key }}{% endif %}
 
-- name: Register with Headscale
-  command: "{{ tailscale_up_cmd }}"
+- name: Register with Headscale (async — tailscale may disrupt SSH briefly)
+  command: "{{ tailscale_up_cmd }} --timeout=30s"
   when: >
     tailscale_auth_key != '' and
     (tailscale_status.rc != 0 or
      (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+  async: 60
+  poll: 0
   register: tailscale_register
-  changed_when: tailscale_register.rc == 0
+
+- name: Wait for Tailscale registration to complete
+  async_status:
+    jid: "{{ tailscale_register.ansible_job_id }}"
+  register: tailscale_result
+  until: tailscale_result.finished
+  retries: 12
+  delay: 5
+  when: tailscale_register is changed
 
 - name: Show manual auth instructions
   debug:
