@@ -31,7 +31,8 @@
         restart_policy: "{{ config.global.restart_policy }}"
         node_ips:
           vps: "{{ config.networking.vps.tailscale_ip }}"
-          k3s_server: "{{ config.networking.nodes.k3s_server.tailscale_ip }}"
+          ace1: "{{ config.networking.nodes.ace1.tailscale_ip }}"
+          ace2: "{{ config.networking.nodes.ace2.tailscale_ip }}"
           rpi3: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
           rpi4: "{{ config.networking.nodes.rpi4.tailscale_ip }}"
           beelink: "{{ config.networking.nodes.beelink.tailscale_ip }}"

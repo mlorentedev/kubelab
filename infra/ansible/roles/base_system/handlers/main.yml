@@ -3,3 +3,6 @@
   service:
     name: ufw
     state: restarted
+
+- name: apply netplan
+  command: netplan apply

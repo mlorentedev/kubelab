@@ -274,18 +274,18 @@ secrets-audit:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 ENV=staging|prod [BOOTSTRAP=1]" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 ENV=staging|prod [BOOTSTRAP=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 [ENV=staging|prod] [BOOTSTRAP=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	@if [ -n "$(BOOTSTRAP)" ]; then \
 		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
-		$(TOOLKIT) infra ansible generate --env $(ENV) --bootstrap; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(ENV) -K; \
+		$(TOOLKIT) infra ansible generate --env $(_ENV) --bootstrap; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) -K; \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with Tailscale IPs ==="; \
-		$(TOOLKIT) infra ansible generate --env $(ENV); \
+		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(ENV) -K; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) -K; \
 	fi
 
 .PHONY: deploy

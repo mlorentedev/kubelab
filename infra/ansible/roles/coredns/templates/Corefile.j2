@@ -3,25 +3,25 @@
 
 {{ staging_domain }} {
     hosts {
-        {{ node_ips.k3s_server }} {{ staging_domain }}
-        {{ node_ips.k3s_server }} api.{{ staging_domain }}
-        {{ node_ips.k3s_server }} web.{{ staging_domain }}
-        {{ node_ips.k3s_server }} blog.{{ staging_domain }}
-        {{ node_ips.k3s_server }} grafana.{{ staging_domain }}
-        {{ node_ips.k3s_server }} traefik.{{ staging_domain }}
-        {{ node_ips.k3s_server }} auth.{{ staging_domain }}
-        {{ node_ips.k3s_server }} status.{{ staging_domain }}
-        {{ node_ips.k3s_server }} gitea.{{ staging_domain }}
-        {{ node_ips.k3s_server }} n8n.{{ staging_domain }}
-        {{ node_ips.k3s_server }} minio.{{ staging_domain }}
-        {{ node_ips.k3s_server }} console.minio.{{ staging_domain }}
-        {{ node_ips.k3s_server }} loki.{{ staging_domain }}
-        {{ node_ips.k3s_server }} portainer.{{ staging_domain }}
+        {{ node_ips.ace1 }} {{ staging_domain }}
+        {{ node_ips.ace1 }} api.{{ staging_domain }}
+        {{ node_ips.ace1 }} web.{{ staging_domain }}
+        {{ node_ips.ace1 }} blog.{{ staging_domain }}
+        {{ node_ips.ace1 }} grafana.{{ staging_domain }}
+        {{ node_ips.ace1 }} traefik.{{ staging_domain }}
+        {{ node_ips.ace1 }} auth.{{ staging_domain }}
+        {{ node_ips.ace1 }} status.{{ staging_domain }}
+        {{ node_ips.ace1 }} gitea.{{ staging_domain }}
+        {{ node_ips.ace1 }} n8n.{{ staging_domain }}
+        {{ node_ips.ace1 }} minio.{{ staging_domain }}
+        {{ node_ips.ace1 }} console.minio.{{ staging_domain }}
+        {{ node_ips.ace1 }} loki.{{ staging_domain }}
+        {{ node_ips.ace1 }} portainer.{{ staging_domain }}
         fallthrough
     }
     template IN A {{ staging_domain }} {
         match .*\.staging\.kubelab\.live
-        answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ node_ips.k3s_server }}"
+        answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ node_ips.ace1 }}"
         fallthrough
     }
     log

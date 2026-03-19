@@ -1,0 +1,13 @@
+---
+gateway_interface: "eth0"
+gateway_lan_cidr: "172.16.1.1/24"
+gateway_uplink_interfaces:
+  - "enx*"
+  - "wlan0"
+gateway_dhcp_range_start: "172.16.1.50"
+gateway_dhcp_range_end: "172.16.1.150"
+gateway_dhcp_lease: "12h"
+gateway_dns_servers: "8.8.8.8,1.1.1.1"
+gateway_dhcp_reservations: []
+gateway_vpn_domain: ""
+gateway_vpn_public_ip: ""

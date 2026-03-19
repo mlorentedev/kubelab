@@ -1,0 +1,13 @@
+# Managed by Ansible — do not edit manually
+port=0
+interface={{ gateway_interface }}
+bind-interfaces
+
+dhcp-range={{ gateway_dhcp_range_start }},{{ gateway_dhcp_range_end }},255.255.255.0,{{ gateway_dhcp_lease }}
+
+dhcp-option=option:router,{{ gateway_lan_cidr | regex_replace('/.*', '') }}
+dhcp-option=option:dns-server,{{ gateway_dns_servers }}
+
+{% for res in gateway_dhcp_reservations %}
+dhcp-host={{ res.mac }},{{ res.hostname }},{{ res.ip }}
+{% endfor %}
