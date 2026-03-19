@@ -1,0 +1,3 @@
+---
+- name: Restart minipc2 services
+  command: docker compose -f {{ minipc2_deploy_dir }}/compose.yml up -d --force-recreate

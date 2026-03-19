@@ -1,0 +1,51 @@
+# KubeLab SSH Config Template
+# Copy to ~/.ssh/config and adjust paths/IPs as needed.
+# Tailscale IPs are assigned by Headscale — update after registration.
+
+# --- VPS (Hetzner) ---
+Host kubelab-vps
+  HostName 162.55.57.175
+  User deployer
+  IdentityFile ~/.ssh/id_ed25519
+
+# --- MiniPCs (LAN) ---
+Host ace1
+  HostName 172.16.1.2
+  User manu
+  IdentityFile ~/.ssh/id_ed25519
+  StrictHostKeyChecking accept-new
+
+Host ace2
+  HostName 172.16.1.5
+  User manu
+  IdentityFile ~/.ssh/id_ed25519
+  StrictHostKeyChecking accept-new
+
+# --- Raspberry Pis ---
+Host rpi4
+  HostName 172.16.1.1
+  User manu
+  IdentityFile ~/.ssh/id_ed25519
+
+Host rpi3
+  HostName TAILSCALE_IP_HERE
+  User manu
+  IdentityFile ~/.ssh/id_ed25519
+
+# --- Compute ---
+Host beelink
+  HostName 172.16.1.3
+  User manu
+  IdentityFile ~/.ssh/id_ed25519
+
+Host jetson
+  HostName 172.16.1.4
+  User manu
+  IdentityFile ~/.ssh/id_ed25519
+
+# --- Tailscale aliases (after VPN registration) ---
+# Uncomment and fill in Tailscale IPs for remote access
+# Host ace1-ts
+#   HostName 100.64.0.X
+#   User manu
+#   IdentityFile ~/.ssh/id_ed25519

@@ -20,6 +20,7 @@ k3s_traefik_acme_email: ""
 k3s_traefik_acme_dns_provider: "cloudflare"
 k3s_traefik_acme_dns_resolvers: "1.1.1.1:53,8.8.8.8:53"
 k3s_traefik_acme_secret_name: "cloudflare-api-token"
+k3s_traefik_acme_cloudflare_token: ""  # From SOPS (secrets.cloudflare.api_token)
 
 # Kubeconfig fetch to controller
 k3s_fetch_kubeconfig: false

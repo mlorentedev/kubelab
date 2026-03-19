@@ -70,6 +70,15 @@
   until: k3s_ready.rc == 0
   changed_when: false
 
+# --- Bootstrap secrets (K3s auto-applies manifests in this dir) ---
+- name: Template Cloudflare API token Secret
+  template:
+    src: cloudflare-secret.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/cloudflare-api-token.yaml
+    mode: "0600"
+  no_log: true
+  when: k3s_traefik_acme_enabled and k3s_traefik_acme_cloudflare_token | length > 0
+
 # --- Traefik HelmChartConfig (Pattern C — ADR-015) ---
 - name: Template Traefik HelmChartConfig
   template:

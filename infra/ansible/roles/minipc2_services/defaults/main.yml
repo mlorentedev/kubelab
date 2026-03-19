@@ -1,0 +1,4 @@
+---
+minipc2_deploy_dir: /opt/kubelab
+minipc2_minio_data_dir: /opt/minio/data
+minipc2_runner_work_dir: /opt/runner/_work

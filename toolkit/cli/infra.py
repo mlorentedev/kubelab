@@ -498,19 +498,26 @@ def k8s_status(
 @ansible_app.command("generate")
 def ansible_generate(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
+    bootstrap: Annotated[
+        bool, typer.Option("--bootstrap", help="Use LAN IPs instead of Tailscale (first-time provisioning)")
+    ] = False,
 ) -> None:
     """Generate Ansible inventory from common.yaml (SSOT).
 
     Reads networking.* from common.yaml and produces inventory
     in infra/ansible/generated/{env}/. Playbooks load config
     directly via include_vars (ADR-020 Rev2).
+
+    Use --bootstrap for first-time provisioning when Tailscale
+    is not yet configured on target nodes. This uses lan_ip
+    as ansible_host instead of tailscale_ip.
     """
-    logger.section("Ansible Generate")
+    logger.section("Ansible Generate" + (" (bootstrap)" if bootstrap else ""))
 
     try:
         from toolkit.features.generator_ansible import ansible_generator
 
-        result = ansible_generator.generate(env)
+        result = ansible_generator.generate(env, bootstrap=bootstrap)
         if result.get("success"):
             for f in result.get("files", []):
                 logger.info(f"  {f}")
@@ -530,6 +537,9 @@ def ansible_run(
     tags: Annotated[str | None, typer.Option("--tags", "-t", help="Run only tagged tasks")] = None,
     check: Annotated[bool, typer.Option("--check", help="Dry-run mode (no changes)")] = False,
     become_ask_pass: Annotated[bool, typer.Option("--ask-become-pass", "-K", help="Ask for sudo password")] = False,
+    extra_vars: Annotated[
+        str | None, typer.Option("--extra-vars", help="Extra variables (key=value key2=value2)")
+    ] = None,
 ) -> None:
     """Run an Ansible playbook against the generated inventory.
 
@@ -560,6 +570,8 @@ def ansible_run(
         cmd += " --check"
     if become_ask_pass:
         cmd += " --ask-become-pass"
+    if extra_vars:
+        cmd += f" --extra-vars '{extra_vars}'"
 
     logger.info(f"Running: {cmd}")
     result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
