@@ -41,7 +41,7 @@ networking:
     # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed
     ace1:
       hostname: "ace1"
-      tailscale_ip: "100.64.0.4"  # placeholder — assigned by Headscale after registration
+      tailscale_ip: "100.64.0.11"
       lan_ip: "172.16.1.2"
       ssh_user: "manu"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]

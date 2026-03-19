@@ -5,6 +5,11 @@
     cache_valid_time: 3600
   when: not (legacy_python | default(false))
 
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+  when: not (legacy_python | default(false))
+
 - name: Install base packages
   apt:
     name: "{{ base_packages }}"

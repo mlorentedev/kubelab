@@ -138,7 +138,7 @@
       tags: [tailscale]
       vars:
         tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
-        tailscale_accept_routes: true
+        tailscale_accept_routes: false  # LAN nodes must NOT accept subnet routes (breaks inbound LAN traffic)
         tailscale_auth_key: "{{ _tailscale_auth_key | default('') }}"
 
     - role: ../roles/k3s_server

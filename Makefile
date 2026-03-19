@@ -272,22 +272,15 @@ secrets-audit:
 #   make deploy TARGET=k3s ENV=staging
 #   make backup ENV=prod
 
-# LAN CIDR from common.yaml (SSOT) — used by BOOTSTRAP to bypass Tailscale routing
-_LAN_CIDR = $(shell python3 -c "import yaml; c=yaml.safe_load(open('infra/config/values/common.yaml')); print(c['networking']['lan_cidr'])" 2>/dev/null)
-
 .PHONY: provision
 provision:
 	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 ENV=staging|prod [BOOTSTRAP=1]" && exit 1)
 	@test -n "$(ENV)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 ENV=staging|prod [BOOTSTRAP=1]" && exit 1)
 	@if [ -n "$(BOOTSTRAP)" ]; then \
-		echo "=== Bootstrap: LAN route priority over Tailscale (sudo required) ==="; \
-		sudo ip rule add to $(_LAN_CIDR) lookup main priority 100 2>/dev/null || true; \
 		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(ENV) --bootstrap; \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(ENV) -K; \
 		_exit=$$?; \
-		echo "=== Restoring: removing LAN route priority ==="; \
-		sudo ip rule del to $(_LAN_CIDR) lookup main priority 100 2>/dev/null || true; \
 		echo "=== Restoring: inventory with Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(ENV); \
 		exit $$_exit; \
