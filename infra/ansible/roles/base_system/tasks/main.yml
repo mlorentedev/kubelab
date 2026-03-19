@@ -1,4 +1,37 @@
 ---
+- name: Configure passwordless sudo for ansible user
+  copy:
+    content: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "/etc/sudoers.d/{{ ansible_user }}"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Ensure hostname resolves locally
+  lineinfile:
+    path: /etc/hosts
+    regexp: '127\.0\.1\.1'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    state: present
+
+- name: Configure static IP (netplan)
+  copy:
+    content: |
+      network:
+        version: 2
+        ethernets:
+          {{ netplan_interface }}:
+            addresses:
+              - {{ netplan_address }}
+            routes:
+              - to: default
+                via: {{ netplan_gateway }}
+            nameservers:
+              addresses: {{ netplan_dns | default([netplan_gateway, '8.8.8.8']) }}
+    dest: /etc/netplan/50-cloud-init.yaml
+    mode: "0600"
+  when: netplan_address is defined
+  notify: apply netplan
+
 - name: Update apt cache
   apt:
     update_cache: true

@@ -43,12 +43,14 @@ networking:
       hostname: "ace1"
       tailscale_ip: "100.64.0.11"
       lan_ip: "172.16.1.2"
+      lan_interface: "enp1s0"
       ssh_user: "manu"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
     ace2:
       hostname: "ace2"
       tailscale_ip: "100.64.0.5"
       lan_ip: "172.16.1.5"
+      lan_interface: "enp1s0"
       ssh_user: "manu"
       ansible_groups: ["platform_nodes", "docker_hosts", "minipc"]
     rpi4:

@@ -1,0 +1,16 @@
+---
+- name: restart nftables
+  # Use reload, NOT restart — restart triggers ExecStop which does 'flush ruleset'
+  # and destroys Docker/UFW/Tailscale iptables rules
+  systemd:
+    name: nftables
+    state: reloaded
+
+- name: reload ufw
+  command: ufw reload
+  changed_when: true
+
+- name: restart dnsmasq
+  systemd:
+    name: dnsmasq
+    state: restarted

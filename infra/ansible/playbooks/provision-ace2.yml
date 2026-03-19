@@ -130,6 +130,9 @@
       tags: [base]
       vars:
         system_timezone: "{{ config.global.timezone }}"
+        netplan_interface: "{{ config.networking.nodes.ace2.lan_interface }}"
+        netplan_address: "{{ config.networking.nodes.ace2.lan_ip }}/24"
+        netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
 
     - role: ../roles/ssh_hardening
       tags: [ssh]

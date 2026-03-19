@@ -1,0 +1,17 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible — gateway NAT masquerade for LAN routing
+# Uses named table to avoid conflicts with Docker/UFW/Tailscale
+# NEVER use 'flush ruleset' — it destroys all iptables rules from other services
+
+# Atomic idempotent pattern: create (noop if exists) → delete → recreate
+table inet kubelab
+delete table inet kubelab
+
+table inet kubelab {
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+{% for iface in gateway_uplink_interfaces %}
+        oifname "{{ iface }}" masquerade
+{% endfor %}
+    }
+}

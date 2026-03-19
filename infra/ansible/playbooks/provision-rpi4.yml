@@ -3,11 +3,17 @@
 # RPi4 Gateway Provisioning
 #
 # Full provisioning of the RPi4 gateway node: base system, SSH hardening,
-# Docker, Tailscale VPN, and CoreDNS.
+# gateway networking (nftables NAT, dnsmasq DHCP, IP forwarding),
+# Docker, Tailscale VPN, Pi-hole, and CoreDNS.
+#
+# Prerequisites:
+#   - Ubuntu Server flashed on SD card with netplan configured
+#   - See vault runbook: 02-runbooks/rpi4-bootstrap.md
 #
 # Usage:
-#   make provision-rpi4
+#   make provision NODE=rpi4 ENV=prod
 #   toolkit infra ansible run -p provision-rpi4 -e prod -K
+#   toolkit infra ansible run -p provision-rpi4 -e prod -K --tags gateway
 #   toolkit infra ansible run -p provision-rpi4 -e prod -K --tags coredns
 # =============================================================================
 - name: Provision RPi4 gateway
@@ -16,7 +22,9 @@
   gather_facts: true
 
   vars:
-    deploy_env: prod  # RPi4 is prod-only — override with -e deploy_env=X if needed
+    # RPi4 is infrastructure — always uses prod config (base_domain: kubelab.live)
+    # Hardcoded to prevent CLI -e deploy_env=staging from breaking CoreDNS zones
+    _rpi4_env: prod
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -26,7 +34,7 @@
 
     - name: Load environment overrides
       include_vars:
-        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        file: "{{ playbook_dir }}/../../config/values/{{ _rpi4_env }}.yaml"
         name: env_overrides
 
     - name: Merge configs (env overrides win)
@@ -43,7 +51,7 @@
       no_log: true
 
     - name: Decrypt env secrets (controller-side)
-      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ _rpi4_env }}.enc.yaml
       register: sops_env
       delegate_to: localhost
       become: false
@@ -57,29 +65,42 @@
       no_log: true
 
   roles:
-    # --- Base system (hostname, timezone, packages) ---
     - role: ../roles/base_system
       tags: [base]
       vars:
         base_system_hostname: "{{ config.networking.nodes.rpi4.hostname }}"
         base_system_timezone: "{{ config.global.timezone }}"
 
-    # --- SSH hardening ---
     - role: ../roles/ssh_hardening
       tags: [ssh]
 
-    # --- Docker ---
+    - role: ../roles/gateway
+      tags: [gateway]
+      vars:
+        gateway_interface: "eth0"
+        gateway_lan_cidr: "{{ config.networking.nodes.rpi4.lan_ip }}/24"
+        gateway_uplink_interfaces:
+          - "enx*"
+          - "wlan0"
+        gateway_vpn_domain: "{{ config.apps.services.core.headscale.domain }}"
+        gateway_vpn_public_ip: "{{ config.networking.vps.public_ip }}"
+        gateway_dhcp_reservations:
+          - { mac: "68:1D:EF:38:C5:6F", hostname: "kubelab-ace1", ip: "{{ config.networking.nodes.ace1.lan_ip }}" }
+          - { mac: "68:1D:EF:38:C5:8B", hostname: "kubelab-ace2", ip: "{{ config.networking.nodes.ace2.lan_ip }}" }
+          - { mac: "78:55:36:06:18:14", hostname: "kubelab-bee", ip: "{{ config.networking.nodes.beelink.lan_ip }}" }
+          - { mac: "00:04:4b:e5:5f:28", hostname: "kubelab-jet1", ip: "{{ config.networking.nodes.jetson.lan_ip }}" }
+
     - role: ../roles/docker
       tags: [docker]
 
-    # --- Tailscale VPN client ---
     - role: ../roles/tailscale
       tags: [tailscale]
       vars:
         tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
-        tailscale_extra_flags: "--accept-dns=false --advertise-routes=172.16.1.0/24"
+        tailscale_accept_dns: false
+        tailscale_accept_routes: false
+        tailscale_advertise_routes: "{{ config.networking.lan_cidr }}"
 
-    # --- CoreDNS (internal DNS resolution) ---
     - role: ../roles/coredns
       tags: [coredns]
       vars:
@@ -89,7 +110,8 @@
         restart_policy: "{{ config.global.restart_policy }}"
         node_ips:
           vps: "{{ config.networking.vps.tailscale_ip }}"
-          k3s_server: "{{ config.networking.nodes.k3s_server.tailscale_ip }}"
+          ace1: "{{ config.networking.nodes.ace1.tailscale_ip }}"
+          ace2: "{{ config.networking.nodes.ace2.tailscale_ip }}"
           rpi3: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
           rpi4: "{{ config.networking.nodes.rpi4.tailscale_ip }}"
           beelink: "{{ config.networking.nodes.beelink.tailscale_ip }}"

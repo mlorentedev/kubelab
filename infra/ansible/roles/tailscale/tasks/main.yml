@@ -4,6 +4,7 @@
   register: tailscale_check
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Install Tailscale
   shell: curl -fsSL https://tailscale.com/install.sh | sh
@@ -22,6 +23,7 @@
   register: tailscale_status
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Build Tailscale up command
   set_fact:
@@ -68,3 +70,4 @@
   register: tailscale_verify
   changed_when: false
   failed_when: false
+  check_mode: false
