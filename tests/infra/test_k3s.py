@@ -1,6 +1,6 @@
 """Infrastructure: K3s cluster health — node status, pods, PVCs.
 
-Uses local kubeconfig (~/.kube/kubelab-config) instead of SSH+sudo
+Uses local kubeconfig (~/.kube/kubelab-{env}-config) instead of SSH+sudo
 to the K3s server. Requires Tailscale VPN for connectivity.
 """
 
@@ -14,13 +14,19 @@ import pytest
 
 pytestmark = pytest.mark.infra
 
-_KUBECONFIG = os.path.expanduser("~/.kube/kubelab-config")
-_KUBECTL = f"kubectl --kubeconfig {_KUBECONFIG}"
+_KUBECONFIG_PATTERN = "~/.kube/kubelab-{env}-config"
 
 
-def _kubectl(args: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+def _get_kubeconfig(env: str) -> str:
+    if kubeconfig := os.environ.get("KUBECONFIG"):
+        return kubeconfig
+    return os.path.expanduser(_KUBECONFIG_PATTERN.format(env=env))
+
+
+def _kubectl(args: str, env: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+    kubeconfig = _get_kubeconfig(env)
     return subprocess.run(
-        f"{_KUBECTL} {args}",
+        f"kubectl --kubeconfig {kubeconfig} {args}",
         shell=True,
         capture_output=True,
         text=True,
@@ -30,10 +36,11 @@ def _kubectl(args: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.fixture(scope="module")
-def require_kubeconfig() -> None:
-    if not os.path.exists(_KUBECONFIG):
-        pytest.skip(f"Kubeconfig not found: {_KUBECONFIG}")
-    result = _kubectl("cluster-info", timeout=10)
+def require_kubeconfig(env: str) -> None:
+    kubeconfig = _get_kubeconfig(env)
+    if not os.path.exists(kubeconfig):
+        pytest.skip(f"Kubeconfig not found: {kubeconfig}")
+    result = _kubectl("cluster-info", env, timeout=10)
     if result.returncode != 0:
         pytest.skip(f"K3s cluster unreachable: {result.stderr.strip()}")
 
@@ -41,8 +48,8 @@ def require_kubeconfig() -> None:
 class TestK3sCluster:
     """K3s cluster must be healthy with all nodes ready."""
 
-    def test_all_nodes_ready(self, require_vpn: None, require_kubeconfig: None) -> None:
-        result = _kubectl("get nodes -o json")
+    def test_all_nodes_ready(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        result = _kubectl("get nodes -o json", env)
         assert result.returncode == 0, f"kubectl get nodes failed: {result.stderr}"
 
         data = json.loads(result.stdout)
@@ -59,8 +66,8 @@ class TestK3sCluster:
         ]
         assert not not_ready, f"K3s nodes not Ready: {not_ready}"
 
-    def test_no_memory_pressure(self, require_vpn: None, require_kubeconfig: None) -> None:
-        result = _kubectl("get nodes -o json")
+    def test_no_memory_pressure(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        result = _kubectl("get nodes -o json", env)
         assert result.returncode == 0, f"kubectl get nodes failed: {result.stderr}"
 
         data = json.loads(result.stdout)
@@ -74,8 +81,8 @@ class TestK3sCluster:
         ]
         assert not pressure, f"K3s nodes with MemoryPressure: {pressure}"
 
-    def test_pods_running_in_namespace(self, require_vpn: None, require_kubeconfig: None) -> None:
-        result = _kubectl("get pods -n kubelab -o json")
+    def test_pods_running_in_namespace(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        result = _kubectl("get pods -n kubelab -o json", env)
         assert result.returncode == 0, f"kubectl get pods failed: {result.stderr}"
 
         data = json.loads(result.stdout)
@@ -89,8 +96,8 @@ class TestK3sCluster:
         ]
         assert not not_running, "Pods not Running:\n" + "\n".join(not_running)
 
-    def test_pvcs_bound(self, require_vpn: None, require_kubeconfig: None) -> None:
-        result = _kubectl("get pvc -n kubelab -o json")
+    def test_pvcs_bound(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        result = _kubectl("get pvc -n kubelab -o json", env)
         assert result.returncode == 0, f"kubectl get pvc failed: {result.stderr}"
 
         data = json.loads(result.stdout)

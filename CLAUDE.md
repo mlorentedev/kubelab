@@ -46,7 +46,7 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 
 - v1.34.4+k3s1, namespace: `kubelab`
 - Nodes: k3s-server (.10), agent-1 (.11), agent-2 (.12) on 172.16.1.0/24
-- Kubeconfig: `~/.kube/kubelab-config`
+- Kubeconfig: `~/.kube/kubelab-{env}-config` (e.g. `kubelab-staging-config`)
 - Deploy: `kubectl apply -k infra/k8s/overlays/staging/`
 
 ### VPN mesh

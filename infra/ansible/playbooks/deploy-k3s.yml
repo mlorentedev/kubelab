@@ -3,8 +3,8 @@
 # K3s Cluster Deployment — ADR-020 Phase 3
 #
 # Usage:
-#   make deploy-k3s ENV=staging          # Homelab cluster (server + agents)
-#   make deploy-k3s ENV=prod             # VPS single-node (server only)
+#   make deploy TARGET=k3s ENV=staging
+#   make deploy TARGET=k3s ENV=prod
 #   toolkit infra ansible run -p deploy-k3s -e staging --tags k3s-server
 # =============================================================================
 
@@ -80,40 +80,7 @@
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"
 
-# --- Play 2: K3s Agents ---
-- name: Deploy K3s agents
-  hosts: k3s_agents
-  become: true
-  gather_facts: true
-
-  vars:
-    deploy_env: staging
-
-  pre_tasks:
-    - name: Load base config (SSOT)
-      include_vars:
-        file: "{{ playbook_dir }}/../../config/values/common.yaml"
-        name: common
-
-    - name: Load environment overrides
-      include_vars:
-        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
-        name: env_overrides
-
-    - name: Merge configs (env overrides win)
-      set_fact:
-        config: "{{ common | combine(env_overrides, recursive=True) }}"
-
-  roles:
-    - role: ../roles/k3s_agent
-      tags: [k3s, k3s-agent]
-      vars:
-        k3s_version: "{{ config.k3s.version }}"
-        k3s_install_script_url: "{{ config.k3s.install_script_url }}"
-        k3s_server_url: "https://{{ hostvars[groups['k3s_servers'][0]].ansible_host }}:{{ config.k3s.api_port }}"
-        k3s_join_token: "{{ hostvars[groups['k3s_servers'][0]].k3s_join_token }}"
-
-# --- Play 3: Verify cluster ---
+# --- Play 2: Verify cluster ---
 - name: Verify K3s cluster health
   hosts: k3s_servers
   become: true

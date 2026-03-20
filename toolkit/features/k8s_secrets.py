@@ -87,15 +87,15 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
 ]
 
 
-def _get_kubeconfig() -> str:
-    """Get kubeconfig path."""
+def _get_kubeconfig(env: str) -> str:
+    """Get kubeconfig path for the given environment."""
     import os
 
-    return os.environ.get("KUBECONFIG", os.path.expanduser("~/.kube/kubelab-config"))
+    return os.path.expanduser(f"~/.kube/kubelab-{env}-config")
 
 
-def _kubectl_base() -> list[str]:
-    return ["kubectl", "--kubeconfig", _get_kubeconfig(), "-n", "kubelab"]
+def _kubectl_base(env: str) -> list[str]:
+    return ["kubectl", "--kubeconfig", _get_kubeconfig(env), "-n", "kubelab"]
 
 
 def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
@@ -122,7 +122,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     all_ok = True
     for mapping in SECRET_DEFINITIONS:
         extra = dynamic_literals.get(mapping.name, {})
-        ok = _apply_single_secret(mapping, env_vars, extra, dry_run)
+        ok = _apply_single_secret(mapping, env_vars, extra, dry_run, env=env)
         if not ok:
             all_ok = False
 
@@ -190,6 +190,7 @@ def _apply_single_secret(
     env_vars: dict[str, str],
     extra_literals: dict[str, str],
     dry_run: bool,
+    env: str = "staging",
 ) -> bool:
     """Create or update a single K8s Secret. Returns True on success."""
     logger.info(f"Processing secret: {mapping.name}")
@@ -217,7 +218,7 @@ def _apply_single_secret(
 
     # kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -
     create_cmd = [
-        *_kubectl_base(),
+        *_kubectl_base(env),
         "create",
         "secret",
         "generic",
@@ -242,7 +243,7 @@ def _apply_single_secret(
             check=True,
         )
         # Pipe to kubectl apply
-        apply_cmd = [*_kubectl_base(), "apply", "-f", "-"]
+        apply_cmd = [*_kubectl_base(env), "apply", "-f", "-"]
         apply_result = subprocess.run(
             apply_cmd,
             input=create_result.stdout,
