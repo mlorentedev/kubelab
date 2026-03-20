@@ -25,20 +25,22 @@
     - role: ../roles/coredns
       tags: [dns, coredns]
       vars:
-        base_domain: "{{ config.global.base_domain }}"
-        staging_domain: "staging.{{ config.global.base_domain }}"
-        vps_public_ip: "{{ config.networking.vps.public_ip }}"
-        restart_policy: "{{ config.global.restart_policy }}"
+        # RPi4 serves DNS for ALL envs — use common.yaml base (not env override)
+        base_domain: "{{ common.global.base_domain }}"
+        staging_domain: "staging.{{ common.global.base_domain }}"
+        staging_zones: "{{ common.networking.staging_zones }}"
+        vps_public_ip: "{{ common.networking.vps.public_ip }}"
+        restart_policy: "{{ common.global.restart_policy }}"
         node_ips:
-          vps: "{{ config.networking.vps.tailscale_ip }}"
-          ace1: "{{ config.networking.nodes.ace1.tailscale_ip }}"
-          ace2: "{{ config.networking.nodes.ace2.tailscale_ip }}"
-          rpi3: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
-          rpi4: "{{ config.networking.nodes.rpi4.tailscale_ip }}"
-          beelink: "{{ config.networking.nodes.beelink.tailscale_ip }}"
-          jetson: "{{ config.networking.nodes.jetson.tailscale_ip }}"
+          vps: "{{ common.networking.vps.tailscale_ip }}"
+          ace1: "{{ common.networking.nodes.ace1.tailscale_ip }}"
+          ace2: "{{ common.networking.nodes.ace2.tailscale_ip }}"
+          rpi3: "{{ common.networking.nodes.rpi3.tailscale_ip }}"
+          rpi4: "{{ common.networking.nodes.rpi4.tailscale_ip }}"
+          beelink: "{{ common.networking.nodes.beelink.tailscale_ip }}"
+          jetson: "{{ common.networking.nodes.jetson.tailscale_ip }}"
         service_domains:
-          vpn: "{{ config.apps.services.core.headscale.domain }}"
-          status: "{{ config.apps.services.observability.uptime_kuma.domain }}"
-          ollama: "ollama.{{ config.global.base_domain }}"
-          jetson: "jetson.{{ config.global.base_domain }}"
+          vpn: "{{ common.apps.services.core.headscale.domain }}"
+          status: "{{ common.apps.services.observability.uptime_kuma.domain }}"
+          ollama: "ollama.{{ common.global.base_domain }}"
+          jetson: "jetson.{{ common.global.base_domain }}"

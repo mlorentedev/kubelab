@@ -114,6 +114,24 @@ spec:
       containers:
         - name: crowdsec
           image: crowdsecurity/crowdsec:latest
+          # Ensure bouncer is registered after every pod start.
+          # CrowdSec only auto-registers from BOUNCER_KEY_* on first run;
+          # subsequent starts skip registration even if the DB lost the entry.
+          # See: vault 90-lessons.md [2026-03-01]
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    for i in $(seq 1 30); do
+                      wget -qO- http://localhost:8080/health >/dev/null 2>&1 && break
+                      sleep 2
+                    done
+                    cscli bouncers add crowdsec-bouncer \
+                      --key "$(printenv 'BOUNCER_KEY_crowdsec-bouncer')" \
+                      2>/dev/null || true
           ports:
             - name: lapi
               containerPort: 8080

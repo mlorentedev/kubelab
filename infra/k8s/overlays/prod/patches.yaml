@@ -390,29 +390,6 @@ spec:
   tls:
     certResolver: letsencrypt
 ---
-# Override base uptime-kuma IngressRoute with prod domain
-# RPi3 Tailscale IP stays the same — EndpointSlice doesn't need override
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: uptime-kuma
-  namespace: kubelab
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`status.kubelab.live`)
-      kind: Rule
-      middlewares:
-        - name: crowdsec-bouncer
-          namespace: kubelab
-        - name: error-pages
-      services:
-        - name: uptime-kuma
-          port: 3001
-  tls:
-    certResolver: letsencrypt
----
 # Override base catch-all IngressRoute with prod wildcard cert
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

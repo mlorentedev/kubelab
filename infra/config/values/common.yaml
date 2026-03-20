@@ -18,6 +18,11 @@ global:
 networking:
   lan_cidr: "172.16.1.0/24"
   tailscale_cidr: "100.64.0.0/10"
+  # Staging DNS zones — resolved via Headscale split DNS → RPi4 CoreDNS → K3s
+  # Add new domains here; deploy-vps, Corefile, and Pi-hole all consume this list.
+  staging_zones:
+    - "staging.kubelab.live"
+    - "staging.mlorente.dev"
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
   vps:

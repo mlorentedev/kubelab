@@ -1,6 +1,8 @@
 # Managed by Ansible — do not edit manually
 # Source: infra/ansible/roles/coredns/templates/Corefile.j2
 
+# --- Staging zones (from networking.staging_zones in common.yaml) ---
+
 {{ staging_domain }} {
     hosts {
         {{ node_ips.ace1 }} {{ staging_domain }}
@@ -10,7 +12,6 @@
         {{ node_ips.ace1 }} grafana.{{ staging_domain }}
         {{ node_ips.ace1 }} traefik.{{ staging_domain }}
         {{ node_ips.ace1 }} auth.{{ staging_domain }}
-        {{ node_ips.ace1 }} status.{{ staging_domain }}
         {{ node_ips.ace1 }} gitea.{{ staging_domain }}
         {{ node_ips.ace1 }} n8n.{{ staging_domain }}
         {{ node_ips.ace1 }} minio.{{ staging_domain }}
@@ -27,6 +28,21 @@
     log
     errors
 }
+
+{% for zone in staging_zones %}
+{% if zone != staging_domain %}
+{{ zone }} {
+    hosts {
+        {{ node_ips.ace1 }} {{ zone }}
+        fallthrough
+    }
+    log
+    errors
+}
+
+{% endif %}
+{% endfor %}
+# --- Prod zone ---
 
 {{ base_domain }} {
     hosts {

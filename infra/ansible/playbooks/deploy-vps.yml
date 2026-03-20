@@ -42,6 +42,11 @@
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
 
+    - name: Build Headscale split DNS from staging zones (SSOT)
+      set_fact:
+        _headscale_dns_split: "{{ _headscale_dns_split | default({}) | combine({item: [config.networking.nodes.rpi4.tailscale_ip]}) }}"
+      loop: "{{ config.networking.staging_zones }}"
+
   roles:
     # --- Error pages (Traefik error-pages middleware depends on this) ---
     - role: ../roles/errors
@@ -127,9 +132,7 @@
         docker_network: "{{ config.networking.vps.docker_network }}"
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
-        headscale_dns_split:
-          staging.kubelab.live:
-            - "{{ config.networking.nodes.rpi4.tailscale_ip }}"
+        headscale_dns_split: "{{ _headscale_dns_split }}"
         headscale_dns_extra_records:
           - name: "ollama.{{ config.global.base_domain }}"
             type: A

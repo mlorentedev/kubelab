@@ -11,18 +11,8 @@ resource "cloudflare_record" "mlorente_root" {
   proxied = false
 }
 
-# -----------------------------------------------------------------------------
-# mlorente.dev — staging (VPN-only, Tailscale IP → K3s server)
-# -----------------------------------------------------------------------------
-
-resource "cloudflare_record" "mlorente_staging" {
-  zone_id = var.zone_id_mlorente
-  name    = "staging"
-  content = "100.64.0.4"  # networking.nodes.k3s_server.tailscale_ip
-  type    = "A"
-  ttl     = var.dns_ttl
-  proxied = false  # Tailscale IP, not routable from internet
-}
+# staging.mlorente.dev: resolved via Headscale split DNS → RPi4 CoreDNS → ace1
+# No Cloudflare record needed — staging DNS is VPN-only
 
 # -----------------------------------------------------------------------------
 # mlorente.dev — service records from services.json

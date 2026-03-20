@@ -5,7 +5,7 @@ No test code changes needed.
 
 IMPORTANT: Service names must match the keys in the merged YAML config
 (common.yaml + env override), as extracted by HealthChecker._extract_service_configs().
-Use underscores (uptime_kuma), not hyphens (uptime-kuma).
+Use underscores (grafana), not hyphens (grafana).
 Run `make test-e2e` to verify names are correct — unmatched names show as skipped.
 """
 
@@ -83,9 +83,6 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         api_json_keys={"/api/health": ["database"]},
     ),
     "loki": ServiceExpectation(
-        health_status=(200, 302),
-    ),
-    "uptime_kuma": ServiceExpectation(
         health_status=(200, 302),
     ),
     # -- Core --

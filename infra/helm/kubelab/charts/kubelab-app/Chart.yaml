@@ -1,5 +1,0 @@
-apiVersion: v2
-name: kubelab-app
-description: Generic chart for KubeLab custom applications
-type: application
-version: 0.1.0
