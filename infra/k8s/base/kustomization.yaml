@@ -5,9 +5,8 @@ namespace: kubelab
 
 resources:
   - namespace.yaml
-  # api, web, errors: managed by Helm (ADR-021). DO NOT add here.
+  - edge/errors.yaml
   - external/ollama.yaml
-  - external/uptime-kuma.yaml
   - edge/secure-headers.yaml
   - services/grafana.yaml
   - services/loki.yaml

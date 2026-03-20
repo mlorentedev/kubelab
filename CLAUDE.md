@@ -45,14 +45,16 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 ### K3s cluster
 
 - v1.34.4+k3s1, namespace: `kubelab`
-- Nodes: k3s-server (.10), agent-1 (.11), agent-2 (.12) on 172.16.1.0/24
+- Node: ace1 (172.16.1.2) — single all-in-one (no separate agents since ADR-023 Phase 1)
 - Kubeconfig: `~/.kube/kubelab-{env}-config` (e.g. `kubelab-staging-config`)
-- Deploy: `kubectl apply -k infra/k8s/overlays/staging/`
+- Deploy: `make deploy-k8s ENV=staging` (Kustomize only — Helm chart removed, ADR-021 Rev2)
+- K8s packaging: custom apps (api/web/errors) = Kustomize, third-party = Helm official charts (H2 pending)
 
 ### VPN mesh
 
-- Headscale v0.28.0 on VPS, Tailscale on 9 nodes
-- Split DNS: `*.kubelab.live` → RPi4 Pi-hole → CoreDNS → cluster
+- Headscale v0.28.0 on VPS, Tailscale on 8 nodes (3 legacy VMs removed 2026-03-19)
+- Split DNS zones defined in `networking.staging_zones` (common.yaml SSOT) → Headscale → RPi4 Pi-hole → CoreDNS → K3s
+- Staging DNS is VPN-only. Prod DNS is Cloudflare (Terraform).
 
 ## Critical gotchas
 
@@ -84,7 +86,10 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Headscale (`vpn.kubelab.live`) MUST resolve to public IP**: CoreDNS and `/etc/hosts` entries for `vpn.kubelab.live` must use `162.55.57.175` (public), NEVER `100.64.0.2` (Tailscale). Bootstrap services can't depend on VPN being up.
 - **RPi4 Tailscale flags**: `--login-server=https://vpn.kubelab.live --accept-dns=false --advertise-routes=172.16.1.0/24`. All three are required. `tailscale-watchdog.timer` auto-reconnects every 5 min.
 - **LAN nodes MUST use `--accept-routes=false`**: Nodes physically on 172.16.1.0/24 (ace1, ace2) must NOT accept Tailscale subnet routes. RPi4 advertises 172.16.1.0/24 — if a LAN node accepts it, Tailscale installs that route in table 52 via `tailscale0`, hijacking reply routing and breaking all inbound LAN traffic. Fix: `tailscale set --accept-routes=false`. Only remote nodes (workstation, VPS) need `--accept-routes=true`.
-- **External services through K3s Traefik**: Bare-metal services (Uptime Kuma, Ollama) use Service + EndpointSlice in `infra/k8s/base/external/`. Label: `kubelab.live/location: external`.
+- **External services through K3s Traefik**: Bare-metal services (Ollama) use Service + EndpointSlice in `infra/k8s/base/external/`. Label: `kubelab.live/location: external`. Uptime Kuma removed from K3s (2026-03-19) — lives on RPi3 standalone, proxied via VPS Traefik.
+- **CrowdSec bouncer auto-registration**: `postStart` lifecycle hook on CrowdSec deployment ensures bouncer is registered after every pod start. No manual `cscli bouncers add` needed.
+- **Staging DNS zones are SSOT-driven**: `networking.staging_zones` in common.yaml feeds Headscale split DNS, CoreDNS Corefile, and Pi-hole forwarding. Add a new staging domain in one place, deploy VPS + DNS.
+- **Jetson Nano (Ubuntu 18.04)**: Cannot reuse Ubuntu 24.04 Ansible roles. Use `raw` module. NetworkManager (not netplan). Static IP via `nmcli`. Pollex deployment lives in pollex repo, not kubelab.
 - **yamllint directives inside `|` blocks don't work**: `# yamllint disable` is string content inside literal block scalars, not a YAML comment. yamllint max line-length is 130 (accommodates argon2 hashes).
 - **Trunk-based development**: `master` is the only permanent branch. Feature branches use `feature/`, `fix/`, `hotfix/`, `chore/` prefixes. All PRs squash-merge to master. No `develop` branch.
 - **RC versioning**: Feature branches produce `{next-version}-rc.{N}` Docker tags. Master produces stable `{version}` tags. No more `0.0.0-dev.{sha}` builds.
@@ -111,7 +116,7 @@ infra/stacks/                      — Docker Compose stacks (local dev)
 infra/ansible/roles/k3s_server/    — K3s server provisioning (ADR-020 Phase 3)
 infra/ansible/roles/k3s_agent/     — K3s agent provisioning
 infra/ansible/roles/errors/        — Error pages container (VPS)
-infra/helm/                        — Helm charts (ADR-021, future)
+infra/helm/                        — Helm charts for third-party services (ADR-021 Rev2, H2 pending)
 edge/                              — Traefik, DNS gateway configs
 edge/errors/                       — Error pages source (Dockerfile + HTML)
 toolkit/                           — Python CLI (will become kubelab-cli)

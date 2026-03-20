@@ -56,9 +56,7 @@ help:
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
 	@echo "Kubernetes:"
-	@echo "  make deploy-k8s ENV=x   Deploy ALL K8s workloads (Helm + legacy kustomize)"
-	@echo "  make helm-deploy ENV=x  Deploy via Helm only"
-	@echo "  make helm-template ENV=x Render Helm templates (dry-run)"
+	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads via Kustomize"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
@@ -298,54 +296,16 @@ deploy:
 backup:
 	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
 
-# Helm deploy (ADR-021 — replaces kubectl apply -k)
+# K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
 KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
-HELM_CHART = infra/helm/kubelab
-
-.PHONY: helm-deploy
-helm-deploy:
-	@test -n "$(ENV)" || (echo "Usage: make helm-deploy ENV=staging|prod" && exit 1)
-	@echo "Deploying KubeLab via Helm ($(ENV))..."
-	@if [ "$(ENV)" = "prod" ]; then \
-		helm upgrade --install kubelab $(HELM_CHART) \
-			-f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
-	else \
-		helm upgrade --install kubelab $(HELM_CHART) \
-			-f $(HELM_CHART)/values.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
-	fi
-
-.PHONY: helm-template
-helm-template:
-	@test -n "$(ENV)" || (echo "Usage: make helm-template ENV=staging|prod" && exit 1)
-	@if [ "$(ENV)" = "prod" ]; then \
-		helm template kubelab $(HELM_CHART) -f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml; \
-	else \
-		helm template kubelab $(HELM_CHART) -f $(HELM_CHART)/values.yaml; \
-	fi
-
-# K8s deploy — Helm for piloted apps + legacy kustomize for remaining services
-# When H2 is complete, k8s-apply is removed and deploy-k8s becomes helm-deploy only
 
 .PHONY: deploy-k8s
 deploy-k8s:
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@echo "=== Deploying K8s workloads ($(ENV)) ==="
-	@echo "[1/2] Helm (api, web, errors)..."
-	@if [ "$(ENV)" = "prod" ]; then \
-		helm upgrade --install kubelab $(HELM_CHART) \
-			-f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
-	else \
-		helm upgrade --install kubelab $(HELM_CHART) \
-			-f $(HELM_CHART)/values.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
-	fi
-	@echo "[2/2] Kustomize (legacy services)..."
 	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG_PATH)
-	@echo "✓ All K8s workloads deployed for $(ENV)"
+	@echo "✓ K8s workloads deployed for $(ENV)"
 
 # -----------------------------------------------------------------------------
 # Validation & Testing
