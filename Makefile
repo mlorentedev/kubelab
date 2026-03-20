@@ -299,7 +299,8 @@ backup:
 	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
 
 # Helm deploy (ADR-021 — replaces kubectl apply -k)
-KUBECONFIG ?= ~/.kube/kubelab-config
+# Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
+KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
 HELM_CHART = infra/helm/kubelab
 
 .PHONY: helm-deploy
@@ -309,11 +310,11 @@ helm-deploy:
 	@if [ "$(ENV)" = "prod" ]; then \
 		helm upgrade --install kubelab $(HELM_CHART) \
 			-f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
 	else \
 		helm upgrade --install kubelab $(HELM_CHART) \
 			-f $(HELM_CHART)/values.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
 	fi
 
 .PHONY: helm-template
@@ -336,14 +337,14 @@ deploy-k8s:
 	@if [ "$(ENV)" = "prod" ]; then \
 		helm upgrade --install kubelab $(HELM_CHART) \
 			-f $(HELM_CHART)/values.yaml -f $(HELM_CHART)/values-prod.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
 	else \
 		helm upgrade --install kubelab $(HELM_CHART) \
 			-f $(HELM_CHART)/values.yaml \
-			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG); \
+			-n kubelab --create-namespace --kubeconfig $(KUBECONFIG_PATH); \
 	fi
 	@echo "[2/2] Kustomize (legacy services)..."
-	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG)
+	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG_PATH)
 	@echo "✓ All K8s workloads deployed for $(ENV)"
 
 # -----------------------------------------------------------------------------

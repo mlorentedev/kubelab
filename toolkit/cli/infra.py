@@ -288,12 +288,16 @@ def backup_list(
 # KUBERNETES COMMANDS
 # =============================================================================
 
-_K8S_DEFAULT_KUBECONFIG = "~/.kube/kubelab-config"
+_K8S_KUBECONFIG_PATTERN = "~/.kube/kubelab-{env}-config"
 
 
-def _get_kubeconfig() -> str:
-    """Get kubeconfig path from env or default."""
-    return os.environ.get("KUBECONFIG", os.path.expanduser(_K8S_DEFAULT_KUBECONFIG))
+def _get_kubeconfig(env: str) -> str:
+    """Get kubeconfig path for the given environment.
+
+    Always derives from --env to ensure deterministic behavior
+    regardless of shell KUBECONFIG env var.
+    """
+    return os.path.expanduser(_K8S_KUBECONFIG_PATTERN.format(env=env))
 
 
 def _kubectl_cmd(kubeconfig: str) -> str:
@@ -358,7 +362,7 @@ def k8s_deploy(
     env_config = validate_environment_config(env)
     confirm_dangerous_operation(env_config, "Deploy to Kubernetes")
 
-    kubeconfig = _get_kubeconfig()
+    kubeconfig = _get_kubeconfig(env)
     kctl = _kubectl_cmd(kubeconfig)
     overlay_dir = settings.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env
 
@@ -424,7 +428,7 @@ def k8s_dry_run(
     logger.section(f"K8s Dry-Run - {env.upper()}")
     validate_environment_config(env)
 
-    kubeconfig = _get_kubeconfig()
+    kubeconfig = _get_kubeconfig(env)
     kctl = _kubectl_cmd(kubeconfig)
     overlay_dir = settings.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env
 
@@ -476,7 +480,7 @@ def k8s_status(
     logger.section(f"K8s Status - {env.upper()}")
     validate_environment_config(env)
 
-    kubeconfig = _get_kubeconfig()
+    kubeconfig = _get_kubeconfig(env)
     kctl = _kubectl_cmd(kubeconfig)
 
     result = command.run(
