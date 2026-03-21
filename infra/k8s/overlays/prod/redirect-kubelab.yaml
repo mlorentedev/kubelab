@@ -1,0 +1,44 @@
+---
+# kubelab.live → mlorente.dev 301 redirect (prod-only)
+# Equivalent of VPS Traefik app-redirect-kubelab.yml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kubelab-redirect
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: kubelab-redirect
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  redirectRegex:
+    regex: "^https://(www\\.)?kubelab\\.live/(.*)"
+    replacement: "https://mlorente.dev/${2}"
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kubelab-redirect
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: kubelab-redirect
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`kubelab.live`) || Host(`www.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: kubelab-redirect
+      services:
+        - name: errors
+          port: 80
+  tls:
+    certResolver: letsencrypt
+    domains:
+      - main: "kubelab.live"
+        sans:
+          - "www.kubelab.live"
