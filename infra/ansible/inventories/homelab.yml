@@ -13,19 +13,24 @@ all:
     headscale_ip: 162.55.57.175
 
   children:
-    lan_nodes:
+    # K3s cluster (bare metal since ADR-023 Phase 1)
+    k3s_servers:
       hosts:
-        kubelab-jet1:
-          ansible_host: 100.64.0.8
-          legacy_python: true
+        kubelab-ace1:
+          ansible_host: 100.64.0.11  # networking.nodes.ace1.tailscale_ip
+          lan_ip: 172.16.1.2
+
+    # Platform / compute nodes
+    platform_nodes:
+      hosts:
+        kubelab-ace2:
+          ansible_host: 100.64.0.5  # networking.nodes.ace2.tailscale_ip
+          lan_ip: 172.16.1.5
         kubelab-bee:
-          ansible_host: 100.64.0.3
-        k3s-server:
-          ansible_host: 100.64.0.4
-        k3s-agent-1:
-          ansible_host: 100.64.0.7
-        k3s-agent-2:
-          ansible_host: 100.64.0.9
+          ansible_host: 100.64.0.3  # networking.nodes.beelink.tailscale_ip
+        kubelab-jet1:
+          ansible_host: 100.64.0.8  # networking.nodes.jetson.tailscale_ip
+          legacy_python: true
 
     gateway_nodes:
       hosts:

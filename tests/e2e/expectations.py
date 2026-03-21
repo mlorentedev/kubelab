@@ -109,6 +109,11 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     # -- Data --
     "minio": ServiceExpectation(),
+    # -- AI / ML --
+    "ollama": ServiceExpectation(
+        api_json_keys={"/api/tags": ["models"]},
+        skip_in_envs=("dev", "prod"),  # Bare metal on Beelink, reachable only via VPN (staging)
+    ),
     # -- Edge --
     # errors is Traefik's internal error page backend, not a user-facing service.
     # It has no public route — Traefik references it internally for custom 404/502 pages.

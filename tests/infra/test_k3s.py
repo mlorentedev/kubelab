@@ -18,9 +18,12 @@ _KUBECONFIG_PATTERN = "~/.kube/kubelab-{env}-config"
 
 
 def _get_kubeconfig(env: str) -> str:
+    env_specific = os.path.expanduser(_KUBECONFIG_PATTERN.format(env=env))
+    if os.path.exists(env_specific):
+        return env_specific
     if kubeconfig := os.environ.get("KUBECONFIG"):
         return kubeconfig
-    return os.path.expanduser(_KUBECONFIG_PATTERN.format(env=env))
+    return env_specific
 
 
 def _kubectl(args: str, env: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
