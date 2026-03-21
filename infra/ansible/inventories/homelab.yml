@@ -38,3 +38,11 @@ all:
           ansible_host: 100.64.0.10
         kubelab-rpi3:
           ansible_host: 100.64.0.6
+
+    # VPS (Hetzner CAX21, ARM64)
+    vps:
+      hosts:
+        kubelab-vps:
+          ansible_host: 100.64.0.2  # networking.vps.tailscale_ip
+          ansible_user: deployer
+          public_ip: 162.55.57.175

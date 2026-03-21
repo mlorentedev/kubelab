@@ -95,7 +95,7 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **RC versioning**: Feature branches produce `{next-version}-rc.{N}` Docker tags. Master produces stable `{version}` tags. No more `0.0.0-dev.{sha}` builds.
 - **Errors service lives in `edge/errors/`** (not `apps/`). It's an edge service, not a platform app. CI path filter reflects this.
 - **K3s HelmChartConfig managed by Ansible**: Template at `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2`. Includes ACME config. Do NOT create static HelmChartConfig in `infra/k8s/`.
-- **K3s deploy requires sudo**: `make deploy-k3s ENV=x` passes `-K` for become password on homelab nodes. VPS uses NOPASSWD.
+- **All nodes use NOPASSWD sudo**: SSH hardened + NOPASSWD on all nodes (2026-03-20). No `-K` needed. For NEW nodes, bootstrap NOPASSWD manually first, then provision with `make provision NODE=x ENV=y ASK_PASS=1`.
 - **Pattern C ports are in prod.yaml only**: common.yaml has 80/443 (default). prod.yaml overrides to 8080/8443 for side-by-side validation. Do NOT put alternate ports in common.yaml.
 
 ## Workflow rules

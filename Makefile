@@ -52,7 +52,7 @@ help:
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi4)"
-	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s)"
+	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
 	@echo "Kubernetes:"
@@ -272,25 +272,26 @@ secrets-audit:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 [ENV=staging|prod] [BOOTSTRAP=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4|vps [ENV=staging|prod] [BOOTSTRAP=1] [ASK_PASS=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	$(eval _K := $(if $(ASK_PASS),-K,))
 	@if [ -n "$(BOOTSTRAP)" ]; then \
 		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV) --bootstrap; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) -K; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) -K; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
 	fi
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s ENV=staging|prod" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s ENV=staging|prod" && exit 1)
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) -K
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV)
 
 .PHONY: backup
 backup:

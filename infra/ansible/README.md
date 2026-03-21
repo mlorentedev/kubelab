@@ -117,10 +117,10 @@ Ensures all nodes can resolve critical infrastructure domains (`vpn.kubelab.live
 inventories/homelab.yml
 
 # Apply to all nodes (-K prompts for sudo password)
-ansible-playbook -i inventories/homelab.yml playbooks/homelab-dns.yml -K
+ansible-playbook -i inventories/homelab.yml playbooks/homelab-dns.yml
 
 # Dry-run
-ansible-playbook -i inventories/homelab.yml playbooks/homelab-dns.yml -K --check --diff
+ansible-playbook -i inventories/homelab.yml playbooks/homelab-dns.yml --check --diff
 
 # Verify a specific node
 ansible -i inventories/homelab.yml kubelab-jet1 -m raw -a "grep vpn.kubelab.live /etc/hosts"

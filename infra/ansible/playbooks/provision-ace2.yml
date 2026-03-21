@@ -7,8 +7,8 @@
 #
 # Usage:
 #   make provision NODE=ace2 ENV=staging
-#   toolkit infra ansible run -p provision-ace2 -e staging -K
-#   toolkit infra ansible run -p provision-ace2 -e staging -K --tags services
+#   toolkit infra ansible run -p provision-ace2 -e staging
+#   toolkit infra ansible run -p provision-ace2 -e staging --tags services
 #
 # First run (before Tailscale): use BOOTSTRAP=1 to auto-use LAN IP
 #   make provision NODE=ace2 ENV=staging BOOTSTRAP=1
