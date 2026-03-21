@@ -86,9 +86,10 @@ class TestDNSResolution:
 
         errors: list[str] = []
         for domain in domains_to_check:
-            result = ssh_run(rpi4.host, f"dig +short {domain} 2>/dev/null | head -1")
+            # Query CoreDNS directly — RPi4's /etc/resolv.conf may not point to localhost
+            result = ssh_run(rpi4.host, f"dig +short {domain} @127.0.0.1 2>/dev/null | head -1")
             if result.returncode != 0 or not result.stdout.strip():
-                errors.append(f"{domain}: DNS resolution failed from RPi4")
+                errors.append(f"{domain}: DNS resolution failed from RPi4 CoreDNS (@127.0.0.1)")
 
         assert not errors, "DNS resolution failures:\n" + "\n".join(errors)
 

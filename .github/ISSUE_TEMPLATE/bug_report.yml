@@ -1,0 +1,64 @@
+name: Bug Report
+description: Report a bug in KubeLab infrastructure
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to trigger the issue.
+      placeholder: |
+        1. Run `make deploy-k8s ENV=staging`
+        2. Check pod status
+        3. See error...
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - staging (K3s on ace1)
+        - production (VPS)
+        - local dev
+        - RPi4 (DNS gateway)
+        - RPi3 (monitoring)
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node / Service
+      description: Which node or service is affected (e.g. ace1, traefik, authelia).
+      placeholder: ace1 / authelia
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste logs, error messages, or kubectl output.
+      render: shell

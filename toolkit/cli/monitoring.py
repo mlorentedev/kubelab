@@ -10,6 +10,7 @@ from toolkit.config.constants import MESSAGES
 from toolkit.config.settings import get_settings
 from toolkit.core.logging import console, logger
 from toolkit.features import command
+from toolkit.features.configuration import ConfigurationManager
 
 app = typer.Typer(
     name="monitoring",
@@ -17,18 +18,47 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Uptime Kuma runs on RPi3 (kubelab-rpi3) via Tailscale
-_KUMA_HOST = "100.64.0.6"
-_KUMA_SSH_USER = "manu"
-_KUMA_CONTAINER = "uptime-kuma"
 _KUMA_DB_PATH_IN_CONTAINER = "/app/data/kuma.db"
 _KUMA_BACKUP_DIR = "infra/config/uptime-kuma"
-_KUMA_URL = f"http://{_KUMA_HOST}:3001"
+
+# Cached config loaded lazily from common.yaml (SSOT)
+_kuma_config: dict[str, str] | None = None
+
+
+def _get_kuma_config() -> dict[str, str]:
+    """Load Uptime Kuma connection details from config (networking.nodes.rpi3 + apps.services)."""
+    global _kuma_config
+    if _kuma_config is not None:
+        return _kuma_config
+
+    settings = get_settings()
+    # Node data lives in common.yaml — env doesn't matter for this lookup
+    config_manager = ConfigurationManager("staging", settings.project_root)
+    merged = config_manager.get_merged_config()
+
+    node = merged.get("networking", {}).get("nodes", {}).get("rpi3", {})
+    svc = merged.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
+
+    host = node.get("tailscale_ip", "")
+    if not host:
+        logger.error("networking.nodes.rpi3.tailscale_ip not found in config")
+        raise typer.Exit(1)
+
+    port = str(svc.get("default_port", "3001"))
+
+    _kuma_config = {
+        "host": host,
+        "ssh_user": node.get("ssh_user", "manu"),
+        "container": svc.get("name", "uptime-kuma"),
+        "url": f"http://{host}:{port}",
+    }
+    return _kuma_config
 
 
 def _ssh_cmd(cmd: str) -> str:
     """Build SSH command to RPi3."""
-    return f"ssh -o ConnectTimeout=5 {_KUMA_SSH_USER}@{_KUMA_HOST} {cmd!r}"
+    cfg = _get_kuma_config()
+    return f"ssh -o ConnectTimeout=5 {cfg['ssh_user']}@{cfg['host']} {cmd!r}"
 
 
 def _backup_dir(project_root: Path) -> Path:
@@ -53,19 +83,20 @@ def backup(
     filename = output or "kuma.db"
     local_file = backup_path / filename
 
+    cfg = _get_kuma_config()
     logger.section("Uptime Kuma Backup")
 
     # 1. Check RPi3 reachability
-    logger.info(f"Connecting to RPi3 ({_KUMA_HOST})...")
-    ping = command.run(f"ping -c1 -W2 {_KUMA_HOST}", check=False)
+    logger.info(f"Connecting to RPi3 ({cfg['host']})...")
+    ping = command.run(f"ping -c1 -W2 {cfg['host']}", check=False)
     if ping.returncode != 0:
-        logger.error(f"RPi3 unreachable at {_KUMA_HOST}. Is Tailscale connected?")
+        logger.error(f"RPi3 unreachable at {cfg['host']}. Is Tailscale connected?")
         raise typer.Exit(1)
 
     # 2. Extract DB from container to RPi3 /tmp
     logger.info("Extracting kuma.db from container...")
     extract = command.run(
-        _ssh_cmd(f"docker cp {_KUMA_CONTAINER}:{_KUMA_DB_PATH_IN_CONTAINER} /tmp/kuma.db"),
+        _ssh_cmd(f"docker cp {cfg['container']}:{_KUMA_DB_PATH_IN_CONTAINER} /tmp/kuma.db"),
         check=False,
     )
     if extract.returncode != 0:
@@ -76,7 +107,7 @@ def backup(
     logger.info(f"Copying to {local_file}...")
     backup_path.mkdir(parents=True, exist_ok=True)
     scp = command.run(
-        f"scp -o ConnectTimeout=5 {_KUMA_SSH_USER}@{_KUMA_HOST}:/tmp/kuma.db {local_file}",
+        f"scp -o ConnectTimeout=5 {cfg['ssh_user']}@{cfg['host']}:/tmp/kuma.db {local_file}",
         check=False,
     )
     if scp.returncode != 0:
@@ -111,6 +142,7 @@ def restore(
     backup_path = _backup_dir(settings.project_root)
     local_file = Path(input_file) if input_file else backup_path / "kuma.db"
 
+    cfg = _get_kuma_config()
     logger.section("Uptime Kuma Restore")
 
     if not local_file.exists():
@@ -125,16 +157,16 @@ def restore(
         raise typer.Exit(0)
 
     # 1. Check connectivity
-    logger.info(f"Connecting to RPi3 ({_KUMA_HOST})...")
-    ping = command.run(f"ping -c1 -W2 {_KUMA_HOST}", check=False)
+    logger.info(f"Connecting to RPi3 ({cfg['host']})...")
+    ping = command.run(f"ping -c1 -W2 {cfg['host']}", check=False)
     if ping.returncode != 0:
-        logger.error(f"RPi3 unreachable at {_KUMA_HOST}")
+        logger.error(f"RPi3 unreachable at {cfg['host']}")
         raise typer.Exit(1)
 
     # 2. Upload DB to RPi3
     logger.info("Uploading kuma.db to RPi3...")
     scp = command.run(
-        f"scp -o ConnectTimeout=5 {local_file} {_KUMA_SSH_USER}@{_KUMA_HOST}:/tmp/kuma-restore.db",
+        f"scp -o ConnectTimeout=5 {local_file} {cfg['ssh_user']}@{cfg['host']}:/tmp/kuma-restore.db",
         check=False,
     )
     if scp.returncode != 0:
@@ -164,7 +196,7 @@ def restore(
 
     if start.returncode == 0:
         logger.success(f"Uptime Kuma restored from {local_file}")
-        logger.info(f"Verify at {_KUMA_URL}")
+        logger.info(f"Verify at {cfg['url']}")
     else:
         logger.error("Failed to restart Uptime Kuma after restore")
         raise typer.Exit(1)
@@ -173,20 +205,21 @@ def restore(
 @app.command("status")
 def status() -> None:
     """Check Uptime Kuma connectivity and container status on RPi3."""
+    cfg = _get_kuma_config()
     logger.section("Uptime Kuma Status")
 
     # 1. Ping RPi3
-    logger.info(f"Pinging RPi3 ({_KUMA_HOST})...")
-    ping = command.run(f"ping -c1 -W2 {_KUMA_HOST}", check=False)
+    logger.info(f"Pinging RPi3 ({cfg['host']})...")
+    ping = command.run(f"ping -c1 -W2 {cfg['host']}", check=False)
     if ping.returncode != 0:
-        logger.error(f"RPi3 unreachable at {_KUMA_HOST}")
+        logger.error(f"RPi3 unreachable at {cfg['host']}")
         raise typer.Exit(1)
     logger.success("RPi3 reachable via Tailscale")
 
     # 2. Check container
     logger.info("Checking container status...")
     container = command.run(
-        _ssh_cmd(f"docker inspect {_KUMA_CONTAINER} --format '{{{{.State.Status}}}}'"),
+        _ssh_cmd(f"docker inspect {cfg['container']} --format '{{{{.State.Status}}}}'"),
         check=False,
     )
     container_status = container.stdout.strip() if container.returncode == 0 else "not found"
@@ -194,7 +227,7 @@ def status() -> None:
     # 3. Check HTTP
     logger.info("Checking HTTP endpoint...")
     http = command.run(
-        f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 5 {_KUMA_URL}",
+        f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 5 {cfg['url']}",
         check=False,
     )
     http_code = http.stdout.strip() if http.returncode == 0 else "timeout"
@@ -203,7 +236,7 @@ def status() -> None:
     started_at = "unknown"
     if container_status == "running":
         uptime = command.run(
-            _ssh_cmd(f"docker inspect {_KUMA_CONTAINER} --format '{{{{.State.StartedAt}}}}'"),
+            _ssh_cmd(f"docker inspect {cfg['container']} --format '{{{{.State.StartedAt}}}}'"),
             check=False,
         )
         started_at = uptime.stdout.strip()[:19] if uptime.returncode == 0 else "unknown"
@@ -218,7 +251,7 @@ def status() -> None:
     table.add_row(
         "RPi3 Tailscale",
         "[green]OK[/green]" if ping_ok else "[red]FAIL[/red]",
-        _KUMA_HOST,
+        cfg["host"],
     )
 
     container_ok = container_status == "running"
