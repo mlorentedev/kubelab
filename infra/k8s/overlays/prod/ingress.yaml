@@ -46,6 +46,6 @@ spec:
         - name: error-pages
       services:
         - name: web
-          port: 8080
+          port: 4321
   tls:
     certResolver: letsencrypt

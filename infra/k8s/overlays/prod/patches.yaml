@@ -108,7 +108,7 @@ data:
 
         # PROTECTED services (one_factor via Authelia forward-auth)
         - domain: 'n8n.kubelab.live'
-          policy: one_factor (Authelia one-factor)
+          policy: one_factor
         - domain: 'grafana.kubelab.live'
           policy: one_factor
         - domain: 'traefik.kubelab.live'
@@ -132,7 +132,7 @@ data:
       cookies:
         - domain: kubelab.live
           authelia_url: https://auth.kubelab.live
-          default_redirection_url: https://mlorente.dev
+          default_redirection_url: https://kubelab.live
 
       redis:
         host: redis
