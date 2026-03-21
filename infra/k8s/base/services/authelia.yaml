@@ -97,13 +97,13 @@ data:
         - domain: 'api.staging.kubelab.live'
           policy: bypass
 
-        # OIDC-enabled services (bypass Authelia forward-auth — OIDC handles login)
+        # Services with own auth (protected by Authelia until OIDC SSO is configured)
         - domain: 'console.minio.staging.kubelab.live'
-          policy: bypass
+          policy: one_factor
         - domain: 'minio.staging.kubelab.live'
-          policy: bypass
+          policy: bypass  # S3 API — programmatic access
         - domain: 'gitea.staging.kubelab.live'
-          policy: bypass
+          policy: one_factor
 
         # Protected services (one_factor via Authelia forward-auth)
         - domain: 'n8n.staging.kubelab.live'
