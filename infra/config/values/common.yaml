@@ -30,7 +30,7 @@ networking:
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
     ssh_user: "deployer"
-    ansible_groups: ["vps", "docker_hosts"]
+    ansible_groups: ["vps", "docker_hosts", "k3s_servers"]  # K3s permanent after ADR-023 cutover
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
     backup:
       root: "/opt/backups"

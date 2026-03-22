@@ -284,8 +284,7 @@ spec:
       services:
         - name: loki
           port: 3100
-  tls:
-    certResolver: letsencrypt
+  tls: {}  # No certResolver — .local TLD can't get ACME certs
 ---
 # Override base gitea ConfigMap with prod domain
 apiVersion: v1

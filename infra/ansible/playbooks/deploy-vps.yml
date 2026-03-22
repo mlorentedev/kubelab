@@ -48,17 +48,21 @@
       loop: "{{ config.networking.staging_zones }}"
 
   roles:
-    # --- Error pages (Traefik error-pages middleware depends on this) ---
+    # --- Error pages (Docker Compose — only when K3s is NOT the ingress) ---
+    # In prod, VPS is in k3s_servers group → K3s handles errors deployment
     - role: ../roles/errors
       tags: [errors]
+      when: "'k3s_servers' not in group_names"
       vars:
         docker_network: "{{ config.networking.vps.docker_network }}"
         restart_policy: "{{ config.global.restart_policy }}"
         errors_image: "{{ config.registry }}/{{ config.edge.errors.image_name }}:{{ config.edge.errors.version }}"
 
-    # --- Traefik reverse proxy ---
+    # --- Traefik reverse proxy (Docker Compose — only when K3s is NOT the ingress) ---
+    # In prod, VPS is in k3s_servers group → K3s Traefik handles ingress
     - role: ../roles/traefik_vps
       tags: [traefik]
+      when: "'k3s_servers' not in group_names"
       vars:
         traefik_image: "{{ config.edge.traefik.image }}"
         docker_network: "{{ config.networking.vps.docker_network }}"
@@ -129,6 +133,9 @@
         headscale_listen_port: "{{ config.apps.services.core.headscale.default_port }}"
         headscale_stun_port: "{{ config.apps.services.core.headscale.stun_port }}"
         vps_public_ip: "{{ config.networking.vps.public_ip }}"
+        docker_dns_servers:
+          - "{{ config.edge.traefik.dns_resolver_1.split(':')[0] }}"
+          - "{{ config.edge.traefik.dns_resolver_2.split(':')[0] }}"
         docker_network: "{{ config.networking.vps.docker_network }}"
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_cidr: "{{ config.networking.tailscale_cidr }}"

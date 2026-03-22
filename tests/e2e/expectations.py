@@ -99,7 +99,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     "n8n": ServiceExpectation(
         health_status=(200, 302),
-        auth_protected=True,
+        auth_protected=False,  # n8n 2.x has built-in auth; Authelia policy=bypass (OIDC is enterprise-only)
     ),
     "headscale": ServiceExpectation(
         skip_in_envs=("dev", "staging"),  # VPN on VPS only

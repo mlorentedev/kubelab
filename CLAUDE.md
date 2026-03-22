@@ -111,6 +111,13 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **SOPS secrets not auto-synced across envs**: When adding credentials to staging, manually add to prod too. Run `make secrets-audit` to detect gaps. TOOL-001/002 backlog items for automation.
 - **PVC backup (ADR-024)**: CronJob in prod overlay. Uses `sqlite3 .backup` for consistent SQLite snapshots. `make backup-pvc ENV=prod` for manual trigger. minio-data excluded (circular — deferred to Phase 5 Velero).
 - **Traefik ACME persistence is REQUIRED**: K3s Traefik uses `emptyDir` by default for `/data/acme.json`. Every pod restart loses certificates and requests new ones from Let's Encrypt. Rate limit: 5 certs per domain set per 168h. Add `persistence.enabled: true` to HelmChartConfig.
+- **VPS `ansible_host` must use `public_ip`**: VPS hosts Headscale (bootstrap). Using Tailscale IP creates circular dependency — can't reach VPS to fix Tailscale when Tailscale is down. Generator uses `vps.get("public_ip")`. Kubeconfig must also use public IP (162.55.57.175:6443).
+- **K3s `resolv-conf` on systemd-resolved hosts**: Must set `resolv-conf: "/run/systemd/resolve/resolv.conf"` in K3s config.yaml. Default `/etc/resolv.conf` contains `127.0.0.53` (stub) which isn't reachable from pods. Without this, CoreDNS can't forward external queries and ACME fails.
+- **Docker containers need explicit `dns:` on systemd-resolved hosts**: Host `/etc/resolv.conf` has `127.0.0.53` which is the pod/container's own loopback, not the host's resolver. Add `dns: [1.1.1.1, 8.8.8.8]` to compose services. Parameterized as `docker_dns_servers` in Headscale role.
+- **Headscale `override_local_dns` must be `false`**: `true` makes Tailscale override ALL clients' system DNS with MagicDNS (100.100.100.100). If VPN is down, ALL DNS fails. With `false`, only split DNS zones are affected.
+- **`deploy-vps` skips Traefik/errors when K3s is active**: `when: "'k3s_servers' not in group_names"` on traefik_vps and errors roles. Prevents Docker Compose Traefik from stealing ports 80/443 from K3s Traefik in prod.
+- **Headscale K8s routing (prod only)**: After K3s cutover, vpn.kubelab.live needs IngressRoute + Service + EndpointSlice in prod overlay (`headscale.yaml`). Headscale stays in Docker Compose (ADR-015) but K3s Traefik handles TLS termination. TLSOption `headscale-http11` forces HTTP/1.1 ALPN for Noise protocol.
+- **Loki prod IngressRoute uses `.local` TLD**: Patched to `tls: {}` (no certResolver). ACME can't issue certs for non-public TLDs.
 
 ## Workflow rules
 

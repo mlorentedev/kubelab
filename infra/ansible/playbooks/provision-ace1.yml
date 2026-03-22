@@ -150,6 +150,7 @@
         k3s_version: "{{ config.k3s.version }}"
         k3s_install_script_url: "{{ config.k3s.install_script_url }}"
         k3s_tls_san: "{{ _k3s_tls_san }}"
+        k3s_resolv_conf: "/run/systemd/resolve/resolv.conf"
         k3s_configure_traefik: true
         k3s_traefik_http_port: "{{ config.k3s.traefik.http_port }}"
         k3s_traefik_https_port: "{{ config.k3s.traefik.https_port }}"

@@ -8,6 +8,7 @@ headscale_config_dir: "{{ headscale_remote_dir }}/config"
 
 vps_public_ip: ""
 docker_network: "kubelab"
+docker_dns_servers: ["1.1.1.1", "8.8.8.8"]
 restart_policy: "unless-stopped"
 
 # Tailscale CIDR for IP allocation
