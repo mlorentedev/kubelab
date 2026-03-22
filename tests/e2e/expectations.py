@@ -84,13 +84,14 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     "loki": ServiceExpectation(
         health_status=(200, 302),
+        skip_in_envs=("prod",),  # Internal-only in prod (no public IngressRoute)
     ),
     # -- Core --
     "traefik": ServiceExpectation(
         health_status=(200, 302),
         auth_protected=True,
         api_endpoints={"/dashboard/": (200, 302, 401)},
-        skip_in_envs=("staging",),  # Dashboard has no IngressRoute on K3s staging
+        skip_in_envs=("staging", "prod"),  # Dashboard not exposed via IngressRoute on K3s
     ),
     # portainer: removed (PROD-K3S-000f, 2026-03-21)
     "gitea": ServiceExpectation(

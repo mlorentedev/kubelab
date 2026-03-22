@@ -59,6 +59,7 @@ help:
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads via Kustomize"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
+	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
@@ -298,6 +299,16 @@ deploy:
 .PHONY: backup
 backup:
 	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
+
+# K8s PVC backup — triggers a one-off Job from the CronJob (ADR-024)
+# Usage: make backup-pvc ENV=prod
+.PHONY: backup-pvc
+backup-pvc:
+	@test -n "$(ENV)" || (echo "Usage: make backup-pvc ENV=prod" && exit 1)
+	@echo "=== Triggering PVC backup ($(ENV)) ==="
+	@kubectl create job --from=cronjob/pvc-backup pvc-backup-manual-$$(date +%s) \
+		--namespace kubelab --kubeconfig $(KUBECONFIG_PATH)
+	@echo "✓ Backup job created. Monitor: kubectl get jobs -n kubelab --kubeconfig $(KUBECONFIG_PATH)"
 
 # K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior

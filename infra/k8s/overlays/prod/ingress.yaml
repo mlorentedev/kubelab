@@ -16,6 +16,8 @@ spec:
     - match: Host(`api.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
@@ -42,6 +44,8 @@ spec:
     - match: Host(`mlorente.dev`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages

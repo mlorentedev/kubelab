@@ -58,6 +58,7 @@ spec:
         app.kubernetes.io/component: core
         app.kubernetes.io/part-of: kubelab
     spec:
+      enableServiceLinks: false
       containers:
         - name: n8n
           image: n8nio/n8n:2.12.3

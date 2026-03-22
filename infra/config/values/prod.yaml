@@ -13,12 +13,22 @@ log_level: INFO
 debug_mode: false
 
 # ==========================================================================
-# K3S — Pattern C: alternate ports during side-by-side validation (ADR-015)
+# K3S — Production ports (cutover from Pattern C, ADR-015)
 # ==========================================================================
 k3s:
   traefik:
-    http_port: 8080
-    https_port: 8443
+    http_port: 80
+    https_port: 443
+
+# ==========================================================================
+# NETWORKING — prod topology overrides
+# ==========================================================================
+networking:
+  vps:
+    ansible_groups: ["vps", "docker_hosts", "k3s_servers"]
+  nodes:
+    ace1:
+      ansible_groups: ["docker_hosts", "minipc"]  # Not a K3s server in prod
 
 # ==========================================================================
 # PROTOCOLS & NETWORKING

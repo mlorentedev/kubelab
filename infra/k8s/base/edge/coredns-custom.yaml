@@ -23,3 +23,11 @@ data:
     staging.mlorente.dev:53 {
       forward . 100.64.0.10
     }
+    kubelab.live:53 {
+      rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local
+      forward . 10.43.0.10
+    }
+    mlorente.dev:53 {
+      rewrite name regex (.*)\.mlorente\.dev traefik.kube-system.svc.cluster.local
+      forward . 10.43.0.10
+    }

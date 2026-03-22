@@ -346,6 +346,14 @@ spec:
   forwardAuth:
     address: http://authelia.kubelab.svc.cluster.local:9091/api/authz/forward-auth
     trustForwardHeader: true
+    authRequestHeaders:
+      - Cookie
+      - Accept
+      - X-Forwarded-For
+      - X-Forwarded-Host
+      - X-Forwarded-Proto
+      - X-Forwarded-URI
+      - X-Forwarded-Method
     authResponseHeaders:
       - Remote-User
       - Remote-Groups

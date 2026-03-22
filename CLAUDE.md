@@ -101,6 +101,16 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Gitea OIDC CLI vs web process**: `gitea admin auth add-oauth` writes to SQLite but the web process caches in memory. Always restart Gitea after CLI auth changes.
 - **K3s pods can't resolve external domains by default**: Add `coredns-custom` ConfigMap in kube-system with forward zones. Applied via `make deploy-k8s` (separate kubectl step outside Kustomize overlay).
 - **error-pages middleware must NOT intercept 400-404**: Only 408, 429, 500-503. Application 4xx responses (401 auth, 404 not found) must pass through to API clients.
+- **n8n K8s MUST set `enableServiceLinks: false`**: K8s injects `N8N_PORT=tcp://...` which n8n can't parse, causing basic_auth fallback mode. Same pattern as Authelia.
+- **Authelia ForwardAuth MUST whitelist `authRequestHeaders`**: Exclude `Authorization` header. Browser caches basic auth credentials → sends `Authorization: Basic` → Authelia can't parse empty password → 403 loop. Whitelist: Cookie, Accept, X-Forwarded-*.
+- **Traefik HelmChartConfig API**: Use `additionalArguments: ["--api.dashboard=true", "--api.insecure=true"]`. The `api:` Helm values don't work in K3s bundled chart.
+- **Traefik HelmChartConfig ports**: `port` (container) must equal `exposedPort` (service). HTTP→HTTPS redirect uses container port. Mismatch → redirect includes wrong port (e.g., `:8443`).
+- **Ansible inventory env-aware for k3s_servers**: common.yaml has ace1 as k3s_server. prod.yaml MUST override `networking.vps.ansible_groups` to add `k3s_servers` and `networking.nodes.ace1.ansible_groups` to remove it. Regenerate with `toolkit infra ansible generate --env prod`.
+- **configure_oidc.py uses update-oauth**: When Gitea auth source exists with linked users, `delete` fails. Script uses `update-oauth --id N` to update config without breaking user linkages.
+- **Authelia OIDC issuer is request-dependent**: Accessing discovery via internal URL → issuer is internal URL. Gitea OIDC must use EXTERNAL URL for discovery (browser OIDC flows use external issuer in JWT).
+- **SOPS secrets not auto-synced across envs**: When adding credentials to staging, manually add to prod too. Run `make secrets-audit` to detect gaps. TOOL-001/002 backlog items for automation.
+- **PVC backup (ADR-024)**: CronJob in prod overlay. Uses `sqlite3 .backup` for consistent SQLite snapshots. `make backup-pvc ENV=prod` for manual trigger. minio-data excluded (circular — deferred to Phase 5 Velero).
+- **Traefik ACME persistence is REQUIRED**: K3s Traefik uses `emptyDir` by default for `/data/acme.json`. Every pod restart loses certificates and requests new ones from Let's Encrypt. Rate limit: 5 certs per domain set per 168h. Add `persistence.enabled: true` to HelmChartConfig.
 
 ## Workflow rules
 

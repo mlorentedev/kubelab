@@ -61,44 +61,50 @@ def configure_gitea_oidc(config: dict[str, str], env: str) -> None:
 
     print(f"Discovery URL: {discovery_url}")
 
-    # Delete existing auth source if present
+    # Check if auth source exists
+    auth_id = None
     result = gitea_cmd(["gitea", "admin", "auth", "list"], env)
     if result.returncode == 0 and "authelia" in result.stdout.lower():
         for line in result.stdout.strip().split("\n"):
             if "authelia" in line.lower():
                 auth_id = line.split()[0]
-                gitea_cmd(["gitea", "admin", "auth", "delete", "--id", auth_id], env)
-                print(f"Deleted existing auth source (ID={auth_id})")
                 break
 
-    # Create fresh with current config
-    result = gitea_cmd(
-        [
-            "gitea",
-            "admin",
-            "auth",
-            "add-oauth",
-            "--name",
-            "authelia",
-            "--provider",
-            "openidConnect",
-            "--key",
-            "gitea",
-            "--secret",
-            f"'{secret}'",
-            "--auto-discover-url",
-            f"'{discovery_url}'",
-            "--scopes",
-            "'openid,profile,email,groups'",
-        ],
-        env,
-    )
+    oauth_args = [
+        "--name",
+        "authelia",
+        "--provider",
+        "openidConnect",
+        "--key",
+        "gitea",
+        "--secret",
+        f"'{secret}'",
+        "--auto-discover-url",
+        f"'{discovery_url}'",
+        "--scopes",
+        "'openid,profile,email,groups'",
+    ]
+
+    if auth_id:
+        # Update existing source (preserves linked user accounts)
+        result = gitea_cmd(
+            ["gitea", "admin", "auth", "update-oauth", "--id", auth_id, *oauth_args],
+            env,
+        )
+        action = f"Updated existing auth source (ID={auth_id})"
+    else:
+        # Create new source
+        result = gitea_cmd(
+            ["gitea", "admin", "auth", "add-oauth", *oauth_args],
+            env,
+        )
+        action = "Created new Authelia OIDC provider"
 
     if result.returncode != 0:
-        print(f"ERROR: Create failed: {result.stderr}")
+        print(f"ERROR: {action.split()[0]} failed: {result.stderr}")
         sys.exit(1)
 
-    print("Created Authelia OIDC provider in Gitea")
+    print(action)
 
     # Restart Gitea to reload OIDC config from DB (CLI writes to SQLite but web process caches in memory)
     print("Restarting Gitea to reload OIDC config...")

@@ -68,7 +68,7 @@ class TestSecurityHeaders:
         self,
         svc_name: str,
         services_by_name: dict[str, ServiceHealthConfig],
-        http_client_follow: httpx.Client,
+        http_client: httpx.Client,
         env: str,
     ) -> None:
         if env == "dev":
@@ -82,7 +82,9 @@ class TestSecurityHeaders:
         if not svc:
             pytest.skip(f"{svc_name} not in {env} config")
 
-        r = http_client_follow.get(f"https://{svc.domain}{svc.health_path}")
+        # Use non-follow client: auth-protected services redirect to Authelia,
+        # and the redirect response (from Traefik) carries the HSTS header.
+        r = http_client.get(f"https://{svc.domain}{svc.health_path}")
 
         hsts = r.headers.get(_HSTS_HEADER, "")
         assert "max-age=" in hsts, (
