@@ -68,13 +68,26 @@ metadata:
     app.kubernetes.io/part-of: kubelab
 data:
   GF_SERVER_ROOT_URL: "https://grafana.staging.kubelab.live"
-  GF_SECURITY_ADMIN_USER: "admin"
   GF_AUTH_ANONYMOUS_ENABLED: "false"
+  # Authelia ForwardAuth (reverse proxy headers)
   GF_AUTH_PROXY_ENABLED: "true"
   GF_AUTH_PROXY_HEADER_NAME: "Remote-User"
   GF_AUTH_PROXY_HEADER_PROPERTY: "username"
   GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
   GF_AUTH_PROXY_HEADERS: "Email:Remote-Email Name:Remote-Name Groups:Remote-Groups"
+  # Authelia OIDC (direct login — enables "Sign in with Authelia" button)
+  GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+  GF_AUTH_GENERIC_OAUTH_NAME: "Authelia"
+  GF_AUTH_GENERIC_OAUTH_CLIENT_ID: "grafana"
+  GF_AUTH_GENERIC_OAUTH_SCOPES: "openid profile email groups"
+  GF_AUTH_GENERIC_OAUTH_AUTH_URL: "https://auth.staging.kubelab.live/api/oidc/authorization"
+  GF_AUTH_GENERIC_OAUTH_TOKEN_URL: "https://auth.staging.kubelab.live/api/oidc/token"
+  GF_AUTH_GENERIC_OAUTH_API_URL: "https://auth.staging.kubelab.live/api/oidc/userinfo"
+  GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH: "preferred_username"
+  GF_AUTH_GENERIC_OAUTH_GROUPS_ATTRIBUTE_PATH: "groups"
+  GF_AUTH_GENERIC_OAUTH_NAME_ATTRIBUTE_PATH: "name"
+  GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+  GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN: "false"
   GF_LOG_MODE: "console"
   GF_LOG_LEVEL: "info"
 ---
@@ -114,11 +127,21 @@ spec:
             - configMapRef:
                 name: grafana-config
           env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-user
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: grafana-admin
                   key: password
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: oidc-client-secret
           volumeMounts:
             - name: data
               mountPath: /var/lib/grafana

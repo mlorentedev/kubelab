@@ -97,6 +97,10 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **K3s HelmChartConfig managed by Ansible**: Template at `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2`. Includes ACME config. Do NOT create static HelmChartConfig in `infra/k8s/`.
 - **All nodes use NOPASSWD sudo**: SSH hardened + NOPASSWD on all nodes (2026-03-20). No `-K` needed. For NEW nodes, bootstrap NOPASSWD manually first, then provision with `make provision NODE=x ENV=y ASK_PASS=1`.
 - **Pattern C ports are in prod.yaml only**: common.yaml has 80/443 (default). prod.yaml overrides to 8080/8443 for side-by-side validation. Do NOT put alternate ports in common.yaml.
+- **Authelia does NOT auto-reload configuration.yml**: ConfigMap changes require pod restart. Long-term: use configMapGenerator hash suffix for automatic rolling updates.
+- **Gitea OIDC CLI vs web process**: `gitea admin auth add-oauth` writes to SQLite but the web process caches in memory. Always restart Gitea after CLI auth changes.
+- **K3s pods can't resolve external domains by default**: Add `coredns-custom` ConfigMap in kube-system with forward zones. Applied via `make deploy-k8s` (separate kubectl step outside Kustomize overlay).
+- **error-pages middleware must NOT intercept 400-404**: Only 408, 429, 500-503. Application 4xx responses (401 auth, 404 not found) must pass through to API clients.
 
 ## Workflow rules
 

@@ -113,7 +113,7 @@ spec:
               readOnly: true
       containers:
         - name: crowdsec
-          image: crowdsecurity/crowdsec:latest
+          image: crowdsecurity/crowdsec:v1.7.6
           # Ensure bouncer is registered after every pod start.
           # CrowdSec only auto-registers from BOUNCER_KEY_* on first run;
           # subsequent starts skip registration even if the DB lost the entry.

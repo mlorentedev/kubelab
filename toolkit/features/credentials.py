@@ -425,6 +425,20 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             minio_oidc_client_secret_hash = self.generate_argon2_hash(minio_oidc_client_secret)
 
+        # 11b. Generate Gitea OIDC Client Secret and its hash
+        logger.info("Generating Gitea OIDC Client Secret...")
+        gitea_oidc_client_secret = secrets.token_urlsafe(64)
+        logger.success("Gitea OIDC Client Secret generated.")
+
+        logger.info("Generating Gitea OIDC Client Secret hash...")
+        try:
+            gitea_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(gitea_oidc_client_secret)
+            logger.success("Gitea OIDC Client Secret hash generated.")
+        except Exception as e:
+            logger.warning(f"Could not generate Gitea OIDC client secret hash via Docker: {e}")
+            logger.warning("Using Argon2 hash from local library instead...")
+            gitea_oidc_client_secret_hash = self.generate_argon2_hash(gitea_oidc_client_secret)
+
         # 12. Generate CrowdSec Bouncer API Key
         # Determine bouncer name from config (e.g., crowdsec-bouncer-traefik)
         cm = ConfigurationManager(env, self.project_root)
@@ -455,6 +469,7 @@ class CredentialsManager:
             f"{_auth}.oidc_client_secret_grafana": grafana_oidc_client_secret,
             f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
+            f"{_auth}.oidc_client_secret_gitea_hash": gitea_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
@@ -462,6 +477,8 @@ class CredentialsManager:
             "apps.services.data.minio.root_user": common_username,
             "apps.services.data.minio.root_password": common_password,
             "apps.services.data.minio.oidc_client_secret": minio_oidc_client_secret,
+            # Gitea secrets
+            "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
         }
@@ -587,6 +604,12 @@ class CredentialsManager:
         print(f'                oidc_client_secret_grafana_hash: "{grafana_hash}"')
         minio_hash = secrets_dict[f"{_a}.oidc_client_secret_minio_hash"]
         print(f'                oidc_client_secret_minio_hash: "{minio_hash}"')
+        gitea_hash = secrets_dict[f"{_a}.oidc_client_secret_gitea_hash"]
+        print(f'                oidc_client_secret_gitea_hash: "{gitea_hash}"')
+        print("        core:")
+        print("            gitea:")
+        gitea_oidc = secrets_dict["apps.services.core.gitea.oidc_client_secret"]
+        print(f'                oidc_client_secret: "{gitea_oidc}"')
         print("")
 
         logger.success("Secrets generated. Copy above to SOPS, then run 'toolkit config generate'.")

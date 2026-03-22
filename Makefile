@@ -56,7 +56,9 @@ help:
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
 	@echo "Kubernetes:"
+	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads via Kustomize"
+	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
@@ -301,9 +303,35 @@ backup:
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
 KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
 
+.PHONY: sync-k8s-images
+sync-k8s-images:
+	@echo "=== Syncing K8s image tags from common.yaml ==="
+	@$(POETRY) run python toolkit/scripts/sync_k8s_images.py
+	@echo "✓ Image tags synced"
+
+.PHONY: sync-oidc-hashes
+sync-oidc-hashes:
+	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
+	@echo "=== Syncing OIDC hashes from SOPS → K8s ConfigMaps ($(ENV)) ==="
+	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV)
+	@echo "✓ OIDC hashes synced"
+
+.PHONY: configure-oidc
+configure-oidc:
+	@test -n "$(ENV)" || (echo "Usage: make configure-oidc ENV=staging|prod" && exit 1)
+	@echo "=== Configuring OIDC providers for $(ENV) ==="
+	@$(POETRY) run python toolkit/scripts/configure_oidc.py --env $(ENV)
+	@echo "✓ OIDC providers configured for $(ENV)"
+
 .PHONY: deploy-k8s
-deploy-k8s:
+deploy-k8s: sync-k8s-images
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
+	@echo "=== Applying CoreDNS hairpin DNS ($(ENV)) ==="
+	@kubectl apply -f infra/k8s/base/edge/coredns-custom.yaml --kubeconfig $(KUBECONFIG_PATH)
+	@echo "=== Syncing OIDC hashes from SOPS ($(ENV)) ==="
+	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV) || true
+	@echo "=== Applying K8s secrets from SOPS ($(ENV)) ==="
+	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
 	@echo "=== Deploying K8s workloads ($(ENV)) ==="
 	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG_PATH)
 	@echo "✓ K8s workloads deployed for $(ENV)"

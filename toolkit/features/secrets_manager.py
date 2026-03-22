@@ -195,6 +195,15 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="$argon2id$v=19$...",
         rotate_note="Auto-derived from minio.oidc_client_secret.",
     ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_gitea_hash",
+        description="Argon2 hash of Gitea OIDC client secret",
+        kind=SecretKind.ARGON2_HASH,
+        services=("authelia",),
+        derived_from="apps.services.core.gitea.oidc_client_secret",
+        format_hint="$argon2id$v=19$...",
+        rotate_note="Auto-derived from gitea.oidc_client_secret.",
+    ),
     # =========================================================================
     # Grafana
     # =========================================================================
@@ -240,6 +249,13 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.PASSWORD,
         services=("gitea",),
         rotate_note="Change via Gitea admin UI or CLI.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.gitea.oidc_client_secret",
+        description="Gitea OIDC client secret for Authelia SSO (plaintext)",
+        kind=SecretKind.OIDC_CLIENT_SECRET,
+        services=("gitea", "authelia"),
+        rotate_note="Must also regenerate authelia.oidc_client_secret_gitea_hash.",
     ),
     # =========================================================================
     # N8N
@@ -531,8 +547,22 @@ class SecretsManager:
 
             plaintext = self._resolve_key(decrypted, spec.derived_from)
             if not plaintext:
-                logger.warning(f"  Source not found: {spec.derived_from} (needed for {spec.key_path})")
-                continue
+                # Auto-generate OIDC client secrets if missing
+                if spec.kind == SecretKind.ARGON2_HASH and "oidc_client_secret" in spec.derived_from:
+                    import secrets as _secrets
+
+                    new_secret = _secrets.token_urlsafe(64)
+                    if cm.update_secret_key(spec.derived_from, new_secret):
+                        logger.success(f"  Auto-generated: {spec.derived_from}")
+                        plaintext = new_secret
+                        # Refresh decrypted data for subsequent lookups
+                        decrypted = cm._decrypt_sops(cm.secrets_path / f"{env}.enc.yaml")
+                    else:
+                        logger.error(f"  Failed to auto-generate: {spec.derived_from}")
+                        continue
+                else:
+                    logger.warning(f"  Source not found: {spec.derived_from} (needed for {spec.key_path})")
+                    continue
 
             hash_value = cred.generate_argon2_hash(str(plaintext))
             hashes[spec.key_path] = hash_value

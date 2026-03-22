@@ -19,6 +19,7 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: api
           port: 8080
@@ -44,8 +45,9 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: web
-          port: 4321
+          port: 8080
   tls:
     certResolver: letsencrypt

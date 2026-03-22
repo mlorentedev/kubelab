@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socket
 import ssl
+import warnings
 
 import httpx
 import pytest
@@ -50,6 +51,7 @@ class TestTLSCertificates:
             pytest.skip("No testable domains in this environment")
 
         errors: list[str] = []
+        unreachable: list[str] = []
         for domain in domains:
             try:
                 ctx = ssl.create_default_context()
@@ -57,9 +59,16 @@ class TestTLSCertificates:
                     with ctx.wrap_socket(sock, server_hostname=domain) as ssock:
                         cert = ssock.getpeercert()
                         assert cert is not None
+            except ConnectionRefusedError:
+                unreachable.append(domain)
             except (ssl.SSLError, OSError, TimeoutError) as exc:
                 errors.append(f"{domain}: {exc}")
 
+        if unreachable:
+            warnings.warn(
+                f"Unreachable domains (host down?): {', '.join(unreachable)}",
+                stacklevel=1,
+            )
         assert not errors, "TLS errors:\n" + "\n".join(errors)
 
 

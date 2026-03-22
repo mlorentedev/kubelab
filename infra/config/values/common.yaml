@@ -296,7 +296,7 @@ apps:
 
       n8n:
         name: n8n
-        image: n8nio/n8n:1.95.3
+        image: n8nio/n8n:2.12.3
         domain: n8n.kubelab.live
         enable_auth: false
         auth_level: bypass
@@ -305,7 +305,7 @@ apps:
 
       gitea:
         name: gitea
-        image: gitea/gitea:1.23
+        image: gitea/gitea:1.25.5
         domain: gitea.kubelab.live
         app_name: "KubeLab Git"
         enable_auth: false
@@ -373,7 +373,7 @@ apps:
       loki:
         name: loki
         domain: loki.kubelab.live
-        image: grafana/loki:3.3.2
+        image: grafana/loki:3.6.4
         vector_image: timberio/vector:0.43.1-alpine
         enable_auth: true
         auth_level: one_factor
@@ -388,7 +388,7 @@ apps:
       uptime_kuma:
         name: uptime-kuma
         domain: status.kubelab.live
-        image: louislam/uptime-kuma:2.0.2
+        image: louislam/uptime-kuma:2.2.1
         enable_auth: true
         auth_level: one_factor
         default_port: 3001

@@ -30,7 +30,7 @@ edge:
   nginx:
     domain: errors.staging.kubelab.live
   cloudflared:
-    enabled: false # Tailscale replaces cloudflared for staging access
+    enabled: false  # Tailscale replaces cloudflared for staging access
 # ==========================================================================
 # APPS SETTINGS
 # ==========================================================================
@@ -44,18 +44,17 @@ apps:
       email_secure: true
     web:
       backend_url: "https://api.staging.kubelab.live"
-      allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live"
-      domain: web.staging.kubelab.live
-      site_domain: staging.kubelab.live
-      site_url: https://web.staging.kubelab.live
+      allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live,.staging.mlorente.dev"
+      domain: staging.mlorente.dev
+      site_domain: staging.mlorente.dev
+      site_url: https://staging.mlorente.dev
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
   # Third-party services
   services:
     core:
-      portainer:
-        domain: portainer.staging.kubelab.live
+      # portainer: removed (PROD-K3S-000f, 2026-03-21)
 
       gitea:
         domain: gitea.staging.kubelab.live

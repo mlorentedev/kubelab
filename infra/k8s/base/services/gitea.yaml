@@ -63,7 +63,7 @@ spec:
     spec:
       containers:
         - name: gitea
-          image: gitea/gitea:1.23
+          image: gitea/gitea:1.25.5
           ports:
             - name: http
               containerPort: 3000
@@ -82,6 +82,37 @@ spec:
                   key: SECRET_KEY
             - name: GITEA__security__INSTALL_LOCK
               value: "true"
+            - name: GITEA_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-secrets
+                  key: ADMIN_USER
+            - name: GITEA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-secrets
+                  key: ADMIN_PASSWORD
+            - name: GITEA_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-secrets
+                  key: ADMIN_EMAIL
+          # Auto-create admin user on first start (idempotent)
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    sleep 5
+                    su git -c "gitea admin user list 2>/dev/null | grep -q $GITEA_ADMIN_USER" || \
+                    su git -c "gitea admin user create \
+                      --admin \
+                      --username $GITEA_ADMIN_USER \
+                      --password $GITEA_ADMIN_PASSWORD \
+                      --email $GITEA_ADMIN_EMAIL \
+                      --must-change-password=false" 2>/dev/null || true
           volumeMounts:
             - name: data
               mountPath: /data

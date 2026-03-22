@@ -92,11 +92,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         api_endpoints={"/dashboard/": (200, 302, 401)},
         skip_in_envs=("staging",),  # Dashboard has no IngressRoute on K3s staging
     ),
-    "portainer": ServiceExpectation(
-        health_status=(200, 302, 307),
-        api_json_keys={"/api/status": ["Version"]},
-        skip_in_envs=("staging",),  # Docker Compose only, no K3s IngressRoute
-    ),
+    # portainer: removed (PROD-K3S-000f, 2026-03-21)
     "gitea": ServiceExpectation(
         api_json_keys={"/api/v1/version": ["version"]},
     ),

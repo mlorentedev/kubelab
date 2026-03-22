@@ -183,6 +183,32 @@ data:
               - profile
               - email
             consent_mode: implicit
+          - client_id: grafana
+            client_name: Grafana
+            client_secret: '$pbkdf2-sha512$310000$placeholder$placeholder'  # synced via: make sync-oidc-hashes ENV=prod
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://grafana.kubelab.live/login/generic_oauth
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+            consent_mode: implicit
+          - client_id: gitea
+            client_name: Gitea
+            client_secret: '$pbkdf2-sha512$310000$placeholder$placeholder'  # synced via: make sync-oidc-hashes ENV=prod
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://gitea.kubelab.live/user/oauth2/authelia/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+            consent_mode: implicit
 ---
 # Override base grafana IngressRoute with prod domain
 apiVersion: traefik.io/v1alpha1
@@ -200,7 +226,9 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: authelia
+          namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: grafana
           port: 3000
@@ -245,6 +273,7 @@ spec:
       kind: Rule
       middlewares:
         - name: authelia
+          namespace: kubelab
       services:
         - name: loki
           port: 3100
@@ -286,6 +315,7 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: gitea
           port: 3000
@@ -301,7 +331,7 @@ metadata:
 data:
   N8N_HOST: "n8n.kubelab.live"
   N8N_PROTOCOL: "https"
-  N8N_PORT: "5678"
+  N8N_PROXY_HOPS: "1"
   WEBHOOK_URL: "https://n8n.kubelab.live/"
   DB_TYPE: "sqlite"
   GENERIC_TIMEZONE: "Europe/Madrid"
@@ -323,8 +353,6 @@ spec:
       middlewares:
         - name: crowdsec-bouncer
           namespace: kubelab
-        - name: authelia
-        - name: error-pages
       services:
         - name: n8n
           port: 5678
@@ -362,6 +390,7 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: minio
           port: 9000
@@ -384,6 +413,7 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: minio
           port: 9001
@@ -406,6 +436,7 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: uptime-kuma
           port: 3001
