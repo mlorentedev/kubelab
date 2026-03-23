@@ -131,7 +131,7 @@ class K8sGenerator(BaseGenerator):
 
         Args:
             env_vars: Flattened environment variables dictionary
-            component: Component name (e.g., 'api', 'portainer')
+            component: Component name (e.g., 'api', 'grafana')
             suffix: Variable suffix (e.g., 'DOMAIN', 'DEFAULT_PORT')
 
         Returns:

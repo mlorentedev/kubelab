@@ -91,9 +91,8 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         health_status=(200, 302),
         auth_protected=True,
         api_endpoints={"/dashboard/": (200, 302, 401)},
-        skip_in_envs=("staging", "prod"),  # Dashboard not exposed via IngressRoute on K3s
+        skip_in_envs=("dev",),  # Dashboard exposed via IngressRoute in staging + prod with Authelia
     ),
-    # portainer: removed (PROD-K3S-000f, 2026-03-21)
     "gitea": ServiceExpectation(
         api_json_keys={"/api/v1/version": ["version"]},
     ),

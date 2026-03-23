@@ -54,8 +54,6 @@ apps:
   # Third-party services
   services:
     core:
-      # portainer: removed (PROD-K3S-000f, 2026-03-21)
-
       gitea:
         domain: gitea.staging.kubelab.live
 

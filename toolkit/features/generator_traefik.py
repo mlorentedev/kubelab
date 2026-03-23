@@ -125,7 +125,7 @@ class TraefikGenerator(BaseGenerator):
 
         Args:
             env_vars: Environment variables dictionary
-            component: Component name (e.g., 'api', 'portainer')
+            component: Component name (e.g., 'api', 'grafana')
             suffix: Variable suffix (e.g., 'DOMAIN', 'DEFAULT_PORT')
 
         Returns:
@@ -258,7 +258,7 @@ class TraefikGenerator(BaseGenerator):
                 continue
 
             # Determine auth requirement (sensitive services)
-            sensitive_services = {"portainer", "traefik", "grafana", "kestra", "loki"}
+            sensitive_services = {"traefik", "grafana", "kestra", "loki"}
             enable_auth = component.lower() in sensitive_services
 
             # Check for explicit override

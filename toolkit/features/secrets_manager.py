@@ -134,7 +134,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         derived_from="(interactive password prompt)",
         format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
         rotate_note="Update E2E test config if password changes.",
-        envs=("dev", "staging"),
+        envs=("dev", "staging", "prod"),
     ),
     # =========================================================================
     # Authelia — OIDC Provider

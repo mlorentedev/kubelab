@@ -96,10 +96,6 @@
             backend_url: "http://web:{{ config.apps.platform.web.default_port }}"
             middlewares: [secure-headers@file, rate-limit@file, error-pages]
           # Core infrastructure services
-          - name: portainer
-            domain: "{{ config.apps.services.core.portainer.domain }}"
-            backend_url: "http://portainer:{{ config.apps.services.core.portainer.default_port }}"
-            middlewares: [secure-headers@file, rate-limit@file, error-pages]
           - name: n8n
             domain: "{{ config.apps.services.core.n8n.domain }}"
             backend_url: "http://n8n:{{ config.apps.services.core.n8n.default_port }}"

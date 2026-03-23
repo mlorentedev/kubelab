@@ -360,7 +360,7 @@ class CredentialsManager:
         jwt_secret_reset_password = secrets.token_urlsafe(64)
         logger.success("JWT Secret for password reset generated.")
 
-        # 7. Generate OIDC Client Secret and its hash (General Authelia client, e.g., for Portainer)
+        # 7. Generate OIDC Client Secret and its hash (General Authelia client)
         logger.info("Generating OIDC Client Secret (General Authelia client)...")
         oidc_client_secret = secrets.token_urlsafe(64)
         logger.success("OIDC Client Secret generated.")

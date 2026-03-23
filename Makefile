@@ -140,7 +140,7 @@ regen-certs:
 DEV_DOMAINS := mlorente.test \
 	traefik.kubelab.test api.kubelab.test blog.kubelab.test \
 	auth.kubelab.test grafana.kubelab.test loki.kubelab.test \
-	portainer.kubelab.test gitea.kubelab.test n8n.kubelab.test \
+	gitea.kubelab.test n8n.kubelab.test \
 	status.kubelab.test minio.kubelab.test console.minio.kubelab.test \
 	crowdsec.kubelab.test errors.kubelab.test
 
@@ -165,7 +165,7 @@ setup-local-dns:
 # Development Shortcuts
 # -----------------------------------------------------------------------------
 
-.PHONE: credentials-generate
+.PHONY: credentials-generate
 credentials-generate:
 	@$(TOOLKIT) credentials generate --env dev
 	@echo "✓ Credentials generated"
@@ -185,7 +185,7 @@ build-dev:
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		api web errors portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api web errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -193,7 +193,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		api web errors portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api web errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -218,11 +218,10 @@ dev-full-reset: dev-full-clean credentials-generate
 	@read -p "" # Pauses execution until user presses Enter
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik portainer gitea n8n uptime loki grafana api web errors minio github-runner --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api web errors minio github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
 	@echo ""
 	@echo "--- Post-start manual steps ---"
-	@echo "  Portainer : set admin password at https://portainer.kubelab.test"
 	@echo "  Gitea     : docker exec --user git gitea gitea admin user create --admin --username admin --password <pass> --email <email> --must-change-password=false"
 	@echo "  n8n       : create owner account at https://n8n.kubelab.test"
 	@echo "  MinIO     : login at https://console.minio.kubelab.test with root creds from SOPS"
