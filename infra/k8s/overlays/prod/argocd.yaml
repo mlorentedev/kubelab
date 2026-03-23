@@ -19,8 +19,8 @@ metadata:
 spec:
   ports:
     - name: http
-      port: 80
-      targetPort: 80
+      port: 30080
+      targetPort: 30080
       protocol: TCP
 ---
 apiVersion: discovery.k8s.io/v1
@@ -36,7 +36,7 @@ metadata:
 addressType: IPv4
 ports:
   - name: http
-    port: 80
+    port: 30080
     protocol: TCP
 endpoints:
   - addresses:
@@ -69,6 +69,6 @@ spec:
           namespace: kubelab
       services:
         - name: argocd
-          port: 80
+          port: 30080
   tls:
     certResolver: letsencrypt

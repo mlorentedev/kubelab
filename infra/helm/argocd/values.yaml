@@ -6,6 +6,10 @@ global:
 
 server:
   replicas: 1
+  service:
+    type: NodePort
+    nodePortHttp: 30080
+    nodePortHttps: 30443
   resources:
     requests:
       cpu: 50m
@@ -13,7 +17,7 @@ server:
     limits:
       memory: 256Mi
   extraArgs:
-    - --insecure  # TLS terminated by Traefik, not Argo CD server
+    - --insecure  # TLS terminated by prod Traefik, not Argo CD server
 
 controller:
   replicas: 1
