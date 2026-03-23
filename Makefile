@@ -367,6 +367,16 @@ tf-aws-destroy:
 	@cd infra/terraform/aws && terraform destroy -var-file=aws.tfvars
 	@rm -f infra/terraform/aws/aws.tfvars
 
+# Terraform DNS (Cloudflare) — SOPS-injected token
+.PHONY: tf-dns-plan tf-dns-apply
+tf-dns-plan:
+	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		cd infra/terraform/dns && terraform plan -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
+
+tf-dns-apply:
+	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
+
 .PHONY: sync-k8s-images
 sync-k8s-images:
 	@echo "=== Syncing K8s image tags from common.yaml ==="
