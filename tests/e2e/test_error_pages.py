@@ -62,8 +62,8 @@ class TestCustomErrorPages:
             pytest.skip(f"Got {r.status_code} instead of 404")
 
         # error-pages does NOT intercept 404 — backend response passes through
-        ct = r.headers.get("content-type", "")
-        assert "text/html" not in ct or "página no encontrada" not in r.text.lower(), (
+        # Verify the response is NOT our custom error page (which contains "move along")
+        assert "move along" not in r.text.lower(), (
             "404 should NOT be intercepted by error-pages middleware"
         )
 

@@ -1,0 +1,35 @@
+---
+# staging.kubelab.live → staging.mlorente.dev 301 redirect
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kubelab-redirect
+  namespace: kubelab
+spec:
+  redirectRegex:
+    regex: "^https://staging\\.kubelab\\.live/(.*)"
+    replacement: "https://staging.mlorente.dev/${1}"
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kubelab-redirect
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: kubelab-redirect
+      services:
+        - name: errors
+          port: 80
+  tls:
+    certResolver: letsencrypt
+    domains:
+      - main: "staging.kubelab.live"
+        sans:
+          - "*.staging.kubelab.live"
