@@ -2,10 +2,7 @@
 name: Create Global Release Bundle
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  push:
     branches:
       - master
   workflow_dispatch:
@@ -17,7 +14,6 @@ jobs:
   create-global-release:
     name: Create Release Bundle
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
