@@ -158,6 +158,6 @@ class TestUnknownHostRouting:
         assert r.status_code == 404, (
             f"Expected 404 for unknown host, got {r.status_code}"
         )
-        assert "página no encontrada" in r.text.lower(), (
+        assert "404" in r.text and "move along" in r.text.lower(), (
             "Unknown host should show errors custom 404 page"
         )
