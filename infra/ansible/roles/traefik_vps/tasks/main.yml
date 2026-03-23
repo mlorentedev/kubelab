@@ -10,18 +10,6 @@
     - "{{ traefik_certs_dir }}"
     - "{{ traefik_logs_dir }}"
 
-# --- Network migration (proxy → kubelab) ---
-- name: Check if legacy 'proxy' network exists
-  command: docker network inspect proxy
-  register: proxy_network
-  changed_when: false
-  failed_when: false
-  check_mode: false
-
-- name: Migrate network (proxy → kubelab)
-  include_tasks: migrate_network.yml
-  when: proxy_network.rc == 0
-
 # --- Ensure target network exists ---
 - name: Ensure Docker network exists
   community.docker.docker_network:
