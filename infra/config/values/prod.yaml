@@ -24,7 +24,8 @@ k3s:
 # NETWORKING — prod topology overrides
 # ==========================================================================
 networking:
-  # vps.ansible_groups: k3s_servers now in common.yaml (permanent after ADR-023 cutover)
+  vps:
+    ansible_groups: ["vps", "docker_hosts", "k3s_servers"]  # VPS runs K3s in prod only
   nodes:
     ace1:
       ansible_groups: ["docker_hosts", "minipc"]  # Not a K3s server in prod

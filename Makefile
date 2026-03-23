@@ -339,7 +339,7 @@ deploy-k8s: sync-k8s-images
 	@echo "=== Applying CoreDNS hairpin DNS ($(ENV)) ==="
 	@kubectl apply -f infra/k8s/base/edge/coredns-custom.yaml --kubeconfig $(KUBECONFIG_PATH)
 	@echo "=== Syncing OIDC hashes from SOPS ($(ENV)) ==="
-	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV) || true
+	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV)
 	@echo "=== Applying K8s secrets from SOPS ($(ENV)) ==="
 	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
 	@echo "=== Deploying K8s workloads ($(ENV)) ==="
