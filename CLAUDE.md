@@ -100,7 +100,9 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Authelia does NOT auto-reload configuration.yml**: ConfigMap changes require pod restart. Long-term: use configMapGenerator hash suffix for automatic rolling updates.
 - **Gitea OIDC CLI vs web process**: `gitea admin auth add-oauth` writes to SQLite but the web process caches in memory. Always restart Gitea after CLI auth changes.
 - **K3s pods can't resolve external domains by default**: Add `coredns-custom` ConfigMap in kube-system with forward zones. Applied via `make deploy-k8s` (separate kubectl step outside Kustomize overlay).
-- **error-pages middleware must NOT intercept 400-404**: Only 408, 429, 500-503. Application 4xx responses (401 auth, 404 not found) must pass through to API clients.
+- **error-pages middleware intercepts 502/503/504 ONLY**: Industry standard — infrastructure errors where backend is unreachable. Application errors (4xx, 500, 429) must pass through to preserve JSON responses and rate-limit headers.
+- **Custom app images need manual pin in kustomization.yaml**: `sync_k8s_images.py` only handles third-party images. After releasing a custom app (errors, api, web), update its tag in `infra/k8s/base/kustomization.yaml` `images:` section. `kubectl apply -k` may need `rollout restart` if image digest didn't change. Argo CD Image Updater (Phase 3) will automate this.
+- **release-please ignores `chore:` for version bumps**: Only `fix:` (patch) and `feat:` (minor) trigger releases. If changes need a Docker image rebuild, use the appropriate prefix.
 - **n8n K8s MUST set `enableServiceLinks: false`**: K8s injects `N8N_PORT=tcp://...` which n8n can't parse, causing basic_auth fallback mode. Same pattern as Authelia.
 - **Authelia ForwardAuth MUST whitelist `authRequestHeaders`**: Exclude `Authorization` header. Browser caches basic auth credentials → sends `Authorization: Basic` → Authelia can't parse empty password → 403 loop. Whitelist: Cookie, Accept, X-Forwarded-*.
 - **Traefik HelmChartConfig API**: Use `additionalArguments: ["--api.dashboard=true", "--api.insecure=true"]`. The `api:` Helm values don't work in K3s bundled chart.
