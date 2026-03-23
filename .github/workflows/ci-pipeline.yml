@@ -95,10 +95,13 @@ jobs:
             echo "version=skip" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping Docker build (release-please handles stable releases)"
           else
-            # Feature branches: release candidate (e.g., 0.1.0-rc.142)
-            FINAL_VERSION="${BASE_VERSION}-rc.${RUN_NUMBER}"
+            # Feature branches: bump patch so RCs target the NEXT unreleased version
+            # e.g., version.txt=1.1.1 (already released) → RC base=1.1.2 → tag=1.1.2-rc.205
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+            RC_BASE="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            FINAL_VERSION="${RC_BASE}-rc.${RUN_NUMBER}"
             echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
-            echo "::notice::[DEV] Feature build: $FINAL_VERSION"
+            echo "::notice::[DEV] Feature build: $FINAL_VERSION (next release after $BASE_VERSION)"
           fi
 
       # API
