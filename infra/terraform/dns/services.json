@@ -70,5 +70,11 @@
     "zone": "kubelab",
     "proxied": false,
     "environments": ["prod"]
+  },
+  {
+    "name": "argo",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
   }
 ]

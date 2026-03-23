@@ -1,0 +1,62 @@
+# Argo CD — non-HA, tuned for t4g.micro (1 vCPU, 1GB RAM)
+# Ref: ADR-023 Phase 3
+
+global:
+  domain: argo.kubelab.live
+
+server:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  extraArgs:
+    - --insecure  # TLS terminated by Traefik, not Argo CD server
+
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 384Mi
+
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+# Disable components we don't need on a 1GB instance
+dex:
+  enabled: false  # No external SSO on hub — Argo CD built-in auth
+
+notifications:
+  enabled: false  # ARGO-011 — enable later
+
+applicationSet:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+configs:
+  params:
+    server.insecure: true  # TLS at Traefik level, not Argo
