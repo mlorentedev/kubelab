@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.0...errors-v1.1.1) (2026-03-23)
+
+
+### Miscellaneous
+
+* ADR-023 Phase 2 closeout — cleanup, hardening, E2E improvements ([#121](https://github.com/mlorentedev/kubelab/issues/121)) ([2e407c9](https://github.com/mlorentedev/kubelab/commit/2e407c94bf7a5f9cf2a5d15ef5c0b1a6ca4a9697))
+
 ## [1.1.0](https://github.com/mlorentedev/kubelab/compare/errors-v1.0.1...errors-v1.1.0) (2026-03-16)
 
 
