@@ -35,8 +35,6 @@ class ConfigurationManager:
     def _load_yaml(self, path: Path) -> Dict[str, Any]:
         """Load a YAML file silently."""
         if not path.exists():
-            # It is okay if specific env override doesn't exist, but warn for debugging
-            # self._get_logger().debug(f"Configuration file not found: {path}")
             return {}
 
         try:

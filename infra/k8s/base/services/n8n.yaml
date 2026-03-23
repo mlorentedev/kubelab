@@ -28,8 +28,8 @@ data:
   # Domain from: apps.services.core.n8n.domain (staging.yaml)
   N8N_HOST: "n8n.staging.kubelab.live"
   N8N_PROTOCOL: "https"
-  N8N_PORT: "5678"
   WEBHOOK_URL: "https://n8n.staging.kubelab.live/"
+  N8N_PROXY_HOPS: "1"
   DB_TYPE: "sqlite"
   GENERIC_TIMEZONE: "Europe/Madrid"
   N8N_LOG_LEVEL: "info"
@@ -58,9 +58,10 @@ spec:
         app.kubernetes.io/component: core
         app.kubernetes.io/part-of: kubelab
     spec:
+      enableServiceLinks: false
       containers:
         - name: n8n
-          image: n8nio/n8n:1.95.3
+          image: n8nio/n8n:2.12.3
           ports:
             - name: http
               containerPort: 5678
@@ -141,8 +142,6 @@ spec:
       kind: Rule
       middlewares:
         - name: secure-headers
-        - name: error-pages
-        - name: authelia
         - name: crowdsec-bouncer
       services:
         - name: n8n

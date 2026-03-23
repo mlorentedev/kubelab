@@ -1,0 +1,132 @@
+---
+# PVC Backup CronJob — ADR-024
+# Backs up critical PVCs (gitea, n8n, authelia) to MinIO bucket.
+# Uses sqlite3 .backup for application-consistent database snapshots.
+# Prod only — staging data is disposable.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pvc-backup
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pvc-backup
+    app.kubernetes.io/component: ops
+    app.kubernetes.io/part-of: kubelab
+spec:
+  schedule: "0 3 * * *"  # Daily at 3 AM UTC (5 AM CEST)
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800  # 30 min max
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: pvc-backup
+            app.kubernetes.io/component: ops
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:3.21
+              command: ["/bin/sh", "-e", "-c"]
+              args:
+                - |
+                  echo "=== PVC Backup started at $(date -u) ==="
+
+                  # Install tools
+                  apk add --no-cache sqlite > /dev/null 2>&1
+                  ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+                  wget -q "https://dl.min.io/client/mc/release/linux-${ARCH}/mc" -O /usr/local/bin/mc
+                  chmod +x /usr/local/bin/mc
+
+                  # Configure MinIO client
+                  mc alias set backup http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" > /dev/null
+
+                  # Create bucket if not exists
+                  mc mb --ignore-existing backup/kubelab-backups > /dev/null
+
+                  DATE=$(date -u +%Y-%m-%d)
+
+                  # --- Gitea: git repos + SQLite DB ---
+                  echo "Backing up gitea-data..."
+                  sqlite3 /backup-source/gitea/gitea/gitea.db ".backup /tmp/gitea.db"
+                  cp -a /backup-source/gitea /tmp/gitea-snapshot
+                  cp /tmp/gitea.db /tmp/gitea-snapshot/gitea/gitea.db
+                  tar czf /tmp/gitea-${DATE}.tar.gz -C /tmp/gitea-snapshot .
+                  mc cp /tmp/gitea-${DATE}.tar.gz backup/kubelab-backups/gitea/
+                  rm -rf /tmp/gitea-snapshot /tmp/gitea.db /tmp/gitea-${DATE}.tar.gz
+                  echo "  gitea-data OK"
+
+                  # --- Authelia: SQLite DB (users, TOTP, sessions) ---
+                  echo "Backing up authelia-data..."
+                  sqlite3 /backup-source/authelia/db.sqlite3 ".backup /tmp/authelia.db"
+                  cp -a /backup-source/authelia /tmp/authelia-snapshot
+                  cp /tmp/authelia.db /tmp/authelia-snapshot/db.sqlite3
+                  tar czf /tmp/authelia-${DATE}.tar.gz -C /tmp/authelia-snapshot .
+                  mc cp /tmp/authelia-${DATE}.tar.gz backup/kubelab-backups/authelia/
+                  rm -rf /tmp/authelia-snapshot /tmp/authelia.db /tmp/authelia-${DATE}.tar.gz
+                  echo "  authelia-data OK"
+
+                  # --- n8n: workflows + SQLite DB ---
+                  echo "Backing up n8n-data..."
+                  sqlite3 /backup-source/n8n/database.sqlite ".backup /tmp/n8n.db"
+                  cp -a /backup-source/n8n /tmp/n8n-snapshot
+                  cp /tmp/n8n.db /tmp/n8n-snapshot/database.sqlite
+                  tar czf /tmp/n8n-${DATE}.tar.gz -C /tmp/n8n-snapshot .
+                  mc cp /tmp/n8n-${DATE}.tar.gz backup/kubelab-backups/n8n/
+                  rm -rf /tmp/n8n-snapshot /tmp/n8n.db /tmp/n8n-${DATE}.tar.gz
+                  echo "  n8n-data OK"
+
+                  # --- Retention: remove backups older than 7 days ---
+                  mc find backup/kubelab-backups --older-than 7d --exec "mc rm {}" 2>/dev/null || true
+
+                  echo "=== PVC Backup completed at $(date -u) ==="
+              env:
+                - name: MINIO_ROOT_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-secrets
+                      key: MINIO_ROOT_USER
+                - name: MINIO_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-secrets
+                      key: MINIO_ROOT_PASSWORD
+              volumeMounts:
+                - name: gitea-data
+                  mountPath: /backup-source/gitea
+                  readOnly: true
+                - name: authelia-data
+                  mountPath: /backup-source/authelia
+                  readOnly: true
+                - name: n8n-data
+                  mountPath: /backup-source/n8n
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                limits:
+                  memory: 512Mi
+                  cpu: "0.5"
+                requests:
+                  memory: 128Mi
+                  cpu: "0.1"
+          volumes:
+            - name: gitea-data
+              persistentVolumeClaim:
+                claimName: gitea-data
+                readOnly: true
+            - name: authelia-data
+              persistentVolumeClaim:
+                claimName: authelia-data
+                readOnly: true
+            - name: n8n-data
+              persistentVolumeClaim:
+                claimName: n8n-data
+                readOnly: true
+            - name: tmp
+              emptyDir:
+                sizeLimit: 2Gi

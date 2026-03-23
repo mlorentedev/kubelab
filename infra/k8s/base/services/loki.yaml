@@ -92,7 +92,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: loki
-          image: grafana/loki:3.3.2
+          image: grafana/loki:3.6.4
           args:
             - -config.file=/etc/loki/loki.yaml
           ports:

@@ -43,7 +43,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     SecretMapping(
         name="grafana-admin",
         keys={
+            "admin-user": "BASIC_AUTH_USER",
             "password": "APPS_SERVICES_OBSERVABILITY_GRAFANA_ADMIN_PASSWORD",
+            "oidc-client-secret": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_GRAFANA",
         },
     ),
     SecretMapping(
@@ -56,6 +58,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         name="gitea-secrets",
         keys={
             "SECRET_KEY": "APPS_SERVICES_CORE_GITEA_SECRET_KEY",
+            "ADMIN_USER": "BASIC_AUTH_USER",
+            "ADMIN_PASSWORD": "APPS_SERVICES_CORE_GITEA_ADMIN_PASSWORD",
+            "ADMIN_EMAIL": "APPS_SERVICES_CORE_GITEA_ADMIN_EMAIL",
         },
     ),
     SecretMapping(

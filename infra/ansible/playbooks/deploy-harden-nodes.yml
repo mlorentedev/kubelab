@@ -1,0 +1,67 @@
+---
+# =============================================================================
+# SSH Hardening + NOPASSWD — One-time remediation
+#
+# Applies ssh_hardening role and NOPASSWD sudo to nodes that were
+# provisioned before Ansible roles existed or were set up manually.
+#
+# Usage:
+#   make deploy TARGET=harden-nodes ENV=staging
+#
+# All nodes now have NOPASSWD — no -K needed.
+# For NEW nodes, bootstrap NOPASSWD manually first:
+#   ssh user@host "echo 'user ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/user"
+#
+# Target nodes (hostnames from generated inventory):
+#   - rpi3: needs ssh_hardening (NOPASSWD exists but not Ansible-managed)
+#   - beelink: needs ssh_hardening + NOPASSWD
+#   - kubelab-vps: needs NOPASSWD only (SSH already hardened by Hetzner)
+# =============================================================================
+
+# --- Play 1: SSH hardening for rpi3 + beelink ---
+- name: "Harden SSH on unhardened nodes"
+  hosts: rpi3,beelink
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify SSH key is working before we disable password auth
+      command: "true"
+      changed_when: false
+
+  roles:
+    - role: ../roles/ssh_hardening
+
+# --- Play 2: NOPASSWD for all targeted nodes ---
+- name: "Enable Ansible-managed NOPASSWD sudo"
+  hosts: rpi3,beelink,kubelab-vps
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Configure passwordless sudo for ansible user
+      copy:
+        content: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ ansible_user }}"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Remove legacy Raspberry Pi OS sudoers file
+      file:
+        path: /etc/sudoers.d/010_pi-nopasswd
+        state: absent
+      when: "'rpi3' in inventory_hostname"
+
+# --- Play 3: Verify all nodes ---
+- name: "Verify: SSH + NOPASSWD on all hardened nodes"
+  hosts: rpi3,beelink,kubelab-vps
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Verify SSH connectivity (key-based)
+      ansible.builtin.ping:
+
+    - name: Verify NOPASSWD sudo works
+      command: sudo -n true
+      changed_when: false

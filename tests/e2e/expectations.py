@@ -84,25 +84,21 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     "loki": ServiceExpectation(
         health_status=(200, 302),
+        skip_in_envs=("prod",),  # Internal-only in prod (no public IngressRoute)
     ),
     # -- Core --
     "traefik": ServiceExpectation(
         health_status=(200, 302),
         auth_protected=True,
         api_endpoints={"/dashboard/": (200, 302, 401)},
-        skip_in_envs=("staging",),  # Dashboard has no IngressRoute on K3s staging
-    ),
-    "portainer": ServiceExpectation(
-        health_status=(200, 302, 307),
-        api_json_keys={"/api/status": ["Version"]},
-        skip_in_envs=("staging",),  # Docker Compose only, no K3s IngressRoute
+        skip_in_envs=("dev",),  # Dashboard exposed via IngressRoute in staging + prod with Authelia
     ),
     "gitea": ServiceExpectation(
         api_json_keys={"/api/v1/version": ["version"]},
     ),
     "n8n": ServiceExpectation(
         health_status=(200, 302),
-        auth_protected=True,
+        auth_protected=False,  # n8n 2.x has built-in auth; Authelia policy=bypass (OIDC is enterprise-only)
     ),
     "headscale": ServiceExpectation(
         skip_in_envs=("dev", "staging"),  # VPN on VPS only

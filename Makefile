@@ -52,11 +52,14 @@ help:
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi4)"
-	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s)"
+	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
 	@echo "Kubernetes:"
+	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads via Kustomize"
+	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
+	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
@@ -137,7 +140,7 @@ regen-certs:
 DEV_DOMAINS := mlorente.test \
 	traefik.kubelab.test api.kubelab.test blog.kubelab.test \
 	auth.kubelab.test grafana.kubelab.test loki.kubelab.test \
-	portainer.kubelab.test gitea.kubelab.test n8n.kubelab.test \
+	gitea.kubelab.test n8n.kubelab.test \
 	status.kubelab.test minio.kubelab.test console.minio.kubelab.test \
 	crowdsec.kubelab.test errors.kubelab.test
 
@@ -162,7 +165,7 @@ setup-local-dns:
 # Development Shortcuts
 # -----------------------------------------------------------------------------
 
-.PHONE: credentials-generate
+.PHONY: credentials-generate
 credentials-generate:
 	@$(TOOLKIT) credentials generate --env dev
 	@echo "✓ Credentials generated"
@@ -182,7 +185,7 @@ build-dev:
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		api web errors portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api web errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -190,7 +193,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		api web errors portainer gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api web errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -215,11 +218,10 @@ dev-full-reset: dev-full-clean credentials-generate
 	@read -p "" # Pauses execution until user presses Enter
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik portainer gitea n8n uptime loki grafana api web errors minio github-runner --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api web errors minio github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
 	@echo ""
 	@echo "--- Post-start manual steps ---"
-	@echo "  Portainer : set admin password at https://portainer.kubelab.test"
 	@echo "  Gitea     : docker exec --user git gitea gitea admin user create --admin --username admin --password <pass> --email <email> --must-change-password=false"
 	@echo "  n8n       : create owner account at https://n8n.kubelab.test"
 	@echo "  MinIO     : login at https://console.minio.kubelab.test with root creds from SOPS"
@@ -272,37 +274,74 @@ secrets-audit:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4 [ENV=staging|prod] [BOOTSTRAP=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4|vps [ENV=staging|prod] [BOOTSTRAP=1] [ASK_PASS=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	$(eval _K := $(if $(ASK_PASS),-K,))
 	@if [ -n "$(BOOTSTRAP)" ]; then \
 		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV) --bootstrap; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) -K; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) -K; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
 	fi
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s ENV=staging|prod" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s ENV=staging|prod" && exit 1)
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) -K
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV)
 
 .PHONY: backup
 backup:
 	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
 
+# K8s PVC backup — triggers a one-off Job from the CronJob (ADR-024)
+# Usage: make backup-pvc ENV=prod
+.PHONY: backup-pvc
+backup-pvc:
+	@test -n "$(ENV)" || (echo "Usage: make backup-pvc ENV=prod" && exit 1)
+	@echo "=== Triggering PVC backup ($(ENV)) ==="
+	@kubectl create job --from=cronjob/pvc-backup pvc-backup-manual-$$(date +%s) \
+		--namespace kubelab --kubeconfig $(KUBECONFIG_PATH)
+	@echo "✓ Backup job created. Monitor: kubectl get jobs -n kubelab --kubeconfig $(KUBECONFIG_PATH)"
+
 # K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
 KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
 
+.PHONY: sync-k8s-images
+sync-k8s-images:
+	@echo "=== Syncing K8s image tags from common.yaml ==="
+	@$(POETRY) run python toolkit/scripts/sync_k8s_images.py
+	@echo "✓ Image tags synced"
+
+.PHONY: sync-oidc-hashes
+sync-oidc-hashes:
+	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
+	@echo "=== Syncing OIDC hashes from SOPS → K8s ConfigMaps ($(ENV)) ==="
+	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV)
+	@echo "✓ OIDC hashes synced"
+
+.PHONY: configure-oidc
+configure-oidc:
+	@test -n "$(ENV)" || (echo "Usage: make configure-oidc ENV=staging|prod" && exit 1)
+	@echo "=== Configuring OIDC providers for $(ENV) ==="
+	@$(POETRY) run python toolkit/scripts/configure_oidc.py --env $(ENV)
+	@echo "✓ OIDC providers configured for $(ENV)"
+
 .PHONY: deploy-k8s
-deploy-k8s:
+deploy-k8s: sync-k8s-images
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
+	@echo "=== Applying CoreDNS hairpin DNS ($(ENV)) ==="
+	@kubectl apply -f infra/k8s/base/edge/coredns-custom.yaml --kubeconfig $(KUBECONFIG_PATH)
+	@echo "=== Syncing OIDC hashes from SOPS ($(ENV)) ==="
+	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV)
+	@echo "=== Applying K8s secrets from SOPS ($(ENV)) ==="
+	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
 	@echo "=== Deploying K8s workloads ($(ENV)) ==="
 	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG_PATH)
 	@echo "✓ K8s workloads deployed for $(ENV)"

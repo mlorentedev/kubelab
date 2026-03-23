@@ -7,6 +7,7 @@ resources:
   - namespace.yaml
   - edge/errors.yaml
   - external/ollama.yaml
+  - external/uptime-kuma.yaml
   - edge/secure-headers.yaml
   - services/grafana.yaml
   - services/loki.yaml
@@ -33,3 +34,23 @@ configMapGenerator:
       - services/grafana-dashboards/kubelab-logs-overview.json
     options:
       disableNameSuffixHash: true
+
+# Image tags synced from infra/config/values/common.yaml (SSOT).
+# Run `make sync-k8s-images` to refresh after bumping versions.
+images:
+  - name: gitea/gitea
+    newTag: 1.25.5
+  - name: n8nio/n8n
+    newTag: 2.12.3
+  - name: grafana/loki
+    newTag: 3.6.4
+  - name: timberio/vector
+    newTag: 0.43.1-alpine
+  - name: authelia/authelia
+    newTag: 4.39.15
+  - name: redis
+    newTag: 7-alpine
+  - name: crowdsecurity/crowdsec
+    newTag: v1.7.6
+  - name: quay.io/minio/minio
+    newTag: RELEASE.2025-09-07T16-13-09Z

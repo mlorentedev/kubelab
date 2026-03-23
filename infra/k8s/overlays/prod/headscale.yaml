@@ -1,0 +1,85 @@
+---
+# Headscale — external service on VPS Docker Compose
+# K3s Traefik proxies vpn.kubelab.live to Headscale container on same host.
+# Headscale MUST stay in Docker Compose (ADR-015: bootstrapping dependency).
+# Source of truth: networking.vps.public_ip in common.yaml
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
+metadata:
+  name: headscale-http11
+  namespace: kubelab
+spec:
+  minVersion: VersionTLS12
+  alpnProtocols:
+    - http/1.1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headscale
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: headscale
+    app.kubernetes.io/component: vpn
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+  annotations:
+    kubelab.live/host: kubelab-vps
+    kubelab.live/description: "Headscale VPN control plane on VPS Docker Compose (162.55.57.175:8080)"
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: headscale-external
+  namespace: kubelab
+  labels:
+    kubernetes.io/service-name: headscale
+    app.kubernetes.io/name: headscale
+    app.kubernetes.io/component: vpn
+    app.kubernetes.io/part-of: kubelab
+addressType: IPv4
+ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+endpoints:
+  - addresses:
+      - "162.55.57.175"  # Must match networking.vps.public_ip in common.yaml
+    conditions:
+      ready: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: headscale
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: headscale
+    app.kubernetes.io/component: vpn
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`vpn.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: secure-headers
+          namespace: kubelab
+      services:
+        - name: headscale
+          port: 8080
+  tls:
+    certResolver: letsencrypt
+    options:
+      name: headscale-http11
+      namespace: kubelab

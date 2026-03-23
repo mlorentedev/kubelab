@@ -9,6 +9,10 @@ resources:
   - services.yaml
   - configmaps.yaml
   - ingress.yaml
+  - redirect-kubelab.yaml
+  - backup.yaml
+  - traefik-dashboard.yaml
+  - headscale.yaml
   # secrets managed via: toolkit infra k8s apply-secrets --env prod (ADR-014)
 
 # Override base resources with prod-specific domains and config

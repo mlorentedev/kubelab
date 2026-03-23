@@ -7,10 +7,15 @@ services:
     restart: {{ restart_policy }}
     command: serve
     ports:
+      - "{{ vps_public_ip }}:{{ headscale_listen_port }}:{{ headscale_listen_port }}"  # K3s Traefik → Headscale (bound to public IP only)
       - "{{ headscale_stun_port }}:3478/udp"
     volumes:
       - ./config:/etc/headscale:ro
       - headscale_data:/var/lib/headscale
+    dns:
+{% for dns_ip in docker_dns_servers %}
+      - {{ dns_ip }}
+{% endfor %}
     networks:
       - {{ docker_network }}
     healthcheck:

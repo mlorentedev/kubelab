@@ -1,0 +1,349 @@
+---
+# =============================================================================
+# VPS Provisioning — K3s Production (Pattern C: side-by-side with Docker Compose)
+#
+# Installs K3s on the Hetzner VPS alongside the existing Docker Compose stack.
+# K3s Traefik listens on 8080/8443 (Pattern C). Docker Compose Traefik keeps
+# 80/443. Swap happens at cutover (PROD-K3S-003b).
+#
+# Prerequisites:
+#   - VPS already provisioned (packages, sudo, hostname, Docker, Tailscale)
+#   - Docker Compose Traefik running on 80/443
+#   - Headscale running on VPS
+#   - SOPS secrets accessible from controller
+#
+# Usage:
+#   make provision NODE=vps ENV=prod
+#   toolkit infra ansible run -p provision-vps -e prod
+#   toolkit infra ansible run -p provision-vps -e prod --tags k3s
+#
+# Tags: preflight, prepare, k3s, verify
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight validation (no changes to target)
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate VPS connectivity and prerequisites"
+  hosts: kubelab-vps
+  gather_facts: false
+  become: false
+  tags: [preflight]
+
+  tasks:
+    - name: Verify SSH + Python connectivity
+      ansible.builtin.ping:
+
+    - name: Verify become (sudo) works
+      command: sudo -n true
+      become: true
+      changed_when: false
+
+    - name: Verify SSH private key exists on controller
+      stat:
+        path: "{{ _ssh_key_path }}"
+      delegate_to: localhost
+      register: _ssh_key
+      failed_when: not _ssh_key.stat.exists
+      vars:
+        _ssh_key_path: "{{ ansible_ssh_private_key_file | default('~/.ssh/id_ed25519') }}"
+
+    - name: Verify target has internet (K3s install needs it)
+      command: curl -sf --connect-timeout 5 https://get.k3s.io -o /dev/null
+      changed_when: false
+
+    - name: Verify Docker is running (coexistence requirement)
+      command: docker info --format '{{ '{{' }}.ServerVersion{{ '}}' }}'
+      changed_when: false
+
+    - name: Verify Docker Compose Traefik is running
+      command: docker ps --filter name=traefik --format '{{ '{{' }}.Names{{ '}}' }}'
+      register: _traefik_check
+      changed_when: false
+      failed_when: "'traefik' not in _traefik_check.stdout"
+
+    - name: Check for existing K3s installation (safety)
+      stat:
+        path: /usr/local/bin/k3s
+      register: _k3s_binary
+
+    - name: Fail if K3s already installed
+      fail:
+        msg: >-
+          K3s binary already exists at /usr/local/bin/k3s.
+          This playbook is for first-time installation only.
+          Use deploy-k3s.yml for updates, or uninstall first with /usr/local/bin/k3s-uninstall.sh.
+      when: _k3s_binary.stat.exists
+
+# ---------------------------------------------------------------------------
+# Play 1: Prepare VPS for K3s (UFW + port conflict resolution)
+# ---------------------------------------------------------------------------
+- name: "Prepare VPS for K3s installation"
+  hosts: kubelab-vps
+  become: true
+  gather_facts: true
+  tags: [prepare]
+
+  vars:
+    deploy_env: prod
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+  tasks:
+    # --- UFW: open K3s ports ---
+    - name: Allow K3s API server (6443/tcp)
+      community.general.ufw:
+        rule: allow
+        port: "6443"
+        proto: tcp
+        comment: "K3s API server"
+
+    - name: Allow K3s Traefik HTTP — Pattern C ({{ config.k3s.traefik.http_port }}/tcp)
+      community.general.ufw:
+        rule: allow
+        port: "{{ config.k3s.traefik.http_port | string }}"
+        proto: tcp
+        comment: "K3s Traefik HTTP (Pattern C)"
+
+    - name: Allow K3s Traefik HTTPS — Pattern C ({{ config.k3s.traefik.https_port }}/tcp)
+      community.general.ufw:
+        rule: allow
+        port: "{{ config.k3s.traefik.https_port | string }}"
+        proto: tcp
+        comment: "K3s Traefik HTTPS (Pattern C)"
+
+    # --- Resolve port 8080 conflict: Traefik dashboard → 9080 ---
+    - name: Check current Traefik dashboard port binding
+      command: docker port traefik 8080/tcp
+      register: _traefik_dashboard_port
+      changed_when: false
+      failed_when: false
+
+    - name: Remap Traefik dashboard port (8080 → 9080) via Ansible role
+      when: "'8080' in (_traefik_dashboard_port.stdout | default(''))"
+      block:
+        - name: Load secrets for Traefik role (controller-side)
+          command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+          register: _sops_common
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          check_mode: false
+          no_log: true
+
+        - name: Load env secrets (controller-side)
+          command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
+          register: _sops_env
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          check_mode: false
+          no_log: true
+
+        - name: Merge secrets
+          set_fact:
+            _secrets: "{{ (_sops_common.stdout | from_yaml) | combine(_sops_env.stdout | from_yaml, recursive=True) }}"
+          no_log: true
+
+        - name: Re-deploy Traefik with dashboard on port 9080
+          include_role:
+            name: ../roles/traefik_vps
+          vars:
+            traefik_image: "{{ config.edge.traefik.image }}"
+            docker_network: "{{ config.networking.vps.docker_network }}"
+            base_domain: "{{ config.global.base_domain }}"
+            restart_policy: "{{ config.global.restart_policy }}"
+            traefik_dashboard_port: 9080
+            traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+            traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"
+            traefik_dns_provider: "{{ config.edge.traefik.dns_provider }}"
+            traefik_dns_delay_before_check: "{{ config.edge.traefik.dns_delay_before_check }}"
+            traefik_cf_dns_api_token: "{{ _secrets.cloudflare.api_token }}"
+            traefik_acme_domains:
+              - main: "mlorente.dev"
+                sans:
+                  - "*.mlorente.dev"
+              - main: "kubelab.live"
+                sans:
+                  - "*.kubelab.live"
+            traefik_dashboard_domain: "{{ config.edge.traefik.domain | default('traefik.' + config.global.base_domain) }}"
+            traefik_dashboard_auth_users: "{{ _secrets.basic_auth.credentials | default('') }}"
+            traefik_rate_limit_average: "{{ config.edge.traefik.rate_limit_average }}"
+            traefik_rate_limit_burst: "{{ config.edge.traefik.rate_limit_burst }}"
+            traefik_rate_limit_period: "{{ config.edge.traefik.rate_limit_period }}"
+            traefik_service_routes: []  # Routes unchanged, only port remap matters
+            traefik_dns_resolvers: []
+
+        - name: Verify Traefik responds on new dashboard port (9080)
+          uri:
+            url: "http://127.0.0.1:9080/ping"
+            status_code: 200
+          register: _traefik_ping
+          retries: 12
+          delay: 5
+          until: _traefik_ping.status == 200
+
+        - name: Confirm port 8080 is free
+          command: ss -tlnp sport = :8080
+          register: _port_check
+          changed_when: false
+          failed_when: "'LISTEN' in _port_check.stdout"
+
+# ---------------------------------------------------------------------------
+# Play 2: Install K3s (server role with prod vars)
+# ---------------------------------------------------------------------------
+- name: "Install K3s on VPS — Pattern C (8080/8443)"
+  hosts: kubelab-vps
+  become: true
+  gather_facts: true
+  tags: [k3s]
+
+  vars:
+    deploy_env: prod
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Decrypt env secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
+      register: sops_env
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Merge secrets (env overrides common)
+      set_fact:
+        secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+
+    # TLS SAN: ansible_host (100.64.0.2) + public_ip (162.55.57.175) from inventory
+    - name: Build TLS SAN list
+      set_fact:
+        _k3s_tls_san: >-
+          {{ [ansible_host] +
+             ([hostvars[inventory_hostname].public_ip]
+              if hostvars[inventory_hostname].public_ip is defined else []) }}
+
+  roles:
+    - role: ../roles/k3s_server
+      tags: [k3s]
+      vars:
+        k3s_version: "{{ config.k3s.version }}"
+        k3s_install_script_url: "{{ config.k3s.install_script_url }}"
+        k3s_tls_san: "{{ _k3s_tls_san }}"
+        k3s_resolv_conf: "/run/systemd/resolve/resolv.conf"
+        k3s_configure_traefik: true
+        k3s_traefik_http_port: "{{ config.k3s.traefik.http_port }}"
+        k3s_traefik_https_port: "{{ config.k3s.traefik.https_port }}"
+        k3s_traefik_acme_enabled: true
+        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
+        k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
+        k3s_traefik_acme_cloudflare_token: "{{ secrets.cloudflare.api_token }}"
+        k3s_fetch_kubeconfig: true
+        k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
+        k3s_api_address: "{{ ansible_host }}"
+
+# ---------------------------------------------------------------------------
+# Play 3: Verify K3s installation
+# ---------------------------------------------------------------------------
+- name: "Verify K3s on VPS"
+  hosts: kubelab-vps
+  become: true
+  gather_facts: false
+  tags: [k3s, verify]
+
+  tasks:
+    - name: Verify K3s service is active
+      systemd:
+        name: k3s
+        state: started
+      check_mode: true
+      register: _k3s_service
+      failed_when: _k3s_service.changed
+
+    - name: Wait for K3s API to be ready
+      command: k3s kubectl get nodes --no-headers
+      register: _k3s_ready
+      retries: 30
+      delay: 10
+      until: _k3s_ready.rc == 0 and 'NotReady' not in _k3s_ready.stdout
+      changed_when: false
+
+    - name: Get cluster nodes
+      command: k3s kubectl get nodes -o wide
+      register: _k3s_nodes
+      changed_when: false
+
+    - name: Show cluster status
+      debug:
+        msg: "{{ _k3s_nodes.stdout_lines }}"
+
+    - name: Verify K3s Traefik is listening on Pattern C ports
+      wait_for:
+        port: "{{ item }}"
+        host: 127.0.0.1
+        timeout: 60
+      loop:
+        - 8080   # K3s Traefik HTTP (from prod.yaml)
+        - 8443   # K3s Traefik HTTPS (from prod.yaml)
+
+    - name: Verify Docker Compose Traefik still running on standard ports
+      wait_for:
+        port: "{{ item }}"
+        host: 127.0.0.1
+        timeout: 10
+      loop:
+        - 80     # Docker Compose Traefik HTTP
+        - 443    # Docker Compose Traefik HTTPS
+
+    - name: Confirm coexistence — both Traefik instances responding
+      debug:
+        msg: >-
+          K3s installed successfully on VPS (Pattern C).
+          K3s Traefik: 8080/8443 | Docker Compose Traefik: 80/443.
+          Next: apply prod overlay (PROD-K3S-002), validate routes (PROD-K3S-003),
+          then port swap cutover (PROD-K3S-003b).
+
+    - name: Verify kubeconfig fetched to controller
+      stat:
+        path: "~/.kube/kubelab-prod-config"
+      delegate_to: localhost
+      become: false
+      register: _kubeconfig
+      failed_when: not _kubeconfig.stat.exists

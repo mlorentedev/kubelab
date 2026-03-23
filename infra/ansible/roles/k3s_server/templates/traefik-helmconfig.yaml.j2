@@ -8,11 +8,27 @@ spec:
   valuesContent: |-
     ports:
       web:
+        port: {{ k3s_traefik_http_port }}
         exposedPort: {{ k3s_traefik_http_port }}
       websecure:
+        port: {{ k3s_traefik_https_port }}
         exposedPort: {{ k3s_traefik_https_port }}
+      traefik:
+        port: 9000
+        expose:
+          default: true
+        exposedPort: 9000
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 128Mi
 {% if k3s_traefik_acme_enabled %}
+    providers:
+      kubernetesCRD:
+        allowCrossNamespace: true
     additionalArguments:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider={{ k3s_traefik_acme_dns_provider }}"
       - "--certificatesresolvers.letsencrypt.acme.email={{ k3s_traefik_acme_email }}"

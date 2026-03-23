@@ -68,6 +68,8 @@ class TestLokiReadiness:
         http_client: httpx.Client,
         env: str,
     ) -> None:
+        if env == "prod":
+            pytest.skip("Loki is internal-only in prod (no public IngressRoute)")
         svc = services_by_name.get("loki")
         if not svc:
             pytest.skip("Loki not in config")
@@ -85,7 +87,9 @@ class TestLokiReadiness:
         env: str,
     ) -> None:
         if env == "dev":
-            pytest.skip("Loki query test only on staging/prod (namespace-based)")
+            pytest.skip("Loki query test only on staging (namespace-based)")
+        if env == "prod":
+            pytest.skip("Loki is internal-only in prod (no public IngressRoute)")
 
         svc = services_by_name.get("loki")
         if not svc:

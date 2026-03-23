@@ -77,12 +77,12 @@ class AnsibleGenerator(BaseGenerator):
         # Collect all nodes (VPS + homelab nodes)
         all_nodes: list[dict[str, Any]] = []
 
-        # VPS — always uses Tailscale IP (already on the mesh, not being provisioned)
+        # VPS — always uses public IP (Headscale bootstrap host; Tailscale IP would create circular dependency)
         if vps:
             all_nodes.append(
                 {
                     "hostname": vps.get("hostname", "kubelab-vps"),
-                    "ansible_host": vps.get("tailscale_ip"),
+                    "ansible_host": vps.get("public_ip") or vps.get("tailscale_ip"),
                     "ansible_user": vps.get("ssh_user", "deployer"),
                     "public_ip": vps.get("public_ip"),
                     "groups": vps.get("ansible_groups", []),

@@ -67,14 +67,6 @@ class TestGrafana:
         assert code in (200, 302)
 
 
-class TestPortainer:
-    """Portainer container management."""
-
-    def test_reachable(self, require_vpn: None) -> None:
-        code, _ = _curl("https://portainer.kubelab.live")
-        assert code in (200, 302, 307)
-
-
 class TestN8N:
     """N8N workflow automation."""
 

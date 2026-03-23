@@ -17,7 +17,6 @@
         {{ node_ips.ace1 }} minio.{{ staging_domain }}
         {{ node_ips.ace1 }} console.minio.{{ staging_domain }}
         {{ node_ips.ace1 }} loki.{{ staging_domain }}
-        {{ node_ips.ace1 }} portainer.{{ staging_domain }}
         fallthrough
     }
     template IN A {{ staging_domain }} {

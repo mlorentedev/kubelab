@@ -97,17 +97,18 @@ data:
         - domain: 'api.staging.kubelab.live'
           policy: bypass
 
-        # OIDC-enabled services (bypass Authelia forward-auth — OIDC handles login)
+        # Services with own auth (protected by Authelia until OIDC SSO is configured)
         - domain: 'console.minio.staging.kubelab.live'
-          policy: bypass
+          policy: one_factor
         - domain: 'minio.staging.kubelab.live'
-          policy: bypass
+          policy: bypass  # S3 API — programmatic access
         - domain: 'gitea.staging.kubelab.live'
           policy: bypass
 
-        # Protected services (one_factor via Authelia forward-auth)
+        # n8n: own auth (2.x built-in user management, OIDC is enterprise-only)
         - domain: 'n8n.staging.kubelab.live'
-          policy: one_factor
+          policy: bypass
+        # Protected services (one_factor via Authelia forward-auth)
         - domain: 'grafana.staging.kubelab.live'
           policy: one_factor
         - domain: 'loki.staging.kubelab.live'
@@ -171,7 +172,7 @@ data:
         clients:
           - client_id: minio
             client_name: MinIO
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$m/AX8CozfEySg044nfsGFQ$ocewO2BPqMJ6sQOPkmsQEr5aJcWdPb2cwrvG98HNJXU'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$Clqn8xYqFYHClboRXqhrzQ$CSwje4eEDXFiUb9hCwUqx17GEyFer4G87n61KyVXxZk'
             public: false
             authorization_policy: one_factor
             redirect_uris:
@@ -180,6 +181,34 @@ data:
               - openid
               - profile
               - email
+            consent_mode: implicit
+          - client_id: grafana
+            client_name: Grafana
+            # synced via: make sync-oidc-hashes ENV=staging
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$dBiONJGBx1x9RWcHvEvO9w$dSh2Aqnnc2kpWQ+dwIciTuuHOQT5PpOU3SDBRikS7gI'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://grafana.staging.kubelab.live/login/generic_oauth
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+            consent_mode: implicit
+          - client_id: gitea
+            client_name: Gitea
+            # synced via: make sync-oidc-hashes ENV=staging
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$wBJCovjEK6tqcMW4lMrRpA$b67WyvPk9spyCZ91VtwmJ2NLUgXirOvo5Gtt+bob4RQ'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://gitea.staging.kubelab.live/user/oauth2/authelia/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
             consent_mode: implicit
 ---
 apiVersion: apps/v1
@@ -317,6 +346,14 @@ spec:
   forwardAuth:
     address: http://authelia.kubelab.svc.cluster.local:9091/api/authz/forward-auth
     trustForwardHeader: true
+    authRequestHeaders:
+      - Cookie
+      - Accept
+      - X-Forwarded-For
+      - X-Forwarded-Host
+      - X-Forwarded-Proto
+      - X-Forwarded-URI
+      - X-Forwarded-Method
     authResponseHeaders:
       - Remote-User
       - Remote-Groups

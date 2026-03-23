@@ -12,9 +12,9 @@
 #
 # Usage:
 #   make provision NODE=rpi4 ENV=prod
-#   toolkit infra ansible run -p provision-rpi4 -e prod -K
-#   toolkit infra ansible run -p provision-rpi4 -e prod -K --tags gateway
-#   toolkit infra ansible run -p provision-rpi4 -e prod -K --tags coredns
+#   toolkit infra ansible run -p provision-rpi4 -e prod
+#   toolkit infra ansible run -p provision-rpi4 -e prod --tags gateway
+#   toolkit infra ansible run -p provision-rpi4 -e prod --tags coredns
 # =============================================================================
 - name: Provision RPi4 gateway
   hosts: gateway

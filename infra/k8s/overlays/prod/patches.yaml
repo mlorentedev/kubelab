@@ -7,6 +7,9 @@ metadata:
   namespace: kubelab
 data:
   GF_SERVER_ROOT_URL: "https://grafana.kubelab.live"
+  GF_AUTH_GENERIC_OAUTH_AUTH_URL: "https://auth.kubelab.live/api/oidc/authorization"
+  GF_AUTH_GENERIC_OAUTH_TOKEN_URL: "https://auth.kubelab.live/api/oidc/token"
+  GF_AUTH_GENERIC_OAUTH_API_URL: "https://auth.kubelab.live/api/oidc/userinfo"
   GF_LOG_LEVEL: "info"
 ---
 # Override base authelia-config with prod domains and policies
@@ -18,7 +21,7 @@ metadata:
 data:
   configuration.yml: |
     # ==========================================================================
-    # Authelia — Production (ForwardAuth + OIDC for MinIO)
+    # Authelia — Production (ForwardAuth + OIDC)
     # ==========================================================================
     theme: dark
     default_2fa_method: totp
@@ -108,7 +111,7 @@ data:
 
         # PROTECTED services (one_factor via Authelia forward-auth)
         - domain: 'n8n.kubelab.live'
-          policy: one_factor (Authelia one-factor)
+          policy: one_factor
         - domain: 'grafana.kubelab.live'
           policy: one_factor
         - domain: 'traefik.kubelab.live'
@@ -132,7 +135,7 @@ data:
       cookies:
         - domain: kubelab.live
           authelia_url: https://auth.kubelab.live
-          default_redirection_url: https://mlorente.dev
+          default_redirection_url: https://kubelab.live
 
       redis:
         host: redis
@@ -173,7 +176,7 @@ data:
         clients:
           - client_id: minio
             client_name: MinIO
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$44uPoJIoiASyqyTQF67Ybg$MTAK3CL+z0o/Qqe7ePbjZy35jhJuRsXLYpdS271xmdo'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$DqQ7qkni7MhiWGN/0MLcSg$EKHekUxBYDIZ9pBif85RY3/OaIGMuh8PVRB1KSNghvE'
             public: false
             authorization_policy: one_factor
             redirect_uris:
@@ -182,6 +185,34 @@ data:
               - openid
               - profile
               - email
+            consent_mode: implicit
+          - client_id: grafana
+            client_name: Grafana
+            # synced via: make sync-oidc-hashes ENV=prod
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$qoD3hsIzFnlKC+blWyROew$REwrpanYqd7HQAhvCwEQc/qAnoXXd1kBll3jGsul4CU'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://grafana.kubelab.live/login/generic_oauth
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+            consent_mode: implicit
+          - client_id: gitea
+            client_name: Gitea
+            # synced via: make sync-oidc-hashes ENV=prod
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$wBJCovjEK6tqcMW4lMrRpA$b67WyvPk9spyCZ91VtwmJ2NLUgXirOvo5Gtt+bob4RQ'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://gitea.kubelab.live/user/oauth2/authelia/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
             consent_mode: implicit
 ---
 # Override base grafana IngressRoute with prod domain
@@ -197,10 +228,14 @@ spec:
     - match: Host(`grafana.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: authelia
+          namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: grafana
           port: 3000
@@ -245,11 +280,11 @@ spec:
       kind: Rule
       middlewares:
         - name: authelia
+          namespace: kubelab
       services:
         - name: loki
           port: 3100
-  tls:
-    certResolver: letsencrypt
+  tls: {}  # No certResolver — .local TLD can't get ACME certs
 ---
 # Override base gitea ConfigMap with prod domain
 apiVersion: v1
@@ -283,9 +318,12 @@ spec:
     - match: Host(`gitea.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: gitea
           port: 3000
@@ -301,7 +339,7 @@ metadata:
 data:
   N8N_HOST: "n8n.kubelab.live"
   N8N_PROTOCOL: "https"
-  N8N_PORT: "5678"
+  N8N_PROXY_HOPS: "1"
   WEBHOOK_URL: "https://n8n.kubelab.live/"
   DB_TYPE: "sqlite"
   GENERIC_TIMEZONE: "Europe/Madrid"
@@ -321,10 +359,12 @@ spec:
     - match: Host(`n8n.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: authelia
-        - name: error-pages
+          namespace: kubelab
       services:
         - name: n8n
           port: 5678
@@ -359,9 +399,12 @@ spec:
     - match: Host(`minio.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: minio
           port: 9000
@@ -381,12 +424,40 @@ spec:
     - match: Host(`console.minio.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
       services:
         - name: minio
           port: 9001
+  tls:
+    certResolver: letsencrypt
+---
+# Override base uptime-kuma IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: uptime-kuma
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`status.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
+      services:
+        - name: uptime-kuma
+          port: 3001
   tls:
     certResolver: letsencrypt
 ---

@@ -1,0 +1,28 @@
+---
+# Traefik Dashboard IngressRoute — cross-namespace reference to kube-system
+# Requires: api.dashboard=true + providers.kubernetesCRD.allowCrossNamespace=true
+# in HelmChartConfig (managed by Ansible k3s_server role)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`traefik.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: authelia
+          namespace: kubelab
+      services:
+        - name: traefik
+          namespace: kube-system
+          port: 9000
+  tls:
+    certResolver: letsencrypt

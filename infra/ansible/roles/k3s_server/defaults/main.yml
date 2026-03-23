@@ -8,6 +8,7 @@ k3s_install_script_path: "/tmp/k3s-install.sh"
 k3s_tls_san: []           # Built by playbook from config.networking.*
 k3s_kubeconfig_mode: "0600"
 k3s_node_labels: []
+k3s_resolv_conf: ""  # Override pod DNS (e.g. /run/systemd/resolve/resolv.conf for systemd-resolved hosts)
 
 # Traefik HelmChartConfig — ports from SSOT (config.k3s.traefik.*)
 k3s_configure_traefik: true

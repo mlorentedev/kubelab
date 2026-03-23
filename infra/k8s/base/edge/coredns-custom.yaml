@@ -1,0 +1,33 @@
+---
+# Hairpin DNS: allow K3s pods to resolve staging/prod domains.
+#
+# Problem: K3s CoreDNS (10.43.0.10) only knows K8s service names.
+# Pods calling external domains (e.g. Gitea→Authelia OIDC token exchange)
+# fail with "no such host". This is standard K8s split-horizon DNS.
+#
+# Solution: forward staging zones to RPi4 CoreDNS (100.64.0.10) which is
+# already the authoritative resolver for staging domains.
+#
+# K3s loads this via: import /etc/coredns/custom/*.server
+# Applied separately (kube-system namespace, NOT via Kustomize kubelab overlay).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  kubelab-hairpin.server: |
+    staging.kubelab.live:53 {
+      forward . 100.64.0.10
+    }
+    staging.mlorente.dev:53 {
+      forward . 100.64.0.10
+    }
+    kubelab.live:53 {
+      rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local
+      forward . 10.43.0.10
+    }
+    mlorente.dev:53 {
+      rewrite name regex (.*)\.mlorente\.dev traefik.kube-system.svc.cluster.local
+      forward . 10.43.0.10
+    }

@@ -69,8 +69,6 @@ apps:
     core:
       traefik:
         domain: traefik.kubelab.test
-      portainer:
-        domain: portainer.kubelab.test
       n8n:
         domain: n8n.kubelab.test
         encryption_key: "dev-n8n-encryption-key-32chars!!"
@@ -101,8 +99,6 @@ apps:
             client_name: KubeLab OIDC Client (General)
             redirect_uris:
               - https://auth.kubelab.test/oauth2/callback
-              # Redirect de Portainer
-              - https://portainer.kubelab.test/login/oauth/oidc/callback
             scopes:
               - openid
               - profile

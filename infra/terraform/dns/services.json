@@ -36,12 +36,6 @@
     "environments": ["prod"]
   },
   {
-    "name": "portainer",
-    "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
     "name": "gitea",
     "zone": "kubelab",
     "proxied": false,

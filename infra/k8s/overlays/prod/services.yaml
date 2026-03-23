@@ -33,6 +33,6 @@ spec:
     app.kubernetes.io/name: web
   ports:
     - name: http
-      port: 4321
+      port: 8080
       targetPort: http
       protocol: TCP
