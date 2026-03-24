@@ -607,13 +607,62 @@ class SecretsManager:
         return [s for s in SECRET_CATALOG if env in s.envs]
 
     def show_secret(self, env: str, key_path: str) -> str | None:
-        """Decrypt and return a single secret value."""
-        cm = self._cm(env)
-        decrypted = cm._decrypt_sops(cm.secrets_path / f"{env}.enc.yaml")
-        if not decrypted:
+        """Decrypt and return a single secret value.
+
+        Supports env='common' for shared secrets (common.enc.yaml).
+        """
+        from pathlib import Path
+
+        secrets_path = Path(self.project_root) / "infra" / "config" / "secrets"
+        sops_file = secrets_path / f"{env}.enc.yaml"
+        if not sops_file.exists():
             return None
+
+        import subprocess
+
+        result = subprocess.run(
+            ["sops", "-d", str(sops_file)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+
+        import yaml
+
+        decrypted = yaml.safe_load(result.stdout) or {}
         value = self._resolve_key(decrypted, key_path)
         return str(value) if value is not None else None
+
+    def set_secret(self, env: str, key_path: str, value: str) -> bool:
+        """Set a single secret value in the SOPS vault.
+
+        Uses `sops set` to write the value directly into the encrypted file.
+        The key_path is dot-separated (e.g., 'aws.access_key_id').
+        """
+        cm = self._cm(env)
+        sops_file = cm.secrets_path / f"{env}.enc.yaml"
+
+        if not sops_file.exists():
+            logger.error(f"SOPS file not found: {sops_file}")
+            return False
+
+        # Convert dot path to sops JSON path: a.b.c → ["a"]["b"]["c"]
+        sops_path = "".join(f'["{k}"]' for k in key_path.split("."))
+
+        import subprocess
+
+        result = subprocess.run(
+            ["sops", "set", str(sops_file), sops_path, f'"{value}"'],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"sops set failed: {result.stderr.strip()}")
+            return False
+
+        return True
 
     # ── Internal helpers ─────────────────────────────────────────────────────
 

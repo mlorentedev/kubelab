@@ -41,6 +41,16 @@ networking:
       exclude_volumes:
         - "jekyll-staging-data"
         - "jekyll-staging-site-data"
+  # AWS management plane (ADR-023 Phase 3)
+  aws:
+    region: "eu-central-1"
+    profile: "kubelab"
+    instance_type: "t4g.micro"
+    ami_name_filter: "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
+    ebs_size_gb: 8
+    hostname: "aws1"
+    tailscale_ip: "100.64.0.4"
+    k3s_version: "v1.34.4+k3s1"  # Match spoke versions
   nodes:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
     # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed

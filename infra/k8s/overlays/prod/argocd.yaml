@@ -1,0 +1,74 @@
+---
+# Argo CD — external service on AWS hub (100.64.0.4)
+# Prod Traefik proxies argo.kubelab.live to aws1 argocd-server via Tailscale VPN.
+# Same EndpointSlice pattern as Headscale (ADR-023 Phase 3).
+# Source of truth: networking.aws.tailscale_ip in common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+  annotations:
+    kubelab.live/host: aws1
+    kubelab.live/description: "Argo CD on AWS hub (100.64.0.4:80 via Tailscale)"
+spec:
+  ports:
+    - name: http
+      port: 30080
+      targetPort: 30080
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: argocd-external
+  namespace: kubelab
+  labels:
+    kubernetes.io/service-name: argocd
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+addressType: IPv4
+ports:
+  - name: http
+    port: 30080
+    protocol: TCP
+endpoints:
+  - addresses:
+      - "100.64.0.4"  # Must match networking.aws.tailscale_ip in common.yaml
+    conditions:
+      ready: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`argo.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: authelia
+          namespace: kubelab
+      services:
+        - name: argocd
+          port: 30080
+  tls:
+    certResolver: letsencrypt

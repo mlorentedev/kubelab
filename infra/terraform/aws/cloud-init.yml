@@ -1,0 +1,72 @@
+# yamllint disable-line rule:comments
+#cloud-config
+# KubeLab Argo CD Hub bootstrap — K3s + Tailscale on AWS Spot
+# After cloud-init: instance joins Headscale mesh, K3s is ready for Argo CD install
+
+hostname: ${hostname}
+timezone: ${timezone}
+manage_etc_hosts: true
+
+users:
+  - name: ${deploy_user}
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+package_upgrade: true
+packages:
+  - curl
+  - wget
+  - git
+  - jq
+  - ca-certificates
+
+swap:
+  filename: /swapfile
+  size: 2147483648
+  maxsize: 2147483648
+
+runcmd:
+  # --- SSH hardening ---
+  - sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+
+  # --- Install Tailscale ---
+  - curl -fsSL https://tailscale.com/install.sh | sh
+
+  # --- Register with Headscale ---
+  - >-
+    tailscale up
+    --login-server=${headscale_url}
+    --authkey=${tailscale_authkey}
+    --hostname=${tailscale_hostname}
+    --accept-routes=false
+    --timeout=60s
+
+  # --- Install K3s (server mode, no Traefik — Argo CD only) ---
+  - |
+    curl -sfL https://get.k3s.io | \
+      INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
+      --disable=traefik --disable=servicelb \
+      --write-kubeconfig-mode=644 \
+      --resolv-conf=/run/systemd/resolve/resolv.conf \
+      --tls-san=$(tailscale ip -4)
+
+  # --- Wait for K3s to be ready ---
+  - |
+    for i in $(seq 1 30); do
+      kubectl get nodes >/dev/null 2>&1 && break
+      sleep 5
+    done
+
+  # --- Create argocd namespace ---
+  - kubectl create namespace argocd || true
+
+  # --- Signal completion ---
+  - "echo 'cloud-init complete' > /var/log/kubelab-bootstrap.log"
+  - "date >> /var/log/kubelab-bootstrap.log"
+  - "tailscale ip -4 >> /var/log/kubelab-bootstrap.log"

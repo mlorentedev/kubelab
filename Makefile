@@ -263,6 +263,32 @@ secrets-audit:
 	@$(TOOLKIT) secrets audit
 
 # -----------------------------------------------------------------------------
+# Hub (AWS — Argo CD management plane)
+# -----------------------------------------------------------------------------
+HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
+
+.PHONY: fetch-kubeconfig-hub
+fetch-kubeconfig-hub:
+	@echo "=== Fetching kubeconfig from aws1 via Tailscale ==="
+	@ssh aws1 "sudo cat /etc/rancher/k3s/k3s.yaml" | sed "s/127.0.0.1/100.64.0.4/" > $(HUB_KUBECONFIG)
+	@chmod 600 $(HUB_KUBECONFIG)
+	@echo "✓ Hub kubeconfig saved to $(HUB_KUBECONFIG)"
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
+
+.PHONY: deploy-argocd
+deploy-argocd:
+	@echo "=== Installing Argo CD on hub (aws1) ==="
+	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
+	@helm repo update argo
+	@helm upgrade --install argocd argo/argo-cd \
+		--namespace argocd --create-namespace \
+		--kubeconfig $(HUB_KUBECONFIG) \
+		-f infra/helm/argocd/values.yaml \
+		--wait --timeout 5m
+	@echo "✓ Argo CD deployed. Get admin password:"
+	@echo "  kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo"
+
+# -----------------------------------------------------------------------------
 # Infrastructure (Ansible)
 # -----------------------------------------------------------------------------
 # Usage:
@@ -312,6 +338,44 @@ backup-pvc:
 # K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
 KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
+
+# AWS Argo CD Hub — Terraform with SOPS-injected secrets
+# Usage: make tf-aws-plan   (dry-run)
+#        make tf-aws-apply  (create/update infrastructure)
+.PHONY: tf-aws-plan tf-aws-apply tf-aws-destroy
+tf-aws-plan:
+	@echo "=== Generating aws.tfvars from SOPS ==="
+	@AUTHKEY=$$(sops -d infra/config/secrets/common.enc.yaml | $(POETRY) run python -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['aws']['headscale_preauth_key'])") && \
+		echo "tailscale_authkey = \"$$AUTHKEY\"" > infra/terraform/aws/aws.tfvars
+	@echo "=== Terraform plan ==="
+	@cd infra/terraform/aws && terraform plan -var-file=aws.tfvars
+
+tf-aws-apply:
+	@echo "=== Generating aws.tfvars from SOPS ==="
+	@AUTHKEY=$$(sops -d infra/config/secrets/common.enc.yaml | $(POETRY) run python -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['aws']['headscale_preauth_key'])") && \
+		echo "tailscale_authkey = \"$$AUTHKEY\"" > infra/terraform/aws/aws.tfvars
+	@echo "=== Terraform apply ==="
+	@cd infra/terraform/aws && terraform apply -auto-approve -var-file=aws.tfvars
+	@rm -f infra/terraform/aws/aws.tfvars
+	@echo "✓ aws.tfvars cleaned (secrets in SOPS only)"
+
+tf-aws-destroy:
+	@echo "=== Generating aws.tfvars from SOPS ==="
+	@AUTHKEY=$$(sops -d infra/config/secrets/common.enc.yaml | $(POETRY) run python -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['aws']['headscale_preauth_key'])") && \
+		echo "tailscale_authkey = \"$$AUTHKEY\"" > infra/terraform/aws/aws.tfvars
+	@echo "=== Terraform destroy ==="
+	@cd infra/terraform/aws && terraform destroy -var-file=aws.tfvars
+	@rm -f infra/terraform/aws/aws.tfvars
+
+# Terraform DNS (Cloudflare) — SOPS-injected token
+.PHONY: tf-dns-plan tf-dns-apply
+tf-dns-plan:
+	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		cd infra/terraform/dns && terraform plan -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
+
+tf-dns-apply:
+	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
 
 .PHONY: sync-k8s-images
 sync-k8s-images:

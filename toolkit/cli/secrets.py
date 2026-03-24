@@ -269,8 +269,10 @@ def show(
     Example:
       toolkit secrets show --env staging
       toolkit secrets show apps.services.core.gitea.secret_key --env staging
+      toolkit secrets show aws.access_key_id --env common
     """
-    settings.validate_environment(env)
+    if env != "common":
+        settings.validate_environment(env)
 
     if key is None:
         # Delegate to existing credentials show
@@ -294,6 +296,31 @@ def show(
         raise typer.Exit(1)
 
     print(value)
+
+
+@app.command("set")
+def set_secret(
+    key: Annotated[str, typer.Argument(help="Dot-separated key path (e.g., aws.access_key_id)")],
+    value: Annotated[str, typer.Argument(help="Secret value to store")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "common",
+) -> None:
+    """Set a secret value in the SOPS vault.
+
+    Example:
+      toolkit secrets set aws.access_key_id AKIA... --env common
+      toolkit secrets set apps.testing.authelia_test_password "pass" --env staging
+    """
+    valid_envs = ("common", "dev", "staging", "prod")
+    if env not in valid_envs:
+        logger.error(f"Invalid env: {env}. Must be one of: {', '.join(valid_envs)}")
+        raise typer.Exit(1)
+
+    mgr = _get_manager()
+    if mgr.set_secret(env, key, value):
+        logger.success(f"Secret '{key}' set in {env}")
+    else:
+        logger.error(f"Failed to set secret '{key}' in {env}")
+        raise typer.Exit(1)
 
 
 # =============================================================================

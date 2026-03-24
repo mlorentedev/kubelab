@@ -1,0 +1,16 @@
+# AWS Argo CD Hub — Terraform variables
+# Copy to aws.tfvars and fill in sensitive values
+# Non-sensitive defaults are in variables.tf (match common.yaml SSOT)
+
+# Required: Headscale pre-auth key (generate via Headscale CLI)
+# headscale preauthkeys create --user kubelab --reusable --expiration 365d
+tailscale_authkey = "REPLACE_WITH_HEADSCALE_PREAUTH_KEY"
+
+# Optional overrides (defaults from variables.tf are usually correct)
+# aws_region      = "eu-central-1"
+# aws_profile     = "kubelab"
+# instance_type   = "t4g.micro"
+# ebs_size_gb     = 8
+# hostname        = "argo-hub"
+# k3s_version     = "v1.34.4+k3s1"
+# headscale_url   = "https://vpn.kubelab.live"
