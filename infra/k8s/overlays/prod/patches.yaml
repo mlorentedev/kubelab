@@ -474,12 +474,11 @@ spec:
   routes:
     - match: Host(`pihole.kubelab.live`)
       kind: Rule
+      # No authelia middleware — Pi-hole v6 has built-in auth
       middlewares:
         - name: secure-headers
           namespace: kubelab
         - name: crowdsec-bouncer
-          namespace: kubelab
-        - name: authelia
           namespace: kubelab
       services:
         - name: pihole

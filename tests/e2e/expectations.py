@@ -113,7 +113,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     # -- Network (bare-metal, external to K3s) --
     "pihole": ServiceExpectation(
         health_status=(200, 302),
-        auth_protected=True,
+        auth_protected=False,  # Pi-hole v6 has built-in auth (same pattern as n8n)
         content_type="text/html",
         skip_in_envs=("dev",),  # RPi4 bare metal, reachable via VPN (staging) + Tailscale (prod)
     ),
