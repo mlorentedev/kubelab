@@ -110,6 +110,13 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         api_json_keys={"/api/tags": ["models"]},
         skip_in_envs=("dev", "prod"),  # Bare metal on Beelink, reachable only via VPN (staging)
     ),
+    # -- Network (bare-metal, external to K3s) --
+    "pihole": ServiceExpectation(
+        health_status=(200, 302),
+        auth_protected=True,
+        content_type="text/html",
+        skip_in_envs=("dev",),  # RPi4 bare metal, reachable via VPN (staging) + Tailscale (prod)
+    ),
     # -- Edge --
     # errors is Traefik's internal error page backend, not a user-facing service.
     # It has no public route — Traefik references it internally for custom 404/502 pages.

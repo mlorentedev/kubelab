@@ -504,6 +504,16 @@ apps:
         health_path: /health
         bouncer_api_key: secrets://apps.services.security.crowdsec.bouncer_api_key
 
+    # Network services (bare-metal, external to K3s)
+    network:
+      pihole:
+        name: pihole
+        domain: pihole.kubelab.live
+        enable_auth: true
+        auth_level: one_factor
+        default_port: 80
+        health_path: /admin/
+
     # AI / ML services (bare-metal, accessed via Tailscale)
     ai:
       ollama:
