@@ -115,7 +115,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         health_status=(200, 302),
         auth_protected=False,  # Pi-hole v6 has built-in auth (same pattern as n8n)
         content_type="text/html",
-        skip_in_envs=("dev",),  # RPi4 bare metal, reachable via VPN (staging) + Tailscale (prod)
+        skip_in_envs=("dev", "prod"),  # RPi4 bare metal, VPN-only (staging.kubelab.live DNS)
     ),
     # -- Edge --
     # errors is Traefik's internal error page backend, not a user-facing service.

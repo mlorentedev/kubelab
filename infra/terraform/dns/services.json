@@ -76,11 +76,5 @@
     "zone": "kubelab",
     "proxied": false,
     "environments": ["prod"]
-  },
-  {
-    "name": "pihole",
-    "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
   }
 ]

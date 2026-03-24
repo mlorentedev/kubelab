@@ -124,7 +124,7 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Argo CD `resource.exclusions` selector field**: May not filter by label as expected. To remove default EndpointSlice exclusion, set `resource.exclusions: ""` in argocd-cm ConfigMap. Manual EndpointSlices (external services) are safe with prune — Argo CD only prunes resources with its tracking label.
 - **Hub t4g.micro sizing**: 1GB RAM fits Argo CD in steady state (5 pods, ~600MB). Helm upgrades and batch pod restarts cause swap thrashing. Don't batch heavy operations. For upgrades, space them out or temporarily scale to t4g.small.
 - **Hub↔spoke uses Tailscale, not public IP**: The CLAUDE.md rule "VPS must use public_ip" applies to bootstrap tools (Ansible, kubeconfig). Runtime services (Argo CD) use Tailscale IPs. Spoke API servers defined in `argocd.spokes` in common.yaml.
-- **Pi-hole not exposed via Traefik**: Runs on RPi4 (Docker Compose, not K3s). Accessible only on LAN (172.16.1.1:80) or Tailscale (100.64.0.10:80). To expose: EndpointSlice + IngressRoute (same pattern as ollama/uptime-kuma).
+- **Pi-hole staging-only (VPN)**: `pihole.staging.kubelab.live` — RPi4 bare metal via LAN EndpointSlice. NOT in prod (RPi4 unreachable if VPN down, no public DNS). Pi-hole v6 has built-in auth — no Authelia middleware (causes redirect loop). Password in SOPS: `apps.services.network.pihole.admin_password`.
 
 ## Workflow rules
 

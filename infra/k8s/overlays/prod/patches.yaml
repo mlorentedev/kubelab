@@ -461,50 +461,6 @@ spec:
   tls:
     certResolver: letsencrypt
 ---
-# Override base pihole IngressRoute with prod domain + Tailscale IP
-# SSOT: networking.nodes.rpi4.tailscale_ip in common.yaml
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: pihole
-  namespace: kubelab
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`pihole.kubelab.live`)
-      kind: Rule
-      # No authelia middleware — Pi-hole v6 has built-in auth
-      middlewares:
-        - name: secure-headers
-          namespace: kubelab
-        - name: crowdsec-bouncer
-          namespace: kubelab
-      services:
-        - name: pihole
-          port: 80
-  tls:
-    certResolver: letsencrypt
----
-# Override base pihole EndpointSlice with Tailscale IP (VPS reaches RPi4 via VPN)
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: pihole-external
-  namespace: kubelab
-  labels:
-    kubernetes.io/service-name: pihole
-addressType: IPv4
-ports:
-  - name: http
-    port: 80
-    protocol: TCP
-endpoints:
-  - addresses:
-      - "100.64.0.10"
-    conditions:
-      ready: true
----
 # Override base catch-all IngressRoute with prod wildcard cert
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
