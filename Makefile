@@ -360,14 +360,14 @@ register-spoke:
 		if [ -n "$$TOKEN" ]; then break; fi; \
 		sleep 2; \
 	done
-	@echo "--- Verifying RBAC scoping ---"
-	@for i in 1 2 3; do \
+	@echo "--- Verifying RBAC (retry up to 5s for propagation) ---"
+	@for i in 1 2 3 4 5; do \
 		RESULT=$$(kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) 2>/dev/null); \
-		if [ "$$RESULT" = "yes" ]; then break; fi; \
+		if [ "$$RESULT" = "yes" ]; then echo "  kubelab: writes OK"; break; fi; \
 		sleep 1; \
 	done
-	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" && echo "  kubelab namespace: OK (create allowed)" || (echo "  RBAC check failed: no create in kubelab" && exit 1)
-	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kube-system --kubeconfig $(KUBECONFIG_PATH) | grep -q "no" && echo "  kube-system namespace: OK (create denied)" || echo "  WARNING: create allowed in kube-system"
+	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" || (echo "  RBAC check failed: no create in kubelab" && exit 1)
+	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
 	@echo "--- Extracting credentials from $(ENV) spoke ---"
 	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
 		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \

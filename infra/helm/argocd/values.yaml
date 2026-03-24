@@ -65,15 +65,8 @@ configs:
   params:
     server.insecure: true  # TLS at Traefik level, not Argo
   cm:
-    # Override default EndpointSlice exclusion — kubelab uses manual EndpointSlices
-    # for external services (ollama, uptime-kuma) that Argo CD should manage.
-    resource.exclusions: |
-      - apiGroups:
-          - "discovery.k8s.io"
-        kinds:
-          - EndpointSlice
-        clusters:
-          - "*"
-        selector:
-          matchLabels:
-            endpointslice.kubernetes.io/managed-by: endpointslice-controller.k8s.io
+    # Remove default EndpointSlice exclusion — kubelab uses manual EndpointSlices
+    # for external services (ollama, uptime-kuma, headscale, argocd).
+    # Auto-managed EndpointSlices aren't in Git, so prune won't touch them
+    # (Argo CD only prunes resources with its tracking label).
+    resource.exclusions: ""
