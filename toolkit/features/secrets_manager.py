@@ -664,6 +664,35 @@ class SecretsManager:
 
         return True
 
+    def unset_secret(self, env: str, key_path: str) -> bool:
+        """Remove a key from the SOPS vault.
+
+        Uses `sops unset` to remove the key from the encrypted file.
+        The key_path is dot-separated (e.g., 'apps.services.network').
+        """
+        cm = self._cm(env)
+        sops_file = cm.secrets_path / f"{env}.enc.yaml"
+
+        if not sops_file.exists():
+            logger.error(f"SOPS file not found: {sops_file}")
+            return False
+
+        sops_path = "".join(f'["{k}"]' for k in key_path.split("."))
+
+        import subprocess
+
+        result = subprocess.run(
+            ["sops", "unset", str(sops_file), sops_path],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"sops unset failed: {result.stderr.strip()}")
+            return False
+
+        return True
+
     # ── Internal helpers ─────────────────────────────────────────────────────
 
     @staticmethod

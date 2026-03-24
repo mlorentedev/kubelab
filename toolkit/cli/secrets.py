@@ -66,15 +66,18 @@ def edit(
     logger.info(f"Opening {sops_file.name} with {editor}...")
 
     try:
-        subprocess.run(
-            ["sops", "--editor", editor, str(sops_file)],
-            check=True,
-            env=os.environ,
+        sops_env = {**os.environ, "EDITOR": editor}
+        result = subprocess.run(
+            ["sops", "edit", str(sops_file)],
+            env=sops_env,
         )
-        logger.success(f"Secrets saved ({env})")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"SOPS edit failed: {e}")
-        raise typer.Exit(1) from None
+        if result.returncode == 0:
+            logger.success(f"Secrets saved ({env})")
+        elif result.returncode == 200:
+            logger.info("No changes made")
+        else:
+            logger.error(f"SOPS edit failed (exit {result.returncode})")
+            raise typer.Exit(1)
     except FileNotFoundError:
         logger.error("sops is not installed")
         raise typer.Exit(1) from None
@@ -320,6 +323,35 @@ def set_secret(
         logger.success(f"Secret '{key}' set in {env}")
     else:
         logger.error(f"Failed to set secret '{key}' in {env}")
+        raise typer.Exit(1)
+
+
+# =============================================================================
+# unset — Remove a secret from the SOPS vault
+# =============================================================================
+
+
+@app.command("unset")
+def unset_secret(
+    key: Annotated[str, typer.Argument(help="Dot-separated key path (e.g., apps.services.network)")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "common",
+) -> None:
+    """Remove a key from the SOPS vault.
+
+    Example:
+      toolkit secrets unset apps.services.network --env prod
+      toolkit secrets unset apps.testing.old_key --env staging
+    """
+    valid_envs = ("common", "dev", "staging", "prod")
+    if env not in valid_envs:
+        logger.error(f"Invalid env: {env}. Must be one of: {', '.join(valid_envs)}")
+        raise typer.Exit(1)
+
+    mgr = _get_manager()
+    if mgr.unset_secret(env, key):
+        logger.success(f"Secret '{key}' removed from {env}")
+    else:
+        logger.error(f"Failed to remove secret '{key}' from {env}")
         raise typer.Exit(1)
 
 
