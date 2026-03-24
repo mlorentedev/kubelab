@@ -1,0 +1,75 @@
+# Pi-hole admin UI — RPi4 bare metal (Docker Compose, not K3s)
+# LAN: 172.16.1.1, Tailscale: 100.64.0.10
+# SSOT: networking.nodes.rpi4.lan_ip, networking.nodes.rpi4.tailscale_ip in common.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pihole
+    app.kubernetes.io/component: dns
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+  annotations:
+    kubelab.live/host: rpi4
+    kubelab.live/description: "Pi-hole admin UI on RPi4 bare metal (172.16.1.1)"
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: pihole-external
+  namespace: kubelab
+  labels:
+    kubernetes.io/service-name: pihole
+    app.kubernetes.io/name: pihole
+    app.kubernetes.io/component: dns
+    app.kubernetes.io/part-of: kubelab
+addressType: IPv4
+ports:
+  - name: http
+    port: 80
+    protocol: TCP
+endpoints:
+  # Staging uses LAN IP (ace1 and RPi4 on same LAN)
+  # Prod overlay patches to Tailscale IP (VPS reaches RPi4 via VPN)
+  - addresses:
+      - "172.16.1.1"
+    conditions:
+      ready: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pihole
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pihole
+    app.kubernetes.io/component: dns
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`pihole.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: authelia
+          namespace: kubelab
+      services:
+        - name: pihole
+          port: 80
+  tls:
+    certResolver: letsencrypt
