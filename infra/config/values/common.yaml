@@ -137,6 +137,19 @@ k3s:
     https_port: 443
 
 # ===========================================================================
+# ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
+# ===========================================================================
+argocd:
+  # Hub: networking.aws.tailscale_ip (100.64.0.4)
+  # All hub↔spoke traffic via Tailscale VPN (WireGuard mesh)
+  # API server URL derived at runtime: https://{tailscale_ip}:{k3s.api_port}
+  spokes:
+    staging:
+      node: ace1   # → networking.nodes.ace1.tailscale_ip
+    prod:
+      node: vps    # → networking.vps.tailscale_ip
+
+# ===========================================================================
 # EDGE SERVICES (Reverse Proxy, Gateway, CDN)
 # ===========================================================================
 edge:
