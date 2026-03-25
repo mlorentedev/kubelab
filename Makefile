@@ -61,6 +61,17 @@ help:
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
 	@echo ""
+	@echo "Hub (Argo CD):"
+	@echo "  make fetch-kubeconfig-hub      Fetch kubeconfig from aws1"
+	@echo "  make deploy-argocd             Install/upgrade Argo CD on hub"
+	@echo "  make deploy-apps               Deploy Argo CD Applications to hub"
+	@echo "  make check-apps                Check Application sync status"
+	@echo "  make restart-argocd            Restart Argo CD controller (clear cache)"
+	@echo "  make register-spoke ENV=x      Register spoke cluster in Argo CD hub"
+	@echo "  make unregister-spoke ENV=x    Remove spoke from Argo CD hub"
+	@echo "  make check-spokes              Verify registered spokes are reachable"
+	@echo "  make rotate-spoke-token ENV=x  Rotate spoke SA token and re-register"
+	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
 	@echo "  make lint               Ruff linting (check only)"
@@ -287,6 +298,129 @@ deploy-argocd:
 		--wait --timeout 5m
 	@echo "✓ Argo CD deployed. Get admin password:"
 	@echo "  kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo"
+
+# Deploy Argo CD Applications to hub (syncs overlays to spokes)
+# Usage: make deploy-apps
+.PHONY: deploy-apps
+deploy-apps:
+	@echo "=== Deploying Argo CD Applications ==="
+	@kubectl apply -f infra/k8s/argocd/applications/ --kubeconfig $(HUB_KUBECONFIG)
+	@echo "✓ Applications deployed. Check sync status:"
+	@echo "  kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get applications"
+
+# Check Argo CD Application sync status
+.PHONY: check-apps
+check-apps:
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get applications -o wide 2>/dev/null || echo "No applications found"
+	@echo ""
+	@for app in $$(kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get applications -o name 2>/dev/null); do \
+		MSG=$$(kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get $$app -o jsonpath='{.status.conditions[*].message}' 2>/dev/null); \
+		if [ -n "$$MSG" ]; then \
+			echo "--- $$(basename $$app) conditions ---"; \
+			echo "$$MSG" | fold -s -w 120; \
+			echo ""; \
+		fi; \
+	done
+
+# Restart Argo CD (controller + server + redis cache flush)
+.PHONY: restart-argocd
+restart-argocd:
+	@echo "=== Flushing Redis cache ==="
+	@REDIS_PASS=$$(kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get secret argocd-redis -o jsonpath='{.data.auth}' | base64 -d) && \
+		kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd exec deploy/argocd-redis -- redis-cli -a "$$REDIS_PASS" FLUSHALL 2>/dev/null || echo "  Redis flush skipped"
+	@echo "=== Restarting Argo CD controller ==="
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd rollout restart statefulset argocd-application-controller
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd rollout status statefulset argocd-application-controller --timeout=120s
+	@echo "✓ Argo CD restarted (cache flushed)"
+
+# Trigger Argo CD sync for an Application
+# Usage: make sync-app APP=kubelab-staging
+.PHONY: sync-app
+sync-app:
+	@test -n "$(APP)" || (echo "Usage: make sync-app APP=kubelab-staging|kubelab-prod" && exit 1)
+	@echo "=== Triggering sync for $(APP) ==="
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd patch application $(APP) --type merge -p '{"operation":{"initiatedBy":{"username":"makefile"},"sync":{"revision":"HEAD"}}}'
+	@echo "✓ Sync triggered for $(APP)"
+
+# Register a spoke cluster in Argo CD hub (scoped RBAC, not cluster-admin)
+# Usage: make register-spoke ENV=staging|prod
+.PHONY: register-spoke
+register-spoke:
+	@test -n "$(ENV)" || (echo "Usage: make register-spoke ENV=staging|prod" && exit 1)
+	@case "$(ENV)" in staging|prod) ;; *) echo "Error: ENV must be staging or prod" && exit 1;; esac
+	@echo "=== Cleaning stale RBAC on $(ENV) cluster ==="
+	@kubectl --kubeconfig $(KUBECONFIG_PATH) delete clusterrole argocd-manager-cluster-readonly argocd-manager-namespaced --ignore-not-found 2>/dev/null || true
+	@kubectl --kubeconfig $(KUBECONFIG_PATH) delete clusterrolebinding argocd-manager-cluster-readonly --ignore-not-found 2>/dev/null || true
+	@kubectl --kubeconfig $(KUBECONFIG_PATH) delete rolebinding argocd-manager-namespaced -n kubelab --ignore-not-found 2>/dev/null || true
+	@echo "=== Applying spoke RBAC on $(ENV) cluster ==="
+	@kubectl apply -f infra/k8s/argocd/spoke-rbac.yaml --kubeconfig $(KUBECONFIG_PATH)
+	@echo "--- Waiting for token to be populated..."
+	@for i in 1 2 3 4 5; do \
+		TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' 2>/dev/null); \
+		if [ -n "$$TOKEN" ]; then break; fi; \
+		sleep 2; \
+	done
+	@echo "--- Verifying RBAC (retry up to 5s for propagation) ---"
+	@for i in 1 2 3 4 5; do \
+		RESULT=$$(kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) 2>/dev/null); \
+		if [ "$$RESULT" = "yes" ]; then echo "  kubelab: writes OK"; break; fi; \
+		sleep 1; \
+	done
+	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" || (echo "  RBAC check failed: no create in kubelab" && exit 1)
+	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
+	@echo "--- Extracting credentials from $(ENV) spoke ---"
+	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
+		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \
+		SERVER=$$($(POETRY) run python -c "import yaml;c=yaml.safe_load(open('infra/config/values/common.yaml'));n=c['argocd']['spokes']['$(ENV)']['node'];ip=c['networking']['vps']['tailscale_ip'] if n=='vps' else c['networking']['nodes'][n]['tailscale_ip'];print(f'https://{ip}:{c[\"k3s\"][\"api_port\"]}')") && \
+		test -n "$$TOKEN" || (echo "Error: token not populated" && exit 1) && \
+		test -n "$$CA" || (echo "Error: CA cert not found" && exit 1) && \
+		echo "--- Creating cluster secret on hub ($$SERVER) ---" && \
+		sed -e "s|CLUSTER_NAME|$(ENV)|g" \
+			-e "s|CLUSTER_SERVER|$$SERVER|g" \
+			-e "s|BEARER_TOKEN|$$TOKEN|g" \
+			-e "s|CA_DATA_BASE64|$$CA|g" \
+			infra/k8s/argocd/cluster-secret.yaml.tpl | \
+		kubectl apply --kubeconfig $(HUB_KUBECONFIG) -f -
+	@echo "--- Verifying registration ---"
+	@kubectl get secret cluster-$(ENV) -n argocd --kubeconfig $(HUB_KUBECONFIG) -o jsonpath='{.data.server}' | base64 -d && echo
+	@echo "✓ Spoke $(ENV) registered in Argo CD hub"
+
+# Remove spoke from Argo CD hub + cleanup RBAC on spoke
+.PHONY: unregister-spoke
+unregister-spoke:
+	@test -n "$(ENV)" || (echo "Usage: make unregister-spoke ENV=staging|prod" && exit 1)
+	@echo "=== Removing $(ENV) spoke from hub ==="
+	@kubectl delete secret cluster-$(ENV) -n argocd --kubeconfig $(HUB_KUBECONFIG) --ignore-not-found
+	@echo "=== Removing spoke RBAC from $(ENV) cluster ==="
+	@kubectl delete -f infra/k8s/argocd/spoke-rbac.yaml --kubeconfig $(KUBECONFIG_PATH) --ignore-not-found
+	@echo "✓ Spoke $(ENV) unregistered"
+
+# Verify all registered spokes are reachable (from workstation, not hub)
+.PHONY: check-spokes
+check-spokes:
+	@echo "=== Checking spoke cluster connectivity ==="
+	@for env in staging prod; do \
+		KC=~/.kube/kubelab-$$env-config; \
+		SECRET=$$(kubectl get secret cluster-$$env -n argocd --kubeconfig $(HUB_KUBECONFIG) -o name 2>/dev/null); \
+		if [ -z "$$SECRET" ]; then \
+			echo "  $$env: NOT REGISTERED"; \
+		elif kubectl --kubeconfig $$KC get ns kubelab >/dev/null 2>&1; then \
+			echo "  $$env: OK (registered + reachable)"; \
+		else \
+			echo "  $$env: REGISTERED but UNREACHABLE"; \
+		fi; \
+	done
+
+# Rotate spoke SA token and re-register on hub
+.PHONY: rotate-spoke-token
+rotate-spoke-token:
+	@test -n "$(ENV)" || (echo "Usage: make rotate-spoke-token ENV=staging|prod" && exit 1)
+	@echo "=== Rotating token for $(ENV) spoke ==="
+	@kubectl delete secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH)
+	@kubectl apply -f infra/k8s/argocd/spoke-rbac.yaml --kubeconfig $(KUBECONFIG_PATH)
+	@echo "--- Waiting for new token..."
+	@sleep 3
+	@$(MAKE) register-spoke ENV=$(ENV)
 
 # -----------------------------------------------------------------------------
 # Infrastructure (Ansible)

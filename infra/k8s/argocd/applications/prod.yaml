@@ -1,0 +1,30 @@
+# Argo CD Application — prod environment
+# Syncs the full Kustomize overlay to the prod spoke
+# Applied via: make deploy-apps
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubelab-prod
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/env: prod
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/mlorentedev/kubelab.git
+    targetRevision: master
+    path: infra/k8s/overlays/prod
+  destination:
+    name: prod
+    namespace: kubelab
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true

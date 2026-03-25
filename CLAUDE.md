@@ -120,6 +120,11 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **`deploy-vps` skips Traefik/errors when K3s is active**: `when: "'k3s_servers' not in group_names"` on traefik_vps and errors roles. Prevents Docker Compose Traefik from stealing ports 80/443 from K3s Traefik in prod.
 - **Headscale K8s routing (prod only)**: After K3s cutover, vpn.kubelab.live needs IngressRoute + Service + EndpointSlice in prod overlay (`headscale.yaml`). Headscale stays in Docker Compose (ADR-015) but K3s Traefik handles TLS termination. TLSOption `headscale-http11` forces HTTP/1.1 ALPN for Noise protocol.
 - **Loki prod IngressRoute uses `.local` TLD**: Patched to `tls: {}` (no certResolver). ACME can't issue certs for non-public TLDs.
+- **Argo CD scoped RBAC requires wildcard reads**: Argo CD cache discovers ALL K8s API resource types and does cluster-wide LIST. Enumerating resources explicitly breaks on K8s upgrades (new types like `ResourceClaim`). Standard pattern: `apiGroups: ["*"], resources: ["*"], verbs: ["get","list","watch"]` via ClusterRoleBinding for reads, scoped RoleBinding in `kubelab` for writes.
+- **Argo CD `resource.exclusions` selector field**: May not filter by label as expected. To remove default EndpointSlice exclusion, set `resource.exclusions: ""` in argocd-cm ConfigMap. Manual EndpointSlices (external services) are safe with prune — Argo CD only prunes resources with its tracking label.
+- **Hub t4g.micro sizing**: 1GB RAM fits Argo CD in steady state (5 pods, ~600MB). Helm upgrades and batch pod restarts cause swap thrashing. Don't batch heavy operations. For upgrades, space them out or temporarily scale to t4g.small.
+- **Hub↔spoke uses Tailscale, not public IP**: The CLAUDE.md rule "VPS must use public_ip" applies to bootstrap tools (Ansible, kubeconfig). Runtime services (Argo CD) use Tailscale IPs. Spoke API servers defined in `argocd.spokes` in common.yaml.
+- **Pi-hole staging-only (VPN)**: `pihole.staging.kubelab.live` — RPi4 bare metal via LAN EndpointSlice. NOT in prod (RPi4 unreachable if VPN down, no public DNS). Pi-hole v6 has built-in auth — no Authelia middleware (causes redirect loop). Password in SOPS: `apps.services.network.pihole.admin_password`.
 
 ## Workflow rules
 

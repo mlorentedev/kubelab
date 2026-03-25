@@ -1,0 +1,178 @@
+# Argo CD Spoke RBAC — applied to spoke clusters (staging + prod)
+# Read access: cluster-wide (Argo CD cache requires cluster-scoped LIST/WATCH)
+# Write access: kubelab namespace only (scoped via RoleBinding)
+# Applied via: make register-spoke ENV=staging|prod
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-manager
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+
+---
+# Long-lived token — K8s 1.24+ requires explicit Secret creation
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-manager-token
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+  annotations:
+    kubernetes.io/service-account.name: argocd-manager
+type: kubernetes.io/service-account-token
+
+---
+# Cluster-wide read-only — Argo CD cache needs LIST/WATCH on all resource types
+# This is the standard scoped-RBAC pattern: reads everywhere, writes scoped
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-manager-readonly
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+rules:
+  # Wildcard read — Argo CD cache discovers ALL API resource types and LIST/WATCHes
+  # each one. Enumerating explicitly breaks on each K8s upgrade (new resource types).
+  # Security: reads cluster-wide, writes scoped to kubelab via RoleBinding below.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  # Events — Argo CD needs create/patch for status tracking
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-manager-readonly
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-manager-readonly
+subjects:
+  - kind: ServiceAccount
+    name: argocd-manager
+    namespace: kubelab
+
+---
+# Write access scoped to kubelab namespace only
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-manager-write
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - endpoints
+      - persistentvolumeclaims
+      - pods
+      - secrets
+      - services
+      - serviceaccounts
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["traefik.io"]
+    resources:
+      - ingressroutes
+      - middlewares
+      - tlsoptions
+      - traefikservices
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs: ["create", "update", "patch", "delete"]
+
+---
+# Bind write access to kubelab namespace only
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-manager-write
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-manager-write
+subjects:
+  - kind: ServiceAccount
+    name: argocd-manager
+    namespace: kubelab
+
+---
+# Cluster-scoped writes — resources in the Kustomize overlay that are cluster-scoped:
+# - Namespace labels/annotations (Kustomize patches the namespace resource)
+# - Vector ClusterRole/ClusterRoleBinding (log collector needs cluster-wide read)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-manager-cluster-write
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings"]
+    verbs: ["create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-manager-cluster-write
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-manager-cluster-write
+subjects:
+  - kind: ServiceAccount
+    name: argocd-manager
+    namespace: kubelab
