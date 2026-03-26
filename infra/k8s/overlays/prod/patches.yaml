@@ -304,6 +304,7 @@ data:
   GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
   GITEA__log__MODE: "console"
   GITEA__log__LEVEL: "Warn"
+  GITEA_OIDC_DISCOVERY_URL: "https://auth.kubelab.live/.well-known/openid-configuration"
 ---
 # Override base gitea IngressRoute with prod domain
 apiVersion: traefik.io/v1alpha1

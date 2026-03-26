@@ -46,8 +46,8 @@ class WikiGenerator(BaseGenerator):
             output_path = wiki_path / "mkdocs.yml"
 
             if not template_path.exists():
-                logger.error(MESSAGES.ERROR_TEMPLATE_NOT_FOUND.format(template_path))
-                return {"success": False, "error": "Template not found"}
+                logger.warning(f"Wiki template not found (skipping): {template_path}")
+                return {"success": True, "files": [], "skipped": True}
 
             # Process template with environment variables from YAML+SOPS
             if not self.replace_placeholders(template_path, output_path, env):

@@ -79,11 +79,9 @@ access_control:
   networks:
     - name: internal
       networks:
-        # These are standard Docker internal networks and private IP ranges.
-        # Generally static, but could be templated if needed.
-        - '10.0.0.0/8'
-        - '172.16.0.0/12'
-        - '192.168.0.0/16'
+        {% for cidr in trusted_cidrs %}
+        - '{{ cidr }}'
+        {% endfor %}
 
   rules:
     # Dummy rule to satisfy default_policy: deny when no other rules are present
