@@ -1,0 +1,279 @@
+- IP Reference:
+    - placeholder:
+        icon: mdi-table
+- Topology:
+    - placeholder:
+        icon: mdi-map-marker-path
+- DNS Map:
+    - placeholder:
+        icon: mdi-table
+- DNS Resolution:
+    - placeholder:
+        icon: mdi-dns
+- GitOps:
+    - placeholder:
+        icon: mdi-source-branch
+- Request Path:
+    - placeholder:
+        icon: mdi-arrow-decision
+- Stg - Apps:
+    - API:
+        icon: mdi-api
+        href: https://api.staging.kubelab.live
+        description: ace1
+        ping: https://api.staging.kubelab.live/health
+    - Web:
+        icon: mdi-web
+        href: https://staging.mlorente.dev
+        description: ace1
+        ping: https://staging.mlorente.dev
+- Stg - Platform:
+    - Gitea:
+        icon: si-gitea
+        href: https://gitea.staging.kubelab.live
+        description: Git
+        ping: https://gitea.staging.kubelab.live
+    - n8n:
+        icon: si-n8n
+        href: https://n8n.staging.kubelab.live
+        description: Automation
+        ping: https://n8n.staging.kubelab.live
+    - MinIO:
+        icon: si-minio
+        href: https://console.minio.staging.kubelab.live
+        description: S3
+        ping: https://minio.staging.kubelab.live/minio/health/live
+- Stg - Security:
+    - Authelia:
+        icon: mdi-shield-lock
+        href: https://auth.staging.kubelab.live
+        description: SSO
+        ping: https://auth.staging.kubelab.live/api/health
+    - CrowdSec:
+        icon: mdi-shield-bug
+        href: https://crowdsec.staging.kubelab.live
+        description: WAF
+        ping: https://crowdsec.staging.kubelab.live
+- Stg - Observability:
+    - Grafana:
+        icon: si-grafana
+        href: https://grafana.staging.kubelab.live
+        description: Dashboards
+        ping: https://grafana.staging.kubelab.live
+    - Loki:
+        icon: si-grafana
+        href: https://loki.staging.kubelab.live
+        description: Logs
+        ping: https://loki.staging.kubelab.live
+    - Traefik:
+        icon: si-traefikproxy
+        href: https://traefik.staging.kubelab.live
+        description: Proxy
+        widget:
+          type: traefik
+          url: http://10.43.86.38:9000
+- Stg - Core:
+    - K3s API:
+        icon: mdi-kubernetes
+        description: ace1 · API server
+        ping: https://100.64.0.11:6443
+    - Redis:
+        icon: mdi-database
+        description: ace1 · Sessions
+        ping: http://redis:6379
+    - CoreDNS:
+        icon: mdi-dns
+        description: ace1 · Cluster DNS
+        ping: http://kube-dns.kube-system:53
+    - Errors:
+        icon: mdi-alert-circle
+        description: Error pages
+        ping: http://errors:8080
+    - Vector:
+        icon: mdi-math-log
+        description: Log shipper
+        ping: http://vector:8686
+- Prod - Apps:
+    - API:
+        icon: mdi-api
+        href: https://api.kubelab.live
+        description: VPS
+        ping: https://api.kubelab.live/health
+    - Web:
+        icon: mdi-web
+        href: https://mlorente.dev
+        description: VPS
+        ping: https://mlorente.dev
+- Prod - Platform:
+    - Gitea:
+        icon: si-gitea
+        href: https://gitea.kubelab.live
+        description: Git
+        ping: https://gitea.kubelab.live
+    - n8n:
+        icon: si-n8n
+        href: https://n8n.kubelab.live
+        description: Automation
+        ping: https://n8n.kubelab.live
+    - MinIO:
+        icon: si-minio
+        href: https://console.minio.kubelab.live
+        description: S3
+        ping: https://minio.kubelab.live/minio/health/live
+- Prod - Security:
+    - Authelia:
+        icon: mdi-shield-lock
+        href: https://auth.kubelab.live
+        description: SSO
+        ping: https://auth.kubelab.live/api/health
+    - CrowdSec:
+        icon: mdi-shield-bug
+        href: https://crowdsec.kubelab.live
+        description: WAF
+        ping: https://crowdsec.kubelab.live
+- Prod - Observability:
+    - Grafana:
+        icon: si-grafana
+        href: https://grafana.kubelab.live
+        description: Dashboards
+        ping: https://grafana.kubelab.live
+    - Loki:
+        icon: si-grafana
+        href: https://loki.kubelab.live
+        description: Logs
+        ping: https://loki.kubelab.live
+    - Traefik:
+        icon: si-traefikproxy
+        href: https://traefik.kubelab.live
+        description: Proxy
+        ping: https://traefik.kubelab.live
+- Prod - Core:
+    - K3s API:
+        icon: mdi-kubernetes
+        description: VPS · API server
+        ping: https://100.64.0.2:6443
+    - Redis:
+        icon: mdi-database
+        description: VPS · Sessions
+    - CoreDNS:
+        icon: mdi-dns
+        description: VPS · Cluster DNS
+    - Errors:
+        icon: mdi-alert-circle
+        description: Error pages
+    - Vector:
+        icon: mdi-math-log
+        description: Log shipper
+- Network:
+    - Argo CD:
+        icon: si-argo
+        href: https://
+        description: aws1 · GitOps hub
+        ping: https://
+    - Headscale:
+        icon: mdi-vpn
+        href: https://vpn.kubelab.live
+        description: VPS · VPN mesh
+        ping: https://vpn.kubelab.live
+    - Pi-hole:
+        icon: si-pihole
+        href: https://pihole.kubelab.live
+        description: RPi4 · DNS filtering
+        ping: https://pihole.kubelab.live
+    - CoreDNS (RPi4):
+        icon: mdi-dns
+        description: RPi4 · Staging DNS
+        ping: http://100.64.0.10:8080
+    - Uptime Kuma:
+        icon: si-uptimekuma
+        href: https://status.kubelab.live
+        description: RPi3 · Status
+        widget:
+          type: uptimekuma
+          url: http://100.64.0.6:3001
+          slug: kubelab
+    - Cloudflare:
+        icon: si-cloudflare
+        href: https://dash.cloudflare.com
+        description: DNS analytics
+        widget:
+          type: customapi
+          url: https://api.cloudflare.com/client/v4/graphql
+          method: POST
+          headers:
+            Authorization: "Bearer {{HOMEPAGE_VAR_CLOUDFLARE_TOKEN}}"
+            Content-Type: application/json
+          requestBody:
+            # yamllint disable-line rule:line-length
+            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-03-25"}) { sum { requests threats } } } } }'
+          mappings:
+            - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.requests
+              label: Requests
+              format: number
+            - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.threats
+              label: Threats
+              format: number
+- Bare Metal:
+    - Ollama:
+        icon: mdi-brain
+        href: http://100.64.0.3:11434
+        description: Beelink · LLM
+        ping: http://100.64.0.3:11434
+    - Pollex:
+        icon: mdi-robot
+        href: http://100.64.0.8:8000
+        description: Jetson · Edge AI
+        ping: http://100.64.0.8:8000
+- Nodes:
+    - "ace1":
+        icon: mdi-server
+        description: "Staging · 12GB"
+        widget:
+          type: glances
+          url: http://100.64.0.11:61208
+          version: 4
+          metric: info
+    - "VPS":
+        icon: mdi-cloud
+        description: "Prod · 8GB"
+        widget:
+          type: glances
+          url: http://100.64.0.2:61208
+          version: 4
+          metric: info
+    - "RPi4":
+        icon: mdi-raspberry-pi
+        description: "DNS · 8GB"
+        widget:
+          type: glances
+          url: http://100.64.0.10:61208
+          version: 4
+          metric: info
+    - "RPi3":
+        icon: mdi-raspberry-pi
+        description: "Monitor · 1GB"
+        widget:
+          type: glances
+          url: http://100.64.0.6:61208
+          version: 4
+          metric: info
+    - "ace2":
+        icon: mdi-server
+        description: "Agent · 12GB"
+        widget:
+          type: glances
+          url: http://100.64.0.5:61208
+          version: 4
+          metric: info
+    - "aws1":
+        icon: mdi-cloud-outline
+        description: "Hub · t4g.micro · 1vCPU · 1GB"
+        ping: http://100.64.0.4:6443
+    - "Beelink":
+        icon: mdi-desktop-tower
+        description: "Ollama · N95 · 8GB (no Glances)"
+        ping: http://100.64.0.3:11434
+    - "Jetson":
+        icon: mdi-chip
+        description: "Pollex · ARM · 4GB (no Glances)"
+        ping: http://100.64.0.8:8000

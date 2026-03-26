@@ -1,0 +1,65 @@
+- Tools:
+    - Cloudflare:
+        - icon: si-cloudflare
+          href: https://dash.cloudflare.com
+    - Terraform Cloud:
+        - icon: si-terraform
+          href: https://app.terraform.io/app/Cubernautas/workspaces
+    - GitHub:
+        - icon: si-github
+          href: https://github.com/mlorentedev/kubelab
+    - Docker Hub:
+        - icon: si-docker
+          href: https://hub.docker.com/u/mlorentedev
+    - PyPI:
+        - icon: si-pypi
+          href: https://pypi.org
+- Security:
+    - GitGuardian:
+        - icon: mdi-shield-search
+          href: https://dashboard.gitguardian.com
+    - SSL Labs:
+        - icon: mdi-certificate
+          href: https://www.ssllabs.com/ssltest/analyze.html?d=kubelab.live
+    - Shodan:
+        - icon: mdi-magnify-scan
+          href: https://www.shodan.io/host/162.55.57.175
+- Status:
+    - GitHub Status:
+        - icon: si-github
+          href: https://www.githubstatus.com
+    - Cloudflare Status:
+        - icon: si-cloudflare
+          href: https://www.cloudflarestatus.com
+    - Claude Status:
+        - icon: si-anthropic
+          href: https://status.anthropic.com
+- Ops:
+    - "Hetzner (~9€/mo)":
+        - icon: si-hetzner
+          href: https://console.hetzner.cloud/billing
+    - "AWS (~$4/mo)":
+        - icon: si-amazonaws
+          href: https://console.aws.amazon.com/billing
+    - YouTube Studio:
+        - icon: si-youtube
+          href: https://studio.youtube.com
+    - Analytics:
+        - icon: si-googleanalytics
+          href: https://analytics.google.com
+    - Vault:
+        - icon: si-obsidian
+          href: obsidian://vault/knowledge
+- Docs:
+    - Kubernetes:
+        - icon: si-kubernetes
+          href: https://kubernetes.io/docs/
+    - Traefik:
+        - icon: si-traefikproxy
+          href: https://doc.traefik.io/traefik/
+    - Argo CD:
+        - icon: si-argo
+          href: https://argo-cd.readthedocs.io/
+    - Authelia:
+        - icon: mdi-shield-lock
+          href: https://www.authelia.com/configuration/

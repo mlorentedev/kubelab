@@ -1,0 +1,124 @@
+title: KubeLab Home
+favicon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/kubernetes.png
+theme: light
+color: zinc
+headerStyle: boxed
+statusStyle: basic
+hideVersion: true
+useEqualHeights: true
+layout:
+  IP Reference:
+    style: row
+    columns: 1
+    icon: mdi-table
+    tab: Diagrams
+  Topology:
+    style: row
+    columns: 1
+    icon: mdi-map-marker-path
+    tab: Diagrams
+  DNS Map:
+    style: row
+    columns: 1
+    icon: mdi-table
+    tab: Diagrams
+  DNS Resolution:
+    style: row
+    columns: 1
+    icon: mdi-dns
+    tab: Diagrams
+  GitOps:
+    style: row
+    columns: 1
+    icon: mdi-source-branch
+    tab: Diagrams
+  Request Path:
+    style: row
+    columns: 1
+    icon: mdi-arrow-decision
+    tab: Diagrams
+  Stg - Apps:
+    style: row
+    columns: 2
+    icon: mdi-application
+    tab: Staging
+  Stg - Platform:
+    style: row
+    columns: 3
+    icon: mdi-cog
+    tab: Staging
+  Stg - Security:
+    style: row
+    columns: 2
+    icon: mdi-shield-lock
+    tab: Staging
+  Stg - Observability:
+    style: row
+    columns: 3
+    icon: mdi-chart-line
+    tab: Staging
+  Stg - Core:
+    style: row
+    columns: 4
+    icon: mdi-heart-pulse
+    tab: Staging
+  Prod - Apps:
+    style: row
+    columns: 2
+    icon: mdi-application
+    tab: Prod
+  Prod - Platform:
+    style: row
+    columns: 3
+    icon: mdi-cog
+    tab: Prod
+  Prod - Security:
+    style: row
+    columns: 2
+    icon: mdi-shield-lock
+    tab: Prod
+  Prod - Observability:
+    style: row
+    columns: 3
+    icon: mdi-chart-line
+    tab: Prod
+  Prod - Core:
+    style: row
+    columns: 4
+    icon: mdi-heart-pulse
+    tab: Prod
+  Network:
+    style: row
+    columns: 3
+    icon: mdi-lan
+    tab: Infra
+  Bare Metal:
+    style: row
+    columns: 2
+    icon: mdi-chip
+    tab: Infra
+  Nodes:
+    style: row
+    columns: 4
+    icon: mdi-server-network
+    tab: Infra
+  Tools:
+    style: row
+    columns: 4
+    tab: Links
+  Security:
+    style: row
+    columns: 3
+    tab: Links
+  Status:
+    style: row
+    columns: 3
+    tab: Links
+  Ops:
+    style: row
+    columns: 5
+    tab: Links
+  Docs:
+    style: row
+    columns: 4
+    tab: Links
