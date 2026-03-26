@@ -38,8 +38,8 @@ help:
 	@echo "  make down-dev           Stop all dev services"
 	@echo "  make restart-dev        Restart all dev services"
 	@echo "  make build-dev          Build all app images (no cache)"
-	@echo "  make config-generate    Generate config files for dev"
-	@echo "  make credentials-generate  Generate credentials for dev"
+	@echo "  make config-generate ENV=x  Generate config files (default: dev)"
+	@echo "  make credentials-generate ENV=x  Generate credentials (default: dev)"
 	@echo "  make regen-certs        Regenerate dev TLS certs and reinstall browser CA"
 	@echo "  make secrets ENV=x      Edit SOPS-encrypted secrets (default: dev)"
 	@echo "  make secrets-init ENV=x Generate machine secrets for an env"
@@ -123,11 +123,7 @@ setup-sops:
 
 .PHONY: setup-certs
 setup-certs:
-	@echo "Setting up TLS certificates for local development..."
-	@$(TOOLKIT) tools certs install-mkcert || true
 	@$(TOOLKIT) tools certs generate --env dev
-	@mkcert -install >/dev/null 2>&1 || true
-	@echo "✓ TLS certificates configured"
 
 .PHONY: setup-ansible
 setup-ansible:
@@ -178,13 +174,11 @@ setup-local-dns:
 
 .PHONY: credentials-generate
 credentials-generate:
-	@$(TOOLKIT) credentials generate --env dev
-	@echo "✓ Credentials generated"
+	@$(TOOLKIT) credentials generate --env $(ENV)
 
 .PHONY: config-generate
 config-generate:
-	@$(TOOLKIT) config generate --env dev
-	@echo "✓ Configuration files generated"
+	@$(TOOLKIT) config generate --env $(ENV)
 
 .PHONY: build-dev
 build-dev:
@@ -532,17 +526,9 @@ configure-oidc:
 	@echo "✓ OIDC providers configured for $(ENV)"
 
 .PHONY: deploy-k8s
-deploy-k8s: sync-k8s-images
+deploy-k8s:
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
-	@echo "=== Applying CoreDNS hairpin DNS ($(ENV)) ==="
-	@kubectl apply -f infra/k8s/base/edge/coredns-custom.yaml --kubeconfig $(KUBECONFIG_PATH)
-	@echo "=== Syncing OIDC hashes from SOPS ($(ENV)) ==="
-	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV)
-	@echo "=== Applying K8s secrets from SOPS ($(ENV)) ==="
-	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
-	@echo "=== Deploying K8s workloads ($(ENV)) ==="
-	@kubectl apply -k infra/k8s/overlays/$(ENV)/ --kubeconfig $(KUBECONFIG_PATH)
-	@echo "✓ K8s workloads deployed for $(ENV)"
+	@$(TOOLKIT) infra k8s deploy --env $(ENV)
 
 # -----------------------------------------------------------------------------
 # Validation & Testing

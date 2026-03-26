@@ -1,0 +1,15 @@
+- greeting:
+    text_size: xl
+    text: KubeLab IDP
+- datetime:
+    text_size: md
+    format:
+      dateStyle: short
+      timeStyle: short
+      hourCycle: h23
+- openmeteo:
+    label: Denver
+    latitude: 39.7392
+    longitude: -104.9903
+    units: metric
+    cache: 15

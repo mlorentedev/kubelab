@@ -1,0 +1,179 @@
+{# Architecture diagrams — Generated from common.yaml SSOT.
+   Run `make sync-homepage` to regenerate. Do NOT edit custom.js directly.
+   Replaces placeholder service cards in Architecture tab with Mermaid diagrams. #}
+(function() {
+  var MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+
+  var DIAGRAMS = {
+    "Node topology": "graph TB\n"
+      + "  subgraph Internet\n"
+      + "    CF[Cloudflare DNS + CDN]\n"
+      + "    Users[Users]\n"
+      + "  end\n"
+      + "  subgraph Cloud\n"
+      + "    VPS[VPS<br/>{{ vps.public_ip }} / {{ vps.tailscale_ip }}<br/>K3s Prod 8GB]\n"
+      + "    AWS1[aws1<br/>{{ aws.tailscale_ip }}<br/>Argo CD Hub 1GB]\n"
+      + "  end\n"
+      + "  subgraph HomeLab[Home Lab 172.16.1.0/24]\n"
+      + "    ACE1[ace1<br/>{{ nodes.ace1.lan_ip }} / {{ nodes.ace1.tailscale_ip }}<br/>K3s Staging 12GB]\n"
+      + "    ACE2[ace2<br/>{{ nodes.ace2.lan_ip }} / {{ nodes.ace2.tailscale_ip }}<br/>K3s Agent 12GB]\n"
+      + "    RPI4[RPi4<br/>{{ nodes.rpi4.lan_ip }} / {{ nodes.rpi4.tailscale_ip }}<br/>DNS Gateway 8GB]\n"
+      + "    BEE[Beelink<br/>{{ nodes.beelink.lan_ip }} / {{ nodes.beelink.tailscale_ip }}<br/>Ollama 8GB]\n"
+      + "    JET[Jetson<br/>{{ nodes.jetson.lan_ip }} / {{ nodes.jetson.tailscale_ip }}<br/>Pollex 4GB]\n"
+      + "  end\n"
+      + "  subgraph Standalone\n"
+      + "    RPI3[RPi3<br/>{{ nodes.rpi3.tailscale_ip }}<br/>Uptime Kuma 1GB]\n"
+      + "  end\n"
+      + "  Users --> CF --> VPS\n"
+      + "  AWS1 -. Tailscale .-> VPS\n"
+      + "  AWS1 -. Tailscale .-> ACE1\n"
+      + "  VPS -. Tailscale .-> ACE1\n"
+      + "  VPS -. Tailscale .-> RPI3\n"
+      + "  ACE1 --- ACE2\n"
+      + "  ACE1 --- RPI4\n"
+      + "  ACE1 --- BEE\n"
+      + "  ACE1 --- JET\n"
+      + "  RPI4 -. Tailscale .-> VPS\n"
+      + "  classDef cloud fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n"
+      + "  classDef lan fill:#dcfce7,stroke:#22c55e,stroke-width:2px\n"
+      + "  classDef standalone fill:#fef3c7,stroke:#f59e0b,stroke-width:2px\n"
+      + "  classDef ext fill:#f3f4f6,stroke:#9ca3af\n"
+      + "  class VPS,AWS1 cloud\n"
+      + "  class ACE1,ACE2,RPI4,BEE,JET lan\n"
+      + "  class RPI3 standalone\n"
+      + "  class CF,Users ext",
+
+    "CI/CD pipeline": "graph LR\n"
+      + "  DEV[Developer] -->|push| GH[GitHub]\n"
+      + "  GH -->|webhook| ARGO[Argo CD<br/>aws1 Hub]\n"
+      + "  ARGO -->|sync| ACE1[K3s Staging<br/>ace1]\n"
+      + "  ARGO -->|sync| VPS[K3s Prod<br/>VPS]\n"
+      + "  GH -->|CI| GHA[GitHub Actions]\n"
+      + "  GHA -->|push image| DH[Docker Hub]\n"
+      + "  DH -.-> ACE1\n"
+      + "  DH -.-> VPS\n"
+      + "  classDef hub fill:#fce7f3,stroke:#ec4899,stroke-width:2px\n"
+      + "  classDef spoke fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n"
+      + "  classDef ci fill:#f3f4f6,stroke:#9ca3af\n"
+      + "  class ARGO hub\n"
+      + "  class ACE1,VPS spoke\n"
+      + "  class GH,GHA,DH ci",
+
+    "Resolution chain": "graph TB\n"
+      + "  C[Client] -->|*.kubelab.live| CFDNS[Cloudflare]\n"
+      + "  CFDNS --> VPS[VPS Traefik<br/>{{ vps.public_ip }}]\n"
+      + "  C -->|VPN| HS[Headscale]\n"
+      + "  HS -->|split DNS| PH[Pi-hole<br/>RPi4]\n"
+      + "  PH -->|staging| CD[CoreDNS<br/>RPi4]\n"
+      + "  CD --> ACE1[ace1 Traefik<br/>{{ nodes.ace1.tailscale_ip }}]\n"
+      + "  PH -->|other| UP[1.1.1.1 / 8.8.8.8]\n"
+      + "  classDef dns fill:#ede9fe,stroke:#8b5cf6,stroke-width:2px\n"
+      + "  classDef proxy fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n"
+      + "  classDef ext fill:#f3f4f6,stroke:#9ca3af\n"
+      + "  class PH,CD,CFDNS dns\n"
+      + "  class VPS,ACE1 proxy\n"
+      + "  class C,HS,UP ext",
+
+    "Request lifecycle": "graph LR\n"
+      + "  U[User] --> T[Traefik]\n"
+      + "  T --> CS[CrowdSec]\n"
+      + "  CS --> A{Authelia}\n"
+      + "  A -->|ok| APP[App]\n"
+      + "  A -->|no| LOGIN[Login]\n"
+      + "  A -.-> R[(Redis)]\n"
+      + "  APP -.-> V[Vector]\n"
+      + "  V --> L[(Loki)]\n"
+      + "  L --> G[Grafana]\n"
+      + "  classDef sec fill:#fef3c7,stroke:#f59e0b,stroke-width:2px\n"
+      + "  classDef app fill:#dcfce7,stroke:#22c55e,stroke-width:2px\n"
+      + "  classDef obs fill:#ede9fe,stroke:#8b5cf6,stroke-width:2px\n"
+      + "  classDef proxy fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n"
+      + "  class CS,A,LOGIN,R sec\n"
+      + "  class APP app\n"
+      + "  class V,L,G obs\n"
+      + "  class T,U proxy"
+  };
+
+  var DIAGRAM_TAB = "#diagrams";
+  var rendered = false;
+
+  function replacePlaceholders() {
+    if (rendered) return;
+    // Only inject diagrams when the Diagrams tab is active
+    var hash = (window.location.hash || "").toLowerCase();
+    if (hash !== DIAGRAM_TAB) return;
+    // Find all service card titles and match against diagram keys
+    var cards = document.querySelectorAll("li a, li div, li span");
+    var matched = 0;
+    for (var i = 0; i < cards.length; i++) {
+      var text = (cards[i].textContent || "").trim();
+      if (DIAGRAMS[text]) {
+        // Found a placeholder — replace its parent card with a diagram
+        var card = cards[i].closest("li") || cards[i].parentElement;
+        if (!card) continue;
+        var container = card.parentElement;
+        var target = document.createElement("div");
+        target.id = "mermaid-" + matched;
+        target.style.cssText = "width:100%;display:flex;justify-content:center;padding:0.5rem;overflow-x:auto";
+        card.replaceWith(target);
+
+        // Render mermaid into this target
+        (function(t, def, idx) {
+          window.mermaid.render("svg-" + idx, def).then(function(result) {
+            var wrapper = document.createElement("div");
+            wrapper.insertAdjacentHTML("afterbegin", result.svg);
+            if (wrapper.firstChild) {
+              t.appendChild(wrapper.firstChild);
+            }
+          });
+        })(target, DIAGRAMS[text], matched);
+        matched++;
+      }
+    }
+    if (matched > 0) rendered = true;
+  }
+
+  function init() {
+    window.mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose"});
+    // Run on hash change (tab switch) and periodically until all replaced
+    var tryReplace = function() {
+      replacePlaceholders();
+      // Only retry while on the Diagrams tab to avoid infinite polling
+      var hash = (window.location.hash || "").toLowerCase();
+      if (!rendered && hash === DIAGRAM_TAB) setTimeout(tryReplace, 1000);
+    };
+    window.addEventListener("hashchange", function() {
+      rendered = false;
+      setTimeout(tryReplace, 300);
+    });
+    setTimeout(tryReplace, 1000);
+  }
+
+  var script = document.createElement("script");
+  script.src = MERMAID_CDN;
+  script.onload = init;
+  document.head.appendChild(script);
+})();
+
+// Public IP badge in header
+(function() {
+  function injectIP() {
+    var widgets = document.querySelector('[id*="information_widgets"]')
+                || document.querySelector(".information-widget-resource")
+                || document.querySelector("#widgets-wrap");
+    if (!widgets) return;
+    if (document.getElementById("ip-badge")) return;
+
+    var badge = document.createElement("span");
+    badge.id = "ip-badge";
+    badge.style.cssText = "font-size:0.75rem;opacity:0.6;margin-left:0.5rem";
+    badge.textContent = "IP: ...";
+    widgets.appendChild(badge);
+
+    fetch("https://api.ipify.org?format=json")
+      .then(function(r) { return r.json(); })
+      .then(function(d) { badge.textContent = "IP: " + d.ip; });
+  }
+
+  setTimeout(injectIP, 1500);
+})();
