@@ -23,6 +23,13 @@ networking:
   staging_zones:
     - "staging.kubelab.live"
     - "staging.mlorente.dev"
+  # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
+  # Consumed by deploy-vps playbook → Headscale config.yaml template.
+  vpn_extra_records:
+    - name: ollama
+      node: beelink       # resolves to networking.nodes.beelink.tailscale_ip
+    - name: jetson
+      node: jetson         # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
   vps:
@@ -246,6 +253,10 @@ edge:
 # CUSTOM APPLICATIONS
 # ===========================================================================
 apps:
+  # SSOT admin identity — used by credentials.py as default for all services
+  auth:
+    admin_username: manu
+
   # Platform applications (custom-built)
   platform:
     api:
@@ -478,7 +489,7 @@ apps:
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
-          - username: admin
+          - username: manu
             displayname: Administrator
             email: mlorentedev@gmail.com
             disabled: false

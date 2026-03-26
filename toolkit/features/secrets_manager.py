@@ -118,8 +118,8 @@ SECRET_CATALOG: list[SecretSpec] = [
     # Authelia — User Password Hashes
     # =========================================================================
     SecretSpec(
-        key_path=f"{_AUTH}.users_admin_password_hash",
-        description="Argon2 hash of admin user password",
+        key_path=f"{_AUTH}.users_manu_password_hash",
+        description="Argon2 hash of admin user password (username from apps.auth.admin_username)",
         kind=SecretKind.ARGON2_HASH,
         services=("authelia",),
         derived_from="(interactive password prompt)",

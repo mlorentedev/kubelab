@@ -1,6 +1,10 @@
 """Tests for credential-to-service mapping and reconciliation."""
 
-from toolkit.features.credentials import CREDENTIAL_SERVICE_MAP
+from toolkit.features.credentials import (
+    CREDENTIAL_SERVICE_MAP,
+    IMMUTABLE_SECRETS,
+    CredentialsManager,
+)
 
 
 class TestCredentialServiceMap:
@@ -65,7 +69,7 @@ class TestAffectedServiceResolution:
             "basic_auth.user",
             "basic_auth.password",
             "basic_auth.credentials",
-            "apps.services.security.authelia.users_admin_password_hash",
+            "apps.services.security.authelia.users_manu_password_hash",
             "apps.services.security.authelia.oidc_hmac_secret",
             "apps.services.security.authelia.session_secret",
             "apps.services.security.authelia.storage_encryption_key",
@@ -92,3 +96,101 @@ class TestAffectedServiceResolution:
     def test_unknown_key_no_services(self) -> None:
         affected = self._resolve_affected(["some.unknown.key"])
         assert affected == set()
+
+
+class TestImmutableSecrets:
+    """Verify IMMUTABLE_SECRETS protection logic."""
+
+    def test_immutable_secrets_defined(self) -> None:
+        assert len(IMMUTABLE_SECRETS) == 4
+
+    def test_storage_encryption_key_is_immutable(self) -> None:
+        assert "apps.services.security.authelia.storage_encryption_key" in IMMUTABLE_SECRETS
+
+    def test_session_secret_is_immutable(self) -> None:
+        assert "apps.services.security.authelia.session_secret" in IMMUTABLE_SECRETS
+
+    def test_jwt_secret_is_immutable(self) -> None:
+        assert "apps.services.security.authelia.jwt_secret_reset_password" in IMMUTABLE_SECRETS
+
+    def test_oidc_hmac_is_immutable(self) -> None:
+        assert "apps.services.security.authelia.oidc_hmac_secret" in IMMUTABLE_SECRETS
+
+    def test_preserve_existing_values(self) -> None:
+        """Existing immutable secrets must not be overwritten."""
+        cm = CredentialsManager()
+        generated = {
+            "apps.services.security.authelia.storage_encryption_key": "NEW_VALUE",
+            "apps.services.security.authelia.session_secret": "NEW_VALUE",
+            "apps.services.security.authelia.oidc_hmac_secret": "NEW_VALUE",
+            "apps.services.security.authelia.jwt_secret_reset_password": "NEW_VALUE",
+            "basic_auth.user": "manu",
+        }
+        existing = {
+            "apps.services.security.authelia.storage_encryption_key": "EXISTING_KEY",
+            "apps.services.security.authelia.session_secret": "EXISTING_SESSION",
+            "apps.services.security.authelia.oidc_hmac_secret": "EXISTING_HMAC",
+            "apps.services.security.authelia.jwt_secret_reset_password": "EXISTING_JWT",
+        }
+        result = cm._preserve_immutable(generated, existing)
+
+        # Immutable secrets preserved
+        assert result["apps.services.security.authelia.storage_encryption_key"] == "EXISTING_KEY"
+        assert result["apps.services.security.authelia.session_secret"] == "EXISTING_SESSION"
+        assert result["apps.services.security.authelia.oidc_hmac_secret"] == "EXISTING_HMAC"
+        assert result["apps.services.security.authelia.jwt_secret_reset_password"] == "EXISTING_JWT"
+        # Non-immutable secrets use new values
+        assert result["basic_auth.user"] == "manu"
+
+    def test_first_run_uses_generated_values(self) -> None:
+        """When no existing secrets, generated values are used."""
+        cm = CredentialsManager()
+        generated = {
+            "apps.services.security.authelia.storage_encryption_key": "FRESH_KEY",
+            "apps.services.security.authelia.session_secret": "FRESH_SESSION",
+        }
+        result = cm._preserve_immutable(generated, existing={})
+
+        assert result["apps.services.security.authelia.storage_encryption_key"] == "FRESH_KEY"
+        assert result["apps.services.security.authelia.session_secret"] == "FRESH_SESSION"
+
+
+class TestFlattenDict:
+    """Verify nested dict flattening for SOPS reading."""
+
+    def test_flat_dict(self) -> None:
+        result = CredentialsManager._flatten_dict({"a": 1, "b": 2})
+        assert result == {"a": 1, "b": 2}
+
+    def test_nested_dict(self) -> None:
+        result = CredentialsManager._flatten_dict({"a": {"b": {"c": "val"}}})
+        assert result == {"a.b.c": "val"}
+
+    def test_mixed_depth(self) -> None:
+        result = CredentialsManager._flatten_dict({
+            "basic_auth": {"user": "manu"},
+            "apps": {"services": {"security": {"authelia": {"session_secret": "abc"}}}},
+        })
+        assert result["basic_auth.user"] == "manu"
+        assert result["apps.services.security.authelia.session_secret"] == "abc"
+
+
+class TestSSOTAdminUsername:
+    """Verify admin username is read from common.yaml SSOT."""
+
+    def test_common_yaml_has_admin_username(self) -> None:
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager("staging")
+        config = cm.get_merged_config()
+        username = config.get("apps", {}).get("auth", {}).get("admin_username")
+        assert username == "manu"
+
+    def test_authelia_users_matches_ssot(self) -> None:
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager("staging")
+        config = cm.get_merged_config()
+        ssot_username = config["apps"]["auth"]["admin_username"]
+        authelia_username = config["apps"]["services"]["security"]["authelia"]["users"][0]["username"]
+        assert ssot_username == authelia_username

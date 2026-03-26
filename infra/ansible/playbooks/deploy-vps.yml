@@ -47,6 +47,11 @@
         _headscale_dns_split: "{{ _headscale_dns_split | default({}) | combine({item: [config.networking.nodes.rpi4.tailscale_ip]}) }}"
       loop: "{{ config.networking.staging_zones }}"
 
+    - name: Build Headscale extra records from vpn_extra_records (SSOT)
+      set_fact:
+        _headscale_dns_extra_records: "{{ _headscale_dns_extra_records | default([]) + [{'name': item.name ~ '.' ~ config.global.base_domain, 'type': 'A', 'value': config.networking.nodes[item.node].tailscale_ip}] }}"
+      loop: "{{ config.networking.vpn_extra_records | default([]) }}"
+
   roles:
     # --- Error pages (Docker Compose — only when K3s is NOT the ingress) ---
     # In prod, VPS is in k3s_servers group → K3s handles errors deployment
@@ -136,10 +141,4 @@
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
         headscale_dns_split: "{{ _headscale_dns_split }}"
-        headscale_dns_extra_records:
-          - name: "ollama.{{ config.global.base_domain }}"
-            type: A
-            value: "{{ config.networking.nodes.beelink.tailscale_ip }}"
-          - name: "jetson.{{ config.global.base_domain }}"
-            type: A
-            value: "{{ config.networking.nodes.jetson.tailscale_ip }}"
+        headscale_dns_extra_records: "{{ _headscale_dns_extra_records }}"
