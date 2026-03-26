@@ -14,13 +14,6 @@ spec:
   routes:
     - match: Host(`api.staging.kubelab.live`)
       kind: Rule
-      middlewares:
-        - name: secure-headers
-          namespace: kubelab
-        - name: error-pages
-          namespace: kubelab
-        - name: crowdsec-bouncer
-          namespace: kubelab
       services:
         - name: api
           port: 8080
@@ -42,15 +35,8 @@ spec:
   routes:
     - match: Host(`staging.mlorente.dev`)
       kind: Rule
-      middlewares:
-        - name: secure-headers
-          namespace: kubelab
-        - name: error-pages
-          namespace: kubelab
-        - name: crowdsec-bouncer
-          namespace: kubelab
       services:
         - name: web
-          port: 8080
+          port: 4321
   tls:
     certResolver: letsencrypt

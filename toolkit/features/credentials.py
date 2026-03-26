@@ -2,7 +2,6 @@
 Credentials management utilities.
 """
 
-import json  # Added for parsing cscli output
 import secrets
 import string
 import subprocess
@@ -215,101 +214,6 @@ class CredentialsManager:
         logger.info("")
         logger.info("Then run 'toolkit config generate' to apply changes to templated files.")
 
-    def _get_crowdsec_bouncer_api_key(self, bouncer_name: str, env: str) -> str:
-        """
-        Gets or generates the CrowdSec bouncer API key from the CrowdSec agent.
-        Ensures the CrowdSec agent is running for this operation.
-        """
-        logger.info(f"Checking CrowdSec bouncer API key for '{bouncer_name}'...")
-
-        # Determine the CrowdSec agent container name dynamically
-        cm = ConfigurationManager(env, self.project_root)
-        env_vars = cm.get_env_vars()
-        crowdsec_agent_container_name = env_vars.get("APPS_SERVICES_SECURITY_CROWDSEC_NAME", "crowdsec")
-
-        # Ensure CrowdSec agent is running
-        docker_service = DockerService(settings)
-        # Path to CrowdSec agent's compose files
-        crowdsec_agent_dir = Path("infra/stacks/services/security/crowdsec")
-
-        # Temporarily start CrowdSec agent if not running
-        try:
-            result = subprocess.run(
-                ["docker", "ps", "-q", "-f", f"name={crowdsec_agent_container_name}"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if not result.stdout.strip():
-                logger.warning(
-                    f"CrowdSec agent '{crowdsec_agent_container_name}' is not running. Starting it temporarily..."
-                )
-                docker_service.start_service(crowdsec_agent_dir, env)
-                import time
-
-                time.sleep(10)  # Give it time to start
-        except Exception as e:
-            logger.error(f"Failed to check/start CrowdSec agent: {e}")
-            raise typer.Exit(1) from e
-
-        try:
-            # Check if bouncer already exists
-            list_bouncers_cmd = [
-                "docker",
-                "exec",
-                crowdsec_agent_container_name,
-                "cscli",
-                "bouncers",
-                "list",
-                "-o",
-                "json",
-            ]
-            result = subprocess.run(list_bouncers_cmd, capture_output=True, text=True, check=True)
-            bouncers_list = json.loads(result.stdout)
-
-            for bouncer in bouncers_list:
-                if bouncer.get("name") == bouncer_name:
-                    logger.info(f"CrowdSec bouncer '{bouncer_name}' exists. Rotating key (delete/re-create)...")
-                    delete_cmd = [
-                        "docker",
-                        "exec",
-                        crowdsec_agent_container_name,
-                        "cscli",
-                        "bouncers",
-                        "delete",
-                        bouncer_name,
-                    ]
-                    subprocess.run(delete_cmd, check=True, capture_output=True)
-                    break
-
-            # Create bouncer and get new key
-            add_bouncer_cmd = [
-                "docker",
-                "exec",
-                crowdsec_agent_container_name,
-                "cscli",
-                "bouncers",
-                "add",
-                bouncer_name,
-                "-o",
-                "raw",
-            ]
-            result = subprocess.run(add_bouncer_cmd, capture_output=True, text=True, check=True)
-            api_key = result.stdout.strip()
-            logger.success(f"CrowdSec bouncer API key generated/rotated for '{bouncer_name}'.")
-            return api_key
-
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to manage CrowdSec bouncer '{bouncer_name}': {e.stderr}")
-            raise typer.Exit(1) from e
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse CrowdSec bouncer list: {e}")
-            raise typer.Exit(1) from e
-        finally:
-            # If we started agent temporarily, we should stop it.
-            # However, for development, it's often kept running.
-            pass
-
     def _read_existing_secrets(self, env: str) -> dict[str, Any]:
         """Read existing secrets from the SOPS file for the given environment.
 
@@ -513,17 +417,16 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             gitea_oidc_client_secret_hash = self.generate_argon2_hash(gitea_oidc_client_secret)
 
-        # 12. Generate CrowdSec Bouncer API Key
-        # Determine bouncer name from config (e.g., crowdsec-bouncer-traefik)
-        cm = ConfigurationManager(env, self.project_root)
-        env_vars = cm.get_env_vars()
-        bouncer_name = env_vars.get("APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_NAME", "crowdsec-bouncer-traefik")
-
-        try:
-            crowdsec_bouncer_api_key = self._get_crowdsec_bouncer_api_key(bouncer_name, env)
-        except Exception as e:
-            logger.error(f"Failed to get CrowdSec bouncer API key: {e}")
-            raise typer.Exit(1) from e
+        # 12. Generate CrowdSec Bouncer API Key (declarative — shared secret)
+        # Both LAPI (BOUNCER_KEY_*) and bouncer (CROWDSEC_BOUNCER_API_KEY) read
+        # from the same K8s Secret. No imperative `cscli bouncers add` needed.
+        existing_bouncer_key = existing_secrets.get("apps.services.security.crowdsec.bouncer_api_key")
+        if existing_bouncer_key:
+            logger.info("Preserving existing CrowdSec bouncer API key")
+            crowdsec_bouncer_api_key = existing_bouncer_key
+        else:
+            crowdsec_bouncer_api_key = secrets.token_urlsafe(32)
+            logger.success("Generated new CrowdSec bouncer API key (static token)")
 
         # Build secrets dictionary
         # Key paths MUST match the structure in common.yaml (apps.services.security.authelia.*)

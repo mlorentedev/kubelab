@@ -114,10 +114,9 @@ spec:
       containers:
         - name: crowdsec
           image: crowdsecurity/crowdsec:v1.7.6
-          # Ensure bouncer is registered after every pod start.
-          # CrowdSec only auto-registers from BOUNCER_KEY_* on first run;
-          # subsequent starts skip registration even if the DB lost the entry.
-          # See: vault 90-lessons.md [2026-03-01]
+          # Idempotent bouncer registration: delete-then-add on every start.
+          # BOUNCER_KEY_* auto-registers only on first run. This hook guarantees
+          # the bouncer is always registered, even after DB corruption or PVC wipe.
           lifecycle:
             postStart:
               exec:
@@ -129,9 +128,13 @@ spec:
                       wget -qO- http://localhost:8080/health >/dev/null 2>&1 && break
                       sleep 2
                     done
+                    if ! wget -qO- http://localhost:8080/health >/dev/null 2>&1; then
+                      echo "ERROR: CrowdSec LAPI not ready after 60s" >&2
+                      exit 1
+                    fi
+                    cscli bouncers delete crowdsec-bouncer 2>/dev/null || true
                     cscli bouncers add crowdsec-bouncer \
-                      --key "$(printenv 'BOUNCER_KEY_crowdsec-bouncer')" \
-                      2>/dev/null || true
+                      --key "$(printenv 'BOUNCER_KEY_crowdsec-bouncer')"
           ports:
             - name: lapi
               containerPort: 8080

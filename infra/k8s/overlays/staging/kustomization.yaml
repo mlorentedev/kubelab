@@ -9,6 +9,3 @@ resources:
   - services.yaml
   - configmaps.yaml
   - ingress.yaml
-  - traefik-dashboard.yaml
-  - redirect-kubelab.yaml
-  # secrets managed via: toolkit infra k8s apply-secrets --env staging (ADR-014)

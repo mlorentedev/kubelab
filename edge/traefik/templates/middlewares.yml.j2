@@ -1,9 +1,9 @@
 http:
   services:
-    {{ APP_NGINX_NAME }}:
+    {{ EDGE_ERRORS_NAME }}:
       loadBalancer:
         servers:
-          - url: "http://{{ APP_NGINX_NAME }}:{{ APP_NGINX_PORT }}"
+          - url: "http://{{ EDGE_ERRORS_NAME }}:{{ EDGE_ERRORS_PORT }}"
 
   middlewares:
     error-pages:
@@ -11,7 +11,7 @@ http:
         status:
           - "400"
           - "402-599"
-        service: {{ APP_NGINX_NAME }}
+        service: {{ EDGE_ERRORS_NAME }}
         query: "/errors/{status}.html"
     https-redirect:
       redirectScheme:
