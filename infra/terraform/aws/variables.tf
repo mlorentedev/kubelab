@@ -78,3 +78,9 @@ variable "tailscale_authkey" {
   type        = string
   sensitive   = true
 }
+
+variable "headscale_api_key" {
+  description = "Headscale management API key for node cleanup on recreate"
+  type        = string
+  sensitive   = true
+}
