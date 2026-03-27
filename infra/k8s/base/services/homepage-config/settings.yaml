@@ -77,23 +77,28 @@ layout:
     columns: 1
     icon: mdi-tools
     tab: Flows
+  Repos:
+    style: row
+    columns: 3
+    icon: si-github
+    tab: Repos
   Tools:
     style: row
     columns: 4
-    tab: Links
+    tab: Bookmarks
   Security:
     style: row
     columns: 3
-    tab: Links
+    tab: Bookmarks
   Status:
     style: row
     columns: 3
-    tab: Links
+    tab: Bookmarks
   Ops:
     style: row
     columns: 5
-    tab: Links
+    tab: Bookmarks
   Docs:
     style: row
     columns: 4
-    tab: Links
+    tab: Bookmarks
