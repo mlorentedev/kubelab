@@ -14,6 +14,7 @@ EXPECTED_COMMAND_GROUPS = [
     "deployment",
     "infra",
     "services",
+    "sync",
     "tools",
 ]
 

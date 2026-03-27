@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from .fixtures import NodeInfo, ssh_run
+from .fixtures import NodeInfo, node_ssh_run
 
 pytestmark = pytest.mark.infra
 
@@ -23,7 +23,7 @@ class TestNodeHealth:
         errors: list[str] = []
         for node in inventory:
             try:
-                result = ssh_run(node.host, "hostname")
+                result = node_ssh_run(node, "hostname")
                 if result.returncode != 0:
                     errors.append(f"{node.name} ({node.host}): SSH failed — {result.stderr.strip()}")
                 else:
@@ -45,7 +45,7 @@ class TestNodeHealth:
         errors: list[str] = []
         for node in inventory:
             try:
-                result = ssh_run(node.host, "df --output=pcent / | tail -1")
+                result = node_ssh_run(node, "df --output=pcent / | tail -1")
                 if result.returncode != 0:
                     errors.append(f"{node.name}: df failed — {result.stderr.strip()}")
                     continue
@@ -65,8 +65,8 @@ class TestNodeHealth:
         errors: list[str] = []
         for node in inventory:
             try:
-                result = ssh_run(
-                    node.host,
+                result = node_ssh_run(
+                    node,
                     "free | awk '/Mem:/ {printf \"%.0f\", $3/$2 * 100}'",
                 )
                 if result.returncode != 0:
@@ -88,7 +88,7 @@ class TestNodeHealth:
         errors: list[str] = []
         for node in inventory:
             try:
-                result = ssh_run(node.host, "tailscale status --peers 2>/dev/null | wc -l")
+                result = node_ssh_run(node, "tailscale status --peers 2>/dev/null | wc -l")
                 if result.returncode != 0:
                     errors.append(f"{node.name}: tailscale status failed — {result.stderr.strip()}")
                     continue
@@ -108,7 +108,7 @@ class TestNodeHealth:
         errors: list[str] = []
         for node in inventory:
             try:
-                result = ssh_run(node.host, "timedatectl show -p NTPSynchronized --value 2>/dev/null || echo unknown")
+                result = node_ssh_run(node, "timedatectl show -p NTPSynchronized --value 2>/dev/null || echo unknown")
                 if result.returncode != 0:
                     errors.append(f"{node.name}: timedatectl failed — {result.stderr.strip()}")
                     continue

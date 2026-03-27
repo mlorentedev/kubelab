@@ -30,12 +30,47 @@ def _load_common_config() -> dict:
 
 _COMMON = _load_common_config()
 
-# VPS node — IP from networking.vps.tailscale_ip in common.yaml
+# VPS node — Tailscale IP from SSOT (SSH access via VPN)
 VPS_NODE = NodeInfo(
     name="vps",
     host=_COMMON["networking"]["vps"]["tailscale_ip"],
     group="vps",
+    vars={"ansible_user": _COMMON["networking"]["vps"].get("ssh_user", "deployer")},
 )
+
+# Default SSH user from Ansible inventory global vars (SSOT)
+_DEFAULT_SSH_USER: str = "manu"  # populated by load_inventory()
+
+
+def _init_default_ssh_user() -> None:
+    """Read the global ansible_user from inventory (SSOT)."""
+    global _DEFAULT_SSH_USER
+    inventory_path = _REPO_ROOT / "infra" / "ansible" / "inventories" / "homelab.yml"
+    if not inventory_path.exists():
+        return
+    try:
+        with open(inventory_path) as f:
+            data = yaml.safe_load(f)
+        if data is None:
+            return
+        _DEFAULT_SSH_USER = data.get("all", {}).get("vars", {}).get("ansible_user", "manu")
+    except (yaml.YAMLError, OSError) as e:
+        import warnings
+
+        warnings.warn(f"Failed to read ansible_user from {inventory_path}: {e}", stacklevel=2)
+
+
+_init_default_ssh_user()
+
+
+def ssh_host(node: NodeInfo) -> str:
+    """SSH host for a node — always ansible_host (Tailscale IP, access via VPN)."""
+    return node.host
+
+
+def ssh_user(node: NodeInfo) -> str:
+    """SSH user for a node — per-node override or inventory global default."""
+    return node.vars.get("ansible_user", _DEFAULT_SSH_USER)
 
 
 def load_inventory(
@@ -71,13 +106,14 @@ def load_inventory(
     return nodes
 
 
-def ssh_run(
-    host: str,
+def node_ssh_run(
+    node: NodeInfo,
     command: str,
     timeout: int = 10,
-    user: str = "manu",
 ) -> subprocess.CompletedProcess[str]:
-    """Run a command over SSH and return the result."""
+    """Run a command over SSH using the node's SSOT user and host."""
+    user = ssh_user(node)
+    host = ssh_host(node)
     return subprocess.run(
         [
             "ssh",

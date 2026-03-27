@@ -48,7 +48,7 @@
             Content-Type: application/json
           requestBody:
             # yamllint disable-line rule:line-length
-            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-03-26"}) { sum { requests threats } } } } }'
+            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-03-27"}) { sum { requests threats } } } } }'
           mappings:
             - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.requests
               label: Requests
@@ -124,7 +124,7 @@
     - "aws1":
         icon: mdi-cloud-outline
         description: "Hub · t4g.micro · 1vCPU · 1GB"
-        ping: http://100.64.0.4:6443
+        ping: http://None:6443
     - "Beelink":
         icon: mdi-desktop-tower
         description: "Ollama · N95 · 8GB (no Glances)"

@@ -176,7 +176,7 @@ data:
         clients:
           - client_id: minio
             client_name: MinIO
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$DqQ7qkni7MhiWGN/0MLcSg$EKHekUxBYDIZ9pBif85RY3/OaIGMuh8PVRB1KSNghvE'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ZENMbw+Oru2372cUdxItFA$2cSPmiwXPbTp+m+/cytz9V6J/ppsnVKXW9Izlaq653o'
             public: false
             authorization_policy: one_factor
             redirect_uris:
@@ -189,7 +189,7 @@ data:
           - client_id: grafana
             client_name: Grafana
             # synced via: make sync-oidc-hashes ENV=prod
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$qoD3hsIzFnlKC+blWyROew$REwrpanYqd7HQAhvCwEQc/qAnoXXd1kBll3jGsul4CU'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$YFjurhJUZsZA7nET/rOWtQ$kCyKlh6EPH3FX5tO7Z15IOXBnOdqxp5EU05/aGMKe3M'
             public: false
             authorization_policy: one_factor
             redirect_uris:
@@ -203,7 +203,7 @@ data:
           - client_id: gitea
             client_name: Gitea
             # synced via: make sync-oidc-hashes ENV=prod
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$wBJCovjEK6tqcMW4lMrRpA$b67WyvPk9spyCZ91VtwmJ2NLUgXirOvo5Gtt+bob4RQ'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$dZFZpAXgnOINpkcZriaNBA$fTErQSrR/HFPha6he0Vvs/ibiBDKtNtCqVXZ99KMG5k'
             public: false
             authorization_policy: one_factor
             redirect_uris:
