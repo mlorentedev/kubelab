@@ -5,10 +5,10 @@ namespace: kubelab
 
 resources:
   - ../../base
-  - deployments.yaml
-  - services.yaml
-  - configmaps.yaml
-  - ingress.yaml
+  - generated/deployments.yaml
+  - generated/services.yaml
+  - generated/configmaps.yaml
+  - generated/ingress.yaml
   - redirect-kubelab.yaml
   - backup.yaml
   - traefik-dashboard.yaml

@@ -117,5 +117,8 @@ apps/**/nginx.conf/
 # Wiki build output
 apps/wiki/generated_docs
 
+# K8s overlay generated manifests (rendered by toolkit at deploy time)
+infra/k8s/overlays/*/generated/
+
 # Security scanning
 .cache_ggshield
