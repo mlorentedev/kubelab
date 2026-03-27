@@ -868,6 +868,32 @@ def tf_destroy(
         raise typer.Exit(1) from None
 
 
+@terraform_app.command("aws-tfvars")
+def tf_aws_tfvars() -> None:
+    """Generate aws.tfvars from SOPS secrets for AWS Argo CD hub."""
+    from toolkit.features.configuration import ConfigurationManager
+
+    aws_dir = settings.project_root / "infra" / "terraform" / "aws"
+    tfvars_path = aws_dir / "aws.tfvars"
+
+    cm = ConfigurationManager("common", settings.project_root)
+    merged = cm.get_merged_config()
+    aws = merged.get("aws", {})
+
+    authkey = aws.get("headscale_preauth_key", "")
+    api_key = aws.get("headscale_api_key", "")
+
+    if not authkey:
+        logger.error("aws.headscale_preauth_key not found in SOPS")
+        raise typer.Exit(1) from None
+    if not api_key:
+        logger.error("aws.headscale_api_key not found in SOPS")
+        raise typer.Exit(1) from None
+
+    tfvars_path.write_text(f'tailscale_authkey = "{authkey}"\nheadscale_api_key = "{api_key}"\n')
+    logger.success(f"Generated {tfvars_path}")
+
+
 @terraform_app.command("validate")
 def tf_validate() -> None:
     """

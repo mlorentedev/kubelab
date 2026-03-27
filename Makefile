@@ -276,7 +276,7 @@ HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
 .PHONY: fetch-kubeconfig-hub
 fetch-kubeconfig-hub:
 	@echo "=== Fetching kubeconfig from aws1 via Tailscale ==="
-	@ssh aws1 "sudo cat /etc/rancher/k3s/k3s.yaml" | sed "s/127.0.0.1/100.64.0.4/" > $(HUB_KUBECONFIG)
+	@ssh aws1 "sudo cat /etc/rancher/k3s/k3s.yaml" | sed "s/127.0.0.1/aws1.kubelab.internal/" > $(HUB_KUBECONFIG)
 	@chmod 600 $(HUB_KUBECONFIG)
 	@echo "✓ Hub kubeconfig saved to $(HUB_KUBECONFIG)"
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
@@ -473,26 +473,18 @@ KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
 #        make tf-aws-apply  (create/update infrastructure)
 .PHONY: tf-aws-plan tf-aws-apply tf-aws-destroy
 tf-aws-plan:
-	@echo "=== Generating aws.tfvars from SOPS ==="
-	@AUTHKEY=$$(sops -d infra/config/secrets/common.enc.yaml | $(POETRY) run python -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['aws']['headscale_preauth_key'])") && \
-		echo "tailscale_authkey = \"$$AUTHKEY\"" > infra/terraform/aws/aws.tfvars
-	@echo "=== Terraform plan ==="
+	@$(POETRY) run toolkit infra terraform aws-tfvars
 	@cd infra/terraform/aws && terraform plan -var-file=aws.tfvars
+	@rm -f infra/terraform/aws/aws.tfvars
 
 tf-aws-apply:
-	@echo "=== Generating aws.tfvars from SOPS ==="
-	@AUTHKEY=$$(sops -d infra/config/secrets/common.enc.yaml | $(POETRY) run python -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['aws']['headscale_preauth_key'])") && \
-		echo "tailscale_authkey = \"$$AUTHKEY\"" > infra/terraform/aws/aws.tfvars
-	@echo "=== Terraform apply ==="
+	@$(POETRY) run toolkit infra terraform aws-tfvars
 	@cd infra/terraform/aws && terraform apply -auto-approve -var-file=aws.tfvars
 	@rm -f infra/terraform/aws/aws.tfvars
 	@echo "✓ aws.tfvars cleaned (secrets in SOPS only)"
 
 tf-aws-destroy:
-	@echo "=== Generating aws.tfvars from SOPS ==="
-	@AUTHKEY=$$(sops -d infra/config/secrets/common.enc.yaml | $(POETRY) run python -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['aws']['headscale_preauth_key'])") && \
-		echo "tailscale_authkey = \"$$AUTHKEY\"" > infra/terraform/aws/aws.tfvars
-	@echo "=== Terraform destroy ==="
+	@$(POETRY) run toolkit infra terraform aws-tfvars
 	@cd infra/terraform/aws && terraform destroy -var-file=aws.tfvars
 	@rm -f infra/terraform/aws/aws.tfvars
 

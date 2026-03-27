@@ -12,10 +12,9 @@
 #
 # After apply:
 #   1. Wait ~5 min for cloud-init (K3s + Tailscale registration)
-#   2. Get Tailscale IP: ssh deployer@<public_ip> "tailscale ip -4"
-#   3. Update common.yaml networking.aws.tailscale_ip
-#   4. Fetch kubeconfig: scp deployer@<public_ip>:/etc/rancher/k3s/k3s.yaml ~/.kube/kubelab-hub-config
-#   5. Install Argo CD: helm install argocd argo/argo-cd -n argocd
+#   2. Verify MagicDNS: dig aws1.kubelab.internal (should resolve to new Tailscale IP)
+#   3. Fetch kubeconfig: make fetch-kubeconfig-hub
+#   4. Install Argo CD: make deploy-argocd
 
 terraform {
   required_version = ">= 1.5"
@@ -162,6 +161,7 @@ resource "aws_spot_instance_request" "argo_hub" {
     headscale_url       = var.headscale_url
     tailscale_authkey   = var.tailscale_authkey
     tailscale_hostname  = var.hostname
+    headscale_api_key   = var.headscale_api_key
   })
 
   tags = {

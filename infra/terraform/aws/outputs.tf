@@ -28,9 +28,9 @@ output "next_steps" {
   value       = <<-EOT
     1. Wait ~5 min for cloud-init to complete
     2. SSH: ssh ${var.deploy_user}@${aws_spot_instance_request.argo_hub.public_ip}
-    3. Check Tailscale: tailscale status
-    4. Get Tailscale IP: tailscale ip -4
-    5. Update common.yaml networking.aws.tailscale_ip
-    6. Fetch kubeconfig via Tailscale IP (not public IP)
+    3. Verify Tailscale: tailscale status (should show as aws1)
+    4. Verify MagicDNS: dig aws1.kubelab.internal (should resolve to Tailscale IP)
+    5. Fetch kubeconfig: make fetch-kubeconfig-hub
+    6. Install Argo CD: make deploy-argocd
   EOT
 }

@@ -1,8 +1,9 @@
 ---
-# Argo CD — external service on AWS hub (100.64.0.4)
+# Argo CD — external service on AWS hub (aws1.kubelab.internal)
 # Prod Traefik proxies argo.kubelab.live to aws1 argocd-server via Tailscale VPN.
 # Same EndpointSlice pattern as Headscale (ADR-023 Phase 3).
-# Source of truth: networking.aws.tailscale_ip in common.yaml
+# NOTE: EndpointSlice requires an IP (can't use DNS). IP may change on Spot
+# replacement — Phase 2 (ASG) cloud-init will update this automatically.
 apiVersion: v1
 kind: Service
 metadata:
@@ -15,7 +16,7 @@ metadata:
     kubelab.live/location: external
   annotations:
     kubelab.live/host: aws1
-    kubelab.live/description: "Argo CD on AWS hub (100.64.0.4:80 via Tailscale)"
+    kubelab.live/description: "Argo CD on AWS hub (aws1.kubelab.internal via Tailscale)"
 spec:
   ports:
     - name: http
@@ -40,7 +41,7 @@ ports:
     protocol: TCP
 endpoints:
   - addresses:
-      - "100.64.0.4"  # Must match networking.aws.tailscale_ip in common.yaml
+      - "100.64.0.9"  # aws1 current Tailscale IP — resolve via: dig aws1.kubelab.internal
     conditions:
       ready: true
 ---

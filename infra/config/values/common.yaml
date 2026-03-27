@@ -63,7 +63,7 @@ networking:
     ami_name_filter: "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
     ebs_size_gb: 8
     hostname: "aws1"
-    tailscale_ip: "100.64.0.4"
+    tailscale_dns: "aws1.kubelab.internal"  # MagicDNS (ADR-025) — IP-independent
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
   nodes:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
@@ -154,9 +154,9 @@ k3s:
 # ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
 # ===========================================================================
 argocd:
-  # Hub: networking.aws.tailscale_ip (100.64.0.4)
+  # Hub: networking.aws.tailscale_dns (aws1.kubelab.internal) — MagicDNS (ADR-025)
   # All hub↔spoke traffic via Tailscale VPN (WireGuard mesh)
-  # API server URL derived at runtime: https://{tailscale_ip}:{k3s.api_port}
+  # API server URL derived at runtime: https://{tailscale_dns}:{k3s.api_port}
   spokes:
     staging:
       node: ace1   # → networking.nodes.ace1.tailscale_ip

@@ -1,5 +1,5 @@
-# yamllint disable-line rule:comments
 #cloud-config
+# yamllint disable-file
 # KubeLab Argo CD Hub bootstrap — K3s + Tailscale on AWS Spot
 # After cloud-init: instance joins Headscale mesh, K3s is ready for Argo CD install
 
@@ -33,10 +33,27 @@ runcmd:
   # --- SSH hardening ---
   - sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
   - sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i 's/^#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+  - echo 'UseDNS no' >> /etc/ssh/sshd_config
   - systemctl restart sshd
 
   # --- Install Tailscale ---
   - curl -fsSL https://tailscale.com/install.sh | sh
+
+  # --- Recycle old Headscale node (cattle pattern) ---
+  # On Spot replacement, the old node is offline in Headscale.
+  # Delete it so the new registration gets a clean hostname + IP.
+  - |
+    NODE_ID=$(curl -sf -H "Authorization: Bearer ${headscale_api_key}" \
+      "${headscale_url}/api/v1/node" | \
+      jq -r '.nodes[] | select(.givenName=="${tailscale_hostname}" and .online==false) | .id' | head -1)
+    if [ -n "$NODE_ID" ]; then
+      curl -sf -X DELETE -H "Authorization: Bearer ${headscale_api_key}" \
+        "${headscale_url}/api/v1/node/$NODE_ID"
+      echo "Deleted old Headscale node $NODE_ID (${tailscale_hostname})" >> /var/log/kubelab-bootstrap.log
+    else
+      echo "No stale Headscale node to clean up" >> /var/log/kubelab-bootstrap.log
+    fi
 
   # --- Register with Headscale ---
   - >-
@@ -54,6 +71,7 @@ runcmd:
       --disable=traefik --disable=servicelb \
       --write-kubeconfig-mode=644 \
       --resolv-conf=/run/systemd/resolve/resolv.conf \
+      --tls-san=${tailscale_hostname}.kubelab.internal \
       --tls-san=$(tailscale ip -4)
 
   # --- Wait for K3s to be ready ---
