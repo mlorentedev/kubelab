@@ -229,7 +229,9 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="CrowdSec bouncer API key for Traefik plugin",
         kind=SecretKind.CROWDSEC_API,
         services=("crowdsec", "traefik"),
-        rotate_note="Must re-register bouncer with cscli. K8s: apply-secrets + restart bouncer.",
+        rotate_note=(
+            "Must re-register bouncer with cscli. K8s: apply-secrets (updates Secret in kube-system) + restart Traefik."
+        ),
     ),
     # =========================================================================
     # Gitea

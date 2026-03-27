@@ -22,6 +22,15 @@ spec:
       enabled: true
       storageClass: local-path
       size: 128Mi
+    experimental:
+      plugins:
+        bouncer:
+          moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
+          version: "v1.5.1"
+    volumes:
+      - name: crowdsec-bouncer-traefik
+        mountPath: "/etc/traefik/crowdsec"
+        type: secret
 {% if k3s_traefik_acme_enabled %}
     providers:
       kubernetesCRD:
