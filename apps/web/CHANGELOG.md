@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/mlorentedev/kubelab/compare/web-v1.0.0...web-v1.0.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* **infra:** separate generated K8s overlays + fix web nginx PID (NET-002) ([#136](https://github.com/mlorentedev/kubelab/issues/136)) ([512abc3](https://github.com/mlorentedev/kubelab/commit/512abc3f0aa171fad45fefb457cef45a3c884448))
+
 ## 1.0.0 (2026-03-16)
 
 
