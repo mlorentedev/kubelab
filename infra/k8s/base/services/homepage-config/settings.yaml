@@ -1,5 +1,5 @@
-title: KubeLab Home
-favicon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/kubernetes.png
+title: KubeLab IDP
+favicon: https://mlorente.dev/images/brand-mark.png
 theme: light
 color: zinc
 headerStyle: boxed
@@ -7,101 +7,76 @@ statusStyle: basic
 hideVersion: true
 useEqualHeights: true
 layout:
-  IP Reference:
+  Shared:
     style: row
     columns: 1
-    icon: mdi-table
-    tab: Diagrams
-  Topology:
+    icon: mdi-share-variant
+    tab: Services
+  Staging:
     style: row
     columns: 1
-    icon: mdi-map-marker-path
-    tab: Diagrams
-  DNS Map:
+    icon: mdi-server
+    tab: Services
+  Prod:
     style: row
     columns: 1
-    icon: mdi-table
-    tab: Diagrams
-  DNS Resolution:
-    style: row
-    columns: 1
-    icon: mdi-dns
-    tab: Diagrams
-  GitOps:
-    style: row
-    columns: 1
-    icon: mdi-source-branch
-    tab: Diagrams
-  Request Path:
-    style: row
-    columns: 1
-    icon: mdi-arrow-decision
-    tab: Diagrams
-  Stg - Apps:
-    style: row
-    columns: 2
-    icon: mdi-application
-    tab: Staging
-  Stg - Platform:
-    style: row
-    columns: 3
-    icon: mdi-cog
-    tab: Staging
-  Stg - Security:
-    style: row
-    columns: 2
-    icon: mdi-shield-lock
-    tab: Staging
-  Stg - Observability:
-    style: row
-    columns: 3
-    icon: mdi-chart-line
-    tab: Staging
-  Stg - Core:
-    style: row
-    columns: 4
-    icon: mdi-heart-pulse
-    tab: Staging
-  Prod - Apps:
-    style: row
-    columns: 2
-    icon: mdi-application
-    tab: Prod
-  Prod - Platform:
-    style: row
-    columns: 3
-    icon: mdi-cog
-    tab: Prod
-  Prod - Security:
-    style: row
-    columns: 2
-    icon: mdi-shield-lock
-    tab: Prod
-  Prod - Observability:
-    style: row
-    columns: 3
-    icon: mdi-chart-line
-    tab: Prod
-  Prod - Core:
-    style: row
-    columns: 4
-    icon: mdi-heart-pulse
-    tab: Prod
+    icon: mdi-cloud
+    tab: Services
   Network:
     style: row
     columns: 3
     icon: mdi-lan
-    tab: Infra
-  Bare Metal:
-    style: row
-    columns: 2
-    icon: mdi-chip
     tab: Infra
   Nodes:
     style: row
     columns: 4
     icon: mdi-server-network
     tab: Infra
+  IP Reference:
+    style: row
+    columns: 1
+    icon: mdi-table
+    tab: Topology
+  Topology:
+    style: row
+    columns: 1
+    icon: mdi-map-marker-path
+    tab: Topology
+  DNS Map:
+    style: row
+    columns: 1
+    icon: mdi-table
+    tab: Topology
+  DNS Resolution:
+    style: row
+    columns: 1
+    icon: mdi-dns
+    tab: Topology
+  GitOps:
+    style: row
+    columns: 1
+    icon: mdi-source-branch
+    tab: Flows
+  Request Path:
+    style: row
+    columns: 1
+    icon: mdi-arrow-decision
+    tab: Flows
+  Secret Flow:
+    style: row
+    columns: 1
+    icon: mdi-key-chain
+    tab: Flows
+  Deploy Pipeline:
+    style: row
+    columns: 1
+    icon: mdi-rocket-launch
+    tab: Flows
+  Tech Stack:
+    style: row
+    columns: 1
+    icon: mdi-tools
+    tab: Flows
   Tools:
     style: row
     columns: 4

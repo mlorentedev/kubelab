@@ -56,6 +56,7 @@ help:
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
 	@echo "Kubernetes:"
+	@echo "  make sync-homepage      Sync Homepage config from common.yaml (settings, services, JS)"
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads via Kustomize"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
@@ -504,6 +505,12 @@ tf-dns-plan:
 tf-dns-apply:
 	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
 		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
+
+.PHONY: sync-homepage
+sync-homepage:
+	@echo "=== Syncing Homepage config from common.yaml ==="
+	@$(POETRY) run python toolkit/scripts/sync_homepage_config.py
+	@echo "✓ Homepage config synced"
 
 .PHONY: sync-k8s-images
 sync-k8s-images:

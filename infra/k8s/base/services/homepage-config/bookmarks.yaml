@@ -14,6 +14,15 @@
     - PyPI:
         - icon: si-pypi
           href: https://pypi.org
+    - Claude Usage:
+        - icon: si-anthropic
+          href: https://claude.ai/settings/usage
+    - Gemini:
+        - icon: si-google
+          href: https://gemini.google.com
+    - NotebookLM:
+        - icon: si-google
+          href: https://notebooklm.google.com
 - Security:
     - GitGuardian:
         - icon: mdi-shield-search
@@ -54,6 +63,9 @@
     - Kubernetes:
         - icon: si-kubernetes
           href: https://kubernetes.io/docs/
+    - K3s:
+        - icon: si-k3s
+          href: https://docs.k3s.io/
     - Traefik:
         - icon: si-traefikproxy
           href: https://doc.traefik.io/traefik/
@@ -63,3 +75,6 @@
     - Authelia:
         - icon: mdi-shield-lock
           href: https://www.authelia.com/configuration/
+    - Headscale:
+        - icon: mdi-vpn
+          href: https://headscale.net/stable/

@@ -1,8 +1,6 @@
 {# Homepage services.yaml — Generated from common.yaml SSOT.
    Run `make sync-homepage` to regenerate. Do NOT edit services.yaml directly. #}
-{% set base = global.base_domain %}
-{% set stg = "staging." + base %}
-{% set stg_ml = "staging.mlorente.dev" %}
+{% set stg = "staging." + global.base_domain %}
 {% set gp = 61208 %}
 {% set n = nodes %}
 {# ── DIAGRAMS (tables + SVGs, injected by custom.js) ── #}
@@ -24,185 +22,27 @@
 - Request Path:
     - placeholder:
         icon: mdi-arrow-decision
-{# ── STAGING ── #}
-- Stg - Apps:
-    - API:
-        icon: mdi-api
-        href: https://api.{{ stg }}
-        description: ace1
-        ping: https://api.{{ stg }}{{ platform.api.health_path | default('/health') }}
-    - Web:
-        icon: mdi-web
-        href: https://{{ stg_ml }}
-        description: ace1
-        ping: https://{{ stg_ml }}
-- Stg - Platform:
-    - Gitea:
-        icon: si-gitea
-        href: https://gitea.{{ stg }}
-        description: Git
-        ping: https://gitea.{{ stg }}
-    - n8n:
-        icon: si-n8n
-        href: https://n8n.{{ stg }}
-        description: Automation
-        ping: https://n8n.{{ stg }}
-    - MinIO:
-        icon: si-minio
-        href: https://console.minio.{{ stg }}
-        description: S3
-        ping: https://minio.{{ stg }}{{ services.data.minio.health_path }}
-- Stg - Security:
-    - Authelia:
-        icon: mdi-shield-lock
-        href: https://auth.{{ stg }}
-        description: SSO
-        ping: https://auth.{{ stg }}{{ services.security.authelia.health_path }}
-    - CrowdSec:
-        icon: mdi-shield-bug
-        href: https://crowdsec.{{ stg }}
-        description: WAF
-        ping: https://crowdsec.{{ stg }}
-- Stg - Observability:
-    - Grafana:
-        icon: si-grafana
-        href: https://grafana.{{ stg }}
-        description: Dashboards
-        ping: https://grafana.{{ stg }}
-    - Loki:
-        icon: si-grafana
-        href: https://loki.{{ stg }}
-        description: Logs
-        ping: https://loki.{{ stg }}
-    - Traefik:
-        icon: si-traefikproxy
-        href: https://traefik.{{ stg }}
-        description: Proxy
-        widget:
-          type: traefik
-          url: http://{{ traefik_cluster_ip }}:9000
-- Stg - Core:
-    - K3s API:
-        icon: mdi-kubernetes
-        description: ace1 · API server
-        ping: https://{{ n.ace1.tailscale_ip }}:{{ k3s.api_port }}
-    - Redis:
-        icon: mdi-database
-        description: ace1 · Sessions
-        ping: http://redis:6379
-    - CoreDNS:
-        icon: mdi-dns
-        description: ace1 · Cluster DNS
-        ping: http://kube-dns.kube-system:53
-    - Errors:
-        icon: mdi-alert-circle
-        description: Error pages
-        ping: http://errors:8080
-    - Vector:
-        icon: mdi-math-log
-        description: Log shipper
-        ping: http://vector:8686
-{# ── PROD ── #}
-- Prod - Apps:
-    - API:
-        icon: mdi-api
-        href: https://{{ platform.api.domain }}
-        description: VPS
-        ping: https://{{ platform.api.domain }}{{ platform.api.health_path | default('/health') }}
-    - Web:
-        icon: mdi-web
-        href: https://mlorente.dev
-        description: VPS
-        ping: https://mlorente.dev
-- Prod - Platform:
-    - Gitea:
-        icon: si-gitea
-        href: https://{{ services.core.gitea.domain }}
-        description: Git
-        ping: https://{{ services.core.gitea.domain }}
-    - n8n:
-        icon: si-n8n
-        href: https://{{ services.core.n8n.domain }}
-        description: Automation
-        ping: https://{{ services.core.n8n.domain }}
-    - MinIO:
-        icon: si-minio
-        href: https://{{ services.data.minio.console_domain }}
-        description: S3
-        ping: https://{{ services.data.minio.domain }}{{ services.data.minio.health_path }}
-- Prod - Security:
-    - Authelia:
-        icon: mdi-shield-lock
-        href: https://{{ services.security.authelia.domain }}
-        description: SSO
-        ping: https://{{ services.security.authelia.domain }}{{ services.security.authelia.health_path }}
-    - CrowdSec:
-        icon: mdi-shield-bug
-        href: https://{{ services.security.crowdsec.domain }}
-        description: WAF
-        ping: https://{{ services.security.crowdsec.domain }}
-- Prod - Observability:
-    - Grafana:
-        icon: si-grafana
-        href: https://{{ services.observability.grafana.domain }}
-        description: Dashboards
-        ping: https://{{ services.observability.grafana.domain }}
-    - Loki:
-        icon: si-grafana
-        href: https://{{ services.observability.loki.domain }}
-        description: Logs
-        ping: https://{{ services.observability.loki.domain }}
-    - Traefik:
-        icon: si-traefikproxy
-        href: https://{{ services.core.traefik.domain }}
-        description: Proxy
-        ping: https://{{ services.core.traefik.domain }}
-- Prod - Core:
-    - K3s API:
-        icon: mdi-kubernetes
-        description: VPS · API server
-        ping: https://{{ vps.tailscale_ip }}:{{ k3s.api_port }}
-    - Redis:
-        icon: mdi-database
-        description: VPS · Sessions
-    - CoreDNS:
-        icon: mdi-dns
-        description: VPS · Cluster DNS
-    - Errors:
-        icon: mdi-alert-circle
-        description: Error pages
-    - Vector:
-        icon: mdi-math-log
-        description: Log shipper
-{# ── INFRA (shared across envs) ── #}
+- Secret Flow:
+    - placeholder:
+        icon: mdi-key-chain
+- Deploy Pipeline:
+    - placeholder:
+        icon: mdi-rocket-launch
+- Tech Stack:
+    - placeholder:
+        icon: mdi-tools
+{# ── SERVICES (tables injected by custom.js) ── #}
+- Shared:
+    - placeholder:
+        icon: mdi-share-variant
+- Staging:
+    - placeholder:
+        icon: mdi-server
+- Prod:
+    - placeholder:
+        icon: mdi-cloud
+{# ── INFRA (widgets + hardware monitoring) ── #}
 - Network:
-    - Argo CD:
-        icon: si-argo
-        href: https://{{ argocd.domain }}
-        description: aws1 · GitOps hub
-        ping: https://{{ argocd.domain }}
-    - Headscale:
-        icon: mdi-vpn
-        href: https://{{ services.core.headscale.domain }}
-        description: VPS · VPN mesh
-        ping: https://{{ services.core.headscale.domain }}
-    - Pi-hole:
-        icon: si-pihole
-        href: https://{{ services.network.pihole.domain }}
-        description: RPi4 · DNS filtering
-        ping: https://{{ services.network.pihole.domain }}
-    - CoreDNS (RPi4):
-        icon: mdi-dns
-        description: RPi4 · Staging DNS
-        ping: http://{{ n.rpi4.tailscale_ip }}:8080
-    - Uptime Kuma:
-        icon: si-uptimekuma
-        href: https://{{ services.observability.uptime_kuma.domain }}
-        description: RPi3 · Status
-        widget:
-          type: uptimekuma
-          url: http://{{ n.rpi3.tailscale_ip }}:{{ services.observability.uptime_kuma.default_port }}
-          slug: kubelab
     - Cloudflare:
         icon: si-cloudflare
         href: https://dash.cloudflare.com
@@ -224,17 +64,30 @@
             - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.threats
               label: Threats
               format: number
-- Bare Metal:
-    - Ollama:
-        icon: mdi-brain
-        href: http://{{ n.beelink.tailscale_ip }}:{{ services.ai.ollama.default_port }}
-        description: Beelink · LLM
-        ping: http://{{ n.beelink.tailscale_ip }}:{{ services.ai.ollama.default_port }}
-    - Pollex:
-        icon: mdi-robot
-        href: http://{{ n.jetson.tailscale_ip }}:8000
-        description: Jetson · Edge AI
-        ping: http://{{ n.jetson.tailscale_ip }}:8000
+    - Uptime Kuma:
+        icon: si-uptimekuma
+        href: https://{{ services.observability.uptime_kuma.domain }}
+        description: RPi3 · Status
+        widget:
+          type: uptimekuma
+          url: http://{{ n.rpi3.tailscale_ip }}:{{ services.observability.uptime_kuma.default_port }}
+          slug: kubelab
+    - Traefik Stg:
+        icon: si-traefikproxy
+        href: https://traefik.{{ stg }}/dashboard/
+        description: Staging proxy
+        widget:
+          type: traefik
+          url: http://{{ traefik_cluster_ip }}:9000
+    - Traefik Prod:
+        icon: si-traefikproxy
+        href: https://{{ services.core.traefik.domain }}/dashboard/
+        description: Prod proxy
+        ping: https://{{ services.core.traefik.domain }}/dashboard/
+    - CoreDNS (RPi4):
+        icon: mdi-dns
+        description: RPi4 · Staging DNS
+        ping: http://{{ n.rpi4.tailscale_ip }}:8080
 - Nodes:
 {% for node_name, node in node_list %}
     - "{{ node_name }}":

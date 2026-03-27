@@ -37,7 +37,17 @@ nav a {
 
 /* Bold header/title */
 h1, .header-title, [class*="header"] h1 {
-  font-weight: 800 !important;
+  font-weight: 900 !important;
+  font-size: 1.5rem !important;
+  letter-spacing: -0.02em !important;
+}
+/* Header greeting text */
+[class*="greeting"], [class*="information-widget"] {
+  font-weight: 700 !important;
+}
+/* Header logo */
+[class*="header"] img {
+  border-radius: 0.25rem;
 }
 
 /* Diagram images */
@@ -72,6 +82,127 @@ h1, .header-title, [class*="header"] h1 {
   background: #f4f4f5 !important;
   border: 1px solid #d4d4d8;
   border-radius: 0.375rem;
+}
+
+/* Endpoint tables */
+.ep-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+}
+.ep-version {
+  color: #6b7280;
+  font-size: 0.7rem;
+}
+.ep-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-table thead {
+  background: #27272a;
+  color: #fafafa;
+}
+.ep-table th {
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ep-table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid #e4e4e7;
+  white-space: nowrap;
+}
+.ep-table tbody tr:hover {
+  background: #f4f4f5;
+}
+.ep-table a {
+  color: #2563eb;
+  text-decoration: none;
+}
+.ep-table a:hover {
+  text-decoration: underline;
+}
+.ep-name {
+  font-weight: 600;
+}
+.ep-notes {
+  font-style: italic;
+  color: #71717a;
+}
+.ep-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-left: 0.25rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 0.25rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.65rem;
+  color: #71717a;
+  vertical-align: middle;
+}
+.ep-copy:hover {
+  background: #e4e4e7;
+  color: #18181b;
+}
+.ep-auth-public {
+  color: #16a34a;
+  font-weight: 600;
+}
+.ep-auth-authelia {
+  color: #d97706;
+  font-weight: 600;
+}
+.ep-auth-builtin {
+  color: #2563eb;
+  font-weight: 600;
+}
+/* Category tags */
+.ep-tag {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ep-tag-platform { background: #dbeafe; color: #0c2d6b; }
+.ep-tag-security { background: #fef3c7; color: #6b3810; }
+.ep-tag-core { background: #f3f4f6; color: #1f2937; }
+.ep-tag-data { background: #ede9fe; color: #3d1d6d; }
+.ep-tag-observability { background: #dcfce7; color: #0d4222; }
+.ep-tag-network { background: #e0f2fe; color: #04395e; }
+.ep-tag-ai { background: #fce7f3; color: #7a1036; }
+.ep-tag-prod { background: #fee2e2; color: #991b1b; }
+.ep-tag-staging { background: #dbeafe; color: #1e40af; }
+.ep-tag-vpnonly { background: #f3f4f6; color: #374151; }
+.ep-tag-orchestration { background: #dbeafe; color: #1e40af; }
+.ep-tag-infrastructure { background: #fef3c7; color: #92400e; }
+.ep-tag-networking { background: #e0f2fe; color: #075985; }
+.ep-tag-gitops { background: #fce7f3; color: #9d174d; }
+.ep-tag-tooling { background: #f3f4f6; color: #374151; }
+
+.ep-status {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+.ep-status-unknown {
+  background: #d4d4d8;
+}
+.ep-status-up {
+  background: #22c55e;
+}
+.ep-status-down {
+  background: #ef4444;
 }
 
 /* Footer */
