@@ -17,6 +17,7 @@ class SecretMapping:
     name: str
     keys: dict[str, str]  # k8s_key → flattened_env_var
     literals: dict[str, str] = field(default_factory=dict)  # k8s_key → pre-rendered value
+    namespace: str = "kubelab"  # target K8s namespace
 
 
 # ── Secret definitions (declarative) ──────────────────────────────────────────
@@ -53,6 +54,13 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         keys={
             "api-key": "APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_API_KEY",
         },
+    ),
+    SecretMapping(
+        name="crowdsec-bouncer-traefik",
+        keys={
+            "api-key": "APPS_SERVICES_SECURITY_CROWDSEC_BOUNCER_API_KEY",
+        },
+        namespace="kube-system",
     ),
     SecretMapping(
         name="gitea-secrets",
@@ -100,8 +108,8 @@ def _get_kubeconfig(env: str) -> str:
     return os.path.expanduser(f"~/.kube/kubelab-{env}-config")
 
 
-def _kubectl_base(env: str) -> list[str]:
-    return ["kubectl", "--kubeconfig", _get_kubeconfig(env), "-n", "kubelab"]
+def _kubectl_base(env: str, namespace: str = "kubelab") -> list[str]:
+    return ["kubectl", "--kubeconfig", _get_kubeconfig(env), "-n", namespace]
 
 
 def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
@@ -128,7 +136,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     all_ok = True
     for mapping in SECRET_DEFINITIONS:
         extra = dynamic_literals.get(mapping.name, {})
-        ok = _apply_single_secret(mapping, env_vars, extra, dry_run, env=env)
+        ok = _apply_single_secret(mapping, env_vars, extra, dry_run, env=env, namespace=mapping.namespace)
         if not ok:
             all_ok = False
 
@@ -197,9 +205,11 @@ def _apply_single_secret(
     extra_literals: dict[str, str],
     dry_run: bool,
     env: str = "staging",
+    namespace: str = "kubelab",
 ) -> bool:
     """Create or update a single K8s Secret. Returns True on success."""
-    logger.info(f"Processing secret: {mapping.name}")
+    ns_label = f" ({namespace})" if namespace != "kubelab" else ""
+    logger.info(f"Processing secret: {mapping.name}{ns_label}")
 
     # Build --from-literal args from env var keys
     from_literals: list[str] = []
@@ -224,7 +234,7 @@ def _apply_single_secret(
 
     # kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -
     create_cmd = [
-        *_kubectl_base(env),
+        *_kubectl_base(env, namespace),
         "create",
         "secret",
         "generic",
@@ -249,7 +259,7 @@ def _apply_single_secret(
             check=True,
         )
         # Pipe to kubectl apply
-        apply_cmd = [*_kubectl_base(env), "apply", "-f", "-"]
+        apply_cmd = [*_kubectl_base(env, namespace), "apply", "-f", "-"]
         apply_result = subprocess.run(
             apply_cmd,
             input=create_result.stdout,

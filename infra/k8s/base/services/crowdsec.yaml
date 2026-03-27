@@ -221,90 +221,10 @@ spec:
       targetPort: lapi
       protocol: TCP
 ---
-# CrowdSec Traefik bouncer (forwardAuth sidecar)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: crowdsec-bouncer
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: crowdsec-bouncer
-    app.kubernetes.io/component: security
-    app.kubernetes.io/part-of: kubelab
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: crowdsec-bouncer
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: crowdsec-bouncer
-        app.kubernetes.io/component: security
-        app.kubernetes.io/part-of: kubelab
-    spec:
-      automountServiceAccountToken: false
-      containers:
-        - name: crowdsec-bouncer
-          image: fbonalair/traefik-crowdsec-bouncer:latest
-          ports:
-            - name: http
-              containerPort: 8080
-              protocol: TCP
-          env:
-            - name: CROWDSEC_AGENT_HOST
-              value: crowdsec.kubelab.svc.cluster.local:8080
-            - name: GIN_MODE
-              value: release
-            - name: CROWDSEC_BOUNCER_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: crowdsec-bouncer
-                  key: api-key
-          livenessProbe:
-            httpGet:
-              path: /api/v1/ping
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /api/v1/ping
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
-          resources:
-            limits:
-              memory: 64Mi
-              cpu: "0.2"
-            requests:
-              memory: 32Mi
-              cpu: "0.05"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: crowdsec-bouncer
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: crowdsec-bouncer
-    app.kubernetes.io/component: security
-    app.kubernetes.io/part-of: kubelab
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: crowdsec-bouncer
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
-      protocol: TCP
----
-# Traefik ForwardAuth Middleware → bouncer
+# CrowdSec Traefik bouncer plugin (SEC-003: replaces deprecated fbonalair ForwardAuth sidecar)
+# Runs natively inside Traefik — no separate pod required.
+# API key read from file mounted by Traefik via HelmChartConfig volumes.
+# Key source: K8s Secret "crowdsec-bouncer-traefik" in kube-system namespace.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -315,6 +235,13 @@ metadata:
     app.kubernetes.io/component: security
     app.kubernetes.io/part-of: kubelab
 spec:
-  forwardAuth:
-    address: http://crowdsec-bouncer.kubelab.svc.cluster.local:8080/api/v1/forwardAuth
-    trustForwardHeader: true
+  plugin:
+    bouncer:
+      enabled: true
+      crowdsecMode: stream
+      updateIntervalSeconds: 60
+      crowdsecLapiScheme: http
+      crowdsecLapiHost: crowdsec.kubelab.svc.cluster.local:8080
+      crowdsecLapiKeyFile: /etc/traefik/crowdsec/api-key
+      clientTrustedIPs:
+        - "100.64.0.0/10"  # Must match networking.tailscale_cidr in common.yaml
