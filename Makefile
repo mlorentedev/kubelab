@@ -56,9 +56,12 @@ help:
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
 	@echo "Kubernetes:"
-	@echo "  make sync-homepage      Sync Homepage config from common.yaml (settings, services, JS)"
+	@echo "  make sync-homepage      Sync Homepage config from common.yaml"
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
-	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads via Kustomize"
+	@echo "  make sync-oidc-hashes ENV=x  Sync OIDC hashes from SOPS to K8s manifests"
+	@echo "  make validate-sync      Check for drift in generated files (ADR-027)"
+	@echo "  make apply-secrets ENV=x  Apply SOPS secrets to K8s cluster"
+	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
 	@echo ""
@@ -175,7 +178,8 @@ setup-local-dns:
 
 .PHONY: credentials-generate
 credentials-generate:
-	@$(TOOLKIT) credentials generate --env $(ENV)
+	@$(TOOLKIT) credentials generate --env $(ENV) --auto-update
+	@if [ "$(ENV)" != "dev" ]; then $(TOOLKIT) sync all --env $(ENV); fi
 
 .PHONY: config-generate
 config-generate:
@@ -500,22 +504,20 @@ tf-dns-apply:
 
 .PHONY: sync-homepage
 sync-homepage:
-	@echo "=== Syncing Homepage config from common.yaml ==="
-	@$(POETRY) run python toolkit/scripts/sync_homepage_config.py
-	@echo "✓ Homepage config synced"
+	@$(TOOLKIT) sync homepage
 
 .PHONY: sync-k8s-images
 sync-k8s-images:
-	@echo "=== Syncing K8s image tags from common.yaml ==="
-	@$(POETRY) run python toolkit/scripts/sync_k8s_images.py
-	@echo "✓ Image tags synced"
+	@$(TOOLKIT) sync images
 
 .PHONY: sync-oidc-hashes
 sync-oidc-hashes:
 	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
-	@echo "=== Syncing OIDC hashes from SOPS → K8s ConfigMaps ($(ENV)) ==="
-	@$(POETRY) run python toolkit/scripts/sync_oidc_hashes.py --env $(ENV)
-	@echo "✓ OIDC hashes synced"
+	@$(TOOLKIT) sync oidc --env $(ENV)
+
+.PHONY: validate-sync
+validate-sync:
+	@$(TOOLKIT) sync all --check --env $(or $(filter staging prod,$(ENV)),staging)
 
 .PHONY: configure-oidc
 configure-oidc:
@@ -524,8 +526,13 @@ configure-oidc:
 	@$(POETRY) run python toolkit/scripts/configure_oidc.py --env $(ENV)
 	@echo "✓ OIDC providers configured for $(ENV)"
 
+.PHONY: apply-secrets
+apply-secrets:
+	@test -n "$(ENV)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
+
 .PHONY: deploy-k8s
-deploy-k8s:
+deploy-k8s: apply-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
 
@@ -569,5 +576,5 @@ type:
 	@$(POETRY) run mypy toolkit
 
 .PHONY: check
-check: lint type test
+check: lint type test validate-sync
 	@echo "✓ All checks passed"

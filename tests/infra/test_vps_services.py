@@ -52,11 +52,11 @@ class TestHeadscale:
 
 
 class TestTraefikDashboard:
-    """Traefik dashboard with basicAuth."""
+    """Traefik dashboard behind Authelia."""
 
     def test_requires_auth(self, require_vpn: None) -> None:
         code, _ = _curl("https://traefik.kubelab.live")
-        assert code == 401
+        assert code in (302, 401), f"Expected Authelia redirect (302) or auth challenge (401), got {code}"
 
 
 class TestGrafana:
@@ -68,11 +68,11 @@ class TestGrafana:
 
 
 class TestN8N:
-    """N8N workflow automation."""
+    """N8N workflow automation (behind Authelia)."""
 
     def test_reachable(self, require_vpn: None) -> None:
         code, _ = _curl("https://n8n.kubelab.live")
-        assert code == 200
+        assert code in (200, 302), f"Expected n8n reachable (200) or Authelia redirect (302), got {code}"
 
 
 class TestAPI:

@@ -16,6 +16,7 @@ from toolkit.cli import (
     monitoring,
     secrets,
     services,
+    sync,
     tools,
 )
 from toolkit.config.settings import settings
@@ -125,6 +126,7 @@ app.add_typer(infra.app, name="infra")
 app.add_typer(monitoring.app, name="monitoring")
 app.add_typer(secrets.app, name="secrets")
 app.add_typer(services.app, name="services")
+app.add_typer(sync.app, name="sync")
 app.add_typer(tools.app, name="tools")
 
 if __name__ == "__main__":
