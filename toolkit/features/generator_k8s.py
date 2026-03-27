@@ -33,8 +33,8 @@ class K8sGenerator(BaseGenerator):
     )
 
     # Template files to render (template_name, output_name)
+    # kustomization.yaml is NOT generated — it's manual (ADR-027, NET-002)
     _TEMPLATE_MAP = [
-        ("kustomization.yaml.j2", "kustomization.yaml"),
         ("deployments.yaml.j2", "deployments.yaml"),
         ("services.yaml.j2", "services.yaml"),
         ("configmaps.yaml.j2", "configmaps.yaml"),
@@ -57,7 +57,8 @@ class K8sGenerator(BaseGenerator):
         logger.info(f"Generating K8s manifests for {env}")
 
         templates_dir = self.project_root / PATH_STRUCTURES.K8S_TEMPLATES_DIR
-        output_dir = self.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env
+        output_dir = self.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR / env / "generated"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         if not templates_dir.exists():
             logger.error(f"K8s templates directory not found: {templates_dir}")
