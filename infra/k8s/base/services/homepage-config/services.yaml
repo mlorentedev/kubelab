@@ -48,7 +48,7 @@
             Content-Type: application/json
           requestBody:
             # yamllint disable-line rule:line-length
-            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-03-27"}) { sum { requests threats } } } } }'
+            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-03-28"}) { sum { requests threats } } } } }'
           mappings:
             - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.requests
               label: Requests
@@ -131,12 +131,8 @@
         ping: http://100.64.0.3:11434
     - "Jetson":
         icon: mdi-chip
-        description: "Pollex · ARM · 4GB"
-        widget:
-          type: glances
-          url: http://100.64.0.8:61208
-          version: 4
-          metric: info
+        description: "Pollex · ARM · 4GB (no Glances)"
+        ping: http://100.64.0.8:8000
 - Repos:
     - kubelab:
         icon: si-github
@@ -145,7 +141,7 @@
         widget:
           type: customapi
           url: https://api.github.com/repos/mlorentedev/kubelab
-          refreshInterval: 300000
+          refreshInterval: 60000
           headers:
             Accept: application/vnd.github.v3+json
           mappings:
@@ -162,7 +158,7 @@
         widget:
           type: customapi
           url: https://api.github.com/search/issues?q=repo:mlorentedev/kubelab+type:pr+state:open
-          refreshInterval: 300000
+          refreshInterval: 60000
           headers:
             Accept: application/vnd.github.v3+json
           mappings:
@@ -173,16 +169,4 @@
         icon: si-github
         href: https://github.com/mlorentedev/mlorente.dev
         description: Personal site
-        widget:
-          type: customapi
-          url: https://api.github.com/repos/mlorentedev/mlorente.dev
-          refreshInterval: 300000
-          headers:
-            Accept: application/vnd.github.v3+json
-          mappings:
-            - field: open_issues_count
-              label: Issues
-              format: number
-            - field: stargazers_count
-              label: Stars
-              format: number
+        ping: https://mlorente.dev

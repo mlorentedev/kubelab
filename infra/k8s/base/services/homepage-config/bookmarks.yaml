@@ -2,18 +2,15 @@
     - Cloudflare:
         - icon: si-cloudflare
           href: https://dash.cloudflare.com
-    - Terraform Cloud:
-        - icon: si-terraform
-          href: https://app.terraform.io/app/Cubernautas/workspaces
+    - Cloudflare One:
+        - icon: si-cloudflare
+          href: https://one.dash.cloudflare.com
     - GitHub:
         - icon: si-github
           href: https://github.com/mlorentedev/kubelab
     - Docker Hub:
         - icon: si-docker
           href: https://hub.docker.com/u/mlorentedev
-    - PyPI:
-        - icon: si-pypi
-          href: https://pypi.org
     - Claude Usage:
         - icon: si-anthropic
           href: https://claude.ai/settings/usage
@@ -43,6 +40,22 @@
     - Claude Status:
         - icon: si-anthropic
           href: https://status.anthropic.com
+- Analytics:
+    - "GSC kubelab.live":
+        - icon: si-googlesearchconsole
+          href: https://search.google.com/search-console?resource_id=sc-domain:kubelab.live
+    - "GSC mlorente.dev":
+        - icon: si-googlesearchconsole
+          href: https://search.google.com/search-console?resource_id=sc-domain:mlorente.dev
+    - Google Analytics:
+        - icon: si-googleanalytics
+          href: https://analytics.google.com
+    - Cloudflare Analytics:
+        - icon: si-cloudflare
+          href: https://dash.cloudflare.com/?to=/:account/:zone/analytics
+    - YouTube Studio:
+        - icon: si-youtube
+          href: https://studio.youtube.com
 - Ops:
     - "Hetzner (~9€/mo)":
         - icon: si-hetzner
@@ -50,12 +63,6 @@
     - "AWS (~$4/mo)":
         - icon: si-amazonaws
           href: https://console.aws.amazon.com/billing
-    - YouTube Studio:
-        - icon: si-youtube
-          href: https://studio.youtube.com
-    - Analytics:
-        - icon: si-googleanalytics
-          href: https://analytics.google.com
     - Vault:
         - icon: si-obsidian
           href: obsidian://vault/knowledge

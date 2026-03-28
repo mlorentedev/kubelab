@@ -144,16 +144,4 @@
         icon: si-github
         href: https://github.com/mlorentedev/mlorente.dev
         description: Personal site
-        widget:
-          type: customapi
-          url: https://api.github.com/repos/mlorentedev/mlorente.dev
-          refreshInterval: 60000
-          headers:
-            Accept: application/vnd.github.v3+json
-          mappings:
-            - field: open_issues_count
-              label: Issues
-              format: number
-            - field: stargazers_count
-              label: Stars
-              format: number
+        ping: https://mlorente.dev
