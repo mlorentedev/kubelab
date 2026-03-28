@@ -27,6 +27,12 @@
     - SSL Labs:
         - icon: mdi-certificate
           href: https://www.ssllabs.com/ssltest/analyze.html?d=kubelab.live
+    - "Headers kubelab":
+        - icon: mdi-shield-check
+          href: https://securityheaders.com/?q=kubelab.live&followRedirects=on
+    - "Headers mlorente":
+        - icon: mdi-shield-check
+          href: https://securityheaders.com/?q=mlorente.dev&followRedirects=on
     - Shodan:
         - icon: mdi-magnify-scan
           href: https://www.shodan.io/host/162.55.57.175
@@ -50,6 +56,12 @@
     - Google Analytics:
         - icon: si-googleanalytics
           href: https://analytics.google.com
+    - "PageSpeed kubelab":
+        - icon: si-pagespeedinsights
+          href: https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fkubelab.live
+    - "PageSpeed mlorente":
+        - icon: si-pagespeedinsights
+          href: https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fmlorente.dev
     - Cloudflare Analytics:
         - icon: si-cloudflare
           href: https://dash.cloudflare.com/?to=/:account/:zone/analytics
