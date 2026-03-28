@@ -352,8 +352,24 @@ _deploy-argocd-helm:
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
-		--wait --timeout 5m
-	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
+		--timeout 10m
+	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
+	@echo "✓ Argo CD Helm upgrade applied. Pods starting — monitor with 'make watch-argocd'"
+
+# Watch ArgoCD pods until all ready — logs timing to /tmp/argocd-timing.log
+# Usage: make watch-argocd (run after deploy-argocd, safe to leave unattended)
+.PHONY: watch-argocd
+watch-argocd:
+	@echo "$$(date): Watching ArgoCD pods..." | tee -a /tmp/argocd-timing.log
+	@while true; do \
+		READY=$$(kubectl --kubeconfig $(HUB_KUBECONFIG) get pods -n argocd -l app.kubernetes.io/part-of=argocd \
+			-o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null | grep -c true); \
+		echo "$$(date): $$READY/5 ready" | tee -a /tmp/argocd-timing.log; \
+		[ "$$READY" -ge 5 ] && break; \
+		sleep 30; \
+	done
+	@echo "$$(date): ALL PODS READY ✓" | tee -a /tmp/argocd-timing.log
+	@echo "Timing log: /tmp/argocd-timing.log"
 
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
 # Usage: make recover-argocd
@@ -617,18 +633,24 @@ flush-sessions:
 # Usage: make pods ENV=staging
 #        make logs SVC=authelia ENV=staging
 #        make logs SVC=authelia ENV=staging TAIL=100
+# K8s observability — supports staging, prod, and hub (ArgoCD)
+# Usage: make pods ENV=staging|prod|hub
+#        make logs SVC=authelia ENV=staging [TAIL=50] [FOLLOW=1]
+#        make logs SVC=argocd-application-controller-0 ENV=hub
 .PHONY: pods
 pods:
-	@test -n "$(ENV)" || (echo "Usage: make pods ENV=staging|prod" && exit 1)
-	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config get pods -n kubelab -o wide
+	@test -n "$(ENV)" || (echo "Usage: make pods ENV=staging|prod|hub" && exit 1)
+	$(eval _NS := $(if $(filter hub,$(ENV)),argocd,kubelab))
+	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config get pods -n $(_NS) -o wide
 
 .PHONY: logs
 logs:
-	@test -n "$(SVC)" || (echo "Usage: make logs SVC=authelia ENV=staging [TAIL=50] [FOLLOW=1]" && exit 1)
-	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	@test -n "$(SVC)" || (echo "Usage: make logs SVC=authelia ENV=staging|prod|hub [TAIL=50] [FOLLOW=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _NS := $(if $(filter hub,$(_ENV)),argocd,kubelab))
 	$(eval _TAIL := $(or $(TAIL),50))
 	$(eval _FOLLOW := $(if $(FOLLOW),-f,))
-	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n kubelab deploy/$(SVC) --tail=$(_TAIL) $(_FOLLOW)
+	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n $(_NS) $(SVC) --tail=$(_TAIL) $(_FOLLOW)
 
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets validate-sync
