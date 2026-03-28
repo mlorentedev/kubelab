@@ -337,8 +337,11 @@ _deploy-authelia-oidc:
 .PHONY: _deploy-argocd-helm
 _deploy-argocd-helm:
 	@echo "=== Step 2/2: Installing Argo CD on hub (aws1) ==="
-	@echo "--- Pre-scale: freeing RAM on t4g.micro (ARGO-OOM-MITIGATION) ---"
-	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy argocd-applicationset-controller -n argocd --replicas=0 2>/dev/null || true
+	@echo "--- Stopping ALL ArgoCD pods for clean upgrade (t4g.micro OOM mitigation) ---"
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy --all -n argocd --replicas=0 2>/dev/null || true
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale statefulset --all -n argocd --replicas=0 2>/dev/null || true
+	@echo "--- Waiting for pods to terminate ---"
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) wait --for=delete pod -l app.kubernetes.io/part-of=argocd -n argocd --timeout=60s 2>/dev/null || true
 	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 	@helm repo update argo
 	@ARGOCD_HASH=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
@@ -349,9 +352,7 @@ _deploy-argocd-helm:
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
-		--wait --timeout 10m
-	@echo "--- Post-scale: restoring applicationset-controller ---"
-	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy argocd-applicationset-controller -n argocd --replicas=1 2>/dev/null || true
+		--wait --timeout 5m
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
