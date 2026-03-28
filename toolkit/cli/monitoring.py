@@ -11,8 +11,8 @@ from toolkit.config.settings import get_settings
 from toolkit.core.logging import console, logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.monitoring import apply_monitors, export_monitors, import_monitors
 from toolkit.features.monitoring import bootstrap as bootstrap_fn
-from toolkit.features.monitoring import export_monitors, import_monitors
 
 app = typer.Typer(
     name="monitoring",
@@ -300,6 +300,17 @@ def import_cmd() -> None:
     """
     settings = get_settings()
     import_monitors(settings.project_root)
+
+
+@app.command("apply")
+def apply_cmd() -> None:
+    """Declarative sync: apply monitors from seed JSON to Uptime Kuma.
+
+    Deletes all existing monitors and recreates from seed (IaC pattern).
+    Same approach as 'kubectl apply' or 'make deploy-k8s' — seed is truth.
+    """
+    settings = get_settings()
+    apply_monitors(settings.project_root)
 
 
 @app.command("bootstrap")

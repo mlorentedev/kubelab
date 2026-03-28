@@ -155,6 +155,97 @@ def import_monitors(project_root: Path) -> None:
         api.disconnect()
 
 
+def apply_monitors(project_root: Path) -> None:
+    """Declarative sync: delete all monitors and recreate from seed.
+
+    This is the IaC approach — seed JSON is the source of truth.
+    Adds monitors one-by-one via API (avoids upload_backup timeout on RPi3).
+    """
+    api, info = _connect(project_root)
+
+    try:
+        export_dir = project_root / EXPORT_DIR
+        monitors_path = export_dir / MONITORS_FILE
+
+        if not monitors_path.exists():
+            logger.error(f"No seed file at {monitors_path}. Run 'make monitoring-export' first.")
+            raise SystemExit(1)
+
+        seed_monitors = json.loads(monitors_path.read_text())
+
+        # Delete all existing monitors
+        existing = api.get_monitors()
+        if existing:
+            logger.info(f"Removing {len(existing)} existing monitors...")
+            for m in existing:
+                api.delete_monitor(m["id"])
+            # Wait for deletes to propagate (Uptime Kuma v2 deferred cleanup)
+            import time
+
+            time.sleep(3)
+            remaining = api.get_monitors()
+            logger.success(f"Removed {len(existing)} monitors ({len(remaining)} remaining)")
+
+        # Only pass fields that _build_monitor_data accepts
+        _ACCEPTED = {
+            "type",
+            "name",
+            "url",
+            "hostname",
+            "port",
+            "interval",
+            "retryInterval",
+            "maxretries",
+            "method",
+            "keyword",
+            "ignoreTls",
+            "upsideDown",
+            "accepted_statuscodes",
+            "description",
+            "httpBodyEncoding",
+            "maxredirects",
+            "parent",
+            "resendInterval",
+            "body",
+            "headers",
+            "basic_auth_user",
+            "basic_auth_pass",
+            "proxyId",
+            "timeout",
+            # notificationIDList excluded — IDs change between instances.
+            # After apply, link notifications manually or via separate sync step.
+        }
+
+        # Create monitors from seed one-by-one
+        logger.info(f"Creating {len(seed_monitors)} monitors from seed...")
+        created = 0
+        for m in seed_monitors:
+            try:
+                params: dict[str, Any] = {}
+                for k, v in m.items():
+                    if v is None:
+                        continue
+                    # Map snake_case export fields to camelCase API fields
+                    if k == "retry_interval":
+                        params["retryInterval"] = v
+                    elif k in _ACCEPTED:
+                        params[k] = v
+                # Uptime Kuma v2.x requires conditions (NOT NULL in DB)
+                # Use low-level sio.call — lib's _call wrapper has issues with v2 responses
+                monitor_data = api._build_monitor_data(**params)
+                monitor_data["conditions"] = []
+                r = api.sio.call("add", monitor_data, timeout=api.timeout)
+                if isinstance(r, dict) and not r.get("ok", True):
+                    raise RuntimeError(r.get("msg", "Unknown error"))
+                created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
+
+        logger.success(f"Applied {created}/{len(seed_monitors)} monitors from seed")
+    finally:
+        api.disconnect()
+
+
 def bootstrap(project_root: Path) -> None:
     """Full bootstrap: create admin user (if fresh) + import monitors from seed.
 

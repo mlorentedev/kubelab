@@ -59,6 +59,7 @@ help:
 	@echo "Monitoring (Uptime Kuma):"
 	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
 	@echo "  make monitoring-import   Import monitors from JSON seed"
+	@echo "  make monitoring-apply     Apply monitors from seed JSON (declarative sync)"
 	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + import)"
 	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
@@ -286,6 +287,10 @@ monitoring-export:
 .PHONY: monitoring-import
 monitoring-import:
 	@$(TOOLKIT) monitoring import
+
+.PHONY: monitoring-apply
+monitoring-apply:
+	@$(TOOLKIT) monitoring apply
 
 .PHONY: monitoring-bootstrap
 monitoring-bootstrap:
