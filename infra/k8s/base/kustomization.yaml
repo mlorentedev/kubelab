@@ -56,5 +56,9 @@ images:
   - name: quay.io/minio/minio
     newTag: RELEASE.2025-09-07T16-13-09Z
   # Custom apps (managed by release-please, not sync_k8s_images.py)
+  - name: docker.io/mlorentedev/kubelab-web
+    newTag: "1.0.1"
+  - name: docker.io/mlorentedev/kubelab-api
+    newTag: "1.0.0"
   - name: docker.io/mlorentedev/kubelab-errors
     newTag: "1.1.1"
