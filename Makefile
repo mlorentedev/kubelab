@@ -45,6 +45,7 @@ help:
 	@echo "  make secrets-init ENV=x Generate machine secrets for an env"
 	@echo "  make secrets-jwks ENV=x Generate OIDC JWKS RSA key for an env"
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
+	@echo "  make secrets-show KEY=x SECRETS_ENV=y  Show a decrypted secret (default: common)"
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo "  make dev-app APP=x      Start Astro app dev server (site, astro-site)"
@@ -268,6 +269,10 @@ secrets-jwks:
 secrets-hash:
 	@$(TOOLKIT) secrets hash --env $(ENV)
 
+.PHONY: secrets-show
+secrets-show:
+	@ENV=dev $(TOOLKIT) secrets show $(KEY) --env $(or $(SECRETS_ENV),common)
+
 .PHONY: secrets-audit
 secrets-audit:
 	@$(TOOLKIT) secrets audit
@@ -290,13 +295,14 @@ deploy-argocd:
 	@echo "=== Installing Argo CD on hub (aws1) ==="
 	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 	@helm repo update argo
-	@helm upgrade --install argocd argo/argo-cd \
+	@ARGOCD_HASH=$$($(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
+	helm upgrade --install argocd argo/argo-cd \
 		--namespace argocd --create-namespace \
 		--kubeconfig $(HUB_KUBECONFIG) \
 		-f infra/helm/argocd/values.yaml \
+		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--wait --timeout 5m
-	@echo "✓ Argo CD deployed. Get admin password:"
-	@echo "  kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo"
+	@echo "✓ Argo CD deployed. Admin password: make secrets-show KEY=argocd.admin_password"
 
 # Deploy Argo CD Applications to hub (syncs overlays to spokes)
 # Usage: make deploy-apps
