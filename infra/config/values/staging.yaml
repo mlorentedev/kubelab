@@ -48,6 +48,7 @@ apps:
       domain: staging.mlorente.dev
       site_domain: staging.mlorente.dev
       site_url: https://staging.mlorente.dev
+      default_port: 8080
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
