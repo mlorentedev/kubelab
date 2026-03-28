@@ -558,7 +558,12 @@ tf-dns-apply:
 sync-homepage:
 	@$(TOOLKIT) sync homepage
 	@if [ -n "$(ENV)" ]; then \
-		echo "Restarting Homepage on $(ENV) to pick up config changes..."; \
+		echo "Applying Homepage ConfigMap to $(ENV)..."; \
+		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config create configmap homepage-config \
+			--from-file=infra/k8s/base/services/homepage-config/ \
+			-n kubelab --dry-run=client -o yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
+		echo "Restarting Homepage on $(ENV)..."; \
 		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config rollout restart deployment/homepage -n kubelab; \
 		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config rollout status deployment/homepage -n kubelab --timeout=60s; \
 	fi
