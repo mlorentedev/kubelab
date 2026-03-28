@@ -314,6 +314,11 @@ class CredentialsManager:
         if len(common_password) < 8:
             logger.error("Password must be at least 8 characters long.")
             raise typer.Exit(1)
+        has_letter = any(c.isalpha() for c in common_password)
+        has_digit = any(c.isdigit() for c in common_password)
+        if not (has_letter and has_digit):
+            logger.error("Password must contain both letters and numbers (required by Uptime Kuma and others).")
+            raise typer.Exit(1)
 
         # 2. Generate Authelia admin password hash (Argon2)
         logger.info("Generating Authelia admin password hash (Argon2)...")
@@ -485,6 +490,9 @@ class CredentialsManager:
             "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
+            # Uptime Kuma secrets (SSOT: same common credentials)
+            "apps.services.observability.uptime_kuma.admin_user": common_username,
+            "apps.services.observability.uptime_kuma.admin_password": common_password,
         }
 
         # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env)

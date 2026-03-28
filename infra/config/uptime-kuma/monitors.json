@@ -1,0 +1,904 @@
+[
+  {
+    "name": "VPS SSH",
+    "type": "port",
+    "url": "https://",
+    "hostname": "162.55.57.175",
+    "port": 22,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 3,
+        "monitor_id": 1,
+        "value": "",
+        "name": "public",
+        "color": "#059669"
+      }
+    ]
+  },
+  {
+    "name": "Router",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "10.0.0.1",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 2,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      }
+    ]
+  },
+  {
+    "name": "Rpi4 LAN",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "172.16.1.1",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 3,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      }
+    ]
+  },
+  {
+    "name": "Smart plug CO",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "10.0.0.167",
+    "port": null,
+    "interval": 60,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 5,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      }
+    ]
+  },
+  {
+    "name": "RPi4 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.10",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 12,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "Pi-hole Admin",
+    "type": "http",
+    "url": "http://172.16.1.1/admin",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 13,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 13,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "VPS Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.2",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 14,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "Beelink Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.3",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 15,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "Headscale",
+    "type": "http",
+    "url": "https://vpn.kubelab.live/health",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 3,
+        "monitor_id": 16,
+        "value": "",
+        "name": "public",
+        "color": "#059669"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 16,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Staging Web",
+    "type": "http",
+    "url": "https://staging.mlorente.dev",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 17,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 17,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Staging API",
+    "type": "http",
+    "url": "https://api.staging.kubelab.live/health",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 18,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 18,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Staging Grafana",
+    "type": "http",
+    "url": "https://grafana.staging.kubelab.live/api/health",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 20,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 20,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Prod Web",
+    "type": "http",
+    "url": "https://mlorente.dev",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 3,
+        "monitor_id": 21,
+        "value": "",
+        "name": "public",
+        "color": "#059669"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 21,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Prod API",
+    "type": "http",
+    "url": "https://api.kubelab.live/health",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 3,
+        "monitor_id": 22,
+        "value": "",
+        "name": "public",
+        "color": "#059669"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 22,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Acemagic 1 LAN",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "172.16.1.2",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 24,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      },
+      {
+        "tag_id": 5,
+        "monitor_id": 24,
+        "value": "",
+        "name": "k3s",
+        "color": "#4F46E5"
+      }
+    ]
+  },
+  {
+    "name": "Acemagic 2 LAN",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "172.16.1.5",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 26,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      }
+    ]
+  },
+  {
+    "name": "Rpi3 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.6",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 28,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "Beelink LAN",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "172.16.1.3",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 29,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      }
+    ]
+  },
+  {
+    "name": "Beelink Ollama API",
+    "type": "http",
+    "url": "http://100.64.0.3:11434/api/tags",
+    "hostname": null,
+    "port": null,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 30,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 30,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  },
+  {
+    "name": "Jetson LAN",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "172.16.1.4",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 1,
+        "monitor_id": 31,
+        "value": "",
+        "name": "lan",
+        "color": "#DC2626"
+      }
+    ]
+  },
+  {
+    "name": "Jetson Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.8",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 32,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "Acemagic 1 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.11",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 33,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      },
+      {
+        "tag_id": 5,
+        "monitor_id": 33,
+        "value": "",
+        "name": "k3s",
+        "color": "#4F46E5"
+      }
+    ]
+  },
+  {
+    "name": "Acemagic 2 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.5",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 34,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "AWS 1",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.9",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 35,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      }
+    ]
+  },
+  {
+    "name": "ArgoCD",
+    "type": "http",
+    "url": "https://argo.kubelab.live",
+    "hostname": "100.64.0.4",
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": null,
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      {
+        "tag_id": 2,
+        "monitor_id": 36,
+        "value": "",
+        "name": "vpn",
+        "color": "#2563EB"
+      },
+      {
+        "tag_id": 4,
+        "monitor_id": 36,
+        "value": "",
+        "name": "app",
+        "color": "#DB2777"
+      }
+    ]
+  }
+]

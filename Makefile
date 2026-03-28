@@ -56,6 +56,11 @@ help:
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
+	@echo "Monitoring (Uptime Kuma):"
+	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
+	@echo "  make monitoring-import   Import monitors from JSON seed"
+	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
+	@echo ""
 	@echo "Kubernetes:"
 	@echo "  make sync-homepage      Sync Homepage config from common.yaml"
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
@@ -269,6 +274,21 @@ secrets-jwks:
 .PHONY: secrets-hash
 secrets-hash:
 	@$(TOOLKIT) secrets hash --env $(ENV)
+
+# -----------------------------------------------------------------------------
+# Monitoring (Uptime Kuma)
+# -----------------------------------------------------------------------------
+.PHONY: monitoring-export
+monitoring-export:
+	@$(TOOLKIT) monitoring export
+
+.PHONY: monitoring-import
+monitoring-import:
+	@$(TOOLKIT) monitoring import
+
+.PHONY: monitoring-status
+monitoring-status:
+	@$(TOOLKIT) monitoring status
 
 .PHONY: secrets-show
 secrets-show:
