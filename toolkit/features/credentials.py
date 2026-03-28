@@ -423,6 +423,20 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             gitea_oidc_client_secret_hash = self.generate_argon2_hash(gitea_oidc_client_secret)
 
+        # 11c. Generate Argo CD OIDC Client Secret and its hash
+        logger.info("Generating Argo CD OIDC Client Secret...")
+        argocd_oidc_client_secret = secrets.token_urlsafe(64)
+        logger.success("Argo CD OIDC Client Secret generated.")
+
+        logger.info("Generating Argo CD OIDC Client Secret hash...")
+        try:
+            argocd_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(argocd_oidc_client_secret)
+            logger.success("Argo CD OIDC Client Secret hash generated.")
+        except Exception as e:
+            logger.warning(f"Could not generate Argo CD OIDC client secret hash via Docker: {e}")
+            logger.warning("Using Argon2 hash from local library instead...")
+            argocd_oidc_client_secret_hash = self.generate_argon2_hash(argocd_oidc_client_secret)
+
         # 12. Generate Argo CD admin password hash (bcrypt, for Helm values)
         logger.info("Generating Argo CD admin password hash (bcrypt)...")
         argocd_admin_password_hash = self.generate_bcrypt_hash(common_password)
@@ -458,6 +472,8 @@ class CredentialsManager:
             f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_gitea_hash": gitea_oidc_client_secret_hash,
+            f"{_auth}.oidc_client_secret_argocd": argocd_oidc_client_secret,
+            f"{_auth}.oidc_client_secret_argocd_hash": argocd_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,

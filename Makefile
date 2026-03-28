@@ -296,14 +296,16 @@ deploy-argocd:
 	@echo "=== Installing Argo CD on hub (aws1) ==="
 	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 	@helm repo update argo
-	@ARGOCD_HASH=$$($(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
+	@ARGOCD_HASH=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
+	OIDC_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show apps.services.security.authelia.oidc_client_secret_argocd --env common 2>/dev/null | tail -1) && \
 	helm upgrade --install argocd argo/argo-cd \
 		--namespace argocd --create-namespace \
 		--kubeconfig $(HUB_KUBECONFIG) \
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
+		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
 		--wait --timeout 5m
-	@echo "✓ Argo CD deployed. Admin password: make secrets-show KEY=argocd.admin_password"
+	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Deploy Argo CD Applications to hub (syncs overlays to spokes)
 # Usage: make deploy-apps
