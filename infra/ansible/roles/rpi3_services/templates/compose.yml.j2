@@ -17,7 +17,7 @@ services:
       start_period: 30s
 
   glances:
-    image: nicolargo/glances:4-full
+    image: nicolargo/glances:4.5.2-full
     container_name: glances
     restart: {{ restart_policy }}
     ports:

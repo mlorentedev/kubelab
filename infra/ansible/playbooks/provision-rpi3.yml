@@ -18,7 +18,7 @@
 # Play 0: Pre-flight validation
 # ---------------------------------------------------------------------------
 - name: "Pre-flight: validate RPi3 connectivity"
-  hosts: kubelab-rpi3
+  hosts: rpi3
   gather_facts: false
   become: false
   tasks:
@@ -39,7 +39,7 @@
 # Play 1: Provisioning
 # ---------------------------------------------------------------------------
 - name: Provision RPi3 — External monitoring node
-  hosts: kubelab-rpi3
+  hosts: rpi3
   become: true
   gather_facts: true
 
@@ -93,6 +93,9 @@
 
     - role: ../roles/dns_resilience
       tags: [dns]
+      vars:
+        headscale_ip: "{{ config.networking.vps.public_ip }}"
+        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
 
     - role: ../roles/rpi3_services
       tags: [services, monitoring]
