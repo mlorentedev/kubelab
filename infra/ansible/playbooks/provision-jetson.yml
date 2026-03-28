@@ -1,0 +1,141 @@
+---
+# =============================================================================
+# Jetson Nano Maintenance — Minimal Health Playbook
+#
+# Ubuntu 18.04 (JetPack 4.6.6) — Python 3.6, Docker 20.10.
+# Uses raw module only (no Ansible modules that need Python 3.7+).
+# Scope: network health, Tailscale connectivity, Docker status.
+# Pollex (llama.cpp) deployment lives in pollex repo, not kubelab.
+#
+# Usage:
+#   make provision NODE=jetson ENV=prod
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight (raw — no Python dependency)
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate Jetson connectivity"
+  hosts: jetson
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Verify SSH connectivity
+      raw: echo ok
+      changed_when: false
+
+    - name: Verify sudo works
+      raw: sudo -n true
+      changed_when: false
+
+# ---------------------------------------------------------------------------
+# Play 1: Maintenance
+# ---------------------------------------------------------------------------
+- name: Maintain Jetson Nano — network + Docker health
+  hosts: jetson
+  gather_facts: false
+  become: true
+
+  vars:
+    deploy_env: prod
+    legacy_python: true
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+      delegate_to: localhost
+      become: false
+
+    - name: Set config fact
+      set_fact:
+        config: "{{ common }}"
+      delegate_to: localhost
+      become: false
+
+  tasks:
+    # -- DNS resilience (legacy raw) --
+    - name: Ensure vpn.kubelab.live in /etc/hosts
+      raw: >
+        grep -q '{{ config.networking.vps.public_ip }} {{ config.apps.services.core.headscale.domain }}' /etc/hosts
+        || echo '{{ config.networking.vps.public_ip }} {{ config.apps.services.core.headscale.domain }}' | sudo tee -a /etc/hosts > /dev/null
+      changed_when: false
+
+    # -- Tailscale health --
+    - name: Check Tailscale status
+      raw: tailscale status --self
+      register: ts_status
+      changed_when: false
+
+    - name: Display Tailscale status
+      debug:
+        msg: "{{ ts_status.stdout_lines[0] | default('unknown') }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Reconnect Tailscale if needed
+      raw: >
+        tailscale status --self | grep -q 'offline' &&
+        sudo tailscale up --login-server=https://{{ config.apps.services.core.headscale.domain }}
+        --accept-routes=false || true
+      changed_when: false
+
+    # -- Docker health --
+    - name: Check Docker daemon
+      raw: docker info > /dev/null 2>&1 && echo "Docker OK" || echo "Docker FAILED"
+      register: docker_status
+      changed_when: false
+
+    - name: Display Docker status
+      debug:
+        msg: "{{ docker_status.stdout | trim }}"
+      delegate_to: localhost
+      become: false
+
+    - name: List running containers
+      raw: docker ps --format 'table {% raw %}{{.Names}}\t{{.Status}}{% endraw %}' 2>/dev/null || echo "No containers"
+      register: containers
+      changed_when: false
+
+    - name: Display containers
+      debug:
+        msg: "{{ containers.stdout_lines | default(['none']) }}"
+      delegate_to: localhost
+      become: false
+
+    # -- Glances agent (consistent with all other nodes) --
+    - name: Check if Glances is running
+      raw: docker ps --filter name=glances --format '{% raw %}{{.Status}}{% endraw %}' 2>/dev/null
+      register: glances_status
+      changed_when: false
+
+    - name: Start Glances container
+      raw: >
+        docker run -d --name glances --restart unless-stopped
+        -p 61208:61208
+        -e GLANCES_OPT=-w
+        -v /var/run/docker.sock:/var/run/docker.sock:ro
+        -v /etc/os-release:/etc/os-release:ro
+        --pid host
+        nicolargo/glances:4.5.2-full
+      when: glances_status.stdout | trim == ""
+      changed_when: true
+
+    # -- System health --
+    - name: Check disk usage
+      raw: df -h / | tail -1
+      register: disk
+      changed_when: false
+
+    - name: Check memory
+      raw: free -m | grep Mem
+      register: mem
+      changed_when: false
+
+    - name: Report system health
+      debug:
+        msg:
+          - "Disk: {{ disk.stdout | trim }}"
+          - "Memory: {{ mem.stdout | trim }}"
+      delegate_to: localhost
+      become: false
