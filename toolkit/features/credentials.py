@@ -469,7 +469,10 @@ class CredentialsManager:
             "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
-            # Argo CD secrets (SSOT: same common_password, bcrypt hash for K8s Secret)
+        }
+
+        # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env)
+        hub_secrets = {
             "argocd.admin_password": common_password,
             "argocd.admin_password_hash": argocd_admin_password_hash,
         }
@@ -493,9 +496,17 @@ class CredentialsManager:
             else:
                 logger.warning("Batch update failed. Falling back to manual output...")
                 self._print_secrets_for_manual_copy(env, generated_secrets)
+
+            # Hub credentials → always common SOPS (Argo CD hub is singleton)
+            common_sops = self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / "common.enc.yaml"
+            if self.config_manager.batch_update_secrets(hub_secrets, secret_file_path=common_sops):
+                logger.success("Hub credentials (Argo CD) updated in common SOPS.")
+            else:
+                logger.warning("Failed to update hub credentials in common SOPS.")
         else:
             # Print for manual copy (original behavior)
-            self._print_secrets_for_manual_copy(env, generated_secrets)
+            all_secrets = {**generated_secrets, **hub_secrets}
+            self._print_secrets_for_manual_copy(env, all_secrets)
 
     def _reconcile_services(self, updated_keys: list[str], env: str) -> None:
         """Restart services affected by credential changes.
