@@ -117,8 +117,9 @@ apps/**/nginx.conf/
 # Wiki build output
 apps/wiki/generated_docs
 
-# K8s overlay generated manifests (rendered by toolkit at deploy time)
-infra/k8s/overlays/*/generated/
+# K8s overlay generated manifests — committed for GitOps (ArgoCD reads from Git).
+# Regenerate with: make deploy-k8s ENV=<env> (or toolkit infra k8s deploy --env <env>)
+# Previously gitignored, unignored for ARGO-007.
 
 # Security scanning
 .cache_ggshield

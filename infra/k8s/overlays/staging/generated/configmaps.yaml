@@ -1,0 +1,52 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+data:
+  BEEHIIV_PUB_ID: "pub_bf6a0b8d-074a-45e5-a2c2-34ed87fb4b5f"
+  EMAIL_FROM: "mlorentedev"
+  EMAIL_HOST: "smtp.gmail.com"
+  EMAIL_PORT: "587"
+  EMAIL_SECURE: "true"
+  EMAIL_USER: "mlorentedev@gmail.com"
+  ENVIRONMENT: "staging"
+  SITE_DOMAIN: "staging.kubelab.live"
+  SITE_TITLE: "mlorentedev"
+  SITE_URL: "https://staging.kubelab.live"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+data:
+  ALLOWED_HOSTS: "localhost,web,127.0.0.1,.staging.kubelab.live,.staging.mlorente.dev"
+  BACKEND_URL: "https://api.staging.kubelab.live"
+  BUY_ME_A_COFFEE_URL: "https://www.buymeacoffee.com/mlorente"
+  CALENDLY_URL: "https://calendly.com/mlorentedev/videollamada"
+  ENABLE_BLOG: "false"
+  ENABLE_CONTACT: "false"
+  ENABLE_HOMELABS: "false"
+  ENVIRONMENT: "staging"
+  GITHUB_URL: "https://github.com/mlorentedev"
+  GOOGLE_ANALYTICS_ID: "G-PLL8SP2YFC"
+  GOOGLE_TAG_MANAGER_ID: "GTM-XXXXXX"
+  SITE_AUTHOR: "Manu Lorente"
+  SITE_DESCRIPTION: "Cloud Native Automation in Spanish"
+  SITE_DOMAIN: "staging.mlorente.dev"
+  SITE_KEYWORDS: "devops, cloud, kubernetes, aws, azure, python, go"
+  SITE_MAIL: "info@mlorente.dev"
+  SITE_TITLE: "Manu Lorente"
+  SITE_URL: "https://staging.mlorente.dev"
+  TWITTER_URL: "https://x.com/mlorentedev"
+  YOUTUBE_URL: "https://www.youtube.com/@mlorentedev"
