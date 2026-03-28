@@ -11,6 +11,7 @@ from toolkit.config.settings import get_settings
 from toolkit.core.logging import console, logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.monitoring import bootstrap as bootstrap_fn
 from toolkit.features.monitoring import export_monitors, import_monitors
 
 app = typer.Typer(
@@ -299,3 +300,15 @@ def import_cmd() -> None:
     """
     settings = get_settings()
     import_monitors(settings.project_root)
+
+
+@app.command("bootstrap")
+def bootstrap_cmd() -> None:
+    """Full disaster recovery: create admin user + import monitors.
+
+    For fresh Uptime Kuma instances (new SD card). Creates admin user
+    from SOPS credentials, then imports monitors + notifications from
+    JSON seed files. Idempotent — safe to re-run.
+    """
+    settings = get_settings()
+    bootstrap_fn(settings.project_root)

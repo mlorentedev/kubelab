@@ -56,6 +56,16 @@
   retries: 3
   delay: 5
 
+- name: Bootstrap Uptime Kuma (setup admin + import monitors from seed)
+  command: poetry run toolkit monitoring bootstrap
+  args:
+    chdir: "{{ playbook_dir }}/../.."
+  delegate_to: localhost
+  become: false
+  register: bootstrap_result
+  changed_when: "'Created admin' in bootstrap_result.stdout"
+  failed_when: false
+
 - name: Report service status
   debug:
     msg: "Uptime Kuma on port {{ uptime_kuma_port }}, Glances on port {{ glances_port }}"
