@@ -557,6 +557,11 @@ tf-dns-apply:
 .PHONY: sync-homepage
 sync-homepage:
 	@$(TOOLKIT) sync homepage
+	@if [ -n "$(ENV)" ]; then \
+		echo "Restarting Homepage on $(ENV) to pick up config changes..."; \
+		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config rollout restart deployment/homepage -n kubelab; \
+		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config rollout status deployment/homepage -n kubelab --timeout=60s; \
+	fi
 
 .PHONY: sync-k8s-images
 sync-k8s-images:
