@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, TypedDict
 
+import bcrypt
 import typer
 import yaml
 from argon2 import PasswordHasher
@@ -81,6 +82,11 @@ class CredentialsManager:
             salt_len=AUTHELIA_CONFIG.ARGON2_SALT_LENGTH,
         )
         return ph.hash(password)
+
+    @staticmethod
+    def generate_bcrypt_hash(password: str) -> str:
+        """Generate a bcrypt hash suitable for Argo CD admin password."""
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     def _generate_htpasswd_bcrypt_hash(self, username: str, password: str) -> str:
         """
@@ -417,7 +423,12 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             gitea_oidc_client_secret_hash = self.generate_argon2_hash(gitea_oidc_client_secret)
 
-        # 12. Generate CrowdSec Bouncer API Key (declarative — shared secret)
+        # 12. Generate Argo CD admin password hash (bcrypt, for Helm values)
+        logger.info("Generating Argo CD admin password hash (bcrypt)...")
+        argocd_admin_password_hash = self.generate_bcrypt_hash(common_password)
+        logger.success("Argo CD admin password hash generated.")
+
+        # 13. Generate CrowdSec Bouncer API Key (declarative — shared secret)
         # Both LAPI (BOUNCER_KEY_*) and bouncer (CROWDSEC_BOUNCER_API_KEY) read
         # from the same K8s Secret. No imperative `cscli bouncers add` needed.
         existing_bouncer_key = existing_secrets.get("apps.services.security.crowdsec.bouncer_api_key")
@@ -458,6 +469,9 @@ class CredentialsManager:
             "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
+            # Argo CD secrets (SSOT: same common_password, bcrypt hash for K8s Secret)
+            "argocd.admin_password": common_password,
+            "argocd.admin_password_hash": argocd_admin_password_hash,
         }
 
         # Preserve immutable secrets (storage_encryption_key, session_secret, etc.)
