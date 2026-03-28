@@ -527,6 +527,10 @@ class CredentialsManager:
                 logger.success("Hub credentials (Argo CD) updated in common SOPS.")
             else:
                 logger.warning("Failed to update hub credentials in common SOPS.")
+
+            # Reconcile external services that have their own auth (not K8s Secrets)
+            old_uk_password = existing_secrets.get("apps.services.observability.uptime_kuma.admin_password", "")
+            self._reconcile_external_credentials(common_username, common_password, old_uk_password)
         else:
             # Print for manual copy (original behavior)
             all_secrets = {**generated_secrets, **hub_secrets}
@@ -584,6 +588,46 @@ class CredentialsManager:
                 logger.error(f"Failed to restart {service_name}: {e}")
 
         logger.success(f"Reconciliation complete. Restarted {len(affected_services)} service(s).")
+
+    def _reconcile_external_credentials(self, username: str, new_password: str, old_password: str = "") -> None:
+        """Reconcile credentials for services with their own auth system (not K8s Secrets).
+
+        These services manage their own user database and need API calls to update
+        credentials, unlike K8s-backed services that read from Secrets.
+        """
+        logger.section("Reconciling external service credentials")
+
+        # Uptime Kuma — update admin password via WebSocket API
+        try:
+            from uptime_kuma_api import UptimeKumaApi
+
+            from toolkit.features.configuration import ConfigurationManager
+
+            cm = ConfigurationManager("staging", self.project_root)
+            merged = cm.get_merged_config()
+            node = merged.get("networking", {}).get("nodes", {}).get("rpi3", {})
+            svc = merged.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
+            host = node.get("tailscale_ip", "")
+            port = svc.get("default_port", 3001)
+            url = f"http://{host}:{port}"
+
+            logger.info(f"Updating Uptime Kuma password at {url}...")
+            api = UptimeKumaApi(url)
+
+            # Try login with old password first (SOPS already has the new one)
+            login_password = old_password or new_password
+            try:
+                api.login(username, login_password)
+            except Exception:
+                # Maybe already updated — try new password
+                api.login(username, new_password)
+
+            api.change_password(login_password, new_password)
+            logger.success("Uptime Kuma password updated to SSOT value.")
+            api.disconnect()
+        except Exception as e:
+            logger.warning(f"Could not update Uptime Kuma password: {e}")
+            logger.warning("Update manually or ensure RPi3 is reachable via Tailscale.")
 
     def _print_secrets_for_manual_copy(self, env: str, secrets_dict: dict[str, str]) -> None:
         """Print generated secrets in YAML format for manual copy to SOPS."""
