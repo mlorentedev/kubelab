@@ -354,6 +354,20 @@ _deploy-argocd-helm:
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy argocd-applicationset-controller -n argocd --replicas=1 2>/dev/null || true
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
+# Recover Argo CD from failed Helm upgrade (pending-upgrade state)
+# Usage: make recover-argocd
+.PHONY: recover-argocd
+recover-argocd:
+	@echo "=== Checking Argo CD Helm release state ==="
+	@STATUS=$$(helm --kubeconfig $(HUB_KUBECONFIG) status argocd -n argocd -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null) && \
+	if [ "$$STATUS" = "pending-upgrade" ] || [ "$$STATUS" = "pending-install" ] || [ "$$STATUS" = "failed" ]; then \
+		echo "Release in $$STATUS state — rolling back..."; \
+		helm --kubeconfig $(HUB_KUBECONFIG) rollback argocd -n argocd --wait --timeout 10m; \
+		echo "✓ Rollback complete. Re-run 'make deploy-argocd' to retry upgrade."; \
+	else \
+		echo "Release state: $$STATUS — no recovery needed."; \
+	fi
+
 # Deploy Argo CD Applications to hub (syncs overlays to spokes)
 # Usage: make deploy-apps
 .PHONY: deploy-apps
