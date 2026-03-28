@@ -52,7 +52,7 @@ help:
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
-	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi4)"
+	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi3|rpi4|vps)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""

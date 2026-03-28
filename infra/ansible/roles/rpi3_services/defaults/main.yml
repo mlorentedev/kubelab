@@ -1,0 +1,3 @@
+---
+rpi3_deploy_dir: /opt/monitoring
+rpi3_kuma_data_dir: /opt/monitoring/uptime-kuma-data
