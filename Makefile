@@ -65,6 +65,7 @@ help:
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
+	@echo "  make flush-sessions ENV=x  Flush Authelia sessions (Redis FLUSHDB)"
 	@echo ""
 	@echo "Hub (Argo CD):"
 	@echo "  make fetch-kubeconfig-hub      Fetch kubeconfig from aws1"
@@ -536,6 +537,13 @@ configure-oidc:
 apply-secrets:
 	@test -n "$(ENV)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
+
+.PHONY: flush-sessions
+flush-sessions:
+	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
+	@echo "Flushing Authelia sessions (Redis) for $(ENV)..."
+	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config exec -n kubelab deploy/redis -- redis-cli FLUSHDB
+	@echo "✓ Sessions flushed. All users must re-authenticate."
 
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets validate-sync
