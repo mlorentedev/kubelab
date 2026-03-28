@@ -304,7 +304,8 @@
     "tags": [
       "prod",
       "critical"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Prod \u00b7 API \u00b7 api.kubelab.live",
@@ -332,7 +333,8 @@
     "tags": [
       "prod",
       "critical"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Prod \u00b7 Web \u00b7 kubelab.live",
@@ -361,7 +363,8 @@
     "tags": [
       "prod",
       "critical"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Auth \u00b7 Authelia Prod",
@@ -391,7 +394,8 @@
       "auth",
       "service",
       "critical"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Auth \u00b7 Argo CD",
@@ -420,7 +424,8 @@
       "auth",
       "service",
       "critical"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Data \u00b7 Grafana Prod",
@@ -449,7 +454,8 @@
       "prod",
       "data",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Data \u00b7 Gitea Prod",
@@ -478,7 +484,8 @@
       "prod",
       "data",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Data \u00b7 MinIO Prod",
@@ -507,7 +514,8 @@
       "prod",
       "data",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Data \u00b7 MinIO Console Prod",
@@ -536,7 +544,8 @@
       "prod",
       "data",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Data \u00b7 n8n Prod",
@@ -565,7 +574,8 @@
       "prod",
       "data",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Monitoring \u00b7 Uptime Kuma Prod",
@@ -594,7 +604,8 @@
       "prod",
       "monitoring",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Data \u00b7 Ollama API",
@@ -649,7 +660,8 @@
     "parent": null,
     "tags": [
       "staging"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Staging \u00b7 API \u00b7 api.staging.kubelab.live",
@@ -676,7 +688,8 @@
     "parent": null,
     "tags": [
       "staging"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Auth \u00b7 Authelia Staging",
@@ -705,7 +718,8 @@
       "staging",
       "auth",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Staging \u00b7 Web \u00b7 Grafana Staging",
@@ -733,7 +747,8 @@
     "tags": [
       "staging",
       "data"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Staging \u00b7 Web \u00b7 Gitea Staging",
@@ -761,7 +776,8 @@
     "tags": [
       "staging",
       "data"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Staging \u00b7 Web \u00b7 n8n Staging",
@@ -789,7 +805,8 @@
     "tags": [
       "staging",
       "data"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Staging \u00b7 Web \u00b7 MinIO Staging",
@@ -817,7 +834,8 @@
     "tags": [
       "staging",
       "data"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Staging \u00b7 Web \u00b7 Homepage Staging",
@@ -844,7 +862,8 @@
     "parent": null,
     "tags": [
       "staging"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Services \u00b7 Monitoring \u00b7 Pi-hole Staging",
@@ -873,7 +892,8 @@
       "staging",
       "monitoring",
       "service"
-    ]
+    ],
+    "expiryNotification": true
   },
   {
     "name": "Home \u00b7 IoT \u00b7 Smart Plug CO",
