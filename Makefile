@@ -69,7 +69,7 @@ help:
 	@echo ""
 	@echo "Hub (Argo CD):"
 	@echo "  make fetch-kubeconfig-hub      Fetch kubeconfig from aws1"
-	@echo "  make deploy-argocd             Install/upgrade Argo CD on hub"
+	@echo "  make deploy-argocd             Install/upgrade Argo CD (deploys Authelia OIDC first)"
 	@echo "  make deploy-apps               Deploy Argo CD Applications to hub"
 	@echo "  make check-apps                Check Application sync status"
 	@echo "  make restart-argocd            Restart Argo CD controller (clear cache)"
@@ -292,8 +292,21 @@ fetch-kubeconfig-hub:
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
 
 .PHONY: deploy-argocd
-deploy-argocd:
-	@echo "=== Installing Argo CD on hub (aws1) ==="
+deploy-argocd: _deploy-authelia-oidc _deploy-argocd-helm
+
+# Internal: ensure Authelia has OIDC clients before Argo CD tries to use them
+.PHONY: _deploy-authelia-oidc
+_deploy-authelia-oidc:
+	@echo "=== Step 1/2: Deploying Authelia OIDC config to prod ==="
+	@$(TOOLKIT) infra k8s apply-secrets --env prod
+	@kubectl --kubeconfig ~/.kube/kubelab-prod-config apply -k infra/k8s/overlays/prod 2>&1 | grep -E 'authelia|error' || true
+	@kubectl --kubeconfig ~/.kube/kubelab-prod-config rollout restart deployment/authelia -n kubelab
+	@kubectl --kubeconfig ~/.kube/kubelab-prod-config rollout status deployment/authelia -n kubelab --timeout=60s
+	@echo "✓ Authelia OIDC ready"
+
+.PHONY: _deploy-argocd-helm
+_deploy-argocd-helm:
+	@echo "=== Step 2/2: Installing Argo CD on hub (aws1) ==="
 	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 	@helm repo update argo
 	@ARGOCD_HASH=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
