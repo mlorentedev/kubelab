@@ -17,6 +17,8 @@ spec:
     browserXssFilter: true
     contentTypeNosniff: true
     referrerPolicy: strict-origin-when-cross-origin
+    # yamllint disable-line rule:line-length
+    contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://api.github.com https://api.cloudflare.com; frame-ancestors 'self'"
     permissionsPolicy: camera=(), microphone=(), geolocation=(), payment=()
     stsSeconds: 31536000
     stsIncludeSubdomains: true

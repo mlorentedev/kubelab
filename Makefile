@@ -554,19 +554,13 @@ tf-dns-apply:
 	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
 		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
 
+# sync-homepage regenerates config files from SSOT. Deployment happens via
+# `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.
+# No more manual kubectl create/apply/restart (DASH-DT-002, RELIAB-002 pattern).
 .PHONY: sync-homepage
 sync-homepage:
 	@$(TOOLKIT) sync homepage
-	@if [ -n "$(ENV)" ]; then \
-		echo "Applying Homepage ConfigMap to $(ENV)..."; \
-		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config create configmap homepage-config \
-			--from-file=infra/k8s/base/services/homepage-config/ \
-			-n kubelab --dry-run=client -o yaml | \
-			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
-		echo "Restarting Homepage on $(ENV)..."; \
-		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config rollout restart deployment/homepage -n kubelab; \
-		kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config rollout status deployment/homepage -n kubelab --timeout=60s; \
-	fi
+	@echo "✓ Homepage config regenerated. Run 'make deploy-k8s ENV=x' to deploy."
 
 .PHONY: sync-k8s-images
 sync-k8s-images:
