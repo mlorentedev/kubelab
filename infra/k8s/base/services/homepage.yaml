@@ -1,0 +1,135 @@
+---
+# Homepage — Developer Cockpit (DASH-001)
+# Config files managed via configMapGenerator in kustomization.yaml.
+# Hash suffix triggers automatic rolling update on config change (RELIAB-002 pattern).
+# Run `make sync-homepage` to regenerate config from SSOT, then `make deploy-k8s` to apply.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homepage
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: homepage
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: homepage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: homepage
+        app.kubernetes.io/component: dashboard
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: homepage
+          image: ghcr.io/gethomepage/homepage:latest
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: HOMEPAGE_ALLOWED_HOSTS
+              value: home.staging.kubelab.live,home.kubelab.live
+          envFrom:
+            - secretRef:
+                name: homepage-secrets
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/settings.yaml
+              subPath: settings.yaml
+            - name: config
+              mountPath: /app/config/services.yaml
+              subPath: services.yaml
+            - name: config
+              mountPath: /app/config/bookmarks.yaml
+              subPath: bookmarks.yaml
+            - name: config
+              mountPath: /app/config/widgets.yaml
+              subPath: widgets.yaml
+            - name: config
+              mountPath: /app/config/kubernetes.yaml
+              subPath: kubernetes.yaml
+            - name: config
+              mountPath: /app/config/docker.yaml
+              subPath: docker.yaml
+            - name: config
+              mountPath: /app/config/custom.css
+              subPath: custom.css
+            - name: config
+              mountPath: /app/config/custom.js
+              subPath: custom.js
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: homepage-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homepage
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: homepage
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: kubelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: homepage
+  ports:
+    - name: http
+      port: 3000
+      protocol: TCP
+      targetPort: http
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: homepage
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: homepage
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`home.staging.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: homepage
+          port: 3000
+  tls:
+    certResolver: letsencrypt

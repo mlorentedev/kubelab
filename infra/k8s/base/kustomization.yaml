@@ -19,8 +19,22 @@ resources:
   - services/gitea.yaml
   - services/n8n.yaml
   - services/minio.yaml
+  - services/homepage.yaml
 
 configMapGenerator:
+  # Homepage config — hash suffix triggers rolling update on config change (RELIAB-002)
+  - name: homepage-config
+    namespace: kubelab
+    files:
+      - services/homepage-config/settings.yaml
+      - services/homepage-config/services.yaml
+      - services/homepage-config/bookmarks.yaml
+      - services/homepage-config/widgets.yaml
+      - services/homepage-config/kubernetes.yaml
+      - services/homepage-config/docker.yaml
+      - services/homepage-config/custom.css
+      - services/homepage-config/custom.js
+
   - name: authelia-assets
     namespace: kubelab
     files:

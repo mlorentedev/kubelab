@@ -114,18 +114,18 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             {
                 "ip": nodes.get("ace2", {}).get("tailscale_ip"),
                 "icon": "mdi-server",
-                "description": "Platform · 12GB",
+                "description": "LLM · 12GB",
                 "glances": True,
             },
         ),
         (
             "aws1",
             {
-                "ip": aws.get("tailscale_ip"),
+                "ip": aws.get("tailscale_dns", aws.get("tailscale_ip")),
                 "icon": "mdi-cloud-outline",
                 "description": "Hub · t4g.micro · 1vCPU · 1GB",
                 "glances": False,
-                "ping_url": f"http://{aws.get('tailscale_ip')}:6443",
+                "ping_url": "https://argo.kubelab.live",
             },
         ),
         (
@@ -133,7 +133,7 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             {
                 "ip": nodes.get("beelink", {}).get("tailscale_ip"),
                 "icon": "mdi-desktop-tower",
-                "description": "Ollama · N95 · 8GB (no Glances)",
+                "description": "Platform · N95 · 8GB (no Glances)",
                 "glances": False,
                 "ping_url": f"http://{nodes.get('beelink', {}).get('tailscale_ip')}:11434",
             },
@@ -143,9 +143,9 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             {
                 "ip": nodes.get("jetson", {}).get("tailscale_ip"),
                 "icon": "mdi-chip",
-                "description": "Pollex · ARM · 4GB (no Glances)",
-                "glances": False,
-                "ping_url": f"http://{nodes.get('jetson', {}).get('tailscale_ip')}:8000",
+                "description": "Pollex · ARM · 4GB",
+                "glances": True,
+                "glances_version": 4,
             },
         ),
     ]
