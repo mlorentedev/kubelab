@@ -308,7 +308,7 @@ class K8sGenerator(BaseGenerator):
         Returns:
             List of middleware references
         """
-        middlewares = []
+        middlewares = ["error-pages"]
         if enable_auth:
             authelia_name = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia")
             middlewares.append(f"{authelia_name}-auth@kubernetescrd")

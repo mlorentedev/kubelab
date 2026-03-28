@@ -21,6 +21,17 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from toolkit.features.configuration import ConfigurationManager  # noqa: E402
 
+
+def _deep_merge(base: dict[str, object], override: dict[str, object]) -> None:
+    """Merge override into base recursively (base is mutated)."""
+    for key, value in override.items():
+        base_val = base.get(key)
+        if isinstance(base_val, dict) and isinstance(value, dict):
+            _deep_merge(base_val, value)
+        elif key not in base:
+            base[key] = value
+
+
 # Map: SOPS key → (OIDC client_id, which files to update)
 OIDC_CLIENTS = {
     "apps.services.security.authelia.oidc_client_secret_minio_hash": {
@@ -33,6 +44,10 @@ OIDC_CLIENTS = {
     },
     "apps.services.security.authelia.oidc_client_secret_gitea_hash": {
         "client_id": "gitea",
+        "files": ["base", "prod"],
+    },
+    "apps.services.security.authelia.oidc_client_secret_argocd_hash": {
+        "client_id": "argocd",
         "files": ["base", "prod"],
     },
 }
@@ -97,6 +112,14 @@ def main() -> int:
     if not secrets:
         print(f"WARNING: No secrets found in {env}.enc.yaml", file=sys.stderr)
         return 0
+
+    # Merge common secrets (hub credentials like Argo CD OIDC live in common)
+    try:
+        common_secrets = cm._decrypt_sops(cm.secrets_path / "common.enc.yaml")
+        if common_secrets:
+            _deep_merge(secrets, common_secrets)
+    except Exception:
+        pass  # common is optional for env-specific runs
 
     updated = 0
     for sops_path, client_info in OIDC_CLIENTS.items():

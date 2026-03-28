@@ -66,8 +66,7 @@ spec:
           namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
-        - name: authelia
-          namespace: kubelab
+        # No authelia ForwardAuth — Argo CD uses native OIDC (ARGO-010)
       services:
         - name: argocd
           port: 30080

@@ -65,10 +65,11 @@ help:
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
+	@echo "  make flush-sessions ENV=x  Flush Authelia sessions (Redis FLUSHDB)"
 	@echo ""
 	@echo "Hub (Argo CD):"
 	@echo "  make fetch-kubeconfig-hub      Fetch kubeconfig from aws1"
-	@echo "  make deploy-argocd             Install/upgrade Argo CD on hub"
+	@echo "  make deploy-argocd             Install/upgrade Argo CD (deploys Authelia OIDC first)"
 	@echo "  make deploy-apps               Deploy Argo CD Applications to hub"
 	@echo "  make check-apps                Check Application sync status"
 	@echo "  make restart-argocd            Restart Argo CD controller (clear cache)"
@@ -291,18 +292,33 @@ fetch-kubeconfig-hub:
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
 
 .PHONY: deploy-argocd
-deploy-argocd:
-	@echo "=== Installing Argo CD on hub (aws1) ==="
+deploy-argocd: _deploy-authelia-oidc _deploy-argocd-helm
+
+# Internal: ensure Authelia has OIDC clients before Argo CD tries to use them
+.PHONY: _deploy-authelia-oidc
+_deploy-authelia-oidc:
+	@echo "=== Step 1/2: Deploying Authelia OIDC config to prod ==="
+	@$(TOOLKIT) infra k8s apply-secrets --env prod
+	@kubectl --kubeconfig ~/.kube/kubelab-prod-config apply -k infra/k8s/overlays/prod 2>&1 | grep -E 'authelia|error' || true
+	@kubectl --kubeconfig ~/.kube/kubelab-prod-config rollout restart deployment/authelia -n kubelab
+	@kubectl --kubeconfig ~/.kube/kubelab-prod-config rollout status deployment/authelia -n kubelab --timeout=60s
+	@echo "✓ Authelia OIDC ready"
+
+.PHONY: _deploy-argocd-helm
+_deploy-argocd-helm:
+	@echo "=== Step 2/2: Installing Argo CD on hub (aws1) ==="
 	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 	@helm repo update argo
-	@ARGOCD_HASH=$$($(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
+	@ARGOCD_HASH=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
+	OIDC_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show apps.services.security.authelia.oidc_client_secret_argocd --env common 2>/dev/null | tail -1) && \
 	helm upgrade --install argocd argo/argo-cd \
 		--namespace argocd --create-namespace \
 		--kubeconfig $(HUB_KUBECONFIG) \
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
+		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
 		--wait --timeout 5m
-	@echo "✓ Argo CD deployed. Admin password: make secrets-show KEY=argocd.admin_password"
+	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Deploy Argo CD Applications to hub (syncs overlays to spokes)
 # Usage: make deploy-apps
@@ -536,6 +552,13 @@ configure-oidc:
 apply-secrets:
 	@test -n "$(ENV)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
+
+.PHONY: flush-sessions
+flush-sessions:
+	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
+	@echo "Flushing Authelia sessions (Redis) for $(ENV)..."
+	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config exec -n kubelab deploy/redis -- redis-cli FLUSHDB
+	@echo "✓ Sessions flushed. All users must re-authenticate."
 
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets validate-sync

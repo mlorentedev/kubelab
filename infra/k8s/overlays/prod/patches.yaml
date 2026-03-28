@@ -214,6 +214,20 @@ data:
               - email
               - groups
             consent_mode: implicit
+          - client_id: argocd
+            client_name: Argo CD
+            # synced via: make sync-oidc-hashes ENV=prod
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ITrEVRiT5s0czAnRKOPviA$00Z6kT5lnb+mbWluVLWZyd5tn7jtDOwJu0qbMhldTA8'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://argo.kubelab.live/auth/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+            consent_mode: implicit
 ---
 # Override base grafana IngressRoute with prod domain
 apiVersion: traefik.io/v1alpha1

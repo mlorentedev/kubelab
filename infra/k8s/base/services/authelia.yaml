@@ -172,7 +172,7 @@ data:
         clients:
           - client_id: minio
             client_name: MinIO
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$Rr5pku8rqRXJ7euzgrgWZg$dyGPJOtcpNy95+LDfUsI5KXh6oTaeWA6n3AFhNNHlKk'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$wj5wl7QJ0kBjfoU14xHzsg$+zHidCseBsuXzhFQikc2YQCuCwccULc04PEvB/N+15I'
             public: false
             authorization_policy: one_factor
             redirect_uris:
@@ -185,7 +185,7 @@ data:
           - client_id: grafana
             client_name: Grafana
             # synced via: make sync-oidc-hashes ENV=staging
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$9QQZKeXKA+A7lqUXRzg1pw$IMvERwMi7eFGuBZomAHObrDLE2bmLv/nXzeUtytB3ts'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$hwMft6DGS9q0FeRZ1LEqHQ$Q3B4hHugcx3NJetiiarH0pmHBZgdE+/LgqtX/6JRXkk'
             public: false
             authorization_policy: one_factor
             redirect_uris:
@@ -199,11 +199,25 @@ data:
           - client_id: gitea
             client_name: Gitea
             # synced via: make sync-oidc-hashes ENV=staging
-            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$EG6yXd4zzgq8yDvqriWaIg$s8+5Ch9/XIilG0qwa9PizlUY2s9biXhz2u8/E6QyBqk'
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$b8EeluewDlRZUEkKSvh4nA$Uq8EryLj+omkz5Q7SwpVHIOKVSICBt2J+2U5Qgs9Z44'
             public: false
             authorization_policy: one_factor
             redirect_uris:
               - https://gitea.staging.kubelab.live/user/oauth2/authelia/callback
+            scopes:
+              - openid
+              - profile
+              - email
+              - groups
+            consent_mode: implicit
+          - client_id: argocd
+            client_name: Argo CD
+            # synced via: make sync-oidc-hashes ENV=staging
+            client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ITrEVRiT5s0czAnRKOPviA$00Z6kT5lnb+mbWluVLWZyd5tn7jtDOwJu0qbMhldTA8'
+            public: false
+            authorization_policy: one_factor
+            redirect_uris:
+              - https://argo.kubelab.live/auth/callback
             scopes:
               - openid
               - profile

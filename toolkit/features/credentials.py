@@ -423,6 +423,20 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             gitea_oidc_client_secret_hash = self.generate_argon2_hash(gitea_oidc_client_secret)
 
+        # 11c. Generate Argo CD OIDC Client Secret and its hash
+        logger.info("Generating Argo CD OIDC Client Secret...")
+        argocd_oidc_client_secret = secrets.token_urlsafe(64)
+        logger.success("Argo CD OIDC Client Secret generated.")
+
+        logger.info("Generating Argo CD OIDC Client Secret hash...")
+        try:
+            argocd_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(argocd_oidc_client_secret)
+            logger.success("Argo CD OIDC Client Secret hash generated.")
+        except Exception as e:
+            logger.warning(f"Could not generate Argo CD OIDC client secret hash via Docker: {e}")
+            logger.warning("Using Argon2 hash from local library instead...")
+            argocd_oidc_client_secret_hash = self.generate_argon2_hash(argocd_oidc_client_secret)
+
         # 12. Generate Argo CD admin password hash (bcrypt, for Helm values)
         logger.info("Generating Argo CD admin password hash (bcrypt)...")
         argocd_admin_password_hash = self.generate_bcrypt_hash(common_password)
@@ -458,6 +472,8 @@ class CredentialsManager:
             f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_gitea_hash": gitea_oidc_client_secret_hash,
+            f"{_auth}.oidc_client_secret_argocd": argocd_oidc_client_secret,
+            f"{_auth}.oidc_client_secret_argocd_hash": argocd_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
@@ -469,7 +485,10 @@ class CredentialsManager:
             "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
-            # Argo CD secrets (SSOT: same common_password, bcrypt hash for K8s Secret)
+        }
+
+        # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env)
+        hub_secrets = {
             "argocd.admin_password": common_password,
             "argocd.admin_password_hash": argocd_admin_password_hash,
         }
@@ -493,9 +512,17 @@ class CredentialsManager:
             else:
                 logger.warning("Batch update failed. Falling back to manual output...")
                 self._print_secrets_for_manual_copy(env, generated_secrets)
+
+            # Hub credentials → always common SOPS (Argo CD hub is singleton)
+            common_sops = self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / "common.enc.yaml"
+            if self.config_manager.batch_update_secrets(hub_secrets, secret_file_path=common_sops):
+                logger.success("Hub credentials (Argo CD) updated in common SOPS.")
+            else:
+                logger.warning("Failed to update hub credentials in common SOPS.")
         else:
             # Print for manual copy (original behavior)
-            self._print_secrets_for_manual_copy(env, generated_secrets)
+            all_secrets = {**generated_secrets, **hub_secrets}
+            self._print_secrets_for_manual_copy(env, all_secrets)
 
     def _reconcile_services(self, updated_keys: list[str], env: str) -> None:
         """Restart services affected by credential changes.
