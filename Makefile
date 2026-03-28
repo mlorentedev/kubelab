@@ -600,6 +600,23 @@ flush-sessions:
 	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config exec -n kubelab deploy/redis -- redis-cli FLUSHDB
 	@echo "✓ Sessions flushed. All users must re-authenticate."
 
+# K8s observability helpers (DEBT-005)
+# Usage: make pods ENV=staging
+#        make logs SVC=authelia ENV=staging
+#        make logs SVC=authelia ENV=staging TAIL=100
+.PHONY: pods
+pods:
+	@test -n "$(ENV)" || (echo "Usage: make pods ENV=staging|prod" && exit 1)
+	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config get pods -n kubelab -o wide
+
+.PHONY: logs
+logs:
+	@test -n "$(SVC)" || (echo "Usage: make logs SVC=authelia ENV=staging [TAIL=50] [FOLLOW=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	$(eval _TAIL := $(or $(TAIL),50))
+	$(eval _FOLLOW := $(if $(FOLLOW),-f,))
+	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n kubelab deploy/$(SVC) --tail=$(_TAIL) $(_FOLLOW)
+
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)

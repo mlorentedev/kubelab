@@ -54,7 +54,9 @@ def edit(
 
     Example: toolkit secrets edit --env staging
     """
-    settings.validate_environment(env)
+    # Allow 'common' for shared SOPS file, validate others as environments
+    if env != "common":
+        settings.validate_environment(env)
     mgr = _get_manager()
     sops_file = mgr.get_sops_file_path(env)
 
