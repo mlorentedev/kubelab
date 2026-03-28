@@ -52,9 +52,16 @@ help:
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
-	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi4)"
+	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi3|rpi4|vps)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
+	@echo ""
+	@echo "Monitoring (Uptime Kuma):"
+	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
+	@echo "  make monitoring-import   Import monitors from JSON seed"
+	@echo "  make monitoring-apply     Apply monitors from seed JSON (declarative sync)"
+	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + import)"
+	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
 	@echo "Kubernetes:"
 	@echo "  make sync-homepage      Sync Homepage config from common.yaml"
@@ -269,6 +276,29 @@ secrets-jwks:
 .PHONY: secrets-hash
 secrets-hash:
 	@$(TOOLKIT) secrets hash --env $(ENV)
+
+# -----------------------------------------------------------------------------
+# Monitoring (Uptime Kuma)
+# -----------------------------------------------------------------------------
+.PHONY: monitoring-export
+monitoring-export:
+	@$(TOOLKIT) monitoring export
+
+.PHONY: monitoring-import
+monitoring-import:
+	@$(TOOLKIT) monitoring import
+
+.PHONY: monitoring-apply
+monitoring-apply:
+	@$(TOOLKIT) monitoring apply
+
+.PHONY: monitoring-bootstrap
+monitoring-bootstrap:
+	@$(TOOLKIT) monitoring bootstrap
+
+.PHONY: monitoring-status
+monitoring-status:
+	@$(TOOLKIT) monitoring status
 
 .PHONY: secrets-show
 secrets-show:

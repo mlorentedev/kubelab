@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# RPi3 Provisioning — External Monitoring Node
+#
+# Deploys: SSH hardening, Uptime Kuma + Glances via Docker Compose.
+# RPi3 is Debian 13 (trixie), aarch64, Docker + Tailscale already installed.
+# No LAN IP / netplan — accessible only via Tailscale (100.64.0.6).
+#
+# Usage:
+#   make provision NODE=rpi3 ENV=prod
+#   toolkit infra ansible run -p provision-rpi3 -e prod
+#   toolkit infra ansible run -p provision-rpi3 -e prod --tags services
+#
+# Note: No BOOTSTRAP mode needed — RPi3 is remote (no LAN access).
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight validation
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate RPi3 connectivity"
+  hosts: rpi3
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Verify SSH + Python connectivity
+      ansible.builtin.ping:
+
+    - name: Verify become (sudo) works
+      command: sudo -n true
+      become: true
+      changed_when: false
+
+    - name: Verify Docker is running
+      command: docker info
+      become: true
+      changed_when: false
+
+# ---------------------------------------------------------------------------
+# Play 1: Provisioning
+# ---------------------------------------------------------------------------
+- name: Provision RPi3 — External monitoring node
+  hosts: rpi3
+  become: true
+  gather_facts: true
+
+  vars:
+    deploy_env: prod
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Merge secrets
+      set_fact:
+        secrets: "{{ sops_common.stdout | from_yaml }}"
+      no_log: true
+
+    - name: Allow monitoring ports on Tailscale interface
+      community.general.ufw:
+        rule: allow
+        interface_in: tailscale0
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "{{ config.apps.services.observability.uptime_kuma.default_port }}"
+        - "61208"  # Glances
+      when: ansible_facts.get('pkg_mgr') != 'unknown'
+      ignore_errors: true  # UFW may not be installed on Debian 13
+
+  roles:
+    - role: ../roles/ssh_hardening
+      tags: [ssh]
+
+    - role: ../roles/dns_resilience
+      tags: [dns]
+      vars:
+        headscale_ip: "{{ config.networking.vps.public_ip }}"
+        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
+
+    - role: ../roles/rpi3_services
+      tags: [services, monitoring]
+      vars:
+        uptime_kuma_image: "{{ config.apps.services.observability.uptime_kuma.image }}"
+        uptime_kuma_port: "{{ config.apps.services.observability.uptime_kuma.default_port }}"
+        glances_port: 61208
+        restart_policy: "{{ config.global.restart_policy }}"

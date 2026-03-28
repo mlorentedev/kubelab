@@ -1,0 +1,71 @@
+---
+- name: Stop legacy containers (pre-Ansible ad-hoc deployments)
+  command: "docker rm -f {{ item }}"
+  loop:
+    - uptime-kuma
+    - glances
+  failed_when: false
+  changed_when: false
+
+- name: Create deployment directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - "{{ rpi3_deploy_dir }}"
+
+- name: Template Docker Compose stack
+  template:
+    src: compose.yml.j2
+    dest: "{{ rpi3_deploy_dir }}/compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  notify: Restart rpi3 services
+
+- name: Pull service images
+  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
+  changed_when: false
+
+- name: Start services
+  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+  changed_when: true
+
+- name: Wait for services to stabilize
+  pause:
+    seconds: 10
+
+- name: Verify Uptime Kuma health
+  uri:
+    url: "http://localhost:{{ uptime_kuma_port }}"
+    method: GET
+    status_code: [200, 302]
+    timeout: 10
+  retries: 5
+  delay: 5
+
+- name: Verify Glances health
+  uri:
+    url: "http://localhost:{{ glances_port }}/api/4/quicklook"
+    method: GET
+    status_code: 200
+    timeout: 10
+  retries: 3
+  delay: 5
+
+- name: Bootstrap Uptime Kuma (setup admin + import monitors from seed)
+  command: poetry run toolkit monitoring bootstrap
+  args:
+    chdir: "{{ playbook_dir }}/../.."
+  delegate_to: localhost
+  become: false
+  register: bootstrap_result
+  changed_when: "'Created admin' in bootstrap_result.stdout"
+  failed_when: false
+
+- name: Report service status
+  debug:
+    msg: "Uptime Kuma on port {{ uptime_kuma_port }}, Glances on port {{ glances_port }}"

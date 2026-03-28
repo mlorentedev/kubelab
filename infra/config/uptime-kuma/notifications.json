@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Slack #alerts",
+    "type": "slack",
+    "isDefault": true,
+    "active": true
+  }
+]

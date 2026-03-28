@@ -1,0 +1,4 @@
+---
+- name: Restart rpi3 services
+  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d --force-recreate
+  changed_when: true

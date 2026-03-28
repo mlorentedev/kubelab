@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+# RPi3 Monitoring Services — Uptime Kuma + Glances
+services:
+  uptime-kuma:
+    image: {{ uptime_kuma_image }}
+    container_name: uptime-kuma
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ uptime_kuma_port }}:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001', r => {process.exit(r.statusCode === 200 || r.statusCode === 302 ? 0 : 1)})\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  glances:
+    image: nicolargo/glances:4.5.2-full
+    container_name: glances
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ glances_port }}:61208"
+    environment:
+      - GLANCES_OPT=-w
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/os-release:/etc/os-release:ro
+    pid: host
+
+volumes:
+  uptime-kuma-data:
+    name: uptime-kuma_uptime_kuma_data
+    external: true
