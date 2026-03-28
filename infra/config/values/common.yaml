@@ -8,6 +8,9 @@ global:
   timezone: Europe/Madrid
   restart_policy: unless-stopped
   base_domain: kubelab.live
+  # GA4 Measurement IDs (reference only — kubelab.live is 301 redirect, no JS injection)
+  google_analytics_kubelab: "G-1XGYR5XFRH"
+  google_analytics_mlorente: "G-PLL8SP2YFC"
 
 # ===========================================================================
 # NETWORKING & VPN
@@ -302,9 +305,8 @@ apps:
       twitter_url: "https://x.com/mlorentedev"
       youtube_url: "https://www.youtube.com/@mlorentedev"
       github_url: "https://github.com/mlorentedev"
-      # Analytics
-      google_analytics_id: "G-PLL8SP2YFC"
-      google_tag_manager_id: "GTM-XXXXXX"
+      # Analytics — GA4 Measurement IDs
+      google_analytics_id: "G-PLL8SP2YFC"  # mlorente.dev property (injected in web build)
       # Feature flags
       enable_blog: true
       enable_homelabs: true
