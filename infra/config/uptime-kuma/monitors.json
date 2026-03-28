@@ -1,6 +1,6 @@
 [
   {
-    "name": "VPS SSH",
+    "name": "Infra · Node · VPS SSH",
     "type": "port",
     "url": "https://",
     "hostname": "162.55.57.175",
@@ -11,164 +11,20 @@
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Hetzner CAX21 VPS SSH port. SSOT: networking.vps.public_ip (162.55.57.175). Hosts Headscale, prod K3s (Pattern C).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 3,
-        "monitor_id": 1,
-        "value": "",
-        "name": "public",
-        "color": "#059669"
-      }
-    ]
+    "tags": []
   },
   {
-    "name": "Router",
+    "name": "Infra · VPN · VPS Tailscale",
     "type": "ping",
     "url": "https://",
-    "hostname": "10.0.0.1",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 2,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      }
-    ]
-  },
-  {
-    "name": "Rpi4 LAN",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "172.16.1.1",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 3,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      }
-    ]
-  },
-  {
-    "name": "Smart plug CO",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "10.0.0.167",
-    "port": null,
-    "interval": 60,
-    "maxretries": 0,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 5,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      }
-    ]
-  },
-  {
-    "name": "RPi4 Tailscale",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "100.64.0.10",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 12,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
-  },
-  {
-    "name": "Pi-hole Admin",
-    "type": "http",
-    "url": "http://172.16.1.1/admin",
-    "hostname": null,
+    "hostname": "100.64.0.2",
     "port": null,
     "interval": 120,
     "maxretries": 3,
@@ -176,69 +32,80 @@
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "VPS Headscale mesh connectivity. SSOT: networking.vps.tailscale_ip (100.64.0.2). Bootstrap node for all VPN clients.",
     "active": true,
-    "httpBodyEncoding": "json",
+    "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 13,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 13,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
+    "tags": []
   },
   {
-    "name": "VPS Tailscale",
+    "name": "Infra · VPN · RPi4 Tailscale",
     "type": "ping",
     "url": "https://",
-    "hostname": "100.64.0.2",
+    "hostname": "100.64.0.10",
     "port": null,
-    "interval": 60,
+    "interval": 120,
     "maxretries": 3,
     "method": "GET",
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Network gateway node. SSOT: networking.nodes.rpi4.tailscale_ip (100.64.0.10). Runs Pi-hole, CoreDNS, advertises LAN subnet.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 14,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
+    "tags": []
   },
   {
-    "name": "Beelink Tailscale",
+    "name": "Infra · VPN · Ace1 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.11",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "K3s server node (staging). SSOT: networking.nodes.ace1.tailscale_ip (100.64.0.11). Runs all staging workloads.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Infra · VPN · Ace2 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "100.64.0.5",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Platform node (heavy workloads). SSOT: networking.nodes.ace2.tailscale_ip (100.64.0.5).",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Infra · VPN · Beelink Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.3",
@@ -249,481 +116,17 @@
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Compute node running Ollama. SSOT: networking.nodes.beelink.tailscale_ip (100.64.0.3).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 15,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
+    "tags": []
   },
   {
-    "name": "Headscale",
-    "type": "http",
-    "url": "https://vpn.kubelab.live/health",
-    "hostname": null,
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 3,
-        "monitor_id": 16,
-        "value": "",
-        "name": "public",
-        "color": "#059669"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 16,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Staging Web",
-    "type": "http",
-    "url": "https://staging.mlorente.dev",
-    "hostname": null,
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": true,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 17,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 17,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Staging API",
-    "type": "http",
-    "url": "https://api.staging.kubelab.live/health",
-    "hostname": null,
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": true,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 18,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 18,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Staging Grafana",
-    "type": "http",
-    "url": "https://grafana.staging.kubelab.live/api/health",
-    "hostname": null,
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": true,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 20,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 20,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Prod Web",
-    "type": "http",
-    "url": "https://mlorente.dev",
-    "hostname": null,
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 3,
-        "monitor_id": 21,
-        "value": "",
-        "name": "public",
-        "color": "#059669"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 21,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Prod API",
-    "type": "http",
-    "url": "https://api.kubelab.live/health",
-    "hostname": null,
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 3,
-        "monitor_id": 22,
-        "value": "",
-        "name": "public",
-        "color": "#059669"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 22,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Acemagic 1 LAN",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "172.16.1.2",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 24,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      },
-      {
-        "tag_id": 5,
-        "monitor_id": 24,
-        "value": "",
-        "name": "k3s",
-        "color": "#4F46E5"
-      }
-    ]
-  },
-  {
-    "name": "Acemagic 2 LAN",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "172.16.1.5",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 26,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      }
-    ]
-  },
-  {
-    "name": "Rpi3 Tailscale",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "100.64.0.6",
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 28,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
-  },
-  {
-    "name": "Beelink LAN",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "172.16.1.3",
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 29,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      }
-    ]
-  },
-  {
-    "name": "Beelink Ollama API",
-    "type": "http",
-    "url": "http://100.64.0.3:11434/api/tags",
-    "hostname": null,
-    "port": null,
-    "interval": 300,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 30,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 30,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
-  },
-  {
-    "name": "Jetson LAN",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "172.16.1.4",
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 1,
-        "monitor_id": 31,
-        "value": "",
-        "name": "lan",
-        "color": "#DC2626"
-      }
-    ]
-  },
-  {
-    "name": "Jetson Tailscale",
+    "name": "Infra · VPN · Jetson Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.8",
@@ -734,171 +137,538 @@
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Jetson Nano (Ubuntu 18.04). SSOT: networking.nodes.jetson.tailscale_ip (100.64.0.8). Runs Pollex (llama.cpp).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 32,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
+    "tags": []
   },
   {
-    "name": "Acemagic 1 Tailscale",
+    "name": "Infra · VPN · RPi3 Self-Check",
     "type": "ping",
     "url": "https://",
-    "hostname": "100.64.0.11",
+    "hostname": "100.64.0.6",
     "port": null,
-    "interval": 60,
+    "interval": 300,
     "maxretries": 3,
     "method": "GET",
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Uptime Kuma host self-check. SSOT: networking.nodes.rpi3.tailscale_ip (100.64.0.6). Tailscale-only (no LAN).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 33,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      },
-      {
-        "tag_id": 5,
-        "monitor_id": 33,
-        "value": "",
-        "name": "k3s",
-        "color": "#4F46E5"
-      }
-    ]
+    "tags": []
   },
   {
-    "name": "Acemagic 2 Tailscale",
+    "name": "Infra · VPN · AWS1 Tailscale",
     "type": "ping",
     "url": "https://",
-    "hostname": "100.64.0.5",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 34,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
-  },
-  {
-    "name": "AWS 1",
-    "type": "ping",
-    "url": "https://",
-    "hostname": "100.64.0.9",
-    "port": null,
-    "interval": 60,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
-    "active": true,
-    "httpBodyEncoding": null,
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 35,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      }
-    ]
-  },
-  {
-    "name": "ArgoCD",
-    "type": "http",
-    "url": "https://argo.kubelab.live",
     "hostname": "100.64.0.4",
     "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "AWS t4g.micro hub (Argo CD). SSOT: networking.aws.tailscale_dns (aws1.kubelab.internal). MagicDNS IP 100.64.0.4.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Infra · VPN · Headscale",
+    "type": "port",
+    "url": "https://",
+    "hostname": "vpn.kubelab.live",
+    "port": 443,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Headscale v0.28 control server. No HTTP /health endpoint — uses TCP port check on 443. SSOT: apps.services.core.headscale.domain.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Prod · Web · mlorente.dev",
+    "type": "http",
+    "url": "https://mlorente.dev",
+    "hostname": null,
+    "port": null,
     "interval": 60,
     "maxretries": 3,
     "method": "GET",
     "keyword": null,
     "ignoreTls": false,
     "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": null,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Production personal website. Public via Cloudflare DNS. Astro SSG behind VPS Traefik (Pattern C, ports 8080/8443).",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Prod · API · api.kubelab.live",
+    "type": "http",
+    "url": "https://api.kubelab.live/health",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Production Go API health endpoint. SSOT: apps.platform.api.domain + health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Prod · Web · kubelab.live",
+    "type": "http",
+    "url": "https://kubelab.live",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299", "301-399"],
+    "description": "Production kubelab.live root domain (redirects to mlorente.dev or web). Public Cloudflare DNS.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Auth · Authelia Prod",
+    "type": "http",
+    "url": "https://auth.kubelab.live/api/health",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Authelia SSO health (prod). SSOT: apps.services.security.authelia.domain + health_path. Critical — gates all protected services.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Auth · Argo CD",
+    "type": "http",
+    "url": "https://argo.kubelab.live",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Argo CD hub on aws1 (t4g.micro). Proxied via VPS Traefik. May 502 if aws1 is down or Argo CD not installed.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Data · Grafana Prod",
+    "type": "http",
+    "url": "https://grafana.kubelab.live/api/health",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Grafana observability dashboard (prod). SSOT: apps.services.observability.grafana.domain + health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Data · Gitea Prod",
+    "type": "http",
+    "url": "https://gitea.kubelab.live/api/healthz",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Gitea Git server health (prod). SSOT: apps.services.core.gitea.domain + health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Data · MinIO Prod",
+    "type": "http",
+    "url": "https://minio.kubelab.live/minio/health/live",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "MinIO object storage health (prod). SSOT: apps.services.data.minio.domain + health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Data · MinIO Console Prod",
+    "type": "http",
+    "url": "https://console.minio.kubelab.live",
+    "hostname": null,
+    "port": null,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "MinIO web console (prod). SSOT: apps.services.data.minio.console_domain.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Data · n8n Prod",
+    "type": "http",
+    "url": "https://n8n.kubelab.live/healthz",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "n8n workflow automation health (prod). SSOT: apps.services.core.n8n.domain + health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Monitoring · Uptime Kuma Prod",
+    "type": "http",
+    "url": "https://status.kubelab.live",
+    "hostname": null,
+    "port": null,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Uptime Kuma self-check (prod status page). SSOT: apps.services.observability.uptime_kuma.domain.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Data · Ollama API",
+    "type": "http",
+    "url": "http://100.64.0.3:11434/api/tags",
+    "hostname": null,
+    "port": null,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Ollama LLM inference API on Beelink bare metal. SSOT: networking.nodes.beelink.tailscale_ip:11434. VPN-only.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · Web · staging.mlorente.dev",
+    "type": "http",
+    "url": "https://staging.mlorente.dev",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Staging web (K3s on ace1). VPN-only — resolves via Headscale split DNS. SSOT: networking.staging_zones.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · API · api.staging.kubelab.live",
+    "type": "http",
+    "url": "https://api.staging.kubelab.live/health",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Staging Go API health (K3s on ace1). VPN-only. SSOT: apps.platform.api.health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Auth · Authelia Staging",
+    "type": "http",
+    "url": "https://auth.staging.kubelab.live/api/health",
+    "hostname": null,
+    "port": null,
+    "interval": 60,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Authelia SSO health (staging). VPN-only. Critical — gates all protected staging services.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · Web · Grafana Staging",
+    "type": "http",
+    "url": "https://grafana.staging.kubelab.live/api/health",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Grafana observability dashboard (staging). VPN-only. SSOT: apps.services.observability.grafana.health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · Web · Gitea Staging",
+    "type": "http",
+    "url": "https://gitea.staging.kubelab.live/api/healthz",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Gitea Git server health (staging). VPN-only. SSOT: apps.services.core.gitea.health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · Web · n8n Staging",
+    "type": "http",
+    "url": "https://n8n.staging.kubelab.live/healthz",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "n8n workflow automation health (staging). VPN-only. SSOT: apps.services.core.n8n.health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · Web · MinIO Staging",
+    "type": "http",
+    "url": "https://minio.staging.kubelab.live/minio/health/live",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "MinIO object storage health (staging). VPN-only. SSOT: apps.services.data.minio.health_path.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Staging · Web · Homepage Staging",
+    "type": "http",
+    "url": "https://home.staging.kubelab.live",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Homepage IDP dashboard (staging). VPN-only. Tabs: Services, Infra, Topology, Flows, Links.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Services · Monitoring · Pi-hole Staging",
+    "type": "http",
+    "url": "https://pihole.staging.kubelab.live/admin/",
+    "hostname": null,
+    "port": null,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": true,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Pi-hole v6 admin (staging). RPi4 bare metal via K3s LAN EndpointSlice. VPN-only. No Authelia (built-in auth).",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [1],
+    "parent": null,
+    "tags": []
+  },
+  {
+    "name": "Home · IoT · Smart Plug CO",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "10.0.0.167",
+    "port": null,
+    "interval": 300,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Personal smart plug on home LAN (10.0.0.0/8 network). Non-infrastructure, low priority.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [1],
     "parent": null,
-    "tags": [
-      {
-        "tag_id": 2,
-        "monitor_id": 36,
-        "value": "",
-        "name": "vpn",
-        "color": "#2563EB"
-      },
-      {
-        "tag_id": 4,
-        "monitor_id": 36,
-        "value": "",
-        "name": "app",
-        "color": "#DB2777"
-      }
-    ]
+    "tags": []
   }
 ]
