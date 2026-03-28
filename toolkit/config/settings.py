@@ -46,11 +46,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 ENVIRONMENT_KEYS = ("ENVIRONMENT", "ENV", "DEFAULT_ENVIRONMENT")
 
 
+VALID_ENVIRONMENTS = ("dev", "staging", "prod")
+
+
 def _resolve_environment() -> str:
     """Detect environment from env vars, default to 'dev'."""
     for key in ENVIRONMENT_KEYS:
         value = os.getenv(key)
-        if value:
+        if value and value in VALID_ENVIRONMENTS:
             return value
     return DEFAULT_CONFIG.DEFAULT_ENVIRONMENT
 

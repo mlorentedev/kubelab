@@ -30,16 +30,20 @@ Streams C1-C2, C4-C5, F, H, P have been extracted to product specs in the vault 
 
 ## Architecture
 
-### Hardware topology
+### Hardware topology (ADR-028: always-on vs on-demand)
 
 ```
-VPS Hetzner (162.55.57.175)  — Production (Docker Compose → K3s in B6)
-Acemagic-1 (12GB Proxmox)   — K3s server + agent-1 VMs (staging)
-Acemagic-2 (12GB Proxmox)   — K3s agent-2 VM (heavy workloads)
-Beelink (8GB)                — Ollama bare metal (LLM inference)
-RPi 4 (8GB)                  — Network gateway: Pi-hole, CoreDNS, Headscale
-RPi 3 (1GB)                  — External monitoring (Uptime Kuma)
-Jetson Nano                  — Pollex (llama.cpp, independent project)
+ALWAYS-ON (24/7):
+  VPS Hetzner (162.55.57.175) — Prod K3s: apps + observability + Gitea + PostgreSQL
+  AWS t4g.micro               — ArgoCD hub (management plane)
+  RPi 3 (1GB)                 — Uptime Kuma (external prod monitoring)
+
+ON-DEMAND (homelab, powered when working):
+  Acemagic-1 (12GB)           — K3s staging all-in-one (ace1)
+  Beelink (8GB)               — CI + Storage + AI orchestration (GH Runner, MinIO, OpenClaw)
+  Acemagic-2 (12GB)           — Ollama bare metal (LLM compute, ace2)
+  RPi 4 (8GB)                 — Staging DNS gateway (CoreDNS, Pi-hole)
+  Jetson Nano                 — Pollex (llama.cpp, independent project)
 ```
 
 ### K3s cluster
@@ -140,6 +144,10 @@ Jetson Nano                  — Pollex (llama.cpp, independent project)
 - **Source of truth**: `infra/config/values/*.yaml` (never .env files)
 - **VPS is ARM**: Multi-arch Docker builds (amd64+arm64) required.
 - **Never clone repos on deployment targets** — VPS/servers are not dev machines.
+- **Service placement principle (ADR-028)**: "Would I need this at 3 AM?" → always-on (VPS/AWS/RPi3). Otherwise → on-demand (homelab). Observability on prod, not staging. Embedding pipeline on VPS (autonomous). CI on Beelink with GitHub-hosted fallback.
+- **Beelink is on-demand Platform Node (ADR-028)**: GH Runner + MinIO + OpenClaw + Glances. NOT Gitea, NOT Grafana (those go on VPS prod 24/7). Services here tolerate being offline when homelab is off.
+- **ace2 is on-demand LLM compute (ADR-028)**: Ollama only. Previous services (MinIO, GH Runner) migrated to Beelink. Swap order: ANSIBLE-013 (Beelink gets services) THEN IDP-024 (ace2 loses them).
+- **Ollama EndpointSlice IP changes with swap**: Currently `172.16.1.3` (Beelink) → will become `172.16.1.5` (ace2) after IDP-024. Update `infra/k8s/base/external/ollama.yaml`.
 
 ## Key paths (repo)
 
