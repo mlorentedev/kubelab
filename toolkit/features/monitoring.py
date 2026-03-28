@@ -131,24 +131,28 @@ def import_monitors(project_root: Path) -> None:
     try:
         export_dir = project_root / EXPORT_DIR
         monitors_path = export_dir / MONITORS_FILE
+        notifications_path = export_dir / NOTIFICATIONS_FILE
 
         if not monitors_path.exists():
             logger.error(f"No monitors file found at {monitors_path}. Run export first.")
             raise SystemExit(1)
 
         monitors_data = json.loads(monitors_path.read_text())
+        notifications_data = json.loads(notifications_path.read_text()) if notifications_path.exists() else []
 
         # Use Uptime Kuma's backup import format
         backup_data = json.dumps(
             {
                 "version": "1.23.0",
-                "notificationList": [],
+                "notificationList": notifications_data,
                 "monitorList": monitors_data,
                 "proxyList": [],
             }
         )
 
         api.upload_backup(json_data=backup_data, import_handle="skip")
-        logger.success(f"Imported {len(monitors_data)} monitors (skipped existing)")
+        logger.success(
+            f"Imported {len(monitors_data)} monitors + {len(notifications_data)} notifications (skipped existing)"
+        )
     finally:
         api.disconnect()
