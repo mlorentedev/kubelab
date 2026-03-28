@@ -46,6 +46,7 @@ _NOTIFICATION_EXPORT_FIELDS = [
 EXPORT_DIR = "infra/config/uptime-kuma"
 MONITORS_FILE = "monitors.json"
 NOTIFICATIONS_FILE = "notifications.json"
+TAGS_FILE = "tags.json"
 
 
 def _get_kuma_creds(project_root: Path) -> dict[str, str]:
@@ -173,6 +174,23 @@ def apply_monitors(project_root: Path) -> None:
 
         seed_monitors = json.loads(monitors_path.read_text())
 
+        # Ensure tags exist (from SSOT tags.json)
+        tags_path = export_dir / TAGS_FILE
+        tag_id_map: dict[str, int] = {}
+        if tags_path.exists():
+            seed_tags = json.loads(tags_path.read_text())
+            existing_tags = {t["name"]: t["id"] for t in api.get_tags()}
+            for t in seed_tags:
+                if t["name"] in existing_tags:
+                    tag_id_map[t["name"]] = existing_tags[t["name"]]
+                else:
+                    try:
+                        result = api.add_tag(name=t["name"], color=t["color"])
+                        tag_id_map[t["name"]] = result["id"]
+                    except Exception:
+                        pass
+            logger.success(f"Tags ready: {len(tag_id_map)} ({', '.join(tag_id_map)})")
+
         # Delete all existing monitors
         existing = api.get_monitors()
         if existing:
@@ -237,7 +255,17 @@ def apply_monitors(project_root: Path) -> None:
                 r = api.sio.call("add", monitor_data, timeout=api.timeout)
                 if isinstance(r, dict) and not r.get("ok", True):
                     raise RuntimeError(r.get("msg", "Unknown error"))
+                monitor_id = r.get("monitorID") if isinstance(r, dict) else None
                 created += 1
+
+                # Associate tags (if defined in seed and tag exists)
+                if monitor_id and m.get("tags"):
+                    for tag_name in m["tags"]:
+                        if tag_name in tag_id_map:
+                            try:
+                                api.add_monitor_tag(tag_id_map[tag_name], monitor_id, "")
+                            except Exception:
+                                pass  # Non-critical — tag association failures are cosmetic
             except Exception as e:
                 logger.warning(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
 

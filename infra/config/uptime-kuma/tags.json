@@ -1,0 +1,12 @@
+[
+  {"name": "infra", "color": "#2563eb"},
+  {"name": "prod", "color": "#dc2626"},
+  {"name": "staging", "color": "#f59e0b"},
+  {"name": "vpn", "color": "#7c3aed"},
+  {"name": "service", "color": "#059669"},
+  {"name": "auth", "color": "#e11d48"},
+  {"name": "data", "color": "#0891b2"},
+  {"name": "monitoring", "color": "#65a30d"},
+  {"name": "iot", "color": "#9333ea"},
+  {"name": "critical", "color": "#b91c1c"}
+]
