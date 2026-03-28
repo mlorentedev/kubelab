@@ -204,6 +204,9 @@ def apply_monitors(project_root: Path) -> None:
             remaining = api.get_monitors()
             logger.success(f"Removed {len(existing)} monitors ({len(remaining)} remaining)")
 
+        # Get default notification ID for linking
+        default_notif_ids = [n["id"] for n in api.get_notifications() if n.get("isDefault")]
+
         # Only pass fields that _build_monitor_data accepts
         _ACCEPTED = {
             "type",
@@ -252,6 +255,9 @@ def apply_monitors(project_root: Path) -> None:
                 # Use low-level sio.call — lib's _call wrapper has issues with v2 responses
                 monitor_data = api._build_monitor_data(**params)
                 monitor_data["conditions"] = []
+                if default_notif_ids:
+                    # Uptime Kuma v2 expects {id: true} format, not [id]
+                    monitor_data["notificationIDList"] = {str(nid): True for nid in default_notif_ids}
                 r = api.sio.call("add", monitor_data, timeout=api.timeout)
                 if isinstance(r, dict) and not r.get("ok", True):
                     raise RuntimeError(r.get("msg", "Unknown error"))

@@ -348,7 +348,7 @@
     "upsideDown": false,
     "accepted_statuscodes": [
       "200-299",
-      "301-399"
+      "300-399"
     ],
     "description": "Production kubelab.live root domain (redirects to mlorente.dev or web). Public Cloudflare DNS.",
     "active": true,
