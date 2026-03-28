@@ -131,8 +131,12 @@
         ping: http://100.64.0.3:11434
     - "Jetson":
         icon: mdi-chip
-        description: "Pollex · ARM · 4GB (no Glances)"
-        ping: http://100.64.0.8:8000
+        description: "Pollex · ARM · 4GB"
+        widget:
+          type: glances
+          url: http://100.64.0.8:61208
+          version: 4
+          metric: info
 - Repos:
     - kubelab:
         icon: si-github
