@@ -361,9 +361,9 @@ _deploy-argocd-helm:
 recover-argocd:
 	@echo "=== Checking Argo CD Helm release state ==="
 	@STATUS=$$(helm --kubeconfig $(HUB_KUBECONFIG) status argocd -n argocd -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null) && \
-	if [ "$$STATUS" = "pending-upgrade" ] || [ "$$STATUS" = "pending-install" ] || [ "$$STATUS" = "failed" ]; then \
+	if [ "$$STATUS" = "pending-upgrade" ] || [ "$$STATUS" = "pending-install" ] || [ "$$STATUS" = "pending-rollback" ] || [ "$$STATUS" = "failed" ]; then \
 		echo "Release in $$STATUS state — rolling back..."; \
-		helm --kubeconfig $(HUB_KUBECONFIG) rollback argocd -n argocd --wait --timeout 10m; \
+		helm --kubeconfig $(HUB_KUBECONFIG) rollback argocd -n argocd --timeout 5m; \
 		echo "✓ Rollback complete. Re-run 'make deploy-argocd' to retry upgrade."; \
 	else \
 		echo "Release state: $$STATUS — no recovery needed."; \
