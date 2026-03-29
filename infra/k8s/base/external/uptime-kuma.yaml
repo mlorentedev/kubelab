@@ -39,7 +39,7 @@ ports:
     protocol: TCP
 endpoints:
   - addresses:
-      - "RESOLVE_RPI3_TAILSCALE_IP"  # resolved at deploy time via: dig rpi3.kubelab.internal
+      - "100.64.0.6"  # networking.nodes.rpi3.tailscale_ip — stable (physical node)
     conditions:
       ready: true
 ---
