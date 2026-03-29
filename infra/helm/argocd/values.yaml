@@ -56,6 +56,63 @@ notifications:
       memory: 32Mi
     limits:
       memory: 64Mi
+  notifiers:
+    service.slack: |
+      token: $slack-token
+  triggers:
+    trigger.on-sync-failed: |
+      - when: app.status.sync.status == 'Unknown' || app.status.operationState.phase in ['Error', 'Failed']
+        send: [app-sync-failed]
+    trigger.on-health-degraded: |
+      - when: app.status.health.status == 'Degraded'
+        send: [app-health-degraded]
+    trigger.on-sync-succeeded: |
+      - when: app.status.operationState.phase == 'Succeeded'
+        send: [app-sync-succeeded]
+  templates:
+    template.app-sync-failed: |
+      slack:
+        attachments: |
+          [{
+            "color": "#E96D76",
+            "title": "❌ {{.app.metadata.name}} sync failed",
+            "text": "Sync failed. Revision: {{.app.status.sync.revision}}",
+            "fields": [
+              {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
+              {"title": "Env", "value": "{{.app.metadata.labels.kubelab_live/env}}", "short": true}
+            ]
+          }]
+    template.app-health-degraded: |
+      slack:
+        attachments: |
+          [{
+            "color": "#F4C030",
+            "title": "⚠️ {{.app.metadata.name}} health degraded",
+            "text": "Application {{.app.metadata.name}} is Degraded.",
+            "fields": [
+              {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
+              {"title": "Health", "value": "{{.app.status.health.status}}", "short": true}
+            ]
+          }]
+    template.app-sync-succeeded: |
+      slack:
+        attachments: |
+          [{
+            "color": "#18BE52",
+            "title": "✅ {{.app.metadata.name}} synced",
+            "text": "Application {{.app.metadata.name}} synced successfully.",
+            "fields": [
+              {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
+              {"title": "Revision", "value": "{{.app.status.sync.revision | trunc 7}}", "short": true}
+            ]
+          }]
+  subscriptions:
+    - recipients:
+        - slack:kubelab-argocd
+      triggers:
+        - on-sync-failed
+        - on-health-degraded
+        - on-sync-succeeded
 
 applicationSet:
   replicas: 1
@@ -95,5 +152,12 @@ configs:
     policy.default: role:readonly
     scopes: '[groups]'
   secret:
+    # GitHub webhook secret — triggers instant sync on push (no 3min polling delay)
+    # Configure webhook in GitHub repo → Settings → Webhooks:
+    #   URL: https://argo.kubelab.live/api/webhook
+    #   Content-type: application/json
+    #   Secret: (same value as webhook.github.secret below)
+    #   Events: Just the push event
+    githubSecret: ""  # Injected at deploy time via --set
     extra:
       oidc.authelia.clientSecret: ""  # Injected at deploy time via --set

@@ -350,12 +350,16 @@ _deploy-argocd-helm:
 	@helm repo update argo
 	@ARGOCD_HASH=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
 	OIDC_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show apps.services.security.authelia.oidc_client_secret_argocd --env common 2>/dev/null | tail -1) && \
+	SLACK_WEBHOOK=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.slack_webhook_url --env common 2>/dev/null | tail -1) && \
+	GH_WEBHOOK_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.github_webhook_secret --env common 2>/dev/null | tail -1) && \
 	helm upgrade --install argocd argo/argo-cd \
 		--namespace argocd --create-namespace \
 		--kubeconfig $(HUB_KUBECONFIG) \
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
+		--set "notifications.secret.items.slack-token=$$SLACK_WEBHOOK" \
+		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
 	@echo "--- Updating ArgoCD EndpointSlice on prod (resolve aws1 Tailscale IP via MagicDNS) ---"
