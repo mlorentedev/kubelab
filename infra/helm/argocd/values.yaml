@@ -1,5 +1,5 @@
-# Argo CD — non-HA, tuned for t4g.micro (1 vCPU, 1GB RAM)
-# Ref: ADR-023 Phase 3
+# Argo CD — non-HA, tuned for t4g.small (2 vCPU, 2GB RAM)
+# Ref: ADR-023 Phase 3, upgraded from t4g.micro (2026-03-28)
 
 global:
   domain: argo.kubelab.live
@@ -15,7 +15,7 @@ server:
       cpu: 50m
       memory: 128Mi
     limits:
-      memory: 256Mi
+      memory: 384Mi
   extraArgs:
     - --insecure  # TLS terminated by prod Traefik, not Argo CD server
 
@@ -24,9 +24,9 @@ controller:
   resources:
     requests:
       cpu: 100m
-      memory: 192Mi
+      memory: 256Mi
     limits:
-      memory: 384Mi
+      memory: 512Mi
 
 repoServer:
   replicas: 1
@@ -45,12 +45,17 @@ redis:
     limits:
       memory: 64Mi
 
-# Disable components we don't need on a 1GB instance
 dex:
-  enabled: false  # No external SSO on hub — Argo CD built-in auth
+  enabled: false  # Native OIDC via Authelia — dex not needed
 
 notifications:
-  enabled: false  # ARGO-011 — enable later
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
 
 applicationSet:
   replicas: 1
