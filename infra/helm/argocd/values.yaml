@@ -132,6 +132,10 @@ configs:
     # Auto-managed EndpointSlices aren't in Git, so prune won't touch them
     # (Argo CD only prunes resources with its tracking label).
     resource.exclusions: ""
+    resource.customizations.health.batch_CronJob: |
+      hs = {}
+      hs.status = "Healthy"
+      return hs
     # Admin local account: API key only (CLI fallback), no web login
     accounts.admin: apiKey
     # OIDC via Authelia (ARGO-010) — native OIDC, no dex
