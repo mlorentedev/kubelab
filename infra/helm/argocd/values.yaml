@@ -93,7 +93,7 @@ notifications:
             {"text": "✅ *{{.app.metadata.name}}* synced successfully"}
   subscriptions:
     - recipients:
-        - webhook:slack
+        - slack
       triggers:
         - on-sync-failed
         - on-health-degraded
