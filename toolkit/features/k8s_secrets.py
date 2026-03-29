@@ -87,6 +87,14 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         },
     ),
     SecretMapping(
+        name="homepage-secrets",
+        keys={
+            "HOMEPAGE_VAR_CLOUDFLARE_TOKEN": "APPS_SERVICES_DASHBOARD_HOMEPAGE_CLOUDFLARE_TOKEN",
+            "HOMEPAGE_VAR_GITHUB_TOKEN": "APPS_SERVICES_DASHBOARD_HOMEPAGE_GITHUB_TOKEN",
+            "HOMEPAGE_VAR_UPTIMEKUMA_KEY": "APPS_SERVICES_DASHBOARD_HOMEPAGE_UPTIMEKUMA_KEY",
+        },
+    ),
+    SecretMapping(
         name="api-secrets",
         keys={
             "EMAIL_PASS": "APPS_PLATFORM_API_EMAIL_PASS",
