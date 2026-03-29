@@ -8,7 +8,8 @@ resources:
   - edge/errors.yaml
   - external/ollama.yaml
   - external/pihole.yaml
-  - external/uptime-kuma.yaml
+  # external/uptime-kuma.yaml excluded — has RESOLVE_RPI3_TAILSCALE_IP placeholder,
+  # applied by `make deploy-external` with dynamic IP resolution (MagicDNS)
   - edge/secure-headers.yaml
   - services/grafana.yaml
   - services/loki.yaml

@@ -384,6 +384,29 @@ watch-argocd:
 	@echo "$$(date): ALL PODS READY ✓" | tee -a /tmp/argocd-timing.log
 	@echo "Timing log: /tmp/argocd-timing.log"
 
+# Deploy external services with dynamic Tailscale IP resolution (MagicDNS)
+# Resolves placeholders in EndpointSlices at deploy time — IPs survive node re-registration.
+# Usage: make deploy-external ENV=staging|prod
+.PHONY: deploy-external
+deploy-external:
+	@test -n "$(ENV)" || (echo "Usage: make deploy-external ENV=staging|prod" && exit 1)
+	@echo "=== Deploying external services to $(ENV) (resolving Tailscale IPs via MagicDNS) ==="
+	@RPI3_IP=$$(dig +short rpi3.kubelab.internal | head -1) && \
+	RPI4_IP=$$(dig +short rpi4.kubelab.internal | head -1) && \
+	echo "  rpi3: $${RPI3_IP:-UNRESOLVED}  rpi4: $${RPI4_IP:-UNRESOLVED}" && \
+	if [ -z "$$RPI3_IP" ] || [ -z "$$RPI4_IP" ]; then \
+		echo "⚠ Some nodes not resolvable — are they online? Skipping unresolved."; \
+	fi && \
+	if [ -n "$$RPI3_IP" ]; then \
+		sed "s/RESOLVE_RPI3_TAILSCALE_IP/$$RPI3_IP/" infra/k8s/base/external/uptime-kuma.yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
+	fi && \
+	if [ -n "$$RPI4_IP" ]; then \
+		sed "s/RESOLVE_RPI4_TAILSCALE_IP/$$RPI4_IP/g" infra/k8s/base/edge/coredns-custom.yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
+	fi && \
+	echo "✓ External services deployed with resolved IPs"
+
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
 # Usage: make recover-argocd
 .PHONY: recover-argocd
