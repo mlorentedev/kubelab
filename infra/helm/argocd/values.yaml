@@ -89,7 +89,7 @@ configs:
         - profile
         - email
         - groups
-  rbacConfig:
+  rbac:
     policy.csv: |
       g, admins, role:admin
     policy.default: role:readonly
