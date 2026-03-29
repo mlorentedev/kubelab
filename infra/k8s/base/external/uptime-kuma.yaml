@@ -39,7 +39,7 @@ ports:
     protocol: TCP
 endpoints:
   - addresses:
-      - "100.64.0.6"  # Must match networking.nodes.rpi3.tailscale_ip
+      - "100.64.0.6"  # networking.nodes.rpi3.tailscale_ip — stable (physical node)
     conditions:
       ready: true
 ---

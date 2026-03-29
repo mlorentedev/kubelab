@@ -123,7 +123,7 @@
           metric: info
     - "aws1":
         icon: mdi-cloud-outline
-        description: "Hub · t4g.micro · 1vCPU · 1GB"
+        description: "Hub · t4g.small · 2vCPU · 2GB"
         ping: https://argo.kubelab.live
     - "Beelink":
         icon: mdi-desktop-tower

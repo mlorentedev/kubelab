@@ -35,7 +35,7 @@ Streams C1-C2, C4-C5, F, H, P have been extracted to product specs in the vault 
 ```
 ALWAYS-ON (24/7):
   VPS Hetzner (162.55.57.175) — Prod K3s: apps + observability + Gitea + PostgreSQL
-  AWS t4g.micro               — ArgoCD hub (management plane)
+  AWS t4g.small (2GB)          — ArgoCD hub (management plane)
   RPi 3 (1GB)                 — Uptime Kuma (external prod monitoring)
 
 ON-DEMAND (homelab, powered when working):
@@ -104,7 +104,7 @@ ON-DEMAND (homelab, powered when working):
 - **Pattern C ports are in prod.yaml only**: common.yaml has 80/443 (default). prod.yaml overrides to 8080/8443 for side-by-side validation. Do NOT put alternate ports in common.yaml.
 - **Authelia does NOT auto-reload configuration.yml**: ConfigMap changes require pod restart. Long-term: use configMapGenerator hash suffix for automatic rolling updates.
 - **Gitea OIDC CLI vs web process**: `gitea admin auth add-oauth` writes to SQLite but the web process caches in memory. Always restart Gitea after CLI auth changes.
-- **Argo CD OIDC is native (no dex)**: Uses `configs.cm.oidc.config` in Helm values. Client secret stored as `$oidc.authelia.clientSecret` in `configs.secret.extra`, injected by `deploy-argocd` via `--set`. Dex disabled to save RAM on t4g.micro. Admin local account is apiKey-only (CLI fallback). RBAC: Authelia `admins` group → `role:admin`.
+- **Argo CD OIDC is native (no dex)**: Uses `configs.cm.oidc.config` in Helm values. Client secret stored as `$oidc.authelia.clientSecret` in `configs.secret.extra`, injected by `deploy-argocd` via `--set`. Dex disabled (not needed with native OIDC). Admin local account is apiKey-only (CLI fallback). RBAC: Authelia `admins` group → `role:admin`.
 - **deploy-argocd enforces OIDC order**: Makefile target runs `_deploy-authelia-oidc` (apply prod manifests + restart Authelia) before `_deploy-argocd-helm`. Authelia must have the OIDC client registered before Argo CD tries discovery.
 - **Hub credentials always in common SOPS**: `argocd.admin_password`, `argocd.admin_password_hash`, and `oidc_client_secret_argocd` live in `common.enc.yaml`, not per-env. `credentials-generate` writes hub secrets separately via `batch_update_secrets(secret_file_path=common_sops)`.
 - **Custom app default_port differs dev vs K8s**: common.yaml `default_port` is for dev (e.g., web=4321 Astro dev server). Staging/prod override to 8080 (nginx Docker). Always check port overrides when adding a new custom app to K8s.
@@ -132,7 +132,7 @@ ON-DEMAND (homelab, powered when working):
 - **Loki prod IngressRoute uses `.local` TLD**: Patched to `tls: {}` (no certResolver). ACME can't issue certs for non-public TLDs.
 - **Argo CD scoped RBAC requires wildcard reads**: Argo CD cache discovers ALL K8s API resource types and does cluster-wide LIST. Enumerating resources explicitly breaks on K8s upgrades (new types like `ResourceClaim`). Standard pattern: `apiGroups: ["*"], resources: ["*"], verbs: ["get","list","watch"]` via ClusterRoleBinding for reads, scoped RoleBinding in `kubelab` for writes.
 - **Argo CD `resource.exclusions` selector field**: May not filter by label as expected. To remove default EndpointSlice exclusion, set `resource.exclusions: ""` in argocd-cm ConfigMap. Manual EndpointSlices (external services) are safe with prune — Argo CD only prunes resources with its tracking label.
-- **Hub t4g.micro sizing**: 1GB RAM fits Argo CD in steady state (5 pods, ~600MB). Helm upgrades and batch pod restarts cause swap thrashing. Don't batch heavy operations. For upgrades, space them out or temporarily scale to t4g.small.
+- **Hub t4g.small sizing**: 2GB RAM fits Argo CD with all components (7 pods, ~940MB). Upgraded from t4g.micro (2026-03-28) — 1GB caused OOM on every Helm upgrade. Full scale-down pre-upgrade still recommended as safety net. `make deploy-argocd` handles this automatically.
 - **Hub↔spoke uses Tailscale, not public IP**: The CLAUDE.md rule "VPS must use public_ip" applies to bootstrap tools (Ansible, kubeconfig). Runtime services (Argo CD) use Tailscale IPs. Spoke API servers defined in `argocd.spokes` in common.yaml.
 - **Pi-hole staging-only (VPN)**: `pihole.staging.kubelab.live` — RPi4 bare metal via LAN EndpointSlice. NOT in prod (RPi4 unreachable if VPN down, no public DNS). Pi-hole v6 has built-in auth — no Authelia middleware (causes redirect loop). Password in SOPS: `apps.services.network.pihole.admin_password`.
 

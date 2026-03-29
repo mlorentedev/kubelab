@@ -41,7 +41,7 @@ ports:
     protocol: TCP
 endpoints:
   - addresses:
-      - "100.64.0.9"  # aws1 current Tailscale IP — resolve via: dig aws1.kubelab.internal
+      - "RESOLVE_AWS1_TAILSCALE_IP"  # resolved at deploy time via: dig aws1.kubelab.internal
     conditions:
       ready: true
 ---

@@ -18,10 +18,10 @@ metadata:
 data:
   kubelab-hairpin.server: |
     staging.kubelab.live:53 {
-      forward . 100.64.0.10
+      forward . RESOLVE_RPI4_TAILSCALE_IP
     }
     staging.mlorente.dev:53 {
-      forward . 100.64.0.10
+      forward . RESOLVE_RPI4_TAILSCALE_IP
     }
     kubelab.live:53 {
       rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local

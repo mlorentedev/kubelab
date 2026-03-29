@@ -59,7 +59,7 @@ networking:
   aws:
     region: "eu-central-1"
     profile: "kubelab"
-    instance_type: "t4g.micro"
+    instance_type: "t4g.small"
     ami_name_filter: "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
     ebs_size_gb: 8
     hostname: "aws1"

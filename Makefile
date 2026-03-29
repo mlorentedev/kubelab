@@ -313,10 +313,14 @@ secrets-audit:
 # -----------------------------------------------------------------------------
 HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
 
+# Fetch kubeconfig from aws1 — auto-accepts new host key (Spot instances rotate)
+# Also cleans stale keys for aws1.kubelab.internal from known_hosts
 .PHONY: fetch-kubeconfig-hub
 fetch-kubeconfig-hub:
 	@echo "=== Fetching kubeconfig from aws1 via Tailscale ==="
-	@ssh aws1 "sudo cat /etc/rancher/k3s/k3s.yaml" | sed "s/127.0.0.1/aws1.kubelab.internal/" > $(HUB_KUBECONFIG)
+	@ssh-keygen -R aws1.kubelab.internal 2>/dev/null || true
+	@ssh -o StrictHostKeyChecking=accept-new aws1.kubelab.internal "sudo cat /etc/rancher/k3s/k3s.yaml" | \
+		sed "s/127.0.0.1/aws1.kubelab.internal/" > $(HUB_KUBECONFIG)
 	@chmod 600 $(HUB_KUBECONFIG)
 	@echo "✓ Hub kubeconfig saved to $(HUB_KUBECONFIG)"
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
@@ -337,8 +341,11 @@ _deploy-authelia-oidc:
 .PHONY: _deploy-argocd-helm
 _deploy-argocd-helm:
 	@echo "=== Step 2/2: Installing Argo CD on hub (aws1) ==="
-	@echo "--- Pre-scale: freeing RAM on t4g.micro (ARGO-OOM-MITIGATION) ---"
-	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy argocd-applicationset-controller -n argocd --replicas=0 2>/dev/null || true
+	@echo "--- Stopping ALL ArgoCD pods for clean upgrade (t4g.micro OOM mitigation) ---"
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy --all -n argocd --replicas=0 2>/dev/null || true
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale statefulset --all -n argocd --replicas=0 2>/dev/null || true
+	@echo "--- Waiting for pods to terminate ---"
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) wait --for=delete pod -l app.kubernetes.io/part-of=argocd -n argocd --timeout=60s 2>/dev/null || true
 	@helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 	@helm repo update argo
 	@ARGOCD_HASH=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.admin_password_hash --env common 2>/dev/null | tail -1) && \
@@ -349,10 +356,56 @@ _deploy-argocd-helm:
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
-		--wait --timeout 10m
-	@echo "--- Post-scale: restoring applicationset-controller ---"
-	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy argocd-applicationset-controller -n argocd --replicas=1 2>/dev/null || true
+		--timeout 10m
+	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
+	@echo "--- Updating ArgoCD EndpointSlice on prod (resolve aws1 Tailscale IP via MagicDNS) ---"
+	@AWS1_IP=$$(dig +short aws1.kubelab.internal | head -1) && \
+	if [ -n "$$AWS1_IP" ]; then \
+		sed "s/RESOLVE_AWS1_TAILSCALE_IP/$$AWS1_IP/" infra/k8s/overlays/prod/argocd.yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-prod-config apply -f -; \
+		echo "✓ ArgoCD EndpointSlice updated ($$AWS1_IP)"; \
+	else \
+		echo "⚠ Could not resolve aws1.kubelab.internal — EndpointSlice not updated"; \
+	fi
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
+
+# Watch ArgoCD pods until all ready — logs timing to /tmp/argocd-timing.log
+# Usage: make watch-argocd (run after deploy-argocd, safe to leave unattended)
+.PHONY: watch-argocd
+watch-argocd:
+	@echo "$$(date): Watching ArgoCD pods..." | tee -a /tmp/argocd-timing.log
+	@while true; do \
+		READY=$$(kubectl --kubeconfig $(HUB_KUBECONFIG) get pods -n argocd -l app.kubernetes.io/part-of=argocd \
+			-o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null | grep -c true); \
+		echo "$$(date): $$READY/5 ready" | tee -a /tmp/argocd-timing.log; \
+		[ "$$READY" -ge 5 ] && break; \
+		sleep 30; \
+	done
+	@echo "$$(date): ALL PODS READY ✓" | tee -a /tmp/argocd-timing.log
+	@echo "Timing log: /tmp/argocd-timing.log"
+
+# Deploy external services with dynamic Tailscale IP resolution (MagicDNS)
+# Resolves placeholders in EndpointSlices at deploy time — IPs survive node re-registration.
+# Usage: make deploy-external ENV=staging|prod
+.PHONY: deploy-external
+deploy-external:
+	@test -n "$(ENV)" || (echo "Usage: make deploy-external ENV=staging|prod" && exit 1)
+	@echo "=== Deploying external services to $(ENV) (resolving Tailscale IPs via MagicDNS) ==="
+	@RPI3_IP=$$(dig +short rpi3.kubelab.internal | head -1) && \
+	RPI4_IP=$$(dig +short rpi4.kubelab.internal | head -1) && \
+	echo "  rpi3: $${RPI3_IP:-UNRESOLVED}  rpi4: $${RPI4_IP:-UNRESOLVED}" && \
+	if [ -z "$$RPI3_IP" ] || [ -z "$$RPI4_IP" ]; then \
+		echo "⚠ Some nodes not resolvable — are they online? Skipping unresolved."; \
+	fi && \
+	if [ -n "$$RPI3_IP" ]; then \
+		sed "s/RESOLVE_RPI3_TAILSCALE_IP/$$RPI3_IP/" infra/k8s/base/external/uptime-kuma.yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
+	fi && \
+	if [ -n "$$RPI4_IP" ]; then \
+		sed "s/RESOLVE_RPI4_TAILSCALE_IP/$$RPI4_IP/g" infra/k8s/base/edge/coredns-custom.yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
+	fi && \
+	echo "✓ External services deployed with resolved IPs"
 
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
 # Usage: make recover-argocd
@@ -360,9 +413,9 @@ _deploy-argocd-helm:
 recover-argocd:
 	@echo "=== Checking Argo CD Helm release state ==="
 	@STATUS=$$(helm --kubeconfig $(HUB_KUBECONFIG) status argocd -n argocd -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null) && \
-	if [ "$$STATUS" = "pending-upgrade" ] || [ "$$STATUS" = "pending-install" ] || [ "$$STATUS" = "failed" ]; then \
+	if [ "$$STATUS" = "pending-upgrade" ] || [ "$$STATUS" = "pending-install" ] || [ "$$STATUS" = "pending-rollback" ] || [ "$$STATUS" = "failed" ]; then \
 		echo "Release in $$STATUS state — rolling back..."; \
-		helm --kubeconfig $(HUB_KUBECONFIG) rollback argocd -n argocd --wait --timeout 10m; \
+		helm --kubeconfig $(HUB_KUBECONFIG) rollback argocd -n argocd --timeout 5m; \
 		echo "✓ Rollback complete. Re-run 'make deploy-argocd' to retry upgrade."; \
 	else \
 		echo "Release state: $$STATUS — no recovery needed."; \
@@ -616,18 +669,24 @@ flush-sessions:
 # Usage: make pods ENV=staging
 #        make logs SVC=authelia ENV=staging
 #        make logs SVC=authelia ENV=staging TAIL=100
+# K8s observability — supports staging, prod, and hub (ArgoCD)
+# Usage: make pods ENV=staging|prod|hub
+#        make logs SVC=authelia ENV=staging [TAIL=50] [FOLLOW=1]
+#        make logs SVC=argocd-application-controller-0 ENV=hub
 .PHONY: pods
 pods:
-	@test -n "$(ENV)" || (echo "Usage: make pods ENV=staging|prod" && exit 1)
-	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config get pods -n kubelab -o wide
+	@test -n "$(ENV)" || (echo "Usage: make pods ENV=staging|prod|hub" && exit 1)
+	$(eval _NS := $(if $(filter hub,$(ENV)),argocd,kubelab))
+	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config get pods -n $(_NS) -o wide
 
 .PHONY: logs
 logs:
-	@test -n "$(SVC)" || (echo "Usage: make logs SVC=authelia ENV=staging [TAIL=50] [FOLLOW=1]" && exit 1)
-	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	@test -n "$(SVC)" || (echo "Usage: make logs SVC=authelia ENV=staging|prod|hub [TAIL=50] [FOLLOW=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _NS := $(if $(filter hub,$(_ENV)),argocd,kubelab))
 	$(eval _TAIL := $(or $(TAIL),50))
 	$(eval _FOLLOW := $(if $(FOLLOW),-f,))
-	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n kubelab deploy/$(SVC) --tail=$(_TAIL) $(_FOLLOW)
+	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n $(_NS) $(SVC) --tail=$(_TAIL) $(_FOLLOW)
 
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets validate-sync
