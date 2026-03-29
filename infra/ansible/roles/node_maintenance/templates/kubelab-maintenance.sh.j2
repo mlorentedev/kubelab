@@ -1,0 +1,35 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Node maintenance — runs via systemd timer
+set -euo pipefail
+
+echo "[$(date)] Starting maintenance on $(hostname)"
+
+# APT cleanup
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+mkdir -p /var/lib/apt/lists/partial
+
+# Journal vacuum
+journalctl --vacuum-size={{ maintenance_journal_max_size }}
+
+# Snap cleanup
+snap set system refresh.retain={{ maintenance_snap_retain }} 2>/dev/null || true
+snap list --all 2>/dev/null | awk '/disabled/{system("snap remove " $1 " --revision=" $3)}' || true
+
+# Docker cleanup (skip if not installed)
+if command -v docker &>/dev/null; then
+    docker image prune -af || echo "WARN: docker image prune failed"
+    docker builder prune -af || echo "WARN: docker builder prune failed"
+fi
+
+# K3s cleanup (skip if not installed)
+if command -v crictl &>/dev/null; then
+    crictl rmi --prune || echo "WARN: crictl prune failed"
+fi
+
+# Temp files (skip symlinks to prevent traversal attacks)
+find /tmp /var/tmp -type f -not -type l -atime +{{ maintenance_tmp_max_days }} -delete 2>/dev/null || true
+
+echo "[$(date)] Maintenance complete:"
+df -h /

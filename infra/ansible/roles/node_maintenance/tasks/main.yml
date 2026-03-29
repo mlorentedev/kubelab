@@ -1,0 +1,137 @@
+---
+# =============================================================================
+# Node Maintenance — disk cleanup + optional systemd timer
+# Works on all node types: K3s, Docker, hub, gateway
+# =============================================================================
+
+# --- Pre-cleanup report ---
+- name: Report disk usage (before)
+  command: df -h /
+  register: _disk_before
+  changed_when: false
+
+- name: Show disk before
+  debug:
+    msg: "BEFORE: {{ _disk_before.stdout_lines | default([]) | last | default('N/A (check mode)') }}"
+
+# --- APT cleanup ---
+- name: Clean APT cache
+  command: apt-get clean
+  changed_when: false
+  when: ansible_facts.pkg_mgr == 'apt'
+
+- name: Remove APT package lists
+  file:
+    path: /var/lib/apt/lists
+    state: absent
+  when: ansible_facts.pkg_mgr == 'apt'
+
+- name: Recreate APT lists directory
+  file:
+    path: /var/lib/apt/lists/partial
+    state: directory
+    mode: "0700"
+  when: ansible_facts.pkg_mgr == 'apt'
+
+# --- Journal cleanup ---
+- name: Vacuum journal logs to {{ maintenance_journal_max_size }}
+  command: journalctl --vacuum-size={{ maintenance_journal_max_size }}
+  register: _journal
+  changed_when: "'Deleted' in _journal.stdout"
+
+# --- Snap cleanup ---
+- name: Check snap refresh retention
+  command: snap get system refresh.retain
+  register: _snap_retain_check
+  changed_when: false
+  ignore_errors: true
+
+- name: Set snap refresh retention to {{ maintenance_snap_retain }}
+  command: snap set system refresh.retain={{ maintenance_snap_retain }}
+  when: _snap_retain_check.stdout | default('') | trim != maintenance_snap_retain | string
+  ignore_errors: true
+
+- name: Remove disabled snap revisions
+  shell: |
+    snap list --all 2>/dev/null | awk '/disabled/{print $1, $3}' | \
+    while read name rev; do snap remove "$name" --revision="$rev" 2>/dev/null; done
+  register: _snap_clean
+  changed_when: _snap_clean.stdout | length > 0
+  ignore_errors: true
+
+# --- Docker cleanup (docker_hosts group) ---
+- name: Prune unused Docker images
+  command: docker image prune -af
+  when: "'docker_hosts' in group_names"
+  register: _docker_prune
+  changed_when: "'Total reclaimed space' in _docker_prune.stdout"
+  ignore_errors: true
+
+- name: Warn if Docker prune failed
+  debug:
+    msg: "WARNING: Docker image prune failed — {{ _docker_prune.stderr | default('unknown') }}"
+  when: _docker_prune is defined and _docker_prune.rc | default(0) != 0
+
+- name: Prune Docker build cache
+  command: docker builder prune -af
+  when: "'docker_hosts' in group_names"
+  register: _docker_builder
+  changed_when: "'Total reclaimed space' in _docker_builder.stdout"
+  ignore_errors: true
+
+# --- K3s cleanup (k3s_servers or hub nodes) ---
+- name: Prune unused container images (crictl)
+  command: crictl rmi --prune
+  when: "'k3s_servers' in group_names or maintenance_is_k3s_node | bool"
+  register: _crictl
+  changed_when: _crictl.stdout_lines | default([]) | length > 0
+  ignore_errors: true
+
+# --- Temp files (skip symlinks for security) ---
+- name: Clean temp files older than {{ maintenance_tmp_max_days }} days
+  shell: |
+    find /tmp /var/tmp -type f -not -type l -atime +{{ maintenance_tmp_max_days }} -delete -print 2>&1 || true
+  register: _tmp_clean
+  changed_when: _tmp_clean.stdout_lines | length > 0
+
+# --- Post-cleanup report ---
+- name: Report disk usage (after)
+  command: df -h /
+  register: _disk_after
+  changed_when: false
+
+- name: Show cleanup summary
+  debug:
+    msg: |
+      BEFORE: {{ _disk_before.stdout_lines | default([]) | last | default('N/A') }}
+      AFTER:  {{ _disk_after.stdout_lines | default([]) | last | default('N/A') }}
+
+# --- Systemd timer (optional) ---
+- name: Install maintenance script
+  template:
+    src: kubelab-maintenance.sh.j2
+    dest: /opt/kubelab-maintenance.sh
+    mode: "0700"
+  when: maintenance_install_timer | bool
+
+- name: Install maintenance service unit
+  template:
+    src: kubelab-maintenance.service.j2
+    dest: /etc/systemd/system/kubelab-maintenance.service
+    mode: "0644"
+  when: maintenance_install_timer | bool
+
+- name: Install maintenance timer unit
+  template:
+    src: kubelab-maintenance.timer.j2
+    dest: /etc/systemd/system/kubelab-maintenance.timer
+    mode: "0644"
+  when: maintenance_install_timer | bool
+
+- name: Enable and start maintenance timer
+  systemd:
+    name: kubelab-maintenance.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: maintenance_install_timer | bool

@@ -80,7 +80,7 @@ warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["sh.*", "yaml.*", "argon2.*"]
+module = ["sh.*", "yaml.*", "argon2.*", "uptime_kuma_api.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

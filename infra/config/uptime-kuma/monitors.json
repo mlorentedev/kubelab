@@ -153,7 +153,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Compute node running Ollama. SSOT: networking.nodes.beelink.tailscale_ip (100.64.0.3).",
+    "description": "On-demand platform node (ADR-028): MinIO + GH Runner + Glances. SSOT: networking.nodes.beelink.tailscale_ip (100.64.0.3).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
@@ -226,7 +226,7 @@
     "name": "Infra \u00b7 VPN \u00b7 AWS1 Tailscale",
     "type": "ping",
     "url": "https://",
-    "hostname": "100.64.0.9",
+    "hostname": "100.64.0.7",
     "port": null,
     "interval": 120,
     "maxretries": 3,
@@ -610,7 +610,7 @@
   {
     "name": "Services \u00b7 Data \u00b7 Ollama API",
     "type": "http",
-    "url": "http://100.64.0.3:11434/api/tags",
+    "url": "http://100.64.0.5:11434/api/tags",
     "hostname": null,
     "port": null,
     "interval": 300,
@@ -622,7 +622,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Ollama LLM inference API on Beelink bare metal. SSOT: networking.nodes.beelink.tailscale_ip:11434. VPN-only.",
+    "description": "Ollama LLM inference API on ace2 Docker (ADR-028). SSOT: networking.nodes.ace2.tailscale_ip:11434. VPN-only.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,

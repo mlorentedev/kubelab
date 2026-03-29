@@ -52,7 +52,8 @@ help:
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
-	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|rpi3|rpi4|jetson|vps)"
+	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|bee|rpi3|rpi4|jetson|vps)"
+	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1]"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
@@ -573,6 +574,17 @@ provision:
 		exit $$_exit; \
 	else \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
+	fi
+
+.PHONY: maintain
+maintain:
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
+	@if [ "$(NODE)" = "all" ]; then \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER); \
+	else \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER); \
 	fi
 
 .PHONY: deploy

@@ -1,5 +1,5 @@
 ---
-# Homelab inventory — all physical nodes and VMs running Tailscale.
+# Homelab inventory — all physical nodes and cloud instances running Tailscale.
 # Access via Tailscale IPs from workstation.
 # If a node is disconnected from Tailscale, fix it manually via SSH LAN
 # (through RPi4 at 172.16.1.1) then re-run this playbook to prevent recurrence.
@@ -8,7 +8,7 @@ all:
   vars:
     ansible_user: manu
     ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=accept-new'
     headscale_domain: vpn.kubelab.live
     headscale_ip: 162.55.57.175
 
@@ -20,29 +20,50 @@ all:
           ansible_host: 100.64.0.11  # networking.nodes.ace1.tailscale_ip
           lan_ip: 172.16.1.2
 
-    # Platform / compute nodes
+    # Platform node — on-demand CI + Storage (ADR-028)
     platform_nodes:
       hosts:
+        kubelab-beelink:
+          ansible_host: 100.64.0.3   # networking.nodes.beelink.tailscale_ip
+          lan_ip: 172.16.1.3
+
+    # Compute nodes — on-demand LLM + edge AI (ADR-028)
+    compute_nodes:
+      hosts:
         kubelab-ace2:
-          ansible_host: 100.64.0.5  # networking.nodes.ace2.tailscale_ip
+          ansible_host: 100.64.0.5   # networking.nodes.ace2.tailscale_ip
           lan_ip: 172.16.1.5
-        kubelab-bee:
-          ansible_host: 100.64.0.3  # networking.nodes.beelink.tailscale_ip
         kubelab-jet1:
-          ansible_host: 100.64.0.8  # networking.nodes.jetson.tailscale_ip
+          ansible_host: 100.64.0.8   # networking.nodes.jetson.tailscale_ip
           legacy_python: true
 
+    # Gateway + monitoring nodes
     gateway_nodes:
       hosts:
         kubelab-rpi4:
-          ansible_host: 100.64.0.10
+          ansible_host: 100.64.0.10  # networking.nodes.rpi4.tailscale_ip
         kubelab-rpi3:
-          ansible_host: 100.64.0.6
+          ansible_host: 100.64.0.6   # networking.nodes.rpi3.tailscale_ip
 
     # VPS (Hetzner CAX21, ARM64)
     vps:
       hosts:
         kubelab-vps:
-          ansible_host: 100.64.0.2  # networking.vps.tailscale_ip
+          ansible_host: 100.64.0.2   # networking.vps.tailscale_ip
           ansible_user: deployer
           public_ip: 162.55.57.175
+
+    # Hub — AWS ArgoCD management plane (ADR-023 Phase 3)
+    hub:
+      hosts:
+        kubelab-aws1:
+          ansible_host: 100.64.0.7   # networking.aws.tailscale_ip
+          ansible_user: deployer
+
+    # Logical groups (for conditional tasks like docker prune, crictl prune)
+    docker_hosts:
+      children:
+        platform_nodes:
+        compute_nodes:
+        gateway_nodes:
+        vps:

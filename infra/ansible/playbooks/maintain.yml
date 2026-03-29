@@ -1,0 +1,32 @@
+---
+# =============================================================================
+# Node Maintenance — disk cleanup + optional auto-maintenance timer
+#
+# Runs on any node. Targets selected via --limit.
+#
+# Usage:
+#   make maintain NODE=aws1                 Cleanup aws1
+#   make maintain NODE=ace1                 Cleanup ace1
+#   make maintain NODE=all                  Cleanup all nodes
+#   make maintain NODE=aws1 TIMER=1         Cleanup + install weekly timer
+#
+# Direct:
+#   toolkit infra ansible run -p maintain -e staging -l kubelab-aws1
+# =============================================================================
+
+- name: Node maintenance
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+  roles:
+    - role: ../roles/node_maintenance
+      vars:
+        maintenance_install_timer: "{{ install_timer | default(false) | bool }}"
+        maintenance_is_k3s_node: "{{ 'k3s_servers' in group_names or 'hub' in group_names }}"

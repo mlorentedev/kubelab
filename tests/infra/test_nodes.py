@@ -10,6 +10,9 @@ pytestmark = pytest.mark.infra
 
 _DISK_THRESHOLD = 80  # percent
 _MEMORY_THRESHOLD = 80  # percent
+# Hub nodes (aws1 t4g.small): 8G disk, 2GB RAM — ArgoCD consumes 80%+ by design
+_HUB_DISK_THRESHOLD = 92
+_HUB_MEMORY_THRESHOLD = 92
 
 
 class TestNodeHealth:
@@ -50,8 +53,9 @@ class TestNodeHealth:
                     errors.append(f"{node.name}: df failed — {result.stderr.strip()}")
                     continue
                 usage = int(result.stdout.strip().rstrip("%"))
-                if usage >= _DISK_THRESHOLD:
-                    errors.append(f"{node.name}: disk at {usage}% (threshold: {_DISK_THRESHOLD}%)")
+                threshold = _HUB_DISK_THRESHOLD if node.group == "hub" else _DISK_THRESHOLD
+                if usage >= threshold:
+                    errors.append(f"{node.name}: disk at {usage}% (threshold: {threshold}%)")
             except Exception as exc:
                 errors.append(f"{node.name}: {exc}")
 
@@ -73,8 +77,9 @@ class TestNodeHealth:
                     errors.append(f"{node.name}: free failed — {result.stderr.strip()}")
                     continue
                 usage = int(result.stdout.strip())
-                if usage >= _MEMORY_THRESHOLD:
-                    errors.append(f"{node.name}: memory at {usage}% (threshold: {_MEMORY_THRESHOLD}%)")
+                threshold = _HUB_MEMORY_THRESHOLD if node.group == "hub" else _MEMORY_THRESHOLD
+                if usage >= threshold:
+                    errors.append(f"{node.name}: memory at {usage}% (threshold: {threshold}%)")
             except Exception as exc:
                 errors.append(f"{node.name}: {exc}")
 

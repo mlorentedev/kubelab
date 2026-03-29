@@ -1,0 +1,8 @@
+---
+maintenance_journal_max_size: "20M"
+maintenance_snap_retain: 2
+maintenance_tmp_max_days: 7
+maintenance_install_timer: false
+maintenance_timer_schedule: "weekly"
+# Override for nodes with K3s but not in k3s_servers group (e.g. aws1 hub)
+maintenance_is_k3s_node: false

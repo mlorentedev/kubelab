@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+# ace2 LLM Services — Ollama (ADR-028: on-demand compute)
+services:
+  ollama:
+    image: {{ ollama_image }}
+    container_name: ollama
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ tailscale_ip }}:{{ ollama_port }}:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE={{ ollama_keep_alive }}
+    volumes:
+      - {{ ace2_ollama_data_dir }}:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: {{ ollama_memory_limit }}
+    networks:
+      - kubelab
+
+networks:
+  kubelab:
+    name: kubelab
+    external: true

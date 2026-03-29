@@ -1,0 +1,5 @@
+---
+beelink_deploy_dir: /opt/kubelab
+beelink_minio_data_dir: /opt/minio/data
+beelink_runner_work_dir: /opt/runner/_work
+glances_port: 61208

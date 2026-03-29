@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=KubeLab node maintenance
+
+[Service]
+Type=oneshot
+ExecStart=/opt/kubelab-maintenance.sh
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal

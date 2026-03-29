@@ -34,7 +34,7 @@ networking:
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:
     - name: ollama
-      node: beelink       # resolves to networking.nodes.beelink.tailscale_ip
+      node: ace2           # resolves to networking.nodes.ace2.tailscale_ip (ADR-028: ace2=Ollama)
     - name: jetson
       node: jetson         # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
@@ -63,6 +63,8 @@ networking:
     ami_name_filter: "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
     ebs_size_gb: 8
     hostname: "aws1"
+    tailscale_ip: "100.64.0.7"
+    ssh_user: "deployer"
     tailscale_dns: "aws1.kubelab.internal"  # MagicDNS (ADR-025) — IP-independent
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
   nodes:
@@ -81,7 +83,7 @@ networking:
       lan_ip: "172.16.1.5"
       lan_interface: "enp1s0"
       ssh_user: "manu"
-      ansible_groups: ["platform_nodes", "docker_hosts", "minipc"]
+      ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-028: Ollama only
     rpi4:
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
@@ -97,8 +99,9 @@ networking:
       hostname: "beelink"
       tailscale_ip: "100.64.0.3"
       lan_ip: "172.16.1.3"
+      lan_interface: "enp1s0"
       ssh_user: "manu"
-      ansible_groups: ["compute", "docker_hosts"]
+      ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: MinIO + GH Runner + Glances
     jetson:
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
@@ -363,7 +366,7 @@ apps:
     automation:
       github_runner:
         name: github-runner
-        image: myoung34/github-runner:latest
+        image: myoung34/github-runner:ubuntu-noble
         repo_url: https://github.com/mlorentedev/kubelab
         runner_group: default
         labels: self-hosted,linux,docker
@@ -424,6 +427,11 @@ apps:
         auth_level: one_factor
         default_port: 3001
         health_path: /
+
+      glances:
+        name: glances
+        image: nicolargo/glances:4.5.2-full
+        default_port: 61208
 
     # Security (authentication, authorization, secrets)
     security:
@@ -536,8 +544,14 @@ apps:
     ai:
       ollama:
         name: ollama
+        image: ollama/ollama:0.16.2
         domain: ollama.kubelab.live
         enable_auth: false
         auth_level: bypass
         default_port: 11434
         health_path: /api/tags
+        keep_alive: "5m"
+        memory_limit: "10G"
+        models:
+          - "qwen2.5-coder:7b"
+          - "qwen2.5:7b"
