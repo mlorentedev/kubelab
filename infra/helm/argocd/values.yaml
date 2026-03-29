@@ -57,8 +57,11 @@ notifications:
     limits:
       memory: 64Mi
   notifiers:
-    service.slack: |
-      token: $slack-token
+    service.webhook.slack: |
+      url: $slack-webhook-url
+      headers:
+        - name: Content-Type
+          value: application/json
   triggers:
     trigger.on-sync-failed: |
       - when: app.status.sync.status == 'Unknown' || app.status.operationState.phase in ['Error', 'Failed']
@@ -71,44 +74,26 @@ notifications:
         send: [app-sync-succeeded]
   templates:
     template.app-sync-failed: |
-      slack:
-        attachments: |
-          [{
-            "color": "#E96D76",
-            "title": "❌ {{.app.metadata.name}} sync failed",
-            "text": "Sync failed. Revision: {{.app.status.sync.revision}}",
-            "fields": [
-              {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
-              {"title": "Env", "value": "{{.app.metadata.name}}", "short": true}
-            ]
-          }]
+      webhook:
+        slack:
+          method: POST
+          body: |
+            {"text": "❌ *{{.app.metadata.name}}* sync failed\nRevision: {{.app.status.sync.revision}}"}
     template.app-health-degraded: |
-      slack:
-        attachments: |
-          [{
-            "color": "#F4C030",
-            "title": "⚠️ {{.app.metadata.name}} health degraded",
-            "text": "Application {{.app.metadata.name}} is Degraded.",
-            "fields": [
-              {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
-              {"title": "Health", "value": "{{.app.status.health.status}}", "short": true}
-            ]
-          }]
+      webhook:
+        slack:
+          method: POST
+          body: |
+            {"text": "⚠️ *{{.app.metadata.name}}* health degraded ({{.app.status.health.status}})"}
     template.app-sync-succeeded: |
-      slack:
-        attachments: |
-          [{
-            "color": "#18BE52",
-            "title": "✅ {{.app.metadata.name}} synced",
-            "text": "Application {{.app.metadata.name}} synced successfully.",
-            "fields": [
-              {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
-              {"title": "Revision", "value": "{{.app.status.sync.revision | trunc 7}}", "short": true}
-            ]
-          }]
+      webhook:
+        slack:
+          method: POST
+          body: |
+            {"text": "✅ *{{.app.metadata.name}}* synced successfully"}
   subscriptions:
     - recipients:
-        - slack:kubelab-argocd
+        - webhook:slack
       triggers:
         - on-sync-failed
         - on-health-degraded
