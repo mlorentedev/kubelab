@@ -104,12 +104,14 @@ class TraefikGenerator(BaseGenerator):
             ]
             missing_files = [f for f in compose_files if not (settings.traefik_dir / f).exists()]
 
-            # Check generated files in edge/traefik/generated/
+            # Check generated files in edge/traefik/generated/ (only for envs already generated)
             generated_dir = self.project_root / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR
             for env in ("dev", "staging", "prod"):
-                generated_file = generated_dir / env / "traefik.yml"
-                if not generated_file.exists():
-                    missing_files.append(f"generated/{env}/traefik.yml")
+                env_dir = generated_dir / env
+                if env_dir.exists():
+                    generated_file = env_dir / "traefik.yml"
+                    if not generated_file.exists():
+                        missing_files.append(f"generated/{env}/traefik.yml")
 
             if missing_files:
                 logger.warning(MESSAGES.WARNING_CONFIG_MISSING_TRAEFIK_FILES.format(", ".join(missing_files)))

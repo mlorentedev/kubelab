@@ -1,0 +1,136 @@
+---
+# =============================================================================
+# Beelink Services — MinIO + GH Runner + Glances (ADR-028: on-demand platform)
+# Replaces bare-metal Ollama (moved to ace2 via ace2_services)
+# =============================================================================
+
+# --- Cleanup legacy Ollama (bare metal) ---
+- name: Check if Ollama service exists
+  command: systemctl cat ollama
+  register: _ollama_check
+  changed_when: false
+  ignore_errors: true
+
+- name: Stop Ollama systemd service
+  systemd:
+    name: ollama
+    state: stopped
+    enabled: false
+  when: _ollama_check.rc == 0
+  tags: [cleanup]
+
+- name: Remove Ollama binary and service files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/ollama
+    - /etc/systemd/system/ollama.service
+    - /etc/systemd/system/ollama.service.d
+  tags: [cleanup]
+
+- name: Reload systemd after Ollama removal
+  systemd:
+    daemon_reload: true
+  when: _ollama_check.rc == 0
+  tags: [cleanup]
+
+# --- Create directories ---
+- name: Create deployment directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - "{{ beelink_deploy_dir }}"
+    - "{{ beelink_minio_data_dir }}"
+    - "{{ beelink_runner_work_dir }}"
+
+# --- Template compose + secrets ---
+- name: Template Docker Compose stack
+  template:
+    src: compose.yml.j2
+    dest: "{{ beelink_deploy_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart beelink services
+
+# --- Multi-arch build support ---
+- name: Install QEMU user static for multi-arch builds
+  apt:
+    name: qemu-user-static
+    state: present
+
+- name: Check if binfmt_misc QEMU is registered
+  stat:
+    path: /proc/sys/fs/binfmt_misc/qemu-aarch64
+  register: _binfmt
+
+- name: Register QEMU binfmt_misc
+  command: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  when: not _binfmt.stat.exists
+
+- name: Check if buildx builder exists
+  command: docker buildx inspect multiarch
+  register: _buildx_check
+  changed_when: false
+  ignore_errors: true
+
+- name: Create Docker buildx builder
+  command: docker buildx create --name multiarch --driver docker-container --use
+  become: false
+  when: _buildx_check.rc != 0
+
+# --- Deploy ---
+- name: Pull service images
+  command: docker compose -f {{ beelink_deploy_dir }}/compose.yml pull
+  register: _pull
+  changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
+
+- name: Start services
+  command: docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+  register: _compose_up
+  changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
+
+# --- Health checks ---
+- name: Wait for MinIO container to be running
+  command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' minio
+  register: _minio_state
+  until: _minio_state.stdout == "running"
+  retries: 12
+  delay: 5
+  changed_when: false
+
+- name: Verify MinIO health
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ minio_api_port }}/minio/health/live"
+    method: GET
+    status_code: 200
+    timeout: 10
+  retries: 5
+  delay: 5
+
+- name: Verify Glances health
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ glances_port }}/api/4/quicklook"
+    method: GET
+    status_code: 200
+    timeout: 10
+  retries: 3
+  delay: 5
+
+- name: Verify GitHub Runner container is running
+  command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
+  register: _runner_state
+  retries: 3
+  delay: 10
+  until: _runner_state.stdout == "running"
+  changed_when: false
+
+- name: Report service status
+  debug:
+    msg: "MinIO on {{ minio_api_port }}/{{ minio_console_port }}, Glances on {{ glances_port }}, GH Runner running"

@@ -105,7 +105,7 @@ class K8sGenerator(BaseGenerator):
             logger.warning(f"Missing K8s templates: {', '.join(missing)}")
             return False
 
-        # Check overlay files for staging/prod
+        # Check overlay structure (ADR-021 Rev2: manual Kustomize overlays)
         overlays_dir = self.project_root / PATH_STRUCTURES.K8S_OVERLAYS_DIR
         missing_overlays = []
         for env in ("staging", "prod"):
@@ -113,9 +113,8 @@ class K8sGenerator(BaseGenerator):
             if not env_dir.exists():
                 missing_overlays.append(f"overlays/{env}/")
                 continue
-            for _, output_name in self._TEMPLATE_MAP:
-                if not (env_dir / output_name).exists():
-                    missing_overlays.append(f"overlays/{env}/{output_name}")
+            if not (env_dir / "kustomization.yaml").exists():
+                missing_overlays.append(f"overlays/{env}/kustomization.yaml")
 
         if missing_overlays:
             logger.warning(f"Missing K8s overlay files: {', '.join(missing_overlays)}")
@@ -308,7 +307,7 @@ class K8sGenerator(BaseGenerator):
         Returns:
             List of middleware references
         """
-        middlewares = ["error-pages"]
+        middlewares = ["secure-headers", "error-pages"]
         if enable_auth:
             authelia_name = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia")
             middlewares.append(f"{authelia_name}-auth@kubernetescrd")

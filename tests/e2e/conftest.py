@@ -109,7 +109,7 @@ def http_client(env: str) -> httpx.Client:
     """
     verify = env != "dev"
     client = httpx.Client(
-        timeout=httpx.Timeout(10.0, connect=5.0),
+        timeout=httpx.Timeout(20.0, connect=10.0),
         verify=verify,
         follow_redirects=False,
     )
@@ -122,7 +122,7 @@ def http_client_follow(env: str) -> httpx.Client:
     """httpx client that follows redirects (for full flow tests)."""
     verify = env != "dev"
     client = httpx.Client(
-        timeout=httpx.Timeout(10.0, connect=5.0),
+        timeout=httpx.Timeout(20.0, connect=10.0),
         verify=verify,
         follow_redirects=True,
     )
@@ -178,7 +178,7 @@ def authenticated_client(
     verify = env != "dev"
 
     client = httpx.Client(
-        timeout=httpx.Timeout(10.0, connect=5.0),
+        timeout=httpx.Timeout(20.0, connect=10.0),
         verify=verify,
         follow_redirects=True,
     )

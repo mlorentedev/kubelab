@@ -1,0 +1,4 @@
+---
+- name: Restart ace2 services
+  command: docker compose -f {{ ace2_deploy_dir }}/compose.yml up -d --force-recreate
+  changed_when: true

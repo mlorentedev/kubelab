@@ -1,0 +1,109 @@
+---
+# =============================================================================
+# ace2 Services — Ollama LLM compute (ADR-028: on-demand)
+# Replaces minipc2_services (MinIO + GH Runner → moved to Beelink)
+# =============================================================================
+
+# --- Cleanup legacy services ---
+- name: Check if legacy compose exists
+  stat:
+    path: /opt/kubelab/compose.yml
+  register: _legacy_compose
+
+- name: Stop legacy MinIO + GH Runner stack
+  command: docker compose -f /opt/kubelab/compose.yml down --remove-orphans
+  when: _legacy_compose.stat.exists
+  register: _legacy_down
+  changed_when: "'Stopped' in _legacy_down.stderr or 'Removed' in _legacy_down.stderr"
+  tags: [cleanup]
+
+- name: Check if legacy Glances compose exists
+  stat:
+    path: /opt/glances/docker-compose.yml
+  register: _legacy_glances
+
+- name: Stop legacy Glances
+  command: docker compose -f /opt/glances/docker-compose.yml down --remove-orphans
+  when: _legacy_glances.stat.exists
+  register: _glances_down
+  changed_when: "'Stopped' in _glances_down.stderr or 'Removed' in _glances_down.stderr"
+  tags: [cleanup]
+
+- name: Remove legacy compose files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/kubelab/compose.yml
+    - /opt/glances/docker-compose.yml
+    - /opt/glances
+  tags: [cleanup]
+
+# --- Deploy Ollama ---
+- name: Create deployment directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - "{{ ace2_deploy_dir }}"
+    - "{{ ace2_ollama_data_dir }}"
+
+- name: Template Docker Compose stack
+  template:
+    src: compose.yml.j2
+    dest: "{{ ace2_deploy_dir }}/compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  notify: Restart ace2 services
+
+- name: Pull Ollama image
+  command: docker compose -f {{ ace2_deploy_dir }}/compose.yml pull
+  register: _pull
+  changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
+
+- name: Start Ollama
+  command: docker compose -f {{ ace2_deploy_dir }}/compose.yml up -d
+  register: _compose_up
+  changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
+
+- name: Wait for Ollama container to be running
+  command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' ollama
+  register: _container_state
+  until: _container_state.stdout == "running"
+  retries: 12
+  delay: 5
+  changed_when: false
+
+- name: Verify Ollama health
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ ollama_port }}/api/tags"
+    method: GET
+    status_code: 200
+    timeout: 10
+  retries: 5
+  delay: 5
+
+- name: Pull Ollama models
+  command: "docker exec ollama ollama pull {{ item }}"
+  loop: "{{ ollama_models }}"
+  register: _model_pull
+  changed_when: "'pulling' in _model_pull.stdout"
+  timeout: 1800
+  when: ollama_models | length > 0
+  ignore_errors: true
+
+- name: Report model pull failures
+  debug:
+    msg: "WARNING: Failed to pull model {{ item.item }} — {{ item.stderr | default('unknown') }}"
+  loop: "{{ _model_pull.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when: item.failed | default(false)
+
+- name: Report service status
+  debug:
+    msg: "Ollama healthy on port {{ ollama_port }}. Models: {{ ollama_models | join(', ') | default('none') }}"

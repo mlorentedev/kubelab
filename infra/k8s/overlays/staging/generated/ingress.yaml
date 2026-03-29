@@ -18,6 +18,7 @@ spec:
         - name: api
           port: 8080
       middlewares:
+        - name: secure-headers
         - name: error-pages
   tls:
     certResolver: letsencrypt
@@ -41,6 +42,7 @@ spec:
         - name: web
           port: 8080
       middlewares:
+        - name: secure-headers
         - name: error-pages
   tls:
     certResolver: letsencrypt

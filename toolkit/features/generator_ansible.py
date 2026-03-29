@@ -89,6 +89,18 @@ class AnsibleGenerator(BaseGenerator):
                 }
             )
 
+        # AWS hub node (ADR-023 Phase 3) — always uses Tailscale IP
+        aws = networking.get("aws", {})
+        if aws and aws.get("tailscale_ip"):
+            all_nodes.append(
+                {
+                    "hostname": aws.get("hostname", "aws1"),
+                    "ansible_host": aws["tailscale_ip"],
+                    "ansible_user": aws.get("ssh_user", "deployer"),
+                    "groups": ["hub"],
+                }
+            )
+
         # Homelab nodes — bootstrap uses lan_ip, normal uses tailscale_ip
         for _node_key, node in nodes.items():
             if bootstrap and node.get("lan_ip"):
@@ -132,7 +144,7 @@ class AnsibleGenerator(BaseGenerator):
             "all": {
                 "vars": {
                     "ansible_ssh_private_key_file": ssh_key,
-                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=no",
+                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=accept-new",
                     "ansible_python_interpreter": "auto_silent",
                 },
                 "children": {},

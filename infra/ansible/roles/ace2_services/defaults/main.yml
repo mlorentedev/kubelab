@@ -1,0 +1,6 @@
+---
+ace2_deploy_dir: /opt/ollama
+ace2_ollama_data_dir: /opt/ollama/data
+ollama_keep_alive: "5m"
+ollama_memory_limit: "10G"
+ollama_models: []

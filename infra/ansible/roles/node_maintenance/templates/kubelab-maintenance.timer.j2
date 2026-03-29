@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Weekly KubeLab node maintenance
+
+[Timer]
+OnCalendar={{ maintenance_timer_schedule }}
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target

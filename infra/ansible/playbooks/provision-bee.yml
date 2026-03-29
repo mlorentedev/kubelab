@@ -1,24 +1,25 @@
 ---
 # =============================================================================
-# ace2 Provisioning — On-Demand LLM Compute Node (ADR-028)
+# Beelink Provisioning — On-Demand Platform Node (ADR-028)
 #
-# Full provisioning: base system, SSH hardening, Docker, Tailscale,
-# then deploys Ollama in Docker (replaces legacy MinIO + GH Runner).
+# Deploys: base system, SSH hardening, Docker, Tailscale,
+# then MinIO (object storage) + GitHub Actions Runner + Glances.
+# Removes legacy bare-metal Ollama (moved to ace2).
 #
 # Usage:
-#   make provision NODE=ace2 ENV=staging
-#   toolkit infra ansible run -p provision-ace2 -e staging
-#   toolkit infra ansible run -p provision-ace2 -e staging --tags services
+#   make provision NODE=bee ENV=staging
+#   toolkit infra ansible run -p provision-bee -e staging
+#   toolkit infra ansible run -p provision-bee -e staging --tags services
 #
 # First run (before Tailscale): use BOOTSTRAP=1 to auto-use LAN IP
-#   make provision NODE=ace2 ENV=staging BOOTSTRAP=1
+#   make provision NODE=bee ENV=staging BOOTSTRAP=1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Play 0: Pre-flight validation (no changes to target)
+# Play 0: Pre-flight validation
 # ---------------------------------------------------------------------------
-- name: "Pre-flight: validate ace2 connectivity"
-  hosts: ace2
+- name: "Pre-flight: validate Beelink connectivity"
+  hosts: beelink
   gather_facts: false
   become: false
   tasks:
@@ -39,7 +40,7 @@
       vars:
         _ssh_key_path: "{{ ansible_ssh_private_key_file | default('~/.ssh/id_ed25519') }}"
 
-    - name: Verify target has internet (apt, Docker, Tailscale need it)
+    - name: Verify target has internet
       command: curl -sf --connect-timeout 5 https://get.docker.com -o /dev/null
       changed_when: false
 
@@ -53,8 +54,8 @@
 # ---------------------------------------------------------------------------
 # Play 1: Full provisioning
 # ---------------------------------------------------------------------------
-- name: Provision ace2 — On-demand LLM compute node
-  hosts: ace2
+- name: Provision Beelink — On-demand platform node
+  hosts: beelink
   become: true
   gather_facts: true
 
@@ -115,20 +116,24 @@
       no_log: true
       tags: [tailscale]
 
-    - name: Allow Ollama port on Tailscale interface
+    - name: Allow service ports on Tailscale interface
       community.general.ufw:
         rule: allow
         interface_in: tailscale0
-        port: "{{ config.apps.services.ai.ollama.default_port }}"
+        port: "{{ item }}"
         proto: tcp
+      loop:
+        - "{{ config.apps.services.data.minio.default_port_api }}"
+        - "{{ config.apps.services.data.minio.default_port_console }}"
+        - "{{ config.apps.services.observability.glances.default_port }}"
 
   roles:
     - role: ../roles/base_system
       tags: [base]
       vars:
         system_timezone: "{{ config.global.timezone }}"
-        netplan_interface: "{{ config.networking.nodes.ace2.lan_interface }}"
-        netplan_address: "{{ config.networking.nodes.ace2.lan_ip }}/24"
+        netplan_interface: "{{ config.networking.nodes.beelink.lan_interface }}"
+        netplan_address: "{{ config.networking.nodes.beelink.lan_ip }}/24"
         netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
 
     - role: ../roles/ssh_hardening
@@ -144,13 +149,22 @@
         tailscale_accept_routes: false  # LAN node — must NOT accept subnet routes
         tailscale_auth_key: "{{ _tailscale_auth_key | default('') }}"
 
-    - role: ../roles/ace2_services
-      tags: [services, ollama]
+    - role: ../roles/beelink_services
+      tags: [services, minio, runner]
       vars:
         restart_policy: "{{ config.global.restart_policy }}"
-        tailscale_ip: "{{ config.networking.nodes.ace2.tailscale_ip }}"
-        ollama_image: "{{ config.apps.services.ai.ollama.image }}"
-        ollama_port: "{{ config.apps.services.ai.ollama.default_port }}"
-        ollama_keep_alive: "{{ config.apps.services.ai.ollama.keep_alive }}"
-        ollama_memory_limit: "{{ config.apps.services.ai.ollama.memory_limit }}"
-        ollama_models: "{{ config.apps.services.ai.ollama.models }}"
+        tailscale_ip: "{{ config.networking.nodes.beelink.tailscale_ip }}"
+        glances_image: "{{ config.apps.services.observability.glances.image }}"
+        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
+        minio_image: "{{ config.apps.services.data.minio.image }}"
+        minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
+        minio_console_port: "{{ config.apps.services.data.minio.default_port_console }}"
+        minio_root_user: "{{ secrets.apps.services.data.minio.root_user }}"
+        minio_root_password: "{{ secrets.apps.services.data.minio.root_password }}"
+        runner_image: "{{ config.apps.services.automation.github_runner.image }}"
+        runner_repo_url: "{{ config.apps.services.automation.github_runner.repo_url }}"
+        runner_access_token: "{{ secrets.apps.services.automation.github_runner.token }}"
+        runner_group: "{{ config.apps.services.automation.github_runner.runner_group }}"
+        runner_labels: "{{ config.apps.services.automation.github_runner.labels }}"
+        runner_cpu_limit: "{{ config.apps.services.automation.github_runner.resources.cpu_limit }}"
+        runner_memory_limit: "{{ config.apps.services.automation.github_runner.resources.memory_limit }}"
