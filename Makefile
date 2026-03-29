@@ -358,7 +358,7 @@ _deploy-argocd-helm:
 		-f infra/helm/argocd/values.yaml \
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
-		--set "notifications.secret.items.slack-token=$$SLACK_WEBHOOK" \
+		--set "notifications.secret.items.slack-webhook-url=$$SLACK_WEBHOOK" \
 		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
