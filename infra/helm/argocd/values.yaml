@@ -117,6 +117,21 @@ configs:
     # Auto-managed EndpointSlices aren't in Git, so prune won't touch them
     # (Argo CD only prunes resources with its tracking label).
     resource.exclusions: ""
+    # CronJob completed pods are Healthy, not Degraded (pvc-backup CronJobs)
+    "resource.customizations.health.batch/CronJob": |
+      hs = {}
+      hs.status = "Healthy"
+      return hs
+    "resource.customizations.health.batch/Job": |
+      hs = {}
+      if obj.status.succeeded == 1 then
+        hs.status = "Healthy"
+      elseif obj.status.failed ~= nil and obj.status.failed > 0 then
+        hs.status = "Degraded"
+      else
+        hs.status = "Progressing"
+      end
+      return hs
     # Admin local account: API key only (CLI fallback), no web login
     accounts.admin: apiKey
     # OIDC via Authelia (ARGO-010) — native OIDC, no dex
