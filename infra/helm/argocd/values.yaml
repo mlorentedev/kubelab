@@ -78,19 +78,46 @@ notifications:
         slack:
           method: POST
           body: |
-            {"text": "❌ *{{.app.metadata.name}}* sync failed\nRevision: {{.app.status.sync.revision}}"}
+            {"attachments": [{"color": "#E96D76", "blocks": [
+              {"type": "header", "text": {"type": "plain_text", "text": "Sync Failed"}},
+              {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": "*App:*\n{{.app.metadata.name}}"},
+                {"type": "mrkdwn", "text": "*Revision:*\n{{.app.status.sync.revision | trunc 7}}"}
+              ]},
+              {"type": "context", "elements": [
+                {"type": "mrkdwn", "text": "<https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}|Open>"}
+              ]}
+            ]}]}
     template.app-health-degraded: |
       webhook:
         slack:
           method: POST
           body: |
-            {"text": "⚠️ *{{.app.metadata.name}}* health degraded ({{.app.status.health.status}})"}
+            {"attachments": [{"color": "#F4C030", "blocks": [
+              {"type": "header", "text": {"type": "plain_text", "text": "Health Degraded"}},
+              {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": "*App:*\n{{.app.metadata.name}}"},
+                {"type": "mrkdwn", "text": "*Health:*\n{{.app.status.health.status}}"}
+              ]},
+              {"type": "context", "elements": [
+                {"type": "mrkdwn", "text": "<https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}|Open>"}
+              ]}
+            ]}]}
     template.app-sync-succeeded: |
       webhook:
         slack:
           method: POST
           body: |
-            {"text": "✅ *{{.app.metadata.name}}* synced successfully"}
+            {"attachments": [{"color": "#18BE52", "blocks": [
+              {"type": "header", "text": {"type": "plain_text", "text": "Sync Succeeded"}},
+              {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": "*App:*\n{{.app.metadata.name}}"},
+                {"type": "mrkdwn", "text": "*Revision:*\n{{.app.status.sync.revision | trunc 7}}"}
+              ]},
+              {"type": "context", "elements": [
+                {"type": "mrkdwn", "text": "<https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}|Open>"}
+              ]}
+            ]}]}
   subscriptions:
     - recipients:
         - slack
@@ -118,11 +145,11 @@ configs:
     # (Argo CD only prunes resources with its tracking label).
     resource.exclusions: ""
     # CronJob completed pods are Healthy, not Degraded (pvc-backup CronJobs)
-    "resource.customizations.health.batch/CronJob": |
+    resource.customizations.health.batch_CronJob: |
       hs = {}
       hs.status = "Healthy"
       return hs
-    "resource.customizations.health.batch/Job": |
+    resource.customizations.health.batch_Job: |
       hs = {}
       if obj.status.succeeded == 1 then
         hs.status = "Healthy"
