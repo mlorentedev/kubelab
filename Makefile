@@ -313,10 +313,14 @@ secrets-audit:
 # -----------------------------------------------------------------------------
 HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
 
+# Fetch kubeconfig from aws1 — auto-accepts new host key (Spot instances rotate)
+# Also cleans stale keys for aws1.kubelab.internal from known_hosts
 .PHONY: fetch-kubeconfig-hub
 fetch-kubeconfig-hub:
 	@echo "=== Fetching kubeconfig from aws1 via Tailscale ==="
-	@ssh aws1 "sudo cat /etc/rancher/k3s/k3s.yaml" | sed "s/127.0.0.1/aws1.kubelab.internal/" > $(HUB_KUBECONFIG)
+	@ssh-keygen -R aws1.kubelab.internal 2>/dev/null || true
+	@ssh -o StrictHostKeyChecking=accept-new aws1.kubelab.internal "sudo cat /etc/rancher/k3s/k3s.yaml" | \
+		sed "s/127.0.0.1/aws1.kubelab.internal/" > $(HUB_KUBECONFIG)
 	@chmod 600 $(HUB_KUBECONFIG)
 	@echo "✓ Hub kubeconfig saved to $(HUB_KUBECONFIG)"
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
@@ -354,7 +358,16 @@ _deploy-argocd-helm:
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
-	@echo "✓ Argo CD Helm upgrade applied. Pods starting — monitor with 'make watch-argocd'"
+	@echo "--- Updating ArgoCD EndpointSlice on prod (resolve aws1 Tailscale IP via MagicDNS) ---"
+	@AWS1_IP=$$(dig +short aws1.kubelab.internal | head -1) && \
+	if [ -n "$$AWS1_IP" ]; then \
+		sed "s/RESOLVE_AWS1_TAILSCALE_IP/$$AWS1_IP/" infra/k8s/overlays/prod/argocd.yaml | \
+			kubectl --kubeconfig ~/.kube/kubelab-prod-config apply -f -; \
+		echo "✓ ArgoCD EndpointSlice updated ($$AWS1_IP)"; \
+	else \
+		echo "⚠ Could not resolve aws1.kubelab.internal — EndpointSlice not updated"; \
+	fi
+	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Watch ArgoCD pods until all ready — logs timing to /tmp/argocd-timing.log
 # Usage: make watch-argocd (run after deploy-argocd, safe to leave unattended)

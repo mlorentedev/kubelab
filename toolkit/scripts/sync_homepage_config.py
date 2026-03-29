@@ -123,7 +123,7 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             {
                 "ip": aws.get("tailscale_dns", aws.get("tailscale_ip")),
                 "icon": "mdi-cloud-outline",
-                "description": "Hub · t4g.micro · 1vCPU · 1GB",
+                "description": "Hub · t4g.small · 2vCPU · 2GB",
                 "glances": False,
                 "ping_url": "https://argo.kubelab.live",
             },
