@@ -145,11 +145,11 @@ configs:
     # (Argo CD only prunes resources with its tracking label).
     resource.exclusions: ""
     # CronJob completed pods are Healthy, not Degraded (pvc-backup CronJobs)
-    "resource.customizations.health.batch/CronJob": |
+    resource.customizations.health.batch_CronJob: |
       hs = {}
       hs.status = "Healthy"
       return hs
-    "resource.customizations.health.batch/Job": |
+    resource.customizations.health.batch_Job: |
       hs = {}
       if obj.status.succeeded == 1 then
         hs.status = "Healthy"
