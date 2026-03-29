@@ -79,7 +79,7 @@ notifications:
             "text": "Sync failed. Revision: {{.app.status.sync.revision}}",
             "fields": [
               {"title": "App", "value": "{{.app.metadata.name}}", "short": true},
-              {"title": "Env", "value": "{{.app.metadata.labels.kubelab_live/env}}", "short": true}
+              {"title": "Env", "value": "{{.app.metadata.name}}", "short": true}
             ]
           }]
     template.app-health-degraded: |
