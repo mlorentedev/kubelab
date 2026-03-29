@@ -13,7 +13,8 @@ resources:
   - backup.yaml
   - traefik-dashboard.yaml
   - headscale.yaml
-  - argocd.yaml
+  # argocd.yaml excluded — has RESOLVE_AWS1_TAILSCALE_IP placeholder,
+  # applied by `make deploy-argocd` with dynamic IP resolution (MagicDNS)
   # secrets managed via: toolkit infra k8s apply-secrets --env prod (ADR-014)
 
 # Override base resources with prod-specific domains and config
