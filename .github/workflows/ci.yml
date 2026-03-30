@@ -35,7 +35,7 @@ jobs:
 
       - name: Validate YAML syntax
         run: |
-          pip install --quiet yamllint
+          pip install --quiet --break-system-packages yamllint
           yamllint -d '{extends: default,
             rules: {
               line-length: {max: 120},
