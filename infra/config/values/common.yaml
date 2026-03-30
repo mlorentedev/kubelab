@@ -371,10 +371,10 @@ apps:
         runner_group: default
         labels: self-hosted,linux,docker
         resources:
-          cpu_limit: "1.0"
-          memory_limit: 1G
-          cpu_reservation: "0.25"
-          memory_reservation: 512M
+          cpu_limit: "4.0"
+          memory_limit: 6G
+          cpu_reservation: "1.0"
+          memory_reservation: 2G
 
     # Data services (storage, databases)
     data:
@@ -386,6 +386,11 @@ apps:
         enable_auth: false
         auth_level: bypass
         default_port_api: 9000
+        resources:
+          cpu_limit: "0.5"
+          memory_limit: 512M
+          cpu_reservation: "0.1"
+          memory_reservation: 128M
         default_port_console: 9001
         health_path: /minio/health/live
 
@@ -432,6 +437,11 @@ apps:
         name: glances
         image: nicolargo/glances:4.5.2-full
         default_port: 61208
+        resources:
+          cpu_limit: "0.25"
+          memory_limit: 256M
+          cpu_reservation: "0.1"
+          memory_reservation: 64M
 
     # Security (authentication, authorization, secrets)
     security:

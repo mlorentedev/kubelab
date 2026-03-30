@@ -13,7 +13,7 @@ permissions:
 jobs:
   create-global-release:
     name: Create Release Bundle
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

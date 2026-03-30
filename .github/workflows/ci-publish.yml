@@ -22,11 +22,16 @@ on:
         type: string
         default: ""
         description: "Additional build args (multiline key=value)"
+      runner:
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
+        description: "JSON-encoded runner label (string or array for self-hosted)"
 
 jobs:
   docker-build-push:
     name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }}
     permissions:
       contents: read
       security-events: write
@@ -43,6 +48,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -127,7 +135,7 @@ jobs:
 
   notify-build-completion:
     name: Notify Build Completion
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }}
     needs: [docker-build-push]
     if: always() && (needs.docker-build-push.result == 'success')
     steps:

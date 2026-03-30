@@ -154,13 +154,15 @@
       vars:
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_ip: "{{ config.networking.nodes.beelink.tailscale_ip }}"
-        glances_image: "{{ config.apps.services.observability.glances.image }}"
-        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
+        # MinIO
         minio_image: "{{ config.apps.services.data.minio.image }}"
         minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
         minio_console_port: "{{ config.apps.services.data.minio.default_port_console }}"
         minio_root_user: "{{ secrets.apps.services.data.minio.root_user }}"
         minio_root_password: "{{ secrets.apps.services.data.minio.root_password }}"
+        minio_cpu_limit: "{{ config.apps.services.data.minio.resources.cpu_limit }}"
+        minio_memory_limit: "{{ config.apps.services.data.minio.resources.memory_limit }}"
+        # GitHub Actions Runner
         runner_image: "{{ config.apps.services.automation.github_runner.image }}"
         runner_repo_url: "{{ config.apps.services.automation.github_runner.repo_url }}"
         runner_access_token: "{{ secrets.apps.services.automation.github_runner.token }}"
@@ -168,3 +170,8 @@
         runner_labels: "{{ config.apps.services.automation.github_runner.labels }}"
         runner_cpu_limit: "{{ config.apps.services.automation.github_runner.resources.cpu_limit }}"
         runner_memory_limit: "{{ config.apps.services.automation.github_runner.resources.memory_limit }}"
+        # Glances
+        glances_image: "{{ config.apps.services.observability.glances.image }}"
+        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
+        glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
+        glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"

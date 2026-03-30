@@ -7,6 +7,11 @@ on:
       app:
         required: true
         type: string
+      runner:
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
+        description: "JSON-encoded runner label (string or array for self-hosted)"
     outputs:
       docker_version:
         description: "Generated Docker version for this app"
@@ -28,7 +33,7 @@ on:
 jobs:
   app-pipeline:
     name: CI + Build for ${{ inputs.app }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }}
     outputs:
       docker_version: ${{ steps.docker_version.outputs.version }}
       sha_short: ${{ steps.short_sha.outputs.sha }}
@@ -298,6 +303,7 @@ jobs:
       sha: ${{ needs.app-pipeline.outputs.sha_short }}
       context: ${{ needs.app-pipeline.outputs.context }}
       extra_build_args: ${{ needs.app-pipeline.outputs.extra_build_args }}
+      runner: ${{ inputs.runner }}
     secrets: inherit
 
   # GitOps update + tagging handled by release-please (release.yml)

@@ -74,15 +74,21 @@
   command: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
   when: not _binfmt.stat.exists
 
-- name: Check if buildx builder exists
+- name: Check if buildx builder is healthy
   command: docker buildx inspect multiarch
   register: _buildx_check
   changed_when: false
   ignore_errors: true
 
+- name: Clean stale buildx builder state
+  shell: |
+    docker buildx rm multiarch 2>/dev/null || true
+    rm -rf /root/.docker/buildx/instances/multiarch 2>/dev/null || true
+  when: _buildx_check.rc != 0
+  changed_when: true
+
 - name: Create Docker buildx builder
   command: docker buildx create --name multiarch --driver docker-container --use
-  become: false
   when: _buildx_check.rc != 0
 
 # --- Deploy ---
