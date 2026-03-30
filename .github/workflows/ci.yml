@@ -33,6 +33,10 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Validate YAML syntax
         run: |
           pip install --quiet yamllint

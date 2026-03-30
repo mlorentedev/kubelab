@@ -146,6 +146,8 @@ ON-DEMAND (homelab, powered when working):
 - **Never clone repos on deployment targets** — VPS/servers are not dev machines.
 - **Service placement principle (ADR-028)**: "Would I need this at 3 AM?" → always-on (VPS/AWS/RPi3). Otherwise → on-demand (homelab). Observability on prod, not staging. Embedding pipeline on VPS (autonomous). CI on Beelink with GitHub-hosted fallback.
 - **Beelink is on-demand Platform Node (ADR-028)**: GH Runner + MinIO + OpenClaw + Glances. NOT Gitea, NOT Grafana (those go on VPS prod 24/7). Services here tolerate being offline when homelab is off.
+- **CI runs on self-hosted runner (ADR-030)**: All workflows use `fromJSON(vars.RUNNER_DOCKER)` for runner routing. Toggle: `gh variable set RUNNER_DOCKER --body '["self-hosted","linux","docker"]'`. Fork PRs forced to `ubuntu-latest` (Docker socket = host access). Runner resources: 4CPU/6GB. Tool cache persists via `runner_toolcache` volume.
+- **Docker buildx state corruption**: If `docker buildx inspect/create/rm` all fail for the same builder, clean filesystem state: `rm -rf /root/.docker/buildx/instances/<name>`. Caused by mixing `become: true/false` in Ansible Docker tasks.
 - **ace2 is on-demand LLM compute (ADR-028)**: Ollama only. Previous services (MinIO, GH Runner) migrated to Beelink. Swap order: ANSIBLE-013 (Beelink gets services) THEN IDP-024 (ace2 loses them).
 - **Ollama EndpointSlice IP changes with swap**: Currently `172.16.1.3` (Beelink) → will become `172.16.1.5` (ace2) after IDP-024. Update `infra/k8s/base/external/ollama.yaml`.
 
