@@ -15,7 +15,7 @@ jobs:
 
   validate:
     name: Validate
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +44,7 @@ jobs:
   detect-changes:
     name: Detect Changes
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     outputs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
@@ -104,6 +104,7 @@ jobs:
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: api
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
   web-pipeline:
@@ -113,6 +114,7 @@ jobs:
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: web
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
   errors-pipeline:
@@ -122,4 +124,5 @@ jobs:
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: errors
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit

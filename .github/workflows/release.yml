@@ -14,7 +14,7 @@ permissions:
 jobs:
   release-please:
     name: Release Please
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       api_release_created: ${{ steps.release.outputs['apps/api--release_created'] }}
@@ -46,6 +46,7 @@ jobs:
       tag: ${{ needs.release-please.outputs.api_version }}
       sha: ${{ github.sha }}
       context: ./apps/api
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
   publish-web:
@@ -58,6 +59,7 @@ jobs:
       tag: ${{ needs.release-please.outputs.web_version }}
       sha: ${{ github.sha }}
       context: ./apps/web
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
   publish-errors:
@@ -70,4 +72,5 @@ jobs:
       tag: ${{ needs.release-please.outputs.errors_version }}
       sha: ${{ github.sha }}
       context: ./edge/errors
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
