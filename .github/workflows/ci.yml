@@ -15,14 +15,20 @@ jobs:
 
   validate:
     name: Validate
-    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    # Fork PRs run on GitHub-hosted (self-hosted has Docker socket access)
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate branch name
         if: github.event_name == 'push' && github.ref_name != 'master'
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          if [[ ! "${{ github.ref_name }}" =~ ^(feature|fix|hotfix|chore)/.+ ]]; then
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|fix|hotfix|chore)/.+ ]]; then
             echo "::error::Branch name must match feature/*, fix/*, hotfix/*, or chore/*"
             exit 1
           fi
@@ -44,7 +50,10 @@ jobs:
   detect-changes:
     name: Detect Changes
     needs: validate
-    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     outputs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
@@ -104,7 +113,10 @@ jobs:
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: api
-      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
+      runner: >-
+        ${{ github.event.pull_request.head.repo.fork
+            && '"ubuntu-latest"'
+            || vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
   web-pipeline:
@@ -114,7 +126,10 @@ jobs:
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: web
-      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
+      runner: >-
+        ${{ github.event.pull_request.head.repo.fork
+            && '"ubuntu-latest"'
+            || vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
   errors-pipeline:
@@ -124,5 +139,8 @@ jobs:
     uses: ./.github/workflows/ci-pipeline.yml
     with:
       app: errors
-      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
+      runner: >-
+        ${{ github.event.pull_request.head.repo.fork
+            && '"ubuntu-latest"'
+            || vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit

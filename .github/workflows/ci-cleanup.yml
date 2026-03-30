@@ -13,7 +13,10 @@ jobs:
 
   detect-changes:
     name: Detect Changes
-    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     outputs:
       changed_apps: ${{ steps.list.outputs.apps }}
       any_changed: ${{ steps.check.outputs.any_changed }}
@@ -64,7 +67,10 @@ jobs:
     name: Cleanup RC Tags
     needs: detect-changes
     if: needs.detect-changes.outputs.any_changed == 'true'
-    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     env:
       REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
     steps:
