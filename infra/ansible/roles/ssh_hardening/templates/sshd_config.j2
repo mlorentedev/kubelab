@@ -23,6 +23,10 @@ AllowTcpForwarding no
 AllowAgentForwarding no
 PermitTunnel no
 PermitUserEnvironment no
+# Skip reverse-DNS lookup on connect — avoids SSH hangs on cloud nodes
+# whose PTR records lag behind their public IP rotation (Spot reclaim).
+UseDNS no
+GSSAPIAuthentication no
 
 # Logging
 SyslogFacility AUTH

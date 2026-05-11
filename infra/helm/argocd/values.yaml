@@ -6,6 +6,8 @@ global:
 
 server:
   replicas: 1
+  # RELIAB-009 §9.2 — keep two-step rollback; collapse ReplicaSet graveyard.
+  revisionHistoryLimit: 3
   service:
     type: NodePort
     nodePortHttp: 30080
@@ -21,6 +23,7 @@ server:
 
 controller:
   replicas: 1
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 100m
@@ -30,6 +33,7 @@ controller:
 
 repoServer:
   replicas: 1
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 50m
@@ -38,6 +42,7 @@ repoServer:
       memory: 256Mi
 
 redis:
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 10m
@@ -50,6 +55,7 @@ dex:
 
 notifications:
   enabled: true
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 10m
@@ -128,6 +134,7 @@ notifications:
 
 applicationSet:
   replicas: 1
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 25m

@@ -57,7 +57,8 @@ all:
     hub:
       hosts:
         kubelab-aws1:
-          ansible_host: 100.64.0.7   # networking.aws.tailscale_ip
+          # MagicDNS (ADR-025) — survives Spot replacement; Tailscale IP rotates.
+          ansible_host: aws1.kubelab.internal  # networking.aws.tailscale_dns
           ansible_user: deployer
 
     # Logical groups (for conditional tasks like docker prune, crictl prune)

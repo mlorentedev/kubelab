@@ -15,3 +15,10 @@ node-label:
   - "{{ label }}"
 {% endfor %}
 {% endif %}
+{% if k3s_terminated_pod_gc_threshold | int != 12500 %}
+kube-controller-manager-arg:
+  - "terminated-pod-gc-threshold={{ k3s_terminated_pod_gc_threshold }}"
+{% endif %}
+{% if k3s_etcd_snapshot_retention | int != 5 %}
+etcd-snapshot-retention: {{ k3s_etcd_snapshot_retention }}
+{% endif %}

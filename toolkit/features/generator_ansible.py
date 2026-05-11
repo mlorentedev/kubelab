@@ -89,13 +89,15 @@ class AnsibleGenerator(BaseGenerator):
                 }
             )
 
-        # AWS hub node (ADR-023 Phase 3) — always uses Tailscale IP
+        # AWS hub node (ADR-023 Phase 3) — prefer MagicDNS (ADR-025) so Spot
+        # replacement does not require an inventory regenerate. Falls back to
+        # tailscale_ip only when tailscale_dns is unset (e.g. early bootstrap).
         aws = networking.get("aws", {})
-        if aws and aws.get("tailscale_ip"):
+        if aws and (aws.get("tailscale_dns") or aws.get("tailscale_ip")):
             all_nodes.append(
                 {
                     "hostname": aws.get("hostname", "aws1"),
-                    "ansible_host": aws["tailscale_ip"],
+                    "ansible_host": aws.get("tailscale_dns") or aws["tailscale_ip"],
                     "ansible_user": aws.get("ssh_user", "deployer"),
                     "groups": ["hub"],
                 }

@@ -1,0 +1,179 @@
+---
+# =============================================================================
+# aws1 Day-2 Provisioning — Argo CD Hub (ADR-023, RELIAB-009 §9.0 Plan B1)
+#
+# CLOUD-INIT vs ANSIBLE BOUNDARY (codified from aws1 deploy lessons)
+# ------------------------------------------------------------------------
+# Terraform cloud-init (AWS-001..005, owned in infra/terraform/aws/) handles:
+#   - K3s install with ExecStart flags (--disable=traefik --disable=servicelb
+#     --write-kubeconfig-mode=644 --resolv-conf --tls-san) — immortal once set.
+#   - 2 GB swap via cloud-init `swap:` directive (lesson 2026-03-22: t4g RAM
+#     alone OOM-kills sshd; swap MUST be cloud-init-managed to survive Spot
+#     reclaim/replacement, not configured manually).
+#   - sshd `UseDNS no` baked-in early (lesson 2026-03-26: Spot stop leaves
+#     stale PTR records causing SSH hangs before Ansible can reach the host).
+#     Ansible's `ssh_hardening` role also enforces it for drift.
+#   - Tailscale install + initial Headscale registration via API key
+#     `secrets.aws.headscale_api_key`, including stale-node cleanup (lesson
+#     2026-03-26: re-registration without cleanup yields `aws1-<random>`).
+#   - `instance_interruption_behavior = "terminate"` + ASG(1,1) — cattle, not
+#     pets (lesson 2026-03-26: `stop` corrupts WireGuard + SSH state).
+#
+# This Ansible playbook (day-2) owns:
+#   - /etc/rancher/k3s/config.yaml — injects kube-controller-manager-arg
+#     `terminated-pod-gc-threshold` (RELIAB-009 §9.3). K3s reads both CLI and
+#     config.yaml; CLI wins on conflicts. config.yaml additions stack on top.
+#   - Base packages + timezone. UFW disabled (AWS Security Groups are the
+#     authoritative network ACL — never run two firewalls on one host).
+#   - SSH hardening drift check — converges sshd_config to current standard.
+#   - Tailscale config drift check — idempotent; no-op when already registered.
+#
+# Hardware contract (asserted below):
+#   - t4g.small Spot — 2 GB RAM, 2 GB swap, 8 GB EBS gp3 (lessons 2026-03-22,
+#     2026-03-28: t4g.micro OOMs on every Helm upgrade; t4g.small clears it).
+#   - Hub services live in common SOPS — singleton credentials, not env-scoped
+#     (lessons 2026-03-27, 2026-03-28: hub creds always in common.enc.yaml).
+#
+# Pre-deploy hygiene for Helm operations (handled by `make deploy-argocd`):
+#   - Scales all argocd Deployments/StatefulSets to 0 before upgrade to free
+#     RAM (lesson 2026-03-28). Never `kubectl patch` during Helm operations.
+#
+# Usage:
+#   make provision NODE=aws1 ENV=hub
+#   toolkit infra ansible run -p provision-aws1 -e hub
+#   toolkit infra ansible run -p provision-aws1 -e hub --tags k3s
+#
+# Cloud-agnostic: a future GCP/Azure hub creates its own provision-<node>.yml
+# but reuses hub.yaml and every Ansible role unchanged.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight validation (no changes to target)
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate aws1 connectivity"
+  hosts: aws1
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Verify SSH + Python connectivity
+      ansible.builtin.ping:
+
+    - name: Verify become (sudo) works
+      command: sudo -n true
+      become: true
+      changed_when: false
+
+    - name: Verify K3s is installed (cloud-init bootstrap prerequisite)
+      stat:
+        path: /usr/local/bin/k3s
+      register: _k3s_bin
+      failed_when: not _k3s_bin.stat.exists
+
+    - name: Verify Tailscale is up (cloud-init bootstrap prerequisite)
+      command: tailscale status --json
+      changed_when: false
+      register: _ts
+      failed_when: _ts.rc != 0
+
+# ---------------------------------------------------------------------------
+# Play 1: Day-2 convergence
+# ---------------------------------------------------------------------------
+- name: Provision aws1 — Argo CD hub day-2 config
+  hosts: aws1
+  become: true
+  gather_facts: true
+
+  vars:
+    deploy_env: hub
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load hub overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (hub overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Expose secrets fact (common only — hub has no env-scoped secrets)
+      set_fact:
+        secrets: "{{ sops_common.stdout | from_yaml }}"
+      no_log: true
+
+    - name: "Invariant: cloud-init swap directive applied"
+      assert:
+        that:
+          - ansible_facts["swaptotal_mb"] is defined
+          - ansible_facts["swaptotal_mb"] >= 1500
+        fail_msg: >-
+          Swap is {{ ansible_facts["swaptotal_mb"] | default(0) }}MB; expected
+          ≥1500MB from cloud-init. Lesson 2026-03-22: K3s + Argo CD OOM-kill
+          sshd without swap. Investigate cloud-init before continuing.
+
+    - name: "Invariant: host meets hub minimum (t4g.small, ~1.8GB RAM)"
+      assert:
+        that:
+          - ansible_facts["memtotal_mb"] >= 1700
+        fail_msg: >-
+          Memory is {{ ansible_facts["memtotal_mb"] }}MB; RELIAB-009 hub
+          minimum is t4g.small (lesson 2026-03-28). t4g.micro OOMs on Helm
+          upgrades.
+
+    - name: Build TLS SAN list (MagicDNS only — IP rotates on Spot replacement)
+      set_fact:
+        _k3s_tls_san:
+          - "{{ config.networking.aws.tailscale_dns }}"
+
+  roles:
+    - role: ../roles/base_system
+      tags: [base]
+      vars:
+        system_timezone: "{{ config.global.timezone }}"
+        # No netplan — EC2 eni is cloud-init managed.
+        # No UFW — AWS Security Groups are the authoritative network ACL.
+        firewall_enabled: false
+
+    - role: ../roles/ssh_hardening
+      tags: [ssh]
+
+    - role: ../roles/tailscale
+      tags: [tailscale]
+      vars:
+        # aws1 is already registered (cloud-init). Role is idempotent: install
+        # task skips (binary present), `tailscale up` skips (BackendState=Running).
+        tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
+        tailscale_accept_routes: true   # Hub is remote — accepts subnet routes
+        tailscale_auth_key: ""           # No re-registration
+
+    - role: ../roles/k3s_server
+      tags: [k3s]
+      vars:
+        k3s_version: "{{ config.k3s.version }}"
+        k3s_install_script_url: "{{ config.k3s.install_script_url }}"
+        k3s_tls_san: "{{ _k3s_tls_san }}"
+        k3s_kubeconfig_mode: "{{ config.k3s.kubeconfig_mode }}"
+        k3s_resolv_conf: "/run/systemd/resolve/resolv.conf"
+        k3s_configure_traefik: "{{ config.k3s.configure_traefik }}"
+        k3s_traefik_acme_enabled: false
+        k3s_terminated_pod_gc_threshold: "{{ config.k3s.terminated_pod_gc_threshold }}"
+        k3s_etcd_snapshot_retention: "{{ config.k3s.etcd_snapshot_retention }}"
+        k3s_fetch_kubeconfig: true
+        k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
+        # MagicDNS in kubeconfig server URL — Spot replacement only requires
+        # MagicDNS auto-resolution, no kubeconfig edit (lesson 2026-03-26).
+        k3s_api_address: "{{ config.networking.aws.tailscale_dns }}"
