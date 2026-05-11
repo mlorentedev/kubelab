@@ -13,6 +13,20 @@ mkdir -p /var/lib/apt/lists/partial
 # Journal vacuum
 journalctl --vacuum-size={{ maintenance_journal_max_size }}
 
+# Rotated rsyslog files older than N days (RELIAB-009 follow-up)
+find /var/log -maxdepth 1 -type f \( \
+    -name 'syslog.*' -o \
+    -name '*.log.*' -o \
+    -name 'btmp.*' -o \
+    -name 'wtmp.*' -o \
+    -name 'lastlog.*' \
+\) -mtime +{{ maintenance_rotated_log_retention_days }} -delete 2>/dev/null || true
+
+# Safety: truncate active syslog if it exceeds the max size
+{% if maintenance_active_log_max_mb | int > 0 %}
+find /var/log -maxdepth 1 -name syslog -size +{{ maintenance_active_log_max_mb }}M -exec truncate -s 0 {} \; 2>/dev/null || true
+{% endif %}
+
 # Snap cleanup
 snap set system refresh.retain={{ maintenance_snap_retain }} 2>/dev/null || true
 snap list --all 2>/dev/null | awk '/disabled/{system("snap remove " $1 " --revision=" $3)}' || true
