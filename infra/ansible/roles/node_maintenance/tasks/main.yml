@@ -40,24 +40,52 @@
   changed_when: "'Deleted' in _journal.stdout"
 
 # --- Rotated rsyslog cleanup (RELIAB-009 follow-up) ---
-- name: Remove rotated rsyslog files older than {{ maintenance_rotated_log_retention_days }} days
-  shell: |
-    find /var/log -maxdepth 1 -type f \( \
-      -name 'syslog.*' -o \
-      -name '*.log.*' -o \
-      -name 'btmp.*' -o \
-      -name 'wtmp.*' -o \
-      -name 'lastlog.*' \
-    \) -mtime +{{ maintenance_rotated_log_retention_days }} -print -delete 2>/dev/null || true
+- name: Find rotated rsyslog files older than {{ maintenance_rotated_log_retention_days }} days
+  find:
+    paths: /var/log
+    file_type: file
+    age: "{{ maintenance_rotated_log_retention_days }}d"
+    patterns:
+      - 'syslog.*'
+      - '*.log.*'
+      - 'btmp.*'
+      - 'wtmp.*'
+      - 'lastlog.*'
+    recurse: false
   register: _rotated_logs
-  changed_when: _rotated_logs.stdout_lines | length > 0
 
-- name: "Safety: truncate active /var/log/syslog if >{{ maintenance_active_log_max_mb }}MB"
-  shell: |
-    find /var/log -maxdepth 1 -name syslog -size +{{ maintenance_active_log_max_mb }}M -print -exec truncate -s 0 {} \;
-  register: _active_log
-  changed_when: _active_log.stdout_lines | length > 0
+- name: Delete rotated rsyslog files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _rotated_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: _rotated_logs.matched | int > 0
+
+- name: Find active /var/log/syslog if larger than {{ maintenance_active_log_max_mb }}MB
+  find:
+    paths: /var/log
+    file_type: file
+    patterns: ['syslog']
+    size: "{{ maintenance_active_log_max_mb }}m"
+    recurse: false
+  register: _oversize_syslog
   when: maintenance_active_log_max_mb | int > 0
+
+- name: "Safety: truncate oversize active syslog to 0 bytes"
+  copy:
+    content: ""
+    dest: "{{ item.path }}"
+    owner: syslog
+    group: adm
+    mode: "0640"
+  loop: "{{ _oversize_syslog.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - maintenance_active_log_max_mb | int > 0
+    - _oversize_syslog.matched | default(0) | int > 0
 
 # --- Snap cleanup ---
 - name: Check snap refresh retention
@@ -108,11 +136,23 @@
   ignore_errors: true
 
 # --- Temp files (skip symlinks for security) ---
-- name: Clean temp files older than {{ maintenance_tmp_max_days }} days
-  shell: |
-    find /tmp /var/tmp -type f -not -type l -atime +{{ maintenance_tmp_max_days }} -delete -print 2>&1 || true
+- name: Find temp files older than {{ maintenance_tmp_max_days }} days
+  find:
+    paths: [/tmp, /var/tmp]
+    file_type: file
+    age: "{{ maintenance_tmp_max_days }}d"
+    age_stamp: atime
+    excludes: []
   register: _tmp_clean
-  changed_when: _tmp_clean.stdout_lines | length > 0
+
+- name: Delete old temp files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _tmp_clean.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: _tmp_clean.matched | int > 0
 
 # --- Post-cleanup report ---
 - name: Report disk usage (after)
