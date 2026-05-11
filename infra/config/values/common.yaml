@@ -61,7 +61,11 @@ networking:
     profile: "kubelab"
     instance_type: "t4g.small"
     ami_name_filter: "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
-    ebs_size_gb: 8
+    # 12 GB is the practical minimum for K3s + Argo CD steady-state (~6.4GB base)
+    # plus headroom for Helm upgrades (image pulls ~250MB) + log spikes (~500MB)
+    # before kubelet's 85% disk-pressure threshold trips. 8GB hit 96% during
+    # the 2026-05-10 RELIAB-009 deploy. ~$0.38/mo extra (eu-central-1 gp3).
+    ebs_size_gb: 12
     hostname: "aws1"
     # Tailscale IP rotates on every Spot replacement. MagicDNS (ADR-025) is the
     # stable identity — prefer tailscale_dns over tailscale_ip in IaC.

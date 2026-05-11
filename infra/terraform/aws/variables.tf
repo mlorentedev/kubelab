@@ -32,9 +32,14 @@ variable "ami_name_filter" {
 }
 
 variable "ebs_size_gb" {
-  description = "Root EBS volume size in GB"
+  description = <<-EOT
+    Root EBS volume size in GB. Online resize: terraform apply triggers
+    ec2:ModifyVolume (no instance replacement). After resize, reboot the
+    instance — cloud-init cc_growpart + cc_resizefs auto-expand the
+    partition + ext4 filesystem on next boot. See 40-runbooks/aws1-ebs-resize.md.
+  EOT
   type        = number
-  default     = 8
+  default     = 12
 }
 
 variable "hostname" {
