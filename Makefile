@@ -52,7 +52,7 @@ help:
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
-	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|bee|rpi3|rpi4|jetson|vps)"
+	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub)"
 	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1]"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
@@ -561,8 +561,8 @@ rotate-spoke-token:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|rpi4|vps [ENV=staging|prod] [BOOTSTRAP=1] [ASK_PASS=1]" && exit 1)
-	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [ASK_PASS=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	@if [ -n "$(BOOTSTRAP)" ]; then \
 		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \

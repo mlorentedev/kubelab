@@ -63,9 +63,11 @@ networking:
     ami_name_filter: "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
     ebs_size_gb: 8
     hostname: "aws1"
+    # Tailscale IP rotates on every Spot replacement. MagicDNS (ADR-025) is the
+    # stable identity — prefer tailscale_dns over tailscale_ip in IaC.
     tailscale_ip: "100.64.0.7"
+    tailscale_dns: "aws1.kubelab.internal"
     ssh_user: "deployer"
-    tailscale_dns: "aws1.kubelab.internal"  # MagicDNS (ADR-025) — IP-independent
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
   nodes:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
@@ -149,6 +151,17 @@ k3s:
   version: "v1.34.4+k3s1"
   api_port: 6443
   install_script_url: "https://get.k3s.io"
+  # kube-controller-manager terminated-pod-gc-threshold.
+  # K3s default 12500; hub.yaml overrides to 100 (low-RAM Spot).
+  terminated_pod_gc_threshold: 12500
+  # Embedded etcd snapshot retention. K3s default 5; hub.yaml overrides to 2
+  # for small-disk Spot instances. RELIAB-009 follow-up 2026-05-10.
+  etcd_snapshot_retention: 5
+  # Bundled Traefik HelmChartConfig. Hub disables it (Argo CD only, no ingress).
+  configure_traefik: true
+  # kubeconfig file mode written by K3s. Hub overrides to 0644 to match its
+  # cloud-init ExecStart (--write-kubeconfig-mode=644).
+  kubeconfig_mode: "0600"
   traefik:
     http_port: 80
     https_port: 443

@@ -10,6 +10,19 @@ k3s_kubeconfig_mode: "0600"
 k3s_node_labels: []
 k3s_resolv_conf: ""  # Override pod DNS (e.g. /run/systemd/resolve/resolv.conf for systemd-resolved hosts)
 
+# kube-controller-manager — terminated pod GC threshold.
+# K3s default 12500 → on low-RAM hubs (e.g. t4g.small) one OOM loop can leave
+# thousands of zombie pods saturating etcd. RELIAB-009 §9.3: hub.yaml overrides
+# to 100. Staging/prod keep the K3s default.
+k3s_terminated_pod_gc_threshold: 12500
+
+# K3s embedded etcd snapshot retention. Default 5; on small EBS volumes
+# (e.g. 8GB hub) each snapshot is ~30-40MB and aged ones bloat /var/lib/rancher.
+# RELIAB-009 follow-up (2026-05-10 incident): give the hub more disk headroom
+# so a §9.3 bulk-delete log spike doesn't trip the kubelet disk-pressure
+# threshold (85%). Staging/prod with larger volumes keep the K3s default.
+k3s_etcd_snapshot_retention: 5
+
 # Traefik HelmChartConfig — ports from SSOT (config.k3s.traefik.*)
 k3s_configure_traefik: true
 k3s_traefik_http_port: 80
