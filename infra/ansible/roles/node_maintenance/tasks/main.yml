@@ -39,6 +39,26 @@
   register: _journal
   changed_when: "'Deleted' in _journal.stdout"
 
+# --- Rotated rsyslog cleanup (RELIAB-009 follow-up) ---
+- name: Remove rotated rsyslog files older than {{ maintenance_rotated_log_retention_days }} days
+  shell: |
+    find /var/log -maxdepth 1 -type f \( \
+      -name 'syslog.*' -o \
+      -name '*.log.*' -o \
+      -name 'btmp.*' -o \
+      -name 'wtmp.*' -o \
+      -name 'lastlog.*' \
+    \) -mtime +{{ maintenance_rotated_log_retention_days }} -print -delete 2>/dev/null || true
+  register: _rotated_logs
+  changed_when: _rotated_logs.stdout_lines | length > 0
+
+- name: "Safety: truncate active /var/log/syslog if >{{ maintenance_active_log_max_mb }}MB"
+  shell: |
+    find /var/log -maxdepth 1 -name syslog -size +{{ maintenance_active_log_max_mb }}M -print -exec truncate -s 0 {} \;
+  register: _active_log
+  changed_when: _active_log.stdout_lines | length > 0
+  when: maintenance_active_log_max_mb | int > 0
+
 # --- Snap cleanup ---
 - name: Check snap refresh retention
   command: snap get system refresh.retain
