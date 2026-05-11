@@ -6,3 +6,14 @@ maintenance_install_timer: false
 maintenance_timer_schedule: "weekly"
 # Override for nodes with K3s but not in k3s_servers group (e.g. aws1 hub)
 maintenance_is_k3s_node: false
+
+# Rotated rsyslog files (syslog.1, syslog.2.gz, kern.log.1, auth.log.*…) older
+# than N days. logrotate keeps 7 by default; on low-disk nodes the spike from
+# a single bad day (e.g. K3s futex deadlock spamming syslog) can fill before
+# the nightly rotation. RELIAB-009 incident 2026-05-10: 201MB in syslog.1.
+maintenance_rotated_log_retention_days: 3
+
+# Safety net against runaway loggers BEFORE logrotate's nightly cron runs:
+# if the ACTIVE /var/log/syslog exceeds this size, truncate to 0. Set to 0
+# to disable. RELIAB-009 incident 2026-05-10.
+maintenance_active_log_max_mb: 100
