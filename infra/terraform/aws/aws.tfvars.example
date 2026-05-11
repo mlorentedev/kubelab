@@ -6,11 +6,13 @@
 # headscale preauthkeys create --user kubelab --reusable --expiration 365d
 tailscale_authkey = "REPLACE_WITH_HEADSCALE_PREAUTH_KEY"
 
-# Optional overrides (defaults from variables.tf are usually correct)
+# Optional overrides (defaults from variables.tf are usually correct).
+# Values shown below mirror the current variables.tf defaults — uncomment
+# only if you need to override locally.
 # aws_region      = "eu-central-1"
 # aws_profile     = "kubelab"
-# instance_type   = "t4g.micro"
-# ebs_size_gb     = 8
-# hostname        = "argo-hub"
+# instance_type   = "t4g.small"
+# ebs_size_gb     = 12
+# hostname        = "aws1"
 # k3s_version     = "v1.34.4+k3s1"
 # headscale_url   = "https://vpn.kubelab.live"
