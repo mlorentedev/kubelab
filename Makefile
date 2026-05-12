@@ -631,6 +631,35 @@ tf-aws-destroy:
 	@cd infra/terraform/aws && terraform destroy -var-file=aws.tfvars
 	@rm -f infra/terraform/aws/aws.tfvars
 
+# aws1 lifecycle wrappers — cancel the underlying Spot Persistent Request
+# BEFORE terraform destroy/replace. Without this, AWS keeps the request
+# active and relaunches a replacement instance after terraform terminates
+# the EC2, costing money and creating zombie nodes outside Terraform.
+# The Spot Request is orphaned from state since the AWS-003 refactor
+# (state rm aws_spot_instance_request + import aws_instance) — it lives
+# in AWS only and must be cancelled out-of-band.
+.PHONY: aws1-destroy aws1-replace _aws1-cancel-spot-request
+_aws1-cancel-spot-request:
+	@SIR=$$(cd infra/terraform/aws && terraform output -raw spot_request_id 2>/dev/null) && \
+		if [ -n "$$SIR" ] && [ "$$SIR" != "null" ]; then \
+			echo "Cancelling Spot Persistent Request $$SIR..." && \
+			aws ec2 cancel-spot-instance-requests \
+				--spot-instance-request-ids $$SIR \
+				--profile kubelab --region eu-central-1 \
+				--output text >/dev/null && \
+			echo "✓ Spot Request cancelled"; \
+		else \
+			echo "No spot_request_id in terraform state — skipping cancellation"; \
+		fi
+
+aws1-destroy: _aws1-cancel-spot-request tf-aws-destroy
+
+aws1-replace: _aws1-cancel-spot-request
+	@$(POETRY) run toolkit infra terraform aws-tfvars
+	@cd infra/terraform/aws && terraform apply -auto-approve -var-file=aws.tfvars -replace=aws_instance.argo_hub
+	@rm -f infra/terraform/aws/aws.tfvars
+	@echo "✓ aws1 replaced. Wait ~5 min for cloud-init, then run: make deploy-argocd"
+
 # Terraform DNS (Cloudflare) — SOPS-injected token
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
