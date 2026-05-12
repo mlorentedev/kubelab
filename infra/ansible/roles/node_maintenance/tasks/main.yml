@@ -4,6 +4,23 @@
 # Works on all node types: K3s, Docker, hub, gateway
 # =============================================================================
 
+# --- Forensic sanity check (ANSIBLE-023) ---
+# Persistent journald is configured by base_system role. Surface a warning if
+# /var/log/journal is missing so an unprovisioned node is noticed during the
+# next scheduled maintenance run.
+- name: Probe persistent journal directory
+  stat:
+    path: /var/log/journal
+  register: _journal_dir
+  changed_when: false
+
+- name: Warn if persistent journal directory is missing
+  debug:
+    msg: >-
+      WARNING: /var/log/journal missing — journald is volatile, crash forensics
+      will be lost on reboot. Re-run base_system role (ANSIBLE-023).
+  when: not _journal_dir.stat.exists
+
 # --- Pre-cleanup report ---
 - name: Report disk usage (before)
   command: df -h /

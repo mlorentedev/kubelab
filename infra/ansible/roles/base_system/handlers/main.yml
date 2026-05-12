@@ -6,3 +6,23 @@
 
 - name: apply netplan
   command: netplan apply
+
+- name: restart systemd-journald
+  systemd:
+    name: systemd-journald
+    state: restarted
+    daemon_reload: true
+
+# `restart systemd-journald` re-reads config but does NOT migrate the active
+# journal from /run/log/journal to /var/log/journal. journalctl --flush is the
+# canonical way to trigger that migration. Always notified together with the
+# restart handler so a config change actually takes effect end-to-end.
+- name: flush journald to persistent storage
+  command: journalctl --flush
+  changed_when: false
+
+- name: restart logrotate timer
+  systemd:
+    name: logrotate.timer
+    state: restarted
+    daemon_reload: true

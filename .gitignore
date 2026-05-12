@@ -121,5 +121,8 @@ apps/wiki/generated_docs
 # Regenerate with: make deploy-k8s ENV=<env> (or toolkit infra k8s deploy --env <env>)
 # Previously gitignored, unignored for ARGO-007.
 
+# Ansible runtime cache (collections/modules/roles installed locally)
+.ansible/
+
 # Security scanning
 .cache_ggshield

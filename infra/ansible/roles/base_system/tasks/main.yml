@@ -100,3 +100,104 @@
     path: "{{ deploy_base_dir }}"
     state: directory
     mode: "0755"
+
+# --- Persistent journald (ANSIBLE-023) -------------------------------------
+# rpi3 outage 2026-05-11 lost crash forensics because journald ran volatile.
+# Storage=auto is unreliable on hosts where /var/log/journal lacks a machine-id
+# subdir at journald start. Force persistent + cap size for low-disk nodes.
+- name: Ensure persistent journal directory exists
+  file:
+    path: /var/log/journal
+    state: directory
+    owner: root
+    group: systemd-journal
+    mode: "2755"
+  tags: [base, logging, journald]
+
+- name: Ensure journald drop-in dir exists
+  file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [base, logging, journald]
+
+# Filename prefix '99-' is intentional. On Raspberry Pi OS / Debian RPi images,
+# /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf ships
+# Storage=volatile by default (preserves SD card life). systemd merges drop-ins
+# lexicographically across /etc and /usr/lib, so '00-' would lose to '40-'.
+# '99-' wins. Trade-off accepted: we cap SystemMaxUse to 20M to bound SD wear.
+- name: Drop in kubelab journald config
+  template:
+    src: journald-kubelab.conf.j2
+    dest: /etc/systemd/journald.conf.d/99-kubelab.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - restart systemd-journald
+    - flush journald to persistent storage
+  tags: [base, logging, journald]
+
+- name: Remove legacy 00-kubelab.conf if present (renamed to 99-kubelab.conf)
+  file:
+    path: /etc/systemd/journald.conf.d/00-kubelab.conf
+    state: absent
+  notify:
+    - restart systemd-journald
+    - flush journald to persistent storage
+  tags: [base, logging, journald]
+
+# --- Logrotate cadence (ANSIBLE-023) ---------------------------------------
+# Default logrotate.timer runs daily. A burst between runs can fill the FS
+# even with per-file `size` directives, because those only evaluate when the
+# timer fires. Hourly + jitter keeps disk bounded across the fleet.
+- name: Ensure logrotate timer drop-in dir exists
+  file:
+    path: /etc/systemd/system/logrotate.timer.d
+    state: directory
+    mode: "0755"
+  tags: [base, logging, logrotate]
+
+- name: Drop in kubelab logrotate.timer override
+  template:
+    src: logrotate-timer-kubelab.conf.j2
+    dest: /etc/systemd/system/logrotate.timer.d/00-kubelab.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart logrotate timer
+  tags: [base, logging, logrotate]
+
+# --- rsyslog size cap (ANSIBLE-023) ----------------------------------------
+# Skipped on nodes where /etc/logrotate.d/rsyslog is absent or empty (Debian
+# trixie + rpi3 use journald-only). Only patches when a /var/log/syslog block
+# is actually present so logrotate has something to rotate.
+- name: Probe /etc/logrotate.d/rsyslog
+  stat:
+    path: /etc/logrotate.d/rsyslog
+  register: _rsyslog_logrotate
+  tags: [base, logging, logrotate]
+
+- name: Detect /var/log/syslog block in rsyslog logrotate config
+  command: grep -q '^/var/log/syslog$' /etc/logrotate.d/rsyslog
+  register: _rsyslog_has_syslog_block
+  changed_when: false
+  failed_when: false
+  when:
+    - _rsyslog_logrotate.stat.exists
+    - _rsyslog_logrotate.stat.size | int > 0
+  tags: [base, logging, logrotate]
+
+- name: Cap active /var/log/syslog at {{ rsyslog_logrotate_size_cap }}
+  lineinfile:
+    path: /etc/logrotate.d/rsyslog
+    insertafter: '^/var/log/syslog$'
+    line: "    size {{ rsyslog_logrotate_size_cap }}"
+    state: present
+  when:
+    - _rsyslog_logrotate.stat.exists
+    - _rsyslog_logrotate.stat.size | int > 0
+    - _rsyslog_has_syslog_block.rc | default(1) == 0
+  tags: [base, logging, logrotate]

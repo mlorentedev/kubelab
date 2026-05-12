@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+# kubelab logrotate.timer override (ANSIBLE-023)
+# Run logrotate hourly instead of daily so per-file `size` directives in
+# /etc/logrotate.d/* take effect near-real-time and bursts cannot fill disk
+# between cron runs.
+[Timer]
+OnCalendar=
+OnCalendar={{ logrotate_schedule }}
+RandomizedDelaySec={{ logrotate_randomized_delay }}
