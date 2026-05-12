@@ -29,3 +29,25 @@ firewall_allowed_ports:
   - { port: 41641, proto: udp }
 
 deploy_base_dir: "/opt"
+
+# --- Persistent journald + log retention bounds (ANSIBLE-023) ---
+# rpi3 outage 2026-05-11: journald ran volatile, crash forensics lost on power cycle.
+# These are explicit (do not rely on Storage=auto) and capped for low-disk nodes.
+journald_storage: "persistent"
+journald_system_max_use: "20M"
+journald_system_keep_free: "50M"
+journald_runtime_max_use: "10M"
+
+# --- Logrotate cadence (ANSIBLE-023) ---
+# Default logrotate.timer is daily — a burst between runs can fill the FS.
+# Hourly cadence means per-file `size` directives in /etc/logrotate.d/* trigger
+# near-real-time. RandomizedDelaySec spreads jitter across the fleet.
+logrotate_schedule: "hourly"
+logrotate_randomized_delay: "10m"
+
+# --- rsyslog active-file size cap (ANSIBLE-023) ---
+# Add `size <N>` to the /var/log/syslog block in /etc/logrotate.d/rsyslog so
+# logrotate rotates the active file before it crosses N (defense in depth on
+# top of node_maintenance maintenance_active_log_max_mb truncate).
+# Silently skipped on nodes where rsyslog is inactive (e.g. rpi3 trixie).
+rsyslog_logrotate_size_cap: "50M"
