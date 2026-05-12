@@ -131,18 +131,29 @@ resource "aws_key_pair" "deployer" {
 # ---------------------------------------------------------------------------
 # Spot Instance (Argo CD Hub)
 # ---------------------------------------------------------------------------
+#
+# Uses aws_instance + instance_market_options (modern Spot API via
+# RunInstances) instead of the legacy aws_spot_instance_request resource.
+# The legacy resource does NOT propagate root_block_device updates to the
+# underlying EBS volume (provider issue hashicorp/terraform-provider-aws#4252),
+# turning every EBS resize into a destroy+recreate. aws_instance handles
+# root_block_device updates correctly via ec2:ModifyVolume.
 
-resource "aws_spot_instance_request" "argo_hub" {
+resource "aws_instance" "argo_hub" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.deployer.key_name
   vpc_security_group_ids = [aws_security_group.argo_hub.id]
   subnet_id              = data.aws_subnets.default.ids[0]
 
-  # Spot config
-  spot_type                      = "persistent"
-  instance_interruption_behavior = "stop"
-  wait_for_fulfillment           = true
+  # Spot config — modern API, mirrors the previous persistent + stop behaviour.
+  instance_market_options {
+    market_type = "spot"
+    spot_options {
+      spot_instance_type             = "persistent"
+      instance_interruption_behavior = "stop"
+    }
+  }
 
   # EBS root volume
   root_block_device {
@@ -153,15 +164,15 @@ resource "aws_spot_instance_request" "argo_hub" {
 
   # cloud-init bootstrap
   user_data = templatefile("${path.module}/cloud-init.yml", {
-    hostname            = var.hostname
-    deploy_user         = var.deploy_user
-    ssh_public_key      = file(var.ssh_public_key_path)
-    timezone            = var.timezone
-    k3s_version         = var.k3s_version
-    headscale_url       = var.headscale_url
-    tailscale_authkey   = var.tailscale_authkey
-    tailscale_hostname  = var.hostname
-    headscale_api_key   = var.headscale_api_key
+    hostname           = var.hostname
+    deploy_user        = var.deploy_user
+    ssh_public_key     = file(var.ssh_public_key_path)
+    timezone           = var.timezone
+    k3s_version        = var.k3s_version
+    headscale_url      = var.headscale_url
+    tailscale_authkey  = var.tailscale_authkey
+    tailscale_hostname = var.hostname
+    headscale_api_key  = var.headscale_api_key
   })
 
   tags = {
@@ -174,10 +185,11 @@ resource "aws_spot_instance_request" "argo_hub" {
 
   # Cattle pattern (ADR-028): replacements are deliberate, not side effects.
   # data.aws_ami.ubuntu uses most_recent=true → fresh Canonical AMIs land every
-  # plan, which would otherwise destroy+recreate the Spot on routine ops like
-  # an EBS resize. user_data is ignored for the same reason: SOPS rotations
-  # (tailscale_authkey, headscale_api_key) must not force replacement.
-  # To re-roll the instance with a fresh AMI/user_data: `make aws1-replace`.
+  # plan, which would otherwise destroy+recreate the instance on routine ops
+  # like an EBS resize. user_data is ignored for the same reason: SOPS
+  # rotations (tailscale_authkey, headscale_api_key) must not force
+  # replacement. To re-roll the instance with a fresh AMI/user_data:
+  # `make aws1-replace`.
   lifecycle {
     ignore_changes = [ami, user_data]
   }
