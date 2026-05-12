@@ -171,4 +171,14 @@ resource "aws_spot_instance_request" "argo_hub" {
     ManagedBy   = "terraform"
     Role        = "argo-cd"
   }
+
+  # Cattle pattern (ADR-028): replacements are deliberate, not side effects.
+  # data.aws_ami.ubuntu uses most_recent=true → fresh Canonical AMIs land every
+  # plan, which would otherwise destroy+recreate the Spot on routine ops like
+  # an EBS resize. user_data is ignored for the same reason: SOPS rotations
+  # (tailscale_authkey, headscale_api_key) must not force replacement.
+  # To re-roll the instance with a fresh AMI/user_data: `make aws1-replace`.
+  lifecycle {
+    ignore_changes = [ami, user_data]
+  }
 }
