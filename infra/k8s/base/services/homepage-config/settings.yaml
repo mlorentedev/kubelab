@@ -94,6 +94,10 @@ layout:
     style: row
     columns: 3
     tab: Bookmarks
+  Analytics:
+    style: row
+    columns: 4
+    tab: Bookmarks
   Ops:
     style: row
     columns: 5
