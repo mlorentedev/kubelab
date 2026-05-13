@@ -190,12 +190,32 @@
     - _rsyslog_logrotate.stat.size | int > 0
   tags: [base, logging, logrotate]
 
-- name: Cap active /var/log/syslog at {{ rsyslog_logrotate_size_cap }}
-  lineinfile:
+# ANSIBLE-025: the previous lineinfile used `insertafter: ^/var/log/syslog$`,
+# which lands the directive BETWEEN the syslog path and the next entry — i.e.
+# outside the `{ ... }` block, where logrotate treats it as a second path and
+# silently ignores the cap. Ubuntu's stock rsyslog config groups 6 paths
+# (syslog, mail.log, kern.log, auth.log, user.log, cron.log) into a single
+# block, so the directive must land inside the shared `{ ... }`.
+- name: Scrub mis-inserted size line after /var/log/syslog path (ANSIBLE-023 bug)
+  ansible.builtin.replace:
     path: /etc/logrotate.d/rsyslog
-    insertafter: '^/var/log/syslog$'
-    line: "    size {{ rsyslog_logrotate_size_cap }}"
-    state: present
+    regexp: '(^/var/log/syslog\n)\s*size\s+\S+\n'
+    replace: '\1'
+  when:
+    - _rsyslog_logrotate.stat.exists
+    - _rsyslog_logrotate.stat.size | int > 0
+    - _rsyslog_has_syslog_block.rc | default(1) == 0
+  tags: [base, logging, logrotate]
+
+# Capture the full path-group that contains /var/log/syslog up to and
+# including the opening `{`, then inject the size cap immediately inside.
+# Negative lookahead `(?!\s*size\s)` makes the task idempotent — on re-run,
+# the next line after `{` is already `<ws>size <N>`, so no match.
+- name: Cap shared /var/log/syslog block at {{ rsyslog_logrotate_size_cap }}
+  ansible.builtin.replace:
+    path: /etc/logrotate.d/rsyslog
+    regexp: '(^(?:/var/log/\S+\n)*?/var/log/syslog\n(?:/var/log/\S+\n)*\{\n)(?!\s*size\s)'
+    replace: '\1    size {{ rsyslog_logrotate_size_cap }}\n'
   when:
     - _rsyslog_logrotate.stat.exists
     - _rsyslog_logrotate.stat.size | int > 0
