@@ -50,14 +50,15 @@ h1, .header-title, [class*="header"] h1 {
   border-radius: 0.25rem;
 }
 
-/* Diagram images */
+/* Diagram images (Kroki pre-rendered, data-URI SVG injected as <img>) */
+/* min-width: 600px removed 2026-05-12 — forced horizontal overflow on mobile */
 .services-group img[alt*="diagram"] {
   max-width: 100%;
-  min-width: 600px;
+  height: auto;
   cursor: zoom-in;
 }
 
-/* Fullscreen overlay */
+/* Fullscreen overlay (img today; svg kept for future inline-mermaid restore) */
 .diagram-overlay {
   position: fixed;
   top: 0; left: 0;
@@ -69,9 +70,13 @@ h1, .header-title, [class*="header"] h1 {
   z-index: 9999;
   cursor: zoom-out;
 }
-.diagram-overlay img {
-  max-width: 95vw; max-height: 95vh;
+.diagram-overlay img,
+.diagram-overlay svg {
+  max-width: 95vw;
+  max-height: 95vh;
   object-fit: contain;
+  width: auto;
+  height: auto;
 }
 
 /* ASCII tables: high contrast */
