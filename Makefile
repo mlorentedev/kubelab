@@ -561,30 +561,32 @@ rotate-spoke-token:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [ASK_PASS=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [ASK_PASS=1] [TAGS=tag1,tag2]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
+	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	@if [ -n "$(BOOTSTRAP)" ]; then \
 		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV) --bootstrap; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS); \
 	fi
 
 .PHONY: maintain
 maintain:
-	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
+	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER); \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER) $(_TAGS); \
 	else \
-		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER); \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS); \
 	fi
 
 .PHONY: deploy
