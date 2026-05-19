@@ -83,6 +83,7 @@ help:
 	@echo "  make restart-argocd            Restart Argo CD controller (clear cache)"
 	@echo "  make register-spoke ENV=x      Register spoke cluster in Argo CD hub"
 	@echo "  make unregister-spoke ENV=x    Remove spoke from Argo CD hub"
+	@echo "  make argo-set-revision APP=x REV=y  Patch Application targetRevision (preview/patch-back)"
 	@echo "  make check-spokes              Verify registered spokes are reachable"
 	@echo "  make rotate-spoke-token ENV=x  Rotate spoke SA token and re-register"
 	@echo ""
@@ -459,6 +460,14 @@ restart-argocd:
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd rollout restart statefulset argocd-application-controller
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd rollout status statefulset argocd-application-controller --timeout=120s
 	@echo "✓ Argo CD restarted (cache flushed)"
+
+# Patch an Argo CD Application's spec.source.targetRevision (preview-per-PR + patch-back).
+# Usage: make argo-set-revision APP=kubelab-staging REV=master
+.PHONY: argo-set-revision
+argo-set-revision:
+	@test -n "$(APP)" || (echo "Usage: make argo-set-revision APP=kubelab-staging REV=master" && exit 1)
+	@test -n "$(REV)" || (echo "Usage: make argo-set-revision APP=kubelab-staging REV=master" && exit 1)
+	@$(TOOLKIT) infra argo set-revision --app $(APP) --rev $(REV)
 
 # Trigger Argo CD sync for an Application
 # Usage: make sync-app APP=kubelab-staging
