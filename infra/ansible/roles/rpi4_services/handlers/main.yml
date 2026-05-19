@@ -1,0 +1,4 @@
+---
+- name: Restart rpi4 glances
+  command: docker compose -f {{ rpi4_services_deploy_dir }}/compose.yml up -d
+  changed_when: true
