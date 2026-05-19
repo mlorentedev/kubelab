@@ -13,6 +13,12 @@ from toolkit.config.constants import MESSAGES, NETWORK_DEFAULTS, PATH_STRUCTURES
 from toolkit.config.settings import get_settings, settings
 from toolkit.core.logging import console, logger
 from toolkit.features import command
+from toolkit.features.argo_manager import (
+    ApplicationNotFoundError,
+)
+from toolkit.features.argo_manager import (
+    set_revision as argo_set_revision_feature,
+)
 from toolkit.features.validation import (
     confirm_dangerous_operation,
     validate_environment_config,
@@ -48,10 +54,53 @@ backup_app = typer.Typer(
     no_args_is_help=True,
 )
 
+argo_app = typer.Typer(
+    name="argo",
+    help="Argo CD hub management (targetRevision swap, etc.)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
 app.add_typer(backup_app, name="backup")
+app.add_typer(argo_app, name="argo")
+
+
+@argo_app.command("set-revision")
+def argo_set_revision(
+    application: Annotated[str, typer.Option("--app", help="Argo CD Application name")],
+    revision: Annotated[str, typer.Option("--rev", help="Git revision (branch, tag, sha)")],
+    kubeconfig: Annotated[
+        str,
+        typer.Option(
+            "--kubeconfig",
+            help="Hub kubeconfig path (env: KUBECONFIG_HUB)",
+            envvar="KUBECONFIG_HUB",
+        ),
+    ] = os.path.expanduser("~/.kube/kubelab-hub-config"),
+    namespace: Annotated[str, typer.Option("--namespace", "-n")] = "argocd",
+) -> None:
+    """Patch an Argo CD Application's spec.source.targetRevision.
+
+    Encapsulates the preview-per-PR and patch-back operations so they
+    stop being manual kubectl calls.
+    """
+    logger.section(f"Argo set-revision — {application} → {revision}")
+    try:
+        result = argo_set_revision_feature(
+            app=application,
+            rev=revision,
+            kubeconfig=kubeconfig,
+            namespace=namespace,
+        )
+    except ApplicationNotFoundError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    logger.info(f"targetRevision: {result.old_revision} → {result.new_revision}")
+    logger.info(f"sync status: {result.sync_status}")
+    logger.success("Application patched")
 
 
 # =============================================================================
