@@ -1,0 +1,4 @@
+---
+# Default deploy dir for the shared Glances role.
+# Overridable per-node via the playbook role vars block.
+glances_deploy_dir: /opt/glances

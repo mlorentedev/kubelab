@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+# Shared Glances stack — bound to Tailscale IP (DASH-DT-014a)
+services:
+  glances:
+    image: {{ glances_image }}
+    container_name: glances
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ tailscale_ip }}:{{ glances_port }}:{{ glances_port }}"
+    environment:
+      - GLANCES_OPT=-w
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/os-release:/etc/os-release:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ glances_cpu_limit }}"
+          memory: "{{ glances_memory_limit }}"
+    pid: host

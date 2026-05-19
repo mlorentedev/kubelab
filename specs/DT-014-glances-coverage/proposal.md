@@ -7,59 +7,56 @@ tags: [spec, proposal, ansible, observability]
 template_version: "1.0"
 ---
 
-# DT-014-glances-coverage
+# DT-014-glances-coverage (PR3a)
 
-> Vault task: `DASH-DT-014`. Folder slug uses `DT-` prefix because `init-spec.sh` regex (`^[A-Z]+-\d+(-[a-z0-9-]+)?$`) does not accept the `DASH-DT-` two-hyphen form.
+> Vault task: `DASH-DT-014a`. Folder slug uses `DT-` prefix (init-spec.sh regex).
+> **Re-scoped 2026-05-18 evening** after audit invalidated original premise: VPS already had Glances `Up 7 weeks`, rpi4 had Glances `Up About an hour`. Original scope (deploy on VPS+rpi4) became redundant. New scope below.
 
 ## Why
 
-The Homepage cockpit (`infra/k8s/base/services/homepage-config/services.yaml`) configures Glances widgets pointing at `100.64.0.2:61208` (VPS), `100.64.0.10:61208` (rpi4), `100.64.0.11:61208` (ace1), and `100.64.0.8:61208` (jetson). None of these four endpoints exist — Glances is only deployed on rpi3, beelink, and ace2. Result: 4 of 7 dashboard widgets render no metrics. This ticket closes the VPS + rpi4 gap (both always-on per ADR-028); ace1 and jetson are out of scope (ace1 on-demand, jetson has legacy Python 2026-vintage that may not run Glances 4.5).
+The Homepage cockpit references Glances widgets for 7 nodes but only 4 currently have a Glances container running, deployed via 3 distinct patterns (beelink inline + tailscale_ip bind; rpi3 inline + 0.0.0.0 bind; VPS + rpi4 ad-hoc without Ansible). User goal: **homogenize all nodes onto one shared pattern before migrating to Prometheus + node_exporter** ([[DASH-DT-015]]).
 
-This is a **pragmatic incremental fix** — the durable enterprise answer is [[DASH-DT-015]] (migrate to Prometheus + node_exporter + Grafana). Glances is hobbyist tier; using it here matches the existing wiring and unblocks the dashboard today without committing to a sub-enterprise pattern long-term.
+This PR3a is the **first half of the homogenization initiative**: introduce a shared `glances` Ansible role and close the coverage gap on the two nodes still missing it (ace1 + ace2). PR3b ([[DASH-DT-014b]]) then migrates the four existing deployments onto the shared role.
 
 ## What
 
 After this PR:
 
-1. `curl http://100.64.0.2:61208/api/4/quicklook` returns HTTP 200 from any tailnet member.
-2. `curl http://100.64.0.10:61208/api/4/quicklook` returns HTTP 200 from any tailnet member.
-3. The Homepage cockpit VPS + RPi4 widgets render live CPU/memory/disk metrics.
-4. `make provision NODE=vps ENV=prod TAGS=monitoring` and `make provision NODE=rpi4 ENV=prod TAGS=monitoring` deploy/restart the Glances container idempotently.
-
-Implementation pattern: replicate the **beelink_services** approach (bind to `tailscale_ip` only, not 0.0.0.0). New Ansible roles `vps_services` and `rpi4_services` each owning a minimal `docker-compose.yml.j2` containing only the Glances service. Wired into the existing `provision-vps.yml` and `provision-rpi4.yml` playbooks.
+1. New role `infra/ansible/roles/glances/` exists with the beelink tailscale_ip-bind pattern.
+2. `provision-ace1.yml` deploys Glances on ace1 via the shared role.
+3. `provision-ace2.yml` deploys Glances on ace2 via the shared role.
+4. `ace2_services` role no longer carries the legacy `/opt/glances` cleanup tasks (those are obsolete now that we want Glances back on ace2 via the shared role).
+5. `curl http://100.64.0.11:61208/api/4/quicklook` and `curl http://100.64.0.5:61208/api/4/quicklook` both return 200.
+6. Homepage cockpit renders live ace1 + ace2 tiles.
 
 ## Out of scope
 
-- **ace1 and jetson Glances deployment** — ace1 is on-demand (low value for monitoring); jetson runs Ubuntu 18.04 with Python that may not satisfy Glances 4.5 requirements. Both deserve a separate ticket if needed.
-- **Migration to Prometheus + node_exporter** — tracked as [[DASH-DT-015]] (separate multi-PR initiative, 500-1000 LOC).
-- **Aligning rpi3 to the tailscale-bind pattern** — rpi3 currently binds 0.0.0.0 (less secure than beelink's tailscale-bind). Minor inconsistency, tracked separately rather than smuggled into this PR (Atomic PRs rule).
-- **Authelia / Traefik fronting for Glances** — would deviate from existing pattern (rpi3/beelink/ace2 all expose raw port via Tailscale IP). No Traefik IngressRoute, no Authelia middleware. Tailnet itself is the auth boundary.
-- **Glances version bump from 4.5.2** — keep parity with the 3 nodes already running it; bumps go in a separate ticket once we decide on a uniform version policy.
+- **Existing 4 Glances deployments** (beelink_services, rpi3_services, VPS ad-hoc, rpi4 ad-hoc) — tracked as [[DASH-DT-014b]] / PR3b. Touching them here would balloon scope past Atomic PR limit and create review fatigue.
+- **My earlier `vps_services` and `rpi4_services` ad-hoc roles** committed earlier in this branch (commit `88cea7a`). They stay until PR3b deletes them; they are functional (binding tailscale_ip on next deploy) but ad-hoc.
+- **jetson Glances** — [[DASH-DT-016]] (Ubuntu 18.04 + Python 3.6/3.7 compat investigation).
+- **Migration to Prometheus + node_exporter** — [[DASH-DT-015]] (separate initiative, 500-1000 LOC, multi-PR).
 
 ## Risks / open questions
 
-- **Atomic PR scope drift.** Estimated 170-200 LOC (2 new roles + 2 playbook updates). Above the 80 LOC the handoff anticipated, still under the 300 LOC Atomic PR limit. RESOLVED: keep both roles minimal (only Glances, no other services).
-- **Idempotency on VPS** where `traefik_vps` already templates a `docker-compose.yml.j2`. RESOLVED: new role uses a separate compose file (`/opt/glances/docker-compose.yml`) with its own project name (`glances`), not the Traefik stack. No collision.
-- **Rpi4 provisioning sequence.** `provision-rpi4.yml` already runs gateway/docker/tailscale/coredns roles. RESOLVED: append `rpi4_services` after `docker` (depends on Docker daemon) and after `tailscale` (depends on tailscale_ip being assigned).
-- **Pre-flight: are VPS + rpi4 both reachable and powered?** Required for the live smoke test. User to confirm before running deploy.
+- **ace2 `legacy_glances` cleanup tasks**: currently run on every provision and delete `/opt/glances/docker-compose.yml`. The new shared role uses the SAME path `/opt/glances`. RESOLVED: remove the cleanup tasks from `ace2_services` in this PR. They were added when Glances was removed per ADR-028 (ace2 = Ollama only); we are reversing that decision for observability coverage.
+- **ace1 has no `ace1_services` role** and `provision-ace1.yml` currently has no per-host services play. RESOLVED: add the shared `glances` role directly to the existing roles list in `provision-ace1.yml`.
+- **PR3b interim state**: between PR3a merge and PR3b merge, the repo has two patterns coexisting (shared role on ace1/ace2; inline + ad-hoc on the other 4). Acceptable for a few days; explicitly tracked in [[DASH-DT-014b]].
 
 ## Acceptance criteria
 
-- [ ] AC1: New role `infra/ansible/roles/vps_services/` exists with `defaults/`, `tasks/`, `templates/compose.yml.j2`; deploys only Glances; binds to `{{ vps.tailscale_ip }}:{{ glances_port }}:{{ glances_port }}`.
-- [ ] AC2: New role `infra/ansible/roles/rpi4_services/` exists with the same minimal structure; binds to `{{ rpi4.tailscale_ip }}:{{ glances_port }}:{{ glances_port }}`.
-- [ ] AC3: `infra/ansible/playbooks/provision-vps.yml` includes `vps_services` role with `tags: [services, monitoring]`.
-- [ ] AC4: `infra/ansible/playbooks/provision-rpi4.yml` includes `rpi4_services` role with `tags: [services, monitoring]`.
-- [ ] AC5: `yamllint` and `ansible-lint` clean on all new/modified files.
-- [ ] AC6: `ansible-playbook --check` dry-run succeeds for both `provision-vps` and `provision-rpi4`.
-- [ ] AC7: Live smoke: `curl -sf http://100.64.0.2:61208/api/4/quicklook | jq .cpu.total` returns a float (VPS Glances up).
-- [ ] AC8: Live smoke: `curl -sf http://100.64.0.10:61208/api/4/quicklook | jq .cpu.total` returns a float (rpi4 Glances up).
-- [ ] AC9: Homepage cockpit visually renders VPS + RPi4 tiles with live metrics (manual browser check).
+- [ ] AC1: `infra/ansible/roles/glances/` exists with `defaults/`, `tasks/`, `templates/compose.yml.j2`, `handlers/main.yml`. Tailscale_ip bind. Image from `config.apps.services.observability.glances.image`.
+- [ ] AC2: `provision-ace1.yml` invokes the shared `glances` role with tags `[services, monitoring]`.
+- [ ] AC3: `provision-ace2.yml` invokes the shared `glances` role with tags `[services, monitoring]`.
+- [ ] AC4: `ace2_services` no longer contains the 3 legacy `/opt/glances` cleanup tasks.
+- [ ] AC5: `yamllint` clean (warnings ≤ 130 char per CLAUDE.md rule); `ansible-lint` no NEW violations (matches existing repo-wide pattern, tracked as TOOL-009).
+- [ ] AC6: Live smoke: `make provision NODE=ace1 ENV=staging TAGS=monitoring` succeeds; `curl http://100.64.0.11:61208/api/4/quicklook` returns 200.
+- [ ] AC7: Live smoke: `make provision NODE=ace2 ENV=staging TAGS=monitoring` succeeds; `curl http://100.64.0.5:61208/api/4/quicklook` returns 200.
+- [ ] AC8: Homepage cockpit ace1 + ace2 tiles render live metrics (manual browser check).
 
 ## References
 
-- Vault: `10_projects/kubelab/11-tasks.md` (DASH-DT-014, DASH-DT-015).
-- Pattern source: `infra/ansible/roles/beelink_services/templates/compose.yml.j2` — tailscale-bind variant.
-- Counter-pattern: `infra/ansible/roles/rpi3_services/templates/compose.yml.j2` — 0.0.0.0 bind (less secure, NOT replicated here).
-- Dashboard wiring: `infra/k8s/base/services/homepage-config/services.yaml` lines 80-145.
-- ADR-028: Operational Topology (always-on vs on-demand classification).
-- Related memory: `feedback_no_guessing_infra.md`, `feedback_collaborative_style.md`.
+- Vault: `10_projects/kubelab/11-tasks.md` (DASH-DT-014a, DASH-DT-014b, DASH-DT-015, DASH-DT-016).
+- Pattern source: `infra/ansible/roles/beelink_services/templates/compose.yml.j2` — tailscale-bind pattern.
+- Dashboard wiring: `infra/k8s/base/services/homepage-config/services.yaml`.
+- ADR-028: Operational Topology.
+- Related memory: `feedback_verify_before_acting.md` (drove the audit that re-scoped this ticket), `feedback_collaborative_style.md`.
