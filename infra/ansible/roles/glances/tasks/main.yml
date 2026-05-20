@@ -26,6 +26,25 @@
     path: "{{ glances_deploy_dir }}/docker-compose.yml"
     state: absent
 
+# Belt-and-suspenders: even if a prior run already removed the compose file,
+# an orphan `glances` container (broken / restart loop / from an old
+# inline-services deploy with a different compose project, or a bare
+# `docker run` without any label) would still hold the container_name and
+# break `compose up`. Detect the compose project label first to keep this
+# step idempotent on healthy nodes managed by this role's own compose.
+- name: Detect compose project of any existing 'glances' container
+  command: docker inspect glances --format '{% raw %}{{index .Config.Labels "com.docker.compose.project"}}{% endraw %}'
+  register: _orphan_project
+  changed_when: false
+  failed_when: false
+
+- name: Force-remove orphan container (not managed by this role's compose)
+  command: docker rm -f glances
+  when:
+    - _orphan_project.rc == 0           # container exists
+    - _orphan_project.stdout != 'glances'  # not labeled with our project
+  changed_when: true
+
 - name: Create Glances deployment directory
   file:
     path: "{{ glances_deploy_dir }}"

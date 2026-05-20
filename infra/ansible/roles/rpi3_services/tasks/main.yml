@@ -1,9 +1,9 @@
 ---
-- name: Stop legacy containers (pre-Ansible ad-hoc deployments)
-  command: "docker rm -f {{ item }}"
-  loop:
-    - uptime-kuma
-    - glances
+# rpi3_services owns Uptime Kuma only since DASH-DT-014b. Glances was
+# extracted to the shared `roles/glances/` role (one role for all nodes,
+# tailscale_ip bind, more secure than the previous 0.0.0.0 bind here).
+- name: Stop legacy Uptime Kuma container (pre-Ansible ad-hoc deployment)
+  command: docker rm -f uptime-kuma
   failed_when: false
   changed_when: false
 
@@ -47,15 +47,6 @@
   retries: 5
   delay: 5
 
-- name: Verify Glances health
-  uri:
-    url: "http://localhost:{{ glances_port }}/api/4/quicklook"
-    method: GET
-    status_code: 200
-    timeout: 10
-  retries: 3
-  delay: 5
-
 - name: Bootstrap Uptime Kuma (setup admin + import monitors from seed)
   command: poetry run toolkit monitoring bootstrap
   args:
@@ -68,4 +59,4 @@
 
 - name: Report service status
   debug:
-    msg: "Uptime Kuma on port {{ uptime_kuma_port }}, Glances on port {{ glances_port }}"
+    msg: "Uptime Kuma on port {{ uptime_kuma_port }}"
