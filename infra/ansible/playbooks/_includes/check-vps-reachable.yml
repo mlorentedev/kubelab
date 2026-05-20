@@ -1,0 +1,23 @@
+---
+# Shared pre-flight check (SSOT-007). Included from every provision-*.yml
+# whose target needs the VPS for Headscale pre-auth key minting. Reads
+# `networking.vps.tailscale_ip` from common.yaml SSOT so the address is
+# not duplicated across playbooks.
+#
+# Usage (inside Play 0 tasks: block):
+#   - ansible.builtin.include_tasks: _includes/check-vps-reachable.yml
+
+- name: "Pre-flight: load SSOT for VPS endpoint"
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../config/values/common.yaml"
+    name: _ssot_common
+
+- name: "Pre-flight: verify VPS reachable (needed for Headscale pre-auth key)"
+  ansible.builtin.command: >-
+    ssh -o ConnectTimeout=5 -o BatchMode=yes
+    {{ _ssot_common.networking.vps.ssh_user }}@{{ _ssot_common.networking.vps.tailscale_ip }}
+    echo ok
+  delegate_to: localhost
+  changed_when: false
+  register: _vps_check
+  failed_when: _vps_check.rc != 0

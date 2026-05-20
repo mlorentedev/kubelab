@@ -38,10 +38,10 @@ ports:
     port: 80
     protocol: TCP
 endpoints:
-  # Staging uses LAN IP (ace1 and RPi4 on same LAN)
-  # Prod overlay patches to Tailscale IP (VPS reaches RPi4 via VPN)
+  # Pi-hole is staging-only (RPi4 unreachable from VPS when VPN is down,
+  # no public DNS). LAN IP works because ace1 and RPi4 share LAN.
   - addresses:
-      - "172.16.1.1"
+      - "172.16.1.1"   # = networking.nodes.rpi4.lan_ip
     conditions:
       ready: true
 ---

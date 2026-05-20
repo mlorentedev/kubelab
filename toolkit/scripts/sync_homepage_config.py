@@ -68,88 +68,53 @@ def get_traefik_cluster_ip() -> str:
 
 
 def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    """Build ordered node list with metadata for template rendering."""
-    nodes = config.get("networking", {}).get("nodes", {})
-    vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
-    node_defs = [
-        (
-            "ace1",
-            {
-                "ip": nodes.get("ace1", {}).get("tailscale_ip"),
-                "icon": "mdi-server",
-                "description": "Staging · 12GB",
-                "glances": True,
-            },
-        ),
-        (
-            "VPS",
-            {
-                "ip": vps.get("tailscale_ip"),
-                "icon": "mdi-cloud",
-                "description": "Prod · 8GB",
-                "glances": True,
-            },
-        ),
-        (
-            "RPi4",
-            {
-                "ip": nodes.get("rpi4", {}).get("tailscale_ip"),
-                "icon": "mdi-raspberry-pi",
-                "description": "DNS · 8GB",
-                "glances": True,
-            },
-        ),
-        (
-            "RPi3",
-            {
-                "ip": nodes.get("rpi3", {}).get("tailscale_ip"),
-                "icon": "mdi-raspberry-pi",
-                "description": "Monitor · 1GB",
-                "glances": True,
-            },
-        ),
-        (
-            "ace2",
-            {
-                "ip": nodes.get("ace2", {}).get("tailscale_ip"),
-                "icon": "mdi-server",
-                "description": "LLM · 12GB",
-                "glances": True,
-            },
-        ),
-        (
-            "aws1",
-            {
-                "ip": aws.get("tailscale_dns", aws.get("tailscale_ip")),
-                "icon": "mdi-cloud-outline",
-                "description": "Hub · t4g.small · 2vCPU · 2GB",
-                "glances": False,
-                "ping_url": "https://argo.kubelab.live",
-            },
-        ),
-        (
-            "Beelink",
-            {
-                "ip": nodes.get("beelink", {}).get("tailscale_ip"),
-                "icon": "mdi-desktop-tower",
-                "description": "Platform · N95 · 8GB (no Glances)",
-                "glances": False,
-                "ping_url": f"http://{nodes.get('beelink', {}).get('tailscale_ip')}:11434",
-            },
-        ),
-        (
-            "Jetson",
-            {
-                "ip": nodes.get("jetson", {}).get("tailscale_ip"),
-                "icon": "mdi-chip",
-                "description": "Pollex · ARM · 4GB",
-                "glances": True,
-                "glances_version": 4,
-            },
-        ),
-    ]
-    return node_defs
+    """Build ordered node list from common.yaml SSOT (SSOT-005).
+
+    Reads `networking.{nodes.*, vps, aws}` and renders one cockpit tile for
+    every entry that defines a `dashboard:` sub-block. Sorted by
+    `dashboard.order`. Display name comes from `dashboard.display_name`
+    (falls back to the key). Widget shape from `dashboard.widget`:
+    - `glances`: emits `glances=True` + optional `glances_version`
+    - `ping`:    emits `glances=False` + `ping_url` (required)
+    - `none`:    emits `glances=False` only (tile with description, no widget)
+    """
+    networking = config.get("networking") or {}
+
+    def _ip_for(entry: dict[str, Any]) -> str | None:
+        # aws prefers MagicDNS over IP (ADR-025); other entries use tailscale_ip.
+        return entry.get("tailscale_dns") or entry.get("tailscale_ip")
+
+    candidates: list[tuple[str, dict[str, Any], str | None]] = []
+    for name, node in (networking.get("nodes") or {}).items():
+        if node.get("dashboard"):
+            candidates.append((name, node["dashboard"], _ip_for(node)))
+    for singleton_key in ("vps", "aws"):
+        entry = networking.get(singleton_key) or {}
+        if entry.get("dashboard"):
+            candidates.append((singleton_key, entry["dashboard"], _ip_for(entry)))
+
+    candidates.sort(key=lambda c: c[1].get("order", 999))
+
+    out: list[tuple[str, dict[str, Any]]] = []
+    for key, dashboard, ip in candidates:
+        display_name = dashboard.get("display_name", key)
+        widget = dashboard.get("widget", "none")
+        tile: dict[str, Any] = {
+            "ip": ip,
+            "icon": dashboard["icon"],
+            "description": dashboard["description"],
+        }
+        if widget == "glances":
+            tile["glances"] = True
+            if "glances_version" in dashboard:
+                tile["glances_version"] = dashboard["glances_version"]
+        elif widget == "ping":
+            tile["glances"] = False
+            tile["ping_url"] = dashboard["ping_url"]
+        else:
+            tile["glances"] = False
+        out.append((display_name, tile))
+    return out
 
 
 def build_service_tables(
@@ -403,9 +368,11 @@ def build_service_tables(
 
 def build_mermaid_topology(config: dict[str, Any]) -> str:
     """Generate Mermaid topology diagram from common.yaml."""
-    n = config.get("networking", {}).get("nodes", {})
-    vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
+    networking = config.get("networking", {})
+    n = networking.get("nodes", {})
+    vps = networking.get("vps", {})
+    aws = networking.get("aws", {})
+    lan_cidr = networking.get("lan_cidr", "?")
     return f"""graph TB
   subgraph Internet
     CF[Cloudflare DNS+CDN]
@@ -415,7 +382,7 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
     VPS["VPS {vps.get("public_ip")} / {vps.get("tailscale_ip")}<br/>K3s Prod 8GB"]
     AWS1["aws1 {aws.get("tailscale_ip")}<br/>Argo CD Hub 1GB"]
   end
-  subgraph HomeLab["Home Lab 172.16.1.0/24"]
+  subgraph HomeLab["Home Lab {lan_cidr}"]
     ACE1["ace1 {n["ace1"]["lan_ip"]} / {n["ace1"]["tailscale_ip"]}<br/>K3s Staging 12GB"]
     ACE2["ace2 {n["ace2"]["lan_ip"]} / {n["ace2"]["tailscale_ip"]}<br/>Platform Node 12GB"]
     RPI4["RPi4 {n["rpi4"]["lan_ip"]} / {n["rpi4"]["tailscale_ip"]}<br/>DNS Gateway 8GB"]
@@ -510,9 +477,11 @@ MERMAID_REQUEST = """graph LR
 
 def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
     """Generate ASCII topology diagram from common.yaml."""
-    n = config.get("networking", {}).get("nodes", {})
-    vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
+    networking = config.get("networking", {})
+    n = networking.get("nodes", {})
+    vps = networking.get("vps", {})
+    aws = networking.get("aws", {})
+    lan_cidr = networking.get("lan_cidr", "?")
 
     vps_pub = vps.get("public_ip", "?")
     vps_ts = vps.get("tailscale_ip", "?")
@@ -537,7 +506,7 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
         f"  VPS        {vps_pub} / {vps_ts}  K3s Prod 8GB",
         f"  aws1       {aws_ts}              Argo CD Hub 1GB",
         "",
-        "HOME LAB (172.16.1.0/24)",
+        f"HOME LAB ({lan_cidr})",
         f"  ace1       {a1l} / {a1t}   K3s Staging 12GB",
         f"  ace2       {a2l} / {a2t}     Platform Node 12GB",
         f"  RPi4       {r4l} / {r4t}    DNS Gateway 8GB",

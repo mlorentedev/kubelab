@@ -1,7 +1,7 @@
 ---
 id: "DT-014-glances-coverage"
 type: spec
-status: draft
+status: archived
 created: "2026-05-18"
 tags: [spec, proposal, ansible, observability]
 template_version: "1.0"

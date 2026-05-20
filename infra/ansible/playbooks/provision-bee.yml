@@ -45,12 +45,8 @@
       command: curl -sf --connect-timeout 5 https://get.docker.com -o /dev/null
       changed_when: false
 
-    - name: Verify VPS reachable (needed for Headscale pre-auth key)
-      command: ssh -o ConnectTimeout=5 -o BatchMode=yes deployer@100.64.0.2 echo ok
-      delegate_to: localhost
-      changed_when: false
-      register: _vps_check
-      failed_when: _vps_check.rc != 0
+    - name: Pre-flight VPS reachability check (SSOT-shared)
+      ansible.builtin.include_tasks: _includes/check-vps-reachable.yml
 
 # ---------------------------------------------------------------------------
 # Play 1: Full provisioning
