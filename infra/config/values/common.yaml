@@ -146,7 +146,8 @@ networking:
       lan_interface: "enp1s0"
       ssh_user: "manu"
       ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: MinIO + GH Runner + Glances
-      # Ping target = Ollama port; Glances widget intentionally absent
+      # Ping target = Ollama (port resolved from apps.services.ai.ollama.default_port,
+      # host from this node's tailscale_ip). Glances widget intentionally absent
       # while the container is broken (tracked in DASH-DT-014b).
       dashboard:
         display_name: "Beelink"
@@ -154,7 +155,7 @@ networking:
         icon: mdi-desktop-tower
         description: "Platform · N95 · 8GB (no Glances)"
         widget: ping
-        ping_url: "http://100.64.0.3:11434"  # = networking.nodes.beelink.tailscale_ip + apps.services.ai.ollama.default_port
+        ping_target: ai.ollama   # dotted path under apps.services; script reads .default_port
     jetson:
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
