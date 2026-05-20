@@ -27,7 +27,15 @@
   hosts: kubelab-vps
   gather_facts: false
   become: false
-  tags: [always, preflight]   # always: run regardless of --tags filter; preflight: explicit invocation
+  # NOTE: unlike the other provision-*.yml Pre-flight Plays, this one is
+  # designed for ONE-TIME first K3s install on VPS (Pattern C migration).
+  # It asserts "K3s not yet installed" and "Docker Compose Traefik running"
+  # — assumptions that DO NOT hold once the cutover is complete. Therefore
+  # it intentionally does NOT carry the [always] tag that PR #181 added to
+  # the other Pre-flight Plays; keep [preflight] so it only runs on
+  # explicit `--tags preflight` invocation. Play 4 (Glances) has its own
+  # config-loading pre_tasks tagged [always], so monitoring runs work.
+  tags: [preflight]
 
   tasks:
     - name: Verify SSH + Python connectivity
