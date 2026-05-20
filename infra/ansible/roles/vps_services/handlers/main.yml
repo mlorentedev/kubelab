@@ -1,4 +1,0 @@
----
-- name: Restart vps glances
-  command: docker compose -f {{ vps_services_deploy_dir }}/compose.yml up -d
-  changed_when: true

@@ -121,13 +121,3 @@
           status: "{{ config.apps.services.observability.uptime_kuma.domain }}"
           ollama: "ollama.{{ config.global.base_domain }}"
           jetson: "jetson.{{ config.global.base_domain }}"
-
-    - role: ../roles/rpi4_services
-      tags: [services, monitoring]
-      vars:
-        restart_policy: "{{ config.global.restart_policy }}"
-        tailscale_ip: "{{ config.networking.nodes.rpi4.tailscale_ip }}"
-        glances_image: "{{ config.apps.services.observability.glances.image }}"
-        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
-        glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
-        glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
