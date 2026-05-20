@@ -27,7 +27,7 @@
   hosts: kubelab-vps
   gather_facts: false
   become: false
-  tags: [preflight]
+  tags: [always, preflight]   # always: run regardless of --tags filter; preflight: explicit invocation
 
   tasks:
     - name: Verify SSH + Python connectivity
