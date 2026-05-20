@@ -1,3 +1,6 @@
+# Ollama LLM API — ace2 bare metal (Docker, not K3s; ADR-027 / ADR-028).
+# SSOT: networking.nodes.ace2.tailscale_ip + apps.services.ai.ollama.default_port in common.yaml.
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -35,7 +38,7 @@ ports:
     protocol: TCP
 endpoints:
   - addresses:
-      - "100.64.0.5"
+      - "100.64.0.5"   # = networking.nodes.ace2.tailscale_ip
     conditions:
       ready: true
 ---
