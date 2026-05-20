@@ -74,15 +74,43 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     every entry that defines a `dashboard:` sub-block. Sorted by
     `dashboard.order`. Display name comes from `dashboard.display_name`
     (falls back to the key). Widget shape from `dashboard.widget`:
-    - `glances`: emits `glances=True` + optional `glances_version`
-    - `ping`:    emits `glances=False` + `ping_url` (required)
-    - `none`:    emits `glances=False` only (tile with description, no widget)
+    - `glances`: emits `glances=True` + optional `glances_version`.
+    - `ping`:    emits `glances=False` + `ping_url`. Source of the URL
+                 (mutually exclusive — exactly one required):
+                 * `ping_target: <dotted-path>` — references
+                   `apps.services.<path>` and builds
+                   `http://<node.tailscale_ip>:<svc.default_port>`. Keeps
+                   the host single-sourced from the node entry.
+                 * `ping_url: <full URL>` — used verbatim. Use only when
+                   the target is NOT the node's own IP (e.g. aws1 pings
+                   the public Argo CD domain).
+    - `none`:    emits `glances=False` only (tile with description, no widget).
     """
     networking = config.get("networking") or {}
+    apps_services = (config.get("apps") or {}).get("services") or {}
 
     def _ip_for(entry: dict[str, Any]) -> str | None:
         # aws prefers MagicDNS over IP (ADR-025); other entries use tailscale_ip.
         return entry.get("tailscale_dns") or entry.get("tailscale_ip")
+
+    def _resolve_ping_url(dashboard: dict[str, Any], ip: str | None, key: str) -> str:
+        target = dashboard.get("ping_target")
+        explicit = dashboard.get("ping_url")
+        if target and explicit:
+            raise ValueError(f"dashboard for {key!r}: ping_target and ping_url are mutually exclusive")
+        if target:
+            svc = resolve_path(apps_services, target)
+            if not isinstance(svc, dict):
+                raise ValueError(f"dashboard for {key!r}: ping_target {target!r} not found under apps.services")
+            port = svc.get("default_port")
+            if not port:
+                raise ValueError(f"dashboard for {key!r}: apps.services.{target} has no default_port")
+            if not ip:
+                raise ValueError(f"dashboard for {key!r}: ping_target requires the node to have an IP")
+            return f"http://{ip}:{port}"
+        if explicit:
+            return explicit
+        raise ValueError(f"dashboard for {key!r}: widget=ping requires ping_target or ping_url")
 
     candidates: list[tuple[str, dict[str, Any], str | None]] = []
     for name, node in (networking.get("nodes") or {}).items():
@@ -110,7 +138,7 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
                 tile["glances_version"] = dashboard["glances_version"]
         elif widget == "ping":
             tile["glances"] = False
-            tile["ping_url"] = dashboard["ping_url"]
+            tile["ping_url"] = _resolve_ping_url(dashboard, ip, key)
         else:
             tile["glances"] = False
         out.append((display_name, tile))
