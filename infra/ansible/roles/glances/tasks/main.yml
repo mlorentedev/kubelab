@@ -7,6 +7,25 @@
 # inline, ad-hoc on VPS+rpi4 (those are migrated in DASH-DT-014b / PR3b).
 # =============================================================================
 
+# Self-migration: stop any previous ad-hoc deploy whose compose file
+# is named `docker-compose.yml` (legacy) before templating ours as
+# `compose.yml`. The legacy container_name 'glances' would collide otherwise.
+- name: Detect legacy ad-hoc compose file
+  stat:
+    path: "{{ glances_deploy_dir }}/docker-compose.yml"
+  register: _legacy_glances_compose
+
+- name: Stop legacy ad-hoc Glances stack
+  command: docker compose -f {{ glances_deploy_dir }}/docker-compose.yml down --remove-orphans
+  when: _legacy_glances_compose.stat.exists
+  register: _legacy_down
+  changed_when: "'Stopped' in _legacy_down.stderr or 'Removed' in _legacy_down.stderr"
+
+- name: Remove legacy ad-hoc compose file
+  file:
+    path: "{{ glances_deploy_dir }}/docker-compose.yml"
+    state: absent
+
 - name: Create Glances deployment directory
   file:
     path: "{{ glances_deploy_dir }}"

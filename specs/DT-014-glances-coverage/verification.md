@@ -1,42 +1,48 @@
 ---
-tags: [spec, verification, templates]
+tags: [spec, verification, ansible, observability]
 created: "2026-05-13"
+updated: "2026-05-19"
 ---
 
-# Verification - DT-014-glances-coverage
+# Verification - DT-014-glances-coverage (PR3a)
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+- [x] **AC1** Shared role exists -> `infra/ansible/roles/glances/{defaults,handlers,tasks,templates}` in commit `090e9de`. Tailscale-bind compose template, image from `config.apps.services.observability.glances.image`.
+- [x] **AC2** `provision-ace1.yml` invokes shared role -> playbook role block with `tags: [monitoring, glances]`, vars from `config.networking.nodes.ace1.tailscale_ip` and `config.apps.services.observability.glances.*`.
+- [x] **AC3** `provision-ace2.yml` invokes shared role -> same pattern, vars from `ace2.tailscale_ip`.
+- [x] **AC4** `ace2_services` cleanup removed -> 3 tasks (Check legacy compose, Stop legacy, Remove `/opt/glances` paths from loop) deleted from `roles/ace2_services/tasks/main.yml`.
+- [x] **AC5** Lint clean -> `yamllint` only reports pre-existing line-length warnings consistent with provision-bee.yml:177 and provision-rpi4.yml:133 (same `glances_memory_limit` line). `ansible-playbook --syntax-check` passes both playbooks. `ansible-lint` not re-run; TOOL-009 owns repo-wide cleanup.
+- [x] **AC6** ace1 smoke -> `make provision NODE=ace1 ENV=staging TAGS=monitoring` first run `ok=13 changed=3` (template, container start, restart handler). `curl http://100.64.0.11:61208/api/4/quicklook` -> HTTP 200. Bind verified `100.64.0.11:61208` (tailscale_ip, NOT 0.0.0.0).
+- [x] **AC7** ace2 smoke -> `make provision NODE=ace2 ENV=staging TAGS=monitoring` first run `ok=13 changed=4` (dir create + template + start + handler). `curl http://100.64.0.5:61208/api/4/quicklook` -> HTTP 200. Bind verified `100.64.0.5:61208`.
+- [ ] **AC8** Homepage cockpit tiles -> not verified in this session (requires browser + auth). Cockpit consumes the `/api/4/quicklook` endpoints, both now HTTP 200. Visual check deferred to user merge review.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+**Idempotency**: second `provision NODE=ace1` and `NODE=ace2` runs report `changed=0` for the glances role -> confirms no spurious changes on re-apply.
+
+**Self-migration evidence**: ace1 had a previous ad-hoc deploy from outside git (`/opt/glances/docker-compose.yml`, container `Up 5 minutes` at audit time, bind `0.0.0.0:61208`). New role detected and removed it before deploying its own `/opt/glances/compose.yml` with tailscale-bind. Container_name `glances` reclaimed cleanly via `docker compose down --remove-orphans`.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: no unit tests applicable (Ansible role + playbook wiring).
+- Manual smoke test: see AC6/AC7 above. Both nodes return HTTP 200 from `/api/4/quicklook`. Bindings are tailscale_ip-scoped.
+- No regressions in existing test suite: yamllint warnings stable (pre-existing line-length only, no new violations). Idempotency verified.
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- **Self-migration logic added to the role** (8 LOC). Detects legacy `docker-compose.yml` from prior ad-hoc deploys, runs `docker compose down --remove-orphans`, and removes the file before templating the new `compose.yml`. Added in this PR because ace1 turned out to have an out-of-git ad-hoc deploy; also pre-positions the role for PR3b which will encounter the same situation on 4 more nodes.
+- **`tags: [always]` added to 3 pre_tasks in provision-ace1.yml and provision-ace2.yml** (config load + env overrides + merge config). Without this, `--tags monitoring` skipped the pre_tasks and `config` was undefined when the role ran. This is the standard Ansible pattern for SSOT-loading pre_tasks; benefits all future tag-selective deploys, not just glances.
+- **ace1 ad-hoc cleanup via role, NOT manual SSH**: rejected the option of `ssh + docker rm` (violates `feedback_never_adhoc_commands`). The role's self-migration step handles it idempotently.
+- **Scope kept as PR3a despite ace1 state change**: rejected re-scoping to "ace2 only" because the legacy compose on ace1 needed cleanup anyway and the role's self-migration code is the right place for it.
 
 ## Promotion candidates
 
-Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
-
-- [ ] Lesson for `<area>/90-lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for `<area>/30-architecture/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] **Lesson** for `10_projects/kubelab/lessons.md`: "Ansible pre_tasks that load SSOT config MUST be tagged `[always]` for tag-selective provisioning to work" - non-obvious failure mode; surfaced when running `--tags monitoring` against ace1/ace2.
+- [ ] ADR-worthy decision: no - all decisions are tactical, not architectural.
+- [ ] New pattern for `00_meta/patterns/`: no - self-migrating role is interesting but specific to a single migration; not yet recurring.
 
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/DT-014-glances-coverage/` -> `specs/archive/DT-014-glances-coverage/`
 - [ ] Backlog entry in vault `11-tasks.md` ticked with PR link
-- [ ] Promotions above executed (if any)
+- [ ] Promotion above (lesson) executed in vault

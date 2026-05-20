@@ -17,26 +17,12 @@
   changed_when: "'Stopped' in _legacy_down.stderr or 'Removed' in _legacy_down.stderr"
   tags: [cleanup]
 
-- name: Check if legacy Glances compose exists
-  stat:
-    path: /opt/glances/docker-compose.yml
-  register: _legacy_glances
-
-- name: Stop legacy Glances
-  command: docker compose -f /opt/glances/docker-compose.yml down --remove-orphans
-  when: _legacy_glances.stat.exists
-  register: _glances_down
-  changed_when: "'Stopped' in _glances_down.stderr or 'Removed' in _glances_down.stderr"
-  tags: [cleanup]
-
 - name: Remove legacy compose files
   file:
     path: "{{ item }}"
     state: absent
   loop:
     - /opt/kubelab/compose.yml
-    - /opt/glances/docker-compose.yml
-    - /opt/glances
   tags: [cleanup]
 
 # --- Deploy Ollama ---
