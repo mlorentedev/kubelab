@@ -15,7 +15,7 @@ updated: "2026-05-19"
 - [x] **AC5** Lint clean -> `yamllint` only reports pre-existing line-length warnings consistent with provision-bee.yml:177 and provision-rpi4.yml:133 (same `glances_memory_limit` line). `ansible-playbook --syntax-check` passes both playbooks. `ansible-lint` not re-run; TOOL-009 owns repo-wide cleanup.
 - [x] **AC6** ace1 smoke -> `make provision NODE=ace1 ENV=staging TAGS=monitoring` first run `ok=13 changed=3` (template, container start, restart handler). `curl http://100.64.0.11:61208/api/4/quicklook` -> HTTP 200. Bind verified `100.64.0.11:61208` (tailscale_ip, NOT 0.0.0.0).
 - [x] **AC7** ace2 smoke -> `make provision NODE=ace2 ENV=staging TAGS=monitoring` first run `ok=13 changed=4` (dir create + template + start + handler). `curl http://100.64.0.5:61208/api/4/quicklook` -> HTTP 200. Bind verified `100.64.0.5:61208`.
-- [ ] **AC8** Homepage cockpit tiles -> not verified in this session (requires browser + auth). Cockpit consumes the `/api/4/quicklook` endpoints, both now HTTP 200. Visual check deferred to user merge review.
+- [x] **AC8** Homepage cockpit tiles -> verified 2026-05-19 by user post-merge: ace1 and ace2 tiles render live Glances metrics. Other tiles (VPS, RPi4, RPi3, Jetson) also live. aws1 (no widget by design, ADR-033) and Beelink (widget intentionally absent due to pre-existing broken container, tracked in DASH-DT-014b sub-bullet) excluded from PR3a scope.
 
 **Idempotency**: second `provision NODE=ace1` and `NODE=ace2` runs report `changed=0` for the glances role -> confirms no spurious changes on re-apply.
 
@@ -37,12 +37,18 @@ updated: "2026-05-19"
 ## Promotion candidates
 
 - [x] **Lesson** for `10_projects/kubelab/lessons.md`: "Ansible pre_tasks that load SSOT config MUST be tagged `[always]` for tag-selective provisioning to work" - non-obvious failure mode; surfaced when running `--tags monitoring` against ace1/ace2.
-- [ ] ADR-worthy decision: no - all decisions are tactical, not architectural.
-- [ ] New pattern for `00_meta/patterns/`: no - self-migrating role is interesting but specific to a single migration; not yet recurring.
+- [x] ADR-worthy decision: ADR-033 `no-glances-on-hub-until-reliab-009` created during archive (decision surfaced when user asked why aws1 has no widget).
+- [x] New pattern for `00_meta/patterns/`: `pattern-self-migrating-role` created — the legacy-cleanup-as-first-task approach used in `roles/glances/` is general enough to recur in future migrations (PR3b is the immediate second occurrence). Promoted during archive.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/DT-014-glances-coverage/` -> `specs/archive/DT-014-glances-coverage/`
-- [ ] Backlog entry in vault `11-tasks.md` ticked with PR link
-- [ ] Promotion above (lesson) executed in vault
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/DT-014-glances-coverage/` -> `specs/archive/DT-014-glances-coverage/`
+- [x] Backlog entry in vault `11-tasks.md` ticked with PR #175 link
+- [x] Promotions executed in vault: 2 lessons (`pre_tasks tags:[always]` + `revert for atomic PR scope`), 1 ADR (ADR-033), 1 pattern (`pattern-self-migrating-role`)
+
+## Spillover (created during archive, separately tracked)
+
+- **DASH-DT-014b**: expanded with Beelink Homepage cockpit widget sub-bullet (cockpit shows `(no Glances)` but Glances container exists, currently broken).
+- **SSOT-005..008**: 4 antipattern tickets created when user audited "hardcoded IPs in manifests" post-merge.
+- **Beelink Glances broken**: container in restart loop (RestartCount=48, ExitCode=1). Compose file references a `docker-compose.yml.j2` template that never existed in git — same mystery as the ace1 ad-hoc deploy cleaned in PR3a. User self-assigned debug + fix.
