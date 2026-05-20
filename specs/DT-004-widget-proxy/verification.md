@@ -1,0 +1,42 @@
+---
+tags: [spec, verification, templates]
+created: "2026-05-13"
+---
+
+# Verification - DT-004-widget-proxy
+
+## Evidence
+
+Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+
+- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
+- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
+- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+
+## Test status
+
+- Test suite: `<command> -> <output / coverage %>`
+- Manual smoke test: what was exercised, what was observed
+- No regressions in existing test suite: yes / no (if no, document)
+
+## Decisions made during implementation
+
+Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
+
+-
+-
+
+## Promotion candidates
+
+Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
+
+- [ ] Lesson for `<area>/90-lessons.md`? <yes / no - one line of what>
+- [ ] ADR-worthy decision for `<area>/30-architecture/adr-XXX.md`? <yes / no - one line of what>
+- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+
+## Archive checklist
+
+- [ ] `proposal.md` frontmatter set to `status: archived`
+- [ ] Folder moved: `specs/DT-004-widget-proxy/` -> `specs/archive/DT-004-widget-proxy/`
+- [ ] Backlog entry in vault `11-tasks.md` ticked with PR link
+- [ ] Promotions above executed (if any)
