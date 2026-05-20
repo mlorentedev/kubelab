@@ -403,9 +403,11 @@ def build_service_tables(
 
 def build_mermaid_topology(config: dict[str, Any]) -> str:
     """Generate Mermaid topology diagram from common.yaml."""
-    n = config.get("networking", {}).get("nodes", {})
-    vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
+    networking = config.get("networking", {})
+    n = networking.get("nodes", {})
+    vps = networking.get("vps", {})
+    aws = networking.get("aws", {})
+    lan_cidr = networking.get("lan_cidr", "?")
     return f"""graph TB
   subgraph Internet
     CF[Cloudflare DNS+CDN]
@@ -415,7 +417,7 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
     VPS["VPS {vps.get("public_ip")} / {vps.get("tailscale_ip")}<br/>K3s Prod 8GB"]
     AWS1["aws1 {aws.get("tailscale_ip")}<br/>Argo CD Hub 1GB"]
   end
-  subgraph HomeLab["Home Lab 172.16.1.0/24"]
+  subgraph HomeLab["Home Lab {lan_cidr}"]
     ACE1["ace1 {n["ace1"]["lan_ip"]} / {n["ace1"]["tailscale_ip"]}<br/>K3s Staging 12GB"]
     ACE2["ace2 {n["ace2"]["lan_ip"]} / {n["ace2"]["tailscale_ip"]}<br/>Platform Node 12GB"]
     RPI4["RPi4 {n["rpi4"]["lan_ip"]} / {n["rpi4"]["tailscale_ip"]}<br/>DNS Gateway 8GB"]
@@ -510,9 +512,11 @@ MERMAID_REQUEST = """graph LR
 
 def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
     """Generate ASCII topology diagram from common.yaml."""
-    n = config.get("networking", {}).get("nodes", {})
-    vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
+    networking = config.get("networking", {})
+    n = networking.get("nodes", {})
+    vps = networking.get("vps", {})
+    aws = networking.get("aws", {})
+    lan_cidr = networking.get("lan_cidr", "?")
 
     vps_pub = vps.get("public_ip", "?")
     vps_ts = vps.get("tailscale_ip", "?")
@@ -537,7 +541,7 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
         f"  VPS        {vps_pub} / {vps_ts}  K3s Prod 8GB",
         f"  aws1       {aws_ts}              Argo CD Hub 1GB",
         "",
-        "HOME LAB (172.16.1.0/24)",
+        f"HOME LAB ({lan_cidr})",
         f"  ace1       {a1l} / {a1t}   K3s Staging 12GB",
         f"  ace2       {a2l} / {a2t}     Platform Node 12GB",
         f"  RPi4       {r4l} / {r4t}    DNS Gateway 8GB",
