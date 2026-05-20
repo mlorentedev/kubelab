@@ -347,3 +347,50 @@
       become: false
       register: _kubeconfig
       failed_when: not _kubeconfig.stat.exists
+
+# ---------------------------------------------------------------------------
+# Play 4: Observability — Glances agent on VPS host
+# ---------------------------------------------------------------------------
+- name: "Deploy Glances on VPS host"
+  hosts: kubelab-vps
+  become: true
+  gather_facts: true
+  tags: [monitoring, glances]
+
+  vars:
+    deploy_env: prod
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+      tags: [always]
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+      tags: [always]
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
+
+    - name: Allow Glances port on Tailscale interface
+      community.general.ufw:
+        rule: allow
+        interface_in: tailscale0
+        port: "{{ config.apps.services.observability.glances.default_port | string }}"
+        proto: tcp
+
+  roles:
+    - role: ../roles/glances
+      vars:
+        restart_policy: "{{ config.global.restart_policy }}"
+        tailscale_ip: "{{ config.networking.vps.tailscale_ip }}"
+        glances_image: "{{ config.apps.services.observability.glances.image }}"
+        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
+        glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
+        glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"

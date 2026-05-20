@@ -67,15 +67,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -170,7 +173,12 @@
         runner_labels: "{{ config.apps.services.automation.github_runner.labels }}"
         runner_cpu_limit: "{{ config.apps.services.automation.github_runner.resources.cpu_limit }}"
         runner_memory_limit: "{{ config.apps.services.automation.github_runner.resources.memory_limit }}"
-        # Glances
+
+    - role: ../roles/glances
+      tags: [monitoring, glances]
+      vars:
+        restart_policy: "{{ config.global.restart_policy }}"
+        tailscale_ip: "{{ config.networking.nodes.beelink.tailscale_ip }}"
         glances_image: "{{ config.apps.services.observability.glances.image }}"
         glances_port: "{{ config.apps.services.observability.glances.default_port }}"
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"

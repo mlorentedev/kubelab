@@ -1,7 +1,8 @@
 ---
 # =============================================================================
-# Beelink Services — MinIO + GH Runner + Glances (ADR-028: on-demand platform)
-# Replaces bare-metal Ollama (moved to ace2 via ace2_services)
+# Beelink Services — MinIO + GH Runner (ADR-028: on-demand platform).
+# Glances was extracted to the shared `roles/glances/` role (DASH-DT-014b).
+# Replaces bare-metal Ollama (moved to ace2 via ace2_services).
 # =============================================================================
 
 # --- Cleanup legacy Ollama (bare metal) ---
@@ -120,15 +121,6 @@
   retries: 5
   delay: 5
 
-- name: Verify Glances health
-  uri:
-    url: "http://{{ tailscale_ip }}:{{ glances_port }}/api/4/quicklook"
-    method: GET
-    status_code: 200
-    timeout: 10
-  retries: 3
-  delay: 5
-
 - name: Verify GitHub Runner container is running
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
   register: _runner_state
@@ -139,4 +131,4 @@
 
 - name: Report service status
   debug:
-    msg: "MinIO on {{ minio_api_port }}/{{ minio_console_port }}, Glances on {{ glances_port }}, GH Runner running"
+    msg: "MinIO on {{ minio_api_port }}/{{ minio_console_port }}, GH Runner running"

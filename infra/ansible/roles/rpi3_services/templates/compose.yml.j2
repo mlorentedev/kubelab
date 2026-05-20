@@ -1,5 +1,6 @@
 # {{ ansible_managed }}
-# RPi3 Monitoring Services — Uptime Kuma + Glances
+# RPi3 Monitoring Services — Uptime Kuma. Glances extracted to the shared
+# `roles/glances/` role (DASH-DT-014b) — invoked from provision-rpi3.yml.
 services:
   uptime-kuma:
     image: {{ uptime_kuma_image }}
@@ -15,19 +16,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-  glances:
-    image: nicolargo/glances:4.5.2-full
-    container_name: glances
-    restart: {{ restart_policy }}
-    ports:
-      - "{{ glances_port }}:61208"
-    environment:
-      - GLANCES_OPT=-w
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /etc/os-release:/etc/os-release:ro
-    pid: host
 
 volumes:
   uptime-kuma-data:

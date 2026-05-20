@@ -52,23 +52,9 @@ services:
     networks:
       - kubelab
 
-  glances:
-    image: {{ glances_image }}
-    container_name: glances
-    restart: {{ restart_policy }}
-    ports:
-      - "{{ tailscale_ip }}:{{ glances_port }}:{{ glances_port }}"
-    environment:
-      - GLANCES_OPT=-w
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /etc/os-release:/etc/os-release:ro
-    deploy:
-      resources:
-        limits:
-          cpus: "{{ glances_cpu_limit }}"
-          memory: "{{ glances_memory_limit }}"
-    pid: host
+# Glances extracted to the shared `roles/glances/` role (DASH-DT-014b).
+# Invoked from provision-bee.yml separately so this role only owns MinIO
+# and the GitHub Actions Runner.
 
 volumes:
   runner_data:

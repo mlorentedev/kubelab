@@ -51,15 +51,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -98,9 +101,18 @@
         headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
 
     - role: ../roles/rpi3_services
-      tags: [services, monitoring]
+      tags: [services, uptime_kuma]
       vars:
         uptime_kuma_image: "{{ config.apps.services.observability.uptime_kuma.image }}"
         uptime_kuma_port: "{{ config.apps.services.observability.uptime_kuma.default_port }}"
-        glances_port: 61208
         restart_policy: "{{ config.global.restart_policy }}"
+
+    - role: ../roles/glances
+      tags: [monitoring, glances]
+      vars:
+        restart_policy: "{{ config.global.restart_policy }}"
+        tailscale_ip: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
+        glances_image: "{{ config.apps.services.observability.glances.image }}"
+        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
+        glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
+        glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
