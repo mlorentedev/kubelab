@@ -127,8 +127,12 @@
         ping: https://argo.kubelab.live
     - "Beelink":
         icon: mdi-desktop-tower
-        description: "Platform · N95 · 8GB (no Glances)"
-        ping: http://100.64.0.3:11434
+        description: "Platform · N95 · 8GB"
+        widget:
+          type: glances
+          url: http://100.64.0.3:61208
+          version: 4
+          metric: info
     - "Jetson":
         icon: mdi-chip
         description: "Pollex · ARM · 4GB"
