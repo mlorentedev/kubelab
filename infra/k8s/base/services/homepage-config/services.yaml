@@ -48,7 +48,7 @@
             Content-Type: application/json
           requestBody:
             # yamllint disable-line rule:line-length
-            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-05-12"}) { sum { requests threats } } } } }'
+            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-05-19"}) { sum { requests threats } } } } }'
           mappings:
             - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.requests
               label: Requests

@@ -68,88 +68,53 @@ def get_traefik_cluster_ip() -> str:
 
 
 def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    """Build ordered node list with metadata for template rendering."""
-    nodes = config.get("networking", {}).get("nodes", {})
-    vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
-    node_defs = [
-        (
-            "ace1",
-            {
-                "ip": nodes.get("ace1", {}).get("tailscale_ip"),
-                "icon": "mdi-server",
-                "description": "Staging · 12GB",
-                "glances": True,
-            },
-        ),
-        (
-            "VPS",
-            {
-                "ip": vps.get("tailscale_ip"),
-                "icon": "mdi-cloud",
-                "description": "Prod · 8GB",
-                "glances": True,
-            },
-        ),
-        (
-            "RPi4",
-            {
-                "ip": nodes.get("rpi4", {}).get("tailscale_ip"),
-                "icon": "mdi-raspberry-pi",
-                "description": "DNS · 8GB",
-                "glances": True,
-            },
-        ),
-        (
-            "RPi3",
-            {
-                "ip": nodes.get("rpi3", {}).get("tailscale_ip"),
-                "icon": "mdi-raspberry-pi",
-                "description": "Monitor · 1GB",
-                "glances": True,
-            },
-        ),
-        (
-            "ace2",
-            {
-                "ip": nodes.get("ace2", {}).get("tailscale_ip"),
-                "icon": "mdi-server",
-                "description": "LLM · 12GB",
-                "glances": True,
-            },
-        ),
-        (
-            "aws1",
-            {
-                "ip": aws.get("tailscale_dns", aws.get("tailscale_ip")),
-                "icon": "mdi-cloud-outline",
-                "description": "Hub · t4g.small · 2vCPU · 2GB",
-                "glances": False,
-                "ping_url": "https://argo.kubelab.live",
-            },
-        ),
-        (
-            "Beelink",
-            {
-                "ip": nodes.get("beelink", {}).get("tailscale_ip"),
-                "icon": "mdi-desktop-tower",
-                "description": "Platform · N95 · 8GB (no Glances)",
-                "glances": False,
-                "ping_url": f"http://{nodes.get('beelink', {}).get('tailscale_ip')}:11434",
-            },
-        ),
-        (
-            "Jetson",
-            {
-                "ip": nodes.get("jetson", {}).get("tailscale_ip"),
-                "icon": "mdi-chip",
-                "description": "Pollex · ARM · 4GB",
-                "glances": True,
-                "glances_version": 4,
-            },
-        ),
-    ]
-    return node_defs
+    """Build ordered node list from common.yaml SSOT (SSOT-005).
+
+    Reads `networking.{nodes.*, vps, aws}` and renders one cockpit tile for
+    every entry that defines a `dashboard:` sub-block. Sorted by
+    `dashboard.order`. Display name comes from `dashboard.display_name`
+    (falls back to the key). Widget shape from `dashboard.widget`:
+    - `glances`: emits `glances=True` + optional `glances_version`
+    - `ping`:    emits `glances=False` + `ping_url` (required)
+    - `none`:    emits `glances=False` only (tile with description, no widget)
+    """
+    networking = config.get("networking") or {}
+
+    def _ip_for(entry: dict[str, Any]) -> str | None:
+        # aws prefers MagicDNS over IP (ADR-025); other entries use tailscale_ip.
+        return entry.get("tailscale_dns") or entry.get("tailscale_ip")
+
+    candidates: list[tuple[str, dict[str, Any], str | None]] = []
+    for name, node in (networking.get("nodes") or {}).items():
+        if node.get("dashboard"):
+            candidates.append((name, node["dashboard"], _ip_for(node)))
+    for singleton_key in ("vps", "aws"):
+        entry = networking.get(singleton_key) or {}
+        if entry.get("dashboard"):
+            candidates.append((singleton_key, entry["dashboard"], _ip_for(entry)))
+
+    candidates.sort(key=lambda c: c[1].get("order", 999))
+
+    out: list[tuple[str, dict[str, Any]]] = []
+    for key, dashboard, ip in candidates:
+        display_name = dashboard.get("display_name", key)
+        widget = dashboard.get("widget", "none")
+        tile: dict[str, Any] = {
+            "ip": ip,
+            "icon": dashboard["icon"],
+            "description": dashboard["description"],
+        }
+        if widget == "glances":
+            tile["glances"] = True
+            if "glances_version" in dashboard:
+                tile["glances_version"] = dashboard["glances_version"]
+        elif widget == "ping":
+            tile["glances"] = False
+            tile["ping_url"] = dashboard["ping_url"]
+        else:
+            tile["glances"] = False
+        out.append((display_name, tile))
+    return out
 
 
 def build_service_tables(
