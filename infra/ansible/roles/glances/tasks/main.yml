@@ -1,0 +1,67 @@
+---
+# =============================================================================
+# Shared Glances role (DASH-DT-014a)
+# One role for all nodes. Binds to {{ tailscale_ip }}:{{ glances_port }} only
+# (beelink pattern — more secure than 0.0.0.0).
+# Replaces today's three patterns: beelink_services inline, rpi3_services
+# inline, ad-hoc on VPS+rpi4 (those are migrated in DASH-DT-014b / PR3b).
+# =============================================================================
+
+# Self-migration: stop any previous ad-hoc deploy whose compose file
+# is named `docker-compose.yml` (legacy) before templating ours as
+# `compose.yml`. The legacy container_name 'glances' would collide otherwise.
+- name: Detect legacy ad-hoc compose file
+  stat:
+    path: "{{ glances_deploy_dir }}/docker-compose.yml"
+  register: _legacy_glances_compose
+
+- name: Stop legacy ad-hoc Glances stack
+  command: docker compose -f {{ glances_deploy_dir }}/docker-compose.yml down --remove-orphans
+  when: _legacy_glances_compose.stat.exists
+  register: _legacy_down
+  changed_when: "'Stopped' in _legacy_down.stderr or 'Removed' in _legacy_down.stderr"
+
+- name: Remove legacy ad-hoc compose file
+  file:
+    path: "{{ glances_deploy_dir }}/docker-compose.yml"
+    state: absent
+
+- name: Create Glances deployment directory
+  file:
+    path: "{{ glances_deploy_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Template Glances Docker Compose stack
+  template:
+    src: compose.yml.j2
+    dest: "{{ glances_deploy_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart glances
+
+- name: Pull Glances image
+  command: docker compose -f {{ glances_deploy_dir }}/compose.yml pull
+  register: _pull
+  changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
+
+- name: Start Glances container
+  command: docker compose -f {{ glances_deploy_dir }}/compose.yml up -d
+  register: _compose_up
+  changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
+
+- name: Verify Glances health
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ glances_port }}/api/4/quicklook"
+    method: GET
+    status_code: 200
+    timeout: 10
+  retries: 5
+  delay: 5
+
+- name: Report Glances status
+  debug:
+    msg: "Glances live on http://{{ tailscale_ip }}:{{ glances_port }}/api/4/quicklook"

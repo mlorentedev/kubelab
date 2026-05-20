@@ -66,15 +66,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -162,3 +165,13 @@
         k3s_fetch_kubeconfig: true
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"
+
+    - role: ../roles/glances
+      tags: [monitoring, glances]
+      vars:
+        restart_policy: "{{ config.global.restart_policy }}"
+        tailscale_ip: "{{ config.networking.nodes.ace1.tailscale_ip }}"
+        glances_image: "{{ config.apps.services.observability.glances.image }}"
+        glances_port: "{{ config.apps.services.observability.glances.default_port }}"
+        glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
+        glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
