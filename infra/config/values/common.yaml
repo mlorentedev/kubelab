@@ -46,6 +46,13 @@ networking:
     ssh_user: "deployer"
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
+    # Homepage cockpit tile (SSOT-005). Consumed by sync_homepage_config.build_node_list.
+    dashboard:
+      display_name: "VPS"
+      order: 2
+      icon: mdi-cloud
+      description: "Prod · 8GB"
+      widget: glances
     backup:
       root: "/opt/backups"
       retention: 3
@@ -73,6 +80,15 @@ networking:
     tailscale_dns: "aws1.kubelab.internal"
     ssh_user: "deployer"
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
+    # Homepage cockpit tile (SSOT-005). Decision documented in ADR-033:
+    # widget=ping (not glances) until RELIAB-009 brings hub day-2 Ansible.
+    dashboard:
+      display_name: "aws1"
+      order: 6
+      icon: mdi-cloud-outline
+      description: "Hub · t4g.small · 2vCPU · 2GB"
+      widget: ping
+      ping_url: "https://argo.kubelab.live"
   nodes:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
     # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed
@@ -83,6 +99,11 @@ networking:
       lan_interface: "enp1s0"
       ssh_user: "manu"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
+      dashboard:
+        order: 1
+        icon: mdi-server
+        description: "Staging · 12GB"
+        widget: glances
     ace2:
       hostname: "ace2"
       tailscale_ip: "100.64.0.5"
@@ -90,17 +111,34 @@ networking:
       lan_interface: "enp1s0"
       ssh_user: "manu"
       ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-028: Ollama only
+      dashboard:
+        order: 5
+        icon: mdi-server
+        description: "LLM · 12GB"
+        widget: glances
     rpi4:
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
       lan_ip: "172.16.1.1"
       ssh_user: "manu"
       ansible_groups: ["gateway", "dns_hosts", "docker_hosts"]
+      dashboard:
+        display_name: "RPi4"
+        order: 3
+        icon: mdi-raspberry-pi
+        description: "DNS · 8GB"
+        widget: glances
     rpi3:
       hostname: "rpi3"
       tailscale_ip: "100.64.0.6"
       ssh_user: "manu"
       ansible_groups: ["monitoring", "docker_hosts"]
+      dashboard:
+        display_name: "RPi3"
+        order: 4
+        icon: mdi-raspberry-pi
+        description: "Monitor · 1GB"
+        widget: glances
     beelink:
       hostname: "beelink"
       tailscale_ip: "100.64.0.3"
@@ -108,6 +146,15 @@ networking:
       lan_interface: "enp1s0"
       ssh_user: "manu"
       ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: MinIO + GH Runner + Glances
+      # Ping target = Ollama port; Glances widget intentionally absent
+      # while the container is broken (tracked in DASH-DT-014b).
+      dashboard:
+        display_name: "Beelink"
+        order: 7
+        icon: mdi-desktop-tower
+        description: "Platform · N95 · 8GB (no Glances)"
+        widget: ping
+        ping_url: "http://100.64.0.3:11434"  # = networking.nodes.beelink.tailscale_ip + apps.services.ai.ollama.default_port
     jetson:
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
@@ -115,6 +162,13 @@ networking:
       ssh_user: "manu"
       ansible_groups: ["compute"]
       legacy_python: true
+      dashboard:
+        display_name: "Jetson"
+        order: 8
+        icon: mdi-chip
+        description: "Pollex · ARM · 4GB"
+        widget: glances
+        glances_version: 4
 
 # ===========================================================================
 # INFRASTRUCTURE & DOCKER
