@@ -54,6 +54,7 @@
   hosts: aws1
   gather_facts: false
   become: false
+  tags: [always]   # Pre-flight checks must run regardless of --tags filter
   tasks:
     - name: Verify SSH + Python connectivity
       ansible.builtin.ping:
