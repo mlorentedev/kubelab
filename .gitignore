@@ -126,3 +126,7 @@ apps/wiki/generated_docs
 
 # Security scanning
 .cache_ggshield
+.aider*
+
+# Git worktrees (parallel workspaces)
+.worktrees/

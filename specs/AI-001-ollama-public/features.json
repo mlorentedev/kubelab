@@ -1,0 +1,51 @@
+[
+  {
+    "id": "ai-001-f1-tags-200",
+    "behavior": "GET /api/tags with valid X-API-Key returns 200 and a non-empty models list",
+    "verification": "curl -fsS -H \"X-API-Key: $OLLAMA_API_KEY\" https://ollama.kubelab.live/api/tags | jq -e '.models | length > 0'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ai-001-f2-tags-401-edge",
+    "behavior": "GET /api/tags without (or with wrong) X-API-Key returns 401 at Traefik edge",
+    "verification": "test \"$(curl -s -o /dev/null -w '%{http_code}' https://ollama.kubelab.live/api/tags)\" = \"401\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ai-001-f2b-no-backend-hit",
+    "behavior": "Rejected requests do NOT reach Ollama backend on Beelink (zero new lines in journalctl during attempt window)",
+    "verification": "curl -s -o /dev/null https://ollama.kubelab.live/api/tags; sleep 2; test \"$(ssh beelink 'sudo journalctl -u ollama --since \"30 seconds ago\" --no-pager | grep -c \"GET /api/tags\"')\" = \"0\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ai-001-f3-generate-stream",
+    "behavior": "POST /api/generate with valid auth completes inference and streams >1 NDJSON chunk",
+    "verification": "curl -fsS -X POST -H \"X-API-Key: $OLLAMA_API_KEY\" -H 'Content-Type: application/json' https://ollama.kubelab.live/api/generate -d '{\"model\":\"llama3.1:8b\",\"prompt\":\"say hi in one word\",\"stream\":true}' | jq -e -s 'length > 1'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ai-001-f4-prod-e2e-no-regression",
+    "behavior": "Existing prod E2E suite passes with zero new failures vs. baseline run before this change",
+    "verification": "cd ~/Projects/kubelab && make e2e-prod",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ai-001-f5-cert-ready",
+    "behavior": "Cloudflare cert solver provisioned a Ready certificate for ollama.kubelab.live (no manual step)",
+    "verification": "kubectl get certificate -n kube-system ollama-kubelab-live -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}' | grep -q True",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ai-001-f6-lan-unaffected",
+    "behavior": "LAN/Tailscale access to existing Ollama Service from ace1 is unaffected by the new IngressRoute",
+    "verification": "ssh ace1 \"curl -fsS http://ollama.kubelab.svc.cluster.local:11434/api/tags\" | jq -e '.models | length > 0'",
+    "state": "pending",
+    "evidence": ""
+  }
+]
