@@ -119,7 +119,14 @@ networking:
     rpi4:
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
+      # Dual-segment gateway: inner LAN (172.16.1.0/24, eth0) advertised to
+      # Tailscale, AND WiFi outer (10.0.0.0/24, wlan0) used by ProxyJump for
+      # ace1/ace2/bee/jet1 access from outside the inner segment. lan_ip is
+      # the inner side (matches networking.lan_cidr); wifi_lan_ip is the
+      # outer side, reachable via the rpi4-lan SSH alias when Tailscale is
+      # down. Both DHCP-reserved on the home router.
       lan_ip: "172.16.1.1"
+      wifi_lan_ip: "10.0.0.131"
       ssh_user: "manu"
       ansible_groups: ["gateway", "dns_hosts", "docker_hosts"]
       dashboard:
@@ -131,6 +138,12 @@ networking:
     rpi3:
       hostname: "rpi3"
       tailscale_ip: "100.64.0.6"
+      # WiFi outer segment (10.0.0.0/24), reachable via rpi3-lan SSH alias.
+      # NOT on the inner lan_cidr (172.16.1.0/24, behind rpi4 gateway/NAT) —
+      # rpi3 lives on the WiFi side, no rpi4 ProxyJump needed. Static DHCP
+      # reservation on home router for MAC b8:27:eb:3d:8e:54 (SSOT-003).
+      lan_ip: "10.0.0.157"
+      lan_interface: "wlan0"
       ssh_user: "manu"
       ansible_groups: ["monitoring", "docker_hosts"]
       dashboard:
