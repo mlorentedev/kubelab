@@ -4,14 +4,18 @@
 #
 # Deploys: SSH hardening, Uptime Kuma + Glances via Docker Compose.
 # RPi3 is Debian 13 (trixie), aarch64, Docker + Tailscale already installed.
-# No LAN IP / netplan — accessible only via Tailscale (100.64.0.6).
+# Primary access via Tailscale (100.64.0.6). LAN fallback via WiFi
+# (10.0.0.157/24, wlan0) — see SSOT-003 + ssh-config Host rpi3-lan.
+# WiFi credentials managed at OS level (NetworkManager / wpa_supplicant);
+# this playbook does NOT touch netplan — wlan0 is configured out-of-band.
 #
 # Usage:
 #   make provision NODE=rpi3 ENV=prod
 #   toolkit infra ansible run -p provision-rpi3 -e prod
 #   toolkit infra ansible run -p provision-rpi3 -e prod --tags services
 #
-# Note: No BOOTSTRAP mode needed — RPi3 is remote (no LAN access).
+# Note: No BOOTSTRAP mode needed — RPi3 ansible_host is the Tailscale IP.
+# For Tailscale-down forensics, SSH via 'rpi3-lan' alias instead (LAN path).
 # =============================================================================
 
 # ---------------------------------------------------------------------------
