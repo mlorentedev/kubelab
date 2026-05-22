@@ -32,6 +32,7 @@ help:
 	@echo "Bootstrap:"
 	@echo "  make setup              Install Poetry, dependencies, toolkit, and Ansible collections"
 	@echo "  make setup-local-dns    Add local DNS entries to /etc/hosts"
+	@echo "  make worktree-init      Bootstrap a new git worktree (poetry install only; idempotent)"
 	@echo ""
 	@echo "Development:"
 	@echo "  make up-dev             Start all dev services"
@@ -182,6 +183,25 @@ setup-local-dns:
 	else \
 		echo "✓ Added $$added DNS entries to /etc/hosts"; \
 	fi
+
+# worktree-init bootstraps a fresh git worktree to first-class status:
+# poetry install populates `.venv` (per-worktree); pre-commit hooks are NOT
+# reinstalled because the repo already has `core.hooksPath = main/.git/hooks`
+# (one-time set during `make setup`), which all worktrees share automatically.
+# Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op.
+# Discovered as TOOL-010 after Wave 1 DT-010 PR hit `make sync-homepage`
+# failures in a fresh worktree (no .venv -> toolkit package not importable).
+.PHONY: worktree-init
+worktree-init:
+	@echo "=== Bootstrapping worktree: $$(pwd) ==="
+	@$(POETRY) install --no-interaction
+	@hookspath=$$(git config --get core.hooksPath 2>/dev/null || echo ""); \
+	if [ -n "$$hookspath" ] && [ -x "$$hookspath/pre-commit" ]; then \
+		echo "✓ pre-commit hooks shared from $$hookspath (no re-install needed)"; \
+	else \
+		echo "⚠ core.hooksPath not set or pre-commit hook missing — run from main worktree: $(POETRY) run pre-commit install"; \
+	fi
+	@echo "✓ Worktree ready. Test: make validate-sync ENV=staging"
 
 # -----------------------------------------------------------------------------
 # Development Shortcuts

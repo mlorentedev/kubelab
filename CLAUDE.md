@@ -140,6 +140,7 @@ ON-DEMAND (homelab, powered when working):
 
 - **Commits**: User commits manually or via Claude when explicitly requested. Never commit autonomously.
 - **Branching**: Trunk-based development. `master` only. PRs with squash merge. See CI workflows.
+- **New git worktree**: run `make worktree-init` once in every new worktree under `.worktrees/`. Installs the per-worktree `.venv` via Poetry (~30s first run, ~1s no-op afterwards). Pre-commit hooks are shared automatically via `core.hooksPath` set at `make setup` time — no per-worktree re-install needed.
 - **IaC-first**: Version-controlled config > declarative > automated > manual.
 - **Source of truth**: `infra/config/values/*.yaml` (never .env files)
 - **VPS is ARM**: Multi-arch Docker builds (amd64+arm64) required.
