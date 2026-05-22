@@ -406,19 +406,17 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
     CF[Cloudflare DNS+CDN]
     Users[Users]
   end
-  subgraph Cloud
+  subgraph AlwaysOn["Always-On (24/7) — ADR-028"]
     VPS["VPS {vps.get("public_ip")} / {vps.get("tailscale_ip")}<br/>K3s Prod 8GB"]
-    AWS1["aws1 {aws.get("tailscale_ip")}<br/>Argo CD Hub 1GB"]
-  end
-  subgraph HomeLab["Home Lab {lan_cidr}"]
-    ACE1["ace1 {n["ace1"]["lan_ip"]} / {n["ace1"]["tailscale_ip"]}<br/>K3s Staging 12GB"]
-    ACE2["ace2 {n["ace2"]["lan_ip"]} / {n["ace2"]["tailscale_ip"]}<br/>Platform Node 12GB"]
-    RPI4["RPi4 {n["rpi4"]["lan_ip"]} / {n["rpi4"]["tailscale_ip"]}<br/>DNS Gateway 8GB"]
-    BEE["Beelink {n["beelink"]["lan_ip"]} / {n["beelink"]["tailscale_ip"]}<br/>Ollama 8GB"]
-    JET["Jetson {n["jetson"]["lan_ip"]} / {n["jetson"]["tailscale_ip"]}<br/>Pollex 4GB"]
-  end
-  subgraph Standalone
+    AWS1["aws1 {aws.get("tailscale_ip")}<br/>Argo CD Hub 2GB"]
     RPI3["RPi3 {n["rpi3"]["tailscale_ip"]}<br/>Uptime Kuma 1GB"]
+  end
+  subgraph OnDemand["On-Demand homelab {lan_cidr} — ADR-028"]
+    ACE1["ace1 {n["ace1"]["lan_ip"]} / {n["ace1"]["tailscale_ip"]}<br/>K3s Staging 12GB"]
+    ACE2["ace2 {n["ace2"]["lan_ip"]} / {n["ace2"]["tailscale_ip"]}<br/>Ollama LLM 12GB"]
+    BEE["Beelink {n["beelink"]["lan_ip"]} / {n["beelink"]["tailscale_ip"]}<br/>Platform Node 8GB"]
+    RPI4["RPi4 {n["rpi4"]["lan_ip"]} / {n["rpi4"]["tailscale_ip"]}<br/>DNS Gateway 8GB"]
+    JET["Jetson {n["jetson"]["lan_ip"]} / {n["jetson"]["tailscale_ip"]}<br/>Pollex 4GB"]
   end
   Users --> CF --> VPS
   AWS1 -. Tailscale .-> VPS
@@ -430,13 +428,11 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
   ACE1 --- BEE
   ACE1 --- JET
   RPI4 -. Tailscale .-> VPS
-  classDef cloud fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
-  classDef lan fill:#dcfce7,stroke:#22c55e,stroke-width:2px
-  classDef standalone fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+  classDef alwayson fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+  classDef ondemand fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
   classDef ext fill:#f3f4f6,stroke:#9ca3af
-  class VPS,AWS1 cloud
-  class ACE1,ACE2,RPI4,BEE,JET lan
-  class RPI3 standalone
+  class VPS,AWS1,RPI3 alwayson
+  class ACE1,ACE2,BEE,RPI4,JET ondemand
   class CF,Users ext"""
 
 
@@ -530,19 +526,17 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
         "INTERNET",
         f"  Cloudflare DNS --> VPS ({vps_pub})",
         "",
-        "CLOUD (Tailscale mesh)",
+        "ALWAYS-ON 24/7 (ADR-028)",
         f"  VPS        {vps_pub} / {vps_ts}  K3s Prod 8GB",
-        f"  aws1       {aws_ts}              Argo CD Hub 1GB",
+        f"  aws1       {aws_ts}              Argo CD Hub 2GB",
+        f"  RPi3       {r3t}                 Uptime Kuma 1GB",
         "",
-        f"HOME LAB ({lan_cidr})",
+        f"ON-DEMAND homelab {lan_cidr} (ADR-028)",
         f"  ace1       {a1l} / {a1t}   K3s Staging 12GB",
-        f"  ace2       {a2l} / {a2t}     Platform Node 12GB",
+        f"  ace2       {a2l} / {a2t}     Ollama LLM 12GB",
+        f"  Beelink    {bel} / {bet}     Platform Node 8GB",
         f"  RPi4       {r4l} / {r4t}    DNS Gateway 8GB",
-        f"  Beelink    {bel} / {bet}     Ollama 8GB",
         f"  Jetson     {jel} / {jet}     Pollex 4GB",
-        "",
-        "STANDALONE",
-        f"  RPi3       {r3t}              Uptime Kuma 1GB",
         "",
         "CONNECTIONS",
         "  VPS <--> ace1      Tailscale",
@@ -581,12 +575,12 @@ def build_ip_reference(config: dict[str, Any]) -> str:  # noqa: E501
         _row("NODE", "LAN", "TAILSCALE", "ROLE"),
         f"{'─' * 12} {'─' * 16} {'─' * 16} {'─' * 20}",
         _row("VPS", vps.get("public_ip", "?"), vps.get("tailscale_ip", "?"), "K3s Prod · 8GB"),
-        _row("aws1", "—", aws.get("tailscale_ip", "?"), "Argo CD Hub · 1GB"),
+        _row("aws1", "—", aws.get("tailscale_ip", "?"), "Argo CD Hub · 2GB"),
         _row("ace1", a1l, a1t, "K3s Staging · 12GB"),
-        _row("ace2", a2l, a2t, "Platform Node · 12GB"),
+        _row("ace2", a2l, a2t, "Ollama LLM · 12GB"),
         _row("RPi4", r4l, r4t, "DNS Gateway · 8GB"),
         _row("RPi3", "—", r3t, "Uptime Kuma · 1GB"),
-        _row("Beelink", bel, bet, "Ollama · 8GB"),
+        _row("Beelink", bel, bet, "Platform Node · 8GB"),
         _row("Jetson", jel, jet, "Pollex · 4GB"),
     ]
     return "\n".join(rows)
