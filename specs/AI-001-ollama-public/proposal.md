@@ -39,16 +39,25 @@ After this PR: `https://ollama.kubelab.live/api/*` is reachable from anywhere, r
 - Token-usage metering / cost accounting.
 - Auth for non-`/api/*` paths (Ollama exposes a UI on `/`; we expose only `/api/*` initially).
 
+## Auth strategy — RESOLVED 2026-05-21 (see ADR-035)
+
+**Decision:** X-API-Key via Traefik plugin `github.com/dtomlinson91/traefik-api-key-middleware` v0.1.2+. Plugin supports both `X-API-Key` and `Authorization: Bearer` headers (forward-compat with Stage 2 OIDC/JWT migration per ADR-035). API key lives in SOPS at `apps.services.ai.ollama.api_key`. Middleware CRD rendered from template + SOPS at deploy time via toolkit extension (AI-001 PR-B).
+
+Rationale captured in vault `30-architecture/adrs/adr-035-api-auth-strategy.md`. Rejected: BasicAuth (misleading semantics), Authelia ForwardAuth (2-step token friction for ad-hoc clients), mTLS (cert distribution).
+
+## Implementation split (3 PRs, linear deps)
+
+| PR | Scope | Size |
+|----|-------|------|
+| **PR-A** (this spec finalize) | ADR-035 vault + AI-001 spec proposal/tasks/verification update + AI-002 fill | ~80 LOC docs |
+| **PR-B** | Toolkit extension `apply_middleware_secrets()` + Ansible HelmChartConfig plugin registration + smoke | ~150 LOC |
+| **PR-C** | K8s manifests (Middleware template + Secret + prod IngressRoute patch) + SOPS api_key + Makefile target + E2E test | ~100 LOC |
+
+PR-A merges first (paves architecture); PR-B before PR-C (toolkit + plugin must be live before applying manifests).
+
 ## Risks / open questions
 
-1. **Auth choice — DECISION REQUIRED before tasks.md is frozen.** Three candidates:
-   - Traefik BasicAuth — built-in, fastest, weak (no key rotation, basic-over-TLS).
-   - Authelia forwardAuth — already in use for Grafana/admin. Operational consistency. Overkill for single-user API key.
-   - Custom header middleware (`X-API-Key: <secret>`) — minimal, easy to rotate via SOPS, single-purpose.
-
-   Lean: option 3. Decision blocks tasks.md freeze.
-
-2. **No backend auth in Ollama itself.** If the middleware misconfigures or is bypassed, Ollama is open. Mitigation: also restrict Beelink Ollama port via Tailscale ACL (defense in depth).
+1. **No backend auth in Ollama itself.** If the middleware misconfigures or is bypassed, Ollama is open. Mitigation: also restrict Beelink Ollama port via Tailscale ACL (defense in depth).
 
 3. **Cost/DoS exposure.** Even with auth, leaked key → expensive inference loop on Beelink GPU. AI-003 mitigates; until then key rotation costs <5 min so tolerable.
 
