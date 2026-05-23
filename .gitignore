@@ -121,6 +121,12 @@ apps/wiki/generated_docs
 # Regenerate with: make deploy-k8s ENV=<env> (or toolkit infra k8s deploy --env <env>)
 # Previously gitignored, unignored for ARGO-007.
 
+# Rendered Traefik Middlewares (contain plaintext API keys post-render).
+# Source templates: infra/k8s/overlays/*/middlewares/*.tpl  (committed).
+# Rendered output: infra/k8s/overlays/*/middlewares/.rendered/*.yaml  (gitignored, audit copy).
+# Re-render: `make apply-middleware-secrets ENV=<env>` (toolkit/features/k8s_middlewares.py).
+infra/k8s/overlays/*/middlewares/.rendered/
+
 # Ansible runtime cache (collections/modules/roles installed locally)
 .ansible/
 

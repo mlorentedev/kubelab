@@ -146,6 +146,24 @@ class ConfigurationManager:
 
         return flattened
 
+    def get_secret_by_path(self, path: str) -> Optional[str]:
+        """Look up a scalar value by dot-separated path in the merged config.
+
+        Symmetric counterpart to `_set_nested_key`. Returns None if the path does
+        not resolve or if the value at the leaf is a container (dict/list) rather
+        than a scalar. Caller-side callers always want a str (api keys, secrets);
+        coerce non-string scalars to str.
+        """
+        config = self.get_merged_config()
+        current: Any = config
+        for key in path.split("."):
+            if not isinstance(current, dict) or key not in current:
+                return None
+            current = current[key]
+        if isinstance(current, (dict, list)) or current is None:
+            return None
+        return str(current)
+
     def get_compose_files(self, component_path: Path) -> List[str]:
         """
         Return list of compose files with -f flag.

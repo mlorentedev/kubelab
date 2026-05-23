@@ -394,6 +394,31 @@ def k8s_apply_secrets(
         raise typer.Exit(1)
 
 
+@k8s_app.command("apply-middleware-secrets")
+def k8s_apply_middleware_secrets(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Render only, do not apply")] = False,
+) -> None:
+    """Render Traefik Middleware CRDs from templates + SOPS, then kubectl apply.
+
+    Reads MIDDLEWARE_CATALOG (toolkit/features/k8s_middlewares.py), substitutes the
+    SOPS api_key into the matching template, writes a gitignored audit copy under
+    infra/k8s/overlays/<env>/middlewares/.rendered/, and applies via stdin to keep
+    plaintext keys off disk persistently. Middlewares whose `envs` does not include
+    the target are silently skipped (successful no-op).
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    validate_environment_config(env)
+
+    from toolkit.features.k8s_middlewares import apply_middleware_secrets
+
+    if not apply_middleware_secrets(env, settings.project_root, dry_run=dry_run):
+        raise typer.Exit(1)
+
+
 @k8s_app.command("deploy")
 def k8s_deploy(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],

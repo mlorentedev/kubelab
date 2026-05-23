@@ -27,6 +27,14 @@ spec:
         bouncer:
           moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
           version: "v1.5.1"
+        # api-key (ADR-035 Stage 1): used by Middlewares api-key-* rendered
+        # from infra/k8s/overlays/<env>/middlewares/*.yaml.tpl via
+        # `make apply-middleware-secrets ENV=<env>`. Plugin returns HTTP 403
+        # for any rejected request. Both X-API-Key and Authorization: Bearer
+        # headers are supported (Bearer enabled for Stage 2 OIDC forward-compat).
+        api-key:
+          moduleName: "github.com/dtomlinson91/traefik-api-key-middleware"
+          version: "v0.1.2"
     volumes:
       - name: crowdsec-bouncer-traefik
         mountPath: "/etc/traefik/crowdsec"
