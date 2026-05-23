@@ -7,9 +7,9 @@
     "evidence": ""
   },
   {
-    "id": "ai-001-f2-tags-401-edge",
-    "behavior": "GET /api/tags without (or with wrong) X-API-Key returns 401 at Traefik edge",
-    "verification": "test \"$(curl -s -o /dev/null -w '%{http_code}' https://ollama.kubelab.live/api/tags)\" = \"401\"",
+    "id": "ai-001-f2-tags-403-edge",
+    "behavior": "GET /api/tags without (or with wrong) X-API-Key returns 403 at Traefik edge (per dtomlinson91/traefik-api-key-middleware default)",
+    "verification": "test \"$(curl -s -o /dev/null -w '%{http_code}' https://ollama.kubelab.live/api/tags)\" = \"403\"",
     "state": "pending",
     "evidence": ""
   },

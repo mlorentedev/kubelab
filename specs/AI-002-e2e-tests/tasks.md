@@ -27,7 +27,7 @@ updated: "2026-05-21"
 
 - [ ] All four E2E tests pass on `make test-e2e ENV=prod`.
 - [ ] `make test-e2e ENV=staging` passes the health case; 3 auth cases skipped with documented reason ("staging is VPN-only").
-- [ ] Negative-regression check executed manually once: remove `api-key-ollama` middleware from prod IngressRoute, re-run tests → 403/Bearer/no-leak cases fail as expected → restore middleware.
+- [ ] Mutation drill executed once via SOPS tampering (NOT IngressRoute removal — keeps prod auth always on): set `apps.services.ai.ollama.api_key` to a known-wrong value in SOPS, `make apply-middleware-secrets ENV=prod`, re-run tests → `test_ollama_health_authenticated` fails with 403 → restore real key + re-apply + re-run → all pass.
 - [ ] No API key value in any test output / pytest captured stdout / CI artifact.
 - [ ] `verification.md` filled with concrete CI run links.
 - [ ] PR opened referencing `specs/AI-002-e2e-tests/`.
