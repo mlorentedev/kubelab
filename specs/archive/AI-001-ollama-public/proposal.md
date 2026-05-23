@@ -1,8 +1,9 @@
 ---
 id: "AI-001-ollama-public"
 type: spec
-status: draft
+status: archived
 created: "2026-05-13"
+archived: "2026-05-23"
 tags: [spec, proposal, ai, traefik, ollama]
 template_version: "1.0"
 ---
