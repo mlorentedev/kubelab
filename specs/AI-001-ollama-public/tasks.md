@@ -1,7 +1,7 @@
 ---
 tags: [spec, tasks]
 created: "2026-05-13"
-updated: "2026-05-21"
+updated: "2026-05-23"
 ---
 
 # Tasks - AI-001-ollama-public
@@ -45,27 +45,28 @@ updated: "2026-05-21"
 - [x] Smoke `make apply-middleware-secrets ENV=staging` → no-op exit 0 ("no middlewares for env=staging"), kubectl never invoked.
 - [ ] Smoke `make provision NODE=vps ENV=prod TAGS=k3s` re-templates the HelmChartConfig with the new plugin entry; verify `kubectl get pods -n kube-system traefik-*` healthy. **(Deferred to PR-C closing — requires homelab on + prod kubeconfig)**
 - [x] CLAUDE.md gotcha for "Middleware secret injection (ADR-035 Stage 1, AI-001)" added.
-- [ ] Commit + push + PR.
+- [x] Commit + push + PR. → PR #193 merged 2026-05-23.
+- [x] (Follow-up) Codex P1 on PR #193: `apply-middleware-secrets` blocked `deploy-k8s ENV=prod` because SOPS key was deferred to PR-C. Fixed by seeding `apps.services.ai.ollama.api_key` in `prod.enc.yaml`. → PR #194.
 
 ## PR-C — K8s manifests + SOPS + smoke (~100 LOC)
 
-> Merges after PR-B. Actual public-exposure activation.
+> Merges after PR-B + #194. Actual public-exposure activation.
 
-- [ ] Branch: `feat/ai-001-ollama-public-impl` from PR-B merged master.
+- [x] Branch: `feat/ai-001-ollama-public-impl` stacked on `fix/ai-001-seed-ollama-api-key` (#194). Rebases cleanly on master once #194 squashes in.
 - [x] ~~Middleware template `infra/k8s/overlays/prod/middlewares/api-key-ollama.yaml.tpl`~~ → already created in PR-B as generic `api-key.yaml.tpl` (substitutes `${NAME}` / `${SERVICE}` per MiddlewareSpec; one template reused across services). PR-C consumes it as-is.
-- [ ] Prod overlay `patches.yaml`: add patch for the `ollama` IngressRoute (base) to override host to `ollama.kubelab.live` and append the `api-key-ollama` middleware ref.
-- [ ] `infra/config/values/common.yaml`: confirm `apps.services.ai.ollama.api_key` placeholder path (real value lives in SOPS only).
-- [ ] SOPS: `make secrets ENV=common` → add `apps.services.ai.ollama.api_key` (32-byte random key, base64).
-- [ ] Deploy: `make apply-secrets ENV=prod` → `make apply-middleware-secrets ENV=prod` → `make deploy-k8s ENV=prod`.
-- [ ] Verify cert: `kubectl get ingressroute ollama -n kubelab -o yaml | grep certResolver` returns `letsencrypt`.
-- [ ] Smoke (acceptance criteria):
+- [x] Prod overlay `patches.yaml`: added patch for the `ollama` IngressRoute (base) overriding host to `ollama.kubelab.live` and appending the `api-key-ollama` middleware ref. Verified via `kubectl kustomize`: route renders with `[secure-headers, crowdsec-bouncer, api-key-ollama, error-pages]` and `api-key-ollama` Middleware CRD is NOT in the kustomize output (per design — applied out-of-band by `apply-middleware-secrets`).
+- [x] `infra/config/values/common.yaml`: added `api_key: secrets://apps.services.ai.ollama.api_key` to `apps.services.ai.ollama` (mirrors the crowdsec `bouncer_api_key` SSOT convention; documentation-only — no code consumes the `secrets://` scheme).
+- [x] SOPS: `apps.services.ai.ollama.api_key` seeded in `prod.enc.yaml` (32-byte urlsafe random token via `toolkit secrets set`). Shipped in #194.
+- [ ] Deploy: `make apply-secrets ENV=prod` → `make apply-middleware-secrets ENV=prod` → `make deploy-k8s ENV=prod`. **(Deferred — requires homelab + prod kubeconfig.)**
+- [ ] Verify cert: `kubectl get ingressroute ollama -n kubelab -o yaml | grep certResolver` returns `letsencrypt`. **(Deferred — homelab session.)**
+- [ ] Smoke (acceptance criteria) — **(Deferred — homelab session.)**:
   - `curl https://ollama.kubelab.live/api/tags` → 403 (no auth).
   - `curl -H "X-API-Key: $KEY" https://ollama.kubelab.live/api/tags` → 200 + model list.
   - `curl -H "Authorization: Bearer $KEY" https://ollama.kubelab.live/api/tags` → 200 (Bearer mode works too, forward-compat for Stage 2).
   - `curl -X POST -d '{"model":"...","prompt":"..."}' -H "X-API-Key: $KEY" https://ollama.kubelab.live/api/generate` → streams inference.
-- [ ] E2E test added under `tests/e2e/` exercising the 403/200 boundary (consumes AI-002 spec).
-- [ ] Existing prod E2E suite passes (zero regressions).
-- [ ] LAN/Tailscale path unaffected: `curl http://100.64.0.5:11434/api/tags` from any Tailscale node still works.
+- [ ] E2E test added under `tests/e2e/` exercising the 403/200 boundary (consumes AI-002 spec). **(Deferred to AI-002 PR.)**
+- [ ] Existing prod E2E suite passes (zero regressions). **(Deferred — homelab session.)**
+- [ ] LAN/Tailscale path unaffected: `curl http://100.64.0.5:11434/api/tags` from any Tailscale node still works. **(Deferred — homelab session.)**
 
 ## Closing (post PR-C merge)
 
