@@ -637,6 +637,9 @@ apps:
         name: ollama
         image: ollama/ollama:0.16.2
         domain: ollama.kubelab.live
+        # `enable_auth: false` = no Authelia ForwardAuth. Public prod access is
+        # gated by the X-API-Key Traefik plugin via the `api-key-ollama`
+        # Middleware (ADR-035 Stage 1, AI-001 prod-only). Staging stays VPN-only.
         enable_auth: false
         auth_level: bypass
         default_port: 11434
@@ -646,3 +649,6 @@ apps:
         models:
           - "qwen2.5-coder:7b"
           - "qwen2.5:7b"
+        # SSOT reference — real value in SOPS. Consumed by toolkit
+        # `apply_middleware_secrets` (k8s_middlewares.py MIDDLEWARE_CATALOG).
+        api_key: secrets://apps.services.ai.ollama.api_key
