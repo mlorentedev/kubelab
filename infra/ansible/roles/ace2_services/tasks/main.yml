@@ -46,6 +46,32 @@
     mode: "0644"
   notify: Restart ace2 services
 
+# --- Firewall (ANSIBLE-025 fix companion) ---
+# With `network_mode: host` in compose.yml.j2, ollama listens on 0.0.0.0.
+# UFW restricts ingress on ollama_port to Tailscale + LAN CIDRs only — the
+# public internet cannot reach the host port even though the listener is open.
+# Public access only via K3s Traefik on the VPS (AI-001 X-API-Key gated).
+#
+# base_system role already configures UFW: install + default-deny-incoming +
+# SSH allow + enable. We only add ollama-specific allow rules here.
+- name: UFW — allow ollama port from Tailscale CIDR
+  community.general.ufw:
+    rule: allow
+    port: "{{ ollama_port | string }}"
+    proto: tcp
+    src: "{{ tailscale_cidr }}"
+    comment: "ollama LLM API — Tailscale (ANSIBLE-025)"
+  become: true
+
+- name: UFW — allow ollama port from LAN CIDR
+  community.general.ufw:
+    rule: allow
+    port: "{{ ollama_port | string }}"
+    proto: tcp
+    src: "{{ lan_cidr }}"
+    comment: "ollama LLM API — LAN (ANSIBLE-025)"
+  become: true
+
 - name: Pull Ollama image
   command: docker compose -f {{ ace2_deploy_dir }}/compose.yml pull
   register: _pull
