@@ -149,6 +149,8 @@
       vars:
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_ip: "{{ config.networking.nodes.ace2.tailscale_ip }}"
+        tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
+        lan_cidr: "{{ config.networking.lan_cidr }}"
         ollama_image: "{{ config.apps.services.ai.ollama.image }}"
         ollama_port: "{{ config.apps.services.ai.ollama.default_port }}"
         ollama_keep_alive: "{{ config.apps.services.ai.ollama.keep_alive }}"

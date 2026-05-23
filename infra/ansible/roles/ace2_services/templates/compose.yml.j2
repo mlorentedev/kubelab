@@ -1,14 +1,31 @@
 # {{ ansible_managed }}
 # ace2 LLM Services — Ollama (ADR-028: on-demand compute)
+#
+# Networking model (ANSIBLE-025 fix):
+#   - `network_mode: host` ELIMINATES the Docker port-binding dependency on
+#     tailscale0 being up at restart time. With the previous
+#     `ports: ["{tailscale_ip}:11434:11434"]` model, a `tailscaled` flap that
+#     dropped {{ tailscale_ip }} from tailscale0 caused dockerd to fail
+#     re-binding on container restart with `cannot assign requested address`,
+#     leaving the container in a death loop until manual recreate. With host
+#     networking, ollama listens directly on the kernel's port table — the bind
+#     survives interface flaps and re-attaches as tailscale0 comes back up.
+#   - Security: UFW rules (in tasks/main.yml) restrict {{ ollama_port }}/tcp
+#     ingress to `networking.tailscale_cidr` + `networking.lan_cidr` only.
+#     World cannot reach 0.0.0.0:{{ ollama_port }} directly even though the
+#     listener accepts on all interfaces. AI-001 X-API-Key auth still gates
+#     the public path through K3s Traefik on the VPS — defense in depth.
+#   - No `kubelab` custom network needed: per ADR-028, ace2 is "Ollama only",
+#     no cross-container comms expected on this host.
 services:
   ollama:
     image: {{ ollama_image }}
     container_name: ollama
     restart: {{ restart_policy }}
-    ports:
-      - "{{ tailscale_ip }}:{{ ollama_port }}:11434"
+    network_mode: host
     environment:
-      - OLLAMA_HOST=0.0.0.0
+      # 0.0.0.0:{{ ollama_port }} — UFW restricts who can actually reach it.
+      - OLLAMA_HOST=0.0.0.0:{{ ollama_port }}
       - OLLAMA_KEEP_ALIVE={{ ollama_keep_alive }}
     volumes:
       - {{ ace2_ollama_data_dir }}:/root/.ollama
@@ -16,10 +33,3 @@ services:
       resources:
         limits:
           memory: {{ ollama_memory_limit }}
-    networks:
-      - kubelab
-
-networks:
-  kubelab:
-    name: kubelab
-    external: true
