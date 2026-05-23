@@ -18,6 +18,7 @@ updated: "2026-05-21"
 - [ ] Add fixture: `ollama_api_key` in `tests/e2e/conftest.py` — resolves `apps.services.ai.ollama.api_key` from SOPS via existing SOPS-loader fixture pattern. Skip with reason if missing in env.
 - [ ] Write failing test `test_ollama_health_authenticated` — `GET /api/tags` with `X-API-Key` returns 200 + JSON `models` array non-empty. Run on `staging` (no auth used, header ignored) AND `prod` (auth required).
 - [ ] Write failing test `test_ollama_auth_boundary_rejects_anon` — `GET /api/tags` with NO auth headers returns 403. Skip in staging (VPN-only, no auth required). Negative-assert body does not contain "ollama", "models", or any host name.
+- [ ] Write failing test `test_ollama_rejects_invalid_key` — `GET /api/tags` with `X-API-Key: definitely-not-the-real-key` (hardcoded sentinel, NOT read from SOPS) returns 403. This is the test-of-the-test: client sends a value it KNOWS is wrong, so the assertion is independent of any SOPS rotation. If the middleware ever accepts arbitrary keys, this fails.
 - [ ] Write failing test `test_ollama_bearer_forward_compat` — `GET /api/tags` with `Authorization: Bearer <key>` returns 200. Skip in staging. Proves plugin Bearer mode is enabled (Stage 2 OIDC migration prerequisite).
 - [ ] Write failing test `test_ollama_no_key_leak_in_403_body` — full text of the 403 response is grep-clean for the actual API key value (extra paranoia — plugin shouldn't echo, but verify).
 - [ ] Implement: tests are mostly httpx/requests calls against the fixture URL + auth header — minimal logic. Move shared assertions to a helper if duplication grows.
@@ -25,9 +26,9 @@ updated: "2026-05-21"
 
 ## Closing
 
-- [ ] All four E2E tests pass on `make test-e2e ENV=prod`.
-- [ ] `make test-e2e ENV=staging` passes the health case; 3 auth cases skipped with documented reason ("staging is VPN-only").
-- [ ] Mutation drill executed once via SOPS tampering (NOT IngressRoute removal — keeps prod auth always on): set `apps.services.ai.ollama.api_key` to a known-wrong value in SOPS, `make apply-middleware-secrets ENV=prod`, re-run tests → `test_ollama_health_authenticated` fails with 403 → restore real key + re-apply + re-run → all pass.
+- [ ] All five E2E tests pass on `make test-e2e ENV=prod`.
+- [ ] `make test-e2e ENV=staging` passes the health case; 4 auth cases skipped with documented reason ("staging is VPN-only").
+- [ ] `test_ollama_rejects_invalid_key` is part of the standard `make test-e2e ENV=prod` run — passes by default, would fail iff middleware ever accepts arbitrary keys (this is the automated test-of-the-test; no manual drill required).
 - [ ] No API key value in any test output / pytest captured stdout / CI artifact.
 - [ ] `verification.md` filled with concrete CI run links.
 - [ ] PR opened referencing `specs/AI-002-e2e-tests/`.

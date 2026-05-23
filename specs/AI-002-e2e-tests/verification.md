@@ -12,10 +12,10 @@ updated: "2026-05-21"
 
 Map every acceptance criterion from `proposal.md` to concrete proof.
 
-- [ ] `make test-e2e ENV=prod` passes all four ollama cases → CI run `<link>`.
-- [ ] `make test-e2e ENV=staging` skips 3 auth cases with documented reason → captured pytest output `<paste>`.
-- [ ] Mutation drill demo via SOPS tampering (prod IngressRoute untouched): temporarily set `apps.services.ai.ollama.api_key` to a wrong value in SOPS → `make apply-middleware-secrets ENV=prod` → re-run E2E → `test_ollama_health_authenticated` fails (403) → restore real key + re-apply + re-run → all pass. Captures the "test of the test" without ever exposing `ollama.kubelab.live` to anonymous traffic.
-- [ ] SOPS rotation demo (positive path): rotate `apps.services.ai.ollama.api_key` to a new valid value, run `make apply-middleware-secrets ENV=prod`, re-run E2E → all auth cases still pass → SOPS audit clean.
+- [ ] `make test-e2e ENV=prod` passes all five ollama cases → CI run `<link>`.
+- [ ] `make test-e2e ENV=staging` skips 4 auth cases with documented reason → captured pytest output `<paste>`.
+- [ ] `test_ollama_rejects_invalid_key` passes as part of the standard `make test-e2e ENV=prod` run → this IS the test-of-the-test (no manual drill, no IngressRoute touched, no SOPS rotated). The wrong-key sentinel is hardcoded in the test, so the assertion is independent of any SOPS state — if the middleware ever stops rejecting arbitrary keys, this test fails automatically on the next CI run.
+- [ ] SOPS rotation demo (positive path): rotate `apps.services.ai.ollama.api_key` to a new valid value, run `make apply-middleware-secrets ENV=prod`, re-run E2E → all five cases still pass (including the wrong-key one, since the sentinel does not change) → SOPS audit clean.
 - [ ] Negative-grep on a fixture run: API key value never appears in pytest output, CI artifacts, assertion messages.
 
 ## Test status
