@@ -76,5 +76,11 @@
     "zone": "kubelab",
     "proxied": false,
     "environments": ["prod"]
+  },
+  {
+    "name": "ollama",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
   }
 ]
