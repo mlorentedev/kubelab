@@ -734,6 +734,16 @@ apply-secrets:
 	@test -n "$(ENV)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
 
+# Renders Traefik Middlewares that wrap SOPS-sourced API keys (ADR-035 Stage 1).
+# Currently only api-key-ollama (prod). Adding a new auth-protected service:
+#   1. Append a SecretSpec to SECRET_CATALOG (toolkit/features/secrets_manager.py)
+#   2. Append a MiddlewareSpec to MIDDLEWARE_CATALOG (toolkit/features/k8s_middlewares.py)
+#   3. Put the api_key in SOPS, then `make apply-middleware-secrets ENV=prod`
+.PHONY: apply-middleware-secrets
+apply-middleware-secrets:
+	@test -n "$(ENV)" || (echo "Usage: make apply-middleware-secrets ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra k8s apply-middleware-secrets --env $(ENV)
+
 .PHONY: flush-sessions
 flush-sessions:
 	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
@@ -765,7 +775,7 @@ logs:
 	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n $(_NS) $(SVC) --tail=$(_TAIL) $(_FOLLOW)
 
 .PHONY: deploy-k8s
-deploy-k8s: apply-secrets validate-sync
+deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
 

@@ -363,6 +363,23 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("api",),
         rotate_note="apply-secrets for api-secrets. Regenerate in Zoho API console.",
     ),
+    # =========================================================================
+    # AI services (ADR-035 Stage 1 — X-API-Key via Traefik plugin)
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.services.ai.ollama.api_key",
+        description="API key for public ollama.kubelab.live (Traefik api-key middleware)",
+        kind=SecretKind.RANDOM_TOKEN,
+        length=32,
+        services=("ollama", "traefik"),
+        format_hint="urlsafe base64 token (~43 chars)",
+        rotate_note=(
+            "Re-render Middleware: `make apply-middleware-secrets ENV=prod`. "
+            "All API clients must update their X-API-Key (or Authorization: Bearer) "
+            "header. No pod restart required — Traefik picks up the new Middleware CRD."
+        ),
+        envs=("prod",),  # Stage 1 prod-only; staging is VPN-only (no auth)
+    ),
 ]
 
 # Build lookup by key_path for quick access
