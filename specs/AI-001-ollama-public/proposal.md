@@ -29,7 +29,7 @@ Add a new IngressRoute on the prod K3s Traefik:
 - Backend: existing `ollama` external Service in K3s (already pointing at Beelink LAN IP)
 - Auth: a Traefik middleware that requires a valid credential on every request (auth choice TBD — see Risks)
 
-After this PR: `https://ollama.kubelab.live/api/*` is reachable from anywhere, returns 401 without auth, 200 with auth.
+After this PR: `https://ollama.kubelab.live/api/*` is reachable from anywhere, returns 403 without auth, 200 with auth.
 
 ## Out of scope
 
@@ -68,7 +68,7 @@ PR-A merges first (paves architecture); PR-B before PR-C (toolkit + plugin must 
 ## Acceptance criteria
 
 - [ ] `GET https://ollama.kubelab.live/api/tags` with valid auth returns 200 and lists installed models.
-- [ ] Same request without (or wrong) auth returns 401 and does NOT reach Ollama (verify via Beelink access logs — zero new lines).
+- [ ] Same request without (or wrong) auth returns 403 and does NOT reach Ollama (verify via Beelink access logs — zero new lines). Status code rationale: plugin `dtomlinson91/traefik-api-key-middleware` emits `403` for missing, invalid, or wrong-keyed requests per its README.
 - [ ] `POST https://ollama.kubelab.live/api/generate` completes inference end-to-end and streams response.
 - [ ] Existing prod E2E suite passes with zero regressions (no new failures on previously-passing services).
 - [ ] Cert provisioned for `ollama.kubelab.live` via existing Cloudflare cert solver (no manual step).

@@ -14,8 +14,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 
 - [ ] `make test-e2e ENV=prod` passes all four ollama cases → CI run `<link>`.
 - [ ] `make test-e2e ENV=staging` skips 3 auth cases with documented reason → captured pytest output `<paste>`.
-- [ ] Negative-regression demo: remove `api-key-ollama` middleware from prod IngressRoute → `test_ollama_auth_boundary_rejects_anon` fails → restore → passes again → commit log of the temp revert + restore.
-- [ ] SOPS rotation demo: rotate `apps.services.ai.ollama.api_key`, run `make apply-middleware-secrets ENV=prod`, re-run E2E → all auth cases still pass → SOPS audit clean.
+- [ ] Mutation drill demo via SOPS tampering (prod IngressRoute untouched): temporarily set `apps.services.ai.ollama.api_key` to a wrong value in SOPS → `make apply-middleware-secrets ENV=prod` → re-run E2E → `test_ollama_health_authenticated` fails (403) → restore real key + re-apply + re-run → all pass. Captures the "test of the test" without ever exposing `ollama.kubelab.live` to anonymous traffic.
+- [ ] SOPS rotation demo (positive path): rotate `apps.services.ai.ollama.api_key` to a new valid value, run `make apply-middleware-secrets ENV=prod`, re-run E2E → all auth cases still pass → SOPS audit clean.
 - [ ] Negative-grep on a fixture run: API key value never appears in pytest output, CI artifacts, assertion messages.
 
 ## Test status
