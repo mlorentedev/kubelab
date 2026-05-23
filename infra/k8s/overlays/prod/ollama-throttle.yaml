@@ -1,0 +1,54 @@
+---
+# Post-auth abuse protection for ollama.kubelab.live (AI-001 follow-up, SEC-AI-001 MVP).
+#
+# Cadena efectiva en la IngressRoute:
+#   secure-headers -> crowdsec-bouncer -> api-key-ollama -> ollama-ratelimit -> ollama-inflight -> error-pages
+#
+# IMPORTANT: el orden importa. RateLimit + InFlightReq van DESPUÉS de api-key para que
+# la cuota se aplique solo a requests autenticados (un atacante sin key se cae en 403
+# antes y no consume cuota). CrowdSec sigue siendo IP-level genérico (HTTP probing etc.).
+#
+# El plugin api-key-ollama vive fuera de Kustomize (renderizado por
+# `make apply-middleware-secrets ENV=prod`, ADR-035 / AI-001 PR-B). Estas dos
+# middlewares SÍ son declarativas y van en git.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ollama-ratelimit
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: throttle
+    app.kubernetes.io/part-of: kubelab
+spec:
+  rateLimit:
+    # 60 req/min sostenido por sourceIP. Burst de 10 absorbe ráfagas legítimas
+    # (un script que pida tags + chat + generate inmediatamente).
+    # Cálculo: average / period -> 60 / 1m = 1 req/s sostenido, burst hasta 10.
+    average: 60
+    period: 1m
+    burst: 10
+    sourceCriterion:
+      ipStrategy:
+        # K3s Traefik está detrás del LoadBalancer service. El IP real del cliente
+        # viene en X-Forwarded-For tras 1 hop (el LB de Hetzner / proxy del VPS).
+        depth: 1
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ollama-inflight
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: throttle
+    app.kubernetes.io/part-of: kubelab
+spec:
+  inFlightReq:
+    # Ollama serializa por modelo cargado (OLLAMA_NUM_PARALLEL=1 en ace2). Cap=2
+    # permite que un usuario tenga una inferencia en curso + una peticiön corta
+    # (tags / show) en paralelo sin tirar 429.
+    amount: 2
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
