@@ -27,12 +27,13 @@ Vault refs: `kubelab/11-tasks.md` AI-002 entry, ADR-035, sister spec AI-001.
 Add E2E test cases under `tests/e2e/` that, when run against `ENV=staging` or `ENV=prod`, exercise:
 
 1. **Health**: `GET https://ollama.<env-domain>/api/tags` returns 200 with at least one model in the JSON response.
-2. **Auth boundary (prod only)**: `GET https://ollama.kubelab.live/api/tags` WITHOUT any auth header returns 403. Body contains no Ollama-internal data. Plugin `dtomlinson91/traefik-api-key-middleware` emits `403` (not `401`) for all unauthenticated cases per its README — assert on `403` exactly.
-3. **Auth happy path (prod only)**: same request WITH `X-API-Key: <key from SOPS>` returns 200 + model list.
-4. **Bearer forward-compat (prod only)**: same request WITH `Authorization: Bearer <key from SOPS>` returns 200 (proves the plugin's Bearer mode is enabled — guards against future Middleware drift breaking Stage 2 migration).
-5. **No leakage**: response body of the 403 contains no Beelink/ace2 hostname, no model list, no internal error stack.
+2. **Auth boundary — no header (prod only)**: `GET https://ollama.kubelab.live/api/tags` WITHOUT any auth header returns 403. Body contains no Ollama-internal data.
+3. **Auth boundary — wrong key (prod only)**: same request WITH `X-API-Key: definitely-not-the-real-key` returns 403. This is the **automated "test of the test"**: it proves the middleware actually validates the key value (not just header presence), without needing any manual drill or SOPS tampering — client sends a string it KNOWS is wrong, middleware (whose real key is sourced from SOPS, independent of the client) rejects. Plugin `dtomlinson91/traefik-api-key-middleware` emits `403` (not `401`) for all unauthenticated/wrong-keyed cases per its README — assert on `403` exactly.
+4. **Auth happy path (prod only)**: same request WITH `X-API-Key: <key from SOPS>` returns 200 + model list.
+5. **Bearer forward-compat (prod only)**: same request WITH `Authorization: Bearer <key from SOPS>` returns 200 (proves the plugin's Bearer mode is enabled — guards against future Middleware drift breaking Stage 2 migration).
+6. **No leakage**: response body of the 403 contains no Beelink/ace2 hostname, no model list, no internal error stack.
 
-Tests read the API key from SOPS via the existing fixture pattern (no key in repo, no key in test code). Tests skip with a clear reason when `ENV=staging` (staging is VPN-only, no auth needed there) for cases #2/#3/#4.
+Tests read the API key from SOPS via the existing fixture pattern (no key in repo, no key in test code). The wrong-key case (#3) deliberately uses a hardcoded sentinel string, NOT a SOPS-rotated value — so the client and the middleware do not share a moving source of truth. Tests skip with a clear reason when `ENV=staging` (staging is VPN-only, no auth needed there) for cases #2-#5.
 
 ## Out of scope
 
@@ -52,10 +53,10 @@ No remaining open questions.
 
 ## Acceptance criteria
 
-- [ ] `make test-e2e ENV=prod` runs and passes all four ollama cases (health + 3 auth variants).
-- [ ] `make test-e2e ENV=staging` runs and skips the 3 auth cases with a clear "staging is VPN-only" reason; health case still runs and passes.
-- [ ] **Mutation drill (test-of-the-test) via SOPS tampering, NOT IngressRoute removal**: temporarily rotate `apps.services.ai.ollama.api_key` in SOPS to a known-wrong value, run `make apply-middleware-secrets ENV=prod`, then re-run `make test-e2e ENV=prod` — `test_ollama_health_authenticated` MUST fail with 403 (proves the happy-path test actually exercises the middleware and would catch a real auth break). Restore the real key + re-apply + re-run → passes again. This replaces the original "remove middleware from IngressRoute" drill because that approach exposes `ollama.kubelab.live` to anonymous traffic during validation (security/cost risk on a public endpoint).
-- [ ] Rotating the SOPS `apps.services.ai.ollama.api_key` and re-applying produces a passing test on the new value (proves SOPS fixture pickup works end-to-end).
+- [ ] `make test-e2e ENV=prod` runs and passes all five ollama cases (health + no-header 403 + wrong-key 403 + happy-path 200 + Bearer 200).
+- [ ] `make test-e2e ENV=staging` runs and skips the 4 auth cases with a clear "staging is VPN-only" reason; health case still runs and passes.
+- [ ] **Automated test-of-the-test**: `test_ollama_rejects_invalid_key` (case #3) passes — the middleware rejects `X-API-Key: definitely-not-the-real-key` with 403. Because the wrong-key sentinel is hardcoded in the test (not read from SOPS), it remains a true mutation oracle even if the SOPS value is rotated: the test will fail iff the middleware ever accepts arbitrary keys. No manual drill, no IngressRoute removal, no SOPS tampering needed.
+- [ ] Rotating the SOPS `apps.services.ai.ollama.api_key` and re-applying still leaves all five cases passing (proves SOPS fixture pickup is end-to-end and the wrong-key sentinel survives rotation).
 - [ ] No API key value ever appears in test output, CI logs, or assertion messages (negative-grep on a fixture run).
 
 ## References
