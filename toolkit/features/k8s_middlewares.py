@@ -176,7 +176,24 @@ def _kubeconfig_for(env: str) -> str:
 
 
 def _kubectl_apply(env: str, namespace: str, rendered: str, spec_name: str) -> bool:
-    """`kubectl apply -f -` with rendered YAML on stdin. Returns True on success."""
+    """Server-side apply of the rendered Middleware + scrub legacy annotation.
+
+    SEC-AI-002. Client-side `kubectl apply` persists the request body into the
+    `kubectl.kubernetes.io/last-applied-configuration` annotation — for a
+    Middleware whose body embeds a plaintext API key, that leaks the key into
+    cluster state and any `kubectl get -o yaml` output. Server-side apply
+    tracks managed fields via the API server instead, so the rendered body
+    (with the key) is never echoed back into an annotation.
+
+    `--force-conflicts` is required for the first apply when migrating a
+    resource previously managed client-side: the legacy annotation still
+    claims ownership of every field, so server-side rejects the apply as a
+    conflict unless we explicitly take over. Subsequent applies stay clean.
+
+    `--field-manager kubelab-toolkit` makes ownership traceable in
+    `metadata.managedFields[*].manager` so other operators (Argo CD, hand
+    edits) are distinguishable from this toolkit at audit time.
+    """
     cmd = [
         "kubectl",
         "--kubeconfig",
@@ -184,6 +201,10 @@ def _kubectl_apply(env: str, namespace: str, rendered: str, spec_name: str) -> b
         "-n",
         namespace,
         "apply",
+        "--server-side",
+        "--force-conflicts",
+        "--field-manager",
+        "kubelab-toolkit",
         "-f",
         "-",
     ]
@@ -196,7 +217,36 @@ def _kubectl_apply(env: str, namespace: str, rendered: str, spec_name: str) -> b
             check=True,
         )
         logger.success(f"  {result.stdout.strip() or spec_name + ' applied'}")
+        _scrub_legacy_annotation(env, namespace, spec_name)
         return True
     except subprocess.CalledProcessError as exc:
         logger.error(f"  kubectl apply failed for '{spec_name}': {exc.stderr.strip()}")
         return False
+
+
+def _scrub_legacy_annotation(env: str, namespace: str, spec_name: str) -> None:
+    """Strip `kubectl.kubernetes.io/last-applied-configuration` from a Middleware.
+
+    Legacy from any pre-SEC-AI-002 client-side apply that embedded the
+    plaintext API key into the annotation. Idempotent: `kubectl annotate
+    name key-` succeeds with a warning when the annotation is absent.
+    """
+    cmd = [
+        "kubectl",
+        "--kubeconfig",
+        _kubeconfig_for(env),
+        "-n",
+        namespace,
+        "annotate",
+        "middleware",
+        spec_name,
+        "kubectl.kubernetes.io/last-applied-configuration-",
+        "--overwrite=true",
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        # Non-fatal — the apply already succeeded; scrub is a best-effort
+        # cleanup. Surface the reason so a real failure (RBAC, missing
+        # resource) is still visible.
+        logger.warning(f"  legacy annotation scrub skipped for '{spec_name}': {exc.stderr.strip()}")
