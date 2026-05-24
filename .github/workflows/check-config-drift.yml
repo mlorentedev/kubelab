@@ -62,8 +62,12 @@ jobs:
           python -m pip install "poetry>=1.8,<2.0"
           poetry --version
 
-      - name: Install project deps (no dev, no root)
-        run: poetry install --no-root --only main
+      - name: Install project deps
+        # `--only main` skips the dev group (lint/test). DO NOT add
+        # `--no-root` — toolkit/__init__.py calls
+        # importlib.metadata.version("toolkit"), which requires the
+        # package itself to be installed.
+        run: poetry install --only main
 
       - name: Check ${{ matrix.env }} for generator drift
         run: make config-check-drift ENV="$TARGET_ENV"
