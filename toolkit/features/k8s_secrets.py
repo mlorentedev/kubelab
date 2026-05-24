@@ -31,7 +31,8 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "session_secret": "APPS_SERVICES_SECURITY_AUTHELIA_SESSION_SECRET",
             "storage_encryption_key": "APPS_SERVICES_SECURITY_AUTHELIA_STORAGE_ENCRYPTION_KEY",
             "jwt_secret": "APPS_SERVICES_SECURITY_AUTHELIA_JWT_SECRET_RESET_PASSWORD",
-            "smtp_password": "APPS_PLATFORM_API_EMAIL_PASS",
+            # SMTP password from shared infra namespace (ADR-036, SSOT-012 PR #3).
+            "smtp_password": "INFRA_SMTP_PASS",
             "oidc_hmac_secret": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_HMAC_SECRET",
             "oidc_jwks_key": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_JWKS_PRIVATE_KEY",
         },
@@ -97,12 +98,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     SecretMapping(
         name="api-secrets",
         keys={
-            "EMAIL_PASS": "APPS_PLATFORM_API_EMAIL_PASS",
-            "EMAIL_USER": "APPS_PLATFORM_API_EMAIL_USER",
-            # EMAIL_FROM + BEEHIIV_PUB_ID removed (SSOT-012 phases 1+2):
-            # both are non-secret values now sourced from common.yaml via
-            # ConfigMap. Consumers still read the same env var names —
-            # only the K8s source object changes.
+            # SMTP password from shared infra namespace (ADR-036, PR #3).
+            # User/host/port/from are non-secrets in common.yaml → ConfigMap.
+            "INFRA_SMTP_PASS": "INFRA_SMTP_PASS",
             "BEEHIIV_API_KEY": "APPS_PLATFORM_API_BEEHIIV_API_KEY",
             "ZOHO_CLIENT_ID": "APPS_PLATFORM_API_ZOHO_CLIENT_ID",
             "ZOHO_CLIENT_SECRET": "APPS_PLATFORM_API_ZOHO_CLIENT_SECRET",

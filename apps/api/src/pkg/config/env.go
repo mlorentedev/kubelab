@@ -88,13 +88,13 @@ func populateConfig() (*Config, error) {
 	cfg.Beehiiv.APIKey = os.Getenv("BEEHIIV_API_KEY")
 	cfg.Beehiiv.PubID = os.Getenv("BEEHIIV_PUB_ID")
 
-	// Email Configuration
-	cfg.Email.Host = os.Getenv("EMAIL_HOST")
-	cfg.Email.Port = os.Getenv("EMAIL_PORT")
-	cfg.Email.From = os.Getenv("EMAIL_FROM")
-	cfg.Email.User = os.Getenv("EMAIL_USER")
-	cfg.Email.Pass = os.Getenv("EMAIL_PASS")
-	cfg.Email.Secure = getBoolEnv("EMAIL_SECURE", true)
+	// SMTP Configuration (shared infra namespace — ADR-036 / SSOT-012)
+	cfg.Email.Host = os.Getenv("INFRA_SMTP_HOST")
+	cfg.Email.Port = os.Getenv("INFRA_SMTP_PORT")
+	cfg.Email.From = os.Getenv("INFRA_SMTP_FROM")
+	cfg.Email.User = os.Getenv("INFRA_SMTP_USER")
+	cfg.Email.Pass = os.Getenv("INFRA_SMTP_PASS")
+	cfg.Email.Secure = getBoolEnv("INFRA_SMTP_SECURE", true)
 
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {
@@ -146,7 +146,7 @@ func validateConfig(cfg *Config) error {
 			return errors.New("SITE_DOMAIN is required in production")
 		}
 		if cfg.Email.Host == "" || cfg.Email.User == "" || cfg.Email.Pass == "" {
-			return errors.New("email credentials (EMAIL_HOST, USER, PASS) are required in production")
+			return errors.New("SMTP credentials (INFRA_SMTP_HOST, USER, PASS) are required in production")
 		}
 	}
 

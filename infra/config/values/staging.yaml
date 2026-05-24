@@ -41,7 +41,6 @@ apps:
       domain: api.staging.kubelab.live
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
-      email_secure: true
     web:
       backend_url: "https://api.staging.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1,.staging.kubelab.live,.staging.mlorente.dev"

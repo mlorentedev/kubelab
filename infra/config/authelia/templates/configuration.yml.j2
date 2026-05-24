@@ -147,15 +147,15 @@ storage:
 notifier:
   disable_startup_check: false
   smtp:
-    address: submission://{{ APPS_PLATFORM_API_EMAIL_HOST }}:{{ APPS_PLATFORM_API_EMAIL_PORT }}
-    username: {{ APPS_PLATFORM_API_EMAIL_USER }}
-    password: {{ APPS_PLATFORM_API_EMAIL_PASS }}
-    sender: "Authelia <{{ APPS_PLATFORM_API_EMAIL_USER }}>"
+    address: submission://{{ INFRA_SMTP_HOST }}:{{ INFRA_SMTP_PORT }}
+    username: {{ INFRA_SMTP_USER }}
+    password: {{ INFRA_SMTP_PASS }}
+    sender: "Authelia <{{ INFRA_SMTP_USER }}>"
     identifier: {{ APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN }}
     subject: "[Authelia] {title}"
-    startup_check_address: {{ APPS_PLATFORM_API_EMAIL_USER }}
+    startup_check_address: {{ INFRA_SMTP_USER }}
     disable_require_tls: {{ APPS_SERVICES_SECURITY_AUTHELIA_DISABLE_REQUIRE_TLS }}
     disable_html_emails: false
     tls:
-      server_name: {{ APPS_PLATFORM_API_EMAIL_HOST }}
+      server_name: {{ INFRA_SMTP_HOST }}
       skip_verify: {{ APPS_SERVICES_SECURITY_AUTHELIA_DISABLE_REQUIRE_TLS }}

@@ -187,6 +187,29 @@ registry: docker.io/mlorentedev
 network_name: kubelab
 python_version: "3.12"
 
+# ===========================================================================
+# SHARED INFRA SERVICES (ADR-036)
+# ===========================================================================
+# Values consumed by MORE THAN ONE component. Flatten with full prefix
+# preserved (e.g. `infra.smtp.user` → env var `INFRA_SMTP_USER`). The
+# toolkit ConfigMap generator emits these as-is into every component's
+# ConfigMap that opts into shared infra access.
+#
+# Secrets stay in SOPS at `infra.<service>.<attr>` (same namespace, encrypted).
+# Non-secrets stay here in common.yaml.
+infra:
+  smtp:
+    # Outbound SMTP — consumed by `apps.platform.api` (transactional + newsletter
+    # emails) AND by `apps.services.security.authelia` (account notifications,
+    # password reset). Previously lived under `apps.platform.api.email_*` which
+    # forced Authelia to cross-read a per-app namespace (boundary violation
+    # surfaced by SSOT-012 audit 2026-05-23). The `pass` attribute lives in SOPS.
+    host: smtp.gmail.com
+    port: 587
+    user: mlorentedev@gmail.com
+    from: mlorentedev
+    secure: true
+
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
@@ -360,13 +383,11 @@ apps:
       default_port: 8080
       health_path: /health
       site_title: mlorentedev
-      email_host: smtp.gmail.com
-      email_port: 587
-      # SSOT-012 phase 2: sender display name is not a secret — it ships in
-      # every outgoing email's `From:` header. Moving from SOPS removes the
-      # secret-but-public ambiguity (same rationale as beehiiv.pub_id in
-      # SSOT-012 PR #1). API-only consumer per audit; no Authelia coupling.
-      email_from: mlorentedev
+      # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
+      # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,
+      # `INFRA_SMTP_HOST`, `INFRA_SMTP_PORT`, `INFRA_SMTP_FROM`. Authelia
+      # template reads the same names. Stream C will extract the API
+      # without touching SMTP because SMTP lives in shared infra namespace.
       beehiiv:
         # SSOT-012 phase 1: publication ID is a PUBLIC identifier (visible in
         # every Beehiiv embed URL). Was historically in SOPS but bypasses the

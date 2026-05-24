@@ -314,24 +314,18 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     # Platform API (external — user-provided credentials)
     # =========================================================================
+    # SSOT-012 PR #3 (ADR-036, 2026-05-23): SMTP moved from
+    # `apps.platform.api.email_*` to the shared infra namespace
+    # `infra.smtp.*`. `user` was moved to common.yaml (not a secret —
+    # visible in every email sent); `pass` stays in SOPS. Consumers
+    # (API + Authelia) read `INFRA_SMTP_*` env vars directly.
     SecretSpec(
-        key_path="apps.platform.api.email_user",
-        description="SMTP username (shared: API emails + Authelia notifications)",
+        key_path="infra.smtp.pass",
+        description="SMTP app password (shared: API + Authelia outbound mail)",
         kind=SecretKind.EXTERNAL,
         services=("api", "authelia"),
         rotate_note="apply-secrets for api-secrets + authelia-secrets, restart both.",
     ),
-    SecretSpec(
-        key_path="apps.platform.api.email_pass",
-        description="SMTP app password (shared: API emails + Authelia notifications)",
-        kind=SecretKind.EXTERNAL,
-        services=("api", "authelia"),
-        rotate_note="apply-secrets for api-secrets + authelia-secrets, restart both.",
-    ),
-    # SSOT-012 phase 2 (2026-05-23): apps.platform.api.email_from moved from
-    # SOPS to common.yaml — sender display name is not a secret (visible in
-    # every outgoing email's From: header). Companion `email_pass` stays in
-    # SOPS as a true secret.
     SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         description="Beehiiv newsletter API key",
