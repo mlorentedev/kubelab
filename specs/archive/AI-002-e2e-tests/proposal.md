@@ -1,9 +1,10 @@
 ---
 id: "AI-002-e2e-tests"
 type: spec
-status: draft
+status: archived
 created: "2026-05-14"
-updated: "2026-05-21"
+updated: "2026-05-23"
+archived: "2026-05-23"
 tags: [spec, proposal, ai, e2e, tests, ollama]
 template_version: "1.0"
 ---
