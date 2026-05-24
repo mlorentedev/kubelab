@@ -208,6 +208,22 @@ def authenticated_client(
     client.close()
 
 
+@pytest.fixture(scope="session")
+def ollama_api_key(e2e_config: dict[str, Any]) -> str | None:
+    """Resolve the public Ollama X-API-Key from SOPS-merged config.
+
+    Path mirrors `MIDDLEWARE_CATALOG["api-key-ollama"].secret_key_path`
+    (toolkit.features.k8s_middlewares) — the same value the Traefik
+    Middleware reads. Returns None when no decrypted key is available
+    (e.g. SOPS unreachable locally); callers must skip in that case.
+    """
+    ai = e2e_config.get("apps", {}).get("services", {}).get("ai", {})
+    key = ai.get("ollama", {}).get("api_key")
+    if not key or (isinstance(key, str) and key.startswith("secrets://")):
+        return None
+    return str(key)
+
+
 # ---------------------------------------------------------------------------
 # Auto-skip if environment unreachable
 # ---------------------------------------------------------------------------
