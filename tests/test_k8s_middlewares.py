@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -162,7 +163,11 @@ class TestApplyMiddlewareSecrets:
 
     def test_kubectl_apply_uses_stdin_with_rendered_yaml(self, fake_project: Path) -> None:
         cm = self._patch_targets(self._SOPS_OK)
-        run_mock = _mock_kubectl("middleware.traefik.io/api-key-ollama configured")
+        # Two outputs: apply + legacy-annotation scrub (SEC-AI-002).
+        run_mock = _mock_kubectl(
+            "middleware.traefik.io/api-key-ollama serverside-applied",
+            "middleware.traefik.io/api-key-ollama annotated",
+        )
 
         with patch(
             "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
@@ -170,19 +175,66 @@ class TestApplyMiddlewareSecrets:
             ok = apply_middleware_secrets(env="prod", project_root=fake_project)
 
         assert ok is True
-        assert run_mock.call_count == 1
-        call = run_mock.call_args_list[0]
-        argv = call.args[0]
-        assert "kubectl" in argv
-        assert "apply" in argv
-        assert "-f" in argv and "-" in argv, "Must apply via stdin (-f -)"
-        stdin = call.kwargs.get("input", "")
+        assert run_mock.call_count == 2, "apply + post-apply annotation scrub"
+
+        apply_call = run_mock.call_args_list[0]
+        apply_argv = apply_call.args[0]
+        assert "kubectl" in apply_argv
+        assert "apply" in apply_argv
+        assert "-f" in apply_argv and "-" in apply_argv, "Must apply via stdin (-f -)"
+        # SEC-AI-002 invariant: never client-side apply for Middlewares whose
+        # body embeds a plaintext secret (would leak into the
+        # last-applied-configuration annotation).
+        assert "--server-side" in apply_argv
+        assert "--force-conflicts" in apply_argv, (
+            "Required for first-time migration from client-side managed fields"
+        )
+        assert "--field-manager" in apply_argv
+        fm_idx = apply_argv.index("--field-manager")
+        assert apply_argv[fm_idx + 1] == "kubelab-toolkit", (
+            "Owner tag must be traceable in metadata.managedFields"
+        )
+        stdin = apply_call.kwargs.get("input", "")
         assert "PROD_KEY_42" in stdin
         assert "api-key-ollama" in stdin
 
+        scrub_call = run_mock.call_args_list[1]
+        scrub_argv = scrub_call.args[0]
+        assert "annotate" in scrub_argv
+        assert "middleware" in scrub_argv
+        assert "api-key-ollama" in scrub_argv
+        assert "kubectl.kubernetes.io/last-applied-configuration-" in scrub_argv, (
+            "Must strip the legacy annotation that pre-SEC-AI-002 client-side "
+            "applies left behind (it embeds the plaintext API key)"
+        )
+
+    def test_scrub_failure_does_not_fail_the_apply(self, fake_project: Path) -> None:
+        """The legacy-annotation scrub is best-effort. A failure (RBAC,
+        missing resource on first apply, …) must not flip a successful
+        apply into a False return — the secret-injection contract is the
+        apply, not the cleanup."""
+        cm = self._patch_targets(self._SOPS_OK)
+
+        apply_ok = MagicMock(stdout="serverside-applied", stderr="", returncode=0)
+        scrub_err = subprocess.CalledProcessError(
+            returncode=1, cmd=["kubectl", "annotate"], stderr="forbidden"
+        )
+        run_mock = MagicMock(side_effect=[apply_ok, scrub_err])
+
+        with patch(
+            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
+        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+            ok = apply_middleware_secrets(env="prod", project_root=fake_project)
+
+        assert ok is True, "apply succeeded; scrub failure is non-fatal"
+        assert run_mock.call_count == 2
+
     def test_audit_copy_written_to_generated_dir(self, fake_project: Path) -> None:
         cm = self._patch_targets(self._SOPS_OK)
-        run_mock = _mock_kubectl("middleware.traefik.io/api-key-ollama configured")
+        run_mock = _mock_kubectl(
+            "middleware.traefik.io/api-key-ollama serverside-applied",
+            "middleware.traefik.io/api-key-ollama annotated",
+        )
 
         with patch(
             "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
