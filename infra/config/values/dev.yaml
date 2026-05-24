@@ -2,6 +2,12 @@
 # DEV SETTINGS
 # ==========================================================================
 environment: dev
+
+# Local dev: SMTP via Gmail without forced TLS (defaults to STARTTLS, not strict).
+# common.yaml default is `infra.smtp.secure: true` for staging/prod.
+infra:
+  smtp:
+    secure: false
 # ==========================================================================
 # GLOBAL OVERRIDES
 # ==========================================================================
@@ -51,7 +57,6 @@ apps:
       domain: api.kubelab.test
       site_domain: kubelab.test
       site_url: http://kubelab.test
-      email_secure: false
     web:
       backend_url: "http://api.kubelab.test"
       allowed_hosts: "localhost,web,127.0.0.1,.kubelab.test,.mlorente.test"

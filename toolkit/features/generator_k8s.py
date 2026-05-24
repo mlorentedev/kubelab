@@ -239,6 +239,13 @@ class K8sGenerator(BaseGenerator):
     def _extract_app_env_vars(self, env_vars: dict[str, str], component: str) -> dict[str, str]:
         """Extract non-secret, non-metadata env vars for a component's ConfigMap.
 
+        Picks up two prefix classes (per ADR-036):
+          - APPS_PLATFORM_<COMPONENT>_*  → suffix-stripped (component-local view).
+            E.g. APPS_PLATFORM_API_HEALTH_PATH → HEALTH_PATH in the API pod.
+          - INFRA_*                       → emitted as-is (shared infra services).
+            E.g. INFRA_SMTP_USER stays INFRA_SMTP_USER in every component's
+            ConfigMap. Lives at `infra.<service>.<attr>` in common.yaml.
+
         Args:
             env_vars: Flattened environment variables
             component: Component name
@@ -247,29 +254,34 @@ class K8sGenerator(BaseGenerator):
             Dictionary of env var name -> value for the ConfigMap
         """
         component_upper = component.upper().replace("-", "_")
-        prefix = f"APPS_PLATFORM_{component_upper}_"
+        component_prefix = f"APPS_PLATFORM_{component_upper}_"
+        shared_prefix = "INFRA_"
 
         result: dict[str, str] = {}
         for key, value in env_vars.items():
-            if not key.startswith(prefix):
+            if key.startswith(component_prefix):
+                # Component-local: strip the prefix.
+                name = key[len(component_prefix) :]
+            elif key.startswith(shared_prefix):
+                # Shared infra: keep the full name (ADR-036).
+                name = key
+            else:
                 continue
 
-            suffix = key[len(prefix) :]
-
-            # Skip metadata keys
-            if suffix in self._METADATA_SUFFIXES:
+            # Skip metadata keys (only meaningful for the stripped form)
+            if name in self._METADATA_SUFFIXES:
                 continue
 
             # Skip resource-related keys
-            if suffix.startswith("RESOURCES_"):
+            if name.startswith("RESOURCES_"):
                 continue
 
             # Skip secret-pattern keys (exact word match, not substring)
-            parts = suffix.split("_")
+            parts = name.split("_")
             if any(part in VALIDATION_RULES.SECRET_PATTERNS for part in parts):
                 continue
 
-            result[suffix] = str(value)
+            result[name] = str(value)
 
         return result
 
