@@ -44,13 +44,6 @@ jobs:
         env: [staging, prod]
     env:
       TARGET_ENV: ${{ matrix.env }}
-      # `toolkit.features.github_secrets` instantiates a manager at import
-      # time and shells out to `gh` for repo discovery. Without a token,
-      # any toolkit subcommand fails to import. The workflow's default
-      # `secrets.GITHUB_TOKEN` is read-only and that's all we need.
-      # Tracked as toolkit debt: lazy-init the manager so this isn't
-      # required for non-secret commands.
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:

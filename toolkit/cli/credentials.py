@@ -169,7 +169,7 @@ def setup_gh_secrets(
     """
     settings.validate_environment(env)
 
-    synced_count = github_secrets_manager.sync_env_to_secrets(env)
+    synced_count = github_secrets_manager().sync_env_to_secrets(env)
 
     if synced_count > 0:
         logger.success(f"Synced {synced_count} secrets to GitHub for {env} environment")
@@ -184,10 +184,10 @@ def list_gh_secrets() -> None:
     """
     logger.section("GitHub Secrets")
 
-    if not github_secrets_manager.check_gh_cli():
+    if not github_secrets_manager().check_gh_cli():
         raise typer.Exit() from None
 
-    secrets = github_secrets_manager.list_secrets()
+    secrets = github_secrets_manager().list_secrets()
 
     if secrets:
         logger.info(f"Found {len(secrets)} configured GitHub secrets:")
@@ -215,13 +215,13 @@ def set_gh_secret(
     """
     logger.section("Set GitHub Secret")
 
-    if not github_secrets_manager.check_gh_cli():
+    if not github_secrets_manager().check_gh_cli():
         raise typer.Exit() from None
 
     secret_name = f"{name}_{env.upper()}" if env else name
     logger.info(f"Setting secret: {secret_name}")
 
-    if github_secrets_manager.set_secret(secret_name, value):
+    if github_secrets_manager().set_secret(secret_name, value):
         logger.success(MESSAGES.SUCCESS_CREDENTIALS_SECRET_SET.format(secret_name))
     else:
         logger.error(MESSAGES.ERROR_CREDENTIALS_SECRET_SET_FAILED.format(secret_name))
@@ -245,7 +245,7 @@ def delete_gh_secret(
     """
     logger.section("Delete GitHub Secret")
 
-    if not github_secrets_manager.check_gh_cli():
+    if not github_secrets_manager().check_gh_cli():
         raise typer.Exit() from None
 
     secret_name = f"{name}_{env.upper()}" if env else name
@@ -254,7 +254,7 @@ def delete_gh_secret(
         logger.info(MESSAGES.INFO_CREDENTIALS_SECRET_DELETION_CANCELLED)
         return
 
-    if github_secrets_manager.delete_secret(secret_name):
+    if github_secrets_manager().delete_secret(secret_name):
         logger.success(MESSAGES.SUCCESS_CREDENTIALS_SECRET_DELETED.format(secret_name))
     else:
         logger.error(MESSAGES.ERROR_CREDENTIALS_SECRET_DELETE_FAILED.format(secret_name))
