@@ -221,17 +221,22 @@ config-generate:
 # ingress.yaml lacked secure-headers middleware because the generator code
 # evolved but the committed file was never refreshed).
 #
-# Scope: K8s overlays, Traefik configs, Ansible inventory. Excludes Authelia
-# (its generated configuration.yml contains SOPS-interpolated values, which
-# CI without an age key cannot reproduce — extend coverage once CI gains
-# SOPS access).
+# Scope: K8s overlays + Ansible inventory ONLY. These two generator chains
+# read exclusively from `common.yaml` + `<env>.yaml` (no SOPS), so the gate
+# is deterministic in CI without an age key.
+#
+# OUT of scope (require SOPS in CI to cover — separate follow-up):
+#   - edge/traefik/generated/<env>/ — middlewares.yml.j2 reads
+#     BASIC_AUTH_CREDENTIALS from SOPS.
+#   - infra/config/authelia/generated/<env>/ — configuration.yml has
+#     SOPS-interpolated jwt_secret, session secret, OIDC argon2 hashes.
 .PHONY: config-check-drift
 config-check-drift:
 	@test -n "$(ENV)" || (echo "Usage: make config-check-drift ENV=staging|prod" && exit 1)
 	@echo "→ Regenerating $(ENV) configs and checking for drift..."
 	@$(TOOLKIT) config generate --env $(ENV) --force
 	@_status=0; \
-	_paths="infra/k8s/overlays/$(ENV)/generated edge/traefik/generated/$(ENV) infra/ansible/generated/$(ENV)"; \
+	_paths="infra/k8s/overlays/$(ENV)/generated infra/ansible/generated/$(ENV)"; \
 	if git diff --quiet -- $$_paths; then \
 		echo "✓ No drift in $(ENV) generated configs ($$_paths)"; \
 	else \
