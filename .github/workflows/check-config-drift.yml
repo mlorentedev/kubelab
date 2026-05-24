@@ -1,0 +1,70 @@
+---
+name: Config Drift Gate
+
+# CI-GATE-002. Prevents the SEC-K8S-001 class of bug: generator code evolves
+# but committed `generated/` files are never refreshed, so `kubectl apply -k`
+# uses stale manifests and tests that assert on generator-implied invariants
+# silently regress months after the original closure.
+#
+# Strategy: for each env, run `make config-check-drift ENV=<env>`. The target
+# regenerates configs via the toolkit and compares against the committed
+# files. Any non-empty diff fails the job, with the diff printed in the
+# log so the fix is obvious (commit the regenerated files).
+#
+# Scope: K8s overlays, Traefik configs, Ansible inventory — none of these
+# depend on SOPS-decrypted values. Authelia is intentionally OUT of scope
+# until CI gains access to an age key.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  schedule:
+    # Nightly at 06:00 UTC — catches drift introduced by force-pushes,
+    # squash-merges that bypassed PR checks, or manual edits to generated/.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  drift-check:
+    name: Drift / ${{ matrix.env }}
+    # Fork PRs run on GitHub-hosted (self-hosted has Docker socket access).
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [staging, prod]
+    env:
+      TARGET_ENV: ${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install project deps (no dev, no root)
+        run: poetry install --no-root --only main
+
+      - name: Check ${{ matrix.env }} for generator drift
+        run: make config-check-drift ENV="$TARGET_ENV"
+
+      - name: Hint on failure
+        if: failure()
+        run: |
+          echo "::error::Generator output drifted from committed files. Locally run:"
+          echo "::error::  make config-generate ENV=$TARGET_ENV"
+          echo "::error::Review the diff, then commit the regenerated files."

@@ -216,6 +216,32 @@ credentials-generate:
 config-generate:
 	@$(TOOLKIT) config generate --env $(ENV)
 
+# CI-GATE-002: detect drift between the generator output and the committed
+# `generated/` files. Catches the class of bug that bit SEC-K8S-001 (prod
+# ingress.yaml lacked secure-headers middleware because the generator code
+# evolved but the committed file was never refreshed).
+#
+# Scope: K8s overlays, Traefik configs, Ansible inventory. Excludes Authelia
+# (its generated configuration.yml contains SOPS-interpolated values, which
+# CI without an age key cannot reproduce — extend coverage once CI gains
+# SOPS access).
+.PHONY: config-check-drift
+config-check-drift:
+	@test -n "$(ENV)" || (echo "Usage: make config-check-drift ENV=staging|prod" && exit 1)
+	@echo "→ Regenerating $(ENV) configs and checking for drift..."
+	@$(TOOLKIT) config generate --env $(ENV) --force
+	@_status=0; \
+	_paths="infra/k8s/overlays/$(ENV)/generated edge/traefik/generated/$(ENV) infra/ansible/generated/$(ENV)"; \
+	if git diff --quiet -- $$_paths; then \
+		echo "✓ No drift in $(ENV) generated configs ($$_paths)"; \
+	else \
+		echo "✗ Drift detected in $(ENV) generated configs:"; \
+		git --no-pager diff -- $$_paths; \
+		_status=1; \
+	fi; \
+	git checkout -- infra edge 2>/dev/null || true; \
+	exit $$_status
+
 .PHONY: build-dev
 build-dev:
 	@$(TOOLKIT) services build api --env dev --no-cache
