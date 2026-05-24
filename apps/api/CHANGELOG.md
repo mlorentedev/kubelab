@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/mlorentedev/kubelab/compare/api-v1.0.0...api-v1.1.0) (2026-05-24)
+
+
+### Features
+
+* **ssot:** SSOT-012 PR [#3](https://github.com/mlorentedev/kubelab/issues/3) — shared SMTP namespace `infra.smtp.*` (ADR-036) ([#210](https://github.com/mlorentedev/kubelab/issues/210)) ([094af52](https://github.com/mlorentedev/kubelab/commit/094af5215e560794f09b2224036c080159070bf9))
+
 ## 1.0.0 (2026-03-16)
 
 
