@@ -1,15 +1,22 @@
 ---
 # =============================================================================
-# VPS Provisioning — K3s Production (Pattern C: side-by-side with Docker Compose)
+# VPS Provisioning — K3s Production
 #
-# Installs K3s on the Hetzner VPS alongside the existing Docker Compose stack.
-# K3s Traefik listens on 8080/8443 (Pattern C). Docker Compose Traefik keeps
-# 80/443. Swap happens at cutover (PROD-K3S-003b).
+# Installs K3s on the Hetzner VPS as the primary edge. Traefik listens on the
+# ports configured at `config.k3s.traefik.{http,https}_port` — currently 80/443
+# in prod.yaml (post-cutover).
+#
+# Historical context: this play was bootstrapped during the Pattern C (ADR-015)
+# side-by-side migration in March 2026, when Docker Compose Traefik held 80/443
+# and K3s Traefik validated on alternate 8080/8443 before the port swap.
+# Post-cutover (PROD-K3S-003b completed 2026-03-22) the Docker Compose edge is
+# gone, K3s Traefik owns 80/443, and this playbook is the canonical bootstrap
+# for a replacement VPS (idempotent — see Play 1's dashboard-port-remap block,
+# which no-ops when no Docker Compose Traefik is present).
 #
 # Prerequisites:
 #   - VPS already provisioned (packages, sudo, hostname, Docker, Tailscale)
-#   - Docker Compose Traefik running on 80/443
-#   - Headscale running on VPS
+#   - Headscale running on VPS via Docker Compose (stays outside K3s per ADR-015)
 #   - SOPS secrets accessible from controller
 #
 # Usage:
@@ -28,13 +35,17 @@
   gather_facts: false
   become: false
   # NOTE: unlike the other provision-*.yml Pre-flight Plays, this one is
-  # designed for ONE-TIME first K3s install on VPS (Pattern C migration).
-  # It asserts "K3s not yet installed" and "Docker Compose Traefik running"
-  # — assumptions that DO NOT hold once the cutover is complete. Therefore
-  # it intentionally does NOT carry the [always] tag that PR #181 added to
-  # the other Pre-flight Plays; keep [preflight] so it only runs on
-  # explicit `--tags preflight` invocation. Play 4 (Glances) has its own
-  # config-loading pre_tasks tagged [always], so monitoring runs work.
+  # designed for the FIRST K3s install on a VPS (originally the Pattern C
+  # side-by-side migration). It asserts pre-cutover invariants like "K3s not
+  # yet installed" and "Docker Compose Traefik running on 80/443" — neither
+  # of which holds on the in-place prod VPS today (cutover completed
+  # 2026-03-22) or on a replacement VPS (no Docker Compose Traefik any more).
+  # Therefore it intentionally does NOT carry the [always] tag that PR #181
+  # added to the other Pre-flight Plays; keep [preflight] so it only runs on
+  # explicit `--tags preflight` invocation against a fresh VPS that genuinely
+  # has the Pattern C precondition (today: never; kept for historical
+  # rollback). Play 4 (Glances) has its own config-loading pre_tasks tagged
+  # [always], so monitoring runs work.
   tags: [preflight]
 
   tasks:
@@ -118,19 +129,19 @@
         proto: tcp
         comment: "K3s API server"
 
-    - name: Allow K3s Traefik HTTP — Pattern C ({{ config.k3s.traefik.http_port }}/tcp)
+    - name: Allow K3s Traefik HTTP ({{ config.k3s.traefik.http_port }}/tcp)
       community.general.ufw:
         rule: allow
         port: "{{ config.k3s.traefik.http_port | string }}"
         proto: tcp
-        comment: "K3s Traefik HTTP (Pattern C)"
+        comment: "K3s Traefik HTTP"
 
-    - name: Allow K3s Traefik HTTPS — Pattern C ({{ config.k3s.traefik.https_port }}/tcp)
+    - name: Allow K3s Traefik HTTPS ({{ config.k3s.traefik.https_port }}/tcp)
       community.general.ufw:
         rule: allow
         port: "{{ config.k3s.traefik.https_port | string }}"
         proto: tcp
-        comment: "K3s Traefik HTTPS (Pattern C)"
+        comment: "K3s Traefik HTTPS"
 
     # --- Resolve port 8080 conflict: Traefik dashboard → 9080 ---
     - name: Check current Traefik dashboard port binding
@@ -212,7 +223,7 @@
 # ---------------------------------------------------------------------------
 # Play 2: Install K3s (server role with prod vars)
 # ---------------------------------------------------------------------------
-- name: "Install K3s on VPS — Pattern C (8080/8443)"
+- name: "Install K3s on VPS"
   hosts: kubelab-vps
   become: true
   gather_facts: true
@@ -296,6 +307,27 @@
   gather_facts: false
   tags: [k3s, verify]
 
+  vars:
+    deploy_env: prod
+
+  pre_tasks:
+    # Plays are isolated by default — Play 3 needs its own SSOT load to
+    # reference `config.k3s.traefik.{http,https}_port` in the verify tasks
+    # below. Mirrors the pattern in Plays 1 and 2.
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+
+    - name: Load environment overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+
+    - name: Merge configs (env overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+
   tasks:
     - name: Verify K3s service is active
       systemd:
@@ -322,31 +354,28 @@
       debug:
         msg: "{{ _k3s_nodes.stdout_lines }}"
 
-    - name: Verify K3s Traefik is listening on Pattern C ports
+    # Parametrized from `config.k3s.traefik.{http,https}_port` so the check
+    # tracks whatever ports the SSOT says K3s Traefik should expose today.
+    # Pre-cutover (Pattern C) this was hardcoded 8080/8443 + a separate check
+    # for Docker Compose Traefik on 80/443; both became false-positives once
+    # K3s Traefik moved to 80/443 and the Docker Compose edge was removed.
+    - name: Verify K3s Traefik is listening on configured ports
       wait_for:
         port: "{{ item }}"
         host: 127.0.0.1
         timeout: 60
       loop:
-        - 8080   # K3s Traefik HTTP (from prod.yaml)
-        - 8443   # K3s Traefik HTTPS (from prod.yaml)
+        - "{{ config.k3s.traefik.http_port }}"
+        - "{{ config.k3s.traefik.https_port }}"
 
-    - name: Verify Docker Compose Traefik still running on standard ports
-      wait_for:
-        port: "{{ item }}"
-        host: 127.0.0.1
-        timeout: 10
-      loop:
-        - 80     # Docker Compose Traefik HTTP
-        - 443    # Docker Compose Traefik HTTPS
-
-    - name: Confirm coexistence — both Traefik instances responding
+    - name: Confirm K3s Traefik responding on configured ports
       debug:
         msg: >-
-          K3s installed successfully on VPS (Pattern C).
-          K3s Traefik: 8080/8443 | Docker Compose Traefik: 80/443.
-          Next: apply prod overlay (PROD-K3S-002), validate routes (PROD-K3S-003),
-          then port swap cutover (PROD-K3S-003b).
+          K3s installed successfully on VPS. Traefik listening on
+          {{ config.k3s.traefik.http_port }}/{{ config.k3s.traefik.https_port }}
+          (per `config.k3s.traefik.*` in {{ deploy_env }}.yaml).
+          Next: apply prod overlay (`make deploy-k8s ENV=prod`) and validate
+          routes via E2E (`make test-e2e ENV=prod`).
 
     - name: Verify kubeconfig fetched to controller
       stat:

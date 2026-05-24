@@ -79,7 +79,7 @@
   no_log: true
   when: k3s_traefik_acme_enabled and k3s_traefik_acme_cloudflare_token | length > 0
 
-# --- Traefik HelmChartConfig (Pattern C — ADR-015) ---
+# --- Traefik HelmChartConfig (ports + plugins, ADR-015) ---
 - name: Template Traefik HelmChartConfig
   template:
     src: traefik-helmconfig.yaml.j2
