@@ -362,6 +362,14 @@ apps:
       site_title: mlorentedev
       email_host: smtp.gmail.com
       email_port: 587
+      beehiiv:
+        # SSOT-012 phase 1: publication ID is a PUBLIC identifier (visible in
+        # every Beehiiv embed URL). Was historically in SOPS but bypasses the
+        # SECRET_PATTERNS regex → leaked into ConfigMaps anyway. Moving here
+        # removes the "secret-but-not-really" ambiguity and makes the CI
+        # drift gate (CI-GATE-002) able to cover configmaps.yaml deterministically.
+        # The companion `api_key` stays in SOPS.
+        pub_id: pub_bf6a0b8d-074a-45e5-a2c2-34ed87fb4b5f
 
     web:
       name: web

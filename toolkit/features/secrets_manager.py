@@ -342,13 +342,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("api",),
         rotate_note="apply-secrets for api-secrets. Regenerate in Beehiiv dashboard.",
     ),
-    SecretSpec(
-        key_path="apps.platform.api.beehiiv_pub_id",
-        description="Beehiiv publication ID",
-        kind=SecretKind.EXTERNAL,
-        services=("api",),
-        rotate_note="apply-secrets for api-secrets.",
-    ),
+    # SSOT-012 (2026-05-23): apps.platform.api.beehiiv.pub_id moved from SOPS
+    # to common.yaml — publication IDs are public (visible in every Beehiiv
+    # embed URL) and were leaking into ConfigMaps via the SECRET_PATTERNS
+    # regex gap. Companion `api_key` stays in SOPS as a true secret.
     SecretSpec(
         key_path="apps.platform.api.zoho_client_id",
         description="Zoho OAuth client ID",
