@@ -101,7 +101,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "EMAIL_USER": "APPS_PLATFORM_API_EMAIL_USER",
             "EMAIL_FROM": "APPS_PLATFORM_API_EMAIL_FROM",
             "BEEHIIV_API_KEY": "APPS_PLATFORM_API_BEEHIIV_API_KEY",
-            "BEEHIIV_PUB_ID": "APPS_PLATFORM_API_BEEHIIV_PUB_ID",
+            # BEEHIIV_PUB_ID removed (SSOT-012): now sourced from common.yaml
+            # via the ConfigMap path, not the Secret. Consumers still read
+            # the same env var name — only the K8s source object changes.
             "ZOHO_CLIENT_ID": "APPS_PLATFORM_API_ZOHO_CLIENT_ID",
             "ZOHO_CLIENT_SECRET": "APPS_PLATFORM_API_ZOHO_CLIENT_SECRET",
         },
