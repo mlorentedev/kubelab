@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+from functools import lru_cache
 from typing import Any
 
 from toolkit.config.constants import MESSAGES
@@ -296,5 +297,13 @@ class GitHubSecretsManager:
         return len(unused_secrets) if dry_run else deleted_count
 
 
-# Global GitHub secrets manager instance
-github_secrets_manager = GitHubSecretsManager()
+@lru_cache(maxsize=1)
+def github_secrets_manager() -> GitHubSecretsManager:
+    """Lazy singleton accessor for the GitHub secrets manager.
+
+    Instantiation calls `gh repo view` which fails fast on missing
+    auth — keep that I/O out of import time so CI flows that don't
+    touch GitHub secrets (e.g. config drift checks) don't require
+    GH_TOKEN. Cache the instance so subsequent calls are free.
+    """
+    return GitHubSecretsManager()

@@ -216,6 +216,45 @@ credentials-generate:
 config-generate:
 	@$(TOOLKIT) config generate --env $(ENV)
 
+# CI-GATE-002: detect drift between the generator output and the committed
+# `generated/` files. Catches the class of bug that bit SEC-K8S-001 (prod
+# ingress.yaml lacked secure-headers middleware because the generator code
+# evolved but the committed file was never refreshed).
+#
+# Scope (Phase 1 — SOPS-independent only):
+#   - infra/k8s/overlays/<env>/generated/ingress.yaml
+#   - infra/ansible/generated/<env>/hosts.yml
+#
+# Both generators read EXCLUSIVELY from `common.yaml` + `<env>.yaml`, so
+# the gate is deterministic in CI without an age key. The minimal scope
+# is deliberately tight to keep zero false positives on this first PR.
+#
+# OUT of scope for Phase 1 (broader generator output requires SSOT
+# cleanup + age key access — tracked as SSOT-012 and CI-GATE-003):
+#   - configmaps.yaml / deployments.yaml — currently pull a handful of
+#     non-secret values from SOPS (BEEHIIV_PUB_ID, EMAIL_FROM, EMAIL_USER);
+#     audit + relocate to common.yaml first.
+#   - edge/traefik/generated/<env>/middlewares.yml — uses
+#     BASIC_AUTH_CREDENTIALS from SOPS.
+#   - infra/config/authelia/generated/<env>/configuration.yml — has
+#     SOPS-interpolated jwt_secret, session secret, OIDC argon2 hashes.
+.PHONY: config-check-drift
+config-check-drift:
+	@test -n "$(ENV)" || (echo "Usage: make config-check-drift ENV=staging|prod" && exit 1)
+	@echo "→ Regenerating $(ENV) configs and checking for drift..."
+	@$(TOOLKIT) config generate --env $(ENV) --force
+	@_status=0; \
+	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml infra/ansible/generated/$(ENV)/hosts.yml"; \
+	if git diff --quiet -- $$_paths; then \
+		echo "✓ No drift in $(ENV) generated configs ($$_paths)"; \
+	else \
+		echo "✗ Drift detected in $(ENV) generated configs:"; \
+		git --no-pager diff -- $$_paths; \
+		_status=1; \
+	fi; \
+	git checkout -- infra edge 2>/dev/null || true; \
+	exit $$_status
+
 .PHONY: build-dev
 build-dev:
 	@$(TOOLKIT) services build api --env dev --no-cache

@@ -38,6 +38,12 @@ def generate(
         "-s",
         help="Specific service (traefik, ansible, terraform, authelia, k8s)",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Skip the staging/prod confirmation prompt. Required for CI runs.",
+    ),
 ) -> None:
     """
     Generate configuration files from templates (Traefik, Ansible, Terraform).
@@ -49,7 +55,8 @@ def generate(
     # Validate environment and confirm dangerous operation
     env_config = validate_environment_config(env)
     logger.info(f"Target: {env_config.description}")
-    confirm_dangerous_operation(env_config, "Generate configs")
+    if not force:
+        confirm_dangerous_operation(env_config, "Generate configs")
 
     try:
         success_count = 0
