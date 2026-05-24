@@ -54,7 +54,13 @@ jobs:
           python-version: '3.12'
 
       - name: Install Poetry
-        run: pipx install poetry
+        # pipx is not preinstalled on the self-hosted runner; use pip
+        # directly. `--user` keeps the install in the runner's per-job
+        # tool cache without needing root.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry --version
 
       - name: Install project deps (no dev, no root)
         run: poetry install --no-root --only main
