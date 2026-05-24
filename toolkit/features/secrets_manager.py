@@ -328,13 +328,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("api", "authelia"),
         rotate_note="apply-secrets for api-secrets + authelia-secrets, restart both.",
     ),
-    SecretSpec(
-        key_path="apps.platform.api.email_from",
-        description="SMTP sender address (From header)",
-        kind=SecretKind.EXTERNAL,
-        services=("api",),
-        rotate_note="apply-secrets for api-secrets.",
-    ),
+    # SSOT-012 phase 2 (2026-05-23): apps.platform.api.email_from moved from
+    # SOPS to common.yaml — sender display name is not a secret (visible in
+    # every outgoing email's From: header). Companion `email_pass` stays in
+    # SOPS as a true secret.
     SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         description="Beehiiv newsletter API key",
