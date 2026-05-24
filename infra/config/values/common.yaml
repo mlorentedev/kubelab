@@ -362,6 +362,11 @@ apps:
       site_title: mlorentedev
       email_host: smtp.gmail.com
       email_port: 587
+      # SSOT-012 phase 2: sender display name is not a secret — it ships in
+      # every outgoing email's `From:` header. Moving from SOPS removes the
+      # secret-but-public ambiguity (same rationale as beehiiv.pub_id in
+      # SSOT-012 PR #1). API-only consumer per audit; no Authelia coupling.
+      email_from: mlorentedev
       beehiiv:
         # SSOT-012 phase 1: publication ID is a PUBLIC identifier (visible in
         # every Beehiiv embed URL). Was historically in SOPS but bypasses the
