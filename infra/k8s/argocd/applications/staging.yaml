@@ -1,6 +1,19 @@
 # Argo CD Application — staging environment
 # Syncs the full Kustomize overlay to the staging spoke
 # Applied via: make deploy-apps
+#
+# selfHeal: false (ADR-037, ARGO-015 — 2026-05-23)
+#
+# Staging is a MUTABLE TEST BED. Developers deploy feature-branch manifests
+# directly via `make deploy-k8s ENV=staging` to validate changes against the
+# real cluster BEFORE merging to master and promoting to prod. With selfHeal
+# enabled, Argo CD would revert those manual applies within seconds — making
+# staging effectively read-only and defeating its purpose.
+#
+# The companion `applications/prod.yaml` keeps `selfHeal: true` because prod
+# must self-correct any drift from master HEAD. See ADR-037 for the full
+# rationale and the Pattern B + Pattern D + conditional-selfHeal combination
+# this is part of.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -24,7 +37,7 @@ spec:
   syncPolicy:
     automated:
       prune: true
-      selfHeal: true
+      selfHeal: false  # ADR-037 — staging is a mutable test bed; see header.
     syncOptions:
       - CreateNamespace=false
       - ApplyOutOfSyncOnly=true

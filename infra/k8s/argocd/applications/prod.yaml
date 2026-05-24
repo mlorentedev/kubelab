@@ -1,6 +1,13 @@
 # Argo CD Application — prod environment
 # Syncs the full Kustomize overlay to the prod spoke
 # Applied via: make deploy-apps
+#
+# selfHeal: true (ADR-037)
+#
+# Prod is the system of record. Any drift from master HEAD is a bug or an
+# intrusion; Argo CD must self-correct it immediately. The companion
+# `applications/staging.yaml` keeps `selfHeal: false` because staging is
+# a mutable test bed. See ADR-037 for the full rationale.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
