@@ -51,8 +51,9 @@ def test_ollama_health_authenticated(
     svc = _ollama(services_by_name)
     headers = {}
     if env == "prod":
-        if not ollama_api_key:
-            pytest.skip("ollama_api_key fixture returned None — SOPS unavailable?")
+        # Fixture fails hard in prod when key is missing (see conftest.py);
+        # by the time we get here, `ollama_api_key` is guaranteed non-None.
+        assert ollama_api_key is not None
         headers["X-API-Key"] = ollama_api_key
 
     r = http_client.get(_tags_url(svc), headers=headers)
@@ -120,8 +121,7 @@ def test_ollama_bearer_forward_compat(
     """
     if env != "prod":
         pytest.skip("staging is VPN-only — no middleware to honor Bearer")
-    if not ollama_api_key:
-        pytest.skip("ollama_api_key fixture returned None — SOPS unavailable?")
+    assert ollama_api_key is not None  # fixture fails in prod if missing
 
     svc = _ollama(services_by_name)
     headers = {"Authorization": f"Bearer {ollama_api_key}"}
@@ -146,8 +146,7 @@ def test_ollama_no_key_leak_in_403_body(
     """
     if env != "prod":
         pytest.skip("staging is VPN-only — no middleware emits 403 bodies")
-    if not ollama_api_key:
-        pytest.skip("ollama_api_key fixture returned None — SOPS unavailable?")
+    assert ollama_api_key is not None  # fixture fails in prod if missing
 
     svc = _ollama(services_by_name)
     r = http_client.get(_tags_url(svc), headers={"X-API-Key": _WRONG_KEY_SENTINEL})
