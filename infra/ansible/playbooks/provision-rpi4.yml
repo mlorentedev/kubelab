@@ -8,7 +8,7 @@
 #
 # Prerequisites:
 #   - Ubuntu Server flashed on SD card with netplan configured
-#   - See vault runbook: 02-runbooks/rpi4-bootstrap.md
+#   - See vault runbook: 40-runbooks/rpi4-bootstrap.md
 #
 # Usage:
 #   make provision NODE=rpi4 ENV=prod

@@ -130,4 +130,4 @@ ansible -i inventories/homelab.yml kubelab-jet1 -m raw -a "grep vpn.kubelab.live
 - `-K` required: most nodes need sudo password for `/etc/hosts` (RPi3 has NOPASSWD).
 - The inventory uses Tailscale IPs. If a node is already disconnected from Tailscale, fix it manually via SSH over LAN (`ssh <host>-lan`), then run this playbook to prevent recurrence.
 - Jetson Nano uses `raw` module (Python 3.6 too old for Ansible modules). Flagged with `legacy_python: true` in inventory.
-- Full operational docs: vault `02-runbooks/dns-homelab.md` → "DNS Resilience" section.
+- Full operational docs: vault `40-runbooks/dns-homelab.md` → "DNS Resilience" section.
