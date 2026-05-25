@@ -47,8 +47,11 @@
             Authorization: "Bearer {{HOMEPAGE_VAR_CLOUDFLARE_TOKEN}}"
             Content-Type: application/json
           requestBody:
+            # DASH-DT-010: static far-past date_geq + orderBy date_DESC returns the most
+            # recent daily group without baking today's date into the committed file
+            # (no daily drift across validate-sync).
             # yamllint disable-line rule:line-length
-            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_gt: "2026-05-22"}) { sum { requests threats } } } } }'
+            query: '{ viewer { zones(filter: {zoneTag: "a708cb04dd4572e76eb6da42cc09507d"}) { httpRequests1dGroups(limit: 1, filter: {date_geq: "2020-01-01"}, orderBy: [date_DESC]) { sum { requests threats } } } } }'
           mappings:
             - field: data.viewer.zones.0.httpRequests1dGroups.0.sum.requests
               label: Requests
