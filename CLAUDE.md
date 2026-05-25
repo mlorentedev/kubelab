@@ -17,7 +17,7 @@ KubeLab is one piece of a larger product ecosystem organized in 4 layers:
 
 **Master index**: vault `10_projects/kubelab/portfolio.md`
 **Product specs**: vault `10_projects/<product>/_index.md`
-**Template**: vault `10_projects/kubelab/06-products/product-template.md`
+**Template**: vault `00_meta/templates/product-template.md`
 
 ### Product lifecycle
 
@@ -188,12 +188,14 @@ versioning.md              — Versioning strategy
 architecture-diagram.md    — Detailed architecture diagrams
 portfolio.md               — Product portfolio master index
 service-catalog.md         — Service catalog
-01-adrs/                   — Architecture Decision Records
-02-runbooks/               — Operational runbooks
-03-troubleshooting/        — Troubleshooting guides
-04-infra/                  — Infrastructure docs (DNS, networking)
-05-hardware/               — Hardware allocation and topology
-06-products/               — Product template
+30-architecture/adrs/      — Architecture Decision Records
+30-architecture/components/ — Component-level architecture docs
+30-architecture/infra/     — Infrastructure docs (DNS, networking)
+30-architecture/hardware/  — Hardware allocation and topology
+30-architecture/plans/     — Implementation plans
+40-runbooks/               — Operational runbooks
+50-troubleshooting/        — Troubleshooting guides
+20-business/               — Positioning, offers, funnel, competitor analysis
 changelog.md               — Project changelog
 ```
 
