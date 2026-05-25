@@ -1,6 +1,6 @@
 ---
 # Gateway role: IP forwarding, nftables NAT, dnsmasq DHCP, DNS resilience
-# Assumes netplan was configured pre-boot (see vault runbook: 02-runbooks/rpi4-bootstrap.md)
+# Assumes netplan was configured pre-boot (see vault runbook: 40-runbooks/rpi4-bootstrap.md)
 
 - name: Enable IP forwarding
   sysctl:
