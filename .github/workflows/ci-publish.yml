@@ -118,8 +118,28 @@ jobs:
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
 
-      # TODO: Re-enable Trivy scanning when action version stabilizes
-      # Removed: aquasecurity/trivy-action kept breaking CI across versions
+      # SEC-SCAN-001: pinned to v0.36.0 (commit SHA, not floating tag, to avoid CI breakage).
+      # continue-on-error during a 4-week soak so findings surface in GitHub Security
+      # without blocking ships; flip to blocking after baseline is established.
+      - name: Trivy vulnerability scan
+        id: trivy_scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: ${{ steps.docker_tags.outputs.full_image }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-${{ inputs.app }}
 
       - name: Log build summary
         run: |
