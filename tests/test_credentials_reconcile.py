@@ -1,5 +1,7 @@
 """Tests for credential-to-service mapping and reconciliation."""
 
+import pytest
+
 from toolkit.features.credentials import (
     CREDENTIAL_SERVICE_MAP,
     IMMUTABLE_SECRETS,
@@ -175,25 +177,26 @@ class TestFlattenDict:
         assert result["apps.services.security.authelia.session_secret"] == "abc"
 
 
+@pytest.mark.parametrize("env", ["staging", "prod"])
 class TestSSOTAdminUsername:
-    """Verify admin username is read from common.yaml SSOT."""
+    """Verify admin username is read from common.yaml SSOT (both envs)."""
 
-    def test_common_yaml_has_admin_username(self) -> None:
+    def test_common_yaml_has_admin_username(self, env: str) -> None:
         from toolkit.features.configuration import ConfigurationManager
 
-        cm = ConfigurationManager("staging")
+        cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         username = config.get("apps", {}).get("auth", {}).get("admin_username")
         assert username == "operator"
 
-    def test_authelia_admin_user_derives_from_ssot(self) -> None:
+    def test_authelia_admin_user_derives_from_ssot(self, env: str) -> None:
         """SSOT-014b: admin entry is flagged with `is_admin: true` and has no
         duplicated `username` field. Generators resolve username from
         `apps.auth.admin_username` at generation time, so the admin identity
         lives in exactly one place."""
         from toolkit.features.configuration import ConfigurationManager
 
-        cm = ConfigurationManager("staging")
+        cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         users = config["apps"]["services"]["security"]["authelia"]["users"]
         admin_entries = [u for u in users if u.get("is_admin")]
@@ -205,23 +208,24 @@ class TestSSOTAdminUsername:
         assert config["apps"]["auth"]["admin_username"], "apps.auth.admin_username SSOT must be non-empty"
 
 
+@pytest.mark.parametrize("env", ["staging", "prod"])
 class TestSSOTContactEmail:
-    """SSOT-014c: operator contact email is derived from apps.contact.email."""
+    """SSOT-014c: operator contact email is derived from apps.contact.email (both envs)."""
 
-    def test_contact_email_ssot_is_set(self) -> None:
+    def test_contact_email_ssot_is_set(self, env: str) -> None:
         from toolkit.features.configuration import ConfigurationManager
 
-        cm = ConfigurationManager("staging")
+        cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config.get("apps", {}).get("contact", {}).get("email")
         assert contact, "apps.contact.email SSOT must be non-empty"
 
-    def test_loader_injects_acme_email_from_contact(self) -> None:
+    def test_loader_injects_acme_email_from_contact(self, env: str) -> None:
         """edge.traefik.acme_email is removed from common.yaml literal;
         loader fills it from apps.contact.email."""
         from toolkit.features.configuration import ConfigurationManager
 
-        cm = ConfigurationManager("staging")
+        cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config["apps"]["contact"]["email"]
         acme_email = config["edge"]["traefik"]["acme_email"]
@@ -230,10 +234,10 @@ class TestSSOTContactEmail:
             f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
         )
 
-    def test_loader_injects_uptime_kuma_admin_email_from_contact(self) -> None:
+    def test_loader_injects_uptime_kuma_admin_email_from_contact(self, env: str) -> None:
         from toolkit.features.configuration import ConfigurationManager
 
-        cm = ConfigurationManager("staging")
+        cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config["apps"]["contact"]["email"]
         admin_email = (
@@ -244,10 +248,10 @@ class TestSSOTContactEmail:
             f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
         )
 
-    def test_loader_injects_authelia_admin_email_from_contact(self) -> None:
+    def test_loader_injects_authelia_admin_email_from_contact(self, env: str) -> None:
         from toolkit.features.configuration import ConfigurationManager
 
-        cm = ConfigurationManager("staging")
+        cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config["apps"]["contact"]["email"]
         admin_entries = [
