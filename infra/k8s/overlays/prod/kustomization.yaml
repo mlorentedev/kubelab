@@ -18,6 +18,16 @@ resources:
   # applied by `make deploy-argocd` with dynamic IP resolution (MagicDNS)
   # secrets managed via: toolkit infra k8s apply-secrets --env prod (ADR-014)
 
+# Override base authelia-config with prod-specific domains, policies, OIDC clients.
+# Hash suffix triggers auto rolling restart on change (SECRET-RELOAD-001a refactor).
+# Replaces the base-generated authelia-config ConfigMap.
+configMapGenerator:
+  - name: authelia-config
+    namespace: kubelab
+    behavior: replace
+    files:
+      - authelia-config/configuration.yml
+
 # Override base resources with prod-specific domains and config
 patches:
   - path: patches.yaml

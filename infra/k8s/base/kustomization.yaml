@@ -35,6 +35,15 @@ configMapGenerator:
       - services/homepage-config/custom.css
       - services/homepage-config/custom.js
 
+  # Authelia config — hash suffix triggers auto rolling restart on configuration.yml change
+  # (SECRET-RELOAD-001a fix: configuration.yml is mounted via subPath so updates would otherwise
+  # freeze at mount time, AND Authelia does not hot-reload configuration.yml).
+  # Prod overlay replaces this CM via `behavior: replace` in overlays/prod/kustomization.yaml.
+  - name: authelia-config
+    namespace: kubelab
+    files:
+      - services/authelia-config/configuration.yml
+
   - name: authelia-assets
     namespace: kubelab
     files:
