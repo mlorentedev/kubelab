@@ -229,19 +229,12 @@ config-generate:
 # the gate is deterministic in CI without an age key. The minimal scope
 # is deliberately tight to keep zero false positives on this first PR.
 #
-# OUT of scope for Phase 1 (broader generator output requires SSOT
-# cleanup + age key access — tracked as SSOT-012 and CI-GATE-003):
-#   - configmaps.yaml / deployments.yaml — currently pull a handful of
-#     non-secret values from SOPS (BEEHIIV_PUB_ID, EMAIL_FROM, EMAIL_USER);
-#     audit + relocate to common.yaml first.
-#   - edge/traefik/generated/<env>/middlewares.yml — uses
-#     BASIC_AUTH_CREDENTIALS from SOPS.
-#   - infra/config/authelia/generated/<env>/configuration.yml — has
-#     SOPS-interpolated jwt_secret, session secret, OIDC argon2 hashes.
+# OUT of scope for Phase 1 (Phase 2 = `config-check-drift-extended` target
+# below — runs on self-hosted runner only, reads age key from filesystem).
 .PHONY: config-check-drift
 config-check-drift:
 	@test -n "$(ENV)" || (echo "Usage: make config-check-drift ENV=staging|prod" && exit 1)
-	@echo "→ Regenerating $(ENV) configs and checking for drift..."
+	@echo "→ Regenerating $(ENV) configs and checking for drift (Phase 1, SOPS-independent)..."
 	@$(TOOLKIT) config generate --env $(ENV) --force
 	@_status=0; \
 	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml infra/ansible/generated/$(ENV)/hosts.yml"; \
@@ -249,6 +242,47 @@ config-check-drift:
 		echo "✓ No drift in $(ENV) generated configs ($$_paths)"; \
 	else \
 		echo "✗ Drift detected in $(ENV) generated configs:"; \
+		git --no-pager diff -- $$_paths; \
+		_status=1; \
+	fi; \
+	git checkout -- infra edge 2>/dev/null || true; \
+	exit $$_status
+
+# CI-GATE-003: extend drift gate to SOPS-dependent generated files.
+# Requires an age key at ~/.config/sops/age/keys.txt (or $SOPS_AGE_KEY_FILE).
+# Runs on self-hosted runner only (per ADR-030); fork PRs and the
+# GitHub-hosted fallback skip this target via workflow `if:` guards.
+#
+# Scope additions over Phase 1:
+#   - infra/k8s/overlays/<env>/generated/configmaps.yaml — post-SSOT-012
+#     the SMTP/beehiiv values come from common.yaml, but other SOPS values
+#     (api keys, etc.) still flow through here.
+#   - infra/k8s/overlays/<env>/generated/deployments.yaml — image digests
+#     and env vars sourced from common + SOPS.
+#   - edge/traefik/generated/<env>/dynamic/middlewares.yml — embeds
+#     BASIC_AUTH_CREDENTIALS hashes from SOPS.
+#   - infra/config/authelia/generated/<env>/configuration.yml — has
+#     jwt_secret, session_secret, OIDC issuer key from SOPS.
+.PHONY: config-check-drift-extended
+config-check-drift-extended:
+	@test -n "$(ENV)" || (echo "Usage: make config-check-drift-extended ENV=staging|prod" && exit 1)
+	@if [ ! -f "$$HOME/.config/sops/age/keys.txt" ] && [ -z "$$SOPS_AGE_KEY_FILE" ]; then \
+		echo "✗ Extended drift check requires an age key."; \
+		echo "  Looked for ~/.config/sops/age/keys.txt and \$$SOPS_AGE_KEY_FILE — neither found."; \
+		echo "  This target is meant to run on the self-hosted runner (ADR-030) where the key lives on disk."; \
+		exit 1; \
+	fi
+	@echo "→ Regenerating $(ENV) configs and checking extended drift (Phase 2, SOPS-dependent)..."
+	@$(TOOLKIT) config generate --env $(ENV) --force
+	@_status=0; \
+	_paths="infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/deployments.yaml \
+	        edge/traefik/generated/$(ENV)/dynamic/middlewares.yml \
+	        infra/config/authelia/generated/$(ENV)/configuration.yml"; \
+	if git diff --quiet -- $$_paths; then \
+		echo "✓ No drift in $(ENV) extended generated configs"; \
+	else \
+		echo "✗ Drift detected in $(ENV) extended generated configs:"; \
 		git --no-pager diff -- $$_paths; \
 		_status=1; \
 	fi; \
