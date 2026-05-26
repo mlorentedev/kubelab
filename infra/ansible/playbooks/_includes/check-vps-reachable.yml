@@ -15,7 +15,7 @@
 - name: "Pre-flight: verify VPS reachable (needed for Headscale pre-auth key)"
   ansible.builtin.command: >-
     ssh -o ConnectTimeout=5 -o BatchMode=yes
-    {{ _ssot_common.networking.vps.ssh_user }}@{{ _ssot_common.networking.vps.tailscale_ip }}
+    {{ _ssot_common.networking.vps.ssh_user | default(_ssot_common.networking.ssh_users.cloud) }}@{{ _ssot_common.networking.vps.tailscale_ip }}
     echo ok
   delegate_to: localhost
   changed_when: false

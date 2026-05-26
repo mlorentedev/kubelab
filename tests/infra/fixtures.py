@@ -35,7 +35,8 @@ VPS_NODE = NodeInfo(
     name="vps",
     host=_COMMON["networking"]["vps"]["tailscale_ip"],
     group="vps",
-    vars={"ansible_user": _COMMON["networking"]["vps"].get("ssh_user", "deployer")},
+    # SSOT-014a: per-node override wins, else category SSOT (cloud for VPS).
+    vars={"ansible_user": _COMMON["networking"]["vps"].get("ssh_user") or _COMMON["networking"]["ssh_users"]["cloud"]},
 )
 
 # Default SSH user from Ansible inventory global vars (SSOT)

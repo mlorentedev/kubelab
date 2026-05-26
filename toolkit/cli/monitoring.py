@@ -38,7 +38,8 @@ def _get_kuma_config() -> dict[str, str]:
     config_manager = ConfigurationManager("staging", settings.project_root)
     merged = config_manager.get_merged_config()
 
-    node = merged.get("networking", {}).get("nodes", {}).get("rpi3", {})
+    networking = merged.get("networking", {})
+    node = networking.get("nodes", {}).get("rpi3", {})
     svc = merged.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
 
     host = node.get("tailscale_ip", "")
@@ -50,7 +51,8 @@ def _get_kuma_config() -> dict[str, str]:
 
     _kuma_config = {
         "host": host,
-        "ssh_user": node.get("ssh_user", "manu"),
+        # SSOT-014a: read from networking.ssh_users.homelab, fall back to per-node override.
+        "ssh_user": node.get("ssh_user") or networking["ssh_users"]["homelab"],
         "container": svc.get("name", "uptime-kuma"),
         "url": f"http://{host}:{port}",
     }
