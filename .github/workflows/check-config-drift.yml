@@ -1,24 +1,23 @@
 ---
 name: Config Drift Gate
 
-# CI-GATE-002. Prevents the SEC-K8S-001 class of bug: generator code evolves
-# but committed `generated/` files are never refreshed, so `kubectl apply -k`
-# uses stale manifests and tests that assert on generator-implied invariants
-# silently regress months after the original closure.
+# CI-GATE-002/003. Prevents the SEC-K8S-001 class of bug: generator code
+# evolves but committed `generated/` files are never refreshed, so
+# `kubectl apply -k` uses stale manifests and tests that assert on
+# generator-implied invariants silently regress months after the original
+# closure.
 #
-# Strategy: for each env, run `make config-check-drift ENV=<env>`. The target
-# regenerates configs via the toolkit and compares against the committed
-# files. Any non-empty diff fails the job, with the diff printed in the
-# log so the fix is obvious (commit the regenerated files).
+# Strategy: for each env, run `make config-check-drift ENV=<env>`. The
+# target regenerates configs via the toolkit and compares against the
+# committed files. Any non-empty diff fails the job, with the diff
+# printed in the log so the fix is obvious (commit the regenerated files).
 #
-# Scope (Phase 1): K8s ingress overlays + Ansible inventory — SOPS-independent.
-# Runs on every PR (including forks) and every push to master.
+# Scope: ingress.yaml + Ansible hosts.yml (CI-GATE-002) + configmaps.yaml
+# (CI-GATE-003). All SOPS-independent — no age key needed in CI.
 #
-# Scope (Phase 2, CI-GATE-003): configmaps.yaml, deployments.yaml, Traefik
-# middlewares.yml, Authelia configuration.yml. These embed SOPS-decrypted
-# values, so the step needs an age key. The age key lives on the
-# self-hosted runner filesystem (per ADR-030) — fork PRs (forced to
-# ubuntu-latest) and the GitHub-hosted fallback skip Phase 2.
+# See Makefile config-check-drift target for the rationale on what's NOT
+# included (deployments.yaml, middlewares.yml, configuration.yml) and the
+# SSOT-018 follow-up for deployments.yaml drift coverage.
 
 on:
   pull_request:
@@ -74,17 +73,8 @@ jobs:
         # package itself to be installed.
         run: poetry install --only main
 
-      - name: Check ${{ matrix.env }} for generator drift (Phase 1)
+      - name: Check ${{ matrix.env }} for generator drift
         run: make config-check-drift ENV="$TARGET_ENV"
-
-      - name: Check ${{ matrix.env }} for extended drift (Phase 2, SOPS-dependent)
-        # CI-GATE-003. Self-hosted runner only — fork PRs (forced to
-        # ubuntu-latest by the runs-on expression above) and the
-        # GitHub-hosted fallback (RUNNER_DOCKER unset) skip this step.
-        if: >-
-          !github.event.pull_request.head.repo.fork
-          && vars.RUNNER_DOCKER != ''
-        run: make config-check-drift-extended ENV="$TARGET_ENV"
 
       - name: Hint on failure
         if: failure()
