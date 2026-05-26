@@ -370,7 +370,7 @@ edge:
 apps:
   # SSOT admin identity — used by credentials.py as default for all services
   auth:
-    admin_username: manu
+    admin_username: operator
 
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
@@ -381,7 +381,7 @@ apps:
   # NOT auto-filled (semantic distinction): infra.smtp.user — that is the SMTP
   # relay account, which may legitimately differ (e.g. noreply@) in the future.
   contact:
-    email: mlorentedev@gmail.com
+    email: info@kubelab.live
 
   # Platform applications (custom-built)
   platform:
