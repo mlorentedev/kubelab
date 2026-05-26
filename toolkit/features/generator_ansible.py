@@ -61,6 +61,11 @@ class AnsibleGenerator(BaseGenerator):
             logger.error(f"Failed to generate Ansible config: {e}")
             return {"success": False, "error": str(e)}
 
+    @staticmethod
+    def _resolve_ssh_user(node: dict[str, Any], networking: dict[str, Any], category: str) -> str:
+        """SSOT-014a: per-node `ssh_user` wins as override, else category default."""
+        return node.get("ssh_user") or networking["ssh_users"][category]
+
     def _generate_inventory(self, networking: dict[str, Any], output_path: Path, bootstrap: bool = False) -> None:
         """Generate Ansible inventory YAML from networking config.
 
@@ -83,7 +88,7 @@ class AnsibleGenerator(BaseGenerator):
                 {
                     "hostname": vps.get("hostname", "kubelab-vps"),
                     "ansible_host": vps.get("public_ip") or vps.get("tailscale_ip"),
-                    "ansible_user": vps.get("ssh_user", "deployer"),
+                    "ansible_user": self._resolve_ssh_user(vps, networking, "cloud"),
                     "public_ip": vps.get("public_ip"),
                     "groups": vps.get("ansible_groups", []),
                 }
@@ -98,7 +103,7 @@ class AnsibleGenerator(BaseGenerator):
                 {
                     "hostname": aws.get("hostname", "aws1"),
                     "ansible_host": aws.get("tailscale_dns") or aws["tailscale_ip"],
-                    "ansible_user": aws.get("ssh_user", "deployer"),
+                    "ansible_user": self._resolve_ssh_user(aws, networking, "cloud"),
                     "groups": ["hub"],
                 }
             )
@@ -112,7 +117,7 @@ class AnsibleGenerator(BaseGenerator):
             entry: dict[str, Any] = {
                 "hostname": node.get("hostname", _node_key),
                 "ansible_host": host_ip,
-                "ansible_user": node.get("ssh_user", "manu"),
+                "ansible_user": self._resolve_ssh_user(node, networking, "homelab"),
                 "groups": node.get("ansible_groups", []),
             }
             if node.get("lan_ip"):

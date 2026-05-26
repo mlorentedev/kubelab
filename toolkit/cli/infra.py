@@ -123,11 +123,13 @@ def _get_vps_config() -> _VpsBackupConfig:
     common_path = settings.project_root / "infra" / "config" / "values" / "common.yaml"
     with open(common_path) as f:
         config = yaml.safe_load(f)
-    vps = config["networking"]["vps"]
+    networking = config["networking"]
+    vps = networking["vps"]
     backup = vps.get("backup", {})
     return _VpsBackupConfig(
         ip=vps["tailscale_ip"],
-        user=vps.get("ssh_user", "deployer"),
+        # SSOT-014a: read from networking.ssh_users.cloud, fall back to per-node override.
+        user=vps.get("ssh_user") or networking["ssh_users"]["cloud"],
         backup_root=backup.get("root", "/opt/backups"),
         retention=backup.get("retention", 3),
         filesystem_paths=tuple(backup.get("filesystem_paths", [])),

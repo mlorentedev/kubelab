@@ -39,11 +39,19 @@ networking:
       node: jetson         # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
+
+  # SSOT-014a: SSH user per node category. Consumers infer category by YAML
+  # position (vps + aws → cloud; nodes.* → homelab). Per-node `ssh_user` field
+  # remains supported as an override (currently unused — no node deviates from
+  # its category default). See specs/SSOT-014-ssh-user/proposal.md.
+  ssh_users:
+    homelab: "manu"
+    cloud: "deployer"
+
   vps:
     hostname: "kubelab-vps"
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
-    ssh_user: "deployer"
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
     # Homepage cockpit tile (SSOT-005). Consumed by sync_homepage_config.build_node_list.
@@ -78,7 +86,6 @@ networking:
     # stable identity — prefer tailscale_dns over tailscale_ip in IaC.
     tailscale_ip: "100.64.0.7"
     tailscale_dns: "aws1.kubelab.internal"
-    ssh_user: "deployer"
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
     # Homepage cockpit tile (SSOT-005). Decision documented in ADR-033:
     # widget=ping (not glances) until RELIAB-009 brings hub day-2 Ansible.
@@ -97,7 +104,6 @@ networking:
       tailscale_ip: "100.64.0.11"
       lan_ip: "172.16.1.2"
       lan_interface: "enp1s0"
-      ssh_user: "manu"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
       dashboard:
         order: 1
@@ -109,7 +115,6 @@ networking:
       tailscale_ip: "100.64.0.5"
       lan_ip: "172.16.1.5"
       lan_interface: "enp1s0"
-      ssh_user: "manu"
       ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-028: Ollama only
       dashboard:
         order: 5
@@ -127,7 +132,6 @@ networking:
       # down. Both DHCP-reserved on the home router.
       lan_ip: "172.16.1.1"
       wifi_lan_ip: "10.0.0.131"
-      ssh_user: "manu"
       ansible_groups: ["gateway", "dns_hosts", "docker_hosts"]
       dashboard:
         display_name: "RPi4"
@@ -144,7 +148,6 @@ networking:
       # reservation on home router for MAC b8:27:eb:3d:8e:54 (SSOT-003).
       lan_ip: "10.0.0.157"
       lan_interface: "wlan0"
-      ssh_user: "manu"
       ansible_groups: ["monitoring", "docker_hosts"]
       dashboard:
         display_name: "RPi3"
@@ -157,7 +160,6 @@ networking:
       tailscale_ip: "100.64.0.3"
       lan_ip: "172.16.1.3"
       lan_interface: "enp1s0"
-      ssh_user: "manu"
       ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: MinIO + GH Runner + Glances
       dashboard:
         display_name: "Beelink"
@@ -169,7 +171,6 @@ networking:
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
       lan_ip: "172.16.1.4"
-      ssh_user: "manu"
       ansible_groups: ["compute"]
       legacy_python: true
       dashboard:
