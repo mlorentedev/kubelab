@@ -305,7 +305,7 @@ edge:
     # SSL certificates
     use_local_certs: false
     cert_resolver: letsencrypt
-    acme_email: mlorentedev@gmail.com
+    # acme_email auto-filled from apps.contact.email by the config loader (SSOT-014c).
     # DNS
     dns_provider: cloudflare
     dns_resolver_1: 1.1.1.1:53
@@ -371,6 +371,17 @@ apps:
   # SSOT admin identity — used by credentials.py as default for all services
   auth:
     admin_username: manu
+
+  # SSOT-014c: operator contact email. Single declaration site.
+  # The toolkit config loader (configuration.py:get_merged_config) auto-fills
+  # the following downstream fields if they are empty/absent:
+  #   - edge.traefik.acme_email                                   (Let's Encrypt account)
+  #   - apps.services.observability.uptime_kuma.admin_email       (incident alerts)
+  #   - apps.services.security.authelia.users[is_admin=true].email (admin user identity)
+  # NOT auto-filled (semantic distinction): infra.smtp.user — that is the SMTP
+  # relay account, which may legitimately differ (e.g. noreply@) in the future.
+  contact:
+    email: mlorentedev@gmail.com
 
   # Platform applications (custom-built)
   platform:
@@ -463,7 +474,7 @@ apps:
         default_port: 3000
         ssh_port: 2222
         health_path: /api/healthz
-        admin_email: mlorentedev@gmail.com
+        # admin_email auto-filled from apps.contact.email by the config loader (SSOT-014c).
 
       headscale:
         name: headscale
@@ -637,7 +648,7 @@ apps:
           # SEC-PRIVACY-001) becomes a 1-line change in apps.auth.
           - is_admin: true
             displayname: Administrator
-            email: mlorentedev@gmail.com
+            # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
             disabled: false
             groups:
               - admins
