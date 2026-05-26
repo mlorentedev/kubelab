@@ -630,7 +630,12 @@ apps:
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
-          - username: manu
+          # SSOT-014b: admin entry derives its username key from
+          # `apps.auth.admin_username` at generation time. Both generators
+          # (generator_authelia.py + k8s_secrets._build_users_database) resolve
+          # `is_admin=true` → admin_username. Renaming "manu" later (Phase B /
+          # SEC-PRIVACY-001) becomes a 1-line change in apps.auth.
+          - is_admin: true
             displayname: Administrator
             email: mlorentedev@gmail.com
             disabled: false
