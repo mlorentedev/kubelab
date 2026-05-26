@@ -69,7 +69,7 @@ class TestAffectedServiceResolution:
             "basic_auth.user",
             "basic_auth.password",
             "basic_auth.credentials",
-            "apps.services.security.authelia.users_manu_password_hash",
+            "apps.services.security.authelia.users_operator_password_hash",
             "apps.services.security.authelia.oidc_hmac_secret",
             "apps.services.security.authelia.session_secret",
             "apps.services.security.authelia.storage_encryption_key",
@@ -184,7 +184,7 @@ class TestSSOTAdminUsername:
         cm = ConfigurationManager("staging")
         config = cm.get_merged_config()
         username = config.get("apps", {}).get("auth", {}).get("admin_username")
-        assert username == "manu"
+        assert username == "operator"
 
     def test_authelia_admin_user_derives_from_ssot(self) -> None:
         """SSOT-014b: admin entry is flagged with `is_admin: true` and has no

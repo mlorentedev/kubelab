@@ -1,7 +1,7 @@
 ---
 id: "SSOT-014-authelia-user"
 type: spec
-status: draft
+status: archived
 created: "2026-05-25"
 tags: [spec, proposal, ssot, authelia, identity]
 template_version: "1.0"
