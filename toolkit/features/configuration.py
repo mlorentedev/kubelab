@@ -117,7 +117,53 @@ class ConfigurationManager:
         env_secrets = self._decrypt_sops(self.secrets_path / f"{self.env}.enc.yaml")
         self._deep_update(config, env_secrets)
 
+        # 5. SSOT-014c: derive operator-contact fields from apps.contact.email
+        #    if not explicitly set. Keeps `common.yaml` to a single declaration
+        #    of the contact email while preserving consumer paths unchanged.
+        self._inject_contact_email_derivations(config)
+
         return config
+
+    @staticmethod
+    def _inject_contact_email_derivations(config: Dict[str, Any]) -> None:
+        """SSOT-014c: fill operator-contact email derivations.
+
+        Reads `apps.contact.email` and uses it as the default for:
+          - edge.traefik.acme_email
+          - apps.services.observability.uptime_kuma.admin_email
+          - any Authelia user with `is_admin: true` and no explicit `email`
+
+        Per ADR-036 / SSOT-014 master plan: single declaration, multiple
+        consumer paths preserved (zero downstream code changes). NOT applied
+        to `infra.smtp.user` — that is the SMTP relay account, semantically
+        distinct (may legitimately differ from operator contact in future).
+        """
+        contact_email = config.get("apps", {}).get("contact", {}).get("email")
+        if not contact_email:
+            return
+
+        # edge.traefik.acme_email
+        traefik = config.setdefault("edge", {}).setdefault("traefik", {})
+        if not traefik.get("acme_email"):
+            traefik["acme_email"] = contact_email
+
+        # apps.services.observability.uptime_kuma.admin_email
+        uptime_kuma = (
+            config.setdefault("apps", {})
+            .setdefault("services", {})
+            .setdefault("observability", {})
+            .setdefault("uptime_kuma", {})
+        )
+        if not uptime_kuma.get("admin_email"):
+            uptime_kuma["admin_email"] = contact_email
+
+        # Authelia admin users (is_admin: true) with no explicit email
+        authelia_users = (
+            config.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {}).get("users", [])
+        )
+        for user in authelia_users:
+            if user.get("is_admin") and not user.get("email"):
+                user["email"] = contact_email
 
     def get_env_vars(self) -> Dict[str, str]:
         """

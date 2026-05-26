@@ -203,3 +203,60 @@ class TestSSOTAdminUsername:
         )
         # SSOT itself must be set for the generator to resolve successfully
         assert config["apps"]["auth"]["admin_username"], "apps.auth.admin_username SSOT must be non-empty"
+
+
+class TestSSOTContactEmail:
+    """SSOT-014c: operator contact email is derived from apps.contact.email."""
+
+    def test_contact_email_ssot_is_set(self) -> None:
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager("staging")
+        config = cm.get_merged_config()
+        contact = config.get("apps", {}).get("contact", {}).get("email")
+        assert contact, "apps.contact.email SSOT must be non-empty"
+
+    def test_loader_injects_acme_email_from_contact(self) -> None:
+        """edge.traefik.acme_email is removed from common.yaml literal;
+        loader fills it from apps.contact.email."""
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager("staging")
+        config = cm.get_merged_config()
+        contact = config["apps"]["contact"]["email"]
+        acme_email = config["edge"]["traefik"]["acme_email"]
+        assert acme_email == contact, (
+            f"edge.traefik.acme_email ({acme_email!r}) must derive from "
+            f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
+        )
+
+    def test_loader_injects_uptime_kuma_admin_email_from_contact(self) -> None:
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager("staging")
+        config = cm.get_merged_config()
+        contact = config["apps"]["contact"]["email"]
+        admin_email = (
+            config["apps"]["services"]["observability"]["uptime_kuma"]["admin_email"]
+        )
+        assert admin_email == contact, (
+            f"uptime_kuma.admin_email ({admin_email!r}) must derive from "
+            f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
+        )
+
+    def test_loader_injects_authelia_admin_email_from_contact(self) -> None:
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager("staging")
+        config = cm.get_merged_config()
+        contact = config["apps"]["contact"]["email"]
+        admin_entries = [
+            u
+            for u in config["apps"]["services"]["security"]["authelia"]["users"]
+            if u.get("is_admin")
+        ]
+        assert len(admin_entries) == 1
+        assert admin_entries[0]["email"] == contact, (
+            f"Authelia admin user email ({admin_entries[0]['email']!r}) must "
+            f"derive from apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
+        )
