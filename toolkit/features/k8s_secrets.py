@@ -175,6 +175,8 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     merged = cm.get_merged_config()
     authelia = merged.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {})
     users = authelia.get("users", [])
+    # SSOT-014b: admin entry derives username from apps.auth.admin_username.
+    admin_username = merged.get("apps", {}).get("auth", {}).get("admin_username", "")
 
     if not users or not isinstance(users, list):
         logger.warning("No Authelia users found in config")
@@ -182,7 +184,7 @@ def _build_users_database(cm: ConfigurationManager) -> str:
 
     lines = ["users:"]
     for user in users:
-        username = user.get("username", "")
+        username = admin_username if user.get("is_admin") else user.get("username", "")
         hash_key = f"users_{username}_password_hash"
         password_hash = authelia.get(hash_key, "")
 

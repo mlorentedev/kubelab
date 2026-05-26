@@ -168,9 +168,11 @@ class AutheliaGenerator(BaseGenerator):
             # Build users list for template
             authelia_users = []
             users_config = authelia_config.get("users", [])
+            # SSOT-014b: admin entry derives username from apps.auth.admin_username.
+            admin_username = get_nested(merged_config, ["apps", "auth", "admin_username"], "")
 
             for user in users_config:
-                username = user.get("username", "")
+                username = admin_username if user.get("is_admin") else user.get("username", "")
                 # Look for password hash in flattened env vars using the LONG prefix
                 password_hash_key = f"APPS_SERVICES_SECURITY_AUTHELIA_USERS_{username.upper()}_PASSWORD_HASH"
                 password_hash = env_vars.get(password_hash_key)

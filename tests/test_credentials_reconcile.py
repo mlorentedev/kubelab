@@ -186,11 +186,20 @@ class TestSSOTAdminUsername:
         username = config.get("apps", {}).get("auth", {}).get("admin_username")
         assert username == "manu"
 
-    def test_authelia_users_matches_ssot(self) -> None:
+    def test_authelia_admin_user_derives_from_ssot(self) -> None:
+        """SSOT-014b: admin entry is flagged with `is_admin: true` and has no
+        duplicated `username` field. Generators resolve username from
+        `apps.auth.admin_username` at generation time, so the admin identity
+        lives in exactly one place."""
         from toolkit.features.configuration import ConfigurationManager
 
         cm = ConfigurationManager("staging")
         config = cm.get_merged_config()
-        ssot_username = config["apps"]["auth"]["admin_username"]
-        authelia_username = config["apps"]["services"]["security"]["authelia"]["users"][0]["username"]
-        assert ssot_username == authelia_username
+        users = config["apps"]["services"]["security"]["authelia"]["users"]
+        admin_entries = [u for u in users if u.get("is_admin")]
+        assert len(admin_entries) == 1, "Exactly one user must be flagged is_admin"
+        assert "username" not in admin_entries[0], (
+            "Admin user must NOT have a `username` field — it derives from apps.auth.admin_username (SSOT)"
+        )
+        # SSOT itself must be set for the generator to resolve successfully
+        assert config["apps"]["auth"]["admin_username"], "apps.auth.admin_username SSOT must be non-empty"
