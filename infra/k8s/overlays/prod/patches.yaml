@@ -40,7 +40,8 @@ data:
     # ---- Authentication Backend ----
     authentication_backend:
       file:
-        path: /config/users_database.yml
+        # Mount uses a directory (no subPath) so K8s propagates Secret updates.
+        path: /config/users/users_database.yml
         watch: true
         password:
           algorithm: argon2

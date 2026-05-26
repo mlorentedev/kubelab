@@ -46,7 +46,9 @@ data:
     # ---- Authentication Backend ----
     authentication_backend:
       file:
-        path: /config/users_database.yml
+        # Mounted as a directory (no subPath) so K8s propagates Secret updates;
+        # Authelia's `watch: true` then reloads users_database.yml without restart.
+        path: /config/users/users_database.yml
         watch: true
         password:
           algorithm: argon2
@@ -276,8 +278,7 @@ spec:
               subPath: configuration.yml
               readOnly: true
             - name: users
-              mountPath: /config/users_database.yml
-              subPath: users_database.yml
+              mountPath: /config/users
               readOnly: true
             - name: assets
               mountPath: /config/assets
