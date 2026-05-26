@@ -117,9 +117,15 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     # Authelia — User Password Hashes
     # =========================================================================
+    # Tracks `apps.auth.admin_username` SSOT (SSOT-014b). Static key here —
+    # when admin_username is renamed (e.g. Phase B "manu" → "operator" on
+    # 2026-05-25), this catalog entry MUST be updated in lockstep with the
+    # SOPS key rename, or audit/init/rotation workflows will silently target
+    # the wrong path. Future refactor: derive this `key_path` dynamically
+    # from the SSOT at catalog-build time so the manual lockstep is removed.
     SecretSpec(
-        key_path=f"{_AUTH}.users_manu_password_hash",
-        description="Argon2 hash of admin user password (username from apps.auth.admin_username)",
+        key_path=f"{_AUTH}.users_operator_password_hash",
+        description="Argon2 hash of admin user password (username from apps.auth.admin_username SSOT)",
         kind=SecretKind.ARGON2_HASH,
         services=("authelia",),
         derived_from="(interactive password prompt)",
