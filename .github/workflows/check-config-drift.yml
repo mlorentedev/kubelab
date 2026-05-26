@@ -1,19 +1,23 @@
 ---
 name: Config Drift Gate
 
-# CI-GATE-002. Prevents the SEC-K8S-001 class of bug: generator code evolves
-# but committed `generated/` files are never refreshed, so `kubectl apply -k`
-# uses stale manifests and tests that assert on generator-implied invariants
-# silently regress months after the original closure.
+# CI-GATE-002/003. Prevents the SEC-K8S-001 class of bug: generator code
+# evolves but committed `generated/` files are never refreshed, so
+# `kubectl apply -k` uses stale manifests and tests that assert on
+# generator-implied invariants silently regress months after the original
+# closure.
 #
-# Strategy: for each env, run `make config-check-drift ENV=<env>`. The target
-# regenerates configs via the toolkit and compares against the committed
-# files. Any non-empty diff fails the job, with the diff printed in the
-# log so the fix is obvious (commit the regenerated files).
+# Strategy: for each env, run `make config-check-drift ENV=<env>`. The
+# target regenerates configs via the toolkit and compares against the
+# committed files. Any non-empty diff fails the job, with the diff
+# printed in the log so the fix is obvious (commit the regenerated files).
 #
-# Scope: K8s overlays, Traefik configs, Ansible inventory — none of these
-# depend on SOPS-decrypted values. Authelia is intentionally OUT of scope
-# until CI gains access to an age key.
+# Scope: ingress.yaml + Ansible hosts.yml (CI-GATE-002) + configmaps.yaml
+# (CI-GATE-003). All SOPS-independent — no age key needed in CI.
+#
+# See Makefile config-check-drift target for the rationale on what's NOT
+# included (deployments.yaml, middlewares.yml, configuration.yml) and the
+# SSOT-018 follow-up for deployments.yaml drift coverage.
 
 on:
   pull_request:
