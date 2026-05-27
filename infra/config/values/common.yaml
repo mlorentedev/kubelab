@@ -377,6 +377,7 @@ apps:
   # the following downstream fields if they are empty/absent:
   #   - edge.traefik.acme_email                                   (Let's Encrypt account)
   #   - apps.services.observability.uptime_kuma.admin_email       (incident alerts)
+  #   - apps.services.core.gitea.admin_email                      (Gitea admin user)
   #   - apps.services.security.authelia.users[is_admin=true].email (admin user identity)
   # NOT auto-filled (semantic distinction): infra.smtp.user — that is the SMTP
   # relay account, which may legitimately differ (e.g. noreply@) in the future.
