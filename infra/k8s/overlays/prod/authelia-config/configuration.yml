@@ -158,6 +158,7 @@ identity_providers:
         client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ZENMbw+Oru2372cUdxItFA$2cSPmiwXPbTp+m+/cytz9V6J/ppsnVKXW9Izlaq653o'
         public: false
         authorization_policy: one_factor
+        token_endpoint_auth_method: 'client_secret_basic'
         redirect_uris:
           - https://console.minio.kubelab.live/oauth_callback
         scopes:
@@ -171,6 +172,7 @@ identity_providers:
         client_secret: '$argon2id$v=19$m=65536,t=3,p=4$YFjurhJUZsZA7nET/rOWtQ$kCyKlh6EPH3FX5tO7Z15IOXBnOdqxp5EU05/aGMKe3M'
         public: false
         authorization_policy: one_factor
+        token_endpoint_auth_method: 'client_secret_basic'
         redirect_uris:
           - https://grafana.kubelab.live/login/generic_oauth
         scopes:
@@ -185,6 +187,9 @@ identity_providers:
         client_secret: '$argon2id$v=19$m=65536,t=3,p=4$dZFZpAXgnOINpkcZriaNBA$fTErQSrR/HFPha6he0Vvs/ibiBDKtNtCqVXZ99KMG5k'
         public: false
         authorization_policy: one_factor
+        # Gitea sends client credentials in POST body. Authelia 4.39.x defaults to
+        # client_secret_basic, so this MUST be set explicitly (else: invalid_client).
+        token_endpoint_auth_method: 'client_secret_post'
         redirect_uris:
           - https://gitea.kubelab.live/user/oauth2/authelia/callback
         scopes:
@@ -199,6 +204,7 @@ identity_providers:
         client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ITrEVRiT5s0czAnRKOPviA$00Z6kT5lnb+mbWluVLWZyd5tn7jtDOwJu0qbMhldTA8'
         public: false
         authorization_policy: one_factor
+        token_endpoint_auth_method: 'client_secret_basic'
         redirect_uris:
           - https://argo.kubelab.live/auth/callback
         scopes:
