@@ -248,6 +248,24 @@ class TestSSOTContactEmail:
             f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
         )
 
+    def test_loader_injects_gitea_admin_email_from_contact(self, env: str) -> None:
+        """SSOT-019: apps.services.core.gitea.admin_email derives from apps.contact.email.
+
+        Surfaced 2026-05-26 during Phase B prod smoke (apply-secrets warning) and confirmed
+        2026-05-26 in staging (gitea pod CreateContainerConfigError — missing ADMIN_EMAIL key
+        in gitea-secrets Secret).
+        """
+        from toolkit.features.configuration import ConfigurationManager
+
+        cm = ConfigurationManager(env)
+        config = cm.get_merged_config()
+        contact = config["apps"]["contact"]["email"]
+        admin_email = config["apps"]["services"]["core"]["gitea"]["admin_email"]
+        assert admin_email == contact, (
+            f"gitea.admin_email ({admin_email!r}) must derive from "
+            f"apps.contact.email ({contact!r}) via loader injection (SSOT-019)"
+        )
+
     def test_loader_injects_authelia_admin_email_from_contact(self, env: str) -> None:
         from toolkit.features.configuration import ConfigurationManager
 

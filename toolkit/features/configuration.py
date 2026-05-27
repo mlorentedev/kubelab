@@ -131,6 +131,7 @@ class ConfigurationManager:
         Reads `apps.contact.email` and uses it as the default for:
           - edge.traefik.acme_email
           - apps.services.observability.uptime_kuma.admin_email
+          - apps.services.core.gitea.admin_email
           - any Authelia user with `is_admin: true` and no explicit `email`
 
         Per ADR-036 / SSOT-014 master plan: single declaration, multiple
@@ -156,6 +157,11 @@ class ConfigurationManager:
         )
         if not uptime_kuma.get("admin_email"):
             uptime_kuma["admin_email"] = contact_email
+
+        # apps.services.core.gitea.admin_email (SSOT-019 follow-up to 014c)
+        gitea = config.setdefault("apps", {}).setdefault("services", {}).setdefault("core", {}).setdefault("gitea", {})
+        if not gitea.get("admin_email"):
+            gitea["admin_email"] = contact_email
 
         # Authelia admin users (is_admin: true) with no explicit email
         authelia_users = (
