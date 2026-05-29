@@ -184,3 +184,7 @@ See [LICENSE](LICENSE) for details.
 ## Author
 
 Manuel Lorente — [mlorente.dev](https://mlorente.dev) | [GitHub](https://github.com/mlorentedev)
+
+## Documentation
+
+Project-bound knowledge lives in [`docs/`](docs/) (docs-as-code): ADRs, architecture, runbooks, troubleshooting, and lessons.
