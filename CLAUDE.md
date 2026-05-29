@@ -178,32 +178,28 @@ apps/                              — Application source (api, web, blog)
 .github/workflows/                 — CI pipeline
 ```
 
-## Vault location
+## Documentation & knowledge location
 
-All documentation, roadmaps, and operational knowledge lives in the Obsidian vault at `~/Projects/knowledge/`. This repo has NO `tasks/` or `docs/` directories — everything is in the vault.
+Project-bound knowledge lives in this repo under `docs/` (docs-as-code). Cross-project strategic context and session memory live in the maintainer's knowledge store, not here.
 
-### Vault paths for this project (`10_projects/kubelab/`)
+### Repo `docs/` (build/operate — versioned with the code)
 
 ```
-roadmap.md                 — L0 infrastructure backlog (Kanban, active/pending tasks)
-completed.md               — Archived completed tasks (full detail, zero info loss)
-lessons.md                 — Patterns learned, gotchas, post-mortems
-toolkit.md                 — Toolkit CLI documentation
-testing.md                 — Testing strategy
-versioning.md              — Versioning strategy
-architecture-diagram.md    — Detailed architecture diagrams
-portfolio.md               — Product portfolio master index
-service-catalog.md         — Service catalog
-30-architecture/adrs/      — Architecture Decision Records
-30-architecture/components/ — Component-level architecture docs
-30-architecture/infra/     — Infrastructure docs (DNS, networking)
-30-architecture/hardware/  — Hardware allocation and topology
-30-architecture/plans/     — Implementation plans
-40-runbooks/               — Operational runbooks
-50-troubleshooting/        — Troubleshooting guides
-20-business/               — Positioning, offers, funnel, competitor analysis
-changelog.md               — Project changelog
+docs/adr/                     — Architecture Decision Records
+docs/architecture/            — system/design docs (overview, diagram, service-catalog, versioning)
+docs/architecture/components/ — component-level architecture docs
+docs/architecture/infra/      — infrastructure docs (DNS, networking)
+docs/architecture/hardware/   — hardware allocation and topology
+docs/architecture/plans/      — implementation plans
+docs/runbooks/                — operational runbooks
+docs/troubleshooting/         — troubleshooting guides
+docs/lessons.md               — patterns learned, gotchas, post-mortems
+CHANGELOG.md                  — project changelog
 ```
+
+### Knowledge store (decide/position — NOT in this repo)
+
+`10_projects/kubelab/` in the maintainer's vault holds strategic-only context: roadmap, tasks, `20-business/` (positioning, offers, funnel), portfolio, prestudy, and session memory.
 
 ### Task management conventions
 
