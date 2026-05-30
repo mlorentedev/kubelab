@@ -167,11 +167,17 @@ def _get_homepage_output_files() -> list[Path]:
 
 
 def _get_oidc_output_files() -> list[Path]:
-    """Target files for OIDC hash sync."""
-    return [
-        settings.project_root / "infra/k8s/base/services/authelia.yaml",
-        settings.project_root / "infra/k8s/overlays/prod/patches.yaml",
-    ]
+    """Target files for OIDC hash sync.
+
+    Reuses sync_oidc_hashes.FILE_PATHS as the single source of truth so the
+    --check snapshot/compare/restore set can never drift from the files the sync
+    actually writes. Hardcoding them separately is what broke OIDC-SYNC-001
+    (--check compared/restored the old files while the sync wrote the new ones,
+    falsely reporting "in sync" and leaving the real config modified).
+    """
+    from toolkit.scripts.sync_oidc_hashes import FILE_PATHS
+
+    return list(FILE_PATHS.values())
 
 
 def _run_oidc_sync(env: str) -> int:
