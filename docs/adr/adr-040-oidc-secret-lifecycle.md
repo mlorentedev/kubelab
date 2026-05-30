@@ -32,8 +32,8 @@ remember in order:
 SOPS plaintext
   → make sync-oidc-hashes   (hash → Authelia configuration.yml)
   → commit + PR + deploy    (Authelia picks up new hash via PR #225 hash-suffix restart)
-  → make configure-oidc     (plaintext → Gitea/MinIO/... admin API)
-  → restart each consumer pod
+  → make configure-oidc     (plaintext → Gitea SQLite via admin API; Gitea only)
+  → apply-secrets + restart  (plaintext env var → MinIO/Grafana/Argo CD pods)
 ```
 
 Every step is a place to forget, and **drift is silent until a human attempts an
