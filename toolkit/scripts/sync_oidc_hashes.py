@@ -1,8 +1,8 @@
 """Sync OIDC client_secret hashes from SOPS into Authelia K8s ConfigMap YAMLs.
 
 Reads argon2 hashes from SOPS and replaces placeholder/stale values in:
-  - infra/k8s/base/services/authelia.yaml (staging)
-  - infra/k8s/overlays/prod/patches.yaml (prod)
+  - infra/k8s/base/services/authelia-config/configuration.yml (staging)
+  - infra/k8s/overlays/prod/authelia-config/configuration.yml (prod)
 
 This eliminates the manual step of copy-pasting hashes after `toolkit secrets hash`.
 
@@ -52,9 +52,13 @@ OIDC_CLIENTS = {
     },
 }
 
+# OIDC clients live in the Authelia configuration.yml ConfigMap (configMapGenerator).
+# PR #225 (authelia-config refactor) moved them out of authelia.yaml / patches.yaml.
+# These paths MUST track that file or the sync becomes a silent no-op (OIDC-SYNC-001);
+# tests/test_sync_oidc_hashes.py guards against drift.
 FILE_PATHS = {
-    "base": PROJECT_ROOT / "infra/k8s/base/services/authelia.yaml",
-    "prod": PROJECT_ROOT / "infra/k8s/overlays/prod/patches.yaml",
+    "base": PROJECT_ROOT / "infra/k8s/base/services/authelia-config/configuration.yml",
+    "prod": PROJECT_ROOT / "infra/k8s/overlays/prod/authelia-config/configuration.yml",
 }
 
 
@@ -84,9 +88,13 @@ def update_client_secret(content: str, client_id: str, new_hash: str) -> str:
         re.MULTILINE,
     )
     match = pattern.search(content)
-    if match:
-        return content[: match.start()] + match.group(1) + new_hash + match.group(2) + content[match.end() :]
-    return content
+    if not match:
+        raise RuntimeError(
+            f"OIDC client '{client_id}' not found: no 'client_id: {client_id}' + "
+            "'client_secret' block in the target config. FILE_PATHS is stale or the "
+            "client was removed/renamed. Refusing to report success (OIDC-SYNC-001)."
+        )
+    return content[: match.start()] + match.group(1) + new_hash + match.group(2) + content[match.end() :]
 
 
 def main() -> int:
@@ -134,7 +142,11 @@ def main() -> int:
         file_path = FILE_PATHS[target_key]
         content = file_path.read_text()
         client_id = str(client_info["client_id"])
-        new_content = update_client_secret(content, client_id, hash_value)
+        try:
+            new_content = update_client_secret(content, client_id, hash_value)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
 
         if new_content != content:
             file_path.write_text(new_content)
