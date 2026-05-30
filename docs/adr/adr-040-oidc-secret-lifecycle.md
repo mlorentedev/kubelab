@@ -33,7 +33,8 @@ SOPS plaintext
   → make sync-oidc-hashes   (hash → Authelia configuration.yml)
   → commit + PR + deploy    (Authelia picks up new hash via PR #225 hash-suffix restart)
   → make configure-oidc     (plaintext → Gitea SQLite via admin API; Gitea only)
-  → apply-secrets + restart  (plaintext env var → MinIO/Grafana/Argo CD pods)
+  → make apply-secrets + restart   (plaintext env var → MinIO/Grafana pods)
+  → make deploy-argocd      (plaintext → Argo CD stored secret via helm --set; common SOPS)
 ```
 
 Every step is a place to forget, and **drift is silent until a human attempts an
@@ -66,21 +67,31 @@ Two coherent directions were on the table:
   nothing to drift. Architecturally the cleanest "generation over synchronization" stance —
   but it assumes the consumer side can be made declarative.
 
-The decisive observation is that **the OIDC secret has two structurally different faces**,
-and they do not fit the same model:
+The decisive observation is that the OIDC secret has **one provider face plus three
+distinct consumer faces**, each with a different propagation step — and grouping them
+by what they are *not* (e.g. "not admin-API") hides exactly the differences that break a
+rotation. The propagation step is what SYNC-002 must run; the verification is how it
+proves the step worked:
 
-| Face | Where it lives | Can it be *generated* from SSOT? |
-|------|----------------|----------------------------------|
-| **Provider (Authelia)** | argon2 hash in `configuration.yml`, a file the toolkit already renders | **Yes** — it is already a generated artifact ([ADR-038](adr-038-secret-delivery-paths.md) Path 3). Drift here can be made structurally impossible. |
-| **Consumer — admin-API (Gitea)** | plaintext in Gitea's SQLite OAuth source, written via `gitea admin auth update-oauth` | **No** — there is no declarative K8s resource for "Gitea's OAuth source row". It is mutable runtime state behind an API. The best available primitive is *push then verify*. |
-| **Consumer — env-var (MinIO, Grafana, Argo CD)** | plaintext injected as an env var from a K8s Secret ([ADR-038](adr-038-secret-delivery-paths.md) Path 1: `MINIO_IDENTITY_OPENID_CLIENT_SECRET` etc.) | **Delivery is already declarative** (the Secret is generated from SSOT), but the secret is only *exercised* at an interactive OIDC login — so correctness is provable only by an *end-to-end flow test*, not by `configure-oidc` (which never touches these services). |
+| Face | How the secret gets there | Propagation step SYNC-002 must run | How it is proven |
+|------|---------------------------|------------------------------------|------------------|
+| **Provider (Authelia)** | argon2 hash in `configuration.yml`, a file the toolkit renders | **generate** the hash from SOPS (PROVIDER-GEN-001) | drift structurally impossible once generated ([ADR-038](adr-038-secret-delivery-paths.md) Path 3) |
+| **Consumer — admin-API (Gitea)** | plaintext in Gitea's SQLite OAuth source | `make configure-oidc` (`gitea admin auth update-oauth`) | **DRIFT-001 token round-trip** (shipped #231) |
+| **Consumer — env-var (MinIO, Grafana)** | plaintext as an env var from a K8s Secret ([ADR-038](adr-038-secret-delivery-paths.md) Path 1, e.g. `MINIO_IDENTITY_OPENID_CLIENT_SECRET`) | `make apply-secrets` + pod restart | OIDC-E2E-001 flow test (**pending**) |
+| **Consumer — Helm `--set` (Argo CD)** | injected into Argo CD's stored secret at deploy via `helm upgrade --set configs.secret.extra.oidc\.authelia\.clientSecret=…`; source is **common** SOPS, not per-env | `make deploy-argocd` (NOT `apply-secrets`) | OIDC-E2E-001 flow test (**pending**) |
 
-Two distinct consumer shapes matter here, and conflating them is the trap Codex
-flagged on this ADR: **only Gitea has an imperative admin-API push**, and therefore
-only Gitea is covered by the `configure-oidc` round-trip (DRIFT-001). MinIO/Grafana/
-Argo CD get their secret as an env var; `configure-oidc` does not touch them at all,
-so DRIFT-001 says nothing about them. Their drift is caught only by per-client flow
-tests (OIDC-E2E-001).
+The trap — caught by Codex on this ADR — is conflating consumers by what verifies them
+instead of by what *propagates* to them. An earlier draft lumped Argo CD into the
+"env-var" bucket; but Argo CD's secret is **not** an env var. If SYNC-002 runs only
+`apply-secrets + restart` for that bucket, it would rotate Authelia's hash and leave Argo
+CD's stored client secret stale → Argo CD OIDC broken while the plan reports the consumer
+handled. The same silent-success this ADR exists to kill, reintroduced through a wrong
+taxonomy. Argo CD needs its own propagation (`make deploy-argocd`) and its secret lives in
+common SOPS.
+
+So: **four faces, four propagation steps, three verification strategies** (provider =
+generation; Gitea = DRIFT-001; env-var + Helm consumers = OIDC-E2E-001). `configure-oidc`
+covers Gitea only; it touches none of the others.
 
 Direction B breaks on the admin-API consumer face: you cannot declaratively generate a
 row in Gitea's SQLite. Direction A under-serves the provider face: it keeps treating a
@@ -108,8 +119,8 @@ separate `sync-oidc-hashes` step.
 ### 2. Consumer side: verify, with coverage matched to the delivery mechanism
 
 The consumer secret cannot be generated into agreement; it must be **proven** to agree.
-But the two consumer shapes need two different proofs — and neither may report success
-without one:
+Each consumer face needs its own propagation step AND its own proof — and none may report
+success without one:
 
 **2a. Admin-API consumer (Gitea).** The secret is pushed via `gitea admin auth
 update-oauth`. `configure-oidc` performs a **token-endpoint round-trip** after every
@@ -119,39 +130,53 @@ failed client authentication, so it is the precise signal that the Gitea plainte
 disagrees with the provider hash. **Scope: Gitea only** — `configure-oidc` does not
 touch any other consumer.
 
-**2b. Env-var consumers (MinIO, Grafana, Argo CD).** The secret is delivered as an env
-var from a K8s Secret (Path 1); there is no push step and **no verification today** —
-this is a real gap, not a solved problem. Their correctness is provable only by a
-**programmatic OIDC flow test per registered client** (**OIDC-E2E-001**, not yet
-implemented). Until E2E-001 lands, a stale env-var secret for these services drifts
-silently exactly as the Gitea one used to.
+**2b. Env-var consumers (MinIO, Grafana).** The secret is delivered as an env var from a
+K8s Secret (Path 1) via `make apply-secrets` + pod restart; there is no push step and
+**no verification today**. Provable only by a **programmatic OIDC flow test per client**
+(**OIDC-E2E-001**, not yet implemented).
 
-> Do not assume "reuse DRIFT-001" covers all consumers. DRIFT-001 proves Gitea. The
-> env-var consumers are unverified until OIDC-E2E-001 exists — SYNC-002 must treat that
-> as an open gap, not delegate to a check that never runs for them.
+**2c. Helm `--set` consumer (Argo CD).** Argo CD is **not** an env-var consumer — its
+client secret is injected into Argo CD's stored secret at deploy time by
+`make deploy-argocd` (`helm upgrade --set configs.secret.extra.oidc\.authelia\.clientSecret=…`),
+and its source is **common** SOPS, not per-env. Its propagation step is therefore
+`make deploy-argocd`, **not** `apply-secrets`. Running the env-var path for Argo CD would
+rotate the Authelia hash while leaving Argo CD's stored secret stale → Argo CD OIDC broken
+while the plan claims the consumer was handled. Verification is the same OIDC-E2E-001 flow
+test, but the propagation step is distinct.
 
-### 3. Rotation composes the two
+> Do not assume "reuse DRIFT-001" covers all consumers, and do not assume one propagation
+> step covers all non-Gitea consumers. DRIFT-001 proves Gitea only. MinIO/Grafana need
+> `apply-secrets`; Argo CD needs `deploy-argocd` (common SOPS). All three non-Gitea
+> consumers are **unverified** until OIDC-E2E-001 exists — SYNC-002 must treat that as an
+> open gap, not delegate to a check that never runs for them.
+
+### 3. Rotation composes the faces
 
 **OIDC-SYNC-002** (`make rotate-oidc-secret`) is **re-scoped** by this ADR. It is not "an
 imperative sequence with guard rails" (Direction A). It is the orchestrator that:
 
-1. rotates the SOPS plaintext (SSOT),
+1. rotates the SOPS plaintext (SSOT) — at the **correct scope** (per-env for Gitea/MinIO/
+   Grafana; **common** for Argo CD),
 2. triggers the provider-side **generation** (§1),
-3. verifies **each** consumer with the proof that matches its delivery (§2): the Gitea
-   token round-trip (DRIFT-001) for the admin-API consumer, and a per-client flow check
-   (OIDC-E2E-001) for the env-var consumers — **a rotation that touches an env-var
-   consumer while E2E-001 is unimplemented is not fully verifiable and must say so, not
-   report green**,
+3. runs the **propagation step that matches the target consumer** (§2): `configure-oidc`
+   for Gitea, `apply-secrets` + restart for MinIO/Grafana, `deploy-argocd` for Argo CD —
+   they are **not interchangeable**,
+4. **verifies** that consumer with its matching proof: DRIFT-001 token round-trip for
+   Gitea; OIDC-E2E-001 flow test for MinIO/Grafana/Argo CD — **a rotation that touches any
+   non-Gitea consumer while E2E-001 is unimplemented is not fully verifiable and must say
+   so, not report green**,
 
 and treats the **verification, not the exit code of each step, as the definition of
-success**. A rotation that cannot prove the affected consumers work fails and rolls back.
+success**. A rotation that cannot prove the affected consumer works fails and rolls back.
 
 ### Invariant
 
-> The provider side is *generated* (drift impossible). Each consumer is *proven* by the
-> check that matches its delivery — Gitea by token round-trip (shipped), env-var consumers
-> by flow test (E2E-001, pending). No OIDC secret operation reports success for a consumer
-> it cannot actually verify; an unverifiable consumer is reported as a gap, never as green.
+> The provider side is *generated* (drift impossible). Each consumer is *propagated by the
+> step that matches its delivery* (Gitea = `configure-oidc`, MinIO/Grafana = `apply-secrets`,
+> Argo CD = `deploy-argocd`) and *proven by the check that matches it* (Gitea = token
+> round-trip, shipped; all others = E2E-001 flow test, pending). No OIDC secret operation
+> reports success for a consumer it cannot actually verify; an unverifiable consumer is
+> reported as a gap, never as green.
 
 ## Consequences
 
@@ -225,7 +250,9 @@ be pushed and proven, regardless of whether the SSOT is SOPS or a SealedSecret.
 - **OIDC-DRIFT-001** (#231, merged) — the **Gitea** (admin-API) verification primitive;
   shipped per §2a. Does **not** cover env-var consumers.
 - **OIDC-E2E-001** — re-confirmed as **required, not optional**: it is the only verification
-  for the env-var consumers (MinIO/Grafana/Argo CD), which are unverified until it lands.
+  for every non-Gitea consumer (env-var: MinIO/Grafana; Helm `--set`: Argo CD), all of which
+  are unverified until it lands. Note their propagation steps differ (`apply-secrets` vs
+  `deploy-argocd`) even though they share this one verifier.
 - **OIDC-SYNC-002** — re-scoped per §3: generation + orchestration + verification, not a
   guard-railed imperative sequence. **Should not start until this ADR is accepted** (it was
   the reason to write the ADR first).
