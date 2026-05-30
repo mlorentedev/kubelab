@@ -7,10 +7,37 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from toolkit.cli.sync import _normalize_content, _restore_snapshots, _run_with_check
+from toolkit.cli.sync import (
+    _get_oidc_output_files,
+    _normalize_content,
+    _restore_snapshots,
+    _run_with_check,
+)
 from toolkit.main import app
 
 runner = CliRunner()
+
+
+class TestOidcCheckPaths:
+    """The --check snapshot set must match the files the sync actually writes.
+
+    OIDC-SYNC-001b: _get_oidc_output_files() hardcoded the old authelia.yaml /
+    patches.yaml paths while sync_oidc_hashes wrote configuration.yml, so
+    `toolkit sync oidc --check` compared/restored the wrong files — falsely
+    reporting "in sync" and leaving the real config modified on disk.
+    """
+
+    def test_check_paths_match_sync_file_paths(self) -> None:
+        from toolkit.scripts.sync_oidc_hashes import FILE_PATHS
+
+        assert set(_get_oidc_output_files()) == set(FILE_PATHS.values())
+
+    def test_check_paths_point_at_configuration_yml(self) -> None:
+        for path in _get_oidc_output_files():
+            assert path.name == "configuration.yml", (
+                f"--check snapshots {path}, not the authelia-config configuration.yml "
+                "the sync writes (OIDC-SYNC-001b path drift)."
+            )
 
 
 class TestSyncCLI:
