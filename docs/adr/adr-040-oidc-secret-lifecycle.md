@@ -72,10 +72,18 @@ and they do not fit the same model:
 | Face | Where it lives | Can it be *generated* from SSOT? |
 |------|----------------|----------------------------------|
 | **Provider (Authelia)** | argon2 hash in `configuration.yml`, a file the toolkit already renders | **Yes** — it is already a generated artifact ([ADR-038](adr-038-secret-delivery-paths.md) Path 3). Drift here can be made structurally impossible. |
-| **Consumer (Gitea/MinIO/…)** | plaintext inside the app's own datastore (Gitea SQLite, MinIO config), reachable only through an imperative admin API | **No** — there is no declarative K8s resource for "Gitea's OAuth source row". It is mutable runtime state behind an API. The best available primitive is *push then verify*. |
+| **Consumer — admin-API (Gitea)** | plaintext in Gitea's SQLite OAuth source, written via `gitea admin auth update-oauth` | **No** — there is no declarative K8s resource for "Gitea's OAuth source row". It is mutable runtime state behind an API. The best available primitive is *push then verify*. |
+| **Consumer — env-var (MinIO, Grafana, Argo CD)** | plaintext injected as an env var from a K8s Secret ([ADR-038](adr-038-secret-delivery-paths.md) Path 1: `MINIO_IDENTITY_OPENID_CLIENT_SECRET` etc.) | **Delivery is already declarative** (the Secret is generated from SSOT), but the secret is only *exercised* at an interactive OIDC login — so correctness is provable only by an *end-to-end flow test*, not by `configure-oidc` (which never touches these services). |
 
-Direction B breaks on the consumer face: you cannot declaratively generate a row in
-Gitea's SQLite. Direction A under-serves the provider face: it keeps treating a
+Two distinct consumer shapes matter here, and conflating them is the trap Codex
+flagged on this ADR: **only Gitea has an imperative admin-API push**, and therefore
+only Gitea is covered by the `configure-oidc` round-trip (DRIFT-001). MinIO/Grafana/
+Argo CD get their secret as an env var; `configure-oidc` does not touch them at all,
+so DRIFT-001 says nothing about them. Their drift is caught only by per-client flow
+tests (OIDC-E2E-001).
+
+Direction B breaks on the admin-API consumer face: you cannot declaratively generate a
+row in Gitea's SQLite. Direction A under-serves the provider face: it keeps treating a
 *generatable* artifact as something to imperatively sync. The right answer is asymmetric.
 
 ## Decision
@@ -97,18 +105,30 @@ separate `sync-oidc-hashes` step.
   (#229) and its `--check` set is **derived from a single source** (#230). It is explicitly
   a transitional mechanism, not the end state.
 
-### 2. Consumer side (Gitea/MinIO): imperative push, mandatory verification
+### 2. Consumer side: verify, with coverage matched to the delivery mechanism
 
-The consumer secret cannot be generated; it is pushed through an admin API. Therefore every
-push **must** be followed by an automated proof that the round-trip actually works — an
-imperative write without verification is the exact shape that failed silently.
+The consumer secret cannot be generated into agreement; it must be **proven** to agree.
+But the two consumer shapes need two different proofs — and neither may report success
+without one:
 
-- `configure-oidc` performs a **token-endpoint round-trip** after every update and fails
-  loud on `invalid_client` (**OIDC-DRIFT-001**, #231). Per RFC 6749 §5.2, `invalid_client`
-  is the only error code that denotes failed client authentication, so it is the precise
-  signal that the consumer plaintext disagrees with the provider hash.
-- CI gains a **programmatic OIDC flow test** per registered client (**OIDC-E2E-001**) so the
-  disagreement surfaces in PR review, not in a manual prod smoke.
+**2a. Admin-API consumer (Gitea).** The secret is pushed via `gitea admin auth
+update-oauth`. `configure-oidc` performs a **token-endpoint round-trip** after every
+update and fails loud on `invalid_client` (**OIDC-DRIFT-001**, #231, merged
+`2a771de`). Per RFC 6749 §5.2, `invalid_client` is the only error code that denotes
+failed client authentication, so it is the precise signal that the Gitea plaintext
+disagrees with the provider hash. **Scope: Gitea only** — `configure-oidc` does not
+touch any other consumer.
+
+**2b. Env-var consumers (MinIO, Grafana, Argo CD).** The secret is delivered as an env
+var from a K8s Secret (Path 1); there is no push step and **no verification today** —
+this is a real gap, not a solved problem. Their correctness is provable only by a
+**programmatic OIDC flow test per registered client** (**OIDC-E2E-001**, not yet
+implemented). Until E2E-001 lands, a stale env-var secret for these services drifts
+silently exactly as the Gitea one used to.
+
+> Do not assume "reuse DRIFT-001" covers all consumers. DRIFT-001 proves Gitea. The
+> env-var consumers are unverified until OIDC-E2E-001 exists — SYNC-002 must treat that
+> as an open gap, not delegate to a check that never runs for them.
 
 ### 3. Rotation composes the two
 
@@ -117,17 +137,21 @@ imperative sequence with guard rails" (Direction A). It is the orchestrator that
 
 1. rotates the SOPS plaintext (SSOT),
 2. triggers the provider-side **generation** (§1),
-3. performs the consumer-side **push + verify** (§2, reusing DRIFT-001 as its verification
-   step),
+3. verifies **each** consumer with the proof that matches its delivery (§2): the Gitea
+   token round-trip (DRIFT-001) for the admin-API consumer, and a per-client flow check
+   (OIDC-E2E-001) for the env-var consumers — **a rotation that touches an env-var
+   consumer while E2E-001 is unimplemented is not fully verifiable and must say so, not
+   report green**,
 
 and treats the **verification, not the exit code of each step, as the definition of
-success**. A rotation that cannot prove a working token round-trip fails and rolls back.
+success**. A rotation that cannot prove the affected consumers work fails and rolls back.
 
 ### Invariant
 
-> The provider side is *generated* (drift impossible). The consumer side is *pushed and
-> proven* (drift caught immediately). No OIDC secret operation reports success without a
-> verification that the full SOPS → Authelia → consumer chain agrees.
+> The provider side is *generated* (drift impossible). Each consumer is *proven* by the
+> check that matches its delivery — Gitea by token round-trip (shipped), env-var consumers
+> by flow test (E2E-001, pending). No OIDC secret operation reports success for a consumer
+> it cannot actually verify; an unverifiable consumer is reported as a gap, never as green.
 
 ## Consequences
 
@@ -135,11 +159,12 @@ success**. A rotation that cannot prove a working token round-trip fails and rol
 
 - **Eliminates a whole bug class.** Once §1 lands, the OIDC-SYNC-001/001b family (a separate
   sync step pointing at the wrong file) cannot recur — there is no separate step.
-- **Silent success becomes impossible** on the consumer side: the only definition of done is
-  a proven token round-trip.
+- **Silent success becomes impossible *where a verifier exists*:** for Gitea, the only
+  definition of done is a proven token round-trip (shipped). For the env-var consumers the
+  ADR makes the absence of a verifier *explicit* (E2E-001 gap) rather than implying coverage.
 - **Reframes the backlog into a coherent plan** instead of four loosely related tickets:
-  SYNC-002 (provider generation + orchestration), DRIFT-001 (consumer verify, shipped),
-  E2E-001 (CI proof). Each now has a clear role.
+  SYNC-002 (provider generation + orchestration), DRIFT-001 (Gitea admin-API verify,
+  shipped #231), E2E-001 (env-var consumer proof, still required). Each now has a clear role.
 - **Honours existing patterns.** Provider-side generation is the same "generate, don't sync"
   stance already used for ConfigMaps; consumer-side verify-after-write mirrors Argo CD health
   checks. Nothing exotic is introduced.
@@ -197,8 +222,10 @@ be pushed and proven, regardless of whether the SSOT is SOPS or a SealedSecret.
 
 - **OIDC-SYNC-001 / 001b** — done (#229, #230); reclassified as the *transitional bridge* for
   the provider side, to be retired when §1 generation lands.
-- **OIDC-DRIFT-001** (#231) — the consumer-side verification primitive; shipped per this ADR's
-  §2.
+- **OIDC-DRIFT-001** (#231, merged) — the **Gitea** (admin-API) verification primitive;
+  shipped per §2a. Does **not** cover env-var consumers.
+- **OIDC-E2E-001** — re-confirmed as **required, not optional**: it is the only verification
+  for the env-var consumers (MinIO/Grafana/Argo CD), which are unverified until it lands.
 - **OIDC-SYNC-002** — re-scoped per §3: generation + orchestration + verification, not a
   guard-railed imperative sequence. **Should not start until this ADR is accepted** (it was
   the reason to write the ADR first).
