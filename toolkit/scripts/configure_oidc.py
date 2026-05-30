@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import httpx
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -128,18 +130,103 @@ def configure_gitea_oidc(config: dict[str, str], env: str) -> None:
         print(f"WARNING: Gitea restart failed: {restart_result.stderr}")
 
 
-def main() -> None:
+# Verdicts returned by classify_token_response (OIDC-DRIFT-001).
+VERIFY_PASS = "pass"  # client authentication succeeded (secret matches the hash)
+VERIFY_FAIL = "fail"  # invalid_client — secret<->hash drift or stale Gitea OAuth source
+VERIFY_INCONCLUSIVE = "inconclusive"  # could not reach/parse the endpoint — do not gate on this
+
+
+def classify_token_response(status_code: int, body: dict[str, object]) -> str:
+    """Classify an OAuth2 token-endpoint response into a drift verdict.
+
+    OIDC-DRIFT-001: the only thing we can assert without enabling a grant is whether
+    the *client authenticated* — i.e. whether the plaintext secret we hold matches the
+    argon2 hash Authelia stores. The token endpoint authenticates the client BEFORE it
+    evaluates the grant, so:
+
+      - `invalid_client` (RFC 6749 §5.2, usually HTTP 401) means the secret did NOT
+        match -> this is exactly the secret<->hash drift / stale Gitea source the
+        incident was about -> FAIL.
+      - ANY other OAuth2 error (`unauthorized_client`, `invalid_grant`,
+        `unsupported_grant_type`, ...) means client auth already PASSED and we tripped
+        on the grant instead -> PASS (drift is not present).
+      - HTTP 200 with an access_token -> PASS.
+
+    Per RFC 6749 §5.2, `invalid_client` is the ONLY error code that denotes failed
+    client authentication; every other code (`invalid_request`, `invalid_grant`,
+    `unauthorized_client`, `unsupported_grant_type`, `invalid_scope`) is raised only
+    after the client has been authenticated. So the machine-readable `error` field is
+    authoritative — the HTTP status (400 vs 401 for invalid_client) varies across
+    implementations and is not relied upon here.
+    """
+    error = str(body.get("error", "")).strip().lower()
+    return VERIFY_FAIL if error == "invalid_client" else VERIFY_PASS
+
+
+def verify_token_endpoint(config: dict[str, str], env: str) -> str:
+    """Probe Authelia's token endpoint with the Gitea client credentials.
+
+    Returns a VERIFY_* verdict. Network/parse failures map to VERIFY_INCONCLUSIVE so a
+    transient outage never reports a false drift. Hits the EXTERNAL issuer URL because
+    Authelia's OIDC issuer is request-dependent (CLAUDE.md gotcha), and posts the
+    secret in the body to match Gitea's `client_secret_post` auth method.
+    """
+    token_url = f"{config['authelia_url']}/api/oidc/token"
+    try:
+        resp = httpx.post(
+            token_url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": "gitea",
+                "client_secret": config["oidc_client_secret"],
+            },
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        print(f"WARNING: token endpoint unreachable ({exc}) — skipping drift verification")
+        return VERIFY_INCONCLUSIVE
+
+    try:
+        body = resp.json()
+    except ValueError:
+        print(f"WARNING: token endpoint returned non-JSON (HTTP {resp.status_code}) — skipping verification")
+        return VERIFY_INCONCLUSIVE
+
+    verdict = classify_token_response(resp.status_code, body)
+    if verdict == VERIFY_FAIL:
+        err = body.get("error_description") or body.get("error") or "client authentication failed"
+        print(f"FAIL: OIDC token round-trip rejected the Gitea client secret: {err}")
+    else:
+        print("✓ Token endpoint round-trip succeeded (Gitea client secret matches Authelia)")
+    return verdict
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Configure OIDC providers")
     parser.add_argument("--env", "-e", required=True, help="Target environment")
+    parser.add_argument(
+        "--skip-verify",
+        action="store_true",
+        help="Skip the post-update token round-trip verification (OIDC-DRIFT-001)",
+    )
     args = parser.parse_args()
 
     config = get_config(args.env)
     if not config["oidc_client_secret"]:
         print("ERROR: Gitea oidc_client_secret not found in SOPS")
-        sys.exit(1)
+        return 1
 
     configure_gitea_oidc(config, args.env)
 
+    if args.skip_verify:
+        return 0
+
+    verdict = verify_token_endpoint(config, args.env)
+    if verdict == VERIFY_FAIL:
+        return 2  # drift confirmed: secret<->hash mismatch or stale Gitea source
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
