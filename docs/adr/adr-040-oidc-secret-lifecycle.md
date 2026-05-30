@@ -185,11 +185,11 @@ success**. A rotation that cannot prove the affected consumer works fails and ro
 - **Eliminates a whole bug class.** Once §1 lands, the OIDC-SYNC-001/001b family (a separate
   sync step pointing at the wrong file) cannot recur — there is no separate step.
 - **Silent success becomes impossible *where a verifier exists*:** for Gitea, the only
-  definition of done is a proven token round-trip (shipped). For the env-var consumers the
+  definition of done is a proven token round-trip (shipped). For the non-Gitea consumers the
   ADR makes the absence of a verifier *explicit* (E2E-001 gap) rather than implying coverage.
 - **Reframes the backlog into a coherent plan** instead of four loosely related tickets:
   SYNC-002 (provider generation + orchestration), DRIFT-001 (Gitea admin-API verify,
-  shipped #231), E2E-001 (env-var consumer proof, still required). Each now has a clear role.
+  shipped #231), E2E-001 (non-Gitea consumer proof, still required). Each now has a clear role.
 - **Honours existing patterns.** Provider-side generation is the same "generate, don't sync"
   stance already used for ConfigMaps; consumer-side verify-after-write mirrors Argo CD health
   checks. Nothing exotic is introduced.
@@ -248,18 +248,16 @@ be pushed and proven, regardless of whether the SSOT is SOPS or a SealedSecret.
 - **OIDC-SYNC-001 / 001b** — done (#229, #230); reclassified as the *transitional bridge* for
   the provider side, to be retired when §1 generation lands.
 - **OIDC-DRIFT-001** (#231, merged) — the **Gitea** (admin-API) verification primitive;
-  shipped per §2a. Does **not** cover env-var consumers.
+  shipped per §2a. Does **not** cover the non-Gitea consumers.
 - **OIDC-E2E-001** — re-confirmed as **required, not optional**: it is the only verification
   for every non-Gitea consumer (env-var: MinIO/Grafana; Helm `--set`: Argo CD), all of which
   are unverified until it lands. Note their propagation steps differ (`apply-secrets` vs
   `deploy-argocd`) even though they share this one verifier.
-- **OIDC-SYNC-002** — re-scoped per §3: generation + orchestration + verification, not a
-  guard-railed imperative sequence. **Should not start until this ADR is accepted** (it was
-  the reason to write the ADR first).
-- **OIDC-E2E-001** — the CI proof of §2; unchanged in intent, now explicitly part of the
-  verification half of the strategy.
-- **New follow-up (PROVIDER-GEN-001, to file):** fold argon2 hash computation into the
-  Authelia config render with hash-stability preservation; retires `sync_oidc_hashes`.
+- **OIDC-SYNC-002** — re-scoped per §3: generation + per-consumer propagation + per-consumer
+  verification, not a guard-railed imperative sequence. **Should not start until this ADR is
+  accepted** (it was the reason to write the ADR first).
+- **PROVIDER-GEN-001** (new) — fold argon2 hash computation into the Authelia config render
+  with hash-stability preservation; retires `sync_oidc_hashes`. The §1 end-state.
 
 ## Cross-references
 
