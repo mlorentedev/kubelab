@@ -136,31 +136,50 @@ VERIFY_FAIL = "fail"  # invalid_client — secret<->hash drift or stale Gitea OA
 VERIFY_INCONCLUSIVE = "inconclusive"  # could not reach/parse the endpoint — do not gate on this
 
 
+# RFC 6749 §5.2 token-endpoint error codes. `invalid_client` denotes failed CLIENT
+# authentication; the rest are raised only AFTER the client has authenticated.
+_OAUTH2_TOKEN_ERRORS = frozenset(
+    {
+        "invalid_request",
+        "invalid_client",
+        "invalid_grant",
+        "unauthorized_client",
+        "unsupported_grant_type",
+        "invalid_scope",
+    }
+)
+
+
 def classify_token_response(status_code: int, body: dict[str, object]) -> str:
     """Classify an OAuth2 token-endpoint response into a drift verdict.
 
     OIDC-DRIFT-001: the only thing we can assert without enabling a grant is whether
     the *client authenticated* — i.e. whether the plaintext secret we hold matches the
-    argon2 hash Authelia stores. The token endpoint authenticates the client BEFORE it
-    evaluates the grant, so:
+    argon2 hash Authelia stores. Three outcomes, because a JSON body is not proof that
+    we even reached the token endpoint (an ingress/proxy/Authelia 404/403/502 can be
+    JSON too):
 
-      - `invalid_client` (RFC 6749 §5.2, usually HTTP 401) means the secret did NOT
-        match -> this is exactly the secret<->hash drift / stale Gitea source the
-        incident was about -> FAIL.
-      - ANY other OAuth2 error (`unauthorized_client`, `invalid_grant`,
-        `unsupported_grant_type`, ...) means client auth already PASSED and we tripped
-        on the grant instead -> PASS (drift is not present).
-      - HTTP 200 with an access_token -> PASS.
+      - `access_token` present -> the client authenticated AND the grant ran -> PASS.
+      - an OAuth2 error code present (RFC 6749 §5.2):
+          * `invalid_client` -> the secret did NOT match -> FAIL (the drift / stale
+            Gitea source the incident was about).
+          * any other §5.2 code -> client auth already PASSED, we tripped on the grant
+            -> PASS (drift not present).
+      - anything else (no access_token, no recognized OAuth2 error) -> we did not get a
+        real token-endpoint response -> INCONCLUSIVE. Never report PASS for a body we
+        cannot interpret — that would be the same silent-success this check exists to kill.
 
-    Per RFC 6749 §5.2, `invalid_client` is the ONLY error code that denotes failed
-    client authentication; every other code (`invalid_request`, `invalid_grant`,
-    `unauthorized_client`, `unsupported_grant_type`, `invalid_scope`) is raised only
-    after the client has been authenticated. So the machine-readable `error` field is
-    authoritative — the HTTP status (400 vs 401 for invalid_client) varies across
-    implementations and is not relied upon here.
+    The machine-readable `error` field is authoritative; the HTTP status (400 vs 401 for
+    invalid_client) varies across implementations and is not relied upon here.
     """
+    if body.get("access_token"):
+        return VERIFY_PASS
+
     error = str(body.get("error", "")).strip().lower()
-    return VERIFY_FAIL if error == "invalid_client" else VERIFY_PASS
+    if error in _OAUTH2_TOKEN_ERRORS:
+        return VERIFY_FAIL if error == "invalid_client" else VERIFY_PASS
+
+    return VERIFY_INCONCLUSIVE
 
 
 def verify_token_endpoint(config: dict[str, str], env: str) -> str:
@@ -197,6 +216,11 @@ def verify_token_endpoint(config: dict[str, str], env: str) -> str:
     if verdict == VERIFY_FAIL:
         err = body.get("error_description") or body.get("error") or "client authentication failed"
         print(f"FAIL: OIDC token round-trip rejected the Gitea client secret: {err}")
+    elif verdict == VERIFY_INCONCLUSIVE:
+        print(
+            f"WARNING: token endpoint returned an unrecognized JSON response (HTTP {resp.status_code}) "
+            "— not a token-endpoint round-trip; skipping verification"
+        )
     else:
         print("✓ Token endpoint round-trip succeeded (Gitea client secret matches Authelia)")
     return verdict
