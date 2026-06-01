@@ -16,8 +16,13 @@
 {% endfor %}
   },
 
+  // tag:hermes must be owned by `agents@` — the user that registers tagged fleet
+  // nodes (its admin-minted preauth keys carry the tag). `kubelab@` is kept for
+  // manual admin tagging (`headscale nodes tag`). Owning by the registering user
+  // is required by Headscale: a node/key cannot carry a tag its user does not own.
+  // (Corrects ADR-041's "tagOwners = kubelab admin" — surfaced onboarding hermes.)
   "tagOwners": {
-    "tag:hermes": ["kubelab@"],
+    "tag:hermes": ["kubelab@", "agents@"],
   },
 
   "acls": [

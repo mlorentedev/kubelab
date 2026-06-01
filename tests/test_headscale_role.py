@@ -155,9 +155,13 @@ class TestPolicyHujsonContent:
         assert rendered_hosts["beelink"] == ssot["beelink"]
         assert rendered_hosts["lan-rpi4"] == ssot["lan-rpi4"]
 
-    def test_tag_hermes_owned_by_admin(self) -> None:
-        policy = _load_hujson(_render_policy())
-        assert policy["tagOwners"]["tag:hermes"] == ["kubelab@"], "v0.28 needs the user@ form"
+    def test_tag_hermes_owned_by_registering_user(self) -> None:
+        # the `agents` user registers tagged nodes, so it MUST own the tag (Headscale
+        # rejects a node/key carrying a tag its user does not own); kubelab@ kept for
+        # manual admin tagging. v0.28 needs the user@ form.
+        owners = _load_hujson(_render_policy())["tagOwners"]["tag:hermes"]
+        assert "agents@" in owners, "agents@ must own tag:hermes so the agent can register with it"
+        assert all(o.endswith("@") for o in owners), "user references need the user@ form on v0.28"
 
     def test_permissive_first_rule_preserves_existing_identities(self) -> None:
         acls = _load_hujson(_render_policy())["acls"]
