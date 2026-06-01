@@ -11,7 +11,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - [x] AC1 (role policy-path param + reload-on-change) -> render/static-YAML test `tests/test_headscale_role.py` (7 tests green); reload is SIGHUP `docker kill --signal=HUP headscale` (NOT restart), policy path SEPARATE from config.yaml restart path. On-VPS reload exercised in VPN-ACL-002 (dormant until then: default `headscale_policy_path: ""`). _(commit pending)_
 - [x] AC2 (`headscale policy check` CI gate) -> `make check-headscale-policy` → "Policy is valid" (real v0.28 binary via Docker); CI gate in `check-config-drift.yml` (prod) via `toolkit infra headscale policy-check`. _(commit 8b4e4a4/2681f19)_
-- [~] AC3 (permissive baseline preserves flows + auto-revert) -> code done: `toolkit infra headscale probe` + role block/rescue auto-revert; unit-tested (probe aggregation + revert structure). **Live probe evidence pending prod activation** (`make deploy TARGET=vps ENV=prod`).
+- [x] AC3 (permissive baseline preserves flows + auto-revert) -> activated on prod 2026-05-31; `toolkit infra headscale probe` 7/7 OK against the live mesh (admin→vps, hub→spoke :6443, monitoring, rpi4 route, intra-K3s); 9 nodes stayed online. Auto-revert exercised for real: the first-activation probe hit the post-reload propagation window (false negative) → fixed with probe retries + first-activation rescue tolerance (`73cfeab`). Re-deploy is clean/idempotent.
 - [ ] AC4 (hermes SSH-reachable, tagged, own-credential auth) -> `headscale nodes list` + service-auth observation — VPN-ACL-003
 
 ## Test status

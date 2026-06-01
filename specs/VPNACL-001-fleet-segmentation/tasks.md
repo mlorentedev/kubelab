@@ -31,7 +31,7 @@ created: "2026-05-31"
 - [x] External connectivity-probe harness (`toolkit infra headscale probe`): declarative preserved-flow checks (admin SSH, hub→spoke `:6443`, rpi4 route, intra-K3s, monitoring); required flows must hold, optional homelab flows skip when source is down
 - [x] Auto-revert: role backs up `.prev`, probes after SIGHUP reload (block), restores + reloads + fails on probe failure (rescue)
 - [x] Probe assertions authored as `(src, dst, port)` Flow tuples → migrate 1:1 into the v0.29 `tests` block (VPN-ACL-006)
-- [ ] **ACTIVATE on prod**: set `headscale_policy_path` + `make deploy TARGET=vps ENV=prod` (renders policy, SIGHUP reload, probe confirms) — pending go-live
+- [x] **ACTIVATE on prod** ✓ 2026-05-31: `make deploy TARGET=vps ENV=prod` rendered policy.hujson, restarted headscale (config.yaml path change), SIGHUP-reloaded. Live mesh verified: `toolkit infra headscale probe` 7/7 OK, 9 nodes online, headscale healthy. Learned: probe needs retries for the post-reload propagation window (fixed `73cfeab`); first activation has no `.prev` (rescue made tolerant).
 
 ## VPN-ACL-003 — Onboard hermes (zero-trust)
 
