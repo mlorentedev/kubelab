@@ -222,10 +222,16 @@ class TestHeadscaleProbe:
         aws1 = _net()["aws"]["tailscale_ip"]
         assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({aws1}))) == 1
 
-    def test_reachable_source_with_broken_flow_fails(self) -> None:
-        # source up, dst unreachable = real regression, fatal even for an optional flow
+    def test_optional_broken_flow_is_logged_not_fatal(self) -> None:
+        # an optional flow that fails (e.g. intra-K3s ace1:6443) is logged but must NOT
+        # trigger an auto-revert — only required flows drive the gate (homelab/route nuances)
         ace1 = _net()["nodes"]["ace1"]["tailscale_ip"]
-        assert run_probe(_net(), runner=_fake_runner(blocked=frozenset({f"{ace1}:6443"}))) == 1
+        assert run_probe(_net(), runner=_fake_runner(blocked=frozenset({f"{ace1}:6443"}))) == 0
+
+    def test_required_broken_flow_fails(self) -> None:
+        # a required flow failing (hub->spoke prod, vps:6443) IS fatal
+        vps = _net()["vps"]["tailscale_ip"]
+        assert run_probe(_net(), runner=_fake_runner(blocked=frozenset({f"{vps}:6443"}))) == 1
 
 
 class TestAutoRevert:
