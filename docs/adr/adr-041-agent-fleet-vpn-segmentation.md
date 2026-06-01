@@ -59,6 +59,12 @@ Audited against Headscale v0.28 docs, Tailscale upstream ACL/tags docs, and Tail
 
 Adopt **Option A**.
 
+> **Implementation corrections (2026-05-31, from spec VPNACL-001 — two details below were wrong/insufficient and corrected during the first real onboarding):**
+> 1. **`tagOwners` must include the registering user `agents@`** (item 1 below says "kubelab admin" only). Headscale rejects a node/key carrying a tag whose user is not a `tagOwner`, so the agent join fails (`"tag not permitted by auth key"`). Fix: `tagOwners["tag:hermes"] = ["kubelab@", "agents@"]` (keep `kubelab@` for manual admin tagging). Also: agents are tagged by the **key's embedded `--tags`** — do **NOT** pass `tailscale up --advertise-tags` (item 1); combining both triggers the advertise-path validation and fails.
+> 2. **Reload is `docker kill --signal=HUP headscale`**, not `systemctl reload` (items 2–3): Headscale runs in Docker Compose (no systemd). A propagation window after reload means the verification probe must retry.
+>
+> Full procedure + gotchas: [`docs/runbooks/onboard-vpn-fleet-agent.md`](../runbooks/onboard-vpn-fleet-agent.md).
+
 1. **Identity model.** Register fleet agents under a dedicated Headscale user `agents` (custody/revocation of preauth keys only). Each agent advertises a per-type tag (`tag:hermes`, `tag:openclaw`, …) via `--advertise-tags` on `tailscale up`. ACL rules are written exclusively against tags. `tagOwners` for all agent tags = the `kubelab` admin user.
 2. **Policy storage.** File-mode HuJSON at a repo path, deployed by the `headscale` Ansible role (parameterize `policy.path`, mount the file, trigger `systemctl reload headscale` on change). Never edited manually on the VPS.
 3. **Segmentation shape.** Deny-by-default. Agents are `src` to a narrow, explicitly-enumerated set of `dst` (per-agent-type). Agents are reachable only by admin on `:22` (`dst: tag:hermes:22` via `acls`, since kubelab uses sshd). Agent↔agent is denied unless a specific need is enumerated. The concrete per-agent dst matrix starts **closed** and is enumerated in the implementation spec as needs arise.

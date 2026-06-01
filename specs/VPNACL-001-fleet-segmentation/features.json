@@ -1,0 +1,30 @@
+[
+  {
+    "id": "VPNACL-001-f1",
+    "behavior": "headscale role renders policy.path from a var and reloads (not restarts) Headscale on policy change",
+    "verification": "TODO: render/molecule test asserting config.yaml policy.path != '' and a reload (not restart) handler fires on change",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPNACL-001-f2",
+    "behavior": "policy.hujson passes headscale policy check (syntax) as a CI gate",
+    "verification": "headscale policy check --file infra/.../policy.hujson",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPNACL-001-f3",
+    "behavior": "permissive-first baseline preserves all current mesh flows post-reload; broken policy auto-reverts",
+    "verification": "TODO: toolkit/ansible probe asserting admin->node SSH, hub->spoke :6443, rpi4 172.16.1.0/24, intra-K3s, monitoring; plus an auto-revert smoke",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPNACL-001-f4",
+    "behavior": "hermes is SSH-reachable over VPN, carries tag:hermes, and authenticates to a target service with its own scoped credential",
+    "verification": "TODO: headscale nodes list | grep tag:hermes; ssh hermes; service-auth observation (own token, not network trust)",
+    "state": "pending",
+    "evidence": ""
+  }
+]

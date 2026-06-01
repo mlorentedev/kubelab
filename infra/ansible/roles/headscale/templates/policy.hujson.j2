@@ -1,0 +1,38 @@
+// Managed by Ansible — Headscale ACL policy (ADR-041 / VPN-ACL-002).
+// Source: infra/ansible/roles/headscale/templates/policy.hujson.j2
+//
+// hosts are rendered from the networking SSOT (common.yaml → headscale_policy_hosts);
+// never hardcode IPs here. Rules are the PERMISSIVE-FIRST baseline:
+//   1) every existing identity (users) keeps allow-all — and because a tag REPLACES
+//      the user in ACL evaluation, tagged agents are NOT matched by rule 1, so it
+//      cannot grant an agent anything while preserving every current mesh flow
+//      (admin→all, ArgoCD hub↔spoke :6443, rpi4 172.16.1.0/24 route, intra-K3s, monitoring).
+//   2) tag:hermes gets a narrow, node-like-controlled egress (additive, agent-only).
+// Tightening rule 1 toward least-privilege is VPN-ACL-004 (deny risk lives there).
+{
+  "hosts": {
+{% for name, addr in headscale_policy_hosts.items() %}
+    "{{ name }}": "{{ addr }}",
+{% endfor %}
+  },
+
+  // tag:hermes must be owned by `agents@` — the user that registers tagged fleet
+  // nodes (its admin-minted preauth keys carry the tag). `kubelab@` is kept for
+  // manual admin tagging (`headscale nodes tag`). Owning by the registering user
+  // is required by Headscale: a node/key cannot carry a tag its user does not own.
+  // (Corrects ADR-041's "tagOwners = kubelab admin" — surfaced onboarding hermes.)
+  "tagOwners": {
+    "tag:hermes": ["kubelab@", "agents@"],
+  },
+
+  "acls": [
+    // 1) permissive-first: existing identities keep allow-all (excludes tagged agents).
+    //    Headscale v0.28 requires the "user@" form for user references in ACLs.
+    { "action": "accept", "src": ["kubelab@", "manu@", "work@"], "dst": ["*:*"] },
+
+    // 2) agent egress — node-like, controlled. Gitea + Ollama via the prod ingress
+    //    (vps:443, token / api-key auth over TLS); MinIO via its S3 API (own access keys).
+    //    No rule grants tag:hermes → vps:8080 (Headscale CP), *:6443 (K3s API), or peer :22.
+    { "action": "accept", "src": ["tag:hermes"], "dst": ["vps:443", "beelink:9000"] },
+  ],
+}

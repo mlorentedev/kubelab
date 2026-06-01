@@ -52,6 +52,16 @@
         _headscale_dns_extra_records: "{{ _headscale_dns_extra_records | default([]) + [{'name': item.name ~ '.' ~ config.global.base_domain, 'type': 'A', 'value': config.networking.nodes[item.node].tailscale_ip}] }}"
       loop: "{{ config.networking.vpn_extra_records | default([]) }}"
 
+    # ADR-041 / VPN-ACL-002: ACL host aliases (name -> Tailscale IP) for policy.hujson, from SSOT.
+    - name: Build Headscale ACL host aliases from SSOT (node Tailscale IPs)
+      set_fact:
+        _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({item.key: item.value.tailscale_ip}) }}"
+      loop: "{{ config.networking.nodes | dict2items }}"
+
+    - name: Add VPS, hub, and rpi4 LAN route to Headscale ACL hosts (SSOT)
+      set_fact:
+        _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({'vps': config.networking.vps.tailscale_ip, 'aws1': config.networking.aws.tailscale_ip, 'lan-rpi4': config.networking.lan_cidr}) }}"
+
   roles:
     # --- Error pages (Docker Compose — only when K3s is NOT the ingress) ---
     # In prod, VPS is in k3s_servers group → K3s handles errors deployment
@@ -142,3 +152,9 @@
         tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
         headscale_dns_split: "{{ _headscale_dns_split }}"
         headscale_dns_extra_records: "{{ _headscale_dns_extra_records }}"
+        # ADR-041: ACL host aliases from SSOT, consumed by policy.hujson.j2.
+        headscale_policy_hosts: "{{ _headscale_policy_hosts }}"
+        # ADR-041 / VPN-ACL-002: file-mode ACL ACTIVE. The deployed baseline is
+        # permissive-first (existing identities keep allow-all → cannot sever a flow);
+        # on reload the role probes the preserved flows and AUTO-REVERTS on failure.
+        headscale_policy_path: "/etc/headscale/policy.hujson"
