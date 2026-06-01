@@ -89,25 +89,41 @@
     - name: Apply the pending SIGHUP policy reload now
       meta: flush_handlers
 
+    # The new network map takes a few seconds to propagate to clients after a
+    # reload; retry so a propagation-window blip is not misread as a broken flow.
     - name: Probe preserved mesh flows from the controller
       command: toolkit infra headscale probe
       args:
         chdir: "{{ playbook_dir }}/../../.."
       delegate_to: localhost
+      register: hs_probe
+      retries: 4
+      delay: 5
+      until: hs_probe.rc == 0
       changed_when: false
   rescue:
+    - name: Look for a previous policy to revert to
+      stat:
+        path: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
+      register: hs_prev
+
     - name: Restore the previous known-good policy
       copy:
         src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
         dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
         remote_src: true
         mode: "0644"
+      when: hs_prev.stat.exists
 
     - name: Reload the restored policy (SIGHUP)
       command: docker kill --signal=HUP headscale
+      when: hs_prev.stat.exists
 
-    - name: Fail — connectivity probe failed, policy reverted
+    - name: Fail — connectivity probe failed
       fail:
         msg: >-
-          Connectivity probe failed after the policy reload; reverted to the
-          previous known-good policy. Inspect `toolkit infra headscale probe`.
+          Connectivity probe failed after the policy reload.
+          {{ 'Reverted to the previous known-good policy.' if hs_prev.stat.exists
+             else 'No prior policy (first activation); the permissive-first baseline is
+             left active (allow-all for existing identities, safe by construction). Inspect
+             `toolkit infra headscale probe`.' }}
