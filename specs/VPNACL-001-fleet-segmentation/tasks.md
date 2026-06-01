@@ -10,17 +10,19 @@ created: "2026-05-31"
 
 ## Setup
 
-- [ ] Branch created from master: `feature/vpn-acl-fleet-segmentation`
-- [ ] `proposal.md` complete; `[AGENT-DRAFT]` items in "Risks / open questions" resolved
-- [ ] Confirm on the live v0.28.0 VPS: `headscale nodes tag --help`, `headscale preauthkeys create --help` (exact tag flags)
+- [x] Branch created from master: `feature/vpn-acl-fleet-segmentation` ✓ 2026-05-31
+- [x] `proposal.md` complete; `[AGENT-DRAFT]` items in "Risks / open questions" resolved ✓ 2026-05-31
+- [x] Confirm on the live v0.28.0 VPS: `headscale nodes tag --help`, `headscale preauthkeys create --help` (exact tag flags) ✓ 2026-05-31 — `nodes tag -i <ID> -t <tag>`; `preauthkeys create -u <ID> --tags <tag> --reusable -e <expiry>` (default 1h); `policy check` present; users manu(1)/kubelab(2)/work(3), no `agents` yet
 
-## VPN-ACL-001 — Parameterize the headscale role
+## VPN-ACL-001 — Parameterize the headscale role ✓ 2026-05-31
 
-- [ ] Test: a generated `config.yaml` renders `policy.path` from a role var (not hardcoded `""`)
-- [ ] Expose `headscale_policy_path` in `roles/headscale/defaults/main.yml`; template it in `config.yaml.j2`
-- [ ] Task: copy/mount the HuJSON policy file to the VPS (`/etc/headscale/`) idempotently
-- [ ] Handler: `systemctl reload headscale` (NOT restart) triggered on policy file change
-- [ ] Wire deploy through the Makefile/toolkit (no manual VPS edits)
+- [x] Test: a generated `config.yaml` renders `policy.path` from a role var (not hardcoded `""`); default var = `""` keeps current allow-all (no-op refactor) — `tests/test_headscale_role.py::TestPolicyPathParameterized`
+- [x] Test: handler reloads via **SIGHUP** (`docker kill --signal=HUP headscale`), NOT a restart; policy-file change notifies the reload handler, config.yaml change keeps the restart path (SEPARATE — finding #1) — `TestReloadHandler` + `TestPolicyFileDeploy`
+- [x] Expose `headscale_policy_path` in `roles/headscale/defaults/main.yml`; template it in `config.yaml.j2`
+- [x] Task: render `policy.hujson.j2` to the VPS config dir (bind-mounted `./config` → `/etc/headscale`, `:ro`) idempotently, conditional on `headscale_policy_path` set (permissive-first seed; baseline content authored in VPN-ACL-002)
+- [x] Handler: `docker kill --signal=HUP headscale` (Docker Compose, NOT systemd; NOT restart) triggered on policy-file change only
+- [x] Fix in passing: collapse the redundant double health-wait (removed the `wait for headscale` handler + its notify; the always-run inline health gate remains) — finding #5
+- [x] Wire deploy through the Makefile/toolkit — satisfied by existing `deploy-vps.yml:129` role invocation (`make deploy TARGET=vps ENV=prod`); dormant until VPN-ACL-002 sets `headscale_policy_path`
 
 ## VPN-ACL-002 — Author policy.hujson (permissive-first) + probe + CI gate
 

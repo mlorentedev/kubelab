@@ -22,6 +22,19 @@
     mode: "0644"
   register: headscale_config
 
+# ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
+# config dir (appears at headscale_policy_path inside the container). Dormant
+# while headscale_policy_path is "" (default → allow-all). On change this fires
+# the SIGHUP `reload headscale` handler — a hot reload, never a restart, so the
+# policy path is decoupled from the config.yaml restart path above.
+- name: Template Headscale ACL policy
+  template:
+    src: policy.hujson.j2
+    dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
+    mode: "0644"
+  when: headscale_policy_path | length > 0
+  notify: reload headscale
+
 - name: Ensure Docker network exists
   community.docker.docker_network:
     name: "{{ docker_network }}"
@@ -37,10 +50,13 @@
   register: headscale_start
   changed_when: "'Started' in headscale_start.stderr or 'Created' in headscale_start.stderr"
 
+# Only the server config.yaml / compose file need a restart (read at startup).
+# Policy-file changes take the SIGHUP path above. Readiness is gated by the
+# always-run health-wait task below (finding #5: the old `wait for headscale`
+# handler duplicated it).
 - name: Restart Headscale on config change
   command: docker compose -f {{ headscale_remote_dir }}/docker-compose.yml restart
   when: headscale_config.changed or headscale_compose.changed
-  notify: wait for headscale
 
 - name: Wait for Headscale to be healthy
   command: docker inspect --format '{{ '{{' }}.State.Health.Status{{ '}}' }}' headscale

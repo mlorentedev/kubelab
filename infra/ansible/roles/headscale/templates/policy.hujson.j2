@@ -1,0 +1,16 @@
+// Managed by Ansible — Headscale ACL policy (ADR-041 / VPN-ACL-001 seed).
+// Source: infra/ansible/roles/headscale/templates/policy.hujson.j2
+//
+// PERMISSIVE-FIRST seed: replicates today's allow-all so that enabling
+// file-mode segmentation cannot sever an existing flow (the moment a non-empty
+// "acls" array loads, Headscale flips to implicit-deny — see ADR-041).
+// VPN-ACL-002 replaces the single allow-all rule below with the enumerated
+// baseline (admin->all, ArgoCD hub<->spoke :6443, rpi4 172.16.1.0/24 route,
+// intra-K3s, monitoring) PLUS the `agents` identity, `tagOwners`, and the
+// tag:hermes node-like-controlled dst matrix — all rendered from the
+// networking SSOT (no hardcoded IPs).
+{
+  "acls": [
+    { "action": "accept", "src": ["*"], "dst": ["*:*"] }
+  ]
+}

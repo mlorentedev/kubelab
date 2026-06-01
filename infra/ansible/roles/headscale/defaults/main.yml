@@ -27,3 +27,9 @@ headscale_derp_verify_clients: true
 
 # Database
 headscale_db_type: "sqlite"
+
+# ACL policy (ADR-041 / VPN-ACL-001). In-container path of the HuJSON policy file.
+# Default "" keeps Headscale allow-all (no policy loaded). Set to a path under
+# /etc/headscale (bind-mounted from ./config) to enable file-mode segmentation;
+# the role renders policy.hujson.j2 there and SIGHUP-reloads on change.
+headscale_policy_path: ""
