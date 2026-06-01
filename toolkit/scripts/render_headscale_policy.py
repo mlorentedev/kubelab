@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -59,26 +58,19 @@ def headscale_image(common_yaml: Path = COMMON_YAML) -> str:
 
 
 def policy_check(text: str, image: str | None = None) -> int:
-    """Run the real ``headscale policy check`` on rendered text via Docker. Returns exit code."""
+    """Run the real ``headscale policy check`` on rendered text via Docker. Returns exit code.
+
+    Pipes the policy through stdin (``--file /dev/stdin``) rather than a bind mount:
+    inside a dockerized CI runner (Docker-in-Docker), a ``-v <hostpath>`` would resolve
+    against the Docker host's filesystem, not the runner container's, so the file would
+    be missing. stdin is DinD-safe.
+    """
     image = image or headscale_image()
-    with tempfile.TemporaryDirectory() as d:
-        f = Path(d) / "policy.hujson"
-        f.write_text(text)
-        result = subprocess.run(
-            [
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{f}:/policy.hujson:ro",
-                image,
-                "policy",
-                "check",
-                "--file",
-                "/policy.hujson",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        sys.stdout.write(result.stdout or result.stderr)
-        return result.returncode
+    result = subprocess.run(
+        ["docker", "run", "--rm", "-i", image, "policy", "check", "--file", "/dev/stdin"],
+        input=text,
+        capture_output=True,
+        text=True,
+    )
+    sys.stdout.write(result.stdout or result.stderr)
+    return result.returncode

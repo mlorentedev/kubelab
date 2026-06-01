@@ -254,8 +254,16 @@ class TestAutoRevert:
         assert blocks, "the probe must run in a block guarded by a rescue (auto-revert)"
         rescue_yaml = yaml.safe_dump(blocks[0]["rescue"])
         assert ".prev" in rescue_yaml, "rescue must restore the previous policy"
-        assert "kill --signal=HUP" in rescue_yaml, "rescue must SIGHUP-reload the restored policy"
+        assert "kill --signal=HUP" in rescue_yaml, "rescue must SIGHUP-reload the reverted policy"
         assert any("fail" in task for task in blocks[0]["rescue"]), "rescue must fail the play after reverting"
+
+    def test_first_activation_reverts_to_allow_all(self) -> None:
+        # Codex P1: with no .prev (first activation), a failed probe must revert to an explicit
+        # allow-all, not strand the mesh on the just-loaded ACL.
+        rescue = [t for t in self._tasks() if "block" in t and "rescue" in t][0]["rescue"]
+        rescue_yaml = yaml.safe_dump(rescue)
+        assert '"*:*"' in rescue_yaml or "'*:*'" in rescue_yaml, "no-.prev path must write an allow-all policy"
+        assert "not hs_prev.stat.exists" in rescue_yaml, "allow-all fallback must guard on the no-previous-policy case"
 
     def test_probe_runs_via_cli_not_direct_script(self) -> None:
         blocks = [t for t in self._tasks() if "block" in t]

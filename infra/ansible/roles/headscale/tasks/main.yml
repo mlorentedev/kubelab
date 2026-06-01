@@ -115,15 +115,25 @@
         mode: "0644"
       when: hs_prev.stat.exists
 
-    - name: Reload the restored policy (SIGHUP)
-      command: docker kill --signal=HUP headscale
-      when: hs_prev.stat.exists
+    # First activation (no .prev): there is nothing to restore, so revert to an EXPLICIT
+    # allow-all — a failed probe must never strand the mesh on the just-loaded ACL (Codex P1).
+    - name: First activation — revert to an explicit allow-all policy
+      copy:
+        dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
+        mode: "0644"
+        content: |
+          // AUTO-REVERT fallback (no prior policy on first activation): explicit allow-all,
+          // so a failed connectivity probe cannot strand the mesh on a partial ACL.
+          { "acls": [ { "action": "accept", "src": ["*"], "dst": ["*:*"] } ] }
+      when: not hs_prev.stat.exists
 
-    - name: Fail — connectivity probe failed
+    - name: Reload the reverted policy (SIGHUP)
+      command: docker kill --signal=HUP headscale
+
+    - name: Fail — connectivity probe failed, policy reverted
       fail:
         msg: >-
-          Connectivity probe failed after the policy reload.
-          {{ 'Reverted to the previous known-good policy.' if hs_prev.stat.exists
-             else 'No prior policy (first activation); the permissive-first baseline is
-             left active (allow-all for existing identities, safe by construction). Inspect
-             `toolkit infra headscale probe`.' }}
+          Connectivity probe failed after the policy reload; reverted to
+          {{ 'the previous known-good policy' if hs_prev.stat.exists
+             else 'an explicit allow-all (first activation, no prior policy)' }}.
+          Inspect `toolkit infra headscale probe`.
