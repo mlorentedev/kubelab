@@ -1,16 +1,33 @@
-// Managed by Ansible — Headscale ACL policy (ADR-041 / VPN-ACL-001 seed).
+// Managed by Ansible — Headscale ACL policy (ADR-041 / VPN-ACL-002).
 // Source: infra/ansible/roles/headscale/templates/policy.hujson.j2
 //
-// PERMISSIVE-FIRST seed: replicates today's allow-all so that enabling
-// file-mode segmentation cannot sever an existing flow (the moment a non-empty
-// "acls" array loads, Headscale flips to implicit-deny — see ADR-041).
-// VPN-ACL-002 replaces the single allow-all rule below with the enumerated
-// baseline (admin->all, ArgoCD hub<->spoke :6443, rpi4 172.16.1.0/24 route,
-// intra-K3s, monitoring) PLUS the `agents` identity, `tagOwners`, and the
-// tag:hermes node-like-controlled dst matrix — all rendered from the
-// networking SSOT (no hardcoded IPs).
+// hosts are rendered from the networking SSOT (common.yaml → headscale_policy_hosts);
+// never hardcode IPs here. Rules are the PERMISSIVE-FIRST baseline:
+//   1) every existing identity (users) keeps allow-all — and because a tag REPLACES
+//      the user in ACL evaluation, tagged agents are NOT matched by rule 1, so it
+//      cannot grant an agent anything while preserving every current mesh flow
+//      (admin→all, ArgoCD hub↔spoke :6443, rpi4 172.16.1.0/24 route, intra-K3s, monitoring).
+//   2) tag:hermes gets a narrow, node-like-controlled egress (additive, agent-only).
+// Tightening rule 1 toward least-privilege is VPN-ACL-004 (deny risk lives there).
 {
+  "hosts": {
+{% for name, addr in headscale_policy_hosts.items() %}
+    "{{ name }}": "{{ addr }}",
+{% endfor %}
+  },
+
+  "tagOwners": {
+    "tag:hermes": ["kubelab@"],
+  },
+
   "acls": [
-    { "action": "accept", "src": ["*"], "dst": ["*:*"] }
-  ]
+    // 1) permissive-first: existing identities keep allow-all (excludes tagged agents).
+    //    Headscale v0.28 requires the "user@" form for user references in ACLs.
+    { "action": "accept", "src": ["kubelab@", "manu@", "work@"], "dst": ["*:*"] },
+
+    // 2) agent egress — node-like, controlled. Gitea + Ollama via the prod ingress
+    //    (vps:443, token / api-key auth over TLS); MinIO via its S3 API (own access keys).
+    //    No rule grants tag:hermes → vps:8080 (Headscale CP), *:6443 (K3s API), or peer :22.
+    { "action": "accept", "src": ["tag:hermes"], "dst": ["vps:443", "beelink:9000"] },
+  ],
 }

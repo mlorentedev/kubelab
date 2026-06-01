@@ -15,13 +15,17 @@ Encodes the spec VPNACL-001 contract:
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-ROLE = Path(__file__).resolve().parent.parent / "infra/ansible/roles/headscale"
+REPO = Path(__file__).resolve().parent.parent
+ROLE = REPO / "infra/ansible/roles/headscale"
 TEMPLATES = ROLE / "templates"
+COMMON_YAML = REPO / "infra/config/values/common.yaml"
 
 
 def _base_context(**overrides: object) -> dict[str, object]:
@@ -111,3 +115,77 @@ class TestPolicyFileDeploy:
         notify_s = " ".join(notify) if isinstance(notify, list) else str(notify)
         assert "reload" in notify_s.lower(), "policy-file change must notify the reload (SIGHUP) handler"
         assert "restart" not in notify_s.lower(), "policy-file change must NOT trigger a restart"
+
+
+# ── policy.hujson content (VPN-ACL-002) ─────────────────────────────────────────
+
+
+def _hosts_from_ssot() -> dict[str, str]:
+    """Build the ACL host map exactly as the deploy-vps playbook does (from common.yaml)."""
+    net = yaml.safe_load(COMMON_YAML.read_text())["networking"]
+    hosts = {name: node["tailscale_ip"] for name, node in net["nodes"].items()}
+    hosts["vps"] = net["vps"]["tailscale_ip"]
+    hosts["aws1"] = net["aws"]["tailscale_ip"]
+    hosts["lan-rpi4"] = net["lan_cidr"]
+    return hosts
+
+
+def _render_policy(hosts: dict[str, str] | None = None) -> str:
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES)),
+        keep_trailing_newline=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    return env.get_template("policy.hujson.j2").render(headscale_policy_hosts=hosts or _hosts_from_ssot())
+
+
+def _load_hujson(text: str) -> dict:
+    """Parse HuJSON (JSON + // comments + trailing commas) into a dict for assertions."""
+    no_comments = re.sub(r"//[^\n]*", "", text)
+    no_trailing = re.sub(r",(\s*[}\]])", r"\1", no_comments)
+    return json.loads(no_trailing)
+
+
+class TestPolicyHujsonContent:
+    """policy.hujson is the permissive-first baseline + tag:hermes egress, rendered from SSOT."""
+
+    def test_renders_valid_hujson(self) -> None:
+        policy = _load_hujson(_render_policy())
+        assert set(policy) >= {"hosts", "tagOwners", "acls"}
+
+    def test_hosts_come_from_ssot_not_hardcoded(self) -> None:
+        # the template DATA must contain NO IP literals — every address comes from the var.
+        # (Comments may reference IPs for documentation; strip them before the check.)
+        src_body = re.sub(r"//[^\n]*", "", (TEMPLATES / "policy.hujson.j2").read_text())
+        assert not re.search(r"\d{1,3}(\.\d{1,3}){3}", src_body), "policy.hujson.j2 must not hardcode IPs/CIDRs"
+        # and the rendered hosts must equal the common.yaml values
+        ssot = _hosts_from_ssot()
+        rendered_hosts = _load_hujson(_render_policy())["hosts"]
+        assert rendered_hosts["vps"] == ssot["vps"]
+        assert rendered_hosts["beelink"] == ssot["beelink"]
+        assert rendered_hosts["lan-rpi4"] == ssot["lan-rpi4"]
+
+    def test_tag_hermes_owned_by_admin(self) -> None:
+        policy = _load_hujson(_render_policy())
+        assert policy["tagOwners"]["tag:hermes"] == ["kubelab@"], "v0.28 needs the user@ form"
+
+    def test_permissive_first_rule_preserves_existing_identities(self) -> None:
+        acls = _load_hujson(_render_policy())["acls"]
+        permissive = [a for a in acls if a["dst"] == ["*:*"]]
+        assert permissive, "rule 1 must preserve all current flows (dst *:*)"
+        src = permissive[0]["src"]
+        assert {"kubelab@", "manu@", "work@"} <= set(src), "existing users must keep allow-all (user@ form)"
+
+    def test_hermes_egress_is_node_like_controlled(self) -> None:
+        acls = _load_hujson(_render_policy())["acls"]
+        hermes = [a for a in acls if a["src"] == ["tag:hermes"]]
+        assert hermes, "tag:hermes must have an egress rule"
+        assert set(hermes[0]["dst"]) == {"vps:443", "beelink:9000"}
+
+    def test_crown_jewels_excluded_from_hermes(self) -> None:
+        acls = _load_hujson(_render_policy())["acls"]
+        hermes_dst = [d for a in acls if a["src"] == ["tag:hermes"] for d in a["dst"]]
+        forbidden = (":8080", ":6443", ":22")  # Headscale CP, K3s API, peer SSH
+        for d in hermes_dst:
+            assert not d.endswith(forbidden), f"tag:hermes must not reach a control-plane port: {d}"

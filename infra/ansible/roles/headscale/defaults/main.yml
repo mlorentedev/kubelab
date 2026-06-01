@@ -33,3 +33,8 @@ headscale_db_type: "sqlite"
 # /etc/headscale (bind-mounted from ./config) to enable file-mode segmentation;
 # the role renders policy.hujson.j2 there and SIGHUP-reloads on change.
 headscale_policy_path: ""
+
+# ACL host aliases (name -> Tailscale IP / CIDR) rendered into policy.hujson's
+# "hosts" block. SSOT: built from networking.* in the deploy playbook. Empty by
+# default (policy task is dormant until headscale_policy_path is set).
+headscale_policy_hosts: {}
