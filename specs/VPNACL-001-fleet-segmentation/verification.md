@@ -10,8 +10,8 @@ created: "2026-05-31"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, observed behavior). Filled during implementation.
 
 - [x] AC1 (role policy-path param + reload-on-change) -> render/static-YAML test `tests/test_headscale_role.py` (7 tests green); reload is SIGHUP `docker kill --signal=HUP headscale` (NOT restart), policy path SEPARATE from config.yaml restart path. On-VPS reload exercised in VPN-ACL-002 (dormant until then: default `headscale_policy_path: ""`). _(commit pending)_
-- [ ] AC2 (`headscale policy check` CI gate) -> CI run `<link>` — VPN-ACL-002
-- [ ] AC3 (permissive baseline preserves flows + auto-revert) -> probe output `<evidence>` — VPN-ACL-002
+- [x] AC2 (`headscale policy check` CI gate) -> `make check-headscale-policy` → "Policy is valid" (real v0.28 binary via Docker); CI gate in `check-config-drift.yml` (prod) via `toolkit infra headscale policy-check`. _(commit 8b4e4a4/2681f19)_
+- [~] AC3 (permissive baseline preserves flows + auto-revert) -> code done: `toolkit infra headscale probe` + role block/rescue auto-revert; unit-tested (probe aggregation + revert structure). **Live probe evidence pending prod activation** (`make deploy TARGET=vps ENV=prod`).
 - [ ] AC4 (hermes SSH-reachable, tagged, own-credential auth) -> `headscale nodes list` + service-auth observation — VPN-ACL-003
 
 ## Test status

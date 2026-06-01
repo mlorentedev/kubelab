@@ -152,8 +152,9 @@
         tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
         headscale_dns_split: "{{ _headscale_dns_split }}"
         headscale_dns_extra_records: "{{ _headscale_dns_extra_records }}"
-        # ADR-041: ACL host aliases from SSOT. The policy stays DORMANT (allow-all) until
-        # headscale_policy_path is set below — activated only after the VPN-ACL-002 probe +
-        # auto-revert exist, so the deny-by-default flip has a safety net (permissive-first).
+        # ADR-041: ACL host aliases from SSOT, consumed by policy.hujson.j2.
         headscale_policy_hosts: "{{ _headscale_policy_hosts }}"
-        # headscale_policy_path: "/etc/headscale/policy.hujson"  # ACTIVATE: VPN-ACL-002 (after probe)
+        # ADR-041 / VPN-ACL-002: file-mode ACL ACTIVE. The deployed baseline is
+        # permissive-first (existing identities keep allow-all → cannot sever a flow);
+        # on reload the role probes the preserved flows and AUTO-REVERTS on failure.
+        headscale_policy_path: "/etc/headscale/policy.hujson"

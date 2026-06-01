@@ -24,13 +24,14 @@ created: "2026-05-31"
 - [x] Fix in passing: collapse the redundant double health-wait (removed the `wait for headscale` handler + its notify; the always-run inline health gate remains) — finding #5
 - [x] Wire deploy through the Makefile/toolkit — satisfied by existing `deploy-vps.yml:129` role invocation (`make deploy TARGET=vps ENV=prod`); dormant until VPN-ACL-002 sets `headscale_policy_path`
 
-## VPN-ACL-002 — Author policy.hujson (permissive-first) + probe + CI gate
+## VPN-ACL-002 — Author policy.hujson (permissive-first) + probe + CI gate ✓ 2026-05-31 (code)
 
-- [ ] Author `policy.hujson`: `groups`/`tagOwners` (`tag:hermes` owned by admin), `agents` identity, and a permissive-first `acls` baseline preserving ALL current flows (admin→all, ArgoCD hub→spoke `:6443`, rpi4 `172.16.1.0/24`, intra-K3s, monitoring)
-- [ ] `headscale policy check` passes locally and as a CI gate (syntax)
-- [ ] External connectivity-probe harness (toolkit/Ansible): asserts each preserved flow post-reload
-- [ ] Auto-revert: on probe failure, reload the prior known-good policy
-- [ ] Author the probe assertions in a form that migrates into a v0.29 `tests` block later (VPN-ACL-006)
+- [x] Author `policy.hujson.j2`: `tagOwners` (`tag:hermes` owned by `kubelab@`), permissive-first `acls` baseline (existing users keep allow-all; tag replaces user → agents excluded) + `tag:hermes` node-like egress (`vps:443`, `beelink:9000`); hosts rendered from the networking SSOT (no hardcoded IPs)
+- [x] `headscale policy check` passes locally (`make check-headscale-policy` → "Policy is valid", real v0.28 binary) + CI gate in `check-config-drift.yml` (prod, via `toolkit infra headscale policy-check`)
+- [x] External connectivity-probe harness (`toolkit infra headscale probe`): declarative preserved-flow checks (admin SSH, hub→spoke `:6443`, rpi4 route, intra-K3s, monitoring); required flows must hold, optional homelab flows skip when source is down
+- [x] Auto-revert: role backs up `.prev`, probes after SIGHUP reload (block), restores + reloads + fails on probe failure (rescue)
+- [x] Probe assertions authored as `(src, dst, port)` Flow tuples → migrate 1:1 into the v0.29 `tests` block (VPN-ACL-006)
+- [ ] **ACTIVATE on prod**: set `headscale_policy_path` + `make deploy TARGET=vps ENV=prod` (renders policy, SIGHUP reload, probe confirms) — pending go-live
 
 ## VPN-ACL-003 — Onboard hermes (zero-trust)
 
