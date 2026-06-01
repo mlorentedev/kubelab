@@ -22,6 +22,11 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+# Render helpers are imported from the single-source renderer (also used by the
+# CI gate `make check-headscale-policy`) so tests and CI never drift.
+from toolkit.scripts.render_headscale_policy import build_hosts as _hosts_from_ssot
+from toolkit.scripts.render_headscale_policy import render_policy as _render_policy
+
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/headscale"
 TEMPLATES = ROLE / "templates"
@@ -118,26 +123,6 @@ class TestPolicyFileDeploy:
 
 
 # ── policy.hujson content (VPN-ACL-002) ─────────────────────────────────────────
-
-
-def _hosts_from_ssot() -> dict[str, str]:
-    """Build the ACL host map exactly as the deploy-vps playbook does (from common.yaml)."""
-    net = yaml.safe_load(COMMON_YAML.read_text())["networking"]
-    hosts = {name: node["tailscale_ip"] for name, node in net["nodes"].items()}
-    hosts["vps"] = net["vps"]["tailscale_ip"]
-    hosts["aws1"] = net["aws"]["tailscale_ip"]
-    hosts["lan-rpi4"] = net["lan_cidr"]
-    return hosts
-
-
-def _render_policy(hosts: dict[str, str] | None = None) -> str:
-    env = Environment(
-        loader=FileSystemLoader(str(TEMPLATES)),
-        keep_trailing_newline=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    return env.get_template("policy.hujson.j2").render(headscale_policy_hosts=hosts or _hosts_from_ssot())
 
 
 def _load_hujson(text: str) -> dict:

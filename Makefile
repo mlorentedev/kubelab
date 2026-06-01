@@ -860,6 +860,10 @@ lint:
 type:
 	@$(POETRY) run mypy toolkit
 
+.PHONY: check-headscale-policy
+check-headscale-policy: ## Render + validate the Headscale ACL policy (headscale policy check via Docker)
+	@$(POETRY) run python toolkit/scripts/render_headscale_policy.py --check
+
 .PHONY: check
 check: lint type test validate-sync
 	@echo "✓ All checks passed"
