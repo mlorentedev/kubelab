@@ -13,7 +13,6 @@ probe (VPN-ACL-002) until the v0.29 upgrade (VPN-ACL-006).
 
 from __future__ import annotations
 
-import argparse
 import subprocess
 import sys
 import tempfile
@@ -83,19 +82,3 @@ def policy_check(text: str, image: str | None = None) -> int:
         )
         sys.stdout.write(result.stdout or result.stderr)
         return result.returncode
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Render / validate the Headscale ACL policy.")
-    parser.add_argument("--check", action="store_true", help="validate via `headscale policy check` (Docker)")
-    args = parser.parse_args()
-
-    rendered = render_policy()
-    if not args.check:
-        sys.stdout.write(rendered)
-        return 0
-    return policy_check(rendered)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -24,6 +24,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 # Render helpers are imported from the single-source renderer (also used by the
 # CI gate `make check-headscale-policy`) so tests and CI never drift.
+from toolkit.scripts.headscale_probe import run_probe
 from toolkit.scripts.render_headscale_policy import build_hosts as _hosts_from_ssot
 from toolkit.scripts.render_headscale_policy import render_policy as _render_policy
 
@@ -107,16 +108,19 @@ class TestPolicyFileDeploy:
     def _tasks(self) -> list[dict]:
         return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
 
+    def _template_task(self) -> dict:
+        """The task that renders policy.hujson.j2 (distinct from the backup/rescue tasks)."""
+        tasks = [t for t in self._tasks() if t.get("template", {}).get("src") == "policy.hujson.j2"]
+        assert tasks, "a template task must render policy.hujson.j2"
+        return tasks[0]
+
     def test_policy_deploy_task_exists_and_is_conditional(self) -> None:
-        policy_tasks = [t for t in self._tasks() if "policy" in str(t.get("name", "")).lower()]
-        assert policy_tasks, "a task must deploy the HuJSON policy file"
-        t = policy_tasks[0]
+        t = self._template_task()
         assert "when" in t, "policy-file deploy must be conditional (dormant when headscale_policy_path is empty)"
         assert "headscale_policy_path" in str(t["when"]), "the guard must key off headscale_policy_path"
 
     def test_policy_change_notifies_reload_not_restart(self) -> None:
-        policy_tasks = [t for t in self._tasks() if "policy" in str(t.get("name", "")).lower()]
-        notify = policy_tasks[0].get("notify", "")
+        notify = self._template_task().get("notify", "")
         notify_s = " ".join(notify) if isinstance(notify, list) else str(notify)
         assert "reload" in notify_s.lower(), "policy-file change must notify the reload (SIGHUP) handler"
         assert "restart" not in notify_s.lower(), "policy-file change must NOT trigger a restart"
@@ -174,3 +178,77 @@ class TestPolicyHujsonContent:
         forbidden = (":8080", ":6443", ":22")  # Headscale CP, K3s API, peer SSH
         for d in hermes_dst:
             assert not d.endswith(forbidden), f"tag:hermes must not reach a control-plane port: {d}"
+
+
+# ── external probe + auto-revert gate (VPN-ACL-002) ─────────────────────────────
+
+
+def _net() -> dict:
+    return yaml.safe_load(COMMON_YAML.read_text())["networking"]
+
+
+def _fake_runner(down_ips: frozenset[str] = frozenset(), blocked: frozenset[str] = frozenset()):
+    """Mock command runner: `down_ips` fail the ssh reachability probe; `blocked` ('ip:port') fail the TCP probe."""
+
+    def run(cmd: list[str]) -> int:
+        joined = " ".join(cmd)
+        if cmd[-1] == "true":  # ssh reachability check
+            return 1 if any(ip in joined for ip in down_ips) else 0
+        m = re.search(r"/dev/tcp/([\d.]+)/(\d+)", joined)
+        if m and f"{m.group(1)}:{m.group(2)}" in blocked:
+            return 1
+        return 0
+
+    return run
+
+
+class TestHeadscaleProbe:
+    """run_probe: required flows must hold; optional flows skip when their source is down."""
+
+    def test_all_flows_pass(self) -> None:
+        assert run_probe(_net(), runner=_fake_runner()) == 0
+
+    def test_required_dst_unreachable_fails(self) -> None:
+        vps = _net()["vps"]["tailscale_ip"]
+        assert run_probe(_net(), runner=_fake_runner(blocked=frozenset({f"{vps}:22"}))) == 1
+
+    def test_optional_source_down_is_skipped_not_failed(self) -> None:
+        # ace1 is the source only of an OPTIONAL flow (intra-K3s) → skip, overall pass
+        ace1 = _net()["nodes"]["ace1"]["tailscale_ip"]
+        assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({ace1}))) == 0
+
+    def test_required_source_down_fails(self) -> None:
+        # aws1 is the source of a REQUIRED flow (hub->spoke :6443 prod) → cannot be skipped
+        aws1 = _net()["aws"]["tailscale_ip"]
+        assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({aws1}))) == 1
+
+    def test_reachable_source_with_broken_flow_fails(self) -> None:
+        # source up, dst unreachable = real regression, fatal even for an optional flow
+        ace1 = _net()["nodes"]["ace1"]["tailscale_ip"]
+        assert run_probe(_net(), runner=_fake_runner(blocked=frozenset({f"{ace1}:6443"}))) == 1
+
+
+class TestAutoRevert:
+    """The role backs up the policy, probes after reload, and reverts on failure."""
+
+    def _tasks(self) -> list[dict]:
+        return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+
+    def test_policy_backed_up_before_write(self) -> None:
+        backups = [t for t in self._tasks() if "back up" in str(t.get("name", "")).lower()]
+        assert backups, "must back up the current policy before overwriting it"
+        assert ".prev" in str(backups[0].get("copy", {}).get("dest", "")), "backup must write a .prev copy"
+
+    def test_revert_block_restores_reloads_and_fails(self) -> None:
+        blocks = [t for t in self._tasks() if "block" in t and "rescue" in t]
+        assert blocks, "the probe must run in a block guarded by a rescue (auto-revert)"
+        rescue_yaml = yaml.safe_dump(blocks[0]["rescue"])
+        assert ".prev" in rescue_yaml, "rescue must restore the previous policy"
+        assert "kill --signal=HUP" in rescue_yaml, "rescue must SIGHUP-reload the restored policy"
+        assert any("fail" in task for task in blocks[0]["rescue"]), "rescue must fail the play after reverting"
+
+    def test_probe_runs_via_cli_not_direct_script(self) -> None:
+        blocks = [t for t in self._tasks() if "block" in t]
+        block_yaml = yaml.safe_dump(blocks[0]["block"])
+        assert "toolkit infra headscale probe" in block_yaml, "probe must run via the toolkit CLI"
+        assert "toolkit/scripts/" not in block_yaml, "must not invoke the script file directly"

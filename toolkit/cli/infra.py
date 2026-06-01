@@ -60,11 +60,38 @@ argo_app = typer.Typer(
     no_args_is_help=True,
 )
 
+headscale_app = typer.Typer(
+    name="headscale",
+    help="Headscale VPN ACL policy + mesh probe (ADR-041)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
 app.add_typer(backup_app, name="backup")
 app.add_typer(argo_app, name="argo")
+app.add_typer(headscale_app, name="headscale")
+
+
+@headscale_app.command("policy-check")
+def headscale_policy_check() -> None:
+    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker)."""
+    from toolkit.scripts.render_headscale_policy import policy_check, render_policy
+
+    rc = policy_check(render_policy())
+    if rc != 0:
+        raise typer.Exit(rc)
+
+
+@headscale_app.command("probe")
+def headscale_probe() -> None:
+    """Probe the preserved mesh flows after a policy reload (auto-revert gate, ADR-041)."""
+    from toolkit.scripts.headscale_probe import run_probe
+
+    rc = run_probe()
+    if rc != 0:
+        raise typer.Exit(rc)
 
 
 @argo_app.command("set-revision")

@@ -51,11 +51,6 @@ jobs:
       - name: Validate Makefile
         run: make -n help >/dev/null
 
-      - name: Validate Headscale ACL policy (ADR-041)
-        run: |
-          pip install --quiet jinja2 pyyaml
-          python toolkit/scripts/render_headscale_policy.py --check
-
   detect-changes:
     name: Detect Changes
     needs: validate

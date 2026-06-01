@@ -82,3 +82,8 @@ jobs:
           echo "::error::Generator output drifted from committed files. Locally run:"
           echo "::error::  make config-generate ENV=$TARGET_ENV"
           echo "::error::Review the diff, then commit the regenerated files."
+
+      # Headscale ACL policy is prod-only (single control plane, ADR-015), so gate once.
+      - name: Validate Headscale ACL policy (ADR-041 / VPN-ACL-002)
+        if: matrix.env == 'prod'
+        run: poetry run toolkit infra headscale policy-check

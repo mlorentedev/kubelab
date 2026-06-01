@@ -22,6 +22,17 @@
     mode: "0644"
   register: headscale_config
 
+# ADR-041 / VPN-ACL-002: keep the last-applied policy for auto-revert. failed_when:false
+# tolerates the first activation, when no prior policy exists yet.
+- name: Back up current ACL policy (for auto-revert)
+  copy:
+    src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
+    dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
+    remote_src: true
+    mode: "0644"
+  when: headscale_policy_path | length > 0
+  failed_when: false
+
 # ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
 # config dir (appears at headscale_policy_path inside the container). Dormant
 # while headscale_policy_path is "" (default → allow-all). On change this fires
@@ -34,6 +45,7 @@
     mode: "0644"
   when: headscale_policy_path | length > 0
   notify: reload headscale
+  register: headscale_policy
 
 - name: Ensure Docker network exists
   community.docker.docker_network:
@@ -66,3 +78,36 @@
   until: headscale_health.stdout | trim == 'healthy'
   changed_when: false
   check_mode: false
+
+# ADR-041 / VPN-ACL-002: after a policy reload, actively probe the preserved
+# mesh flows from the controller. On v0.28 `policy check` is syntax-only, so this
+# external probe is what proves reachability. If it fails, AUTO-REVERT to the
+# previous policy (reload is reversible in seconds) and fail the play.
+- name: Verify mesh + auto-revert on probe failure
+  when: headscale_policy_path | length > 0 and (headscale_policy.changed | default(false))
+  block:
+    - name: Apply the pending SIGHUP policy reload now
+      meta: flush_handlers
+
+    - name: Probe preserved mesh flows from the controller
+      command: toolkit infra headscale probe
+      args:
+        chdir: "{{ playbook_dir }}/../../.."
+      delegate_to: localhost
+      changed_when: false
+  rescue:
+    - name: Restore the previous known-good policy
+      copy:
+        src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
+        dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
+        remote_src: true
+        mode: "0644"
+
+    - name: Reload the restored policy (SIGHUP)
+      command: docker kill --signal=HUP headscale
+
+    - name: Fail — connectivity probe failed, policy reverted
+      fail:
+        msg: >-
+          Connectivity probe failed after the policy reload; reverted to the
+          previous known-good policy. Inspect `toolkit infra headscale probe`.
