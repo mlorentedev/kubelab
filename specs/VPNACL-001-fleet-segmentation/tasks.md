@@ -33,13 +33,13 @@ created: "2026-05-31"
 - [x] Probe assertions authored as `(src, dst, port)` Flow tuples → migrate 1:1 into the v0.29 `tests` block (VPN-ACL-006)
 - [x] **ACTIVATE on prod** ✓ 2026-05-31: `make deploy TARGET=vps ENV=prod` rendered policy.hujson, restarted headscale (config.yaml path change), SIGHUP-reloaded. Live mesh verified: `toolkit infra headscale probe` 7/7 OK, 9 nodes online, headscale healthy. Learned: probe needs retries for the post-reload propagation window (fixed `73cfeab`); first activation has no `.prev` (rescue made tolerant).
 
-## VPN-ACL-003 — Onboard hermes (zero-trust)
+## VPN-ACL-003 — Onboard hermes (zero-trust)  ◐ 2026-05-31 (core done; C6 + SSOT follow-up)
 
-- [ ] Create Headscale user `agents` on the VPS; mint a `tag:hermes` preauth key (non-ephemeral)
-- [ ] On the agent host: `tailscale up --login-server=https://vpn.kubelab.live --advertise-tags tag:hermes --authkey=<KEY>`
-- [ ] Record assigned IP in `networking.nodes` SSOT (`common.yaml`); regenerate inventory
-- [ ] Provision hermes's per-service scoped credential(s) via toolkit + SOPS (SSH key / API token) — C6 zero-trust
-- [ ] Verify: SSH to hermes over VPN; `headscale nodes list` shows `tag:hermes`; hermes authenticates to a target service with its own credential
+- [x] Create Headscale user `agents` on the VPS (id 4); mint a `tag:hermes` preauth key (one-time, 72h, non-ephemeral) ✓
+- [x] Join from the agent host: `tailscale up --login-server=https://vpn.kubelab.live --authkey=<KEY> --accept-routes=false` ✓ — **NB: NOT `--advertise-tags`** (the key carries the tag; advertise requires the user to own the tag). hermes = node 22, `100.64.0.9`, renamed `hermes-nan`.
+- [ ] Record assigned IP in `networking.nodes` SSOT — **deferred to VPN-ACL-008** (do not record until the entrypoint makes hermes durably up; identity itself persists on `/persist`)
+- [ ] Provision hermes's per-service scoped credential (toolkit + SOPS) — C6 zero-trust — **follow-up (fresh session)**: needs target-service + mechanism decided
+- [x] Verify SSH + tag + **segmentation** ✓ — `ssh hermes-nan` works (admin→:22, AC4a); `headscale nodes list` shows `tag:hermes`; egress proven in prod: `vps:443` reachable, `vps:8080`/`ace1:6443` **dropped** (per-port deny). Own-credential service auth = the C6 follow-up.
 
 ## Closing
 
