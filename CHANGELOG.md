@@ -30,7 +30,7 @@ Significant changes to the KubeLab platform, tracked independently from git hist
 
 - **aws1 Spot instance restore** — Instance was unreachable after AWS stop/start cycle (SSH hung, Tailscale offline). Root cause: `#cloud-config` not on first line (yamllint comment broke detection), plus `UseDNS yes` causing SSH reverse DNS timeout.
 - **cloud-init node recycling** — Added Headscale API call to delete stale node before Tailscale registration. Prevents hostname collision and IP duplication on Spot replacement.
-- **MagicDNS for aws1 (ADR-025, closes INTERNAL-001)** — Replaced hardcoded `tailscale_ip: 100.64.0.4` with `tailscale_dns: aws1.internal.kubelab.live`. Changed Headscale `base_domain` from `kubelab.vpn` (fake TLD) to `kubelab.internal` (IANA-reserved `.internal` TLD). Kubeconfig and K3s TLS SAN use DNS name. IP changes on Spot replacement no longer require manual updates.
+- **MagicDNS for aws1 (ADR-025, closes INTERNAL-001)** — Replaced hardcoded `tailscale_ip: 100.64.0.4` with `tailscale_dns: aws1.kubelab.internal`. Changed Headscale `base_domain` from `kubelab.vpn` (fake TLD) to `kubelab.internal` (IANA-reserved `.internal` TLD). Kubeconfig and K3s TLS SAN use DNS name. IP changes on Spot replacement no longer require manual updates.
 - **Makefile inline scripts → toolkit** — Extracted SOPS→tfvars generation from inline Python in Makefile to `toolkit infra terraform aws-tfvars` command.
 
 ## 2026-03-25
