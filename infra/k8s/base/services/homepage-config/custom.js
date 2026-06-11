@@ -32,7 +32,7 @@ STAGING (VPN-only via split DNS)
 
 VPN-ONLY (Headscale extra_records)
   pihole.kubelab.live                RPi4 (172.16.1.1)
-  ollama.kubelab.live                ace2 (100.64.0.5)`,
+  ollama.kubelab.live                ace2 (172.16.1.5)`,
   tech_stack: `TECHNOLOGY           PURPOSE                      WHERE                    MANAGED BY
 ──────────────────── ──────────────────────────── ──────────────────────── ────────────────────
 
@@ -379,7 +379,7 @@ var KUBELAB_SERVICES_SHARED = [
     "health": "http://ollama.kubelab.live/api/tags",
     "auth": "Public",
     "category": "AI",
-    "node": "Beelink",
+    "node": "ace2",
     "version": "",
     "notes": "LLM inference"
   },

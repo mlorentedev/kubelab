@@ -385,7 +385,7 @@ def build_service_tables(
             f"http://ollama.{base}/api/tags",
             "Public",
             "AI",
-            "Beelink",
+            "ace2",
             "LLM inference",
         ),
         _svc("Pollex", f"http://pollex.{base}", f"http://pollex.{base}", "Public", "AI", "Jetson", "Edge AI"),
@@ -609,7 +609,7 @@ def build_dns_map(config: dict[str, Any]) -> str:
         "",
         "VPN-ONLY (Headscale extra_records)",
         f"  {'pihole.kubelab.live':<34} RPi4 ({rpi4_lan})",
-        f"  {'ollama.kubelab.live':<34} Beelink ({n.get('beelink', {}).get('lan_ip', '?')})",
+        f"  {'ollama.kubelab.live':<34} ace2 ({n.get('ace2', {}).get('lan_ip', '?')})",
     ]
     return "\n".join(rows)
 
