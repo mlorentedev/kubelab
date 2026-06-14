@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/mlorentedev/kubelab/compare/web-v1.0.1...web-v1.1.0) (2026-06-14)
+
+
+### Features
+
+* **web:** reposition mlorente.dev hero to "Platform engineering for AI workloads" ([#613](https://github.com/mlorentedev/kubelab/issues/613)) ([624638b](https://github.com/mlorentedev/kubelab/commit/624638bc816518dd95cda75345b69c12de79d80c))
+
 ## [1.0.1](https://github.com/mlorentedev/kubelab/compare/web-v1.0.0...web-v1.0.1) (2026-03-27)
 
 
