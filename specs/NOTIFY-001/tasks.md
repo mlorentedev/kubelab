@@ -15,8 +15,9 @@ created: "2026-06-14"
 
 ## Implementation
 
-- [ ] **Apprise manifest** — `infra/k8s/base/services/apprise.yaml` (Deployment + Service,
-      cluster-internal, no IngressRoute) + pin `caronc/apprise` in `infra/k8s/base/kustomization.yaml`
+- [x] **Apprise manifest** — `infra/k8s/base/services/apprise.yaml` (ConfigMap + Deployment + Service,
+      cluster-internal, no IngressRoute) + pin `caronc/apprise:1.5.0` via SSOT (`common.yaml` +
+      `IMAGE_SOURCES`) → `kustomization.yaml`. Renders clean on base + staging (`kubectl kustomize`).
 - [ ] **Apprise creds** — `toolkit secrets edit --env staging` add `apps.services.automation.apprise.*`
       (bot tokens, chat IDs) → `toolkit infra k8s apply-secrets --env staging`
 - [ ] **Deploy to staging** (ArgoCD sync) → verify in-cluster `curl apprise/notify` → Telegram

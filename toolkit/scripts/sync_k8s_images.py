@@ -22,6 +22,7 @@ KUSTOMIZATION = PROJECT_ROOT / "infra/k8s/base/kustomization.yaml"
 IMAGE_SOURCES = [
     "apps.services.core.gitea.image",
     "apps.services.core.n8n.image",
+    "apps.services.automation.apprise.image",
     "apps.services.observability.loki.image",
     "apps.services.observability.loki.vector_image",
     "apps.services.security.authelia.image",

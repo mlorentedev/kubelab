@@ -1,0 +1,100 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apprise-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: apprise
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+data:
+  # Stateless delivery gateway (ADR-044: "converge the brain, specialize the egress").
+  # Routing decisions live in n8n; Apprise only fans out. STATEFUL_MODE=disabled means
+  # no persisted config/keys → no writable volume, no PVC, clean /status health.
+  # MVP path uses POST /notify/ with urls in the request body (no {KEY}).
+  APPRISE_STATEFUL_MODE: "disabled"
+  # Cap gunicorn workers: the image defaults to (2*CPUs)+1, which OOMs on a
+  # multi-core node. This is a low-QPS internal egress muxer — 2 is ample.
+  APPRISE_WORKER_COUNT: "2"
+  LOG_LEVEL: "INFO"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apprise
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: apprise
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: apprise
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: apprise
+        app.kubernetes.io/component: automation
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: apprise
+          image: caronc/apprise:1.5.0
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: apprise-config
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              # 2 gunicorn workers (APPRISE_WORKER_COUNT) peak ~180Mi; 384Mi gives
+              # startup headroom and avoids the OOMKill seen with the image default.
+              memory: 384Mi
+              cpu: "0.5"
+            requests:
+              memory: 96Mi
+              cpu: "0.1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apprise
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: apprise
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  # Cluster-internal only: no IngressRoute. Reached by n8n at http://apprise:8000/notify/
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: apprise
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
