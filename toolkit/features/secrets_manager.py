@@ -317,6 +317,26 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("github-runner",),
         rotate_note="Re-provision ace2 (Ansible). Token must have repo + workflow scope.",
     ),
+    # Apprise notification gateway (NOTIFY-001, ADR-044). staging-only until the
+    # fabric is promoted to prod; broaden `envs` at promotion.
+    SecretSpec(
+        key_path="apps.services.automation.apprise.telegram.bot_token",
+        description="Telegram bot token for the Apprise notification gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise", "n8n"),
+        format_hint="<bot_id>:<auth_token> from @BotFather",
+        rotate_note="Re-issue via @BotFather. Read at notify time — no pod restart needed.",
+        envs=("staging",),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.apprise.telegram.chat_page",
+        description="Telegram channel ID for the PAGE tier (push) — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise", "n8n"),
+        format_hint="-100… channel ID (dedicated, not the hermes chat — ADR-044 C5)",
+        rotate_note="Update when the PAGE channel changes. No pod restart needed.",
+        envs=("staging",),
+    ),
     # =========================================================================
     # Platform API (external — user-provided credentials)
     # =========================================================================

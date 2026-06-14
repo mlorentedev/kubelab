@@ -18,9 +18,14 @@ created: "2026-06-14"
 - [x] **Apprise manifest** — `infra/k8s/base/services/apprise.yaml` (ConfigMap + Deployment + Service,
       cluster-internal, no IngressRoute) + pin `caronc/apprise:1.5.0` via SSOT (`common.yaml` +
       `IMAGE_SOURCES`) → `kustomization.yaml`. Renders clean on base + staging (`kubectl kustomize`).
-- [ ] **Apprise creds** — `toolkit secrets edit --env staging` add `apps.services.automation.apprise.*`
-      (bot tokens, chat IDs) → `toolkit infra k8s apply-secrets --env staging`
-- [ ] **Deploy to staging** (ArgoCD sync) → verify in-cluster `curl apprise/notify` → Telegram
+- [x] **Apprise creds** — wired `apps.services.automation.apprise.telegram.{bot_token,chat_page}` in SOPS
+      (`bot_token`→common, `chat_page`→staging) + `SECRET_CATALOG`/`SECRET_DEFINITIONS` (`apprise-secrets`);
+      `apply-secrets --env staging` renders the Secret. Dedicated PAGE channel (kubelab_bot admin), separate
+      from the hermes chat (ADR-044 C5).
+- [x] **Deploy to staging** → `kubectl apply` of the Apprise objects (staging is a mutable test bed,
+      ADR-037; ArgoCD selfHeal=false). Pod Ready after fixing an OOMKill (capped `APPRISE_WORKER_COUNT=2`).
+      Verified: in-cluster `curl apprise:8000/status`→200; `POST /notify/` with `tgram://`→Telegram (HTTP 200,
+      message landed in the dedicated channel).
 - [ ] **n8n workflow** — webhook `/webhook/notify` → validate shared secret → Switch `{domain,severity}`
       → HTTP Request to Apprise; **export workflow JSON into the repo** (APP-CONFIG-003 interim: manual export)
 - [ ] **Routing table** — encode `{domain,severity}` → Apprise tag(s) (ConfigMap or in-workflow map)

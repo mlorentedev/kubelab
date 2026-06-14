@@ -80,6 +80,13 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         },
     ),
     SecretMapping(
+        name="apprise-secrets",
+        keys={
+            "TELEGRAM_BOT_TOKEN": "APPS_SERVICES_AUTOMATION_APPRISE_TELEGRAM_BOT_TOKEN",
+            "TELEGRAM_CHAT_PAGE": "APPS_SERVICES_AUTOMATION_APPRISE_TELEGRAM_CHAT_PAGE",
+        },
+    ),
+    SecretMapping(
         name="minio-secrets",
         keys={
             "MINIO_ROOT_USER": "APPS_SERVICES_DATA_MINIO_ROOT_USER",
