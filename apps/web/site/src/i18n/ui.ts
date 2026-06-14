@@ -15,8 +15,9 @@ export const ui = {
     'nav.toggle': 'Toggle menu',
 
     // Hero
-    'hero.title': 'Engineer from silicon to cloud',
-    'hero.subtitle': 'My personal site about side hustles, notes, and products built across three continents. This boosts my productivity and pays the (some) bills.',
+    'hero.title': 'Platform engineering for AI workloads',
+    'hero.subtitle': 'I build, automate, and operate the infrastructure AI agents run on — Kubernetes, on-prem, reproducible. I run a 40-service homelab and document what breaks.',
+    'hero.status': 'Open to opportunities',
     'hero.cta': 'Read my notes',
 
     // Home sections
@@ -76,7 +77,7 @@ export const ui = {
     '404.cta': 'Go home',
 
     // Meta
-    'meta.description': 'Engineer from silicon to cloud. Infrastructure, Kubernetes, and what breaks in production.',
+    'meta.description': 'Platform engineering for AI workloads. I build and operate agent infrastructure on Kubernetes — on-prem, reproducible.',
     'meta.ghchart.alt': "Manu's GitHub contribution chart",
   },
   es: {
@@ -86,8 +87,9 @@ export const ui = {
     'nav.toggle': 'Abrir menú',
 
     // Hero
-    'hero.title': 'Hazlo tú',
-    'hero.subtitle': 'A mí también me creaba ansiedad poder producir cosas que no era ni capaz de imaginar hace 5 años. De hecho me aterraba. Ahora abrazo el cambio',
+    'hero.title': 'Infraestructura para agentes de IA, en producción',
+    'hero.subtitle': 'Construyo, automatizo y opero la infraestructura sobre la que corren los agentes de IA — Kubernetes, on-prem, reproducible. Tengo un homelab de 40 servicios y documento lo que se rompe.',
+    'hero.status': 'Abierto a oportunidades',
     'hero.cta': 'Empieza ahora',
 
     // Home sections
@@ -147,7 +149,7 @@ export const ui = {
     '404.cta': 'Ir al inicio',
 
     // Meta
-    'meta.description': 'Ingeniero. Del silicio a Kubernetes. Infraestructura real, decisiones reales, documentado mientras construyo.',
+    'meta.description': 'Infraestructura para agentes de IA, en producción. Construyo, automatizo y opero plataformas en Kubernetes — on-prem y reproducible.',
     'meta.ghchart.alt': 'Contribuciones de Manu en GitHub',
   },
 } as const;
