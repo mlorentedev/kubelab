@@ -55,7 +55,7 @@ COPY --chown=node:node site/ ./
 RUN npm run build
 
 # ---------- Runtime Stage — Nginx static serving ----------
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup && \

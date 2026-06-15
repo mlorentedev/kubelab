@@ -1,5 +1,5 @@
 # Build Stage — CI v2 (build-args from YAML config)
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -ldflags="-w -s" -o server ./cmd/server
 
 # Runtime Stage - using minimal alpine
-FROM alpine:3.18 AS runtime
+FROM alpine:3.24 AS runtime
 
 WORKDIR /app
 
