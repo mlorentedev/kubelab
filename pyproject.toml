@@ -25,6 +25,7 @@ mkdocs-git-revision-date-localized-plugin = "^1.5.0"
 uptime-kuma-api = "^1.2.1"
 bcrypt = "^5.0.0"
 ruamel-yaml = "^0.18"
+httpx = "^0.28.0" # HTTP client for registry tag verification (deployment promote)
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7.3"
@@ -33,7 +34,6 @@ pre-commit = "^4.3.0"
 pytest = "^8.2.3"
 pytest-cov = "^7.0.0"
 pytest-mock = "^3.15.1"
-httpx = "^0.28.0"
 
 [tool.poetry.scripts]
 toolkit = "toolkit.main:app"
