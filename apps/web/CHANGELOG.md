@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/mlorentedev/kubelab/compare/web-v1.1.0...web-v1.1.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **deps:** override fast-uri to ^3.1.2 (security GHSA-v39h-62p7-jpjc), stay on Astro 5 ([#617](https://github.com/mlorentedev/kubelab/issues/617)) ([a33f049](https://github.com/mlorentedev/kubelab/commit/a33f0497dd11e742e849d07cd9ab93bd5a9f3c8d))
+
 ## [1.1.0](https://github.com/mlorentedev/kubelab/compare/web-v1.0.1...web-v1.1.0) (2026-06-14)
 
 
