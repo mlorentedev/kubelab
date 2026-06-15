@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
-    "typescript": "^5.8.2"
+    "typescript": "^6.0.3"
   },
   "overrides": {
     "fast-uri": "^3.1.2"
