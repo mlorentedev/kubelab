@@ -1,6 +1,6 @@
 # ---------- Build Stage — Static site (Astro output: 'static') ----------
 # CI context: ./apps/web — files copied from site/ subdirectory
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 ARG TARGETPLATFORM
 ARG TARGETOS
