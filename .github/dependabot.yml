@@ -1,0 +1,135 @@
+---
+# Dependabot governance for the KubeLab monorepo.
+#
+# Declares every dependency ecosystem present in the repo so updates arrive
+# managed (scheduled, grouped, labelled) instead of as default ungoverned
+# grouped security PRs. Security updates are delivered regardless of this file;
+# the blocks below additionally enable scheduled VERSION updates.
+#
+# Conventions:
+#   - Weekly (Monday) to batch review and limit churn on the single self-hosted
+#     runner.
+#   - commit prefix "fix" for runtime deps so release-please cuts a patch and
+#     rebuilds the image (per CLAUDE.md); "chore" for dev deps (no release).
+#   - minor+patch grouped per ecosystem to cut PR count; majors stay individual
+#     for explicit review.
+#   - Astro majors are pinned on the web apps until @astrojs/mdx supports
+#     Astro 6 (tracked separately). Remove the ignore block at migration time.
+version: 2
+
+updates:
+  # ---- JavaScript / Astro web apps ----
+  - package-ecosystem: "npm"
+    directories:
+      - "/apps/web/site"
+      - "/apps/web/astro-site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "web"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
+    groups:
+      web-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Blocked: @astrojs/mdx@4 needs astro@^5. Lift with the Astro 6 migration.
+      - dependency-name: "astro"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@astrojs/*"
+        update-types:
+          - "version-update:semver-major"
+
+  # ---- Go API ----
+  - package-ecosystem: "gomod"
+    directory: "/apps/api/src"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "api"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+    groups:
+      go-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ---- Python toolkit (Poetry) ----
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "toolkit"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
+    groups:
+      toolkit-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ---- Container images ----
+  - package-ecosystem: "docker"
+    directories:
+      - "/apps/web"
+      - "/apps/api"
+      - "/edge/errors"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+    groups:
+      docker-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ---- GitHub Actions ----
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-all:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+          - "major"
