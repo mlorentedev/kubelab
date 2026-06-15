@@ -74,12 +74,15 @@ jobs:
           echo "Branch: $BRANCH_NAME"
 
           case "$DOCKER_VERSION" in
-            *-rc.*)
+            sha-*)
+              # ADR-046: immutable per-commit build tag for staging. No mutable
+              # alias (no :dev, no :latest) — staging tracks this exact tag.
               FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:dev"
-              TAG_TYPE="rc"
+              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
+              TAG_TYPE="sha"
               ;;
             *)
+              # Stable semver release (release-please): immutable tag + :latest alias.
               FINAL_TAG="$DOCKER_VERSION"
               DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:latest"
               TAG_TYPE="stable"
