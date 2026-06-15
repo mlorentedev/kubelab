@@ -29,6 +29,18 @@ owner: manu
 **Rule**: Pattern to follow going forward
 ```
 
+### [2026-06-14] Merge Dependabot config changes BEFORE closing its PRs
+
+**Context**: Added `.github/dependabot.yml` (#618) where none existed; on merge Dependabot opened a 14-PR burst of version updates. To cut churn I started closing the *grouped* PRs (#614 security group, #628 web-minor-patch group) before the follow-up calibration PR (#644 — sets `open-pull-requests-limit: 0` on departing ecosystems) was merged.
+
+**Problem**: Closing a grouped Dependabot PR while the live config still permits that update makes Dependabot re-evaluate and recreate the group's members as **individual** PRs. Closing #614 + #628 exploded ~12 grouped updates into ~17 individual PRs (15 → 27 open), each queuing CI on the single self-hosted runner — a cleanup turned into a recreation storm. Separately, the version-update `ignore` (astro major) does **not** suppress **security** updates: astro 5.x had 3 advisories fixed only in astro 6, so astro→6 PRs reappeared regardless of the ignore.
+
+**Solution**: Stopped closing. Cancelled the queued Dependabot CI runs (`gh run list ... | while read id; do gh run cancel "$id"; done`, filtered to `headBranch` starting `dependabot/`) to free the runner for #644. Correct order: (1) merge the config that disables the updates, (2) then close the stragglers — once `limit: 0` is live they do not recreate. For the security-driven astro PRs the lever is dismissing the Dependabot alert (accept-risk, tracked) or doing the upgrade — `ignore` won't stop them.
+
+**Rule**: Change Dependabot's *config* first, close its *PRs* second. Never close a grouped Dependabot PR while the live config still permits that update — it ungroups into individual PRs. And remember `ignore: version-update:semver-major` does not block security updates; suppress those by dismissing the alert, not via ignore rules. Bonus (runner): a single on-demand self-hosted runner has no autoscaling/fallback headroom — a flood (or a powered-off host) blocks the whole queue. Tracked as OPS-005 (GitHub-hosted fallback); K8s HPA does not apply (runner is a Docker Compose service on Beelink, not a pod — ARC would be the K8s-native autoscaler).
+
+**Tags**: `#dependabot` `#ci` `#gotcha` `#ordering` `#self-hosted-runner` `#pr-618` `#pr-644`
+
 ### [2026-05-26] Comment-vs-implementation drift — pair "auto-filled" comments with executable tests
 
 **Context**: This session surfaced the same pattern twice. (1) `infra/config/values/common.yaml:477` had the comment `# admin_email auto-filled from apps.contact.email by the config loader (SSOT-014c)`, but `toolkit/features/configuration.py:_inject_contact_email_derivations` only filled 3 consumers (acme_email, uptime_kuma, Authelia admin) — Gitea was missing. Result: `make apply-secrets ENV=prod` warned `Missing values: ADMIN_EMAIL`, and the prod gitea pod entered `CreateContainerConfigError` for 76 minutes after the first restart that touched the new SECRET_CATALOG entry. (2) `toolkit/scripts/sync_oidc_hashes.py` docstring promises "Sync OIDC client_secret hashes from SOPS into Authelia K8s ConfigMap YAMLs", but its `FILE_PATHS` dict still points to `infra/k8s/overlays/prod/patches.yaml` after PR #225 moved the OIDC clients block to `infra/k8s/overlays/prod/authelia-config/configuration.yml`. The regex misses, the script reports `"OK: gitea hash already current in patches.yaml"` and exits 0 — false success.
