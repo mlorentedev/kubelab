@@ -318,23 +318,47 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Re-provision ace2 (Ansible). Token must have repo + workflow scope.",
     ),
     # Apprise notification gateway (NOTIFY-001, ADR-044). staging-only until the
-    # fabric is promoted to prod; broaden `envs` at promotion.
+    # fabric is promoted to prod; broaden `envs` at promotion. Under Option B the
+    # bot-token / chat IDs are read at `secrets apply` time to render the Apprise
+    # routing table (kubelab.yml); n8n no longer holds Telegram creds.
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.bot_token",
         description="Telegram bot token for the Apprise notification gateway",
         kind=SecretKind.EXTERNAL,
-        services=("apprise", "n8n"),
+        services=("apprise",),
         format_hint="<bot_id>:<auth_token> from @BotFather",
-        rotate_note="Re-issue via @BotFather. Read at notify time — no pod restart needed.",
+        rotate_note="Re-issue via @BotFather, then `secrets apply` (re-renders kubelab.yml). No pod restart needed.",
         envs=("staging",),
     ),
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.chat_page",
         description="Telegram channel ID for the PAGE tier (push) — Apprise gateway",
         kind=SecretKind.EXTERNAL,
-        services=("apprise", "n8n"),
+        services=("apprise",),
         format_hint="-100… channel ID (dedicated, not the hermes chat — ADR-044 C5)",
-        rotate_note="Update when the PAGE channel changes. No pod restart needed.",
+        rotate_note="Update the PAGE channel, then `secrets apply` (re-renders kubelab.yml).",
+        envs=("staging",),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.apprise.telegram.chat_log",
+        description="Telegram channel ID for the LOG tier (archive, no push) — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise",),
+        format_hint="-100… channel ID (archive tier; kubelab_bot admin — ADR-044 C4/C5)",
+        rotate_note="Update the LOG channel, then `secrets apply` (re-renders kubelab.yml).",
+        envs=("staging",),
+    ),
+    # Shared secret for the n8n /webhook/notify ingress (NOTIFY-001 criterion #4).
+    # Lives in the n8n encrypted credential store (Header Auth, ADR-044 webhook-auth);
+    # SOPS holds the canonical copy for recovery/rotation. No K8s SECRET_DEFINITIONS
+    # mapping — n8n reads it from its own credential, not from an env var.
+    SecretSpec(
+        key_path="apps.services.automation.notify.webhook_secret",
+        description="Shared secret authenticating POSTs to the n8n /webhook/notify ingress",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("n8n",),
+        format_hint="opaque bearer token; sources send 'Authorization: Bearer <token>'",
+        rotate_note="Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source.",
         envs=("staging",),
     ),
     # =========================================================================

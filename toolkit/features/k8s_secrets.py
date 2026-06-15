@@ -81,10 +81,11 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     ),
     SecretMapping(
         name="apprise-secrets",
-        keys={
-            "TELEGRAM_BOT_TOKEN": "APPS_SERVICES_AUTOMATION_APPRISE_TELEGRAM_BOT_TOKEN",
-            "TELEGRAM_CHAT_PAGE": "APPS_SERVICES_AUTOMATION_APPRISE_TELEGRAM_CHAT_PAGE",
-        },
+        keys={},
+        # Option B (ADR-044 / NOTIFY-001): the routing table (tag → tgram URL) is
+        # rendered into kubelab.yml by _build_apprise_config() and mounted at /config
+        # so APPRISE_STATEFUL_MODE=simple resolves POST /notify/kubelab by tag.
+        # The raw bot_token / chat_* values stay in SOPS, read at render time.
     ),
     SecretMapping(
         name="minio-secrets",
@@ -174,7 +175,44 @@ def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str
     if users_db:
         result["authelia-users"] = {"users_database.yml": users_db}
 
+    apprise_cfg = _build_apprise_config(cm)
+    if apprise_cfg:
+        result["apprise-secrets"] = {"kubelab.yml": apprise_cfg}
+
     return result
+
+
+def _build_apprise_config(cm: ConfigurationManager) -> str:
+    """Build the Apprise routing table (tag → tgram URL) from SOPS values.
+
+    Option B (ADR-044): Apprise owns the tag→URL map; n8n only sends a tag.
+    Rendered into the apprise-secrets Secret as kubelab.yml and mounted at /config,
+    so `APPRISE_STATEFUL_MODE=simple` resolves `POST /notify/kubelab` by tag:
+      - tag `page` → PAGE channel (push)
+      - tag `log`  → LOG channel (archive)
+    Telegram bot-token URLs embed a colon, so each URL key is quoted to keep the
+    YAML mapping valid.
+    """
+    merged = cm.get_merged_config()
+    tg = merged.get("apps", {}).get("services", {}).get("automation", {}).get("apprise", {}).get("telegram", {})
+    bot_token = tg.get("bot_token", "")
+    chat_page = tg.get("chat_page", "")
+    chat_log = tg.get("chat_log", "")
+
+    if not bot_token or not chat_page:
+        logger.warning("Apprise telegram bot_token/chat_page missing — skipping routing config")
+        return ""
+
+    lines = ["version: 1", "urls:"]
+    lines.append(f'  - "tgram://{bot_token}/{chat_page}":')
+    lines.append("      tag: page")
+    if chat_log:
+        lines.append(f'  - "tgram://{bot_token}/{chat_log}":')
+        lines.append("      tag: log")
+    else:
+        logger.warning("apprise chat_log not set — the 'log' tier will not deliver until it is")
+
+    return "\n".join(lines) + "\n"
 
 
 def _build_users_database(cm: ConfigurationManager) -> str:

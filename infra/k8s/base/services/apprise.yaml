@@ -9,11 +9,13 @@ metadata:
     app.kubernetes.io/component: automation
     app.kubernetes.io/part-of: kubelab
 data:
-  # Stateless delivery gateway (ADR-044: "converge the brain, specialize the egress").
-  # Routing decisions live in n8n; Apprise only fans out. STATEFUL_MODE=disabled means
-  # no persisted config/keys → no writable volume, no PVC, clean /status health.
-  # MVP path uses POST /notify/ with urls in the request body (no {KEY}).
-  APPRISE_STATEFUL_MODE: "disabled"
+  # Delivery gateway (ADR-044: "converge the brain, specialize the egress").
+  # n8n is the brain ({domain,severity}→tag); Apprise owns the tag→URL routing
+  # table (Option B). STATEFUL_MODE=simple maps a {KEY} straight to /config/{KEY}.yml,
+  # so n8n POSTs /notify/kubelab with a tag and Apprise resolves the channel(s).
+  # The config is mounted read-only from the apprise-secrets Secret (rendered from
+  # SOPS by the toolkit) — no writable volume, no PVC.
+  APPRISE_STATEFUL_MODE: "simple"
   # Cap gunicorn workers: the image defaults to (2*CPUs)+1, which OOMs on a
   # multi-core node. This is a low-QPS internal egress muxer — 2 is ample.
   APPRISE_WORKER_COUNT: "2"
@@ -53,6 +55,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: apprise-config
+          volumeMounts:
+            # Routing table (tag → tgram URL), rendered from SOPS into kubelab.yml.
+            # simple mode reads /config/{KEY}.yml → POST /notify/kubelab resolves tags.
+            - name: routing-config
+              mountPath: /config
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /status
@@ -78,6 +86,12 @@ spec:
             requests:
               memory: 96Mi
               cpu: "0.1"
+      volumes:
+        - name: routing-config
+          secret:
+            # apprise-secrets carries a single key, kubelab.yml (the rendered
+            # routing table); mounted read-only as /config/kubelab.yml.
+            secretName: apprise-secrets
 ---
 apiVersion: v1
 kind: Service
