@@ -28,6 +28,7 @@ spec:
       containers:
         - name: {{ app.name }}
           image: {{ app.image }}
+          imagePullPolicy: {{ app.image_pull_policy }}
           ports:
             - name: http
               containerPort: {{ app.port }}
