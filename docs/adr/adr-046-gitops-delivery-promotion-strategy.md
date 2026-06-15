@@ -65,6 +65,10 @@ The image-tag bump is a `kustomize`/value edit committed by GitHub Actions, **no
 
 The generator declares `imagePullPolicy` explicitly, never relying on the Kubernetes tag-name default: mutable tags (`dev`, `latest`, `*-rc.*`) → `Always`; immutable tags (semver, `sha-*`) → `IfNotPresent`. Implemented in `generator_k8s.py::_resolve_pull_policy` + `deployments.yaml.j2`. The config-drift gate (ADR-027) guarantees the committed overlays always equal the generator output, so promotion *must* flow through values → regenerate → commit — the drift gate is the anti-tamper guard by construction.
 
+### D6 — Image-version mutation is a first-class toolkit command
+
+Both lanes bump an image version the same way: a single toolkit command, never a raw `yq`/`sed` edit in a workflow step. `toolkit deployment promote --env <env> --app <app> --version <tag>` validates env/app, verifies the tag exists in the registry, sets `apps.platform.<app>.version` in `values/<env>.yaml`, and regenerates the overlay — atomically. This keeps the schema path (`apps.platform.<app>.version`) in one place, makes the bump validated and runnable locally, and means the bump can never be committed without its regeneration (the drift gate cannot be tripped). The staging auto-bump (D3) and the prod promotion (D3) are the same primitive applied to a SHA tag vs a semver tag.
+
 ## Consequences
 
 **Positive**
@@ -93,8 +97,8 @@ The generator declares `imagePullPolicy` explicitly, never relying on the Kubern
 Sequenced as independently mergeable, independently working PRs (no debt left floating):
 
 1. **PR-B (this ADR) — generator foundation.** Explicit tag-aware `imagePullPolicy` (`generator_k8s.py` + `deployments.yaml.j2`); remove the dead mis-nested staging RC override. Effect: staging `:dev` now re-pulls (unblocks WEB-011 verification); prod unchanged (still `:dev`, now explicitly `Always` = matches live). No prod roll.
-2. **PR-C — SHA tag scheme + build-on-merge.** `ci-publish.yml`/`ci-pipeline.yml` emit `sha-<short>`; a `push: master` workflow builds + bumps `values/staging.yaml` + regenerates + commits. Staging migrates from mutable `:dev` to immutable SHA (continuous deployment, no `Always` needed).
-3. **PR-D — prod promotion workflow.** `workflow_dispatch` (target version) bumps `values/prod.yaml` → regenerate → open PR. First gated promotion: prod `:dev` → `:1.1.0` (current stable), *after* staging validation — dogfooding the gate.
+2. **PR-C — SHA tag scheme + build-on-merge + `toolkit deployment promote` (D6).** `ci-publish.yml`/`ci-pipeline.yml` emit `sha-<short>`; add the `deployment promote` command; a `push: master` workflow builds then `toolkit deployment promote --env staging --app <app> --version sha-<short>` + commits (default `GITHUB_TOKEN`, no re-entry). Staging migrates from mutable `:dev` to immutable SHA (continuous deployment, no `Always` needed).
+3. **PR-D — prod promotion workflow.** `workflow_dispatch` (target version) runs `toolkit deployment promote --env prod --app <app> --version <X.Y.Z>` → open PR. First gated promotion: prod `:dev` → `:1.1.0` (current stable), *after* staging validation — dogfooding the gate.
 4. **PR-E — cleanup.** `ci-cleanup.yml` prunes old `sha-*` tags; file the descoped `argocd-image-updater` follow-up ticket.
 
 The canonical PR workflow for K8s changes (ADR-037 §Validation) is unchanged: validate on staging, then promote to prod.
