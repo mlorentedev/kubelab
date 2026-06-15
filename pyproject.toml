@@ -24,6 +24,7 @@ mkdocs-minify-plugin = "^0.8.0"
 mkdocs-git-revision-date-localized-plugin = "^1.5.0"
 uptime-kuma-api = "^1.2.1"
 bcrypt = "^5.0.0"
+ruamel-yaml = "^0.18"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7.3"

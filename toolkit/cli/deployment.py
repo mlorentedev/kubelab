@@ -6,6 +6,7 @@ import typer
 
 from toolkit.config.constants import MESSAGES
 from toolkit.core.logging import logger
+from toolkit.features import promotion
 from toolkit.features.orchestrator import DeploymentOrchestrator
 from toolkit.features.validation import (
     confirm_dangerous_operation,
@@ -92,6 +93,38 @@ def deploy(
         logger.success(MESSAGES.SUCCESS_COMPLETED.format(f"Deployment to {env}"))
     except Exception:
         logger.error(MESSAGES.ERROR_DEPLOYMENT_FAILED)
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def promote(
+    env: Annotated[
+        str,
+        typer.Option("--env", "-e", help="Target environment (staging|prod)"),
+    ],
+    app_name: Annotated[
+        str,
+        typer.Option("--app", "-a", help="Platform app to promote (api|web)"),
+    ],
+    version: Annotated[
+        str,
+        typer.Option("--version", "-v", help="Immutable image tag (e.g. 1.2.0 or sha-abc1234)"),
+    ],
+) -> None:
+    """
+    Promote an app to an immutable image tag in an environment (ADR-046 D6).
+
+    Verifies the tag exists in the registry, sets apps.platform.<app>.version in
+    values/<env>.yaml, and regenerates the overlay atomically. Staging tracks SHA
+    tags (continuous deployment); prod tracks semver (gated by PR).
+    """
+    logger.section(f"Promote {app_name} -> {version} ({env.upper()})")
+    validate_environment_config(env)
+    try:
+        promotion.promote(env, app_name, version)
+        logger.success(MESSAGES.SUCCESS_COMPLETED.format(f"Promote {app_name} to {version} in {env}"))
+    except Exception as e:
+        logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Promote", str(e)))
         raise typer.Exit(1) from None
 
 
