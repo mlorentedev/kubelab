@@ -82,7 +82,3 @@ apps:
       minio:
         domain: minio.staging.kubelab.live
         console_domain: console.minio.staging.kubelab.live
-  web:
-    version: 0.0.0-rc.0
-  api:
-    version: 0.0.0-rc.0

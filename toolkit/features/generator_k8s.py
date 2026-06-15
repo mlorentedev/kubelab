@@ -156,6 +156,19 @@ class K8sGenerator(BaseGenerator):
                 return env_vars[path]
         return None
 
+    def _resolve_pull_policy(self, version: str) -> str:
+        """Explicit imagePullPolicy by tag mutability (ADR-046; lesson 2026-03-16).
+
+        Mutable tags (``dev``, ``latest``, RC pre-releases) must re-pull on every
+        rollout so the staging test bed actually refreshes; immutable tags (semver
+        releases, ``sha-*`` build tags) never change, so ``IfNotPresent`` is correct
+        and avoids needless registry round-trips. Never rely on Kubernetes'
+        tag-name default (``latest`` -> Always, else -> IfNotPresent), which
+        silently broke staging's mutable ``:dev`` strategy.
+        """
+        mutable = version in ("dev", "latest") or "-rc." in version or version.endswith("-rc")
+        return "Always" if mutable else "IfNotPresent"
+
     def _build_context(self, env: str) -> dict[str, Any]:
         """Build Jinja2 context for K8s templates.
 
@@ -196,6 +209,7 @@ class K8sGenerator(BaseGenerator):
             enable_auth = bool(enable_auth_val and enable_auth_val.lower() in ("true", "1", "yes"))
 
             image = f"{registry}/{image_name}:{version}"
+            image_pull_policy = self._resolve_pull_policy(version)
 
             # ConfigMap env vars (non-secret, non-metadata)
             app_env_vars = self._extract_app_env_vars(env_vars, component)
@@ -214,6 +228,7 @@ class K8sGenerator(BaseGenerator):
                 {
                     "name": component,
                     "image": image,
+                    "image_pull_policy": image_pull_policy,
                     "port": int(port),
                     "domain": domain,
                     "health_path": health_path,
