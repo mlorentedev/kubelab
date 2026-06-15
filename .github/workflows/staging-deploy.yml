@@ -1,0 +1,124 @@
+---
+name: Deploy Staging
+# Continuous delivery to staging (ADR-046 D3 — PR-per-update). On each push to
+# master that changes app code, build an immutable `sha-<short>` image per
+# changed app, run `toolkit deployment promote --env staging`, and open a PR with
+# the regenerated overlay. Merging it (human + required checks) lets Argo CD sync
+# staging to master HEAD. Same mechanism as prod promotion; staging differs only
+# in that the PR is opened automatically here.
+#
+# The PR is opened with RELEASE_PLEASE_TOKEN (a PAT), NOT the default
+# GITHUB_TOKEN: a PR opened by GITHUB_TOKEN does not trigger `on: pull_request`
+# workflows, so its required checks would never run and it could never be merged.
+#
+# `paths: apps/**` means the promotion PR (which touches only infra/) does not
+# re-trigger this workflow — no loop.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+      - id: sha
+        run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  build-web:
+    name: Build Web
+    needs: detect-changes
+    if: needs.detect-changes.outputs.web == 'true'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: web
+      tag: ${{ needs.detect-changes.outputs.sha }}
+      sha: ${{ github.sha }}
+      context: ./apps/web
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
+    secrets: inherit
+
+  build-api:
+    name: Build API
+    needs: detect-changes
+    if: needs.detect-changes.outputs.api == 'true'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: api
+      tag: ${{ needs.detect-changes.outputs.sha }}
+      sha: ${{ github.sha }}
+      context: ./apps/api
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
+    secrets: inherit
+
+  open-pr:
+    name: Open Staging Deploy PR
+    needs: [detect-changes, build-web, build-api]
+    # Run if at least one app built successfully (skipped builds are not failures).
+    if: >-
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      (needs.build-web.result == 'success' || needs.build-api.result == 'success')
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      - name: Promote built apps to staging
+        env:
+          SHA: ${{ needs.detect-changes.outputs.sha }}
+          WEB_BUILT: ${{ needs.build-web.result }}
+          API_BUILT: ${{ needs.build-api.result }}
+        run: |
+          if [ "$WEB_BUILT" = "success" ]; then
+            poetry run toolkit deployment promote --env staging --app web --version "$SHA"
+          fi
+          if [ "$API_BUILT" = "success" ]; then
+            poetry run toolkit deployment promote --env staging --app api --version "$SHA"
+          fi
+      - name: Open staging deploy PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          SHA: ${{ needs.detect-changes.outputs.sha }}
+        run: |
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git add infra/config/values/staging.yaml infra/k8s/overlays/staging/
+          if git diff --staged --quiet; then
+            echo "No staging overlay changes to promote"; exit 0
+          fi
+          BRANCH="deploy/staging-${SHA}"
+          git checkout -b "$BRANCH"
+          git commit -m "chore(staging): deploy ${SHA}"
+          git push -u origin "$BRANCH" --force-with-lease
+          gh pr create --base master --head "$BRANCH" \
+            --title "chore(staging): deploy ${SHA}" \
+            --body "Automated staging promotion to \`${SHA}\` (ADR-046)."
