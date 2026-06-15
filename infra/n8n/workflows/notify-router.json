@@ -1,0 +1,108 @@
+{
+  "name": "notify-router",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "NOTIFY-001 routing brain (ADR-044): POST /webhook/notify -> route by severity -> Apprise. Staging MVP (page/log only)."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notify",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Webhook notify",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-280, 0],
+      "webhookId": "b1000000-0000-4000-8000-000000000001",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ON_IMPORT",
+          "name": "notify-webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NOTIFY-001 routing brain (ADR-044): severity -> Apprise {tag, type}.\n// MVP tiers: page (push) and log (archive). 'notice' folds to log until\n// the phase-2 Redis digest (NOTIFY-002) lands. Unknown/missing severity\n// fails SAFE to log -- a malformed event must never page at 3 AM.\n// 'domain' is carried but does not route in the MVP (single channel set).\nconst e = $json.body ?? $json;\nconst severity = String(e.severity || '').toLowerCase();\nconst ROUTE = {\n  page:   { tag: 'page', type: 'failure' },\n  log:    { tag: 'log',  type: 'info' },\n  notice: { tag: 'log',  type: 'info' },\n};\nconst r = ROUTE[severity] ?? ROUTE.log;\nreturn [{ json: {\n  tag: r.tag,\n  type: r.type,\n  title: e.title || `[${e.source || 'unknown'}] ${severity || 'event'}`,\n  body: e.body || '(no body)',\n} }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Route by severity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-60, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://apprise:8000/notify/kubelab",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tag: $json.tag, title: $json.title, body: $json.body, type: $json.type }) }}",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Apprise notify/kubelab",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [160, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [380, 0]
+    }
+  ],
+  "connections": {
+    "Webhook notify": {
+      "main": [
+        [
+          {
+            "node": "Route by severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by severity": {
+      "main": [
+        [
+          {
+            "node": "Apprise notify/kubelab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apprise notify/kubelab": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

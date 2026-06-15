@@ -26,9 +26,13 @@ created: "2026-06-14"
       ADR-037; ArgoCD selfHeal=false). Pod Ready after fixing an OOMKill (capped `APPRISE_WORKER_COUNT=2`).
       Verified: in-cluster `curl apprise:8000/status`→200; `POST /notify/` with `tgram://`→Telegram (HTTP 200,
       message landed in the dedicated channel).
-- [ ] **n8n workflow** — webhook `/webhook/notify` → validate shared secret → Switch `{domain,severity}`
-      → HTTP Request to Apprise; **export workflow JSON into the repo** (APP-CONFIG-003 interim: manual export)
-- [ ] **Routing table** — encode `{domain,severity}` → Apprise tag(s) (ConfigMap or in-workflow map)
+- [x] **n8n workflow** — authored `infra/n8n/workflows/notify-router.json` ✓ 2026-06-14: Webhook POST
+      `/webhook/notify` (native Header Auth credential `notify-webhook`) → Code route → HTTP
+      `POST http://apprise:8000/notify/kubelab` → Respond 200. JSON + routing JS validated
+      (`node --check` + 4-case smoke). **UI import + credential link + activate = operator handoff.**
+- [x] **Routing table** — in-workflow Code map ✓ 2026-06-14: `severity` → `{tag,type}` (page→page/failure,
+      log→log/info, notice→log until phase-2 digest #95, unknown→fail-safe log). Full `{domain,severity}`
+      multi-domain table deferred to phase 3 (per the source audit; see NOTIFY-005..007).
 - [ ] **hermes-nan migration** — edit `watchdog`/`backup-fail` scripts (vault `00_meta/agents/scripts/`)
       to `curl` the envelope; set their cron `--deliver local`; deploy via the apply loop (NOT by hand)
 - [ ] **Smoke** — force watchdog-down + backup-fail → confirm each lands in the right Telegram channel
@@ -65,6 +69,35 @@ hand-author + import, no `$env` needed; real multi-branch Switch arrives with ph
 4. n8n UI: import workflow, create the `notify-webhook` Header Auth credential (paste SOPS value),
    activate. Smoke: `page`→PAGE channel, `log`→LOG channel, bad/missing secret→rejected. Fill verification.md.
 5. Before PR: rebase branch on `origin/master` (1 behind = the ADR-044 merge).
+
+## Checkpoint 2 — 2026-06-14 (committed + rebased + workflow authored)
+
+> Resume here. The WIP from Checkpoint 1 is now **committed** and the branch is **rebased
+> onto master** (was 12 behind, now 0). The n8n workflow is authored + validated in the repo.
+> Everything remaining is **operator-gated** (Telegram channels, n8n UI, staging deploy).
+
+**Done this session (all committed on `feat/notification-routing-fabric`):**
+- Committed Checkpoint-1 WIP (Apprise Option B: `simple` mode + SOPS-rendered `kubelab.yml`).
+- Rebased onto `origin/master` (only conflict was `docs/lessons.md`, resolved keeping both).
+- Added `tests/test_k8s_secrets_apprise.py` (3 tests, green) — sibling test for `_build_apprise_config`.
+- Verified `kubectl kustomize` base + staging render clean with the apprise objects.
+- Authored `infra/n8n/workflows/notify-router.json` + `README.md` (import guide).
+- Audited all notification sources (service catalog) → filed the full roadmap on the board:
+  epic #90 refreshed; children NOTIFY-002..008 (#95–#101) + APP-CONFIG-003 (#102).
+
+**Operator-gated next steps (cannot be done from the worktree):**
+1. SOPS (staging): create a LOG Telegram channel (`kubelab_bot` admin) → set
+   `apps.services.automation.apprise.telegram.chat_log`; generate + set
+   `apps.services.automation.notify.webhook_secret`. Both via `toolkit secrets set … --env staging`.
+2. Deploy staging: `make apply-secrets ENV=staging` (re-renders `apprise-secrets/kubelab.yml`) +
+   `make deploy-k8s ENV=staging`; `kubectl rollout restart deploy/apprise -n kubelab` (spoke).
+3. n8n UI (staging): create the `notify-webhook` Header Auth credential (paste the SOPS value),
+   import `notify-router.json`, link the credential, activate. (See `infra/n8n/workflows/README.md`.)
+4. hermes-nan migration (vault `00_meta/agents/scripts/`): point `watchdog`/`backup-fail` at the
+   webhook (`curl` the envelope), set their cron `--deliver local`, deploy via the apply loop.
+5. Smoke (criteria #2–#4): `page`→PAGE channel, `log`→LOG channel, bad/missing secret→403.
+   Force watchdog-down + backup-fail → confirm each lands in its channel. Fill `verification.md`.
+6. Open the kubelab PR; commit the hermes change to the vault; tick NOTIFY-001 on the board.
 
 ## Closing
 
