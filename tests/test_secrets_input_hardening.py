@@ -153,3 +153,28 @@ class TestInitIdempotent:
         with _patch_gen():
             generated = SecretsManager().init_machine_secrets(self.ENV, dry_run=True, rotate=[non_machine])
         assert generated == {}, "rotating a non-machine-generable key must error"
+
+
+# ───────────────── secrets set --stdin: interactive prompt (no Ctrl-D) ─────────────────
+
+
+class TestStdinValueResolution:
+    """_stdin_value: interactive TTY prompts once (Enter submits); pipe reads until EOF."""
+
+    def test_interactive_tty_uses_getpass_no_ctrl_d(self, monkeypatch) -> None:
+        import toolkit.cli.secrets as sec
+
+        fake_stdin = MagicMock()
+        fake_stdin.isatty.return_value = True
+        monkeypatch.setattr(sec.sys, "stdin", fake_stdin)
+        monkeypatch.setattr(sec.getpass, "getpass", lambda *a, **k: "-1004406031115")
+        assert sec._stdin_value() == "-1004406031115"
+        fake_stdin.read.assert_not_called()  # interactive must NOT read-until-EOF (no Ctrl-D)
+
+    def test_piped_stdin_reads_until_eof(self, monkeypatch) -> None:
+        import io
+
+        import toolkit.cli.secrets as sec
+
+        monkeypatch.setattr(sec.sys, "stdin", io.StringIO("piped-value\n"))
+        assert sec._stdin_value() == "piped-value"  # trailing newline stripped
