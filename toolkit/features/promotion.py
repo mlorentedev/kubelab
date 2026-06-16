@@ -14,7 +14,6 @@ ruamel round-trip (comment- and order-preserving) rather than a PyYAML rewrite.
 
 from __future__ import annotations
 
-import httpx
 from ruamel.yaml import YAML
 
 from toolkit.config.constants import COMPONENTS
@@ -22,8 +21,7 @@ from toolkit.config.settings import settings
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
-
-_DOCKERHUB_TAGS_API = "https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags/{tag}"
+from toolkit.features.registry import tag_exists
 
 
 def _resolve_image(env: str, app: str) -> tuple[str, str]:
@@ -34,20 +32,6 @@ def _resolve_image(env: str, app: str) -> tuple[str, str]:
     if not image_name:
         raise ValueError(f"No image_name configured for platform app '{app}'")
     return registry, image_name
-
-
-def _tag_exists(registry: str, image_name: str, tag: str) -> bool | None:
-    """Whether ``tag`` exists on the registry. Returns None (skip) for non-Docker-Hub registries."""
-    if not registry.startswith("docker.io/"):
-        return None
-    namespace = registry.split("/", 1)[1]
-    url = _DOCKERHUB_TAGS_API.format(namespace=namespace, repo=image_name, tag=tag)
-    try:
-        resp = httpx.get(url, timeout=15.0)
-    except httpx.HTTPError as exc:
-        logger.warning(f"Could not reach registry to verify tag ({exc}); skipping check")
-        return None
-    return resp.status_code == 200
 
 
 def promote(env: str, app: str, version: str) -> None:
@@ -66,7 +50,7 @@ def promote(env: str, app: str, version: str) -> None:
 
     registry, image_name = _resolve_image(env, app)
 
-    exists = _tag_exists(registry, image_name, version)
+    exists = tag_exists(registry, image_name, version)
     if exists is False:
         raise ValueError(
             f"Tag '{version}' not found for {registry}/{image_name} — refusing to promote a "
