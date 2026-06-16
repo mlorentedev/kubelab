@@ -463,8 +463,20 @@ class SecretsManager:
 
     # ── Init (generate machine secrets) ──────────────────────────────────────
 
-    def init_machine_secrets(self, env: str, dry_run: bool = False) -> dict[str, str]:
-        """Generate all machine-generable secrets (random tokens, hex keys).
+    def init_machine_secrets(
+        self,
+        env: str,
+        dry_run: bool = False,
+        force: bool = False,
+        rotate: list[str] | None = None,
+    ) -> dict[str, str]:
+        """Generate machine-generable secrets (random tokens, hex keys, RSA, OIDC).
+
+        Idempotent by default: secrets that already exist (non-empty) are skipped,
+        so running this against a populated environment only fills the gaps and never
+        clobbers a live encryption key. Use ``force=True`` to regenerate every
+        machine-generable secret, or ``rotate=[key, ...]`` to regenerate only the
+        named keys.
 
         Does NOT generate:
         - Passwords (require interactive prompt)
@@ -472,7 +484,7 @@ class SecretsManager:
         - CrowdSec API keys (require running container)
         - External secrets (API tokens provided by user)
 
-        Returns dict of key_path → generated value.
+        Returns dict of key_path → generated value (empty dict on validation error).
         """
         auto_kinds = {
             SecretKind.RANDOM_HEX,
@@ -481,17 +493,44 @@ class SecretsManager:
             SecretKind.RSA_KEY,
         }
 
+        rotate_set = set(rotate or [])
+        if rotate_set:
+            env_keys = {s.key_path for s in SECRET_CATALOG if env in s.envs}
+            machine_keys = {s.key_path for s in SECRET_CATALOG if env in s.envs and s.kind in auto_kinds}
+            unknown = rotate_set - env_keys
+            non_machine = (rotate_set & env_keys) - machine_keys
+            if unknown:
+                logger.error(f"Unknown secret key(s) for {env}: {', '.join(sorted(unknown))}")
+                return {}
+            if non_machine:
+                logger.error(f"Not machine-generable (won't rotate): {', '.join(sorted(non_machine))}")
+                return {}
+
+        # Idempotency: skip secrets already present (non-empty). force/rotate bypass it.
+        present = set() if (force or rotate_set) else set(self.audit(env).present)
+
         generated: dict[str, str] = {}
+        skipped: list[str] = []
 
         for spec in SECRET_CATALOG:
             if env not in spec.envs:
                 continue
             if spec.kind not in auto_kinds:
                 continue
+            if rotate_set and spec.key_path not in rotate_set:
+                continue
+            if spec.key_path in present:
+                skipped.append(spec.key_path)
+                continue
 
             value = self._generate_secret(spec)
             if value:
                 generated[spec.key_path] = value
+
+        if skipped:
+            logger.info(
+                f"Skipped {len(skipped)} existing secret(s) (use --force to regenerate all, or --rotate KEY for one)"
+            )
 
         if not dry_run and generated:
             cm = self._cm(env)
