@@ -29,6 +29,54 @@ owner: manu
 **Rule**: Pattern to follow going forward
 ```
 
+### [2026-06-15] A generated artifact's content must not depend on whether secrets are decrypted
+
+**Context**: First gated prod promotion (`api` → `1.1.0`, #664) put the new pod in `CrashLoopBackOff` — `panic: SMTP credentials required in production`. The api Deployment's `envFrom` referenced only `configMapRef: api-config`, never `secretRef: api-secrets`, so `INFRA_SMTP_PASS` (present in the cluster Secret for 86 days) was never injected. `:dev` had no such guard; `1.1.0` added one. No outage — the rolling update held the old `:dev` pod Ready while the new one never became Ready.
+
+**Problem**: The K8s generator's `_has_secret_vars` scanned `APPS_PLATFORM_<APP>_*` env vars for secret-name patterns to decide whether to mount `<app>-secrets`. Those keys come from SOPS, so the decision depended on whether SOPS was decrypted at generation time. The prod overlay had been committed from a SOPS-less `generate` → the keys were absent → `has_secrets=False` → no `secretRef`. Staging had been generated with SOPS → it had the mount all along. Same source, two outputs. The ADR-027 drift check runs in CI **without** SOPS, so it regenerated the same secret-less output and went green — the gate shared the generator's blind spot (false green). The heuristic was also blind to *shared* `INFRA_*` secrets (`INFRA_SMTP_PASS` lives under the `INFRA_` prefix, not `APPS_PLATFORM_API_`).
+
+**Solution**: #666 — tie the mount to the secrets SSOT: `_has_secret_vars(component)` returns true iff a `<component>-secrets` mapping exists in `SECRET_DEFINITIONS`. No `env_vars` input → deterministic and SOPS-independent. CI and local now emit identical overlays, so the drift gate means something again. Regression test asserts the mount decision equals registry presence for every platform app, and that `web` (no secret) never mounts. Validated on staging: `api:1.1.0` boots Ready with `INFRA_SMTP_PASS` injected.
+
+**Rule**: A generator's output must be a pure function of *committed* inputs — never of ambient state like "are secrets decrypted right now". To decide "does this thing exist", read the static SSOT (the definition/registry list), not a side effect of the environment. Corollary: an equality/drift gate is only as strong as the conditions it runs under — if generation can vary with SOPS, either run the gate with SOPS or (better) make generation SOPS-independent. And: *provisioning* a secret (it exists in the cluster) and *consuming* it (the workload references it) are two facts that can silently diverge — bind them at one source.
+
+**Tags**: `#generator` `#determinism` `#sops` `#drift-gate` `#secrets` `#adr-046` `#adr-027` `#pr-666`
+
+### [2026-06-15] Staging must run the same artifact AND mode as prod, or it is not a gate
+
+**Context**: The `api:1.1.0` CrashLoop above reached prod despite staging existing. Staging ran the mutable `:dev` tag, not the `1.1.0` artifact promoted to prod; and staging runs `ENVIRONMENT=staging`, while the guard that fired was `required in production`.
+
+**Problem**: Two independent axes of divergence each defeat the gate. (1) **Artifact**: staging on `:dev` never executes the image being shipped, so image-level regressions pass straight through. (2) **Mode**: even if staging ran `1.1.0`, the `production`-gated guard would not fire under `ENVIRONMENT=staging`, so production-only code paths stay dark. The ADR-027 drift gate verifies overlay *consistency*, not that the *container boots* — a different guarantee. A pre-prod environment that differs from prod in artifact or correctness-affecting behavior validates nothing about what actually ships.
+
+**Solution**: Immediate cause fixed in #666. The parity gaps are tracked: knowledge#105 (staging runs the candidate immutable build, not `:dev`) and knowledge#106 (staging exercises production-mode guards — run prod-equivalent strictness, or de-gate *required-infra* guards in the app source `mlorente-backend` `internal/services/beehiiv.go`).
+
+**Rule**: A staging/pre-prod environment may differ from prod ONLY in environment-specific values (domains, scale, `selfHeal`) — never in the artifact (run the same immutable tag you will promote) nor in correctness-affecting mode. If a guard is `if production`, staging won't catch it: make *required-infra* guards unconditional and keep only side-effectful behavior (live email, real charges) environment-gated.
+
+**Tags**: `#staging` `#parity` `#promotion` `#gates` `#adr-046` `#adr-037` `#issue-105` `#issue-106`
+
+### [2026-06-15] A mutable image tag needs an explicit `imagePullPolicy: Always` or it never re-pulls
+
+**Context**: Both prod and staging ran the mutable `:dev` tag with `imagePullPolicy` never declared in the manifests. Staging silently defaulted to `IfNotPresent` and never re-pulled a freshly-pushed `:dev` — WEB-011 changes were not appearing on staging.
+
+**Problem**: Kubernetes defaults `imagePullPolicy` to `IfNotPresent` for any tag other than `latest`. A mutable tag like `:dev` therefore sticks to whatever image the node first cached; new pushes to the same tag are ignored until the node forgets the image. The 2026-03-16 lesson about this had been learned but never enforced in the generator.
+
+**Solution**: #657 (PR-B) — the generator now sets `imagePullPolicy` tag-aware: mutable tags (`dev`/`latest`/`*-rc.*`) → `Always`; immutable tags (`sha-*`/semver) → `IfNotPresent`. This unblocked the staging refresh and is the foundation for the ADR-046 model (immutable tags everywhere, so a tag change is always a real pull Argo reconciles).
+
+**Rule**: Never run a mutable tag without `imagePullPolicy: Always`, and never leave `imagePullPolicy` to the default. Better still: prefer immutable tags (`sha-<short>`, semver) so the desired state *is* the tag — a change always forces a pull, `IfNotPresent` is correct, and `Always` is unnecessary.
+
+**Tags**: `#kubernetes` `#imagepullpolicy` `#mutable-tags` `#adr-046` `#pr-657`
+
+### [2026-06-15] Under `enforce_admins` branch protection, delivery must be PR-per-update opened with a PAT
+
+**Context**: Both Argo CD apps (staging, prod) watch `master`, which is protected with `enforce_admins` → nobody, not even admins or automation, can push directly. Every deploy is a change to `master`, so every deploy must be a reviewed PR. (Same rework also dropped a broken RC version predictor.)
+
+**Problem**: A delivery mechanism that assumes it can `git push` to the deploy branch breaks under `enforce_admins`. And a CI-opened PR using the default `GITHUB_TOKEN` does **not** trigger `on: pull_request` workflows, so its required checks never run and it can never merge — a silent deadlock. Separately, maintaining an RC version predictor alongside release-please created two semver authorities that drifted (RC behind stable, mis-nested staging override).
+
+**Solution**: ADR-046 PR-per-update — staging auto-opens a deploy PR on each merge (`staging-deploy.yml`); prod opens a gated PR on `workflow_dispatch` (`promote-prod.yml`); both via `toolkit deployment promote`. The PRs are opened with a PAT (`RELEASE_PLEASE_TOKEN`), not `GITHUB_TOKEN`, so their checks run. release-please is the sole semver authority; the RC predictor was deleted.
+
+**Rule**: When the deploy branch is `enforce_admins`-protected, delivery automation must **open PRs, not push** — and open them with a PAT so `on: pull_request` checks fire (a `GITHUB_TOKEN`-opened PR is un-mergeable by design). Keep exactly one semver authority (release-please); never run a parallel predictor that can disagree with it.
+
+**Tags**: `#gitops` `#branch-protection` `#pr-per-update` `#github-token` `#release-please` `#adr-046`
+
 ### [2026-06-14] Merge Dependabot config changes BEFORE closing its PRs
 
 **Context**: Added `.github/dependabot.yml` (#618) where none existed; on merge Dependabot opened a 14-PR burst of version updates. To cut churn I started closing the *grouped* PRs (#614 security group, #628 web-minor-patch group) before the follow-up calibration PR (#644 — sets `open-pull-requests-limit: 0` on departing ecosystems) was merged.
