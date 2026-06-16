@@ -13,6 +13,7 @@ Single entry point for all secret operations:
 
 from __future__ import annotations
 
+import getpass
 import os
 import subprocess
 import sys
@@ -38,6 +39,17 @@ def _get_manager() -> SecretsManager:
     from toolkit.features.secrets_manager import secrets_manager
 
     return secrets_manager
+
+
+def _stdin_value() -> str:
+    """Read a secret value from stdin.
+
+    Interactive TTY → prompt once with hidden input (Enter submits; no Ctrl-D).
+    Piped (non-TTY) → read until EOF. A trailing newline is stripped either way.
+    """
+    if sys.stdin.isatty():
+        return getpass.getpass("Secret value (hidden, Enter to submit): ").rstrip("\r\n")
+    return sys.stdin.read().rstrip("\r\n")
 
 
 # =============================================================================
@@ -325,17 +337,19 @@ def set_secret(
         bool,
         typer.Option(
             "--stdin",
-            help="Read the value from stdin (pipeable; required for values starting with '-')",
+            help="Read the value from stdin: prompts if interactive (Enter submits), reads the pipe otherwise",
         ),
     ] = False,
 ) -> None:
     """Set a secret value in the SOPS vault.
 
-    The value can be passed as an argument or piped via --stdin. Use --stdin for
+    The value can be passed as an argument or supplied via --stdin. Use --stdin for
     values that start with '-' (e.g. Telegram chat IDs) and to keep secrets out of
-    shell history and process args:
+    shell history and process args. On a terminal, --stdin prompts once with hidden
+    input (Enter submits — no Ctrl-D); piped, it reads until EOF:
 
-      printf -- '-1004…' | toolkit secrets set <key> --env staging --stdin
+      toolkit secrets set <key> --env staging --stdin            # interactive prompt
+      printf -- '-1004…' | toolkit secrets set <key> --env staging --stdin   # piped
 
     Example:
       toolkit secrets set aws.access_key_id AKIA... --env common
@@ -350,9 +364,9 @@ def set_secret(
         logger.error("Pass the value as an argument OR via --stdin, not both")
         raise typer.Exit(1)
     if use_stdin:
-        value = sys.stdin.read().rstrip("\r\n")
+        value = _stdin_value()
         if not value:
-            logger.error("--stdin given but no value was provided on stdin")
+            logger.error("--stdin given but no value was provided")
             raise typer.Exit(1)
     elif value is None:
         logger.error("Provide a VALUE argument or use --stdin")
