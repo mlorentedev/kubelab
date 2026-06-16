@@ -61,6 +61,13 @@ spec:
             - name: routing-config
               mountPath: /config
               readOnly: true
+            # Apprise's stateful store lives at /config/store, but the read-only
+            # Secret mount above makes /config unwritable → storage init fails,
+            # apprise falls back to MEMORY mode and /status returns 417, so the
+            # readiness probe never passes. Give the store its own writable
+            # emptyDir (nested mount) — ephemeral is fine for an egress muxer.
+            - name: apprise-store
+              mountPath: /config/store
           livenessProbe:
             httpGet:
               path: /status
@@ -92,6 +99,8 @@ spec:
             # apprise-secrets carries a single key, kubelab.yml (the rendered
             # routing table); mounted read-only as /config/kubelab.yml.
             secretName: apprise-secrets
+        - name: apprise-store
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
