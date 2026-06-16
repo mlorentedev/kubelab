@@ -1,8 +1,9 @@
 # n8n workflows (as code)
 
-> Interim manual export/import until **APP-CONFIG-003** (`mlorentedev/knowledge#102`)
-> automates `n8n export -> Git`. n8n stores workflows in its SQLite DB (ADR-026 gap),
-> so this directory is the versioned source of truth — re-export after any UI edit.
+> **Import** is automated by **TOOL-009** (`make import-n8n ENV=staging`). **Export**
+> (n8n -> Git) is still manual until **APP-CONFIG-003** (`mlorentedev/knowledge#102`).
+> n8n stores workflows in its SQLite DB (ADR-026 gap), so this directory is the
+> versioned source of truth — re-export after any UI edit.
 
 ## `notify-router.json` — NOTIFY-001 routing brain (ADR-044)
 
@@ -16,22 +17,32 @@ channel via the SOPS-rendered `kubelab.yml` routing table.
   Unknown/missing severity fails **safe** to `log`. `domain` is carried but does not route
   yet (single channel set; multi-domain routing is phase 3).
 
-### One-time import (n8n UI, staging)
+### Import (automated — TOOL-009)
 
-1. **Create the credential first.** Credentials -> New -> **Header Auth**, name it
-   exactly `notify-webhook`. Header name `Authorization`, value = the SOPS secret
-   `apps.services.automation.notify.webhook_secret` (staging). This is criterion #4:
-   n8n rejects any POST with a missing/wrong header automatically (HTTP 403).
-2. **Import** `notify-router.json` (Workflows -> Import from File).
-3. On the **Webhook notify** node, confirm the credential resolves to `notify-webhook`
-   (the exported JSON references it by name; re-select if the UI shows it unlinked).
-4. **Activate** the workflow. Production URL: `https://n8n.staging.kubelab.live/webhook/notify`.
+```bash
+make import-n8n ENV=staging
+```
+
+Reconstructs the **credential** and the **workflow** from Git + SOPS with no UI steps,
+then activates it. Runs automatically as the last step of `make deploy-k8s`.
+
+- The **Header Auth** credential `notify-webhook` is rendered from the SOPS secret
+  `apps.services.automation.notify.webhook_secret`: header name `Authorization`, value
+  `Bearer <secret>` (RFC 6750). This is criterion #4 — n8n rejects any POST with a
+  missing/wrong header automatically (HTTP 403).
+- Both ids are fixed in `notify-router.json` (workflow root `id` + the node's
+  `httpHeaderAuth.id`), so re-running is an idempotent upsert (no duplicates). Delete
+  the workflow in n8n and re-run to restore it identically.
+- The secret reaches the pod via `/dev/shm` (tmpfs) only — never persistent disk, never
+  argv. Mirrors the ADR-035 middleware-secret injection pattern.
+
+Production URL after activation: `https://n8n.staging.kubelab.live/webhook/notify`.
 
 ### Sources call it like
 
 ```
 POST https://n8n.staging.kubelab.live/webhook/notify
-Authorization: <webhook_secret>
+Authorization: Bearer <webhook_secret>
 Content-Type: application/json
 
 { "domain": "ops", "severity": "page", "title": "watchdog down",

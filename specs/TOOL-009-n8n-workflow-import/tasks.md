@@ -12,25 +12,26 @@ tags: [spec, tasks]
 - [x] Issue gate: mlorentedev/knowledge#108 (created via `gh api` REST — `gh issue create` uses GraphQL, which was rate-limited)
 - [x] `proposal.md` complete; acceptance criteria testable
 - [ ] Add #108 to the Bitácora Project board (deferred — needs GraphQL; verify whether auto-add already did it)
-- [ ] Confirm n8n 2.12 `import:credentials` JSON shape for `httpHeaderAuth` (docs/CLI)
+- [x] Confirm n8n `import:credentials` JSON shape for `httpHeaderAuth` ✓ 2026-06-15 (n8n docs via context7: import/export use a JSON array of `{id,name,type,data}`; `--input=FILE` consumes the export shape)
 
 ## Implementation
 
-- [ ] Fix credential id in `notify-router.json` (`REPLACE_ON_IMPORT` → stable UUID)
-- [ ] Failing test: credential JSON render reads `webhook_secret` from SOPS + id from the workflow JSON
-- [ ] Failing test: command assembly (import:credentials via `/dev/shm`, import:workflow, update:workflow --active)
-- [ ] Failing test: missing `webhook_secret` → clear error, no partial import
-- [ ] Implement `toolkit/features/n8n_import.py` (render + exec assembly + idempotency)
-- [ ] Wire CLI: new `n8n` subgroup under `infra` → `toolkit infra n8n import --env <e>`
-- [ ] Add `infra/n8n/workflows/credentials/notify-webhook.json.tpl`
-- [ ] Makefile: `import-n8n` target + hook into `deploy-k8s`
-- [ ] Refactor: reuse a SOPS-render helper from `k8s_middlewares.apply_middleware_secrets` if shared
+- [x] Fix credential id in `notify-router.json` (`REPLACE_ON_IMPORT` → `c1…01`) + add root workflow `id` `d1…01` ✓ 2026-06-15 (both ids needed for idempotent upsert)
+- [x] Failing test: credential JSON render reads `webhook_secret` from SOPS + id from the workflow JSON ✓ 2026-06-15
+- [x] Failing test: command assembly (import:credentials via `/dev/shm`, import:workflow, update:workflow --active) ✓ 2026-06-15
+- [x] Failing test: missing `webhook_secret` → clear error, no partial import ✓ 2026-06-15
+- [x] Implement `toolkit/features/n8n_import.py` (render + exec assembly + idempotency) ✓ 2026-06-15
+- [x] Wire CLI: new `n8n` subgroup under `infra` → `toolkit infra n8n import --env <e>` ✓ 2026-06-15
+- [~] ~~Add `infra/n8n/workflows/credentials/notify-webhook.json.tpl`~~ — N/A: credential built with `json.dumps` (robust secret escaping), no textual template. See verification.md.
+- [x] Makefile: `import-n8n` target + hook into `deploy-k8s` (last step — needs the pod up) ✓ 2026-06-15
+- [~] Refactor: reuse a SOPS-render helper from `k8s_middlewares` — N/A: middleware render is textual YAML substitution; credential render is `json.dumps`. SOPS read (`get_secret_by_path`) is already shared via `ConfigurationManager`.
 
 ## Closing
 
-- [ ] Every acceptance criterion covered by ≥1 test; `make test` green
+- [x] Acceptance criteria covered by tests; `make test` green ✓ 2026-06-15 (222 passed; idempotency/delete+re-import criteria gated on the live smoke below)
 - [ ] `features.json` emitted
-- [ ] Lint/format clean
+- [x] Lint/format clean ✓ 2026-06-15 (ruff + mypy)
 - [ ] Live smoke on staging: `make import-n8n ENV=staging` → workflow active; delete + re-import = identical
-- [ ] `verification.md` filled with evidence
-- [ ] PR referencing this spec; update `infra/n8n/workflows/README.md` (remove the manual UI-import section)
+- [x] `verification.md` filled with evidence ✓ 2026-06-15
+- [ ] PR referencing this spec
+- [x] Update `infra/n8n/workflows/README.md` (manual UI-import section removed) ✓ 2026-06-15

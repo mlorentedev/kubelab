@@ -786,6 +786,15 @@ apply-middleware-secrets:
 	@test -n "$(ENV)" || (echo "Usage: make apply-middleware-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-middleware-secrets --env $(ENV)
 
+# Reconstructs the n8n notify-router workflow + Header Auth credential from
+# Git (workflow JSON) + SOPS (webhook_secret) — TOOL-009. Idempotent upsert via
+# fixed ids in the workflow JSON. Secret reaches the pod via /dev/shm only.
+# Auto-runs as the last step of deploy-k8s; staging-only today (no-op elsewhere).
+.PHONY: import-n8n
+import-n8n:
+	@test -n "$(ENV)" || (echo "Usage: make import-n8n ENV=staging" && exit 1)
+	@$(TOOLKIT) infra n8n import --env $(ENV)
+
 .PHONY: flush-sessions
 flush-sessions:
 	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
@@ -820,6 +829,7 @@ logs:
 deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
+	@$(MAKE) import-n8n ENV=$(ENV)
 
 # -----------------------------------------------------------------------------
 # Validation & Testing
