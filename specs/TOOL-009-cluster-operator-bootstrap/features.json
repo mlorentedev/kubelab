@@ -1,0 +1,44 @@
+[
+  {
+    "id": "tool-009-f1-ssot-cluster-operators",
+    "behavior": "infra/config/values/common.yaml declares a cluster_operators list ({name,namespace,version,manifest}) with agent-sandbox v0.5.0rc1, traefik-config and coredns migrated in; it is the single source of truth for cluster-wide component versions.",
+    "verification": "toolkit config validate && python3 -c \"import yaml,sys; d=yaml.safe_load(open('infra/config/values/common.yaml')); ops={o['name'] for o in d['cluster_operators']}; sys.exit(0 if {'agent-sandbox','traefik-config','coredns'} <= ops else 1)\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "tool-009-f2-generalized-apply",
+    "behavior": "toolkit infra k8s deploy applies every cluster_operators entry via kubectl apply --server-side (dry-run validated, per-operator logging), with no hardcoded per-component branches left in infra.py or the Makefile.",
+    "verification": "grep -RqE \"_get_traefik_config_path|coredns-custom.yaml | kubectl apply\" toolkit/ Makefile && echo FAIL && exit 1 || (cd .. && cd kubelab && python -m pytest toolkit -k cluster_operators -q)",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "tool-009-f3-agent-sandbox-vendored",
+    "behavior": "agent-sandbox v0.5.0rc1 is vendored at infra/k8s/cluster/agent-sandbox/manifest.yaml (CRD agents.x-k8s.io/v1beta1 + controller + RBAC + namespace), version-pinned and reproducible.",
+    "verification": "test -f infra/k8s/cluster/agent-sandbox/manifest.yaml && grep -q 'agents.x-k8s.io' infra/k8s/cluster/agent-sandbox/manifest.yaml && grep -q 'v1beta1' infra/k8s/cluster/agent-sandbox/manifest.yaml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "tool-009-f4-sync-operators",
+    "behavior": "make sync-operators (or extended sync-k8s-images) refreshes a vendored operator manifest deterministically from the SSOT-pinned version.",
+    "verification": "make sync-operators && git diff --exit-code infra/k8s/cluster/",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "tool-009-f5-staging-controller-ready",
+    "behavior": "After make deploy-k8s ENV=staging the agent-sandbox controller is Ready and the sandboxes.agents.x-k8s.io v1beta1 CRD is served on the staging cluster.",
+    "verification": "KUBECONFIG=~/.kube/kubelab-staging-config kubectl get crd sandboxes.agents.x-k8s.io -o jsonpath='{.spec.versions[*].name}' | grep -qw v1beta1 && KUBECONFIG=~/.kube/kubelab-staging-config kubectl -n agent-sandbox-system rollout status deploy/agent-sandbox-controller --timeout=180s",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "tool-009-f6-iris-conformance",
+    "behavior": "iris SDD-034c Kubernetes adapter passes its conformance suite (Start/Stop/Status/Exec + sidecar) against the real staging cluster — the downstream validation this spec unblocks.",
+    "verification": "cd ~/Projects/iris && KUBECONFIG=~/.kube/kubelab-staging-config go test ./internal/runtime/k8s/ -run TestK8sConformance -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
