@@ -67,6 +67,7 @@ apps:
       site_domain: kubelab.live
       site_url: https://kubelab.live
 
+      version: 1.1.0
     blog:
       domain: blog.kubelab.live
 
