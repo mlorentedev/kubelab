@@ -76,7 +76,8 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     SecretMapping(
         name="n8n-secrets",
         keys={
-            "N8N_ENCRYPTION_KEY": "APPS_SERVICES_CORE_N8N_ENCRYPTION_KEY",
+            # n8n moved core -> automation (#670); env var prefix follows the new path
+            "N8N_ENCRYPTION_KEY": "APPS_SERVICES_AUTOMATION_N8N_ENCRYPTION_KEY",
         },
     ),
     SecretMapping(
