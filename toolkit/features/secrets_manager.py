@@ -317,10 +317,11 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("github-runner",),
         rotate_note="Re-provision ace2 (Ansible). Token must have repo + workflow scope.",
     ),
-    # Apprise notification gateway (NOTIFY-001, ADR-044). staging-only until the
-    # fabric is promoted to prod; broaden `envs` at promotion. Under Option B the
-    # bot-token / chat IDs are read at `secrets apply` time to render the Apprise
-    # routing table (kubelab.yml); n8n no longer holds Telegram creds.
+    # Apprise notification gateway (NOTIFY-001, ADR-044). Promoted to staging+prod.
+    # bot-token is shared (common SOPS); chat IDs are per-env (dedicated Telegram
+    # channels per environment so prod alerts stay separate from staging). Under
+    # Option B the bot-token / chat IDs are read at `secrets apply` time to render
+    # the Apprise routing table (kubelab.yml); n8n no longer holds Telegram creds.
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.bot_token",
         description="Telegram bot token for the Apprise notification gateway",
@@ -328,7 +329,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("apprise",),
         format_hint="<bot_id>:<auth_token> from @BotFather",
         rotate_note="Re-issue via @BotFather, then `secrets apply` (re-renders kubelab.yml). No pod restart needed.",
-        envs=("staging",),
+        envs=("staging", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.chat_page",
@@ -337,7 +338,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("apprise",),
         format_hint="-100… channel ID (dedicated, not the hermes chat — ADR-044 C5)",
         rotate_note="Update the PAGE channel, then `secrets apply` (re-renders kubelab.yml).",
-        envs=("staging",),
+        envs=("staging", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.chat_log",
@@ -346,7 +347,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("apprise",),
         format_hint="-100… channel ID (archive tier; kubelab_bot admin — ADR-044 C4/C5)",
         rotate_note="Update the LOG channel, then `secrets apply` (re-renders kubelab.yml).",
-        envs=("staging",),
+        envs=("staging", "prod"),
     ),
     # Shared secret for the n8n /webhook/notify ingress (NOTIFY-001 criterion #4).
     # Lives in the n8n encrypted credential store (Header Auth, ADR-044 webhook-auth);
