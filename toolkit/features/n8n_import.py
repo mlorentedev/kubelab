@@ -80,6 +80,7 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
         workflow_path=Path("infra/n8n/workflows/notify-router.json"),
         secret_key_path="apps.services.automation.notify.webhook_secret",
         credential_name="notify-webhook",
+        envs=frozenset({"staging", "prod"}),
     ),
 ]
 

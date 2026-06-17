@@ -360,7 +360,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("n8n",),
         format_hint="opaque bearer token; sources send 'Authorization: Bearer <token>'",
         rotate_note="Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source.",
-        envs=("staging",),
+        envs=("staging", "prod"),
     ),
     # =========================================================================
     # Platform API (external — user-provided credentials)
