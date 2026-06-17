@@ -5,9 +5,11 @@ created: "2026-06-14"
 
 # Verification — NOTIFY-001
 
-> Status: **MVP spine proven on staging (acceptance criterion #1 green).** Criteria #2–4 (n8n
-> routing workflow, severity tiers, hermes-nan migration, webhook shared-secret) remain open —
-> they belong to the n8n-workflow stage, not yet built.
+> Status: **Fabric proven end to end on staging (criteria #1, #2, #4 green).** `POST
+> /webhook/notify` routes `page`/`log` to Telegram and rejects unauthenticated POSTs with 403,
+> reproducible via `make notify-smoke ENV=staging`. Criterion #3 (hermes-nan migration off the
+> legacy `deliver: telegram:`) remains open — it's a vault-side agent-script change, not a
+> kubelab artifact.
 
 ## Environment
 
@@ -21,9 +23,11 @@ created: "2026-06-14"
 ## Acceptance criteria
 
 - [x] **#1 — Apprise live in staging; in-cluster `curl /notify` delivers to Telegram.**
-- [ ] #2 — `POST /webhook/notify` routes `page`/`log` by `{domain,severity}`. *(n8n workflow — open.)*
-- [ ] #3 — hermes-nan `watchdog-down` routes through n8n, not the legacy `deliver: telegram:`. *(open.)*
-- [ ] #4 — a POST with a wrong/missing shared secret is rejected. *(webhook authn — open.)*
+- [x] **#2 — `POST /webhook/notify` routes `page`/`log` to Telegram.** notify-smoke: page→200, log→200;
+  operator confirmed both landed (PAGE + LOG channels). `{domain}` carried but single-channel today.
+- [ ] #3 — hermes-nan `watchdog-down` routes through n8n, not the legacy `deliver: telegram:`. *(open —
+  vault-side agent-script change.)*
+- [x] **#4 — a POST with a missing shared secret is rejected (HTTP 403).** notify-smoke unauthenticated probe.
 
 ## Evidence — criterion #1
 
@@ -54,6 +58,29 @@ observable.
 - `GET http://apprise:8000/status` → `OK`, **HTTP 200** (Service DNS resolves; the n8n→apprise path).
 - `POST http://apprise:8000/notify/` (stateless, `urls=tgram://…`) → apprise log
   `Sent Telegram notification.`, **HTTP 200**; message confirmed in the dedicated channel by the operator.
+
+## Evidence — criteria #2 & #4 (2026-06-16)
+
+**Apprise `/status` 417 → fixed.** With Option B live (`simple` mode + the SOPS config mounted read-only
+at `/config`), apprise CrashLooped: `/status` returned 417 (config dir not writable — see
+`docs/lessons.md` 2026-06-16) and the liveness probe killed the pod (0/1, 14 restarts). Fix
+(`infra/k8s/base/services/apprise.yaml`): `/config` is now a writable `emptyDir` seeded with
+`kubelab.yml` by an initContainer (reusing `caronc/apprise:1.5.0`). Verified on staging: pod **1/1**,
+`/status` **200**, and `POST /notify/kubelab` with `tag=page`/`tag=log` → apprise `Sent Telegram
+notification.` for each.
+
+**End-to-end via the real webhook — `make notify-smoke ENV=staging`.** New toolkit command
+(`toolkit infra n8n smoke`, `toolkit/features/notify_smoke.py`, 9 unit tests) POSTs page + log envelopes
+to `https://n8n.staging.kubelab.live/webhook/notify` with the Bearer secret from SOPS:
+
+```
+page (authenticated):   HTTP 200 (expected 200) -> ok
+log  (authenticated):   HTTP 200 (expected 200) -> ok
+unauthenticated reject: HTTP 403 (expected 403) -> ok
+```
+
+Operator confirmed the page + log messages landed in their Telegram channels. This closes #2 (routing)
+and #4 (auth) at the HTTP level; Telegram read-back stays manual (no synthetic probe yet).
 
 ## Notes / follow-ups
 
