@@ -45,6 +45,24 @@ spec:
         app.kubernetes.io/part-of: kubelab
     spec:
       enableServiceLinks: false
+      # apprise-api's /status healthcheck write-tests THREE dirs: APPRISE_CONFIG_DIR
+      # (/config), APPRISE_ATTACH_DIR, and APPRISE_STORAGE_DIR (/config/store). Any
+      # non-writable dir yields a *_PERMISSION_ISSUE and drops "OK" from the response
+      # → HTTP 417 → the liveness probe kills the pod (CrashLoop). The routing table
+      # is rendered from SOPS, so /config cannot be a read-only Secret mount. Instead
+      # /config is a writable emptyDir that this initContainer seeds with kubelab.yml
+      # copied out of the read-only apprise-secrets Secret. Reuses the app image so we
+      # add no extra pin to the image SSOT (sync_k8s_images IMAGE_SOURCES).
+      initContainers:
+        - name: seed-config
+          image: caronc/apprise:1.5.0
+          command: ["sh", "-c", "cp /seed/kubelab.yml /config/kubelab.yml"]
+          volumeMounts:
+            - name: routing-config
+              mountPath: /seed
+              readOnly: true
+            - name: config-dir
+              mountPath: /config
       containers:
         - name: apprise
           image: caronc/apprise:1.5.0
@@ -56,16 +74,12 @@ spec:
             - configMapRef:
                 name: apprise-config
           volumeMounts:
-            # Routing table (tag → tgram URL), rendered from SOPS into kubelab.yml.
-            # simple mode reads /config/{KEY}.yml → POST /notify/kubelab resolves tags.
-            - name: routing-config
+            # Writable config dir (seeded with kubelab.yml by the initContainer).
+            # simple mode reads /config/{KEY}.yml → POST /notify/kubelab resolves tags;
+            # the healthcheck's write-test on /config now passes (CONFIG_OK).
+            - name: config-dir
               mountPath: /config
-              readOnly: true
-            # Apprise's stateful store lives at /config/store, but the read-only
-            # Secret mount above makes /config unwritable → storage init fails,
-            # apprise falls back to MEMORY mode and /status returns 417, so the
-            # readiness probe never passes. Give the store its own writable
-            # emptyDir (nested mount) — ephemeral is fine for an egress muxer.
+            # Stateful store (STORE_OK). Ephemeral is fine for an egress muxer.
             - name: apprise-store
               mountPath: /config/store
           livenessProbe:
@@ -94,11 +108,16 @@ spec:
               memory: 96Mi
               cpu: "0.1"
       volumes:
+        # Read-only source for the initContainer only: apprise-secrets carries a
+        # single key, kubelab.yml (the SOPS-rendered routing table).
         - name: routing-config
           secret:
-            # apprise-secrets carries a single key, kubelab.yml (the rendered
-            # routing table); mounted read-only as /config/kubelab.yml.
             secretName: apprise-secrets
+        # Writable /config so apprise-api's /status write-test passes; seeded with
+        # kubelab.yml by the initContainer. Ephemeral — the config is reconstructed
+        # from SOPS on every (re)deploy.
+        - name: config-dir
+          emptyDir: {}
         - name: apprise-store
           emptyDir: {}
 ---
