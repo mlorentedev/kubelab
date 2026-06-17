@@ -66,12 +66,19 @@ headscale_app = typer.Typer(
     no_args_is_help=True,
 )
 
+n8n_app = typer.Typer(
+    name="n8n",
+    help="n8n workflow import (TOOL-009) + notification-fabric smoke (NOTIFY-001)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
 app.add_typer(backup_app, name="backup")
 app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
+app.add_typer(n8n_app, name="n8n")
 
 
 @headscale_app.command("policy-check")
@@ -128,6 +135,66 @@ def argo_set_revision(
     logger.info(f"targetRevision: {result.old_revision} → {result.new_revision}")
     logger.info(f"sync status: {result.sync_status}")
     logger.success("Application patched")
+
+
+# =============================================================================
+# N8N COMMANDS
+# =============================================================================
+
+
+@n8n_app.command("import")
+def n8n_import(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Render plan only, do not exec into the pod")] = False,
+) -> None:
+    """Reconstruct the n8n workflow + Header Auth credential from Git + SOPS (TOOL-009).
+
+    Reads N8N_IMPORT_CATALOG (toolkit/features/n8n_import.py): for each workflow
+    targeting the env, decrypts the webhook secret, renders the credential, and
+    pipes it into the n8n pod via /dev/shm (never persistent disk, never argv),
+    then imports the workflow and activates it. Idempotent upsert (fixed ids).
+    Workflows whose `envs` excludes the target are skipped (successful no-op).
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    validate_environment_config(env)
+
+    from toolkit.features.n8n_import import import_n8n_workflow
+
+    if not import_n8n_workflow(env, settings.project_root, dry_run=dry_run):
+        raise typer.Exit(1)
+
+
+@n8n_app.command("smoke")
+def n8n_smoke(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    verify_tls: Annotated[
+        bool,
+        typer.Option(
+            "--verify-tls/--no-verify-tls",
+            help="Verify the webhook TLS cert (off by default: staging is VPN-only, self-signed)",
+        ),
+    ] = False,
+) -> None:
+    """Smoke-test the notification fabric end to end (NOTIFY-001).
+
+    POSTs page + log envelopes to the real n8n webhook with the Bearer secret from
+    SOPS and asserts each is accepted (HTTP 200), plus that an unauthenticated POST
+    is rejected (HTTP 403). A 200 means n8n routed it and apprise accepted delivery
+    — confirm the messages landed in Telegram. Staging-only today.
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    validate_environment_config(env)
+
+    from toolkit.features.notify_smoke import run_notify_smoke
+
+    if not run_notify_smoke(env, settings.project_root, verify_tls=verify_tls):
+        raise typer.Exit(1)
 
 
 # =============================================================================
