@@ -795,6 +795,15 @@ import-n8n:
 	@test -n "$(ENV)" || (echo "Usage: make import-n8n ENV=staging" && exit 1)
 	@$(TOOLKIT) infra n8n import --env $(ENV)
 
+# End-to-end smoke of the notification fabric (NOTIFY-001): POSTs page + log
+# envelopes to the real n8n webhook with the Bearer secret from SOPS, asserts
+# HTTP 200 (routed + delivered) and that an unauthenticated POST is rejected
+# (403). Confirm the messages land in Telegram. Staging-only today.
+.PHONY: notify-smoke
+notify-smoke:
+	@test -n "$(ENV)" || (echo "Usage: make notify-smoke ENV=staging" && exit 1)
+	@$(TOOLKIT) infra n8n smoke --env $(ENV)
+
 .PHONY: flush-sessions
 flush-sessions:
 	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
