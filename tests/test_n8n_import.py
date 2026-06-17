@@ -98,10 +98,11 @@ class TestImportCatalog:
         assert spec.secret_key_path == _SECRET_KEY
         assert spec.workflow_path == Path("infra/n8n/workflows/notify-router.json")
 
-    def test_notify_is_staging_only_for_mvp(self) -> None:
+    def test_notify_targets_staging_and_prod(self) -> None:
         spec = next(s for s in N8N_IMPORT_CATALOG if s.credential_name == "notify-webhook")
         assert "staging" in spec.envs
-        assert "prod" not in spec.envs, "NOTIFY-001 MVP is staging-only (webhook_secret is staging-only)"
+        assert "prod" in spec.envs, "NOTIFY-001 promoted to prod (webhook_secret is staging+prod)"
+        assert "dev" not in spec.envs
 
     def test_spec_is_frozen(self) -> None:
         spec = N8N_IMPORT_CATALOG[0]
@@ -232,7 +233,7 @@ class TestImportN8nWorkflow:
 
     def test_skips_when_env_out_of_scope(self, fake_project: Path) -> None:
         run = _mock_kubectl()
-        ok = self._run(fake_project, _SOPS_OK, run, env="prod")
+        ok = self._run(fake_project, _SOPS_OK, run, env="dev")
         assert ok is True, "out-of-scope env is a successful no-op"
         assert run.call_count == 0
 
