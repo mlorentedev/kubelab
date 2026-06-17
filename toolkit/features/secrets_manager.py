@@ -269,7 +269,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # N8N
     # =========================================================================
     SecretSpec(
-        key_path="apps.services.core.n8n.encryption_key",
+        key_path="apps.services.automation.n8n.encryption_key",
         description="N8N credential encryption key",
         kind=SecretKind.RANDOM_HEX,
         length=32,
