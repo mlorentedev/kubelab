@@ -562,7 +562,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "n8n workflow automation health (prod). SSOT: apps.services.core.n8n.domain + health_path.",
+    "description": "n8n workflow automation health (prod). SSOT: apps.services.automation.n8n.domain + health_path.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
@@ -794,7 +794,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "n8n workflow automation health (staging). VPN-only. SSOT: apps.services.core.n8n.health_path.",
+    "description": "n8n workflow automation health (staging). VPN-only. SSOT: apps.services.automation.n8n.health_path.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,

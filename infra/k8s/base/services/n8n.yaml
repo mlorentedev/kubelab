@@ -25,7 +25,7 @@ metadata:
     app.kubernetes.io/component: core
     app.kubernetes.io/part-of: kubelab
 data:
-  # Domain from: apps.services.core.n8n.domain (staging.yaml)
+  # Domain from: apps.services.automation.n8n.domain (staging.yaml)
   N8N_HOST: "n8n.staging.kubelab.live"
   N8N_PROTOCOL: "https"
   WEBHOOK_URL: "https://n8n.staging.kubelab.live/"
