@@ -4,6 +4,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -19,6 +20,7 @@ from toolkit.features.argo_manager import (
 from toolkit.features.argo_manager import (
     set_revision as argo_set_revision_feature,
 )
+from toolkit.features.k8s_render import BootstrapEntry, render_and_apply
 from toolkit.features.validation import (
     confirm_dangerous_operation,
     validate_environment_config,
@@ -395,10 +397,98 @@ def _generate_k8s_manifests(env: str) -> bool:
     return True
 
 
-def _get_traefik_config_path() -> str | None:
-    """Return path to traefik-config.yaml if it exists (applied outside Kustomize)."""
-    path = settings.project_root / PATH_STRUCTURES.K8S_BASE_DIR / "traefik-config.yaml"
-    return str(path) if path.exists() else None
+def _load_cluster_bootstrap() -> list[BootstrapEntry]:
+    """Load the cluster_bootstrap SSOT (ADR-047 / TOOL-009) from common.yaml.
+
+    These are cluster-scoped foundations (CRDs, controllers, kube-system config)
+    applied OUTSIDE the Argo CD overlay — the spoke RBAC is least-privilege and
+    cannot create them (ADR-041). File order is preserved (stable apply order).
+    """
+    common_path = settings.project_root / "infra" / "config" / "values" / "common.yaml"
+    with open(common_path) as f:
+        config = yaml.safe_load(f)
+    return [BootstrapEntry.from_dict(entry) for entry in config.get("cluster_bootstrap", [])]
+
+
+def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
+    """Render + (validate or apply) every cluster_bootstrap entry, in declared order.
+
+    Shared by `k8s deploy` (step 3), `k8s dry-run`, and `k8s bootstrap`. Returns False on
+    the first hard failure (an `optional` entry whose render target is unreachable is a
+    logged skip, not a failure — see render_and_apply).
+    """
+    for entry in _load_cluster_bootstrap():
+        verb = "Validating" if dry_run else "Applying"
+        logger.info(f"{verb} cluster_bootstrap '{entry.name}' (ns: {entry.namespace})...")
+        if not render_and_apply(entry, kubeconfig=kubeconfig, project_root=settings.project_root, dry_run=dry_run):
+            logger.error(f"cluster_bootstrap {'dry-run' if dry_run else 'apply'} failed: {entry.name}")
+            return False
+    return True
+
+
+@k8s_app.command("bootstrap")
+def k8s_bootstrap(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate only, do not apply")] = False,
+) -> None:
+    """Apply ONLY the cluster-wide bootstrap layer (cluster_bootstrap SSOT) — ADR-047 / TOOL-009.
+
+    Installs cluster-scoped foundations (CRDs, controllers, kube-system config) that live
+    OUTSIDE the Argo CD overlay, without touching namespaced workloads — useful to land a
+    new operator (e.g. agent-sandbox) independently of a full `k8s deploy`.
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    logger.section(f"K8s Cluster Bootstrap - {env.upper()}")
+    env_config = validate_environment_config(env)
+    if not dry_run:
+        confirm_dangerous_operation(env_config, "Apply cluster-wide bootstrap layer")
+
+    kubeconfig = _get_kubeconfig(env)
+    if not _apply_cluster_bootstrap(kubeconfig, dry_run=dry_run):
+        raise typer.Exit(1)
+    logger.success("cluster_bootstrap complete")
+
+
+@k8s_app.command("render-apply")
+def k8s_render_apply(
+    manifest: Annotated[str, typer.Option("--manifest", "-m", help="Repo-relative manifest path")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment (selects kubeconfig)")],
+    render: Annotated[
+        list[str] | None,
+        typer.Option("--render", help="RESOLVE_*=magicdns-host (repeatable)"),
+    ] = None,
+    optional: Annotated[
+        bool, typer.Option("--optional", help="Skip (don't fail) if a render target is unreachable")
+    ] = False,
+) -> None:
+    """Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply.
+
+    Toolkit replacement for the inline `dig | sed | kubectl` Makefile pattern
+    (ADR-047 D3 / TOOL-009 T4) — used for the aws1 (argocd) EndpointSlice whose
+    Tailscale IP rotates on Spot replacement (ADR-025). Cluster-wide bootstrap
+    resources go through `cluster_bootstrap` + `k8s deploy` instead.
+    """
+    render_map: dict[str, str] = {}
+    for item in render or []:
+        key, sep, host = item.partition("=")
+        if not sep or not key or not host:
+            logger.error(f"--render must be KEY=host, got: {item!r}")
+            raise typer.Exit(2)
+        render_map[key] = host
+
+    entry = BootstrapEntry(
+        name=Path(manifest).stem,
+        namespace="",
+        manifest=manifest,
+        optional=optional,
+        render=render_map,
+    )
+    kubeconfig = _get_kubeconfig(env)
+    if not render_and_apply(entry, kubeconfig=kubeconfig, project_root=settings.project_root):
+        raise typer.Exit(1)
 
 
 @k8s_app.command("apply-secrets")
@@ -490,14 +580,13 @@ def k8s_deploy(
         raise typer.Exit(1)
     logger.success("Dry-run passed")
 
-    # 3. Apply cluster-wide resources (outside Kustomize namespace override)
-    traefik_cfg = _get_traefik_config_path()
-    if traefik_cfg:
-        logger.info("Applying Traefik config to kube-system...")
-        tc_result = command.run(f"{kctl} apply -f {traefik_cfg}", check=False)
-        if tc_result.returncode != 0:
-            logger.error(f"Traefik config apply failed:\n{tc_result.stderr}")
-            raise typer.Exit(1)
+    # 3. Apply the cluster-wide bootstrap layer (outside the Kustomize namespace
+    #    override). Least-privilege spoke RBAC cannot create CRDs / cluster-scoped
+    #    resources (ADR-041), so they are applied imperatively via the shared
+    #    render-and-apply primitive driven by the cluster_bootstrap SSOT
+    #    (ADR-047 / TOOL-009) — no hardcoded per-component branches.
+    if not _apply_cluster_bootstrap(kubeconfig, dry_run=False):
+        raise typer.Exit(1)
 
     # 4. Apply namespace-scoped manifests
     logger.info("Applying manifests...")
@@ -544,18 +633,10 @@ def k8s_dry_run(
         logger.error(f"Overlay directory not found: {overlay_dir}")
         raise typer.Exit(1)
 
-    # Dry-run cluster-wide resources
-    traefik_cfg = _get_traefik_config_path()
-    if traefik_cfg:
-        logger.info("Validating Traefik config (kube-system)...")
-        tc_result = command.run(
-            f"{kctl} apply --dry-run=client -f {traefik_cfg}",
-            check=False,
-        )
-        if tc_result.returncode != 0:
-            logger.error(f"Traefik config dry-run failed:\n{tc_result.stderr}")
-            raise typer.Exit(1)
-        logger.console.print(tc_result.stdout)
+    # Dry-run the cluster-wide bootstrap layer (ADR-047 / TOOL-009). Server-side
+    # dry-run validates each rendered manifest against the live API.
+    if not _apply_cluster_bootstrap(kubeconfig, dry_run=True):
+        raise typer.Exit(1)
 
     # Dry-run namespace-scoped resources
     logger.info("Running dry-run validation...")

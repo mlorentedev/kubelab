@@ -241,6 +241,22 @@ def images(
 
 
 @app.command()
+def operators(
+    check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
+) -> None:
+    """Refresh vendored cluster_bootstrap operator manifests from their SSOT version (ADR-047)."""
+    from toolkit.scripts import sync_operators
+
+    if check:
+        if not _run_with_check(sync_operators.output_files(), sync_operators.main, "operators"):
+            raise typer.Exit(1)
+    else:
+        result = sync_operators.main()
+        if result != 0:
+            raise typer.Exit(result)
+
+
+@app.command()
 def oidc(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,

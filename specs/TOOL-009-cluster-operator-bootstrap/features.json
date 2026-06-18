@@ -1,15 +1,15 @@
 [
   {
-    "id": "tool-009-f1-ssot-cluster-operators",
-    "behavior": "infra/config/values/common.yaml declares a cluster_operators list ({name,namespace,version,manifest}) with agent-sandbox v0.5.0rc1, traefik-config and coredns migrated in; it is the single source of truth for cluster-wide component versions.",
-    "verification": "toolkit config validate && python3 -c \"import yaml,sys; d=yaml.safe_load(open('infra/config/values/common.yaml')); ops={o['name'] for o in d['cluster_operators']}; sys.exit(0 if {'agent-sandbox','traefik-config','coredns'} <= ops else 1)\"",
+    "id": "tool-009-f1-ssot-cluster-bootstrap",
+    "behavior": "infra/config/values/common.yaml declares a top-level cluster_bootstrap list. Each entry has {name,namespace,manifest} plus optional {version,render,optional}. It seeds agent-sandbox (version v0.5.0rc1) and coredns-custom (render RESOLVE_RPI4_TAILSCALE_IP, optional:true). It is the single source of truth for cluster-wide component versions/render maps. (traefik is NOT present: its old branch was dead code, removed.)",
+    "verification": "toolkit config validate && python3 -c \"import yaml,sys; d=yaml.safe_load(open('infra/config/values/common.yaml')); ops={o['name'] for o in d['cluster_bootstrap']}; sys.exit(0 if {'agent-sandbox','coredns-custom'} <= ops else 1)\"",
     "state": "pending",
     "evidence": ""
   },
   {
-    "id": "tool-009-f2-generalized-apply",
-    "behavior": "toolkit infra k8s deploy applies every cluster_operators entry via kubectl apply --server-side (dry-run validated, per-operator logging), with no hardcoded per-component branches left in infra.py or the Makefile.",
-    "verification": "grep -RqE \"_get_traefik_config_path|coredns-custom.yaml | kubectl apply\" toolkit/ Makefile && echo FAIL && exit 1 || (cd .. && cd kubelab && python -m pytest toolkit -k cluster_operators -q)",
+    "id": "tool-009-f2-render-primitive-no-inline-shell",
+    "behavior": "A reusable toolkit primitive resolves RESOLVE_* placeholders via MagicDNS, substitutes in-memory, dry-runs server-side, then applies. The dead _get_traefik_config_path() is deleted and no RESOLVE_*-substitution shell remains in the Makefile (coredns/rpi4, uptime-kuma/rpi3, argocd/aws1 all migrated).",
+    "verification": "! grep -Rq '_get_traefik_config_path' toolkit/ && ! grep -Eq 's/RESOLVE_|RESOLVE_[A-Z0-9_]+/\\\\$' Makefile && python -m pytest toolkit -k 'render or cluster_bootstrap' -q",
     "state": "pending",
     "evidence": ""
   },
@@ -22,7 +22,7 @@
   },
   {
     "id": "tool-009-f4-sync-operators",
-    "behavior": "make sync-operators (or extended sync-k8s-images) refreshes a vendored operator manifest deterministically from the SSOT-pinned version.",
+    "behavior": "make sync-operators refreshes a vendored operator manifest deterministically from the SSOT-pinned version, for cluster_bootstrap entries that have a version (config entries like coredns are skipped).",
     "verification": "make sync-operators && git diff --exit-code infra/k8s/cluster/",
     "state": "pending",
     "evidence": ""

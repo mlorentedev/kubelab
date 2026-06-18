@@ -1542,7 +1542,7 @@ table inet nat {
 2. Service mesh (Istio/Linkerd) — rejected: ~2GB RAM overhead, overkill for 12 services on single node
 3. **CoreDNS `forward` to RPi4 (100.64.0.10)** — chosen: reuses existing DNS infra, zero hardcoding, one line per zone
 
-**Solution:** K3s `coredns-custom` ConfigMap forwards staging zones to RPi4 CoreDNS. Applied via `make deploy-k8s` (separate kubectl step, kube-system namespace outside Kustomize overlay).
+**Solution:** K3s `coredns-custom` ConfigMap forwards staging zones to RPi4 CoreDNS. Applied via `make deploy-k8s` through the `cluster_bootstrap` layer (ADR-047/TOOL-009, 2026-06-17): the toolkit renders the `RESOLVE_RPI4_TAILSCALE_IP` placeholder via MagicDNS and server-side applies it outside the Kustomize overlay. (Previously a hand-rolled `dig|sed|kubectl` step in the now-removed `deploy-external` target.)
 
 **Rule:** For K8s hairpin DNS, prefer forwarding to existing authoritative DNS over rewriting to ClusterIPs. ClusterIPs are dynamic; DNS infrastructure is stable. Service mesh only when >50 services or multi-cluster.
 **Tags:** `#k8s` `#coredns` `#dns` `#oidc` `#hairpin` `#rpi4`

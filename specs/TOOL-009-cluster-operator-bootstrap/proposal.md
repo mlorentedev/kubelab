@@ -1,10 +1,10 @@
 ---
 id: "TOOL-009-cluster-operator-bootstrap"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-06-16"
-issue: "TBD — create bitácora item (mlorentedev/knowledge#NNN)"
-tags: [spec, proposal, toolkit, k8s, bootstrap, operators, ssot, argocd, draft]
+issue: "mlorentedev/knowledge#118"
+tags: [spec, proposal, toolkit, k8s, bootstrap, operators, ssot, argocd]
 template_version: "1.0"
 ---
 
@@ -30,14 +30,25 @@ ADR-047, *without* changing the (correct, least-privilege) architecture.
 
 ## What
 
-1. **SSOT declaration** — add `cluster_operators:` to `infra/config/values/common.yaml`, each entry
-   pinning `{ name, namespace, version, manifest }` (path to a vendored, version-pinned manifest under
-   `infra/k8s/cluster/<name>/`). Versions live in SSOT exactly like image tags do.
-2. **Generalized apply** — replace `_get_traefik_config_path()` with a loop over `cluster_operators`
-   in `toolkit infra k8s deploy` step 3: `kubectl apply --server-side -f <vendored manifest>` for each,
-   with dry-run validation and clear per-operator logging. Idempotent and order-stable.
-3. **Migrate existing cases** — fold `traefik-config` and `coredns-custom` into `cluster_operators`
-   so the abstraction is proven on what already exists (no behavior change for them).
+> **Premise correction (2026-06-17 code + vault audit).** The original draft said "two static
+> special-cases (traefik + coredns)". Reality: the `_get_traefik_config_path()` branch is **dead code**
+> (its file was removed in ADR-020 Ph3; HelmChartConfig is now Ansible-managed), and `coredns-custom`
+> lives in `make deploy-external` with a `RESOLVE_RPI4_TAILSCALE_IP` placeholder resolved at deploy time
+> via MagicDNS (ADR-025). The same `RESOLVE_*` pattern recurs inline in **3** Makefile sites. So this
+> spec kills *inline shell*, not "static special-cases".
+
+1. **SSOT declaration** — add a top-level `cluster_bootstrap:` list to `infra/config/values/common.yaml`,
+   each entry `{ name, namespace, manifest }` + optional `{ version, render, optional }` (vendored,
+   version-pinned manifests under `infra/k8s/cluster/<name>/`). `version` only for *versioned* operators;
+   `render` is a `RESOLVE_*`→MagicDNS-name map; `optional` skips on unresolvable target. Key named
+   `cluster_bootstrap` (owner decision) because the list mixes operators + cluster config.
+2. **Render primitive** — `render_and_apply(manifest, render_map, kubeconfig, *, optional, server_side)`:
+   resolve `RESOLVE_*` via MagicDNS, substitute in-memory, `--dry-run=server`, apply. Idempotent,
+   order-stable, per-operator logging. `toolkit infra k8s deploy` step 3 loops `cluster_bootstrap`
+   through it (replacing the dead `_get_traefik_config_path()`, which is **deleted**).
+3. **Migrate all 3 inline sites** — coredns/rpi4 (`Makefile:473`), uptime-kuma/rpi3 (`Makefile:469`),
+   argocd/aws1 (`Makefile:432`) move off inline `dig | sed | kubectl` onto the render primitive
+   (owner decision: all 3 in this PR). The Makefile keeps no deploy-time substitution shell.
 4. **agent-sandbox as first operator** — vendor `agent-sandbox` `v0.5.0rc1` (`agents.x-k8s.io/v1beta1`,
    image `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v0.5.0rc1`); declare it in the list.
 5. **Version-bump path** — a `make sync-operators` (or extend `sync-k8s-images`) target that refreshes
@@ -69,16 +80,17 @@ ADR-047, *without* changing the (correct, least-privilege) architecture.
 
 ## Acceptance criteria
 
-- [ ] `cluster_operators:` exists in `common.yaml` with `traefik-config`, `coredns`, and
-      `agent-sandbox` entries; versions are the SSOT.
-- [ ] `toolkit infra k8s deploy --env staging` applies every `cluster_operators` entry (server-side),
-      dry-run-validated, with no hardcoded per-component branches left in `infra.py`/Makefile.
+- [ ] `cluster_bootstrap:` exists in `common.yaml` with `agent-sandbox` (versioned) and `coredns-custom`
+      (render + optional) entries; versions/render maps are the SSOT.
+- [ ] `toolkit infra k8s deploy --env staging` applies every `cluster_bootstrap` entry (server-side),
+      dry-run-validated, with the dead `_get_traefik_config_path()` removed and no `RESOLVE_*`
+      substitution shell left in the Makefile (all 3 sites on the render primitive).
 - [ ] agent-sandbox `sandboxes.agents.x-k8s.io` CRD (v1beta1) + controller are Ready in
       `agent-sandbox-system` after `make deploy-k8s ENV=staging`.
-- [ ] `make sync-operators` (or equivalent) refreshes a vendored manifest from the SSOT version.
+- [ ] `make sync-operators` refreshes a vendored manifest from the SSOT version (versioned entries only).
 - [ ] iris `go test ./internal/runtime/k8s/ -run TestK8sConformance` passes against staging
       (Start/Stop/Status/Exec + sidecar) — the SDD-034c validation.
-- [ ] Toolkit unit tests cover the `cluster_operators` apply loop and pass via `make test`.
+- [ ] Toolkit unit tests cover the render primitive + the `cluster_bootstrap` apply loop and pass via `make test`.
 
 ## References
 
