@@ -74,11 +74,12 @@ apps:
     core:
       traefik:
         domain: traefik.kubelab.test
+      gitea:
+        domain: gitea.kubelab.test
+    automation:
       n8n:
         domain: n8n.kubelab.test
         encryption_key: "dev-n8n-encryption-key-32chars!!"
-      gitea:
-        domain: gitea.kubelab.test
     data:
       minio:
         domain: minio.kubelab.test

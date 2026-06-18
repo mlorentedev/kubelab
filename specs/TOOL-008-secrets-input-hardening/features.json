@@ -1,0 +1,44 @@
+[
+  {
+    "id": "TOOL-008-secrets-input-hardening-f1",
+    "behavior": "secrets set --stdin reads a value starting with '-' from stdin and stores it verbatim (Telegram chat ID), newline stripped",
+    "verification": "poetry run pytest tests/test_secrets_input_hardening.py::TestSecretsSetStdin::test_stdin_value_with_leading_dash -q --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-008-secrets-input-hardening-f2",
+    "behavior": "secrets set given both a positional VALUE and --stdin errors clearly and does not write",
+    "verification": "poetry run pytest tests/test_secrets_input_hardening.py::TestSecretsSetStdin::test_both_value_and_stdin_is_error -q --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-008-secrets-input-hardening-f3",
+    "behavior": "secrets set --stdin with empty stdin errors instead of storing an empty secret",
+    "verification": "poetry run pytest tests/test_secrets_input_hardening.py::TestSecretsSetStdin::test_empty_stdin_is_error -q --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-008-secrets-input-hardening-f4",
+    "behavior": "secrets init is idempotent: it skips existing secrets and generates only the missing ones",
+    "verification": "poetry run pytest tests/test_secrets_input_hardening.py::TestInitIdempotent::test_skips_existing_generates_missing -q --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-008-secrets-input-hardening-f5",
+    "behavior": "secrets init --force regenerates all machine-generable secrets; --rotate KEY regenerates only the named key",
+    "verification": "poetry run pytest tests/test_secrets_input_hardening.py::TestInitIdempotent -k 'force or rotate_targets' -q --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-008-secrets-input-hardening-f6",
+    "behavior": "secrets init --rotate rejects unknown keys and non-machine-generable keys with a clear error (empty result)",
+    "verification": "poetry run pytest tests/test_secrets_input_hardening.py::TestInitIdempotent -k 'rotate_unknown or rotate_non_machine' -q --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  }
+]
