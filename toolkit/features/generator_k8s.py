@@ -7,6 +7,7 @@ from toolkit.core.logging import logger
 from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
+from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
 
 
 class K8sGenerator(BaseGenerator):
@@ -215,8 +216,8 @@ class K8sGenerator(BaseGenerator):
             app_env_vars = self._extract_app_env_vars(env_vars, component)
             app_env_vars["ENVIRONMENT"] = env
 
-            # Check if app has secret-pattern vars (needs a K8s Secret)
-            has_secrets = self._has_secret_vars(env_vars, component)
+            # Mount <app>-secrets iff one is defined in the secrets SSOT.
+            has_secrets = self._has_secret_vars(component)
 
             # Middleware list for IngressRoute
             middlewares = self._build_middlewares(env_vars, enable_auth)
@@ -300,29 +301,29 @@ class K8sGenerator(BaseGenerator):
 
         return result
 
-    def _has_secret_vars(self, env_vars: dict[str, str], component: str) -> bool:
-        """Check if a component has any secret-pattern environment variables.
+    def _has_secret_vars(self, component: str) -> bool:
+        """Whether a K8s Secret is defined for this component (→ mount it via envFrom).
+
+        The single source of truth for which secrets exist is SECRET_DEFINITIONS
+        (``k8s_secrets.py``). The deployment mounts ``<component>-secrets`` iff a
+        mapping of that name is registered there.
+
+        This deliberately replaces an env-var-pattern heuristic that was blind to
+        *shared* ``INFRA_*`` secrets: ``INFRA_SMTP_PASS`` lives under the ``INFRA_``
+        prefix, not ``APPS_PLATFORM_<COMPONENT>_``, so the heuristic returned False
+        for ``api`` and the deployment never referenced ``api-secrets`` — the
+        secret was provisioned but never injected, panicking images that require it
+        at boot. Tying the mount to the registry keeps provisioning and consumption
+        from silently diverging.
 
         Args:
-            env_vars: Flattened environment variables
             component: Component name
 
         Returns:
-            True if the component has vars matching SECRET_PATTERNS
+            True if a ``<component>-secrets`` mapping exists in SECRET_DEFINITIONS
         """
-        component_upper = component.upper().replace("-", "_")
-        prefix = f"APPS_PLATFORM_{component_upper}_"
-
-        for key in env_vars:
-            if not key.startswith(prefix):
-                continue
-            suffix = key[len(prefix) :]
-            if suffix in self._METADATA_SUFFIXES or suffix.startswith("RESOURCES_"):
-                continue
-            parts = suffix.split("_")
-            if any(part in VALIDATION_RULES.SECRET_PATTERNS for part in parts):
-                return True
-        return False
+        secret_name = f"{component}-secrets"
+        return any(mapping.name == secret_name for mapping in SECRET_DEFINITIONS)
 
     def _build_middlewares(self, env_vars: dict[str, str], enable_auth: bool) -> list[str]:
         """Build IngressRoute middleware list.

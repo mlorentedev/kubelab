@@ -112,8 +112,8 @@
             middlewares: [secure-headers@file, rate-limit@file, error-pages]
           # Core infrastructure services
           - name: n8n
-            domain: "{{ config.apps.services.core.n8n.domain }}"
-            backend_url: "http://n8n:{{ config.apps.services.core.n8n.default_port }}"
+            domain: "{{ config.apps.services.automation.n8n.domain }}"
+            backend_url: "http://n8n:{{ config.apps.services.automation.n8n.default_port }}"
             middlewares: [secure-headers@file, rate-limit@file, error-pages]
           # Observability
           - name: grafana

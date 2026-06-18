@@ -20,6 +20,17 @@ Accepted — 2026-06-14
 
 Extends and **supersedes the mechanism** of [ADR-037](adr-037-environment-promotion-strategy.md) "Pattern D — Image Tag Promotion". ADR-037's *goal* (staging auto-tracks, prod promoted by explicit PR) stands; its *assumed mechanism* (`argocd-image-updater`, tracked as the never-filed ARGO-014) is replaced by a CI-driven, controller-free design. ADR-037's reaffirmed decisions (trunk-based / Pattern A rejection; conditional selfHeal) are unchanged.
 
+## Amendment — 2026-06-15 (PR-per-update mechanism)
+
+Implementing D3/D4 surfaced a hard constraint: **`master` is fully protected** (`required_pull_request_reviews`, `enforce_admins: true`, required status checks) — nothing, not even an admin or CI, can push to it directly. The original D3 mechanism ("build on merge → commit the staging overlay bump to master") is therefore impossible.
+
+Resolution — **both lanes use one mechanism: promote-then-PR** (the industry "PR-per-update" pattern; keeps the protected single source of truth and runs required checks on every deploy):
+
+- **staging** — `staging-deploy.yml` (`on: push: master`, `paths: apps/**`) builds `sha-<short>` for each changed app, runs `toolkit deployment promote --env staging`, and **opens a PR** with the regenerated overlay. The human rubber-stamps it; Argo CD then syncs staging. The PR is opened with a PAT (`RELEASE_PLEASE_TOKEN`) so required checks fire (a `GITHUB_TOKEN`-opened PR would not trigger them). `paths: apps/**` stops the infra-only promotion PR from re-triggering the workflow.
+- **prod** — `promote-prod.yml` (`workflow_dispatch`) runs `toolkit deployment promote --env prod` and opens the PR on demand. The human reviews and merges.
+
+Both Argo Applications keep watching `master` — no rendered/deploy branch, no `targetRevision` change, no force-push to a protected branch. Rejected alternatives (rendered-manifests branch; `argocd-image-updater` `argocd` write-back) were viable but added a machine branch or in-cluster runtime; for a solo operator the per-deploy PR (self-reviewed for staging) is simpler and more auditable. The staging lane trades zero-touch continuity for one extra merge — accepted. Operational steps: `docs/runbooks/gitops-delivery-promotion.md`.
+
 ## Context
 
 ADR-037 (2026-05-23) decided the *what* of environment promotion but deferred the image-promotion *how* to "Pattern D", blocked on `argocd-image-updater` (ARGO-014). Pattern D never landed. A 2026-06-14 investigation found the interim state had drifted into a set of coupled defects:
