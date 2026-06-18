@@ -13,8 +13,10 @@ Single entry point for all secret operations:
 
 from __future__ import annotations
 
+import getpass
 import os
 import subprocess
+import sys
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -37,6 +39,17 @@ def _get_manager() -> SecretsManager:
     from toolkit.features.secrets_manager import secrets_manager
 
     return secrets_manager
+
+
+def _stdin_value() -> str:
+    """Read a secret value from stdin.
+
+    Interactive TTY → prompt once with hidden input (Enter submits; no Ctrl-D).
+    Piped (non-TTY) → read until EOF. A trailing newline is stripped either way.
+    """
+    if sys.stdin.isatty():
+        return getpass.getpass("Secret value (hidden, Enter to submit): ").rstrip("\r\n")
+    return sys.stdin.read().rstrip("\r\n")
 
 
 # =============================================================================
@@ -94,8 +107,20 @@ def edit(
 def init(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be generated")] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Regenerate ALL machine secrets, even existing ones"),
+    ] = False,
+    rotate: Annotated[
+        list[str] | None,
+        typer.Option("--rotate", help="Regenerate only the given key path(s); repeatable"),
+    ] = None,
 ) -> None:
-    """Generate all machine-generable secrets (random tokens, hex keys, RSA).
+    """Generate machine-generable secrets (random tokens, hex keys, RSA).
+
+    Idempotent by default: existing secrets are skipped, so it is safe to run on a
+    populated environment (fills only the gaps). Use `--force` to regenerate every
+    machine secret, or `--rotate KEY` to regenerate specific keys.
 
     Does NOT generate: passwords (use `toolkit credentials generate`),
     CrowdSec API keys (requires running container), or external API tokens.
@@ -106,7 +131,7 @@ def init(
     logger.section(f"Initialize Machine Secrets — {env.upper()}")
 
     mgr = _get_manager()
-    generated = mgr.init_machine_secrets(env, dry_run=dry_run)
+    generated = mgr.init_machine_secrets(env, dry_run=dry_run, force=force, rotate=rotate)
 
     if dry_run:
         logger.info(f"Would generate {len(generated)} secrets:")
@@ -306,18 +331,45 @@ def show(
 @app.command("set")
 def set_secret(
     key: Annotated[str, typer.Argument(help="Dot-separated key path (e.g., aws.access_key_id)")],
-    value: Annotated[str, typer.Argument(help="Secret value to store")],
+    value: Annotated[str | None, typer.Argument(help="Secret value to store (omit when using --stdin)")] = None,
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "common",
+    use_stdin: Annotated[
+        bool,
+        typer.Option(
+            "--stdin",
+            help="Read the value from stdin: prompts if interactive (Enter submits), reads the pipe otherwise",
+        ),
+    ] = False,
 ) -> None:
     """Set a secret value in the SOPS vault.
 
+    The value can be passed as an argument or supplied via --stdin. Use --stdin for
+    values that start with '-' (e.g. Telegram chat IDs) and to keep secrets out of
+    shell history and process args. On a terminal, --stdin prompts once with hidden
+    input (Enter submits — no Ctrl-D); piped, it reads until EOF:
+
+      toolkit secrets set <key> --env staging --stdin            # interactive prompt
+      printf -- '-1004…' | toolkit secrets set <key> --env staging --stdin   # piped
+
     Example:
       toolkit secrets set aws.access_key_id AKIA... --env common
-      toolkit secrets set apps.testing.authelia_test_password "pass" --env staging
+      printf %s "$TOKEN" | toolkit secrets set apps.x.token --env staging --stdin
     """
     valid_envs = ("common", "dev", "staging", "prod")
     if env not in valid_envs:
         logger.error(f"Invalid env: {env}. Must be one of: {', '.join(valid_envs)}")
+        raise typer.Exit(1)
+
+    if use_stdin and value is not None:
+        logger.error("Pass the value as an argument OR via --stdin, not both")
+        raise typer.Exit(1)
+    if use_stdin:
+        value = _stdin_value()
+        if not value:
+            logger.error("--stdin given but no value was provided")
+            raise typer.Exit(1)
+    elif value is None:
+        logger.error("Provide a VALUE argument or use --stdin")
         raise typer.Exit(1)
 
     mgr = _get_manager()

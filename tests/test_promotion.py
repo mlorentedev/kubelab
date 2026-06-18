@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from toolkit.features import promotion
+from toolkit.features import promotion, registry
 
 _VALUES = """\
 # top-of-file comment must survive a round-trip edit
@@ -45,7 +45,8 @@ def env_patched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Path, 
 
 
 def _mock_registry(monkeypatch: pytest.MonkeyPatch, status_code: int) -> None:
-    monkeypatch.setattr(promotion.httpx, "get", MagicMock(return_value=MagicMock(status_code=status_code)))
+    # The tag-existence check now lives in the registry module (promotion reuses it).
+    monkeypatch.setattr(registry.httpx, "get", MagicMock(return_value=MagicMock(status_code=status_code)))
 
 
 class TestPromote:

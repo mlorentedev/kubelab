@@ -26,7 +26,7 @@ Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-s
 ## Promote to prod (deliberate)
 
 1. Pick the stable version to ship (must already exist as a release tag — check `apps/<app>/version.txt` / the registry).
-2. Run the **Promote Prod** workflow (`promote-prod.yml`) via *Actions → Run workflow*, input `version` (and app). It runs `toolkit deployment promote --env prod --app <app> --version <X.Y.Z>` and opens a PR `promote: prod to <X.Y.Z>`.
+2. Run the **Promote Prod** workflow (`promote-prod.yml`) via *Actions → Run workflow*, select the `app` and input the `version` (one app per run — web and api carry independent semvers). It runs `toolkit deployment promote --env prod --app <app> --version <X.Y.Z>` and opens a PR `promote: prod <app> to <X.Y.Z>`.
    - Or do it locally: `toolkit deployment promote --env prod --app web --version 1.2.0`, commit the regenerated overlay, open the PR.
 3. Review the PR (image diff + any config), ensure staging has validated equivalent code, **merge**. Argo CD (prod, selfHeal:true) deploys and then defends that version.
 
