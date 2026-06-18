@@ -426,15 +426,10 @@ _deploy-argocd-helm:
 		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
-	@echo "--- Updating ArgoCD EndpointSlice on prod (resolve aws1 Tailscale IP via MagicDNS) ---"
-	@AWS1_IP=$$(dig +short aws1.kubelab.internal | head -1) && \
-	if [ -n "$$AWS1_IP" ]; then \
-		sed "s/RESOLVE_AWS1_TAILSCALE_IP/$$AWS1_IP/" infra/k8s/overlays/prod/argocd.yaml | \
-			kubectl --kubeconfig ~/.kube/kubelab-prod-config apply -f -; \
-		echo "✓ ArgoCD EndpointSlice updated ($$AWS1_IP)"; \
-	else \
-		echo "⚠ Could not resolve aws1.kubelab.internal — EndpointSlice not updated"; \
-	fi
+	@echo "--- Updating ArgoCD EndpointSlice on prod (MagicDNS-resolved aws1 Tailscale IP) ---"
+	@$(TOOLKIT) infra k8s render-apply --env prod --optional \
+		--manifest infra/k8s/overlays/prod/argocd.yaml \
+		--render RESOLVE_AWS1_TAILSCALE_IP=aws1.kubelab.internal
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Watch ArgoCD pods until all ready — logs timing to /tmp/argocd-timing.log
@@ -452,28 +447,12 @@ watch-argocd:
 	@echo "$$(date): ALL PODS READY ✓" | tee -a /tmp/argocd-timing.log
 	@echo "Timing log: /tmp/argocd-timing.log"
 
-# Deploy external services with dynamic Tailscale IP resolution (MagicDNS)
-# Resolves placeholders in EndpointSlices at deploy time — IPs survive node re-registration.
-# Usage: make deploy-external ENV=staging|prod
-.PHONY: deploy-external
-deploy-external:
-	@test -n "$(ENV)" || (echo "Usage: make deploy-external ENV=staging|prod" && exit 1)
-	@echo "=== Deploying external services to $(ENV) (resolving Tailscale IPs via MagicDNS) ==="
-	@RPI3_IP=$$(dig +short rpi3.kubelab.internal | head -1) && \
-	RPI4_IP=$$(dig +short rpi4.kubelab.internal | head -1) && \
-	echo "  rpi3: $${RPI3_IP:-UNRESOLVED}  rpi4: $${RPI4_IP:-UNRESOLVED}" && \
-	if [ -z "$$RPI3_IP" ] || [ -z "$$RPI4_IP" ]; then \
-		echo "⚠ Some nodes not resolvable — are they online? Skipping unresolved."; \
-	fi && \
-	if [ -n "$$RPI3_IP" ]; then \
-		sed "s/RESOLVE_RPI3_TAILSCALE_IP/$$RPI3_IP/" infra/k8s/base/external/uptime-kuma.yaml | \
-			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
-	fi && \
-	if [ -n "$$RPI4_IP" ]; then \
-		sed "s/RESOLVE_RPI4_TAILSCALE_IP/$$RPI4_IP/g" infra/k8s/base/edge/coredns-custom.yaml | \
-			kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config apply -f -; \
-	fi && \
-	echo "✓ External services deployed with resolved IPs"
+# `deploy-external` removed (ADR-047 / TOOL-009). Its two actions are now covered by
+# `make deploy-k8s ENV=x`:
+#   - coredns-custom (RPi4 hairpin DNS, MagicDNS-rendered) → the cluster_bootstrap layer.
+#   - external EndpointSlices (ollama / pihole / uptime-kuma) → the Kustomize base.
+# The aws1 (argocd) EndpointSlice render moved to `toolkit infra k8s render-apply`
+# inside `_deploy-argocd-helm`. No more inline dig|sed|kubectl in this Makefile.
 
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
 # Usage: make recover-argocd
@@ -755,6 +734,12 @@ sync-homepage:
 sync-k8s-images:
 	@$(TOOLKIT) sync images
 
+# Refresh vendored cluster_bootstrap operator manifests from their SSOT-pinned
+# version (ADR-047 / TOOL-009). Bump the entry's `version` in common.yaml, then run.
+.PHONY: sync-operators
+sync-operators:
+	@$(TOOLKIT) sync operators
+
 .PHONY: sync-oidc-hashes
 sync-oidc-hashes:
 	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
@@ -839,6 +824,13 @@ deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
 	@$(MAKE) import-n8n ENV=$(ENV)
+
+# Apply ONLY the cluster-wide bootstrap layer (cluster_bootstrap SSOT, ADR-047/TOOL-009):
+# CRDs/operators/kube-system config outside the Argo CD overlay, without touching workloads.
+.PHONY: bootstrap-k8s
+bootstrap-k8s:
+	@test -n "$(ENV)" || (echo "Usage: make bootstrap-k8s ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra k8s bootstrap --env $(ENV)
 
 # -----------------------------------------------------------------------------
 # Validation & Testing

@@ -73,8 +73,8 @@ What it does:
 1. Deploys Authelia OIDC config to prod
 2. Scales down ALL ArgoCD pods (OOM mitigation)
 3. Helm upgrade with 10min timeout
-4. Resolves aws1 Tailscale IP via MagicDNS
-5. Applies EndpointSlice to prod with resolved IP
+4. Renders + applies the aws1 ArgoCD EndpointSlice (MagicDNS-resolved Tailscale IP)
+   via `toolkit infra k8s render-apply` (ADR-047 / TOOL-009)
 
 ## Recovery: ArgoCD failed Helm upgrade
 
@@ -100,10 +100,16 @@ make deploy-k8s ENV=prod      # interactive confirmation
 
 **Order matters:** `deploy-k8s` first, `deploy-argocd` last (EndpointSlice).
 
-## Deploy: External services (dynamic IPs)
+## Deploy: External services & cluster bootstrap
+
+Folded into `make deploy-k8s` (ADR-047 / TOOL-009 — the old `deploy-external` target was removed):
+
+- coredns-custom (RPi4 hairpin DNS) and versioned operators (agent-sandbox) are rendered
+  (MagicDNS) + server-side applied via the `cluster_bootstrap` layer.
+- External EndpointSlices (ollama / pihole / uptime-kuma) ship in the Kustomize base.
 
 ```bash
-make deploy-external ENV=staging   # resolves rpi3/rpi4 Tailscale IPs via MagicDNS
+make deploy-k8s ENV=staging   # covers cluster_bootstrap + external EndpointSlices
 ```
 
 ## Deploy: VPS (Ansible)

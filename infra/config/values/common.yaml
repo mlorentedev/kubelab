@@ -259,6 +259,41 @@ k3s:
     https_port: 443
 
 # ===========================================================================
+# CLUSTER-WIDE BOOTSTRAP LAYER (ADR-047 / TOOL-009)
+# ===========================================================================
+# Cluster-scoped foundations applied OUTSIDE the Argo CD overlay. Argo CD spoke
+# RBAC is least-privilege (manages the `kubelab` namespace only; cluster-wide is
+# read-only — ADR-041), so CRDs / ClusterRoles / other-namespace controllers are
+# applied imperatively by the toolkit (`toolkit infra k8s deploy`, step 3) through
+# one shared render-and-apply primitive — NOT by inline Makefile shell (the prior
+# `dig | sed | kubectl` antipattern, ADR-047 D3).
+#
+# Per-entry fields:
+#   name       (req)  logical id + log label.
+#   namespace  (req)  target namespace (informational; the manifest is authoritative).
+#   manifest   (req)  repo-relative path to a vendored, version-pinned manifest.
+#   version    (opt)  only for vendored *operators*; drives `make sync-operators`.
+#   source     (opt)  {repo, asset} GitHub release coords `make sync-operators` re-fetches
+#                     the pinned `version` from (keeps the toolkit free of hardcoded repos).
+#   render     (opt)  RESOLVE_* placeholder -> MagicDNS name, resolved at deploy time
+#                     (ADR-025: Tailscale IPs rotate on node re-registration).
+#   optional   (opt)  skip (don't fail) when a render target is unreachable (node off).
+cluster_bootstrap:
+  - name: agent-sandbox
+    namespace: agent-sandbox-system
+    manifest: infra/k8s/cluster/agent-sandbox/manifest.yaml
+    version: v0.5.0rc1          # K8s SIG runtime substrate for iris (agents.x-k8s.io/v1beta1)
+    source:                     # `make sync-operators` re-fetches this pinned release asset
+      repo: kubernetes-sigs/agent-sandbox
+      asset: manifest.yaml
+  - name: coredns-custom
+    namespace: kube-system
+    manifest: infra/k8s/base/edge/coredns-custom.yaml
+    optional: true              # RPi4 is on-demand — skip pod-hairpin DNS when it is off
+    render:
+      RESOLVE_RPI4_TAILSCALE_IP: rpi4.kubelab.internal
+
+# ===========================================================================
 # ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
 # ===========================================================================
 argocd:
