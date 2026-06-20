@@ -4,9 +4,6 @@ name: Add to bitácora
 # (GitHub Project #1). Pairs with bitacora-status.yml (which flips an assigned
 # issue to In Progress). Canonical copy for the OPS-002 (#258) multi-repo rollout.
 
-# Note: the add-to-project action handles issues; PRs are added via
-# `gh project item-add` below so behaviour stays explicit across action versions.
-
 on:
   issues:
     types: [opened, reopened]
@@ -15,24 +12,18 @@ on:
 
 jobs:
   add-to-project:
-    # Fork PRs run without repository secrets — BITACORA_PAT would be empty and the
-    # job would fail (Codex review on kubelab#237). Skip them; fork PRs reach the
-    # board via the rollout backfill or a manual item-add.
-    if: github.event_name == 'issues' || github.event.pull_request.head.repo.fork == false
+    # Fork PRs and Dependabot PRs run without repository secrets — BITACORA_PAT would
+    # be empty and the job would fail (Codex review on kubelab#237; Dependabot on
+    # kubelab#614). Skip them; they reach the board via the rollout backfill or a
+    # manual item-add.
+    if: >-
+      github.event_name == 'issues' ||
+      (github.event.pull_request.head.repo.fork == false &&
+       github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     steps:
-      # Issues: use the official action
-      - name: Add issue to project
-        if: github.event_name == 'issues'
-        uses: actions/add-to-project@v2.0.0
+      # Pin a real release: actions/add-to-project@v1 does NOT resolve (no floating v1 tag).
+      - uses: actions/add-to-project@v2.0.0
         with:
           project-url: https://github.com/users/mlorentedev/projects/1
           github-token: ${{ secrets.BITACORA_PAT }}
-
-      # PRs: use gh CLI directly (the action doesn't support PRs)
-      - name: Add PR to project
-        if: github.event_name == 'pull_request'
-        run: |
-          gh project item-add 1 --owner mlorentedev --url "${{ github.event.pull_request.html_url }}"
-        env:
-          GH_TOKEN: ${{ secrets.BITACORA_PAT }}
