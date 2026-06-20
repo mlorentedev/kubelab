@@ -11,7 +11,7 @@ owner: manu
 
 ## Status
 
-Accepted (2026-03-22)
+Accepted (2026-03-22). **The Backblaze B2 leg is superseded by [ADR-049](adr-049-edge-object-storage-placement-doctrine.md)** (2026-06-19): the off-site `tier-offsite` is Hetzner Storage Box + Borg (bulk) + Cloudflare R2 (critical subset); B2 is retired.
 
 ## Context
 
@@ -46,7 +46,7 @@ Deploy a K8s CronJob in the **prod overlay only** (staging data is disposable):
 
 ### minio-data excluded
 
-Backing up MinIO to MinIO is circular. minio-data backup deferred to Phase 5 (off-site via Velero + B2).
+Backing up MinIO to MinIO is circular. minio-data backup deferred to Phase 5 (off-site — target revised by ADR-049 from B2 to Hetzner Storage Box / R2).
 
 ### Migration path (Phase 5): Velero + MinIO + B2
 
