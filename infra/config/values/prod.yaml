@@ -67,6 +67,7 @@ apps:
       site_domain: kubelab.live
       site_url: https://kubelab.live
 
+      version: 1.1.0
     blog:
       domain: blog.kubelab.live
 
@@ -82,11 +83,13 @@ apps:
       enable_contact: false
 
   # Third-party services
+      version: 1.1.1
   services:
     core:
       gitea:
         domain: gitea.kubelab.live
 
+    automation:
       n8n:
         domain: n8n.kubelab.live
 

@@ -1,0 +1,142 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apprise-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: apprise
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+data:
+  # Delivery gateway (ADR-044: "converge the brain, specialize the egress").
+  # n8n is the brain ({domain,severity}→tag); Apprise owns the tag→URL routing
+  # table (Option B). STATEFUL_MODE=simple maps a {KEY} straight to /config/{KEY}.yml,
+  # so n8n POSTs /notify/kubelab with a tag and Apprise resolves the channel(s).
+  # The config is mounted read-only from the apprise-secrets Secret (rendered from
+  # SOPS by the toolkit) — no writable volume, no PVC.
+  APPRISE_STATEFUL_MODE: "simple"
+  # Cap gunicorn workers: the image defaults to (2*CPUs)+1, which OOMs on a
+  # multi-core node. This is a low-QPS internal egress muxer — 2 is ample.
+  APPRISE_WORKER_COUNT: "2"
+  LOG_LEVEL: "INFO"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apprise
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: apprise
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: apprise
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: apprise
+        app.kubernetes.io/component: automation
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      enableServiceLinks: false
+      # apprise-api's /status healthcheck write-tests THREE dirs: APPRISE_CONFIG_DIR
+      # (/config), APPRISE_ATTACH_DIR, and APPRISE_STORAGE_DIR (/config/store). Any
+      # non-writable dir yields a *_PERMISSION_ISSUE and drops "OK" from the response
+      # → HTTP 417 → the liveness probe kills the pod (CrashLoop). The routing table
+      # is rendered from SOPS, so /config cannot be a read-only Secret mount. Instead
+      # /config is a writable emptyDir that this initContainer seeds with kubelab.yml
+      # copied out of the read-only apprise-secrets Secret. Reuses the app image so we
+      # add no extra pin to the image SSOT (sync_k8s_images IMAGE_SOURCES).
+      initContainers:
+        - name: seed-config
+          image: caronc/apprise:1.5.0
+          command: ["sh", "-c", "cp /seed/kubelab.yml /config/kubelab.yml"]
+          volumeMounts:
+            - name: routing-config
+              mountPath: /seed
+              readOnly: true
+            - name: config-dir
+              mountPath: /config
+      containers:
+        - name: apprise
+          image: caronc/apprise:1.5.0
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: apprise-config
+          volumeMounts:
+            # Writable config dir (seeded with kubelab.yml by the initContainer).
+            # simple mode reads /config/{KEY}.yml → POST /notify/kubelab resolves tags;
+            # the healthcheck's write-test on /config now passes (CONFIG_OK).
+            - name: config-dir
+              mountPath: /config
+            # Stateful store (STORE_OK). Ephemeral is fine for an egress muxer.
+            - name: apprise-store
+              mountPath: /config/store
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              # 2 gunicorn workers (APPRISE_WORKER_COUNT) peak ~180Mi; 384Mi gives
+              # startup headroom and avoids the OOMKill seen with the image default.
+              memory: 384Mi
+              cpu: "0.5"
+            requests:
+              memory: 96Mi
+              cpu: "0.1"
+      volumes:
+        # Read-only source for the initContainer only: apprise-secrets carries a
+        # single key, kubelab.yml (the SOPS-rendered routing table).
+        - name: routing-config
+          secret:
+            secretName: apprise-secrets
+        # Writable /config so apprise-api's /status write-test passes; seeded with
+        # kubelab.yml by the initContainer. Ephemeral — the config is reconstructed
+        # from SOPS on every (re)deploy.
+        - name: config-dir
+          emptyDir: {}
+        - name: apprise-store
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apprise
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: apprise
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  # Cluster-internal only: no IngressRoute. Reached by n8n at http://apprise:8000/notify/
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: apprise
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

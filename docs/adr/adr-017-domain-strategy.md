@@ -1,7 +1,8 @@
 ---
 id: "adr-017"
 type: adr
-status: active
+status: superseded
+superseded_by: adr-048
 tags: [web, domain, portfolio, content-strategy]
 owner: manu
 created: "2026-03-28"
@@ -11,7 +12,9 @@ created: "2026-03-28"
 
 ## Status
 
-Accepted 2026-03-03
+Superseded by [[adr-048-platform-consumer-repo-boundary|ADR-048]] (2026-06-17).
+
+Accepted 2026-03-03. The two-domain content split (mlorente.dev EN + kubelab.live ES) still holds; what changed is the repo structure: both frontends now live in a single `web` consumer repo (not two `apps/web/*` projects in the kubelab monorepo, and not separate per-domain repos). See ADR-048.
 
 ## Context
 

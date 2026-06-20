@@ -65,7 +65,7 @@ ci-release.yml (triggered by workflow_run after CI succeeds)
 | App | Triggers on changes to |
 |-----|----------------------|
 | api | `apps/api/src/**`, `apps/api/go.mod`, `apps/api/go.sum`, `apps/api/Dockerfile`, `infra/stacks/apps/api/**` |
-| web | `apps/web/astro-site/**`, `apps/web/Dockerfile`, `infra/stacks/apps/web/**` |
+| web | `apps/web/site/**`, `apps/web/Dockerfile`, `infra/stacks/apps/web/**` |
 | blog | `apps/blog/jekyll-site/**`, `apps/blog/Dockerfile`, `infra/stacks/apps/blog/**` |
 
 Changes to `infra/config/values/*.yaml` do NOT trigger rebuilds (GitOps pull model).

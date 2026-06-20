@@ -1,194 +1,51 @@
 ---
-name: Cleanup RC Tags
-
+name: Cleanup Image Tags
+# Janitor for ephemeral Docker Hub tags (ADR-046). Staging runs immutable
+# `sha-<short>` tags (one per app per merge), so they accumulate forever unless
+# pruned. Delegates to `toolkit registry prune` — the retention policy and the
+# Docker Hub client live in the toolkit (unit-tested, shared with promotion),
+# not reimplemented in YAML.
+#
+# Keeps the N most recent `sha-*` per app + deletes the rest and any leftover
+# `-rc.*` (dropped scheme). Prod runs immutable semver and is never touched.
 on:
-  pull_request:
-    branches: [master]
-    types: [closed]
+  schedule:
+    - cron: '0 4 * * 1'  # Mondays 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List what would be deleted, delete nothing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+concurrency:
+  group: cleanup-image-tags
+  cancel-in-progress: false
+
 jobs:
-
-  detect-changes:
-    name: Detect Changes
-    runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
-          && 'ubuntu-latest'
-          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
-    outputs:
-      changed_apps: ${{ steps.list.outputs.apps }}
-      any_changed: ${{ steps.check.outputs.any_changed }}
+  cleanup:
+    name: Cleanup Image Tags
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
-
-      - id: filter
-        uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          filters: |
-            api:
-              - 'apps/api/**'
-            web:
-              - 'apps/web/**'
-            errors:
-              - 'edge/errors/**'
-
-      - name: Check if any app changed
-        id: check
-        env:
-          API: ${{ steps.filter.outputs.api }}
-          WEB: ${{ steps.filter.outputs.web }}
-          ERRORS: ${{ steps.filter.outputs.errors }}
+          python-version: '3.12'
+      - name: Install toolkit
         run: |
-          if [[ "$API" == "true" || "$WEB" == "true" \
-            || "$ERRORS" == "true" ]]; then
-            echo "any_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "any_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: List changed apps
-        id: list
-        env:
-          API: ${{ steps.filter.outputs.api }}
-          WEB: ${{ steps.filter.outputs.web }}
-          ERRORS: ${{ steps.filter.outputs.errors }}
-        run: |
-          apps=()
-          [[ "$API" == "true" ]] && apps+=("api")
-          [[ "$WEB" == "true" ]] && apps+=("web")
-          [[ "$ERRORS" == "true" ]] && apps+=("errors")
-          apps_json=$(printf '%s\n' "${apps[@]}" \
-            | jq -R . | jq -c -s .)
-          echo "apps=${apps_json}" >> "$GITHUB_OUTPUT"
-
-  cleanup-rc-tags:
-    name: Cleanup RC Tags
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_changed == 'true'
-    runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
-          && 'ubuntu-latest'
-          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
-    env:
-      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
-    steps:
-      - name: Authenticate with Docker Hub
-        id: auth
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      - name: Prune stale image tags
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          RETENTION: ${{ vars.SHA_TAG_RETENTION || '15' }}
+          PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: |
-          TOKEN=$(curl -s -X POST \
-            "https://hub.docker.com/v2/users/login" \
-            -H "Content-Type: application/json" \
-            -d "{\"username\":\"${DOCKERHUB_USERNAME}\",\
-          \"password\":\"${DOCKERHUB_TOKEN}\"}" \
-            | jq -r '.token')
-
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "::error::Failed to authenticate"
-            exit 1
-          fi
-
-          echo "::add-mask::${TOKEN}"
-          echo "token=${TOKEN}" >> "$GITHUB_OUTPUT"
-
-      - name: Delete RC tags for changed apps
-        env:
-          HUB_TOKEN: ${{ steps.auth.outputs.token }}
-          CHANGED_APPS: ${{ needs.detect-changes.outputs.changed_apps }}
-          NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_MERGED: ${{ github.event.pull_request.merged }}
-        run: |
-          {
-            echo "## RC Tag Cleanup Summary"
-            echo ""
-            echo "**PR:** #${PR_NUMBER}"
-            if [ "$PR_MERGED" = "true" ]; then
-              echo "**Status:** Merged"
-            else
-              echo "**Status:** Closed"
-            fi
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          TOTAL_DELETED=0
-
-          for APP in $(echo "$CHANGED_APPS" | jq -r '.[]'); do
-            REPO="${REGISTRY_PREFIX}-${APP}"
-            echo "--- Processing ${NAMESPACE}/${REPO} ---"
-            echo "### ${REPO}" >> "$GITHUB_STEP_SUMMARY"
-
-            # Paginate through all tags
-            PAGE=1
-            RC_TAGS=()
-            while true; do
-              URL="https://hub.docker.com/v2/repositories"
-              URL="${URL}/${NAMESPACE}/${REPO}/tags"
-              RESPONSE=$(curl -s \
-                "${URL}/?page_size=100&page=${PAGE}" \
-                -H "Authorization: Bearer ${HUB_TOKEN}")
-
-              TAGS=$(echo "$RESPONSE" \
-                | jq -r '.results[]?.name // empty' \
-                | grep -E '\-rc\.' || true)
-
-              if [ -n "$TAGS" ]; then
-                while IFS= read -r tag; do
-                  RC_TAGS+=("$tag")
-                done <<< "$TAGS"
-              fi
-
-              NEXT=$(echo "$RESPONSE" \
-                | jq -r '.next // empty')
-              if [ -z "$NEXT" ] || [ "$NEXT" = "null" ]; then
-                break
-              fi
-              PAGE=$((PAGE + 1))
-            done
-
-            if [ ${#RC_TAGS[@]} -eq 0 ]; then
-              echo "No RC tags found for ${REPO}"
-              echo "No RC tags found." >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-
-            echo "Found ${#RC_TAGS[@]} RC tag(s) to delete"
-            DELETED=0
-            FAILED=0
-
-            for TAG in "${RC_TAGS[@]}"; do
-              URL="https://hub.docker.com/v2/repositories"
-              URL="${URL}/${NAMESPACE}/${REPO}/tags/${TAG}/"
-              HTTP_CODE=$(curl -s -o /dev/null \
-                -w "%{http_code}" -X DELETE "${URL}" \
-                -H "Authorization: Bearer ${HUB_TOKEN}")
-
-              if [ "$HTTP_CODE" -eq 204 ] \
-                || [ "$HTTP_CODE" -eq 404 ]; then
-                echo "  Deleted: ${TAG}"
-                DELETED=$((DELETED + 1))
-              else
-                echo "  Failed: ${TAG} (HTTP ${HTTP_CODE})"
-                FAILED=$((FAILED + 1))
-              fi
-            done
-
-            TOTAL_DELETED=$((TOTAL_DELETED + DELETED))
-            {
-              echo "Deleted ${DELETED}/${#RC_TAGS[@]} tags"
-              if [ "$FAILED" -gt 0 ]; then
-                echo "(${FAILED} failed)"
-              fi
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          {
-            echo "---"
-            echo "**Total deleted: ${TOTAL_DELETED}**"
-          } >> "$GITHUB_STEP_SUMMARY"
+          ARGS=(--retention "$RETENTION" --registry-prefix "$PREFIX")
+          [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+          poetry run toolkit registry prune "${ARGS[@]}"

@@ -85,6 +85,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]   # secrets must load for any tag selection (e.g. --tags runner)
 
     - name: Decrypt env secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
@@ -94,11 +95,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]   # secrets must load for any tag selection (e.g. --tags runner)
 
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]   # secrets must load for any tag selection (e.g. --tags runner)
 
     - name: Generate Headscale pre-auth key (via VPS)
       command: >

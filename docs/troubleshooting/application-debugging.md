@@ -120,7 +120,7 @@ Astro site fails to build.
 docker exec web-container node --version
 
 # Build locally
-cd apps/web/astro-site
+cd apps/web/site
 npm run build
 
 # Check for TypeScript errors

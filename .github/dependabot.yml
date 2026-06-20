@@ -87,11 +87,10 @@ updates:
   # (open-pull-requests-limit: 0 -> no version PRs; security still flows)
   # ============================================================
 
-  # ---- npm / Astro web apps (-> kubelab.live / mlorente.dev) ----
+  # ---- npm / Astro web app (mlorente.dev; departing to its own `web` repo, ADR-048) ----
   - package-ecosystem: "npm"
     directories:
       - "/apps/web/site"
-      - "/apps/web/astro-site"
     schedule:
       interval: "weekly"
       day: "monday"
