@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.1...errors-v1.1.2) (2026-06-20)
+
+
+### Bug Fixes
+
+* **deps:** bump nginx from 1.27-alpine to 1.31-alpine in /edge/errors in the edge-docker-minor-patch group across 1 directory ([#658](https://github.com/mlorentedev/kubelab/issues/658)) ([a849dd8](https://github.com/mlorentedev/kubelab/commit/a849dd8a7464c55a0f576bb53510e9a41c1ac74e))
+
 ## [1.1.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.0...errors-v1.1.1) (2026-03-23)
 
 
