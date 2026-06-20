@@ -16,6 +16,7 @@ Accepted (2026-03-16). Extends ADR-020 (IaC Lifecycle), ADR-021 (Helm Packaging)
 
 > **Refined by [ADR-029](adr-029-intelligence-layer.md)** (2026-03-28): ace2 repurposed from Platform Node to Ollama bare metal. kubelab-gateway and kubelab-memory absorbed.
 > **Refined by [ADR-028](adr-028-operational-topology.md)** (2026-03-28): Topology redefined as always-on vs on-demand. VPS prod absorbs observability + Gitea + PostgreSQL. Beelink replaces ace2 as Platform Node (on-demand). RPi4 reclassified on-demand.
+> **Backup leg superseded by [ADR-049](adr-049-edge-object-storage-placement-doctrine.md)** (2026-06-19): the "MinIO → Backblaze B2" 3-2-1 off-site leg is retired; `tier-offsite` = Hetzner Storage Box + Borg (bulk) + Cloudflare R2 (critical subset, zero-egress).
 
 ## Date
 
