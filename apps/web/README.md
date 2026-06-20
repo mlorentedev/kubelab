@@ -19,7 +19,7 @@ The site includes my portfolio projects, lead magnets like DevOps checklists, ne
  Project structure
 
 ```
-astro-site/
+site/
 ├── astro.config.mjs           Astro configuration
 ├── package.json               Dependencies and scripts
 ├── tailwind.config.mjs        Tailwind customization
@@ -79,7 +79,7 @@ ENABLE_NEWSLETTER=true
 
 ```bash
  Navigate to the web app
-cd apps/web/astro-site
+cd apps/web/site
 
  Install dependencies
 npm install
