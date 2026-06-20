@@ -1,6 +1,6 @@
 # errors — Branded error pages for KubeLab edge layer
 # Serves static error pages (502/503/504) consumed by Traefik error middleware
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
