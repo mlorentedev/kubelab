@@ -49,7 +49,7 @@ help:
 	@echo "  make secrets-show KEY=x SECRETS_ENV=y  Show a decrypted secret (default: common)"
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
-	@echo "  make dev-app APP=x      Start Astro app dev server (site, astro-site)"
+	@echo "  make dev-app APP=x      Start Astro app dev server (site)"
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
