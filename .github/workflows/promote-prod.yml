@@ -1,0 +1,81 @@
+---
+name: Promote Prod
+# Continuous delivery to prod (ADR-046 — gated promotion). Manually dispatched:
+# pick a platform app and an existing immutable semver tag, run
+# `toolkit deployment promote --env prod`, and open a PR with the regenerated
+# overlay. Merging it (human review + required checks) lets Argo CD (prod,
+# selfHeal:true) sync and deploy that version, then defend it.
+#
+# Mirror of staging-deploy.yml, minus the build step: prod only ships tags that
+# already exist (built + released for staging). The promote command refuses a
+# non-existent registry tag, so a typo fails fast instead of ImagePullBackOff.
+#
+# Same PAT rationale as staging: the PR is opened with RELEASE_PLEASE_TOKEN, not
+# the default GITHUB_TOKEN. A GITHUB_TOKEN-opened PR does not trigger
+# `on: pull_request` workflows, so its required checks would never run and it
+# could never be merged.
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Platform app to promote
+        type: choice
+        options:
+          - web
+          - api
+        required: true
+      version:
+        description: 'Immutable semver image tag (e.g. 1.1.1) — must already exist in the registry'
+        type: string
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize promotions of the same app; never cancel an in-flight one (it may be
+# mid-push). Different apps can promote concurrently.
+concurrency:
+  group: promote-prod-${{ inputs.app }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote Prod
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      - name: Promote app to prod
+        env:
+          APP: ${{ inputs.app }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          poetry run toolkit deployment promote --env prod --app "$APP" --version "$VERSION"
+      - name: Open prod promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          APP: ${{ inputs.app }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git add infra/config/values/prod.yaml infra/k8s/overlays/prod/
+          if git diff --staged --quiet; then
+            echo "No prod overlay changes — ${APP} already at ${VERSION}"; exit 0
+          fi
+          BRANCH="promote/prod-${APP}-${VERSION}"
+          git checkout -b "$BRANCH"
+          git commit -m "promote: prod ${APP} to ${VERSION}"
+          git push -u origin "$BRANCH" --force-with-lease
+          gh pr create --base master --head "$BRANCH" \
+            --title "promote: prod ${APP} to ${VERSION}" \
+            --body "Gated prod promotion of \`${APP}\` to \`${VERSION}\` (ADR-046). Argo CD (prod) deploys on merge."

@@ -57,6 +57,7 @@ apps:
       gitea:
         domain: gitea.staging.kubelab.live
 
+    automation:
       n8n:
         domain: n8n.staging.kubelab.live
 

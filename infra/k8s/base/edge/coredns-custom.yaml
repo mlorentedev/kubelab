@@ -9,7 +9,10 @@
 # already the authoritative resolver for staging domains.
 #
 # K3s loads this via: import /etc/coredns/custom/*.server
-# Applied separately (kube-system namespace, NOT via Kustomize kubelab overlay).
+# Applied separately (kube-system, NOT via the Kustomize kubelab overlay) by the toolkit
+# through the cluster_bootstrap layer (ADR-047/TOOL-009): `RESOLVE_RPI4_TAILSCALE_IP` is
+# rendered via MagicDNS at deploy time (RPi4's Tailscale IP rotates on re-registration,
+# ADR-025) and server-side applied by `make deploy-k8s`. Declared in common.yaml.
 apiVersion: v1
 kind: ConfigMap
 metadata:

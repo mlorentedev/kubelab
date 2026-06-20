@@ -86,7 +86,7 @@ repos:
     rev: v1.37.1
     hooks:
       - id: yamllint
-        exclude: '(infra/helm/.*/templates/|infra/ansible/|apps/blog/|apps/wiki/|infra/config/secrets/)'
+        exclude: '(infra/helm/.*/templates/|infra/ansible/|apps/blog/|apps/wiki/|infra/config/secrets/|infra/k8s/cluster/)'
         args:
           - '-d'
           - >-

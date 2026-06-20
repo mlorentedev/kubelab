@@ -154,6 +154,22 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Webhook ingress bypasses Authelia: n8n enforces its own Header Auth on the
+    # /webhook/ node (403 without the bearer). Without this, Authelia ForwardAuth
+    # 303-redirects every POST to the login page and the notification fabric is
+    # unreachable in prod (NOTIFY-001). More specific match + explicit higher
+    # priority so it wins over the UI route below.
+    - match: Host(`n8n.kubelab.live`) && PathPrefix(`/webhook/`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: n8n
+          port: 5678
     - match: Host(`n8n.kubelab.live`)
       kind: Rule
       middlewares:

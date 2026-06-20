@@ -26,8 +26,8 @@ spec:
     spec:
       containers:
         - name: api
-          image: docker.io/mlorentedev/kubelab-api:dev
-          imagePullPolicy: Always
+          image: docker.io/mlorentedev/kubelab-api:1.1.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
@@ -88,8 +88,8 @@ spec:
     spec:
       containers:
         - name: web
-          image: docker.io/mlorentedev/kubelab-web:dev
-          imagePullPolicy: Always
+          image: docker.io/mlorentedev/kubelab-web:1.1.1
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
