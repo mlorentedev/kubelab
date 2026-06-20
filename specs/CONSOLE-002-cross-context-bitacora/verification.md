@@ -9,9 +9,10 @@ created: "2026-06-20"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 (Context round-trips git + Postgres projection) -> commit `<hash>` / test `TestContextRoundTrip`
+- [ ] AC2 (append-only event history, prior events immutable) -> commit `<hash>` / test `TestAppendOnlyHistory`
+- [ ] AC3 (GitHub adapter ingest + write verified by re-read) -> commit `<hash>` / test `TestGitHubAdapterVerifiedWrite`
+- [ ] AC4 (default-deny per-context routing) -> commit `<hash>` / test `TestResolveContextPolicyDefaultDeny`
 
 ## Test status
 
