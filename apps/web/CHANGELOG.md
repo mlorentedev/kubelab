@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/mlorentedev/kubelab/compare/web-v1.1.1...web-v1.1.2) (2026-06-18)
+
+
+### Miscellaneous
+
+* **web:** retire dead astro-site + platform-vs-consumer boundary (ADR-048) ([#698](https://github.com/mlorentedev/kubelab/issues/698)) ([6ae3fe4](https://github.com/mlorentedev/kubelab/commit/6ae3fe4447116d852757db1c538d1bee1fe818bb))
+
 ## [1.1.1](https://github.com/mlorentedev/kubelab/compare/web-v1.1.0...web-v1.1.1) (2026-06-15)
 
 
