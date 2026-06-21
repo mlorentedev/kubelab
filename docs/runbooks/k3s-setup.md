@@ -4,365 +4,202 @@ type: runbook
 status: active
 tags: [runbook, kubelab, k3s, kubernetes]
 created: "2026-02-20"
-last_tested: 2026-02-20
+last_tested: 2026-06-20
 owner: manu
 ---
 # K3s Cluster Setup
 
-Install and configure a 3-node K3s cluster on KubeLab homelab Proxmox VMs.
+Install and configure a **single-node K3s cluster** on a KubeLab node. Since
+ADR-023 Phase 1, KubeLab runs bare-metal all-in-one nodes (the old 3-VM Proxmox
+topology — `k3s-server` + two agents — was retired). The server schedules
+workloads directly; there are no separate agent nodes.
+
+This runbook is **IaC-driven**: K3s is installed and configured by the
+`k3s_server` Ansible role, never by hand. For upgrading an existing cluster, see
+[k3s-upgrade](k3s-upgrade.md).
+
+## Cluster inventory
+
+| Cluster | Node | Identity | Traefik | Datastore | Notes |
+|---------|------|----------|---------|-----------|-------|
+| staging | `ace1` (Acemagic-1) | `172.16.1.2` / `100.64.0.11` (MagicDNS) | bundled + ACME | kine/SQLite | all-in-one; on-demand homelab |
+| prod | VPS Hetzner | `162.55.57.175` / `100.64.0.2` | bundled + ACME | kine/SQLite | always-on |
+| hub | `aws1` (t4g.small Spot) | `aws1.kubelab.internal` (MagicDNS) | **disabled** (Argo CD only) | kine/SQLite | cattle (Terraform cloud-init) |
+
+All clusters run **single-server mode without `--cluster-init`**, so cluster
+state lives in **kine (SQLite)** at `/var/lib/rancher/k3s/server/db/state.db`,
+not embedded etcd. Namespace for workloads: `kubelab`. K3s version SSOT:
+`infra/config/values/common.yaml` → `k3s.version`.
 
 ## Prerequisites
 
-- Proxmox VMs provisioned (see [hardware-setup](hardware-setup.md) and [proxmox-setup](proxmox-setup.md))
-  - `k3s-server` (172.16.1.10) — Acemagic-1, 5GB RAM
-  - `k3s-agent-1` (172.16.1.11) — Acemagic-1, 5GB RAM
-  - `k3s-agent-2` (172.16.1.12) — Acemagic-2, ~10GB RAM
-- SSH access to all VMs via ProxyJump through RPi 4 (see `~/.ssh/config`)
-- RPi 4 gateway operational (bridge/NAT between 10.0.0.x and 172.16.1.0/24)
+- Node reachable over SSH with NOPASSWD sudo (all nodes hardened, 2026-03-20).
+  For a brand-new node, bootstrap NOPASSWD manually first, then provision with
+  `ASK_PASS=1`.
+- Headscale VPN mesh operational (`vpn.kubelab.live`) — the node joins the mesh
+  during provisioning. See [headscale-setup](headscale-setup.md).
+- Controller (workstation) has the repo, Poetry env (`make setup`), SOPS age key,
+  and the SSH key authorized on the node.
+- Cloudflare API token in SOPS (`cloudflare.api_token`) for Traefik ACME DNS-01.
 
-## Network Topology
+## Install: full node provisioning
 
-```
-Workstation (10.0.0.x)
-    │
-    ├─ WiFi ─→ Home Router (10.0.0.1)
-    │                │
-    │           RPi 4 Gateway (10.0.0.131 / 172.16.1.1)
-    │                │
-    │           TP-Link Switch
-    │                ├── k3s-server  (172.16.1.10)  ← K3s server
-    │                ├── k3s-agent-1 (172.16.1.11)  ← K3s agent
-    │                └── k3s-agent-2 (172.16.1.12)  ← K3s agent (heavy)
-```
-
-## Phase 1: Install K3s Server
-
-SSH into `k3s-server` and configure TLS SAN + install K3s:
+The `provision-<node>` playbook provisions everything end-to-end — base system,
+SSH hardening, Docker, Tailscale (Headscale join), the K3s server, and Glances.
+K3s is one tagged role inside it.
 
 ```bash
-ssh k3s-server
+# staging (ace1)
+make provision NODE=ace1 ENV=staging
 
-# Configure TLS SAN BEFORE install (includes Tailscale IP for VPN access)
-sudo mkdir -p /etc/rancher/k3s
-printf 'tls-san:\n  - "100.64.0.4"\n' | sudo tee /etc/rancher/k3s/config.yaml
+# First run, before the node is on the VPN — uses the LAN IP from common.yaml
+make provision NODE=ace1 ENV=staging BOOTSTRAP=1
 
-# Install K3s (reads config.yaml automatically)
-curl -sfL https://get.k3s.io | sh -
+# prod (VPS) / hub (aws1)
+make provision NODE=vps  ENV=prod
+make provision NODE=aws1 ENV=hub
 ```
 
-> **Why `tls-san`?** K3s generates a TLS cert for the API server. By default it only includes
-> the LAN IP (172.16.1.10) and localhost. Adding the Tailscale IP (100.64.0.4) allows
-> `kubectl` from workstation via VPN without `insecure-skip-tls-verify`.
-> Must be set BEFORE first start (or requires restart to regenerate certs).
-
-Verify installation:
+To run **only** the K3s role on an already-provisioned node (e.g. to apply a
+config change), filter by tag — or use the dedicated deploy playbook:
 
 ```bash
-sudo kubectl get nodes
-# NAME         STATUS   ROLES                  AGE   VERSION
-# k3s-server   Ready    control-plane,master   Xs    v1.34.4+k3s1
+make provision NODE=ace1 ENV=staging TAGS=k3s
+# equivalent K3s-only deploy across the env's k3s_servers group:
+make deploy TARGET=k3s ENV=staging
 ```
 
-Retrieve the node token (needed for agents):
+## What the `k3s_server` role does
+
+Defined in `infra/ansible/roles/k3s_server/`, driven by SSOT values from
+`common.yaml`/`<env>.yaml`:
+
+1. **Asserts** `k3s_version` and `k3s_tls_san` are provided (no silent defaults).
+2. **Detects** the installed version; only (re)installs when missing or when the
+   target version differs — the role is idempotent.
+3. **Templates** `/etc/rancher/k3s/config.yaml`:
+   - `tls-san` — API cert SANs, built from the inventory: Tailscale IP + LAN IP
+     (and **public IP** on the VPS). Prod must cover both `162.55.57.175` and
+     `100.64.0.2`.
+   - `resolv-conf: /run/systemd/resolve/resolv.conf` — required on
+     systemd-resolved hosts so pods can resolve external names (the default
+     `/etc/resolv.conf` points at the `127.0.0.53` stub, unreachable from pods).
+4. **Installs** K3s via `get.k3s.io` with `INSTALL_K3S_VERSION`, then ensures the
+   `k3s` systemd unit is started + enabled and waits for the API to be ready.
+5. **Bootstraps cluster manifests** by templating into
+   `/var/lib/rancher/k3s/server/manifests/` (K3s auto-applies this directory):
+   - the Cloudflare API-token Secret (when ACME is enabled), and
+   - the Traefik `HelmChartConfig` (ports + ACME + plugins, ADR-015) — skipped on
+     the hub, where `configure_traefik: false`.
+6. **Fetches the kubeconfig** to the controller at
+   `~/.kube/kubelab-<env>-config`, rewriting the server URL from `127.0.0.1` to
+   the node's reachable address (Tailscale IP, or MagicDNS name on the hub).
+
+> **Why `tls-san` must be right before first start:** K3s generates the API TLS
+> cert at install time. If the Tailscale IP / public IP isn't in the SAN list,
+> `kubectl` over the VPN fails cert validation. Changing SANs later requires
+> regenerating the cert (remove `/var/lib/rancher/k3s/server/tls/` and restart).
+
+## Workstation access (VPN + MagicDNS)
+
+Cluster access is over the **Headscale VPN mesh** — not a static LAN route. The
+role already wrote `~/.kube/kubelab-<env>-config` with the correct server URL and
+embedded CA, so once your workstation is on the mesh:
 
 ```bash
-sudo cat /var/lib/rancher/k3s/server/node-token
-```
-
-Save the token — it's needed for all agent joins.
-
-## Phase 2: Join Agent Nodes
-
-On each agent node, run the install script with the server URL and token:
-
-### k3s-agent-1 (Acemagic-1)
-
-```bash
-ssh k3s-agent-1
-curl -sfL https://get.k3s.io | K3S_URL=https://172.16.1.10:6443 K3S_TOKEN=<token> sh -
-```
-
-### k3s-agent-2 (Acemagic-2)
-
-```bash
-ssh k3s-agent-2
-curl -sfL https://get.k3s.io | K3S_URL=https://172.16.1.10:6443 K3S_TOKEN=<token> sh -
-```
-
-Verify from the server:
-
-```bash
-ssh k3s-server
-sudo kubectl get nodes
-# NAME           STATUS   ROLES                  AGE   VERSION
-# k3s-server     Ready    control-plane,master   Xm    v1.34.4+k3s1
-# k3s-agent-1    Ready    <none>                 Xm    v1.34.4+k3s1
-# k3s-agent-2    Ready    <none>                 Xm    v1.34.4+k3s1
-```
-
-## Phase 3: Create Namespace
-
-```bash
-ssh k3s-server
-sudo kubectl create namespace kubelab
-```
-
-## Phase 4: Configure Workstation Access
-
-### Copy kubeconfig
-
-K3s kubeconfig is at `/etc/rancher/k3s/k3s.yaml` (root-only). Copy it to workstation:
-
-```bash
-# On k3s-server: copy to accessible location
-ssh k3s-server "sudo cp /etc/rancher/k3s/k3s.yaml /tmp/k3s.yaml && sudo chmod 644 /tmp/k3s.yaml"
-
-# On workstation: download and fix server address
-scp k3s-server:/tmp/k3s.yaml ~/.kube/kubelab-config
-
-# Clean up
-ssh k3s-server "rm /tmp/k3s.yaml"
-```
-
-Edit `~/.kube/kubelab-config`:
-
-```bash
-# Replace server address with Tailscale IP (VPN access from anywhere)
-sed -i 's|server: https://127.0.0.1:6443|server: https://100.64.0.4:6443|' ~/.kube/kubelab-config
-
-# Replace insecure-skip-tls-verify with the CA cert (requires tls-san configured in Phase 1)
-# Get the CA cert base64:
-CA_DATA=$(ssh k3s-server "sudo cat /var/lib/rancher/k3s/server/tls/server-ca.crt | base64 -w0")
-# Then in kubelab-config, replace:
-#   insecure-skip-tls-verify: true
-# with:
-#   certificate-authority-data: <CA_DATA>
-```
-
-> **Important:** Use the Tailscale IP (`100.64.0.4`), not the LAN IP (`172.16.1.10`).
-> Tailscale works from anywhere (home, office, mobile). LAN only works on the local network.
-> The `tls-san` in Phase 1 ensures the cert is valid for this IP.
-
-### Configure KUBECONFIG
-
-Add to shell profile (`~/.zshrc` or `~/.bashrc`):
-
-```bash
-export KUBECONFIG=~/.kube/kubelab-config
-```
-
-Or merge with existing configs:
-
-```bash
-export KUBECONFIG=~/.kube/config:~/.kube/kubelab-config
-```
-
-### Add Static Route (Required)
-
-The workstation needs a route to the homelab LAN (172.16.1.0/24) through the RPi 4 gateway.
-Without this, `kubectl` can't reach the K3s API server directly (SSH works via ProxyJump but kubectl needs a direct route).
-
-**NetworkManager (persistent across reboots):**
-
-```bash
-# Find your active WiFi connection name
-nmcli connection show --active
-
-# Add static route
-nmcli connection modify "EcosDeSanJacinto" +ipv4.routes "172.16.1.0/24 10.0.0.131"
-
-# Apply without disconnecting
-nmcli connection up "EcosDeSanJacinto"
-```
-
-Replace `"EcosDeSanJacinto"` with your actual WiFi connection name.
-
-**Verify route:**
-
-```bash
-ip route | grep 172.16.1
-# 172.16.1.0/24 via 10.0.0.131 dev wlp1s0 ...
-```
-
-**Verify kubectl:**
-
-```bash
-kubectl get nodes
-# Should show all 3 nodes
-```
-
-### Troubleshooting
-
-#### kubectl timeout: "dial tcp 172.16.1.10:6443: i/o timeout"
-
-**Root cause:** Workstation has no route to 172.16.1.0/24. SSH works via ProxyJump through RPi 4, but kubectl connects directly — it doesn't use SSH config.
-
-**Fix:** Add static route via NetworkManager (see "Add Static Route" above).
-
-**Diagnosis checklist:**
-
-1. **Check route exists:** `ip route | grep 172.16.1`
-2. **Test connectivity:** `ping 172.16.1.10`
-3. **Test API port:** `curl -k https://172.16.1.10:6443/version`
-4. **Check RPi 4 forwarding:** `ssh kubelab-rpi4 "sysctl net.ipv4.ip_forward"` (should be `1`)
-5. **Check kubeconfig server URL:** `grep server ~/.kube/kubelab-config` (should be `https://172.16.1.10:6443`)
-
-**Key insight:** If SSH to k3s-server works but kubectl doesn't, the issue is the missing static route. SSH uses ProxyJump (hops through RPi 4), kubectl needs a direct IP route.
-
-#### kubeconfig copy: "a terminal is required to read the password"
-
-**Root cause:** `sudo cat` over SSH pipe requires a TTY for the password prompt. Piping output (`ssh ... "sudo cat" > file`) strips the TTY.
-
-**Fix:** Two-step copy instead of pipe:
-
-```bash
-# Step 1: Copy to /tmp on the server
-ssh k3s-server "sudo cp /etc/rancher/k3s/k3s.yaml /tmp/k3s.yaml && sudo chmod 644 /tmp/k3s.yaml"
-
-# Step 2: SCP to workstation
-scp k3s-server:/tmp/k3s.yaml ~/.kube/kubelab-config
-
-# Step 3: Clean up
-ssh k3s-server "rm /tmp/k3s.yaml"
-```
-
-#### Route lost after WiFi reconnect
-
-If the route disappears after WiFi disconnect/reconnect, verify it's persistent:
-
-```bash
-nmcli connection show "EcosDeSanJacinto" | grep ipv4.routes
-# Should show: 172.16.1.0/24 10.0.0.131
-```
-
-If missing, re-add with `nmcli connection modify` (see Phase 4).
-
-#### Node names show "kubelab-k3s-*" instead of "k3s-*"
-
-K3s uses the system hostname. The Proxmox VMs are named `kubelab-k3s-server`, `kubelab-k3s-agent-1`, `kubelab-k3s-agent-2`. This is correct — the `k3s-server` in SSH config is just an alias.
-
-## Phase 5: Verify Full Cluster
-
-```bash
-# All nodes ready
+export KUBECONFIG=~/.kube/kubelab-staging-config   # or -prod / -hub
 kubectl get nodes -o wide
+```
 
-# Namespace exists
-kubectl get ns kubelab
+Merge multiple cluster configs if you switch often:
 
-# System pods healthy
-kubectl get pods -A
+```bash
+export KUBECONFIG=~/.kube/config:~/.kube/kubelab-staging-config:~/.kube/kubelab-prod-config
+```
 
-# Cluster info
+If `kubectl` can't reach the API:
+
+1. Confirm you're on the mesh: `tailscale status` (or `tailscale ping ace1`).
+2. Confirm the server URL: `grep server ~/.kube/kubelab-staging-config` — should
+   be the node's Tailscale IP / MagicDNS name, not `127.0.0.1`.
+3. Re-fetch a stale kubeconfig by re-running the role (`make provision NODE=…
+   TAGS=k3s`) — it overwrites the file with the current address + CA.
+
+## Verify the cluster
+
+```bash
+kubectl get nodes -o wide        # node Ready, expected K3s version
+kubectl get ns kubelab           # workload namespace exists
+kubectl get pods -A              # kube-system + workloads healthy
 kubectl cluster-info
 ```
+
+## Traefik TLS (Let's Encrypt DNS-01)
+
+Spoke clusters ship the bundled Traefik as the ingress controller, configured by
+the role's `HelmChartConfig` for ACME via **Cloudflare DNS-01**. Key facts:
+
+- The cert resolver is named **`letsencrypt`** (Cloudflare is the DNS challenge
+  *provider*, not the resolver name).
+- The Cloudflare token Secret lives in **`kube-system`** (where Traefik runs).
+- ACME storage **must be persisted** (`persistence.enabled: true`) — an
+  `emptyDir` loses certs on every pod restart and re-hits the Let's Encrypt rate
+  limit (5 certs / domain set / 168h).
+
+Verify issuance after deploying an IngressRoute:
+
+```bash
+kubectl logs -n kube-system -l app.kubernetes.io/name=traefik | grep -i acme
+curl -vk https://web.staging.kubelab.live 2>&1 | grep -E 'subject|issuer'
+```
+
+The HelmChartConfig is **managed by Ansible** (template
+`infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2`) — do not
+create a static `HelmChartConfig` in `infra/k8s/`.
 
 ## Maintenance
 
 ### Restart K3s
 
 ```bash
-# Server
-ssh k3s-server "sudo systemctl restart k3s"
-
-# Agents
-ssh k3s-agent-1 "sudo systemctl restart k3s-agent"
-ssh k3s-agent-2 "sudo systemctl restart k3s-agent"
+ssh ace1 "sudo systemctl restart k3s"
 ```
 
-### Uninstall K3s
-
-```bash
-# Server (destroys cluster!)
-ssh k3s-server "sudo /usr/local/bin/k3s-uninstall.sh"
-
-# Agents
-ssh k3s-agent-1 "sudo /usr/local/bin/k3s-agent-uninstall.sh"
-ssh k3s-agent-2 "sudo /usr/local/bin/k3s-agent-uninstall.sh"
-```
+A restart is non-destructive (kine/SQLite persists) and is the correct fix when
+the server wedges after a bulk delete (`futex` deadlock — see `lessons.md`,
+2026-05-10). It costs ~1–2 min of API downtime.
 
 ### Upgrade K3s
 
-```bash
-# Server first, then agents
-ssh k3s-server "curl -sfL https://get.k3s.io | sh -"
-ssh k3s-agent-1 "curl -sfL https://get.k3s.io | K3S_URL=https://172.16.1.10:6443 K3S_TOKEN=<token> sh -"
-ssh k3s-agent-2 "curl -sfL https://get.k3s.io | K3S_URL=https://172.16.1.10:6443 K3S_TOKEN=<token> sh -"
-```
+Do **not** re-run `curl | sh` by hand. Single-node upgrades require a maintenance
+window and a datastore backup — follow [k3s-upgrade](k3s-upgrade.md).
 
-## Phase 6: Traefik TLS (Let's Encrypt DNS-01)
-
-K3s ships Traefik as the default ingress controller. Configure ACME cert provisioning via Cloudflare DNS-01.
-
-### Prerequisites
-
-- Cloudflare API token with `Zone:DNS:Edit` for `kubelab.live`
-- Secret created on cluster:
-  ```bash
-  kubectl --kubeconfig ~/.kube/kubelab-config create secret generic cloudflare-api-token \
-    --from-literal=api-token=<TOKEN> -n kube-system
-  ```
-
-### Apply HelmChartConfig
-
-K3s uses `HelmChartConfig` CRD to override Traefik Helm values:
+### Uninstall K3s (destroys the cluster)
 
 ```bash
-kubectl --kubeconfig ~/.kube/kubelab-config apply -f infra/k8s/base/traefik-config.yaml
+ssh ace1 "sudo /usr/local/bin/k3s-uninstall.sh"
 ```
-
-File `infra/k8s/base/traefik-config.yaml`:
-```yaml
-apiVersion: helm.cattle.io/v1
-kind: HelmChartConfig
-metadata:
-  name: traefik
-  namespace: kube-system
-spec:
-  valuesContent: |-
-    additionalArguments:
-      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
-      - "--certificatesresolvers.letsencrypt.acme.email=mlorentedev@gmail.com"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
-    env:
-      - name: CF_DNS_API_TOKEN
-        valueFrom:
-          secretKeyRef:
-            name: cloudflare-api-token
-            key: api-token
-```
-
-### Verify
-
-```bash
-# Check Traefik restarted with ACME args
-kubectl --kubeconfig ~/.kube/kubelab-config logs -n kube-system -l app.kubernetes.io/name=traefik | grep -i acme
-
-# After deploying an IngressRoute, check cert issuance (1-2 min)
-curl -vk https://web.staging.kubelab.live 2>&1 | grep -E "subject|issuer"
-```
-
-> **Note:** The Cloudflare secret MUST be in `kube-system` (where Traefik runs), not in `kubelab`.
 
 ## Reference
 
 | Item | Value |
 |------|-------|
-| K3s version | v1.34.4+k3s1 |
-| Server IP | 172.16.1.10 |
-| Agent-1 IP | 172.16.1.11 |
-| Agent-2 IP | 172.16.1.12 |
-| Gateway | 10.0.0.131 (RPi 4) |
-| Kubeconfig | `~/.kube/kubelab-config` |
+| K3s version (SSOT) | `common.yaml` → `k3s.version` (`v1.34.4+k3s1`) |
+| Staging node | `ace1` — `172.16.1.2` / `100.64.0.11` |
+| Prod node | VPS — `162.55.57.175` / `100.64.0.2` |
+| Hub node | `aws1` — `aws1.kubelab.internal` (MagicDNS) |
+| Datastore | kine / SQLite (`/var/lib/rancher/k3s/server/db/state.db`) |
 | Namespace | `kubelab` |
-| API endpoint | `https://172.16.1.10:6443` |
-| Install date | 2026-02-20 |
+| API port | `6443` |
+| Kubeconfig | `~/.kube/kubelab-<env>-config` |
+| Cert resolver | `letsencrypt` (Cloudflare DNS-01) |
+| Ansible role | `infra/ansible/roles/k3s_server` |
+| Install playbooks | `provision-ace1.yml` / `provision-vps.yml` / `provision-aws1.yml`, `deploy-k3s.yml` |
 
 ## Related
 
-- [hardware-setup](hardware-setup.md) — VM provisioning on Proxmox
-- [proxmox-setup](proxmox-setup.md) — Proxmox VE configuration
-- [headscale-setup](headscale-setup.md) — VPN mesh (replaces static route for remote access)
+- [k3s-upgrade](k3s-upgrade.md) — version upgrade procedure (maintenance window)
+- [headscale-setup](headscale-setup.md) — VPN mesh (cluster access transport)
 - [dns-homelab](dns-homelab.md) — CoreDNS for staging domain resolution
+- [operations](operations.md) — master deploy flows
+- [hardware-setup](hardware-setup.md) — node hardware allocation
