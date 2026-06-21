@@ -77,7 +77,7 @@ help:
 	@echo "  make flush-sessions ENV=x  Flush Authelia sessions (Redis FLUSHDB)"
 	@echo ""
 	@echo "Hub (Argo CD):"
-	@echo "  make fetch-kubeconfig-hub      Fetch kubeconfig from aws1"
+	@echo "  make fetch-kubeconfig ENV=x   Fetch a cluster kubeconfig (staging|prod|hub)"
 	@echo "  make deploy-argocd             Install/upgrade Argo CD (deploys Authelia OIDC first)"
 	@echo "  make deploy-apps               Deploy Argo CD Applications to hub"
 	@echo "  make check-apps                Check Application sync status"
@@ -377,17 +377,12 @@ secrets-audit:
 # -----------------------------------------------------------------------------
 HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
 
-# Fetch kubeconfig from aws1 — auto-accepts new host key (Spot instances rotate)
-# Also cleans stale keys for aws1.kubelab.internal from known_hosts
-.PHONY: fetch-kubeconfig-hub
-fetch-kubeconfig-hub:
-	@echo "=== Fetching kubeconfig from aws1 via Tailscale ==="
-	@ssh-keygen -R aws1.kubelab.internal 2>/dev/null || true
-	@ssh -o StrictHostKeyChecking=accept-new aws1.kubelab.internal "sudo cat /etc/rancher/k3s/k3s.yaml" | \
-		sed "s/127.0.0.1/aws1.kubelab.internal/" > $(HUB_KUBECONFIG)
-	@chmod 600 $(HUB_KUBECONFIG)
-	@echo "✓ Hub kubeconfig saved to $(HUB_KUBECONFIG)"
-	@kubectl --kubeconfig $(HUB_KUBECONFIG) get nodes
+# Fetch a cluster's kubeconfig (ADR-052): transport-agnostic server
+# (https://127.0.0.1:<local_port>) -> ~/.kube/kubelab-<ENV>-config.
+# Unifies the old inline hub-only fetch. ENV=staging|prod|hub.
+.PHONY: fetch-kubeconfig
+fetch-kubeconfig:
+	@$(TOOLKIT) infra k8s fetch-kubeconfig --env $(ENV)
 
 .PHONY: deploy-argocd
 deploy-argocd: _deploy-authelia-oidc _deploy-argocd-helm

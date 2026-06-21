@@ -321,6 +321,31 @@ argocd:
       node: vps    # → networking.vps.tailscale_ip
 
 # ===========================================================================
+# CLUSTER ACCESS (operator transport — ADR-052)
+# ===========================================================================
+# How an operator machine fetches and reaches each cluster's kubeconfig, so
+# deploy/apply works on the home LAN, off-network over the VPN, from CI, and
+# from a non-admin box with no native Tailscale. Addresses are NOT duplicated
+# here: `node` references networking.* (same convention as argocd.spokes).
+#   ssh_alias  — ~/.ssh/config alias used to fetch /etc/rancher/k3s/k3s.yaml
+#   local_port — the kubeconfig server is https://127.0.0.1:<local_port> (D1);
+#                the transport (`k8s connect`, Phase 2) maps it to the real
+#                apiserver. Distinct per cluster so several tunnels coexist.
+clusters:
+  staging:
+    node: ace1        # → networking.nodes.ace1
+    ssh_alias: ace1   # mesh alias; ace1-lan / ace1-ext are fast-path/fallback
+    local_port: 16443
+  prod:
+    node: vps         # → networking.vps (public apiserver = networking.vps.public_ip)
+    ssh_alias: vps
+    local_port: 16444
+  hub:
+    node: aws1        # → networking.aws (mesh-only: no LAN/public fallback)
+    ssh_alias: aws1
+    local_port: 16445
+
+# ===========================================================================
 # EDGE SERVICES (Reverse Proxy, Gateway, CDN)
 # ===========================================================================
 edge:
