@@ -4,3 +4,6 @@
 # CI/Linux is already LF, so this is a no-op there.
 *.yaml text eol=lf
 *.yml  text eol=lf
+# Markdown too: docs/lessons.md and others are edited from Windows; eol=lf keeps
+# diffs to the actual content change instead of a whole-file CRLF churn.
+*.md   text eol=lf
