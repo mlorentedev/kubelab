@@ -105,6 +105,15 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         },
     ),
     SecretMapping(
+        name="postgres-secrets",
+        keys={
+            # Shared data-service (ADR-051). The server reads POSTGRES_PASSWORD;
+            # POSTGRES_USER/DB are non-secret literals in the manifest. The api
+            # gets INFRA_POSTGRES_PASSWORD added to api-secrets in PR-1b.
+            "POSTGRES_PASSWORD": "INFRA_POSTGRES_PASSWORD",
+        },
+    ),
+    SecretMapping(
         name="api-secrets",
         keys={
             # SMTP password from shared infra namespace (ADR-036, PR #3).

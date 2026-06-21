@@ -33,6 +33,13 @@ class K8sGenerator(BaseGenerator):
         }
     )
 
+    # Deploy-concern trailing tokens — image refs and version pins are never
+    # runtime env. The _METADATA_SUFFIXES check above only fires on the
+    # prefix-stripped (APPS_PLATFORM_*) form; shared INFRA_* keys reach this
+    # method unstripped (e.g. INFRA_POSTGRES_IMAGE), so match the trailing
+    # segment to keep a shared image pin (ADR-051 D4) out of every ConfigMap.
+    _DEPLOY_CONCERN_SUFFIXES = frozenset({"IMAGE", "VERSION"})
+
     # Template files to render (template_name, output_name)
     # kustomization.yaml is NOT generated — it's manual (ADR-027, NET-002)
     _TEMPLATE_MAP = [
@@ -286,6 +293,11 @@ class K8sGenerator(BaseGenerator):
 
             # Skip metadata keys (only meaningful for the stripped form)
             if name in self._METADATA_SUFFIXES:
+                continue
+
+            # Skip deploy-concern keys (image refs / version pins) in any form,
+            # including unstripped INFRA_* (e.g. INFRA_POSTGRES_IMAGE). ADR-051 D4.
+            if name.rsplit("_", 1)[-1] in self._DEPLOY_CONCERN_SUFFIXES:
                 continue
 
             # Skip resource-related keys
