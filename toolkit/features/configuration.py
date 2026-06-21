@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from toolkit.core.sops import age_key_env
+
 # Removed top-level logger import to avoid circular dependency
 # from toolkit.core.logging import logger
 
@@ -60,7 +62,7 @@ class ConfigurationManager:
                 capture_output=True,
                 text=True,
                 check=True,
-                env=os.environ,  # Inherit current environment variables
+                env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
             return yaml.safe_load(result.stdout) or {}
         except subprocess.CalledProcessError as e:
@@ -268,7 +270,7 @@ class ConfigurationManager:
                 text=True,
                 check=True,
                 capture_output=True,
-                env=os.environ,
+                env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
             self._get_logger().info(f"Created encrypted file: {file_path}")
             return True
@@ -299,7 +301,7 @@ class ConfigurationManager:
                 text=True,
                 check=True,
                 capture_output=True,
-                env=os.environ,
+                env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
             return True
         except subprocess.CalledProcessError as e:
