@@ -1,0 +1,6 @@
+# Line-ending policy: keep YAML (including SOPS-encrypted *.enc.yaml) as LF on
+# every platform. Windows core.autocrlf=true would otherwise check these out as
+# CRLF, which breaks yamllint ("wrong new line character") and churns diffs.
+# CI/Linux is already LF, so this is a no-op there.
+*.yaml text eol=lf
+*.yml  text eol=lf
