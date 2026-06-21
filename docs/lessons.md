@@ -43,6 +43,54 @@ owner: manu
 
 **Rule**: From a non-admin / non-native-Tailscale box, diagnose fleet-access failures against all three causes before concluding "node down" — mesh non-routability, the `-ext` bastion authenticating as `deployer` (not your user), and a passphrase key with no agent. `ts-bridge` solves only single-target *interactive* SSH; *automation* needs a native-Tailscale node or an inherited ssh-agent. Procedure: `docs/runbooks/non-admin-workstation-access.md`.
 
+### [2026-06-20] SOPS matches `.sops.yaml` path_regex against the basename on Windows
+
+**Context**: Provisioning `infra.postgres.password` for staging + prod (#720/#721) from the Windows workstation. Every `toolkit secrets {init,apply,show,audit}` call failed with `no matching creation rules found`, blocking all secret operations.
+
+**Problem**: `.sops.yaml` anchored its rule on a directory prefix — `path_regex: infra/config/secrets/.*\.enc\.yaml$`. On Windows, sops applies `path_regex` to the file **basename** (`staging.enc.yaml`), not the repo-relative path, so a prefix-anchored regex never matches there. On Linux/CI the same rule matched (full path), so the breakage was effectively Windows-only and invisible in CI. Worse second-order effect: the false "no rule" made the toolkit read every secret as **missing** (decryption silently failing), so `toolkit secrets init` was about to *rotate the 12 existing secrets*. Stopped before running it.
+
+**Solution**: Match by extension only — `path_regex: .*\.enc\.yaml$` and `.*\.pem(\.enc)?$`. The only encrypted files in the repo live under `infra/config/secrets/`, so an extension match is equivalent on Linux/CI and also works on Windows. After the fix a dry-run confirmed only `infra.postgres.password` would be generated (no rotation).
+
+**Rule**: Never anchor a `.sops.yaml` `path_regex` on a directory prefix if the workflow ever runs on Windows — sops matches the basename there, not the path. Use a basename-stable pattern (extension). And: when a secret tool reports a secret "missing", verify *decryption itself works* before any `generate`/`init`/rotate — a decrypt failure masquerades as absence, and rotation is destructive.
+
+**Tags**: `#sops` `#windows` `#cross-platform` `#secrets` `#toolkit` `#pr-721`
+
+### [2026-06-20] Keep SOPS ciphertext out of gitleaks, and YAML/Markdown out of CRLF, on Windows
+
+**Context**: After wiring pre-commit in this clone (#721), commits touching `infra/config/secrets/*.enc.yaml` were slow enough to be unsustainable, and YAML files kept failing yamllint with `wrong new line character`.
+
+**Problem**: Two independent Windows/tooling frictions. (1) gitleaks (`useDefault`) was scanning SOPS **ciphertext** — SOPS rotates the data key on every edit, so the whole high-entropy file changes each commit; scanning age ciphertext is slow and only yields false positives, because it is not plaintext. (2) `core.autocrlf=true` with no `.gitattributes` override checked YAML out as CRLF; yamllint rejects CRLF, and the toolkit (writing in text mode) re-emitted CRLF — a churn loop.
+
+**Solution**: `.gitleaks.toml` allowlist `infra/config/secrets/.*\.enc\.yaml$` (+ `.*\.pem(\.enc)?$`) — real plaintext leaks are still caught by the toolkit and the `detect-private-key` hook *before* a value ever reaches SOPS. `.gitattributes` pin `*.yaml`/`*.yml` (and now `*.md`) to `eol=lf`.
+
+**Rule**: A secret scanner must never scan SOPS-encrypted stores — allowlist them by path and rely on a pre-SOPS plaintext guard for real leaks. On any repo edited from Windows, pin every text format that tooling parses (YAML, Markdown) to `eol=lf` in `.gitattributes`; autocrlf otherwise produces CRLF that breaks linters and churns diffs.
+
+**Tags**: `#gitleaks` `#sops` `#pre-commit` `#windows` `#crlf` `#gitattributes` `#pr-721`
+
+### [2026-06-20] A broken language-toolchain launcher silently un-wires the dev setup
+
+**Context**: Resuming work, `poetry` failed with `did not find executable at ...python-313...python.exe`, and pre-commit had clearly never run — `.git/hooks` held only `.sample` files and `core.hooksPath` was unset.
+
+**Problem**: A Poetry console launcher (like venv shebangs) embeds the **absolute path** of the interpreter that created it. The Python 3.13 install had been removed (OneDrive relocation), orphaning the launcher. Because `poetry` itself was broken, `make setup` had never completed in this clone → `pre-commit install` never ran → no git hooks were wired, and nothing surfaced the gap at the time. The breakage stayed invisible until a hook was finally expected to fire.
+
+**Solution**: Reinstall Poetry against a present, CI-parity interpreter — `py -3.12 -m pip install --user --force-reinstall poetry`, then copy the fresh `Python312\Scripts\poetry.exe` over the stale launcher — and `poetry run pre-commit install`. Reinstalled on 3.12.8 (CI parity), not the freshly-installed 3.14.
+
+**Rule**: A toolchain whose launcher pins an absolute interpreter path breaks silently when that interpreter moves or is deleted, and a broken package manager can leave downstream setup (git hooks, venv) half-wired with no error. After any Python relocation/upgrade, re-run `make setup` and verify the chain end-to-end (`poetry --version`, hooks actually present under `core.hooksPath`) — a green shell prompt does not mean the dev environment is wired.
+
+**Tags**: `#poetry` `#python` `#pre-commit` `#dev-setup` `#windows`
+
+### [2026-06-20] Argo CD never creates imperative Secrets — "secret not found" after sync is expected
+
+**Context**: After merging the Postgres manifest (#720), Argo CD reported the Postgres app **Degraded**: `secret "postgres-secrets" not found`.
+
+**Problem**: K8s Secrets in this repo are not in git — the overlay `secrets.yaml` carries only `REPLACE_WITH_SOPS_VALUE` placeholders. Real values are applied imperatively at deploy time via `toolkit secrets apply` (SOPS → rendered Secret → `kubectl apply`). Argo CD syncs only what is committed, so it never creates these Secrets; a freshly-synced workload that consumes one is *expected* to report Degraded until the apply step runs. Here the apply was deferred (no kubeconfig reachable from the workstation — the single `~/.kube/kubelab.config` points at a LAN IP, `172.16.1.10`, unreachable over Tailscale), tracked as #723 (build `make fetch-kubeconfig ENV=staging|prod`) → #724 (apply the secrets).
+
+**Solution**: None needed on the manifest — the Degraded state is the secret-apply step pending, not a defect. Ticketed #723/#724 so the apply is not lost.
+
+**Rule**: In a GitOps repo where Secrets are applied imperatively (not committed), `secret not found` immediately after a sync is expected, not a regression — the secret-apply is a separate, out-of-band action. Track it as a follow-up and don't debug the manifest. Corollary: provisioning a secret in SOPS and applying it to the cluster are two distinct steps; merging the manifest performs neither.
+
+**Tags**: `#argocd` `#gitops` `#secrets` `#sops` `#toolkit` `#adr-037` `#issue-723` `#issue-724`
+
 ### [2026-06-15] A generated artifact's content must not depend on whether secrets are decrypted
 
 **Context**: First gated prod promotion (`api` → `1.1.0`, #664) put the new pod in `CrashLoopBackOff` — `panic: SMTP credentials required in production`. The api Deployment's `envFrom` referenced only `configMapRef: api-config`, never `secretRef: api-secrets`, so `INFRA_SMTP_PASS` (present in the cluster Secret for 86 days) was never injected. `:dev` had no such guard; `1.1.0` added one. No outage — the rolling update held the old `:dev` pod Ready while the new one never became Ready.
