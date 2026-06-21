@@ -1,10 +1,15 @@
 creation_rules:
-  - path_regex: infra/config/secrets/.*\.enc\.yaml$
+  # Match by extension only (not a path prefix): on Windows, sops applies
+  # path_regex against the file basename, so a `infra/config/secrets/...`
+  # prefix never matches there (-> "no matching creation rules found"). The
+  # only *.enc.yaml files in the repo live in infra/config/secrets/, so an
+  # extension match is equivalent on Linux/CI and also works on Windows.
+  - path_regex: .*\.enc\.yaml$
     key_groups:
       - age:
           - "age166v8efpskctmxxes5lcqpxkj0ny3q74l3v0pswpdpa63wlkqmc8q35fkdw"  # human (workstation)
           - "age1wpqxa7vqkr6watypd6zlw7kspz506kq2kvluxnluhz72mgtaga3qlg84cv"  # ci (github-actions)
-  - path_regex: infra/config/secrets/.*\.pem(\.enc)?$
+  - path_regex: .*\.pem(\.enc)?$
     key_groups:
       - age:
           - "age166v8efpskctmxxes5lcqpxkj0ny3q74l3v0pswpdpa63wlkqmc8q35fkdw"  # human (workstation)

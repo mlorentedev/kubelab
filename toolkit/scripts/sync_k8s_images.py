@@ -29,6 +29,7 @@ IMAGE_SOURCES = [
     "apps.services.security.authelia.redis_image",
     "apps.services.security.crowdsec.image",
     "apps.services.data.minio.image",
+    "infra.postgres.image",
 ]
 
 # Marker comments kept above the images block.

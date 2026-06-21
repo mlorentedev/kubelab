@@ -377,6 +377,18 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("api", "authelia"),
         rotate_note="apply-secrets for api-secrets + authelia-secrets, restart both.",
     ),
+    # Shared Postgres data-service (ADR-051). This is OUR OWN DB password (not an
+    # external credential) → machine-generated. `username`/`database`/`host` are
+    # non-secrets in common.yaml. K8s-only (staging+prod base); dev is Docker
+    # Compose with no Postgres yet. The api becomes a second consumer in PR-1b.
+    SecretSpec(
+        key_path="infra.postgres.password",
+        description="Postgres password for the shared data-service (board projection + future pgvector)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("postgres",),
+        rotate_note="apply-secrets for postgres-secrets; ALTER USER + restart postgres (and api once it connects).",
+        envs=("staging", "prod"),
+    ),
     SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         description="Beehiiv newsletter API key",
