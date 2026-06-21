@@ -98,25 +98,33 @@ Notes:
 
 ---
 
-## PR-1 — Postgres + atlas + schema (next)
+## PR-1 — Postgres foundation (split into PR-1a + PR-1b at the ~300-LOC guard)
 
-> Stand up the persistence foundation. Author **ADR-051** (Postgres data-service + atlas) in the same PR.
+### PR-1a — Postgres infra + SSOT/SOPS wiring ✓ 2026-06-20 (branch `feat/console-002-postgres-foundation`)
 
-- [ ] ADR-051 drafted: why Postgres now (D7), why atlas, connection-detail SSOT, init-container migration flow.
-- [ ] `infra/k8s/base/services/postgres.yaml` — StatefulSet + PVC + Service, house style mirroring
-      `redis.yaml` but PVC-backed (`postgres:16-alpine`).
-- [ ] `infra.postgres.{host,port,database,version,image}` in `common.yaml` + SOPS
-      `infra.postgres.{username,password}`; register in `toolkit/features/secrets_manager.py`
-      `SECRET_CATALOG` + `k8s_secrets.py` mapping so `INFRA_DATABASE_URL` / `INFRA_POSTGRES_*` reach the
-      api ConfigMap+Secret (ADR-036).
-- [ ] `INFRA_DATABASE_URL` in `pkg/config/env.go` — optional (required only in prod via `validateConfig`),
-      so the API still boots when unset (mirrors SMTP-optional pattern).
+- [x] **ADR-051** drafted: why Postgres now (D7), why atlas, connection-detail SSOT, migration flow. ✓ 2026-06-20
+- [x] `infra/k8s/base/services/postgres.yaml` — **Deployment(Recreate) + PVC + Service** (NOT StatefulSet:
+      zero StatefulSets in the repo; matched gitea/minio house style), `postgres:16-alpine`. ✓ 2026-06-20
+- [x] `infra.postgres.{host,port,database,username,image}` in `common.yaml`; **only `password` in SOPS**
+      (SMTP precedent: username non-secret; `RANDOM_TOKEN`). `version` dropped (redundant w/ image tag).
+      `SECRET_CATALOG` (`infra.postgres.password`) + `k8s_secrets.py` `postgres-secrets` mapping
+      (`POSTGRES_PASSWORD`). `infra.postgres.image` added to `sync_k8s_images` `IMAGE_SOURCES`. ✓ 2026-06-20
+- [x] **ConfigMap deploy-concern guard** (ADR-051 D4): `_extract_app_env_vars` skips `*_IMAGE`/`*_VERSION`
+      so `infra.postgres.image` does not leak into ConfigMaps. +3 tests. ✓ 2026-06-20
+- [x] Validated: configmaps regenerated (staging+prod), guard verified, unit suite no-regression. ✓ 2026-06-20
+- [ ] **Deploy-time (SOPS context):** `toolkit secrets init/edit` to generate `infra.postgres.password`, then
+      `toolkit secrets apply` before the postgres pod starts (else CrashLoop on missing `POSTGRES_PASSWORD`).
+
+### PR-1b — atlas schema + Go data layer (next)
+
+- [ ] `INFRA_DATABASE_URL`/DSN in `pkg/config/env.go` — optional (required only in prod via `validateConfig`),
+      so the API still boots when unset (mirrors SMTP-optional pattern). Add `INFRA_POSTGRES_PASSWORD` to
+      `api-secrets` mapping; add `api` to the `infra.postgres.password` `SecretSpec.services`.
 - [ ] atlas schema + first migration: `contexts`, `work_items`, `events` (`context_id` NOT NULL
-      everywhere; `events` PK = UUID for idempotency).
+      everywhere; `events` PK = UUID for idempotency). Align `go.mod` 1.23.1 → 1.25 when atlas dep lands.
 - [ ] Real DB ping in `checkDatabaseConnection` (`healthchecks.go`) replacing the mock.
 - [ ] Tests: migration applies cleanly; ping succeeds against an integration DB (skipped when
       `DATABASE_URL` unset so unit CI stays green).
-- [ ] LOC guard: if SSOT + SOPS + manifest crosses ~300, split the K8s manifest from the SSOT/secrets wiring.
 
 ## Closing (whole module)
 

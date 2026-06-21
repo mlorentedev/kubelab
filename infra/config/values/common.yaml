@@ -210,6 +210,20 @@ infra:
     user: mlorentedev@gmail.com
     from: mlorentedev
     secure: true
+  postgres:
+    # Shared data-service (ADR-051, implements ADR-050 D7). First consumer is the
+    # CONSOLE-002 board (Postgres projection of the git event store); pgvector/memory
+    # (ADR-027/043) is the planned second consumer — hence `infra.*`, not a per-app
+    # namespace. `host` is the in-cluster Service name. `username`/`database` are
+    # non-secrets; the `password` lives in SOPS at `infra.postgres.password`
+    # (RANDOM_TOKEN — our own DB password, not an external credential). `image`
+    # feeds `sync_k8s_images` and is kept out of ConfigMaps by the generator's
+    # deploy-concern guard (ADR-051 D4).
+    host: postgres
+    port: 5432
+    database: kubelab
+    username: kubelab
+    image: postgres:16-alpine
 
 resources:
   default_memory_limit: 512m

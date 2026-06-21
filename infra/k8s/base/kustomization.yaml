@@ -14,6 +14,7 @@ resources:
   - services/loki.yaml
   - services/vector.yaml
   - services/redis.yaml
+  - services/postgres.yaml
   - services/authelia.yaml
   - services/crowdsec.yaml
   - services/gitea.yaml
@@ -81,6 +82,8 @@ images:
     newTag: v1.7.6
   - name: quay.io/minio/minio
     newTag: RELEASE.2025-09-07T16-13-09Z
+  - name: postgres
+    newTag: 16-alpine
   # Custom apps (managed by release-please, not sync_k8s_images.py)
   - name: docker.io/mlorentedev/kubelab-web
     newTag: "1.0.1"
