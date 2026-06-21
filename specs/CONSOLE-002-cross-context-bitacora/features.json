@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CONSOLE-002-cross-context-bitacora-f1",
+    "behavior": "A Context persists all four attributes (isolation, allowed providers+keys, visibility, owner) and round-trips through git + the Postgres projection",
+    "verification": "cd apps/api/src && go test -race ./internal/board/... -run TestContextRoundTrip",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-002-cross-context-bitacora-f2",
+    "behavior": "A work item belongs to exactly one Context and accumulates an append-only event history; re-prioritizing/moving a deadline appends an event and never mutates prior state",
+    "verification": "cd apps/api/src && go test -race ./internal/board/... -run TestAppendOnlyHistory",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-002-cross-context-bitacora-f3",
+    "behavior": "The GitHub adapter ingests a repo's open issues (forge->board) and writes status/label back to one issue (board->forge), confirming the write by re-reading not by exit code",
+    "verification": "cd apps/api/src && go test -race ./internal/board/forge/... -run TestGitHubAdapterVerifiedWrite",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-002-cross-context-bitacora-f4",
+    "behavior": "A Context with no explicit provider policy resolves to local-only (Ollama); adding a cloud-provider grant flips the resolution (default-deny enforced by test)",
+    "verification": "cd apps/api/src && go test -race ./internal/board/... -run TestResolveContextPolicyDefaultDeny",
+    "state": "pending",
+    "evidence": ""
+  }
+]
