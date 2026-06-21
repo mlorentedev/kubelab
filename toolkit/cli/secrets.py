@@ -23,6 +23,7 @@ import typer
 
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
+from toolkit.core.sops import age_key_env
 
 if TYPE_CHECKING:
     from toolkit.features.secrets_manager import AuditResult, SecretsManager
@@ -81,7 +82,7 @@ def edit(
     logger.info(f"Opening {sops_file.name} with {editor}...")
 
     try:
-        sops_env = {**os.environ, "EDITOR": editor}
+        sops_env = {**age_key_env(), "EDITOR": editor}
         result = subprocess.run(
             ["sops", "edit", str(sops_file)],
             env=sops_env,

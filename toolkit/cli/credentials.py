@@ -9,6 +9,7 @@ import yaml
 from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
+from toolkit.core.sops import age_key_env
 from toolkit.features.credentials import credentials_manager
 from toolkit.features.github_secrets import github_secrets_manager
 
@@ -42,6 +43,7 @@ def _decrypt_secrets_file(env: str) -> dict[str, Any]:
         capture_output=True,
         text=True,
         check=True,
+        env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
     )
     return yaml.safe_load(result.stdout) or {}
 
