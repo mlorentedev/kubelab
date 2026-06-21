@@ -745,6 +745,34 @@ def k8s_status(
     logger.console.print(result.stdout)
 
 
+@k8s_app.command("fetch-kubeconfig")
+def k8s_fetch_kubeconfig(
+    env: Annotated[str, typer.Option("--env", "-e", help="Cluster to fetch (staging|prod|hub)")],
+) -> None:
+    """Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052).
+
+    Unifies and replaces the bespoke `fetch-kubeconfig-hub` Makefile target.
+    SSHes to the cluster's k3s server via its `clusters.<env>.ssh_alias`
+    (common.yaml SSOT), rewrites the apiserver to https://127.0.0.1:<local_port>,
+    and saves ~/.kube/kubelab-<env>-config (0600). The local port is mapped to the
+    real apiserver by the transport layer (`k8s connect`, ADR-052 Phase 2) -- direct
+    for prod's public IP, an SSH local-forward on the LAN, or ts-bridge over the
+    mesh -- so one kubeconfig works from any machine, including a non-admin box with
+    no native Tailscale.
+    """
+    from toolkit.core.logging import ExecutionError
+    from toolkit.features.k8s_kubeconfig import fetch_kubeconfig
+
+    try:
+        fetch_kubeconfig(env)
+    except KeyError as e:
+        logger.error(str(e))
+        raise typer.Exit(2) from e
+    except (ValueError, ExecutionError) as e:
+        logger.error(f"fetch-kubeconfig failed: {e}")
+        raise typer.Exit(1) from e
+
+
 # =============================================================================
 # ANSIBLE COMMANDS
 # =============================================================================
