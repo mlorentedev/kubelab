@@ -98,7 +98,7 @@ Download the release artifact, verify the checksum, extract. No build toolchain
 needed.
 
 ```powershell
-$dest = "$env:USERPROFILE\tools\ts-bridge"   # stable location (NOT %TEMP%)
+$dest = "$env:USERPROFILE\Apps\ts-bridge"    # stable location (NOT %TEMP%)
 New-Item -ItemType Directory -Force $dest | Out-Null
 gh release download --repo mlorentedev/ts-bridge `
   --pattern 'ts-bridge-*-windows-amd64.zip' --pattern 'checksums.txt' --dir $dest
