@@ -9,4 +9,11 @@ useDefault = true
 [allowlist]
   paths = [
     '''apps/wiki/''',
+    # SOPS-encrypted secret stores: the values are age ciphertext, not plaintext
+    # secrets. SOPS rotates the data key on every edit, so the whole file changes
+    # each commit -> scanning these high-entropy blobs is slow and only yields
+    # false positives. Real plaintext leaks are caught by the toolkit + the
+    # detect-private-key hook before they ever reach SOPS.
+    '''infra/config/secrets/.*\.enc\.yaml$''',
+    '''infra/config/secrets/.*\.pem(\.enc)?$''',
   ]
