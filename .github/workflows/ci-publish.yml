@@ -122,12 +122,11 @@ jobs:
             org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
 
       # SEC-SCAN-001: pinned to v0.36.0 (commit SHA, not floating tag, to avoid CI breakage).
-      # continue-on-error during a 4-week soak so findings surface in GitHub Security
-      # without blocking ships; flip to blocking after baseline is established.
+      # Soak completed 2026-06-22 — baseline clean (0 CRITICAL/HIGH across trivy-api/web/errors).
       - name: Trivy vulnerability scan
         id: trivy_scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
-        continue-on-error: true
+        continue-on-error: false
         with:
           image-ref: ${{ steps.docker_tags.outputs.full_image }}
           format: sarif
