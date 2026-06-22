@@ -384,6 +384,21 @@ HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
 fetch-kubeconfig:
 	@$(TOOLKIT) infra k8s fetch-kubeconfig --env $(ENV)
 
+# Cluster-access transport (ADR-052 Phase 2): map 127.0.0.1:<local_port> to the
+# env's apiserver -- ts-bridge over the mesh (staging|hub) or the direct public
+# endpoint (prod). Idempotent. ENV=staging|prod|hub (the toolkit rejects others).
+.PHONY: connect
+connect:
+	@$(TOOLKIT) infra k8s access connect --env $(ENV)
+
+.PHONY: disconnect
+disconnect:
+	@$(TOOLKIT) infra k8s access disconnect --env $(ENV)
+
+.PHONY: connect-status
+connect-status:
+	@$(TOOLKIT) infra k8s access status --env $(ENV)
+
 .PHONY: deploy-argocd
 deploy-argocd: _deploy-authelia-oidc _deploy-argocd-helm
 

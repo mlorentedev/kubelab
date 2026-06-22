@@ -50,6 +50,12 @@ k8s_app = typer.Typer(
     no_args_is_help=True,
 )
 
+k8s_access_app = typer.Typer(
+    name="access",
+    help="Cluster-access transport (ADR-052): bring up/tear down/inspect the local->apiserver tunnel",
+    no_args_is_help=True,
+)
+
 backup_app = typer.Typer(
     name="backup",
     help="Backup Docker volumes and critical data on remote hosts",
@@ -77,6 +83,7 @@ n8n_app = typer.Typer(
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
+k8s_app.add_typer(k8s_access_app, name="access")
 app.add_typer(backup_app, name="backup")
 app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
@@ -771,6 +778,64 @@ def k8s_fetch_kubeconfig(
     except (ValueError, ExecutionError) as e:
         logger.error(f"fetch-kubeconfig failed: {e}")
         raise typer.Exit(1) from e
+
+
+# -----------------------------------------------------------------------------
+# CLUSTER-ACCESS TRANSPORT (ADR-052 Phase 2 / TOOL-014)
+# `infra k8s access {connect,disconnect,status}` — separate from the legacy
+# `infra k8s status` (workloads), which is left untouched.
+# -----------------------------------------------------------------------------
+
+
+@k8s_access_app.command("connect")
+def k8s_access_connect(
+    env: Annotated[str, typer.Option("--env", "-e", help="Cluster to connect (staging|prod|hub)")],
+) -> None:
+    """Bring up the cluster-access transport (idempotent).
+
+    Maps the kubeconfig's 127.0.0.1:<local_port> to the env's apiserver: ts-bridge
+    over the Headscale mesh for staging/hub, the direct public endpoint for prod.
+    Re-running while already up is a clean no-op.
+    """
+    from toolkit.features.k8s_connect import connect
+
+    try:
+        ok = connect(env)
+    except KeyError as e:
+        logger.error(str(e))
+        raise typer.Exit(2) from e
+    if not ok:
+        raise typer.Exit(1)
+
+
+@k8s_access_app.command("disconnect")
+def k8s_access_disconnect(
+    env: Annotated[str, typer.Option("--env", "-e", help="Cluster to disconnect (staging|prod|hub)")],
+) -> None:
+    """Tear down the cluster-access transport (idempotent; no-op for prod)."""
+    from toolkit.features.k8s_connect import disconnect
+
+    try:
+        ok = disconnect(env)
+    except KeyError as e:
+        logger.error(str(e))
+        raise typer.Exit(2) from e
+    if not ok:
+        raise typer.Exit(1)
+
+
+@k8s_access_app.command("status")
+def k8s_access_status(
+    env: Annotated[str, typer.Option("--env", "-e", help="Cluster to inspect (staging|prod|hub)")],
+) -> None:
+    """Report whether the transport is up and which transport was resolved."""
+    from toolkit.features.k8s_connect import status
+
+    try:
+        status(env)
+    except KeyError as e:
+        logger.error(str(e))
+        raise typer.Exit(2) from e
 
 
 # =============================================================================
