@@ -41,7 +41,7 @@ created: "2026-06-21"
 - [x] Lint passes
 - [x] No unrelated changes in the diff (no scope creep)
 - [x] `verification.md` filled in
-- [ ] PR opened referencing this spec folder (pending user authorization to commit)
+- [x] PR opened referencing this spec folder — merged via PR #732 (`3b861eb`, ADR-052, #731)
 
 ## Machine-readable features
 

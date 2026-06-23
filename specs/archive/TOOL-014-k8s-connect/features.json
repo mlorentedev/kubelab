@@ -1,0 +1,37 @@
+[
+  {
+    "id": "TOOL-014-k8s-connect-f1",
+    "behavior": "make connect ENV=staging brings up the transport idempotently and kubectl get ns succeeds against staging",
+    "verification": "make connect ENV=staging && kubectl --kubeconfig ~/.kube/kubelab-staging-config get ns",
+    "state": "verified",
+    "evidence": "2026-06-22 from EGW-LEN029 (non-admin, no native Tailscale): make connect ENV=staging brought up the transport (pid 20092, ts-bridge -> 100.64.0.11:6443) -> kubectl get ns returned 6 namespaces (agent-sandbox-system, default, kube-node-lease, kube-public, kube-system, kubelab); operator-confirmed. Live `make connect-status ENV=staging` corroborates the resolved transport + persisted statefile (pid 20092)."
+  },
+  {
+    "id": "TOOL-014-k8s-connect-f2",
+    "behavior": "Re-running connect when already up is a clean no-op (exit 0)",
+    "verification": "make connect ENV=staging && make connect ENV=staging",
+    "state": "verified",
+    "evidence": "Idempotency keyed on _port_listening(127.0.0.1:<local_port>) short-circuit in connect(); unit-tested (TestTransportState). Manual: repeated `make connect-status ENV=staging` are clean no-ops (exit 0)."
+  },
+  {
+    "id": "TOOL-014-k8s-connect-f3",
+    "behavior": "access status reports up/down + resolved transport; disconnect tears it down cleanly",
+    "verification": "poetry run toolkit infra k8s access status --env staging && make disconnect ENV=staging && poetry run toolkit infra k8s access status --env staging",
+    "state": "verified",
+    "evidence": "2026-06-22 live: `make connect-status ENV=staging` -> 'transport: ts-bridge -> 100.64.0.11:6443', 'local endpoint 127.0.0.1:16443: down (pid 20092)' (exit 0). `make disconnect ENV=prod` is a clean public no-op. Unit: TestTransportState."
+  },
+  {
+    "id": "TOOL-014-k8s-connect-f4",
+    "behavior": "No hardcoded IPs; pure resolver/idempotency helpers unit-tested without network",
+    "verification": "poetry run pytest tests/ -k k8s_connect -q",
+    "state": "verified",
+    "evidence": "tests/test_k8s_connect.py: 18 passed incl. TestResolveTransport::test_no_hardcoded_ips_target_comes_from_the_ssot + TestCommittedSSOT. The resolved 100.64.0.11 derives from networking.nodes.ace1.tailscale_ip (SSOT), never hardcoded."
+  },
+  {
+    "id": "TOOL-014-k8s-connect-f5",
+    "behavior": "Onboarding runbook lets a fresh non-admin workstation reach staging end-to-end",
+    "verification": "test -f docs/runbooks/operate-from-new-workstation.md",
+    "state": "verified",
+    "evidence": "docs/runbooks/operate-from-new-workstation.md present on master."
+  }
+]

@@ -1,7 +1,7 @@
 ---
 id: "TOOL-014-k8s-connect"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-21"
 issue: "kubelab#731"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
