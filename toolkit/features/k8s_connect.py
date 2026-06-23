@@ -30,9 +30,10 @@ import signal
 import socket
 import subprocess
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import yaml
 
@@ -150,25 +151,29 @@ def resolve_transport(env: str, common_path: Path | None = None) -> ClusterTrans
     return ClusterTransport(env, "ts-bridge", str(mesh_host), apiserver_port, local_port)
 
 
-def ts_bridge_argv(binary: str | os.PathLike[str], transport: ClusterTransport) -> list[str]:
-    """Build the ts-bridge argv for a mesh transport (manual mode, fixed local bind).
+def ts_bridge_argv(
+    binary: str | os.PathLike[str],
+    target_host: str,
+    target_port: int,
+    local_port: int,
+) -> list[str]:
+    """Build the ts-bridge argv for a manual-mode tunnel to target_host:target_port.
 
     ``--manual-mode`` pins the bind to ``--local-addr`` instead of auto-selecting a
-    port from a range - the kubeconfig's ``127.0.0.1:<local_port>`` must match
-    exactly. Auth (``TS_AUTHKEY``) and control-plane URL come from ts-bridge's own
-    ``.env`` (loaded via the binary's working directory), so kubelab never handles
-    the Headscale preauth key.
+    port from a range.  Auth (``TS_AUTHKEY``) and control-plane URL come from
+    ts-bridge's own ``.env`` (loaded via the binary's working directory), so kubelab
+    never handles the Headscale preauth key.
+
+    Works for any TCP target — apiserver (port 6443) or SSH (port 22).
     """
-    if transport.kind != "ts-bridge":
-        raise ValueError(f"ts_bridge_argv is only for a ts-bridge transport, not {transport.kind!r} ({transport.env})")
     return [
         str(binary),
         "connect",
         "--manual-mode",
         "--target",
-        f"{transport.target_host}:{transport.apiserver_port}",
+        f"{target_host}:{target_port}",
         "--local-addr",
-        f"127.0.0.1:{transport.local_port}",
+        f"127.0.0.1:{local_port}",
     ]
 
 
@@ -194,6 +199,94 @@ def locate_ts_bridge() -> Path:
 
 def statefile_path(env: str) -> Path:
     return Path(os.path.expanduser(_STATEFILE_PATTERN.format(env=env)))
+
+
+def find_free_port() -> int:
+    """Return an OS-assigned free loopback port (bind 0, then close)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def resolve_ssh_user(networking: dict[str, Any], node: str) -> str:
+    """Return the OS SSH user for *node* per SSOT-014a (networking.ssh_users.<category>).
+
+    Nodes under ``networking.nodes.*`` are ``homelab``; ``vps`` / ``aws`` are ``cloud``.
+    Raises ``KeyError`` with an actionable message when the category is missing.
+    """
+    nodes = networking.get("nodes") or {}
+    category = "homelab" if node in nodes else "cloud"
+    ssh_users = networking.get("ssh_users") or {}
+    user = ssh_users.get(category)
+    if not user:
+        raise KeyError(f"networking.ssh_users.{category} not declared (node {node!r})")
+    return str(user)
+
+
+def resolve_ssh_tunnel_params(env: str, common_path: Path | None = None) -> tuple[str, str]:
+    """Return ``(ssh_user, mesh_host)`` for SSH-tunnelling into cluster *env*.
+
+    Used by ``fetch_kubeconfig`` when the direct SSH alias is unreachable and the
+    read must be routed through a transient ts-bridge SSH tunnel.
+    """
+    config = _load_config(common_path)
+    clusters = config.get("clusters") or {}
+    try:
+        cluster = clusters[env]
+    except KeyError:
+        valid = ", ".join(sorted(clusters)) or "(none declared)"
+        raise KeyError(f"unknown cluster {env!r}; declared clusters: {valid}") from None
+
+    networking = config.get("networking") or {}
+    node = str(cluster["node"])
+    block = _node_block(networking, node)
+
+    mesh_host = block.get("tailscale_dns") or block.get("tailscale_ip")
+    if not mesh_host:
+        raise KeyError(f"cluster {env!r} node {node!r} has no mesh address for SSH tunnel fallback")
+
+    return resolve_ssh_user(networking, node), str(mesh_host)
+
+
+@contextmanager
+def ts_bridge_tunnel(target_host: str, target_port: int, local_port: int) -> Generator[int, None, None]:
+    """Transient ts-bridge tunnel; guaranteed teardown even when the body raises.
+
+    Spawns ts-bridge in ``--manual-mode`` forwarding ``127.0.0.1:<local_port>``
+    to ``target_host:target_port``, waits for the local port to accept connections,
+    yields the child PID for the caller to inspect, then terminates the process in
+    the ``finally`` block regardless of whether the body succeeds or raises.
+
+    Use this for short-lived tunnels (e.g., an SSH read of ``k3s.yaml``) that must
+    not outlive the operation.  For persistent tunnels use ``connect`` / ``disconnect``.
+    """
+    binary = locate_ts_bridge()
+    argv = ts_bridge_argv(binary, target_host, target_port, local_port)
+    proc = subprocess.Popen(
+        argv,
+        cwd=str(binary.parent),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + _HEALTHCHECK_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if _port_listening(local_port):
+                break
+            if proc.poll() is not None:
+                raise RuntimeError(
+                    f"ts-bridge exited early (code {proc.returncode}); check auth in {binary.parent}/.env"
+                )
+            time.sleep(_HEALTHCHECK_INTERVAL_S)
+        else:
+            raise TimeoutError(
+                f"ts-bridge tunnel {target_host}:{target_port} -> 127.0.0.1:{local_port} "
+                f"did not come up in {_HEALTHCHECK_TIMEOUT_S:.0f}s"
+            )
+        yield proc.pid
+    finally:
+        _terminate(proc.pid)
 
 
 def _port_listening(port: int, host: str = "127.0.0.1", timeout: float = 1.0) -> bool:
@@ -243,7 +336,7 @@ def connect(env: str) -> bool:
         logger.error(str(exc))
         return False
 
-    argv = ts_bridge_argv(binary, transport)
+    argv = ts_bridge_argv(binary, transport.target_host, transport.apiserver_port, transport.local_port)
     logger.info(f"Starting ts-bridge: {' '.join(argv)} (cwd {binary.parent})")
     # Detach so the bridge outlives this CLI; run in the binary's dir to reuse its .env auth.
     proc = subprocess.Popen(

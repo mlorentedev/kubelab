@@ -1,0 +1,44 @@
+[
+  {
+    "id": "TOOL-015-f1",
+    "behavior": "make fetch-kubeconfig ENV=staging succeeds from a non-admin box (no native Tailscale), producing a working ~/.kube/kubelab-staging-config; make connect ENV=staging + kubectl get ns then works end-to-end",
+    "verification": "make fetch-kubeconfig ENV=staging && make connect ENV=staging && kubectl --kubeconfig ~/.kube/kubelab-staging-config get ns",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-015-f2",
+    "behavior": "Idempotent overwrite: re-running fetch-kubeconfig overwrites the kubeconfig at 0600, never appends or accumulates state",
+    "verification": "make fetch-kubeconfig ENV=staging && make fetch-kubeconfig ENV=staging && stat ~/.kube/kubelab-staging-config | grep -E '0600|rw-------'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-015-f3",
+    "behavior": "Guaranteed teardown: a forced failure mid-fetch leaves no orphan ts-bridge process",
+    "verification": "poetry run pytest tests/test_k8s_connect.py::TestTsBridgeTunnel::test_guaranteed_teardown_when_body_raises -v",
+    "state": "verified",
+    "evidence": "tests/test_k8s_connect.py::TestTsBridgeTunnel::test_guaranteed_teardown_when_body_raises PASSED"
+  },
+  {
+    "id": "TOOL-015-f4",
+    "behavior": "Deterministic known_hosts: repeated fetches across clusters never raise 'host key changed' and never write to the user's known_hosts",
+    "verification": "make fetch-kubeconfig ENV=staging && make fetch-kubeconfig ENV=hub -- verify no ~/.ssh/known_hosts entry for 127.0.0.1 added",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-015-f5",
+    "behavior": "No hardcoded IPs; pure helpers (resolve_ssh_user, resolve_ssh_tunnel_params, ts_bridge_argv, find_free_port) unit-tested without network",
+    "verification": "poetry run pytest tests/test_k8s_connect.py tests/test_k8s_kubeconfig.py -q",
+    "state": "verified",
+    "evidence": "315 passed (incl. TestResolveSshUser, TestResolveSshTunnelParams, TestTsBridgeTunnel, TestIsConnectFailure, TestFetchKubeconfig)"
+  },
+  {
+    "id": "TOOL-015-f6",
+    "behavior": "Auth failure (Permission denied / publickey) raises immediately and does NOT activate the ts-bridge fallback",
+    "verification": "poetry run pytest tests/test_k8s_kubeconfig.py::TestFetchKubeconfig::test_raises_loud_on_auth_failure_no_tunnel_fallback -v",
+    "state": "verified",
+    "evidence": "tests/test_k8s_kubeconfig.py::TestFetchKubeconfig::test_raises_loud_on_auth_failure_no_tunnel_fallback PASSED"
+  }
+]

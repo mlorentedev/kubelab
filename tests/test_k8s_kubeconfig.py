@@ -15,6 +15,7 @@ import pytest
 from toolkit.features import k8s_kubeconfig as kc
 from toolkit.features.k8s_kubeconfig import (
     ClusterAccess,
+    _is_connect_failure,
     fetch_argv,
     load_cluster_access,
     load_clusters,
@@ -111,10 +112,32 @@ class TestArgvAndPath:
         assert output_path("staging").parent.name == ".kube"
 
 
-class TestFetchKubeconfig:
-    """The orchestrator: mock the SSH read, redirect output, assert the file."""
+class TestIsConnectFailure:
+    """Pure predicate: network failures fall back; auth failures raise loud."""
 
-    def test_writes_rewritten_kubeconfig(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker) -> None:
+    def test_timeout_is_a_connect_failure(self) -> None:
+        assert _is_connect_failure(255, "ssh: connect to host ace1 port 22: Connection timed out")
+
+    def test_no_route_is_a_connect_failure(self) -> None:
+        assert _is_connect_failure(255, "No route to host")
+
+    def test_connection_refused_is_a_connect_failure(self) -> None:
+        assert _is_connect_failure(255, "Connection refused")
+
+    def test_permission_denied_is_not_a_connect_failure(self) -> None:
+        assert not _is_connect_failure(255, "Permission denied (publickey,gssapi-keyex)")
+
+    def test_non_255_exit_code_is_not_a_connect_failure(self) -> None:
+        assert not _is_connect_failure(1, "No route to host")
+
+    def test_success_is_not_a_connect_failure(self) -> None:
+        assert not _is_connect_failure(0, "")
+
+
+class TestFetchKubeconfig:
+    """Orchestrator: try direct SSH, fall back on connect failure, raise on auth failure."""
+
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         common = tmp_path / "common.yaml"
         common.write_text(
             "clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n"
@@ -122,16 +145,56 @@ class TestFetchKubeconfig:
         dest = tmp_path / ".kube" / "kubelab-staging-config"
         monkeypatch.setattr(kc, "_common_path", lambda: common)
         monkeypatch.setattr(kc, "output_path", lambda env: dest)
-        run = mocker.patch.object(
-            kc.command, "run_list", return_value=subprocess.CompletedProcess([], 0, _K3S_YAML, "")
+        return common, dest
+
+    def test_direct_ssh_success_writes_rewritten_kubeconfig(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker
+    ) -> None:
+        _common, dest = self._setup(tmp_path, monkeypatch)
+        mocker.patch(
+            "toolkit.features.k8s_kubeconfig.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, _K3S_YAML, ""),
         )
 
         out = kc.fetch_kubeconfig("staging")
 
         assert out == dest
-        assert run.call_args.args[0] == ["ssh", "ace1", "sudo", "cat", "/etc/rancher/k3s/k3s.yaml"]
         assert "server: https://127.0.0.1:16443" in dest.read_text()
         assert "https://127.0.0.1:6443" not in dest.read_text()
+
+    def test_falls_back_to_tunnel_on_connect_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker
+    ) -> None:
+        _common, dest = self._setup(tmp_path, monkeypatch)
+        mocker.patch(
+            "toolkit.features.k8s_kubeconfig.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                [], 255, "", "ssh: connect to host ace1 port 22: Connection timed out"
+            ),
+        )
+        tunnel_mock = mocker.patch.object(kc, "_fetch_via_tunnel", return_value=_K3S_YAML)
+
+        kc.fetch_kubeconfig("staging")
+
+        tunnel_mock.assert_called_once()
+        assert "server: https://127.0.0.1:16443" in dest.read_text()
+
+    def test_raises_loud_on_auth_failure_no_tunnel_fallback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker
+    ) -> None:
+        _common, dest = self._setup(tmp_path, monkeypatch)
+        mocker.patch(
+            "toolkit.features.k8s_kubeconfig.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                [], 255, "", "Permission denied (publickey,gssapi-keyex)"
+            ),
+        )
+        tunnel_mock = mocker.patch.object(kc, "_fetch_via_tunnel")
+
+        with pytest.raises(RuntimeError, match="SSH fetch failed"):
+            kc.fetch_kubeconfig("staging")
+
+        tunnel_mock.assert_not_called()
 
 
 class TestCommittedSSOT:

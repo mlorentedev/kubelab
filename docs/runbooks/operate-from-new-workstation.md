@@ -52,6 +52,13 @@ not from an unattended agent.
 make fetch-kubeconfig ENV=staging
 ```
 
+**Works from a non-admin box (no native Tailscale) -- TOOL-015.** The command tries
+a direct `ssh ace1` first. When that fails with a network/routing error (e.g., the mesh
+IP is not reachable without Tailscale), it automatically re-routes the read through a
+transient ts-bridge SSH tunnel (`127.0.0.1:<ephemeral>` → `<mesh_host>:22`). The tunnel
+is torn down immediately after the read. An auth failure (wrong key / permission denied)
+always raises immediately -- the fallback does not activate for key problems.
+
 ## Step 2 -- Bring up the transport (per session)
 
 ```bash
@@ -113,4 +120,5 @@ make disconnect ENV=staging                    # tears it down
 - [ADR-052](../adr/adr-052-cluster-access-transport.md) -- cluster access transport (this is its `connect` step)
 - [`non-admin-workstation-access.md`](non-admin-workstation-access.md) -- ts-bridge install, Headscale pre-auth key, SSH paths, passphrase agent
 - [`headscale-setup.md`](headscale-setup.md) -- Headscale operations, §7 ts-bridge
-- `specs/TOOL-014-k8s-connect/` -- the spec behind these commands; tracking issue kubelab#731
+- `specs/TOOL-014-k8s-connect/` -- `connect` / `disconnect` / `status` commands; tracking issue kubelab#731
+- `specs/TOOL-015-fetch-over-transport/` -- auto-fallback in `fetch-kubeconfig`; tracking issue kubelab#733
