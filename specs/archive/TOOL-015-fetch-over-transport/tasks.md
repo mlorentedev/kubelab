@@ -30,7 +30,7 @@ created: "2026-06-21"
 - [x] Every acceptance criterion covered by a test or a documented manual check ✓ 2026-06-22 (unit tests; live smoke pending from EGW-LEN029)
 - [x] `features.json` filled ✓ 2026-06-22 (TOOL-015-f1..f6; f3/f5/f6 verified by tests; f1/f2/f4 pending live smoke)
 - [x] Type + lint pass ✓ 2026-06-22
-- [ ] PR opened referencing this spec; live-validated from the non-admin box (the whole point)
+- [x] PR opened referencing this spec; live-validated from the non-admin box (the whole point) ✓ 2026-06-22 (PR #741 merged; EGW-LEN029 smoke: 6 namespaces via kubectl get ns)
 
 ## Machine-readable features
 
