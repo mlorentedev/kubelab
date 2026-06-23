@@ -9,10 +9,10 @@ created: "2026-06-21"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [!] **AC1** (end-to-end fetch from non-admin box) -> **PENDING live smoke from EGW-LEN029**. Code path implemented + unit-tested (trigger policy, tunnel context manager, SSH fallback read).
-- [x] **AC2** (idempotent overwrite, 0600) -> existing `fetch_kubeconfig` write logic unchanged; permissions set with `dest.chmod(0o600)`. Manual verification: re-run `make fetch-kubeconfig` overwrites the file.
+- [x] **AC1** (end-to-end fetch from non-admin box) -> **VERIFIED 2026-06-22 on EGW-LEN029**. `make fetch-kubeconfig ENV=staging` routed via ts-bridge SSH tunnel automatically; `make connect ENV=staging` pid 20092; `kubectl get ns` returned 6 namespaces (agent-sandbox-system, default, kube-node-lease, kube-public, kube-system, kubelab).
+- [x] **AC2** (idempotent overwrite, 0600) -> existing `fetch_kubeconfig` write logic unchanged; permissions set with `dest.chmod(0o600)`. Verified: second run on EGW-LEN029 succeeded without accumulation.
 - [x] **AC3** (guaranteed teardown — no orphan on failure) -> `TestTsBridgeTunnel::test_guaranteed_teardown_when_body_raises` — injects `ValueError` inside the context manager, asserts `_terminate(pid)` called.
-- [!] **AC4** (deterministic known_hosts) -> **PENDING live validation**. Code: `UserKnownHostsFile=/dev/null` + `StrictHostKeyChecking=accept-new` in the tunnel SSH command. No writes to `~/.ssh/known_hosts`.
+- [x] **AC4** (deterministic known_hosts) -> **VERIFIED 2026-06-22**. `-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new` in tunnel SSH command; second fetch on EGW-LEN029 succeeded without "host key changed" warning; no write to `~/.ssh/known_hosts`.
 - [x] **AC5** (no hardcoded IPs; pure helpers unit-tested) -> `TestResolveSshUser`, `TestResolveSshTunnelParams`, `TestTsBridgeArgv`, `TestIsConnectFailure`, `TestFetchKubeconfig` — all without network.
 
 ## Test status
@@ -39,6 +39,6 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved to `specs/archive/`
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-06-22
+- [x] Folder moved to `specs/archive/` ✓ 2026-06-22
 - [ ] Bitácora #733 closed with PR link (ADR-018)
