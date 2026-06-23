@@ -19,6 +19,7 @@ The pure helpers (``load_cluster_access``, ``rewrite_server``, ``fetch_argv``,
 
 import os
 import stat
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,11 @@ import yaml
 
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
-from toolkit.features import command
+from toolkit.features.k8s_connect import (
+    find_free_port,
+    resolve_ssh_tunnel_params,
+    ts_bridge_tunnel,
+)
 
 # k3s writes its admin kubeconfig here; the apiserver defaults to 127.0.0.1:6443.
 _K3S_KUBECONFIG_PATH = "/etc/rancher/k3s/k3s.yaml"
@@ -107,18 +112,58 @@ def output_path(env: str) -> Path:
     return Path(os.path.expanduser(_KUBECONFIG_OUT_PATTERN.format(env=env)))
 
 
+# SSH exit code 255 signals a connection-layer failure.  These stderr substrings
+# identify *network* failures where a tunnel fallback is appropriate.  Auth failures
+# ("Permission denied", "publickey") also exit 255 but must NOT trigger the fallback
+# — they indicate a key/permission problem that the tunnel won't fix.
+_SSH_CONNECT_FAILURES = (
+    "timed out",
+    "no route to host",
+    "connection refused",
+    "network is unreachable",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "connection reset by peer",
+)
+
+
+def _is_connect_failure(returncode: int, stderr: str) -> bool:
+    """True iff the SSH failure is a *network/routing* error safe to fall back from."""
+    if returncode != 255:
+        return False
+    s = stderr.lower()
+    return any(pattern in s for pattern in _SSH_CONNECT_FAILURES)
+
+
 def fetch_kubeconfig(env: str) -> Path:
     """Fetch, rewrite, and save the kubeconfig for one cluster. Returns the path.
 
-    The SSH read uses the operator's ``~/.ssh/config`` and needs interactive key
-    auth (passphrase / ssh-agent), so this runs from an operator shell, not an
-    unattended one.
+    Tries a direct ``ssh <alias>`` first.  If the connection fails due to a
+    network/routing error (e.g., mesh IP not reachable from a non-admin box),
+    it re-routes the read through a transient ts-bridge SSH tunnel.  An auth
+    failure always raises immediately — the tunnel won't fix a key problem.
+
+    Interactive key auth (passphrase / ssh-agent) is still required; this runs
+    from an operator shell, not an unattended one.
     """
     access = load_cluster_access(env)
     logger.section(f"Fetch kubeconfig — {env} (node {access.node}, ssh {access.ssh_alias})")
 
-    result = command.run_list(fetch_argv(access.ssh_alias))
-    rewritten = rewrite_server(result.stdout, access.local_port)
+    argv = fetch_argv(access.ssh_alias)
+    result = subprocess.run(argv, capture_output=True, text=True)
+
+    if result.returncode == 0:
+        raw = result.stdout
+    elif _is_connect_failure(result.returncode, result.stderr):
+        logger.info(
+            f"Direct SSH to {access.ssh_alias!r} unreachable "
+            f"({result.stderr.strip()!r}); routing via ts-bridge SSH tunnel..."
+        )
+        raw = _fetch_via_tunnel(env, access)
+    else:
+        raise RuntimeError(f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}")
+
+    rewritten = rewrite_server(raw, access.local_port)
 
     dest = output_path(env)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -130,3 +175,42 @@ def fetch_kubeconfig(env: str) -> Path:
         f"Bring up the transport for {env} before using kubectl (ADR-052 `k8s connect`)."
     )
     return dest
+
+
+def _fetch_via_tunnel(env: str, access: ClusterAccess, common_path: Path | None = None) -> str:
+    """Read k3s.yaml via a transient ts-bridge SSH tunnel (non-admin box fallback).
+
+    The tunnel forwards ``127.0.0.1:<ephemeral>`` -> ``<mesh_host>:22`` so the SSH
+    command never touches the mesh IP directly.  The tunnel is torn down by
+    ``ts_bridge_tunnel``'s ``finally`` block regardless of success or failure.
+
+    ``known_hosts`` behaviour: ``UserKnownHostsFile=/dev/null`` + ``accept-new``
+    avoids "host key changed" errors when the same local port maps to different real
+    hosts across runs.
+    """
+    ssh_user, mesh_host = resolve_ssh_tunnel_params(env, common_path)
+    local_port = find_free_port()
+
+    logger.info(f"ts-bridge SSH tunnel: 127.0.0.1:{local_port} -> {mesh_host}:22 ({ssh_user}@)")
+    with ts_bridge_tunnel(mesh_host, 22, local_port):
+        result = subprocess.run(
+            [
+                "ssh",
+                "-p",
+                str(local_port),
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "StrictHostKeyChecking=accept-new",
+                f"{ssh_user}@127.0.0.1",
+                "sudo",
+                "cat",
+                _K3S_KUBECONFIG_PATH,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"SSH via tunnel failed (code {result.returncode}): {result.stderr.strip()}")
+    return result.stdout
