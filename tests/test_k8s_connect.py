@@ -9,7 +9,9 @@ are not exercised here (they need a live mesh).
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,10 +19,14 @@ from toolkit.features import k8s_connect as tc
 from toolkit.features.k8s_connect import (
     ClusterTransport,
     TransportState,
+    find_free_port,
     locate_ts_bridge,
+    resolve_ssh_tunnel_params,
+    resolve_ssh_user,
     resolve_transport,
     statefile_path,
     ts_bridge_argv,
+    ts_bridge_tunnel,
 )
 
 # A fixture common.yaml exercising all three node positions:
@@ -54,6 +60,9 @@ networking:
       hostname: ace1
       tailscale_ip: 100.64.0.11
       lan_ip: 172.16.1.2
+  ssh_users:
+    homelab: manu
+    cloud: deployer
 """
 
 
@@ -121,9 +130,8 @@ class TestResolveTransport:
 
 
 class TestTsBridgeArgv:
-    def test_builds_a_manual_mode_target_and_local_bind(self) -> None:
-        t = ClusterTransport("staging", "ts-bridge", "100.64.0.11", 6443, 16443)
-        argv = ts_bridge_argv("/opt/ts-bridge", t)
+    def test_builds_a_manual_mode_target_and_local_bind_for_apiserver(self) -> None:
+        argv = ts_bridge_argv("/opt/ts-bridge", "100.64.0.11", 6443, 16443)
         assert argv == [
             "/opt/ts-bridge",
             "connect",
@@ -134,11 +142,11 @@ class TestTsBridgeArgv:
             "127.0.0.1:16443",
         ]
 
-    def test_refuses_to_build_argv_for_a_public_transport(self) -> None:
-        # prod has no tunnel; asking for its ts-bridge argv is a programming error.
-        t = ClusterTransport("prod", "public", "162.55.57.175", 6443, 16444)
-        with pytest.raises(ValueError, match="public"):
-            ts_bridge_argv("/opt/ts-bridge", t)
+    def test_builds_argv_for_ssh_target_port_22(self) -> None:
+        argv = ts_bridge_argv("/opt/ts-bridge", "100.64.0.11", 22, 19022)
+        assert "--target" in argv
+        assert "100.64.0.11:22" in argv
+        assert "127.0.0.1:19022" in argv
 
 
 class TestLocateTsBridge:
@@ -174,6 +182,120 @@ class TestTransportState:
         assert p.parent.name == ".kube"
 
 
+class TestResolveSshUser:
+    """Pure helper: ssh_users from networking SSOT-014a (no config load)."""
+
+    def test_homelab_node_gets_homelab_user(self) -> None:
+        networking = {"nodes": {"ace1": {}}, "ssh_users": {"homelab": "manu", "cloud": "deployer"}}
+        assert resolve_ssh_user(networking, "ace1") == "manu"
+
+    def test_cloud_node_gets_cloud_user(self) -> None:
+        networking = {"nodes": {}, "ssh_users": {"homelab": "manu", "cloud": "deployer"}}
+        assert resolve_ssh_user(networking, "vps") == "deployer"
+
+    def test_missing_category_raises_keyerror(self) -> None:
+        networking = {"nodes": {"ace1": {}}, "ssh_users": {}}  # homelab not declared
+        with pytest.raises(KeyError, match="homelab"):
+            resolve_ssh_user(networking, "ace1")
+
+
+class TestResolveSshTunnelParams:
+    def test_staging_returns_homelab_user_and_mesh_host(self, common_yaml: Path) -> None:
+        user, host = resolve_ssh_tunnel_params("staging", common_yaml)
+        assert user == "manu"
+        assert host == "100.64.0.11"
+
+    def test_hub_returns_cloud_user_and_mesh_host(self, common_yaml: Path) -> None:
+        user, host = resolve_ssh_tunnel_params("hub", common_yaml)
+        assert user == "deployer"
+        assert host == "100.64.0.7"
+
+    def test_prod_has_no_mesh_address_raises(self, tmp_path: Path) -> None:
+        # prod only has a public_ip, no tailscale address — tunnel not applicable.
+        p = tmp_path / "common.yaml"
+        p.write_text(
+            "clusters:\n  prod:\n    node: vps\n    ssh_alias: vps\n    local_port: 16444\n"
+            "networking:\n  vps:\n    public_ip: 1.2.3.4\n  ssh_users:\n    cloud: deployer\n"
+        )
+        with pytest.raises(KeyError, match="mesh address"):
+            resolve_ssh_tunnel_params("prod", p)
+
+    def test_unknown_cluster_raises(self, common_yaml: Path) -> None:
+        with pytest.raises(KeyError, match="hub, prod, staging"):
+            resolve_ssh_tunnel_params("dev", common_yaml)
+
+
+class TestTsBridgeTunnel:
+    """Context manager guarantees teardown and yields pid."""
+
+    def _mock_proc(self) -> MagicMock:
+        proc = MagicMock()
+        proc.pid = 42
+        proc.returncode = None
+        proc.poll.return_value = None
+        return proc
+
+    def test_yields_pid_and_terminates_on_normal_exit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_binary = tmp_path / "ts-bridge"
+        fake_binary.write_text("")
+        monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
+        mock_proc = self._mock_proc()
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
+        monkeypatch.setattr(tc, "_port_listening", lambda *a, **kw: True)
+        terminated: list[int] = []
+        monkeypatch.setattr(tc, "_terminate", lambda pid: terminated.append(pid))
+
+        with ts_bridge_tunnel("100.64.0.11", 22, 19022) as pid:
+            assert pid == 42
+
+        assert terminated == [42]
+
+    def test_guaranteed_teardown_when_body_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_binary = tmp_path / "ts-bridge"
+        fake_binary.write_text("")
+        monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
+        mock_proc = self._mock_proc()
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
+        monkeypatch.setattr(tc, "_port_listening", lambda *a, **kw: True)
+        terminated: list[int] = []
+        monkeypatch.setattr(tc, "_terminate", lambda pid: terminated.append(pid))
+
+        with pytest.raises(ValueError, match="injected"):
+            with ts_bridge_tunnel("100.64.0.11", 22, 19022):
+                raise ValueError("injected failure")
+
+        assert terminated == [42], "bridge process must be terminated even when body raises"
+
+    def test_early_exit_raises_before_yielding(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_binary = tmp_path / "ts-bridge"
+        fake_binary.write_text("")
+        monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
+        mock_proc = self._mock_proc()
+        mock_proc.poll.return_value = 1  # process exited immediately
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
+        monkeypatch.setattr(tc, "_port_listening", lambda *a, **kw: False)
+        terminated: list[int] = []
+        monkeypatch.setattr(tc, "_terminate", lambda pid: terminated.append(pid))
+
+        with pytest.raises(RuntimeError, match="exited early"):
+            with ts_bridge_tunnel("100.64.0.11", 22, 19022):
+                pass  # should not be reached
+
+        assert terminated == [42]
+
+
+class TestFindFreePort:
+    def test_returns_a_valid_loopback_port(self) -> None:
+        port = find_free_port()
+        assert 1024 <= port <= 65535
+
+
 class TestCommittedSSOT:
     """The committed common.yaml resolves all three clusters coherently."""
 
@@ -190,3 +312,7 @@ class TestCommittedSSOT:
     def test_mesh_targets_are_non_empty_addresses(self) -> None:
         for env in ("staging", "hub"):
             assert resolve_transport(env).target_host, f"{env} mesh target must resolve from the SSOT"
+
+    def test_ssh_tunnel_params_resolve_for_staging(self) -> None:
+        user, host = resolve_ssh_tunnel_params("staging")
+        assert user and host, "staging must have ssh_user + mesh_host in common.yaml"
