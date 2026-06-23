@@ -42,7 +42,7 @@ jobs:
       extra_build_args: ${{ steps.web_build_args.outputs.args }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
