@@ -9,7 +9,7 @@ created: "2026-06-21"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [!] **AC1** (`make connect ENV=staging` + `kubectl get ns`) -> **PENDING live validation** against staging (needs homelab on + ts-bridge joining the mesh). Code path implemented + unit-tested (`resolve_transport`, `ts_bridge_argv`, healthcheck loop).
+- [x] **AC1** (`make connect ENV=staging` + `kubectl get ns`) -> **operator-verified 2026-06-22** from EGW-LEN029: `make connect ENV=staging` brought up the transport (pid 20092, ts-bridge -> 100.64.0.11:6443) -> `kubectl get ns` returned 6 namespaces (agent-sandbox-system, default, kube-node-lease, kube-public, kube-system, kubelab). Live `make connect-status ENV=staging` corroborates the resolved transport + persisted statefile. Code path also unit-tested (`resolve_transport`, `ts_bridge_argv`, healthcheck loop).
 - [x] **AC2** (idempotent no-op) -> `_port_listening` short-circuit in `connect()`; manual: `make connect-status ENV=staging` reports down cleanly, re-runs are no-ops.
 - [x] **AC3** (`access status` + `disconnect`) -> tests `TestTransportState`; manual: `make connect-status ENV=staging` (ts-bridge target, down), `make disconnect ENV=prod` (public no-op).
 - [x] **AC4** (no hardcoded IPs; pure helpers unit-tested) -> `tests/test_k8s_connect.py::TestResolveTransport::test_no_hardcoded_ips_target_comes_from_the_ssot` + `TestCommittedSSOT` (18 tests, no network).
@@ -22,7 +22,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Lint: `make lint` -> **All checks passed** (ruff check + format).
 - Type: `make type` -> my files clean; 2 pre-existing errors in `generator_authelia.py` (`os.geteuid` on Windows), unrelated.
 - Manual smoke: `make connect-status ENV=staging` (resolves ts-bridge -> 100.64.0.11:6443, reports down), `make disconnect ENV=prod` (public no-op), unknown-env -> exit 2 listing `hub, prod, staging`.
-- **Not yet exercised:** live `make connect ENV=staging` end-to-end (the only network-dependent AC).
+- **Exercised live (2026-06-22, EGW-LEN029):** `make connect ENV=staging` end-to-end (pid 20092 -> `kubectl get ns` = 6 namespaces, operator-confirmed); `make connect-status ENV=staging` reports the resolved transport + statefile.
 
 ## Decisions made during implementation
 
@@ -44,7 +44,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-06-22
+- [x] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/` ✓ 2026-06-22
+- [x] Bitácora board ticket for this spec — issue #731 already closed (code merged via PR #732)
+- [x] Promotions above executed — ASCII-CLI lesson added to `docs/lessons.md` ✓ 2026-06-22
