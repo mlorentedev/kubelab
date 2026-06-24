@@ -83,6 +83,6 @@ tags: [spec, verification]
 
 - [x] README manual-import section removed (replaced with `make import-n8n` + contract)
 - [x] Live staging smoke green (import + publish + restart, idempotent) 2026-06-15
-- [ ] `proposal.md` → `status: archived`
-- [ ] Folder → `specs/archive/TOOL-009-n8n-workflow-import/`
-- [ ] Issue #108 ticked with PR link
+- [x] `proposal.md` → `status: archived` ✓ 2026-06-23 (spec reconciliation)
+- [x] Folder → `specs/archive/TOOL-009-n8n-workflow-import/` ✓ 2026-06-23
+- [ ] Issue #108 ticked with PR link — knowledge#108 already CLOSED; kubelab#688 board duplicate tracked separately

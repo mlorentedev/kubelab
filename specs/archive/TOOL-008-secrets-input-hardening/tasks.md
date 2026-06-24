@@ -5,6 +5,8 @@ created: "2026-06-16"
 
 # Tasks - TOOL-008-secrets-input-hardening
 
+> **RECONCILED 2026-06-23** — implementation shipped earlier and lives in master (`_stdin_value()` + `--stdin` mutual-exclusion in `toolkit/cli/secrets.py`; `--force`/`--rotate` + skip-existing idempotency in `secrets_manager.init_machine_secrets`); issue `knowledge#104` CLOSED. Spec archived retroactively. The Implementation/Closing boxes below were left unticked at delivery time and are NOT re-verified here.
+>
 > TDD order. One task = one focused commit. The staging secret-set happens only AFTER the fixes are
 > green (and is a NOTIFY-001 follow-on, not part of this PR's diff).
 

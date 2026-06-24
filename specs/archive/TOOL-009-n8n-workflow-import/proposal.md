@@ -1,7 +1,7 @@
 ---
 id: "TOOL-009-n8n-workflow-import"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 issue: "mlorentedev/knowledge#108"  # created via REST (gh api) — gh issue create uses GraphQL, which was rate-limited
 tags: [spec, proposal, toolkit, n8n, notifications, gitops]
 template_version: "1.0"

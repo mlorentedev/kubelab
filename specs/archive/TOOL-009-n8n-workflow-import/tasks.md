@@ -4,6 +4,8 @@ tags: [spec, tasks]
 
 # Tasks - TOOL-009-n8n-workflow-import
 
+> **RECONCILED 2026-06-23** — implementation shipped & verified earlier (see `verification.md`: 18 unit tests, live staging smoke green + idempotent 2026-06-15); `toolkit/features/n8n_import.py` in master; issue `knowledge#108` CLOSED. Spec archived retroactively. The two unticked Closing boxes (`features.json`, PR) reflect the board-reconciliation gap, not missing work.
+>
 > TDD order. Implementation rides the notify branch after TOOL-008 (#104) merges + notify rebases
 > (needs the `webhook_secret` catalog entry).
 
