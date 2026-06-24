@@ -1,0 +1,72 @@
+---
+name: Web Image Receiver
+
+# Cross-repo receiver (ADR-053 §2). mlorentedev/web CI publishes an immutable
+# `sha-<short>` image and fires a `repository_dispatch` (web-image-published).
+# Here we promote that tag to staging via `toolkit deployment promote` and open a
+# staging-deploy PR (ADR-046 D3 — PR-per-update); merging it (human + required
+# checks) lets Argo CD sync staging to master HEAD. Same mechanism as
+# staging-deploy.yml, but triggered by the dispatch instead of an apps/web push.
+#
+# Opened with RELEASE_PLEASE_TOKEN (a PAT), NOT GITHUB_TOKEN: a PR opened by
+# GITHUB_TOKEN does not trigger `on: pull_request`, so its required checks would
+# never run and it could never be merged.
+#
+# Prod promotion is unchanged — the existing gated promote-prod.yml.
+
+on:
+  repository_dispatch:
+    types: [web-image-published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote-web:
+    name: Promote web ${{ github.event.client_payload.tag }} → staging
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+
+      - name: Promote web to staging
+        env:
+          TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          # Defensive: the dispatch is authenticated (KUBELAB_DISPATCH_TOKEN), but
+          # staging only ever tracks immutable sha-<short> tags (ADR-046).
+          case "$TAG" in
+            sha-*) ;;
+            *) echo "::error::Unexpected tag '$TAG' (expected sha-<short>)"; exit 1 ;;
+          esac
+          poetry run toolkit deployment promote --env staging --app web --version "$TAG"
+
+      - name: Open staging deploy PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git add infra/config/values/staging.yaml infra/k8s/overlays/staging/
+          if git diff --staged --quiet; then
+            echo "No staging overlay changes to promote (web already at ${TAG})"; exit 0
+          fi
+          BRANCH="deploy/staging-web-${TAG}"
+          git checkout -b "$BRANCH"
+          git commit -m "chore(staging): deploy web ${TAG}"
+          git push -u origin "$BRANCH" --force-with-lease
+          gh pr create --base master --head "$BRANCH" \
+            --title "chore(staging): deploy web ${TAG}" \
+            --body "Staging promotion of \`web\` to \`${TAG}\` (ADR-046, cross-repo dispatch from mlorentedev/web)."
