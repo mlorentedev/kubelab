@@ -1,7 +1,7 @@
 ---
 id: "TOOL-006-argo-revision-cli"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-05-18"
 tags: [spec, proposal]
 template_version: "1.0"

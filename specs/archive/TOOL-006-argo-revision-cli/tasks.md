@@ -5,6 +5,8 @@ created: "2026-05-18"
 
 # Tasks - TOOL-006-argo-revision-cli
 
+> **RECONCILED 2026-06-23** — implementation shipped & verified earlier (see `verification.md`: 7 ACs green, live hub smoke, 91 tests, mypy/ruff clean); spec archived retroactively. The Implementation/Closing boxes below were left unticked at delivery time and are NOT re-verified here — `verification.md` is the source of truth for completion.
+>
 > TDD order. One task = one focused commit. Tick as you go. Frozen on entry to `implementing` state.
 
 ## Setup

@@ -45,7 +45,7 @@ created: "2026-05-18"
 
 ## Archive checklist (post-merge)
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/TOOL-006-argo-revision-cli/` -> `specs/archive/TOOL-006-argo-revision-cli/`
-- [ ] Backlog entry in vault `11-tasks.md` ticked with PR link
-- [ ] Lesson added to vault `kubelab/90-lessons.md` (see Promotion candidates)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-06-23 (spec reconciliation — code shipped earlier, see Evidence)
+- [x] Folder moved: `specs/TOOL-006-argo-revision-cli/` -> `specs/archive/TOOL-006-argo-revision-cli/` ✓ 2026-06-23
+- [ ] Backlog entry in vault `11-tasks.md` ticked with PR link — deferred: vault bridge absent on this machine; board reconciliation (kubelab#539) tracked separately
+- [ ] Lesson added to vault `kubelab/90-lessons.md` (see Promotion candidates) — deferred: same reason
