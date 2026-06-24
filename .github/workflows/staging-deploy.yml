@@ -29,7 +29,6 @@ jobs:
     runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     outputs:
       api: ${{ steps.filter.outputs.api }}
-      web: ${{ steps.filter.outputs.web }}
       sha: ${{ steps.sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
@@ -41,23 +40,8 @@ jobs:
           filters: |
             api:
               - 'apps/api/**'
-            web:
-              - 'apps/web/**'
       - id: sha
         run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-  build-web:
-    name: Build Web
-    needs: detect-changes
-    if: needs.detect-changes.outputs.web == 'true'
-    uses: ./.github/workflows/ci-publish.yml
-    with:
-      app: web
-      tag: ${{ needs.detect-changes.outputs.sha }}
-      sha: ${{ github.sha }}
-      context: ./apps/web
-      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
-    secrets: inherit
 
   build-api:
     name: Build API
@@ -74,12 +58,12 @@ jobs:
 
   open-pr:
     name: Open Staging Deploy PR
-    needs: [detect-changes, build-web, build-api]
-    # Run if at least one app built successfully (skipped builds are not failures).
+    needs: [detect-changes, build-api]
+    # Run if the app built successfully (a skipped build is not a failure).
     if: >-
       always() &&
       needs.detect-changes.result == 'success' &&
-      (needs.build-web.result == 'success' || needs.build-api.result == 'success')
+      needs.build-api.result == 'success'
     runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v7
@@ -95,12 +79,8 @@ jobs:
       - name: Promote built apps to staging
         env:
           SHA: ${{ needs.detect-changes.outputs.sha }}
-          WEB_BUILT: ${{ needs.build-web.result }}
           API_BUILT: ${{ needs.build-api.result }}
         run: |
-          if [ "$WEB_BUILT" = "success" ]; then
-            poetry run toolkit deployment promote --env staging --app web --version "$SHA"
-          fi
           if [ "$API_BUILT" = "success" ]; then
             poetry run toolkit deployment promote --env staging --app api --version "$SHA"
           fi
