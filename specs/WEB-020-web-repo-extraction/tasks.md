@@ -10,15 +10,17 @@ created: "2026-06-23"
 
 ## Setup
 
-- [ ] Confirm repo name `web` (ADR-048 open decision — owner: proposed `mlorentedev/web`)
-- [ ] `proposal.md` acceptance criteria reviewed
-- [ ] Mint a kubelab-scoped PAT (`contents:write` + `actions:write`) for cross-repo dispatch; store as `web` repo secret
+- [x] Confirm repo name `web` (ADR-048 open decision — owner: proposed `mlorentedev/web`) ✓ 2026-06-23
+- [x] `proposal.md` acceptance criteria reviewed ✓ 2026-06-23
+- [x] Mint a kubelab-scoped PAT (`contents:write` + `actions:write`) for cross-repo dispatch; store as `web` repo secret ✓ 2026-06-23 (fine-grained, scoped to `kubelab`)
 
 ## Extraction (with history)
 
-- [ ] [web] `git filter-repo` (or subtree split) of `apps/web/site` → new `mlorentedev/web`, history preserved
-- [ ] [web] Verify `git blame` lineage survives on a sample file
-- [ ] [web] Add `LICENSE`, `README.md` (documents the two-repo flow + `make dev`), `.gitignore`
+> **Scope (decided 2026-06-23):** extracted **`apps/web/`** (whole product dir), NOT just `apps/web/site/` — the `Dockerfile`/`LICENSE`/`README`/`CHANGELOG`/`version.txt` live at `apps/web/` and the build context is `./apps/web` with `COPY site/…`. Extracting `apps/web/` → repo root keeps `site/` as a subdir → Docker build maps 1:1, zero Dockerfile edits, files arrive with history. See `proposal.md` Risks.
+
+- [x] [web] `git filter-repo` of `apps/web/` → new `mlorentedev/web`, history preserved (239→12 commits; public; default branch `master`) ✓ 2026-06-23
+- [x] [web] Verify `git blame` lineage survives on a sample file (`site/package.json`, `Dockerfile` → `a93727f`; `--follow` on `site/src/data/site.ts`) ✓ 2026-06-23
+- [ ] [web] Update `README.md` for the two-repo flow + `make dev` (`LICENSE`/`.gitignore` already arrived with the extraction)
 
 ## CI in the `web` repo
 
