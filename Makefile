@@ -7,7 +7,7 @@
 #   3. Top-level convenience aliases
 #
 # For all other operations, use toolkit directly:
-#   toolkit services up web
+#   toolkit services up gitea
 #   toolkit services logs api
 #   toolkit services up grafana
 #   toolkit deployment deploy
@@ -100,7 +100,7 @@ help:
 	@echo "  make smoke-test         Health check running services"
 	@echo ""
 	@echo "Toolkit CLI (use directly for most operations):"
-	@echo "  toolkit services up web          Start web app"
+	@echo "  toolkit services up gitea        Start Gitea"
 	@echo "  toolkit services logs api        View API logs"
 	@echo "  toolkit --help                   Show all commands"
 	@echo ""
@@ -261,14 +261,13 @@ config-check-drift:
 .PHONY: build-dev
 build-dev:
 	@$(TOOLKIT) services build api --env dev --no-cache
-	@$(TOOLKIT) services build web --env dev --no-cache
 	@$(TOOLKIT) services build errors --env dev --no-cache
 	@echo "✓ Development services built"
 
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		api web errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -276,7 +275,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		api web errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -301,7 +300,7 @@ dev-full-reset: dev-full-clean credentials-generate
 	@read -p "" # Pauses execution until user presses Enter
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api web errors minio github-runner --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api errors minio github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
 	@echo ""
 	@echo "--- Post-start manual steps ---"
@@ -313,17 +312,6 @@ dev-full-reset: dev-full-clean credentials-generate
 .PHONY: restart-dev
 restart-dev: down-dev up-dev
 	@echo "✓ Development environment restarted"
-
-# Astro apps (standalone dev, no Docker)
-# Usage: make dev-app APP=site | make build-app APP=site
-APP ?= site
-.PHONY: dev-app
-dev-app:
-	@cd apps/web/$(APP) && npm run dev
-
-.PHONY: build-app
-build-app:
-	@cd apps/web/$(APP) && npm run build
 
 .PHONY: secrets
 secrets:

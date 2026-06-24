@@ -19,8 +19,6 @@ jobs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       api_release_created: ${{ steps.release.outputs['apps/api--release_created'] }}
       api_version: ${{ steps.release.outputs['apps/api--version'] }}
-      web_release_created: ${{ steps.release.outputs['apps/web--release_created'] }}
-      web_version: ${{ steps.release.outputs['apps/web--version'] }}
       errors_release_created: ${{ steps.release.outputs['edge/errors--release_created'] }}
       errors_version: ${{ steps.release.outputs['edge/errors--version'] }}
     steps:
@@ -46,19 +44,6 @@ jobs:
       tag: ${{ needs.release-please.outputs.api_version }}
       sha: ${{ github.sha }}
       context: ./apps/api
-      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
-    secrets: inherit
-
-  publish-web:
-    name: Publish Web
-    needs: release-please
-    if: needs.release-please.outputs.web_release_created == 'true'
-    uses: ./.github/workflows/ci-publish.yml
-    with:
-      app: web
-      tag: ${{ needs.release-please.outputs.web_version }}
-      sha: ${{ github.sha }}
-      context: ./apps/web
       runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 

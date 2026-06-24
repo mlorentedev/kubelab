@@ -97,7 +97,6 @@ BLOG_ENDPOINT=http://localhost:
 
  === APPLICATION PATHS ===
 API_PATH=./apps/api
-WEB_PATH=./apps/web
 BLOG_PATH=./apps/blog
 
  === CORE SERVICES PATHS ===
