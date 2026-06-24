@@ -1,7 +1,7 @@
 ---
 id: "WEB-020-web-repo-extraction"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-06-23"
 issue: "kubelab#697"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, web, repo-structure, gitops]
@@ -40,6 +40,8 @@ template_version: "1.0"
 - **[OPEN — implementation]** Cross-repo coupling: a frontend change that also needs a manifest change spans two repos (ADR-053 negative consequence). Document the two-repo flow in the `web` README.
 - **[RESOLVED]** Deploy target: VPS-K3s via the existing Argo CD staging→prod flow (manifests stay in kubelab). NOT Cloudflare Pages (ADR-045/049).
 - **[RESOLVED]** Image promotion mechanism: push `repository_dispatch` → `toolkit deployment promote`, NOT Image Updater/polling (ADR-046/ADR-053 §2).
+- **[RESOLVED — 2026-06-23]** Extraction scope: extract **`apps/web/`** (the whole product dir), not just `apps/web/site/`. The `Dockerfile`/`LICENSE`/`README`/`CHANGELOG`/`version.txt` live at `apps/web/`; the Docker build context is `./apps/web` with `COPY site/…`. Extracting `apps/web/` → repo root keeps `site/` as a subdir, so the build maps 1:1 (zero Dockerfile edits) and those files arrive with history.
+- **[OPEN — inner-loop]** Code default of `PUBLIC_API_URL` is `https://api.staging.kubelab.live` (`site/src/data/site.ts`), but acceptance criterion #4 says default `https://api.kubelab.live`. Reconcile when wiring `make dev`.
 
 ## Acceptance criteria
 
