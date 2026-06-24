@@ -225,7 +225,7 @@ class DeploymentOrchestrator:
 
     def _check_prod_status(self) -> None:
         production_services = {
-            "api": "https://api.mlorente.dev/health",
+            "api": "https://api.kubelab.live/health",
             "web": "https://mlorente.dev",
             "blog": "https://blog.mlorente.dev",
             "wiki": "https://wiki.mlorente.dev",
