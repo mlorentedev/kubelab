@@ -16,10 +16,6 @@
       "release-type": "simple",
       "component": "api"
     },
-    "apps/web": {
-      "release-type": "simple",
-      "component": "web"
-    },
     "edge/errors": {
       "release-type": "simple",
       "component": "errors"

@@ -87,26 +87,6 @@ updates:
   # (open-pull-requests-limit: 0 -> no version PRs; security still flows)
   # ============================================================
 
-  # ---- npm / Astro web app (mlorente.dev; departing to its own `web` repo, ADR-048) ----
-  - package-ecosystem: "npm"
-    directories:
-      - "/apps/web/site"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 0
-    labels:
-      - "dependencies"
-      - "web"
-    ignore:
-      # Blocked: @astrojs/mdx@4 needs astro@^5. Lift with the Astro 6 migration.
-      - dependency-name: "astro"
-        update-types:
-          - "version-update:semver-major"
-      - dependency-name: "@astrojs/*"
-        update-types:
-          - "version-update:semver-major"
-
   # ---- Go API (-> own repo) ----
   - package-ecosystem: "gomod"
     directory: "/apps/api/src"
@@ -121,7 +101,6 @@ updates:
   # ---- App container images (-> own repos) ----
   - package-ecosystem: "docker"
     directories:
-      - "/apps/web"
       - "/apps/api"
     schedule:
       interval: "weekly"

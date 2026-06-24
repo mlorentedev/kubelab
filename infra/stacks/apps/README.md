@@ -37,14 +37,14 @@ ENVIRONMENT=staging poetry run toolkit apps up web
 poetry run toolkit apps logs web
 
  Stop application
-poetry run toolkit apps down web
+poetry run toolkit apps down <app>
 ```
 
  Using Docker Compose Directly
 
 ```bash
  Development
-cd infra/stacks/apps/web
+cd infra/stacks/apps/<app>
 docker compose -f compose.base.yml -f compose.dev.yml up -d
 
  Staging
