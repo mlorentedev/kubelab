@@ -1,0 +1,44 @@
+[
+  {
+    "id": "WEB-020-web-repo-extraction-f1",
+    "behavior": "mlorentedev/web exists with mlorente.dev history preserved; git blame lineage is visible in the new repo",
+    "verification": "git -C <web> log --follow site/src/data/site.ts | head && git -C <web> blame site/package.json | head",
+    "state": "verified",
+    "evidence": "git filter-repo of apps/web/ -> mlorentedev/web (239->12 commits; public; default branch master). Blame: site/package.json + Dockerfile -> a93727f; --follow works on site/src/data/site.ts. Verified 2026-06-23."
+  },
+  {
+    "id": "WEB-020-web-repo-extraction-f2",
+    "behavior": "A push to web master builds a sha-<short> image, pushes it to Docker Hub, and fires a repository_dispatch to kubelab",
+    "verification": "gh run list --repo mlorentedev/web --workflow release.yml && gh api repos/mlorentedev/kubelab/dispatches (event_type web-image-published)",
+    "state": "verified",
+    "evidence": "web release.yml builds via reusable build-image.yml (buildx -> docker.io/mlorentedev/kubelab-web:sha-<short>); job dispatch-staging fires repository_dispatch {event_type: web-image-published, client_payload:{tag,sha}} with KUBELAB_DISPATCH_TOKEN. Exercised: PR #753 (sha-20c9f91), PR #756 (sha-5bd6c07)."
+  },
+  {
+    "id": "WEB-020-web-repo-extraction-f3",
+    "behavior": "The kubelab receiver promotes the dispatched tag to staging via toolkit deployment promote and Argo CD syncs it on the staging spoke",
+    "verification": "gh run list --repo mlorentedev/kubelab --workflow <receiver> && kubectl --kubeconfig ~/.kube/kubelab-staging-config get deploy web -n kubelab -o jsonpath='{.spec.template.spec.containers[0].image}'",
+    "state": "verified",
+    "evidence": "Receiver PR #751 (repository_dispatch -> toolkit deployment promote --env staging --app web --version <tag>). Staging spoke runs kubelab-web:sha-5bd6c07 READY 1/1 == master overlay pin == receiver-promoted tag from PR #756. Prod path unchanged (gated promote-prod.yml). Verified 2026-06-24."
+  },
+  {
+    "id": "WEB-020-web-repo-extraction-f4",
+    "behavior": "make dev in web serves mlorente.dev locally against api.kubelab.live with no cluster running",
+    "verification": "cd <web> && make dev   # astro dev, no cluster; PUBLIC_API_URL resolves to api.kubelab.live",
+    "state": "partial",
+    "evidence": "make dev runs astro dev with no cluster (no-cluster half MET). Canonical-API half NOT met by bare make dev: code default PUBLIC_API_URL=https://api.staging.kubelab.live (site/src/data/site.ts); api.kubelab.live only via manual override. Drift owned by WEB-021 (mlorentedev/web#6, ADR-054 same-origin /api; now unblocked, kubelab#750 MERGED). Reconciliation delegated per WEB-020 closure decision 2026-06-25."
+  },
+  {
+    "id": "WEB-020-web-repo-extraction-f5",
+    "behavior": "apps/web/site is removed from kubelab; the Go API and infra/k8s web manifests remain and still deploy",
+    "verification": "test ! -d apps/web && test -d apps/api && kubectl --kubeconfig ~/.kube/kubelab-staging-config get deploy web -n kubelab",
+    "state": "verified",
+    "evidence": "PR #755: apps/web/ removed; apps/api + mlorentedev/kubelab-web pin in base/kustomization.yaml + staging/prod overlays remain. web Deployment 1/1 available from centralized overlay after removal. Verified 2026-06-24."
+  },
+  {
+    "id": "WEB-020-web-repo-extraction-f6",
+    "behavior": "The kubelab.live -> mlorente.dev 301 redirect still resolves",
+    "verification": "curl -sI https://kubelab.live | grep -iE 'HTTP|location'",
+    "state": "verified",
+    "evidence": "HTTP 308 permanent -> https://mlorente.dev/ at Cloudflare edge (Server: cloudflare), NOT VPS Traefik; mlorente.dev returns 200 via nginx. 308 (not literal 301); both permanent, redirect at DNS/CDN layer. Verified 2026-06-24."
+  }
+]
