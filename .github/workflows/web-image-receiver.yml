@@ -93,5 +93,5 @@ jobs:
               [ "$ref" = "$BRANCH" ] && continue
               echo "Superseding stale staging PR #${pr} (${ref})"
               gh pr close "$pr" --delete-branch \
-                --comment "Superseded by \`${BRANCH}\` — only the latest web sha is promoted to staging (coalesced, ADR-046)."
+                --comment "Superseded by \`${BRANCH}\` (coalesced: staging keeps only the latest web sha)."
             done
