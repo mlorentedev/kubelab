@@ -1,8 +1,10 @@
 ---
 name: Web Image Receiver
 
-# Cross-repo receiver (ADR-053 §2). mlorentedev/web CI publishes an immutable
-# `sha-<short>` image and fires a `repository_dispatch` (web-image-published).
+# Cross-repo receiver (ADR-053 §2). mlorentedev/web CI publishes a staging image —
+# `sha-<short>` (legacy) or a SemVer pre-release `X.Y.Z-rc.N` (web's
+# semver-everywhere delivery, extending ADR-046) — and fires a
+# `repository_dispatch` (web-image-published).
 # Here we promote that tag to staging via `toolkit deployment promote` and open a
 # staging-deploy PR (ADR-046 D3 — PR-per-update); merging it (human + required
 # checks) lets Argo CD sync staging to master HEAD. Same mechanism as
@@ -45,10 +47,14 @@ jobs:
           TAG: ${{ github.event.client_payload.tag }}
         run: |
           # Defensive: the dispatch is authenticated (KUBELAB_DISPATCH_TOKEN), but
-          # staging only ever tracks immutable sha-<short> tags (ADR-046).
+          # we still pin the accepted tag shapes. Staging tracks immutable
+          # sha-<short> (legacy) and SemVer pre-releases X.Y.Z-rc.N (web's
+          # semver-everywhere delivery, extending ADR-046). Clean X.Y.Z is
+          # prod-only (promote-prod.yml) and never promoted to staging here.
           case "$TAG" in
             sha-*) ;;
-            *) echo "::error::Unexpected tag '$TAG' (expected sha-<short>)"; exit 1 ;;
+            [0-9]*.[0-9]*.[0-9]*-rc.*) ;;
+            *) echo "::error::Unexpected tag '$TAG' (expected sha-<short> or X.Y.Z-rc.N)"; exit 1 ;;
           esac
           poetry run toolkit deployment promote --env staging --app web --version "$TAG"
 
