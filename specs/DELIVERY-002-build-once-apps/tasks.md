@@ -18,10 +18,10 @@ created: "2026-06-26"
 
 > TDD where the surface allows. The toolkit resolver is unit-testable; the workflow re-tag is verified by digest equality.
 
-- [ ] Write failing unit test: a toolkit helper resolves the staging-pinned `sha-<short>` for `api`/`errors` from `infra/config/values/staging.yaml` (`apps.platform.<app>.version`), no network. Asserts SSOT-sourced, errors on a non-sha pin.
+- [ ] Write failing unit test: a toolkit helper resolves the staging-pinned `sha-<short>` for `api` from `infra/config/values/staging.yaml` (`apps.platform.api.version`), no network. Asserts SSOT-sourced, errors on a non-sha pin.
 - [ ] Implement `toolkit deployment image-tag --env staging --app <app>` (prints the pinned tag) to make it pass.
 - [ ] Refactor: extract the values-loading shared with `deployment promote` (no dup).
-- [ ] `release.yml`: replace `publish-api`/`publish-errors` (which call `ci-publish.yml` → rebuild) with a **re-tag job** — resolve the staging sha via the toolkit, `docker login`, `docker buildx imagetools create -t <img>:<version> <img>:<sha>`, then `imagetools inspect` to log the resolved digest.
+- [ ] `release.yml`: replace `publish-api` (which calls `ci-publish.yml` → rebuild) with a **re-tag job** — resolve the staging sha via the toolkit, `docker login`, `docker buildx imagetools create -t <img>:<version> <img>:<sha>`, then `imagetools inspect` to log the resolved digest. **`publish-errors` is left unchanged** (errors out of scope — edge infra, ADR-056 *Alternatives*).
 - [ ] Guard the prune race: `ci-cleanup.yml` must not prune a `sha-*` tag referenced by a committed overlay (or document that re-tag precedes the prune window). Add a test/assertion if code-guarded.
 - [ ] Update `docs/runbooks/gitops-delivery-promotion.md`: the promotion sequence is now build-once (no manual candidate-semver validation step — parity is structural).
 

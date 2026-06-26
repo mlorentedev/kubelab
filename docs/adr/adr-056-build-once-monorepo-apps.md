@@ -12,13 +12,13 @@ related:
 issue: "mlorentedev/kubelab#679"   # ARGO artifact-parity
 ---
 
-# ADR-056: Build-once / promote-by-digest for monorepo apps (api, errors)
+# ADR-056: Build-once / promote-by-digest for the api image (monorepo)
 
 ## Status
 
 Accepted — 2026-06-26
 
-Extends [ADR-055](ADR-055-semver-everywhere-delivery.md) (accepted for the extracted `web` repo) to kubelab's in-monorepo apps. Refines [ADR-046](adr-046-gitops-delivery-promotion-strategy.md) D2 by closing its artifact-parity gap structurally.
+Extends [ADR-055](ADR-055-semver-everywhere-delivery.md) (accepted for the extracted `web` repo) to kubelab's `api` image. Refines [ADR-046](adr-046-gitops-delivery-promotion-strategy.md) D2 by closing its artifact-parity gap structurally. **Scope: `api` only** — `errors` is deliberately excluded (see *Alternatives*).
 
 > **Numbering:** `web` claimed `ADR-055` globally (2026-06-25); kubelab's next free number is `056`. The decision is independent of the number.
 
@@ -35,11 +35,11 @@ release.yml :: publish-api  (if api_release_created)
 
 This is not theoretical. The first gated prod promotion (`api` → `1.1.0`, kubelab#664) **CrashLooped in prod** on an init-guard that staging never exercised (incident #666), precisely because staging ran a different artifact than the rebuilt `1.1.0`. kubelab#679 tracks the process gap; its originally-proposed fix was a *manual* "validate the candidate semver on staging before promoting" runbook step. That workaround adds ceremony and still relies on human discipline.
 
-ADR-055 solved this for the extracted `web` repo (build-once / promote-by-digest), verified: `kubelab-web:1.2.0` digest == `:sha-60b24e7` (identical manifest list). But ADR-055's scope note "kubelab unchanged" refers to kubelab's **GitOps/manifest** side (consuming web's tag); it does **not** cover kubelab's own app builds. Those still rebuild. With `web` on build-once and `api`/`errors` rebuilding, the platform has **two divergent delivery patterns** — exactly the ambiguity the ADR-053 §5 golden-path template must not inherit.
+ADR-055 solved this for the extracted `web` repo (build-once / promote-by-digest), verified: `kubelab-web:1.2.0` digest == `:sha-60b24e7` (identical manifest list). But ADR-055's scope note "kubelab unchanged" refers to kubelab's **GitOps/manifest** side (consuming web's tag); it does **not** cover kubelab's own app builds. Those still rebuild. With `web` on build-once and `api` rebuilding, the platform has **two divergent delivery patterns for its products** — exactly the ambiguity the ADR-053 §5 golden-path template must not inherit. Converging `api` onto build-once closes that gap; `errors` is a different category (edge furniture, not a product — see *Alternatives*) and is left as-is.
 
 ## Decision
 
-**On `release_created` for a monorepo app, produce the semver image by re-tagging the staging-validated `sha-<short>` digest — never by rebuilding.**
+**On `release_created` for `api`, produce the semver image by re-tagging the staging-validated `sha-<short>` digest — never by rebuilding.**
 
 ### D1 — Re-tag, don't rebuild
 
@@ -79,6 +79,7 @@ Rejected alternative **B2** (consolidate build+release so the release commit's o
 - **Keep rebuilding (status quo / ADR-046 D2 literal).** The defect that CrashLooped prod (#666). Rejected.
 - **Manual candidate-semver validation runbook (#679's original proposal).** A process workaround that build-once makes unnecessary. Superseded.
 - **Digest-pinned manifests (`@sha256:…`).** Maximally immutable but costs manifest readability and adds tag→digest resolution to promote tooling. ADR-055 declined it for the same reasons; immutable tags + re-tag already give build-once. Out of scope.
+- **Apply build-once to `errors`, or extract `errors` to its own repo like `web`.** Both rejected. `errors` (`edge/errors/` — 369 lines of static HTML served by nginx) is **edge infrastructure, not a product**: no independent identity / users / brand, tightly coupled to the Traefik `error-pages` middleware and the VPS Traefik templates that live in kubelab. ADR-053 / ADR-048 are *product* boundaries — extracting `errors` would create a repo with more CI/governance than content, cargo-culting the `web` extraction onto a different category. And build-once's value for it is near-zero: static pages have no init-guards, no runtime deps, a pinned base image (`nginx:1.31-alpine`), and no staging validation to lose (the #666 CrashLoop was `api`, never `errors`). `errors` stays in kubelab on its existing release-build. Reassess only if it ever gains product-like identity/cadence.
 
 ## Implementation
 
@@ -87,7 +88,7 @@ Sequenced as independently-mergeable PRs (this ADR is PR-1, decision-only):
 1. **PR-1 (this ADR) + spec `DELIVERY-002-build-once-apps`.** Decision, no code.
 2. **PR-2 — build-once.** `toolkit deployment image-tag` (resolver + unit test); `release.yml` `publish-<app>` → re-tag instead of `ci-publish.yml`; `ci-cleanup.yml` prune guard; runbook update. Verified by digest equality (`<app>:X.Y.Z` == `:sha-<short>`).
 
-The CalVer "Global Release Bundle" (`ci-release.yml`) divergence from release-please-as-sole-semver-authority is **out of scope** (separate audit ticket); progressive delivery is DELIVERY-001 (#373).
+The CalVer "Global Release Bundle" (`ci-release.yml`) divergence from release-please-as-sole-semver-authority is **out of scope** (separate audit ticket); progressive delivery is DELIVERY-001 (#373); `errors` build-once / extraction is out of scope (see *Alternatives*).
 
 ## References
 
