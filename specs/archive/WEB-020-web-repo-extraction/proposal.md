@@ -1,7 +1,7 @@
 ---
 id: "WEB-020-web-repo-extraction"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-23"
 issue: "kubelab#697"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, web, repo-structure, gitops]
@@ -45,12 +45,12 @@ template_version: "1.0"
 
 ## Acceptance criteria
 
-- [ ] `mlorentedev/web` exists with mlorente.dev history preserved (`git log apps/web/site` lineage visible via `git blame` in the new repo).
-- [ ] A push to `web` master builds a `sha-<short>` image, pushes it, and fires a `repository_dispatch` to kubelab.
-- [ ] The kubelab receiver workflow promotes that tag to staging via `toolkit deployment promote` and Argo CD syncs it on the staging spoke.
-- [ ] `make dev` in `web` serves mlorente.dev locally against `api.kubelab.live` with no cluster running.
-- [ ] `apps/web/site` is removed from kubelab; the Go API and `infra/k8s` web manifests remain and still deploy.
-- [ ] The `kubelab.live → mlorente.dev` 301 redirect still resolves.
+- [x] `mlorentedev/web` exists with mlorente.dev history preserved (`git log apps/web/site` lineage visible via `git blame` in the new repo).
+- [x] A push to `web` master builds a `sha-<short>` image, pushes it, and fires a `repository_dispatch` to kubelab.
+- [x] The kubelab receiver workflow promotes that tag to staging via `toolkit deployment promote` and Argo CD syncs it on the staging spoke.
+- [~] `make dev` in `web` serves mlorente.dev locally against `api.kubelab.live` with no cluster running. — no-cluster MET; canonical-API delegated to WEB-021 (ADR-054 same-origin `/api`). See `verification.md` AC4.
+- [x] `apps/web/site` is removed from kubelab; the Go API and `infra/k8s` web manifests remain and still deploy.
+- [x] The `kubelab.live → mlorente.dev` 301 redirect still resolves.
 
 ## References
 
