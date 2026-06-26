@@ -11,6 +11,21 @@ created: "2026-03-29"
 
 **Accepted** — 2026-03-30
 
+## Amendment — 2026-06-26 (hosted-primary for the public repo)
+
+Two assumptions behind the original decision no longer hold:
+
+1. **Cost / "zero Actions minutes."** The repo is now **public**, so GitHub-hosted runners are **free and effectively unlimited in parallelism**. The cost driver that motivated self-hosted is gone.
+2. **"No pushes happen when the homelab is off, so no workflow triggers without a runner."** The ADR-053 cross-repo flow broke this: `web` pushes fire a `repository_dispatch` → the **Web Image Receiver** and downstream workflows run on `master` independently of any local dev session. Combined with the single runner (the documented "jobs serialize" negative), this produced exactly the predicted failure — a backlog of ~9 runs serialized behind one ~12-min Docker build, with even cheap `validate`/drift jobs queued behind it.
+
+**Resolution — flip the default to GitHub-hosted; self-hosted becomes opt-in.**
+
+- `RUNNER_DOCKER` set to `["ubuntu-latest"]` (unset → identical fallback). Every workflow already reads `fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"')`, so this one change routes the whole fleet to hosted runners — many concurrent jobs, free, no homelab dependency. An audit confirmed **no CI job needs homelab access**: all are portable (buildx → Docker Hub with `cache-from: type=gha`, Python toolkit, `gh`/`git` PR-opening, release ZIP). The two greps that matched homelab patterns were a comment and Release-body text, not steps.
+- **Concurrency cancellation** added to the PR-triggered workflows (`ci.yml`, `check-config-drift.yml`): a new commit cancels the superseded run instead of piling onto the fleet.
+- The self-hosted runner (`kubelab-bee`) **stays available**: re-enable it for any future job that genuinely needs homelab resources (a step that must reach the cluster or a LAN-only service) by setting `RUNNER_DOCKER` back to the self-hosted labels, or per-job. The fork-PR guard and the toggle mechanics below are unchanged.
+
+The original self-hosted rationale remains valid for a **private** repo or a homelab-bound job; this amendment changes only the *default* for the current public, GitOps-delivered repo.
+
 ## Context
 
 All CI/CD workflows ran on GitHub-hosted runners (`ubuntu-latest`), consuming GitHub Actions minutes and depending on shared infrastructure. With Beelink provisioned as the on-demand Platform Node (ADR-028), we have dedicated compute (8GB RAM, 4 cores) already running a GitHub Actions runner container (ANSIBLE-013).
