@@ -82,12 +82,37 @@ updates:
           - "patch"
           - "major"
 
+  # ---- Container image: apps/api (in this repo) ----
+  # Base images reach EOL and must be tracked regardless of where the code
+  # eventually lives — a missed version bump is exactly how alpine:3.18 rotted
+  # into a Trivy HIGH/CRITICAL failure. version-updates ON while api is in
+  # kubelab. (Go module bumps are churnier and security updates suffice, so the
+  # gomod entry below stays security-only.)
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+    groups:
+      api-docker-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
   # ============================================================
-  # Security-only -- apps departing to their own repos
+  # Security-only -- Go module deps (security suffices; avoid churn)
   # (open-pull-requests-limit: 0 -> no version PRs; security still flows)
   # ============================================================
 
-  # ---- Go API (-> own repo) ----
+  # ---- Go API modules ----
   - package-ecosystem: "gomod"
     directory: "/apps/api/src"
     schedule:
@@ -97,15 +122,3 @@ updates:
     labels:
       - "dependencies"
       - "api"
-
-  # ---- App container images (-> own repos) ----
-  - package-ecosystem: "docker"
-    directories:
-      - "/apps/api"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 0
-    labels:
-      - "dependencies"
-      - "docker"
