@@ -12,6 +12,10 @@ name: Web Image Receiver
 # GITHUB_TOKEN does not trigger `on: pull_request`, so its required checks would
 # never run and it could never be merged.
 #
+# Coalescing: only the latest web sha matters for continuous staging, so a new
+# deploy PR supersedes (closes) any older open `deploy/staging-web-*` PRs —
+# rapid web pushes converge to a single staging PR instead of a queue.
+#
 # Prod promotion is unchanged — the existing gated promote-prod.yml.
 
 on:
@@ -21,6 +25,13 @@ on:
 permissions:
   contents: write
   pull-requests: write
+
+# Serialize dispatches so rapid web pushes process one at a time (latest wins
+# via the coalescing step below). cancel-in-progress: false — never kill a
+# promote mid-push, which could leave a branch without its PR.
+concurrency:
+  group: web-image-receiver
+  cancel-in-progress: false
 
 jobs:
   promote-web:
@@ -52,7 +63,7 @@ jobs:
           esac
           poetry run toolkit deployment promote --env staging --app web --version "$TAG"
 
-      - name: Open staging deploy PR
+      - name: Open staging deploy PR (coalesce older)
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           TAG: ${{ github.event.client_payload.tag }}
@@ -70,3 +81,17 @@ jobs:
           gh pr create --base master --head "$BRANCH" \
             --title "chore(staging): deploy web ${TAG}" \
             --body "Staging promotion of \`web\` to \`${TAG}\` (ADR-046, cross-repo dispatch from mlorentedev/web)."
+
+          # Coalesce: for continuous staging only the LATEST web sha matters, so a
+          # burst of web pushes must not pile up a queue of stale deploy PRs. Now
+          # the new PR exists, close any older open web staging-deploy PRs and
+          # delete their branches (each is superseded by this one).
+          gh pr list --state open --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("deploy/staging-web-")) | "\(.number)\t\(.headRefName)"' \
+          | while IFS=$'\t' read -r pr ref; do
+              [ -n "$pr" ] || continue
+              [ "$ref" = "$BRANCH" ] && continue
+              echo "Superseding stale staging PR #${pr} (${ref})"
+              gh pr close "$pr" --delete-branch \
+                --comment "Superseded by \`${BRANCH}\` — only the latest web sha is promoted to staging (coalesced, ADR-046)."
+            done
