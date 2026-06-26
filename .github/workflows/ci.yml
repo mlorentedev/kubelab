@@ -6,6 +6,12 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# Cancel a superseded run when a new commit is pushed to the same PR — frees
+# runners instead of letting stale builds occupy the fleet (ADR-030 amendment).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   pull-requests: write

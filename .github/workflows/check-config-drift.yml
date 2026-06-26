@@ -30,6 +30,12 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
+# Cancel a superseded run on the same ref — the drift check is idempotent and
+# read-only, so a newer commit's run supersedes the older (ADR-030 amendment).
+concurrency:
+  group: drift-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: read
