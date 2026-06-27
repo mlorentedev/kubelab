@@ -1,7 +1,7 @@
 ---
 id: "DELIVERY-002-build-once-apps"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-26"
 issue: "mlorentedev/kubelab#679"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, delivery, gitops, ci-cd, versioning]
@@ -44,11 +44,11 @@ After this PR, when release-please cuts `api:X.Y.Z`, the prod image is produced 
 
 Observable outcomes. Each must be testable.
 
-- [ ] On `release_created` for `api`, **no `docker build`** runs for the semver tag — the semver image is produced solely by re-tagging an existing `sha-<short>` digest.
-- [ ] `kubelab-api:X.Y.Z` resolves to the **same manifest-list digest** as the staging-validated `kubelab-api:sha-<short>` (identical amd64 + arm64).
-- [ ] The sha to re-tag is **resolved from the staging SSOT** (`values/staging.yaml`), never hardcoded — covered by a toolkit unit test reading the SSOT.
-- [ ] `promote-prod.yml` behavior is unchanged (still refuses a non-existent registry tag; still opens a gated PR).
-- [ ] A toolkit command resolves the staging-pinned sha for an app and is unit-tested without network/registry access.
+- [x] On `release_created` for `api`, **no `docker build`** runs for the semver tag — the semver image is produced solely by re-tagging an existing `sha-<short>` digest. ✓ `release.yml` `publish-api` is a re-tag job (no `build-push-action`).
+- [ ] `kubelab-api:X.Y.Z` resolves to the **same manifest-list digest** as the staging-validated `kubelab-api:sha-<short>` (identical amd64 + arm64). _Asserted in-job; runtime-verified at the first `api` release in CI (pending a staging sha pin)._
+- [x] The sha to re-tag is **resolved from the staging SSOT** (`values/staging.yaml`), never hardcoded — covered by a toolkit unit test reading the SSOT. ✓ `tests/test_image_tag.py`.
+- [x] `promote-prod.yml` behavior is unchanged (still refuses a non-existent registry tag; still opens a gated PR). ✓ untouched; `tests/test_promotion.py` green.
+- [x] A toolkit command resolves the staging-pinned sha for an app and is unit-tested without network/registry access. ✓ `deployment image-tag` + `resolve_image_sha`.
 
 ## References
 
