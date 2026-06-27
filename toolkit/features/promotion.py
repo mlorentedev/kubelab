@@ -14,6 +14,10 @@ ruamel round-trip (comment- and order-preserving) rather than a PyYAML rewrite.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+from typing import Any
+
 from ruamel.yaml import YAML
 
 from toolkit.config.constants import COMPONENTS
@@ -22,6 +26,70 @@ from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.registry import tag_exists
+
+# Immutable CI build tag: ``sha-${GITHUB_SHA::7}`` (see staging-deploy.yml). The
+# web-image-receiver rejects anything else, so staging only ever pins this shape.
+_SHA_TAG = re.compile(r"^sha-[0-9a-f]{7,}$")
+
+
+def _load_values_doc(env: str) -> tuple[YAML, Path, Any]:
+    """Load ``values/<env>.yaml`` comment-preservingly. Returns ``(yaml, path, data)``.
+
+    Shared by ``promote`` (round-trip write) and ``resolve_image_sha`` (read-only)
+    so the values path and ruamel round-trip config live in one place.
+    """
+    path = settings.project_root / "infra" / "config" / "values" / f"{env}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"Values file not found: {path}")
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    return yaml, path, yaml.load(path.read_text())
+
+
+def resolve_image_sha(env: str, app: str) -> str:
+    """Return the immutable ``sha-<short>`` pinned for a platform app in ``values/<env>.yaml``.
+
+    Reads ``apps.platform.<app>.version`` straight from the env SSOT — the exact
+    artifact a human last validated on that environment (ADR-056 B1). release.yml
+    re-tags this digest as the prod semver (build-once); it is never rebuilt.
+
+    Raises ``ValueError`` if the app is not a platform app, or its pin is absent /
+    not an immutable ``sha-<short>`` tag (still ``dev``, a semver, etc.) — refusing
+    to promote bytes the environment never ran (incident #666 / kubelab#679).
+    """
+    if app not in COMPONENTS.PLATFORM_APPS:
+        raise ValueError(
+            f"App '{app}' is not a platform app {COMPONENTS.PLATFORM_APPS}; "
+            "edge services (e.g. errors) are not on the build-once sha lane"
+        )
+    _, path, data = _load_values_doc(env)
+    version = (data.get("apps") or {}).get("platform", {}).get(app, {}).get("version")
+    if not version:
+        raise ValueError(
+            f"No staging-pinned version for platform app '{app}' in {path.name}; "
+            "staging must deploy an immutable sha-<short> build before a prod re-tag"
+        )
+    if not _SHA_TAG.match(str(version)):
+        raise ValueError(
+            f"Staging pin for '{app}' is '{version}', not an immutable sha-<short> tag; "
+            "refusing to re-tag bytes staging never validated (ADR-056 build-once)"
+        )
+    return str(version)
+
+
+def read_pinned_version(env: str, app: str) -> str | None:
+    """Return the raw ``apps.platform.<app>.version`` pin in ``values/<env>.yaml``, or ``None``.
+
+    Tolerant sibling of ``resolve_image_sha``: no validation, never raises on a
+    non-sha (prod pins a semver). Used by the prune janitor to learn which tags a
+    committed overlay references so it never deletes one (ADR-056 prune guard).
+    """
+    try:
+        _, _, data = _load_values_doc(env)
+    except FileNotFoundError:
+        return None
+    version = (data.get("apps") or {}).get("platform", {}).get(app, {}).get("version")
+    return str(version) if version else None
 
 
 def _resolve_image(env: str, app: str) -> tuple[str, str]:
@@ -59,13 +127,7 @@ def promote(env: str, app: str, version: str) -> None:
     if exists is None:
         logger.warning(f"Could not verify {registry}/{image_name}:{version} exists; proceeding")
 
-    values_path = settings.project_root / "infra" / "config" / "values" / f"{env}.yaml"
-    if not values_path.exists():
-        raise FileNotFoundError(f"Values file not found: {values_path}")
-
-    yaml = YAML()
-    yaml.preserve_quotes = True
-    data = yaml.load(values_path.read_text())
+    yaml, values_path, data = _load_values_doc(env)
 
     platform = data.setdefault("apps", {}).setdefault("platform", {})
     app_cfg = platform.setdefault(app, {})

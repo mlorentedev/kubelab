@@ -128,6 +128,31 @@ def promote(
         raise typer.Exit(1) from None
 
 
+@app.command(name="image-tag")
+def image_tag(
+    env: Annotated[
+        str,
+        typer.Option("--env", "-e", help="Source environment whose SSOT pin to read (staging)"),
+    ],
+    app_name: Annotated[
+        str,
+        typer.Option("--app", "-a", help="Platform app (api|web)"),
+    ],
+) -> None:
+    """
+    Print the immutable ``sha-<short>`` tag pinned for a platform app (ADR-056 build-once).
+
+    Resolves ``apps.platform.<app>.version`` from ``values/<env>.yaml`` — the staging-
+    validated digest release.yml re-tags as the prod semver (never a rebuild). Prints the
+    bare tag to stdout for CI capture; errors (exit 1) if the pin is absent or not a sha.
+    """
+    try:
+        typer.echo(promotion.resolve_image_sha(env, app_name))
+    except Exception as e:
+        logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Resolve image tag", str(e)))
+        raise typer.Exit(1) from None
+
+
 @app.command()
 def status(
     env: Annotated[
