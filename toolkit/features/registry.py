@@ -36,12 +36,20 @@ class TagInfo:
     last_updated: str
 
 
-def select_stale_tags(tags: list[TagInfo], retention: int) -> list[str]:
+def select_stale_tags(
+    tags: list[TagInfo],
+    retention: int,
+    protected: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
     """Pure policy: which tag names to delete.
 
     Keep the ``retention`` most recent ``sha-*`` tags (newest first by
     ``last_updated``); the rest are stale. Every ``-rc.*`` tag is stale. Returns
     stale sha (oldest first) followed by rc tags.
+
+    ``protected`` names are never returned — a sha pinned by a committed overlay
+    (``values/<env>.yaml``) must survive even if it falls outside the retention
+    window, or a pending build-once prod re-tag would lose its source (ADR-056).
     """
     if retention < 0:
         raise ValueError(f"retention must be >= 0, got {retention}")
@@ -52,7 +60,7 @@ def select_stale_tags(tags: list[TagInfo], retention: int) -> list[str]:
     )
     stale_sha = [t.name for t in sha[retention:]]
     rc = [t.name for t in tags if _RC_MARKER in t.name]
-    return stale_sha + rc
+    return [name for name in stale_sha + rc if name not in protected]
 
 
 def tag_exists(registry: str, image_name: str, tag: str) -> bool | None:
@@ -138,17 +146,22 @@ def prune(
     retention: int,
     dry_run: bool,
     client: DockerHubClient | None = None,
+    protected: dict[str, set[str]] | None = None,
 ) -> int:
     """Prune stale tags for each ``<registry_prefix>-<app>`` repo.
 
-    Returns the count deleted (or, in ``dry_run``, that would be deleted).
+    ``protected`` maps app -> sha tags pinned by a committed overlay; those are
+    never deleted (ADR-056 prune guard). Returns the count deleted (or, in
+    ``dry_run``, that would be deleted).
     """
     client = client or DockerHubClient.from_env()
+    protected = protected or {}
     total = 0
     for app in apps:
         repo = f"{registry_prefix}-{app}"
         tags = client.list_tags(repo)
-        stale = select_stale_tags(tags, retention)
+        keep = protected.get(app, set())
+        stale = select_stale_tags(tags, retention, protected=keep)
         sha_count = sum(1 for t in tags if t.name.startswith(SHA_TAG_PREFIX))
         kept = min(sha_count, retention)
         if not stale:
