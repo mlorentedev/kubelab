@@ -98,31 +98,39 @@ def deploy(
 
 @app.command()
 def promote(
-    env: Annotated[
-        str,
-        typer.Option("--env", "-e", help="Target environment (staging|prod)"),
-    ],
     app_name: Annotated[
         str,
-        typer.Option("--app", "-a", help="Platform app to promote (api|web)"),
+        typer.Option("--app", "-a", help="App to promote (api|web|errors)"),
     ],
     version: Annotated[
         str,
         typer.Option("--version", "-v", help="Immutable image tag (e.g. 1.2.0 or sha-abc1234)"),
     ],
+    env: Annotated[
+        str | None,
+        typer.Option("--env", "-e", help="Environment (staging|prod); required for api/web, ignored for errors"),
+    ] = None,
 ) -> None:
     """
-    Promote an app to an immutable image tag in an environment (ADR-046 D6).
+    Promote an app to an immutable image tag (ADR-046 D6).
 
-    Verifies the tag exists in the registry, sets apps.platform.<app>.version in
-    values/<env>.yaml, and regenerates the overlay atomically. Staging tracks SHA
-    tags (continuous deployment); prod tracks semver (gated by PR).
+    Verifies the tag exists in the registry, then: api/web set apps.platform.<app>.version
+    in values/<env>.yaml and regenerate the overlay (staging tracks SHA, prod tracks semver);
+    errors sets the single edge.errors.version in common.yaml and re-syncs the kustomization
+    (env-agnostic single SSOT, DELIVERY-003).
     """
-    logger.section(f"Promote {app_name} -> {version} ({env.upper()})")
-    validate_environment_config(env)
+    if app_name == "errors":
+        logger.section(f"Promote errors -> {version}")
+    else:
+        if not env:
+            logger.error("--env is required for platform apps (api|web)")
+            raise typer.Exit(1)
+        logger.section(f"Promote {app_name} -> {version} ({env.upper()})")
+        validate_environment_config(env)
     try:
-        promotion.promote(env, app_name, version)
-        logger.success(MESSAGES.SUCCESS_COMPLETED.format(f"Promote {app_name} to {version} in {env}"))
+        promotion.promote(env or "prod", app_name, version)
+        target = "errors" if app_name == "errors" else f"{app_name} in {env}"
+        logger.success(MESSAGES.SUCCESS_COMPLETED.format(f"Promote {target} to {version}"))
     except Exception as e:
         logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Promote", str(e)))
         raise typer.Exit(1) from None

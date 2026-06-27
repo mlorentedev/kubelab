@@ -26,6 +26,7 @@ from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.registry import tag_exists
+from toolkit.scripts import sync_k8s_images
 
 # Immutable CI build tag: ``sha-${GITHUB_SHA::7}`` (see staging-deploy.yml). The
 # web-image-receiver rejects anything else, so staging only ever pins this shape.
@@ -102,12 +103,58 @@ def _resolve_image(env: str, app: str) -> tuple[str, str]:
     return registry, image_name
 
 
+def _promote_errors(version: str) -> None:
+    """Set ``edge.errors.version`` in ``common.yaml`` and re-sync the kustomization.
+
+    The errors image is a single semver shared across envs (DELIVERY-003), so its
+    promotion is env-agnostic: it writes the one SSOT and derives the K3s tag via
+    the image sync — no per-env overlay regeneration. Refuses a tag that does not
+    exist in the registry, same safety as platform apps.
+    """
+    yaml, common_path, data = _load_values_doc("common")
+    registry = data.get("registry", "docker.io/mlorentedev")
+    errors_cfg = (data.get("edge") or {}).get("errors")
+    if not errors_cfg or "image_name" not in errors_cfg:
+        raise ValueError("edge.errors.image_name missing from common.yaml")
+    image_name = errors_cfg["image_name"]
+
+    exists = tag_exists(registry, image_name, version)
+    if exists is False:
+        raise ValueError(
+            f"Tag '{version}' not found for {registry}/{image_name} — refusing to promote a "
+            "non-existent image (it would ImagePullBackOff)"
+        )
+    if exists is None:
+        logger.warning(f"Could not verify {registry}/{image_name}:{version} exists; proceeding")
+
+    previous = errors_cfg.get("version", "(unset)")
+    if previous == version:
+        logger.info(f"errors already at {version}; nothing to do")
+        return
+    errors_cfg["version"] = version
+    with common_path.open("w") as fh:
+        yaml.dump(data, fh)
+    logger.info(f"errors version {previous} -> {version} (edge.errors.version)")
+
+    # Derive the K3s tag from the SSOT so the drift gate stays authoritative.
+    sync_k8s_images.sync(common_path, settings.project_root / "infra" / "k8s" / "base" / "kustomization.yaml")
+    logger.success(f"Promoted errors to {version}; kustomization re-synced")
+
+
 def promote(env: str, app: str, version: str) -> None:
-    """Set ``apps.platform.<app>.version`` in ``values/<env>.yaml`` and regenerate the overlay.
+    """Set an app's deployed image tag in its SSOT and regenerate derived artifacts.
+
+    Platform apps (api/web) write ``apps.platform.<app>.version`` in
+    ``values/<env>.yaml`` and regenerate the overlay. The ``errors`` edge service
+    writes the single ``edge.errors.version`` in ``common.yaml`` and re-syncs the
+    kustomization (env-agnostic — see ``_promote_errors``).
 
     Raises ``ValueError`` for an unknown app, a non-existent registry tag, or a
-    ``dev`` target (dev runs on Docker Compose, not the K8s overlays).
+    ``dev`` target for a platform app (dev runs on Docker Compose, not the overlays).
     """
+    if app == "errors":
+        _promote_errors(version)
+        return
     if env == "dev":
         raise ValueError("Promotion targets K8s environments (staging|prod), not dev")
     if app not in COMPONENTS.PLATFORM_APPS:
