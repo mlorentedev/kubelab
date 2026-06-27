@@ -1,7 +1,7 @@
 ---
 id: "DELIVERY-003-errors-tag-automation"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-26"
 issue: "mlorentedev/kubelab#776"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, delivery, ci-cd, versioning, edge]
@@ -40,11 +40,11 @@ Right-sized automation (**not** full api-parity):
 
 ## Acceptance criteria
 
-- [ ] `edge.errors.version` is the **single** SSOT for the errors image tag; no hardcoded `kubelab-errors` `newTag` remains in `base/kustomization.yaml`.
-- [ ] On a release-please `errors:X.Y.Z`, the deployed K3s tag updates **without** a manual kustomization edit.
-- [ ] VPS Ansible (`errors_image`) and K3s resolve the **same** SSOT version (no divergence possible).
-- [ ] The config-drift gate stays green (generated == committed) after an errors promotion.
-- [ ] `toolkit` refuses an errors tag that does not exist in the registry (same safety as `api`).
+- [x] `edge.errors.version` is the **single** SSOT for the errors image tag; no hardcoded `kubelab-errors` `newTag` remains in `base/kustomization.yaml`. ✓ `tests/test_sync_k8s_images.py`.
+- [x] On a release-please `errors:X.Y.Z`, the deployed K3s tag updates **without** a manual kustomization edit. ✓ `release.yml` `promote-errors` + `_promote_errors`; `TestPromoteErrors::test_writes_edge_version_and_syncs`.
+- [x] VPS Ansible (`errors_image`) and K3s resolve the **same** SSOT version (no divergence possible). ✓ both read `edge.errors.{image_name,version}`.
+- [~] The config-drift gate stays green (generated == committed) after an errors promotion. ✓ stays green; gap noted in `verification.md` (gate doesn't independently assert kustomization==common.yaml — follow-up ticket).
+- [x] `toolkit` refuses an errors tag that does not exist in the registry (same safety as `api`). ✓ `_promote_errors` `tag_exists`; `TestPromoteErrors::test_rejects_missing_tag` + smoke 404.
 
 ## References
 
