@@ -87,16 +87,7 @@ repos:
     hooks:
       - id: yamllint
         exclude: '(infra/helm/.*/templates/|infra/ansible/|apps/blog/|apps/wiki/|infra/config/secrets/|infra/k8s/cluster/)'
-        args:
-          - '-d'
-          - >-
-            {extends: default,
-            rules: {
-              line-length: {max: 130},
-              document-start: disable,
-              truthy: {check-keys: false},
-              comments-indentation: disable
-            }}
+        # Config lives in the repo .yamllint (single SSOT) — no inline override.
 
   # Dockerfile linting
   - repo: https://github.com/hadolint/hadolint

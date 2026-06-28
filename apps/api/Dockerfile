@@ -27,7 +27,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -ldflags="-w -s" -o server ./cmd/server
 
 # Runtime Stage - using minimal alpine
-FROM alpine:3.18 AS runtime
+# Pin a supported release: 3.18 reached EOL (no security updates -> Trivy
+# HIGH/CRITICAL on patched-elsewhere CVEs). 3.24 is the current stable.
+FROM alpine:3.24 AS runtime
 
 WORKDIR /app
 

@@ -11,14 +11,14 @@ python = "^3.12"
 typer = "^0.26.7"
 rich = "^14.2.0"
 pydantic = "^2.13.4"
-pydantic-settings = "^2.12.0"
+pydantic-settings = "^2.14.2"
 jinja2 = "^3.1.6"
 argon2-cffi = "^25.1.0" # For Argon2 password hashing
 pyyaml = "^6.0.3" # For YAML configuration files
 cryptography = "^49.0.0" # For JWKS RSA key generation
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.7.6"
-pymdown-extensions = "^10.18"
+pymdown-extensions = "^11.0"
 mkdocs-glightbox = "^0.5.2"
 mkdocs-minify-plugin = "^0.8.0"
 mkdocs-git-revision-date-localized-plugin = "^1.5.3"
@@ -29,7 +29,7 @@ httpx = "^0.28.1" # HTTP client for registry tag verification (deployment promot
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7.3"
-mypy = "^1.17.0"
+mypy = "^2.1.0"
 pre-commit = "^4.6.0"
 pytest = "^8.2.3"
 pytest-cov = "^7.1.0"
