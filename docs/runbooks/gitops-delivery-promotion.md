@@ -14,6 +14,10 @@ How code reaches staging and prod. Implements [ADR-046](../adr/adr-046-gitops-de
 
 Image tags are **never reused as desired state**: a tag change is always a real git diff Argo reconciles. release-please is the sole authority for semver.
 
+### How the prod semver is produced (build-once — ADR-056, `api` only)
+
+When release-please cuts `api:X.Y.Z`, `release.yml` does **not** rebuild. It resolves the staging-validated `sha-<short>` from `values/staging.yaml` (`toolkit deployment image-tag --env staging --app api`) and re-tags that exact digest with `docker buildx imagetools create -t api:X.Y.Z api:sha-<short>` (manifest list copied → byte-identical amd64+arm64). So the bytes prod runs are the bytes a human validated on staging — closing the artifact-parity gap that CrashLooped the first gated promotion (#666 / #679). Parity is verified in-job by digest equality; a mismatch fails the release. **Precondition:** `api` must be pinned to a real `sha-*` in staging (deploy it there first), or the release fails fast rather than ship unvalidated bytes. `errors` is out of scope (edge infra) — it still rebuilds at release. The prune janitor (`ci-cleanup.yml`) never deletes a `sha-*` referenced by a committed overlay, so a pending re-tag can't lose its source.
+
 ## Deploy to staging (normal dev loop)
 
 1. Open a feature PR, get it green, merge to `master`.

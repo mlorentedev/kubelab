@@ -77,6 +77,10 @@
     dest: /var/lib/rancher/k3s/server/manifests/cloudflare-api-token.yaml
     mode: "0600"
   no_log: true
+  register: cf_token_secret
+  notify:
+    - Restart Traefik
+    - Wait for Traefik rollout
   when: k3s_traefik_acme_enabled and k3s_traefik_acme_cloudflare_token | length > 0
 
 # --- Traefik HelmChartConfig (ports + plugins, ADR-015) ---
