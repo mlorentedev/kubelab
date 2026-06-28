@@ -49,6 +49,14 @@ class TestSelectStaleTags:
         with pytest.raises(ValueError, match="retention"):
             select_stale_tags([], retention=-1)
 
+    def test_never_prunes_protected_sha(self) -> None:
+        # A sha pinned by a committed overlay must survive even outside the
+        # retention window — pruning it would break a pending prod re-tag (ADR-056).
+        tags = [_tag("sha-old0000", "2026-06-01T00:00:00Z"), _tag("sha-new1111", "2026-06-09T00:00:00Z")]
+        stale = select_stale_tags(tags, retention=0, protected={"sha-old0000"})
+        assert "sha-old0000" not in stale
+        assert "sha-new1111" in stale
+
 
 class TestDockerHubClient:
     def test_list_tags_paginates(self, monkeypatch: pytest.MonkeyPatch) -> None:

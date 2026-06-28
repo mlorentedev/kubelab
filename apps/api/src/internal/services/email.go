@@ -14,7 +14,7 @@ import (
 func SendResourceEmail(options models.ResourceEmailOptions) (bool, error) {
 	if !ValidateEmailConfiguration() {
 		logger.LogFunction("error", constants.Messages.Backend.Error["EmailConfigMissing"], nil)
-		return false, fmt.Errorf(constants.Messages.Service.Email["InvalidConfig"])
+		return false, fmt.Errorf("%s", constants.Messages.Service.Email["InvalidConfig"])
 	}
 
 	if options.Email == "" || options.ResourceLink == "" {

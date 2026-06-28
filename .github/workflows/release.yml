@@ -34,18 +34,71 @@ jobs:
           OUTPUTS: ${{ toJSON(steps.release.outputs) }}
         run: echo "$OUTPUTS"
 
+  # ADR-056 build-once: the prod semver is produced by RE-TAGGING the staging-
+  # validated `sha-<short>` digest, never a rebuild. `imagetools create` copies the
+  # multi-arch manifest list, so `api:X.Y.Z` and `api:sha-<short>` are byte-identical
+  # (incident #666 / kubelab#679). `publish-errors` stays a rebuild — errors is edge
+  # infra, out of the staging-sha lane (ADR-056 Out of scope).
   publish-api:
-    name: Publish API
+    name: Publish API (re-tag staging digest)
     needs: release-please
     if: needs.release-please.outputs.api_release_created == 'true'
-    uses: ./.github/workflows/ci-publish.yml
-    with:
-      app: api
-      tag: ${{ needs.release-please.outputs.api_version }}
-      sha: ${{ github.sha }}
-      context: ./apps/api
-      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
-    secrets: inherit
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    permissions:
+      contents: read
+    env:
+      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
+      VERSION: ${{ needs.release-please.outputs.api_version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      - name: Resolve staging-validated sha
+        id: sha
+        run: |
+          SHA="$(poetry run toolkit deployment image-tag --env staging --app api)"
+          echo "Staging-validated tag for api: $SHA"
+          echo "tag=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Login registry
+        uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Re-tag digest as semver (build-once)
+        env:
+          SHA: ${{ steps.sha.outputs.tag }}
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/${REGISTRY_PREFIX}-api"
+          # Copy the full manifest list to the semver tag + :latest alias. No rebuild.
+          docker buildx imagetools create \
+            -t "${REGISTRY}:${VERSION}" \
+            -t "${REGISTRY}:latest" \
+            "${REGISTRY}:${SHA}"
+          # Verify digest equality: the semver and the staging sha MUST resolve to the
+          # same manifest-list digest, or build-once parity is broken (fail the release).
+          FMT='{{.Manifest.Digest}}'
+          SHA_DIGEST="$(docker buildx imagetools inspect "${REGISTRY}:${SHA}" --format "$FMT")"
+          VER_DIGEST="$(docker buildx imagetools inspect "${REGISTRY}:${VERSION}" --format "$FMT")"
+          echo "::notice::api:${SHA} -> ${SHA_DIGEST}"
+          echo "::notice::api:${VERSION} -> ${VER_DIGEST}"
+          if [ "$SHA_DIGEST" != "$VER_DIGEST" ]; then
+            echo "::error::Digest mismatch — re-tag did not preserve the staging artifact"
+            exit 1
+          fi
+          {
+            echo "## Build-once re-tag (ADR-056)"
+            echo "- App: api"
+            echo "- Staging digest: \`${SHA}\` -> \`${SHA_DIGEST}\`"
+            echo "- Promoted semver: \`${VERSION}\` -> \`${VER_DIGEST}\`"
+            echo "- Rebuild: none (manifest list copied)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   publish-errors:
     name: Publish Errors
@@ -59,3 +112,51 @@ jobs:
       context: ./edge/errors
       runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
+
+  # DELIVERY-003: auto-pin the deployed errors tag after a release. errors is a
+  # single semver shared across envs (edge.errors.version), so the bump lands as
+  # one PR (a human merges) — no per-env gate, no manual kustomization edit. Runs
+  # after publish-errors so the image exists when the toolkit verifies the tag.
+  promote-errors:
+    name: Promote errors tag
+    needs: [release-please, publish-errors]
+    if: needs.release-please.outputs.errors_release_created == 'true'
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      ERRORS_VERSION: ${{ needs.release-please.outputs.errors_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      - name: Pin errors to the released semver (writes SSOT + syncs kustomization)
+        run: poetry run toolkit deployment promote --app errors --version "$ERRORS_VERSION"
+      - name: Open errors promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git add infra/config/values/common.yaml infra/k8s/base/kustomization.yaml
+          if git diff --staged --quiet; then
+            echo "errors already pinned to ${ERRORS_VERSION}; nothing to open"; exit 0
+          fi
+          BRANCH="deploy/errors-${ERRORS_VERSION}"
+          git checkout -b "$BRANCH"
+          git commit -m "chore(deploy): pin errors to ${ERRORS_VERSION}"
+          git push -u origin "$BRANCH" --force-with-lease
+          BODY="Automated errors tag promotion to \`${ERRORS_VERSION}\` (DELIVERY-003)."
+          BODY="$BODY Single SSOT \`edge.errors.version\` + synced kustomization;"
+          BODY="$BODY K3s and VPS follow on merge."
+          gh pr create --base master --head "$BRANCH" \
+            --title "chore(deploy): pin errors to ${ERRORS_VERSION}" \
+            --body "$BODY"
