@@ -1,0 +1,37 @@
+[
+  {
+    "id": "DELIVERY-003-errors-tag-automation-f1",
+    "behavior": "edge.errors.version is the single SSOT for the errors image tag; no hardcoded kubelab-errors newTag remains in base/kustomization.yaml.",
+    "verification": "poetry run pytest tests/test_sync_k8s_images.py -q && ! grep -A1 'kubelab-errors' infra/k8s/base/kustomization.yaml | grep -q '\"1.1.1\"'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DELIVERY-003-errors-tag-automation-f2",
+    "behavior": "A release-please errors:X.Y.Z bump updates the deployed K3s tag without a manual kustomization edit (toolkit writes the SSOT + re-syncs; release.yml opens the PR).",
+    "verification": "poetry run pytest 'tests/test_promotion.py::TestPromoteErrors::test_writes_edge_version_and_syncs' -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DELIVERY-003-errors-tag-automation-f3",
+    "behavior": "VPS Ansible (errors_image) and K3s resolve the same edge.errors.{image_name,version} SSOT — no divergence possible.",
+    "verification": "grep -q 'edge.errors.version' infra/ansible/playbooks/deploy-vps.yml && grep -q 'resolve_errors_image' toolkit/scripts/sync_k8s_images.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DELIVERY-003-errors-tag-automation-f4",
+    "behavior": "The config-drift gate stays green after an errors promotion (kustomization == sync output, committed together).",
+    "verification": "make sync-k8s-images && git diff --quiet infra/k8s/base/kustomization.yaml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DELIVERY-003-errors-tag-automation-f5",
+    "behavior": "The toolkit refuses an errors tag that does not exist in the registry (same safety as api).",
+    "verification": "poetry run pytest 'tests/test_promotion.py::TestPromoteErrors::test_rejects_missing_tag' -q",
+    "state": "pending",
+    "evidence": ""
+  }
+]

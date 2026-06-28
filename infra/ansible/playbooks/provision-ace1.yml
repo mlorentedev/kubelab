@@ -84,6 +84,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]  # prerequisite: secrets needed by any tag-filtered role
 
     - name: Decrypt env secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
@@ -93,11 +94,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]  # prerequisite: secrets needed by any tag-filtered role
 
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]  # prerequisite: secrets needed by any tag-filtered role
 
     - name: Generate Headscale pre-auth key (via VPS)
       command: >
@@ -121,6 +124,7 @@
           {{ [ansible_host] +
              ([config.networking.nodes.ace1.lan_ip]
               if config.networking.nodes.ace1.lan_ip is defined else []) }}
+      tags: [always]  # prerequisite: k3s role needs k3s_tls_san under --tags k3s
 
   roles:
     - role: ../roles/base_system
@@ -155,7 +159,9 @@
         k3s_traefik_http_port: "{{ config.k3s.traefik.http_port }}"
         k3s_traefik_https_port: "{{ config.k3s.traefik.https_port }}"
         k3s_traefik_acme_enabled: true
-        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        # SSOT-014c: acme_email is derived from apps.contact.email by the Python
+        # config loader, which raw include_vars here does NOT run — mirror it.
+        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
         k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
         k3s_traefik_acme_cloudflare_token: "{{ secrets.cloudflare.api_token }}"

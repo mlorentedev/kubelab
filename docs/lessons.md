@@ -3093,3 +3093,27 @@ The agent stays alive for the shell session, so `make connect` + `kubectl get ns
 **Problem:** Notifications scattered with no routing logic; the instinct is to either collapse everything to one channel (loses platform strengths) or adopt a heavy notification product (Novu). Also conflating one-way event routing with two-way human communication, which is the real source of the perceived chaos.
 **Solution:** Separate one-way event-routing (automated, this fabric) from two-way human-comms (channel strategy — NOT routed). Converge routing to one ingress/brain by REUSING the already-running n8n; specialize egress per platform via Apprise URLs; the declarative routing-table is the productizable unit (client deploy = swap config). Adopt-vs-build flips to ADOPT when the asset already exists (inverse of ADR-005's build decision — same constraint logic, opposite answer because n8n is already deployed and the gap is cross-cutting, not single-source). Heavy notification products (Novu) only earn their place at end-user scale (preference center / in-app inbox) and attach as a delivery SINK behind n8n, never a replacement — so the low-regret choice stays forward-compatible. Caveat: n8n workflows live in n8n's DB, so true IaC needs export/import of workflow JSON; Argo carries the stateless delivery infra but not the workflow content.
 **Tags:** `#architecture` `#notifications` `#n8n` `#apprise` `#homelab` `#adopt-vs-build`
+
+### [2026-06-27] Build-once re-tag (ADR-056): read the raw staging pin, protect it from the prune, copy the manifest list
+
+**Context:** Implementing build-once for the `api` image (DELIVERY-002) — prod semver produced by re-tagging the staging-validated `sha-<short>` instead of rebuilding from the release commit (closes the parity gap that CrashLooped the first gated promotion, #666/#679).
+
+**Problem:** Three non-obvious traps. (1) Resolving the sha from the *merged* config surfaces the inherited `dev` from `common.yaml`, masking "staging has no validated artifact" — the resolver would happily re-tag `dev`. (2) The weekly prune janitor (`ci-cleanup.yml`) keeps only the N most-recent `sha-*` and could delete the sha a pending prod promotion still references. (3) A naive `docker pull && docker tag && push` collapses a multi-arch manifest list to a single arch.
+
+**Solution:** (1) Read the **raw** `apps.platform.<app>.version` straight from `values/staging.yaml` and require `^sha-[0-9a-f]{7,}$` — an absent pin is an error, not a silent `dev`. (2) Thread a `protected` set through the pure `select_stale_tags`; the CLI gathers per-app sha pins from staging+prod values so a tag referenced by a committed overlay is never pruned, even outside the retention window. (3) Use `docker buildx imagetools create -t dst src` — a registry-side manifest-list copy (no QEMU, no rebuild), then assert `imagetools inspect --format '{{.Manifest.Digest}}'` equality and fail the release on mismatch.
+
+**Rule:** Re-tag by digest, never rebuild, to ship the validated bytes. Resolve promotion sources from the raw env SSOT (absence must error, not inherit). Any janitor that prunes by recency must exempt state still referenced by committed config. `errors` (edge infra) stays on its rebuild — build-once's value is near-zero for static pages with no staging-validated artifact to lose.
+
+**Tags:** `#delivery` `#ci-cd` `#gitops` `#build-once` `#docker` `#adr-056`
+
+### [2026-06-27] Pick the SSOT lane by where the version lives, not by "it's a custom app" (DELIVERY-003)
+
+**Context:** Automating the `errors` edge image tag (#776). The instinct was to treat it like api/web — add it to `toolkit deployment promote`'s per-env overlay lane.
+
+**Problem:** That's the wrong lane. `errors` pins a *single* `edge.errors.version` in `common.yaml`, shared across all envs — structurally identical to the third-party images (`gitea`, `n8n`…) that `sync_k8s_images.py` already syncs into `base/kustomization.yaml` from common.yaml. api/web are different: their tags live *per-env* in the overlays (`apps.platform.<app>.version` in staging/prod.yaml) and ride `promote` + the K8s generator. Forcing errors onto the promote lane would have invented a per-env split it doesn't have (and the spec's "single SSOT" goal forbids).
+
+**Solution:** Route by SSOT *location*. errors → the **sync** lane: emit it from the structured `edge.errors` keys (`{registry}/{image_name}:{version}`), delete its hardcoded `newTag`, let `sync_k8s_images` own it. `promote --app errors` writes `common.yaml` + re-syncs (env-agnostic, `--env` ignored), never touches an overlay. Note: `sync_k8s_images`'s block-replace regex stops at the `# Custom apps` comment, so web/api stay hand-pinned below while errors joins the synced block above.
+
+**Rule:** Before automating a deploy tag, ask *where does this version live* — one shared key in common.yaml (→ sync lane, like third-party) or per-env in the overlays (→ promote lane, like api/web). The runtime (edge vs platform) is a red herring; the SSOT shape is what decides. Caveat: the drift gate covers the generator (overlays) but NOT the kustomization sync — a manual bump-without-sync isn't caught (tracked: #792).
+
+**Tags:** `#delivery` `#ci-cd` `#ssot` `#kustomize` `#gitops` `#adr-046`

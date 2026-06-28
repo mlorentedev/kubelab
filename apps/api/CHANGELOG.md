@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1](https://github.com/mlorentedev/kubelab/compare/api-v1.1.0...api-v1.1.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **api:** clear image HIGH/CRITICAL CVEs (alpine 3.24 base + Go deps) ([#769](https://github.com/mlorentedev/kubelab/issues/769)) ([acf4e14](https://github.com/mlorentedev/kubelab/commit/acf4e14e5b04f5847ed800d716c1d0ceaa347bc1))
+
+
+### Miscellaneous
+
+* **staging:** deploy web sha-72dced2 ([#764](https://github.com/mlorentedev/kubelab/issues/764)) ([e97e257](https://github.com/mlorentedev/kubelab/commit/e97e257c7ecd72cd5c67adc8e758d53e43fdc53e))
+
 ## [1.1.0](https://github.com/mlorentedev/kubelab/compare/api-v1.0.0...api-v1.1.0) (2026-05-24)
 
 

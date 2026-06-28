@@ -84,10 +84,11 @@ images:
     newTag: RELEASE.2025-09-07T16-13-09Z
   - name: postgres
     newTag: 16-alpine
-  # Custom apps (managed by release-please, not sync_k8s_images.py)
+  - name: docker.io/mlorentedev/kubelab-errors
+    newTag: 1.1.1
+  # Custom apps web/api: per-env tags via `toolkit deployment promote` (overlays).
+  # errors is synced from edge.errors.version above (DELIVERY-003 single SSOT).
   - name: docker.io/mlorentedev/kubelab-web
     newTag: "1.0.1"
   - name: docker.io/mlorentedev/kubelab-api
     newTag: "1.0.0"
-  - name: docker.io/mlorentedev/kubelab-errors
-    newTag: "1.1.1"

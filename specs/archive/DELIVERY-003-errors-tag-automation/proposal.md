@@ -1,7 +1,7 @@
 ---
 id: "DELIVERY-003-errors-tag-automation"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-26"
 issue: "mlorentedev/kubelab#776"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, delivery, ci-cd, versioning, edge]
@@ -34,17 +34,17 @@ Right-sized automation (**not** full api-parity):
 
 ## Risks / open questions
 
-- **[OPEN — implementation] How K3s reads the SSOT tag.** errors' K3s manifest is *static* (`base/edge/errors.yaml` + a base `images:` newTag), unlike api/web's *generated* deployments. Decide: extend the generator to emit errors' image from `edge.errors.version`, or have the toolkit write a Kustomize `images:` override. Prefer the path that keeps the drift gate (ADR-027) authoritative.
-- **[OPEN — design] Prod gate vs auto-pin-everywhere.** Simplest = auto-pin to all envs on release (errors is low-risk; a bad error page is cosmetic, not a CrashLoop). Slightly more rigorous = auto-pin staging on release + add `errors` to the gated `promote-prod.yml` choices for prod. **Recommend the gated form** (keeps ADR-046's "prod is a deliberate gate" invariant) unless the simplicity win is judged decisive. Resolve when implementing.
-- **[DEP] Sequenced after DELIVERY-002** — reuses the `deployment promote` plumbing that build-once touches; avoid a merge race by landing build-once first.
+- **[RESOLVED — implementation] How K3s reads the SSOT tag → extend `sync_k8s_images.py`.** `errors` is structurally a *semver-in-`common.yaml`* image (one `edge.errors.version`, shared across envs), exactly like the third-party images `sync_k8s_images.py` already syncs into `base/kustomization.yaml` — unlike api/web, whose tags live per-env in the overlays and ride `deployment promote`. So `errors` belongs on the **sync** lane, not the per-env promote lane: add it as a structured source (`{registry}/{edge.errors.image_name}:{edge.errors.version}`), emit it in the synced `images:` block, and delete the hand-edited `kubelab-errors` `newTag` from the custom-apps group. The drift gate (ADR-027) stays authoritative because the kustomization tag is now a pure function of `common.yaml`. (Rejected: extending the generator — it does not emit `kustomization.yaml` at all, NET-002.)
+- **[RESOLVED — design] Prod gate vs auto-pin-everywhere → auto-pin everywhere via the single `common.yaml` SSOT, PR-mediated.** A *single* `edge.errors.version` cannot be gated per-env without splitting it into per-env overrides — which directly contradicts this spec's "single SSOT" goal (point 1). The gated form is therefore self-defeating here. Auto-pin is still **deliberate**: the bump lands as a PR a human merges (mirrors `staging-deploy.yml`), preserving ADR-046's "no unreviewed prod change" invariant without per-env divergence. `errors` is cosmetic-risk (a bad error page is not a CrashLoop), so the single shared version is the right granularity. (`errors` is NOT added to `promote-prod.yml` choices — those stay api/web per-env.)
+- **[DONE — DEP] Sequenced after DELIVERY-002** — build-once landed first (#789); this reuses the `deployment promote` plumbing without a merge race.
 
 ## Acceptance criteria
 
-- [ ] `edge.errors.version` is the **single** SSOT for the errors image tag; no hardcoded `kubelab-errors` `newTag` remains in `base/kustomization.yaml`.
-- [ ] On a release-please `errors:X.Y.Z`, the deployed K3s tag updates **without** a manual kustomization edit.
-- [ ] VPS Ansible (`errors_image`) and K3s resolve the **same** SSOT version (no divergence possible).
-- [ ] The config-drift gate stays green (generated == committed) after an errors promotion.
-- [ ] `toolkit` refuses an errors tag that does not exist in the registry (same safety as `api`).
+- [x] `edge.errors.version` is the **single** SSOT for the errors image tag; no hardcoded `kubelab-errors` `newTag` remains in `base/kustomization.yaml`. ✓ `tests/test_sync_k8s_images.py`.
+- [x] On a release-please `errors:X.Y.Z`, the deployed K3s tag updates **without** a manual kustomization edit. ✓ `release.yml` `promote-errors` + `_promote_errors`; `TestPromoteErrors::test_writes_edge_version_and_syncs`.
+- [x] VPS Ansible (`errors_image`) and K3s resolve the **same** SSOT version (no divergence possible). ✓ both read `edge.errors.{image_name,version}`.
+- [~] The config-drift gate stays green (generated == committed) after an errors promotion. ✓ stays green; gap noted in `verification.md` (gate doesn't independently assert kustomization==common.yaml — follow-up ticket).
+- [x] `toolkit` refuses an errors tag that does not exist in the registry (same safety as `api`). ✓ `_promote_errors` `tag_exists`; `TestPromoteErrors::test_rejects_missing_tag` + smoke 404.
 
 ## References
 

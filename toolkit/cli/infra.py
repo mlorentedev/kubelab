@@ -752,6 +752,46 @@ def k8s_status(
     logger.console.print(result.stdout)
 
 
+@k8s_app.command("restart")
+def k8s_restart(
+    deployment: Annotated[str, typer.Argument(help="Deployment name to restart")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    namespace: Annotated[str, typer.Option("--namespace", "-n", help="Namespace")] = "kubelab",
+    timeout: Annotated[int, typer.Option("--timeout", help="Seconds to wait for rollout")] = 120,
+) -> None:
+    """Restart any K8s deployment (rollout restart + wait) on the env's cluster.
+
+    Codified replacement for ad-hoc `kubectl rollout restart`. Generic over
+    deployment + namespace (default: kubelab). Typical use: make a pod re-read a
+    changed env-var Secret, e.g. Traefik's CF_DNS_API_TOKEN after a token resync:
+      toolkit infra k8s restart traefik --env staging --namespace kube-system
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s (use `services restart`)")
+        raise typer.Exit(0)
+
+    logger.section(f"Restart {namespace}/{deployment} - {env.upper()}")
+    validate_environment_config(env)
+
+    kctl = _kubectl_cmd(_get_kubeconfig(env))
+
+    restart = command.run(f"{kctl} -n {namespace} rollout restart deployment/{deployment}", check=False)
+    if restart.returncode != 0:
+        logger.error(f"rollout restart failed:\n{restart.stderr}")
+        raise typer.Exit(1)
+    logger.console.print(restart.stdout.strip())
+
+    rollout = command.run(
+        f"{kctl} -n {namespace} rollout status deployment/{deployment} --timeout={timeout}s",
+        check=False,
+    )
+    if rollout.returncode != 0:
+        logger.error(f"rollout did not complete within {timeout}s:\n{rollout.stderr or rollout.stdout}")
+        raise typer.Exit(1)
+    logger.console.print(rollout.stdout.strip())
+    logger.success(f"{namespace}/{deployment} restarted")
+
+
 @k8s_app.command("fetch-kubeconfig")
 def k8s_fetch_kubeconfig(
     env: Annotated[str, typer.Option("--env", "-e", help="Cluster to fetch (staging|prod|hub)")],
