@@ -1,0 +1,47 @@
+{
+  "spec": "DELIVERY-002-build-once-apps",
+  "features": [
+    {
+      "id": "C1-no-rebuild-at-release",
+      "behavior": "On release_created for api, no docker build runs for the semver tag; the image is produced solely by re-tagging an existing sha-<short> digest.",
+      "verification": "release.yml publish-api uses 'docker buildx imagetools create'; no build-push-action, no ci-publish.yml call. Digest-equality asserted in-job at first api release.",
+      "state": "pending",
+      "evidence": ".github/workflows/release.yml"
+    },
+    {
+      "id": "C2-digest-parity",
+      "behavior": "kubelab-api:X.Y.Z resolves to the same manifest-list digest as the staging-validated kubelab-api:sha-<short> (identical amd64+arm64).",
+      "verification": "In-job 'imagetools inspect --format {{.Manifest.Digest}}' compares both tags; mismatch exits 1 and fails the release.",
+      "state": "pending",
+      "evidence": ".github/workflows/release.yml (Re-tag digest as semver step)"
+    },
+    {
+      "id": "C3-sha-from-ssot",
+      "behavior": "The sha to re-tag is resolved from the staging SSOT (values/staging.yaml), never hardcoded; a non-sha pin is rejected.",
+      "verification": "tests/test_image_tag.py::TestResolveImageSha (test_returns_pinned_sha, test_errors_on_dev_pin, test_errors_on_semver_pin, test_errors_on_missing_pin).",
+      "state": "pending",
+      "evidence": "tests/test_image_tag.py"
+    },
+    {
+      "id": "C4-promote-prod-unchanged",
+      "behavior": "promote-prod.yml behavior is unchanged (still refuses a non-existent registry tag; still opens a gated PR).",
+      "verification": "promote-prod.yml and promotion.promote untouched in behavior; tests/test_promotion.py green (5/5).",
+      "state": "pending",
+      "evidence": "tests/test_promotion.py"
+    },
+    {
+      "id": "C5-resolver-offline",
+      "behavior": "A toolkit command resolves the staging-pinned sha for an app and is unit-tested without network/registry access.",
+      "verification": "tests/test_image_tag.py::TestResolveImageSha::test_returns_pinned_sha runs with no registry mock; toolkit deployment image-tag prints the bare tag to stdout.",
+      "state": "pending",
+      "evidence": "toolkit/cli/deployment.py (image-tag), toolkit/features/promotion.py (resolve_image_sha)"
+    },
+    {
+      "id": "C6-prune-guard",
+      "behavior": "ci-cleanup never prunes a sha-* tag referenced by a committed overlay, so a pending re-tag cannot lose its source.",
+      "verification": "tests/test_registry_prune.py::TestSelectStaleTags::test_never_prunes_protected_sha; CLI gathers per-app pins from staging/prod values and threads them as protected.",
+      "state": "pending",
+      "evidence": "toolkit/features/registry.py, toolkit/cli/registry.py"
+    }
+  ]
+}

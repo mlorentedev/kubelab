@@ -759,6 +759,15 @@ apply-secrets:
 	@test -n "$(ENV)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
 
+# Restart any K8s deployment via the toolkit (rollout restart + wait). Generic over
+# service + namespace (NS defaults to kubelab). E.g. make a pod re-read a changed
+# env-var Secret: make restart-service SVC=traefik ENV=staging NS=kube-system
+.PHONY: restart-service
+restart-service:
+	@test -n "$(SVC)" || (echo "Usage: make restart-service SVC=<deployment> ENV=staging|prod [NS=namespace]" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make restart-service SVC=<deployment> ENV=staging|prod [NS=namespace]" && exit 1)
+	@$(TOOLKIT) infra k8s restart $(SVC) --env $(ENV) $(if $(NS),--namespace $(NS),)
+
 # Renders Traefik Middlewares that wrap SOPS-sourced API keys (ADR-035 Stage 1).
 # Currently only api-key-ollama (prod). Adding a new auth-protected service:
 #   1. Append a SecretSpec to SECRET_CATALOG (toolkit/features/secrets_manager.py)

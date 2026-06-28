@@ -57,6 +57,45 @@ def parse_image(image_str: str) -> tuple[str, str]:
     return image_str[:last_colon], image_str[last_colon + 1 :]
 
 
+def resolve_errors_image(config: dict[str, object]) -> tuple[str, str] | None:
+    """Build the `errors` image (name, tag) from the structured `edge.errors` SSOT.
+
+    Unlike third-party images (single `name:tag` strings), `errors` is pinned by
+    separate keys — `registry` + `edge.errors.image_name` + `edge.errors.version`
+    — the same string Ansible renders for the VPS. This is the one custom app on
+    the sync lane: a semver shared across envs (DELIVERY-003), not a per-env tag.
+    Returns ``None`` if any key is missing.
+    """
+    edge = config.get("edge")
+    registry = config.get("registry")
+    if not isinstance(edge, dict) or not isinstance(registry, str):
+        return None
+    errors = edge.get("errors")
+    if not isinstance(errors, dict):
+        return None
+    image_name = errors.get("image_name")
+    version = errors.get("version")
+    if not isinstance(image_name, str) or not version:
+        return None
+    return f"{registry}/{image_name}", str(version)
+
+
+def collect_images(config: dict[str, object]) -> list[tuple[str, str]]:
+    """Resolve every synced image (third-party + the `errors` custom app)."""
+    images: list[tuple[str, str]] = []
+    for path in IMAGE_SOURCES:
+        image_str = resolve_path(config, path)
+        if not image_str or ":" not in image_str:
+            continue
+        name, tag = parse_image(image_str)
+        if tag and tag != "latest":
+            images.append((name, tag))
+    errors_image = resolve_errors_image(config)
+    if errors_image:
+        images.append(errors_image)
+    return images
+
+
 def build_images_block(images: list[tuple[str, str]]) -> str:
     """Build the YAML text for the images: section."""
     lines = [IMAGES_HEADER, "images:\n"]
@@ -66,20 +105,18 @@ def build_images_block(images: list[tuple[str, str]]) -> str:
     return "".join(lines)
 
 
-def main() -> int:
-    with open(COMMON_YAML) as f:
+def sync(common_yaml: Path = COMMON_YAML, kustomization: Path = KUSTOMIZATION) -> int:
+    """Rewrite the ``images:`` block in ``kustomization`` from ``common_yaml``.
+
+    Paths are injectable so callers (e.g. ``deployment promote --app errors``) can
+    re-sync a working tree other than the module default. Returns 0 on success.
+    """
+    with open(common_yaml) as f:
         config = yaml.safe_load(f)
 
-    content = KUSTOMIZATION.read_text()
+    content = kustomization.read_text()
 
-    images: list[tuple[str, str]] = []
-    for path in IMAGE_SOURCES:
-        image_str = resolve_path(config, path)
-        if not image_str or ":" not in image_str:
-            continue
-        name, tag = parse_image(image_str)
-        if tag and tag != "latest":
-            images.append((name, tag))
+    images = collect_images(config)
 
     if not images:
         print("WARNING: No images resolved from common.yaml", file=sys.stderr)
@@ -100,9 +137,14 @@ def main() -> int:
         # No images section yet -- append
         content = content.rstrip("\n") + "\n\n" + new_block
 
-    KUSTOMIZATION.write_text(content)
+    kustomization.write_text(content)
     print(f"Synced {len(images)} image tags from common.yaml -> kustomization.yaml")
     return 0
+
+
+def main() -> int:
+    """CLI entrypoint — sync the repo's default common.yaml -> kustomization.yaml."""
+    return sync()
 
 
 if __name__ == "__main__":
