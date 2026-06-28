@@ -30,6 +30,12 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
+# Cancel a superseded run on the same ref — the drift check is idempotent and
+# read-only, so a newer commit's run supersedes the older (ADR-030 amendment).
+concurrency:
+  group: drift-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: read
@@ -82,6 +88,21 @@ jobs:
           echo "::error::Generator output drifted from committed files. Locally run:"
           echo "::error::  make config-generate ENV=$TARGET_ENV"
           echo "::error::Review the diff, then commit the regenerated files."
+
+      # Base kustomization image tags are synced from common.yaml (env-independent),
+      # so gate once. The generator drift check above covers overlays only — this
+      # catches a manual common.yaml image bump that skipped `make sync-k8s-images`
+      # (e.g. edge.errors.version or a third-party tag). #792.
+      - name: Check base kustomization image sync (#792)
+        if: matrix.env == 'prod'
+        run: poetry run toolkit sync images --check
+
+      - name: Hint on image-sync drift
+        if: failure() && matrix.env == 'prod'
+        run: |
+          echo "::error::Base kustomization image tags drifted from common.yaml. Locally run:"
+          echo "::error::  make sync-k8s-images"
+          echo "::error::Review the diff, then commit infra/k8s/base/kustomization.yaml."
 
       # Headscale ACL policy is prod-only (single control plane, ADR-015), so gate once.
       - name: Validate Headscale ACL policy (ADR-041 / VPN-ACL-002)

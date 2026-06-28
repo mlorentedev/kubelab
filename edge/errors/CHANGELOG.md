@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.2...errors-v1.1.3) (2026-06-26)
+
+
+### Miscellaneous
+
+* **staging:** deploy web sha-72dced2 ([#764](https://github.com/mlorentedev/kubelab/issues/764)) ([e97e257](https://github.com/mlorentedev/kubelab/commit/e97e257c7ecd72cd5c67adc8e758d53e43fdc53e))
+
 ## [1.1.2](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.1...errors-v1.1.2) (2026-06-20)
 
 

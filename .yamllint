@@ -1,15 +1,14 @@
 ---
-# Project-wide yamllint config.
-# Default line-length (80) is too tight for Ansible role tasks and K8s manifests.
-# 100 is the sweet spot — readable on side-by-side diffs and matches modern norms
-# (Prettier default, Go fmt style). Keep at 100 unless a real long-line case
-# (Argon2 hash, long URL) justifies a per-file override.
+# Project-wide yamllint config — the single SSOT consumed by pre-commit AND CI
+# (both reference this file; neither passes an inline `-d` config anymore, so the
+# threshold lives in one place). Default line-length (80) is too tight for K8s
+# manifests and generated Authelia configs; 130 accommodates those (and Argon2
+# hashes via allow-non-breakable-words) without breaking committed output.
 extends: default
 
 rules:
   line-length:
-    max: 100
-    level: warning
+    max: 130
   document-start: disable
   truthy:
     check-keys: false
