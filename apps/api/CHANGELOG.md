@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/mlorentedev/kubelab/compare/api-v1.1.1...api-v1.1.2) (2026-06-28)
+
+
+### Bug Fixes
+
+* **deps:** bump golang from 1.25-alpine to 1.26-alpine in /apps/api in the api-docker-minor-patch group across 1 directory ([#785](https://github.com/mlorentedev/kubelab/issues/785)) ([2b96d67](https://github.com/mlorentedev/kubelab/commit/2b96d67e0434d6db896e9a3fa04a2082efcdeded))
+
 ## [1.1.1](https://github.com/mlorentedev/kubelab/compare/api-v1.1.0...api-v1.1.1) (2026-06-26)
 
 
