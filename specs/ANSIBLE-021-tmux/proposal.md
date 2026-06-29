@@ -17,12 +17,14 @@ Captured 2026-05-11 during dotfiles tmux integration.
 
 ## What
 
-Add `tmux` to the `base_system` Ansible role's package list. Re-run `base_system` against the inventory targets it already covers:
+Add `tmux` to the `base_system` Ansible role's package list. Under the per-node `make provision NODE=x` flow, `base_system` runs on **5 nodes**:
 
-- Homelab: ace1, ace2, rpi4, rpi3, beelink
-- Cloud: vps, aws1
+- Homelab: ace1, ace2, beelink, rpi4
+- Cloud: aws1
 
-Jetson is deliberately excluded — Ubuntu 18.04, raw-only via ANSIBLE-014, not an interactive-session target.
+**vps and rpi3 are NOT covered by this change**: their bespoke playbooks (`provision-vps.yml`, `provision-rpi3.yml`) deliberately omit `base_system`. They receive tmux as part of the minimal-baseline fix in **ANSIBLE-029 (#817)** — not bolted onto the prod K3s playbook here.
+
+Jetson is deliberately excluded — Ubuntu 18.04, raw-only via ANSIBLE-014, not an interactive-session target (its `provision-jetson.yml` also omits `base_system`).
 
 ## Out of scope
 
@@ -34,7 +36,7 @@ Jetson is deliberately excluded — Ubuntu 18.04, raw-only via ANSIBLE-014, not 
 
 - Idempotency: apt module handles "already installed" gracefully. No risk.
 - Side effects: `tmux` is ~1 MB, no service, no port. Zero blast radius.
-- Verification load: re-running `base_system` against 7 hosts via existing `make provision` flow.
+- Verification load: re-running `base_system` against 5 hosts via existing `make provision` flow.
 
 No open questions.
 
@@ -42,11 +44,13 @@ No open questions.
 
 - [ ] `base_system` role defaults list includes `tmux` (single line change).
 - [ ] Provisioning is idempotent (no failures; only "changed" on first run per host).
-- [ ] Smoke succeeds on every covered host: `for h in ace1 ace2 rpi4 rpi3 beelink vps aws1; do ssh "$h" tmux -V; done`.
+- [ ] Smoke succeeds on every covered host: `for h in ace1 ace2 aws1 beelink rpi4; do ssh "$h" tmux -V; done`.
 - [ ] Jetson NOT touched (verify smoke returns "command not found" for jetson or inventory inspection shows exclusion).
 
 ## References
 
-- Backlog: `kubelab/11-tasks.md` ANSIBLE-021
+- Issue: [#420](https://github.com/mlorentedev/kubelab/issues/420) (canonical; bitácora per ADR-018)
+- Systemic baseline-coverage gap: [#817](https://github.com/mlorentedev/kubelab/issues/817) (ANSIBLE-029) — vps/rpi3 tmux lands there
+- Host context: ADR-058 (ace2 dev-node)
 - Dotfiles: `~/Projects/dotfiles/.zsh/functions.zsh` — `sshmux` function
 - Role: `infra/ansible/roles/base_system/`
