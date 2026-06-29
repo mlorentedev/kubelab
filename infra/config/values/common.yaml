@@ -21,22 +21,22 @@ networking:
   # Trusted CIDRs — consumed by Authelia access_control as "internal" networks.
   # Single source for all services that need a trusted-network definition.
   trusted_cidrs:
-    - "10.0.0.0/8"
-    - "172.16.0.0/12"
-    - "192.168.0.0/16"
-    - "100.64.0.0/10"    # Tailscale VPN
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+  - "192.168.0.0/16"
+  - "100.64.0.0/10"      # Tailscale VPN
   # Staging DNS zones — resolved via Headscale split DNS → RPi4 CoreDNS → K3s
   # Add new domains here; deploy-vps, Corefile, and Pi-hole all consume this list.
   staging_zones:
-    - "staging.kubelab.live"
-    - "staging.mlorente.dev"
+  - "staging.kubelab.live"
+  - "staging.mlorente.dev"
   # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:
-    - name: ollama
-      node: ace2           # resolves to networking.nodes.ace2.tailscale_ip (ADR-028: ace2=Ollama)
-    - name: jetson
-      node: jetson         # resolves to networking.nodes.jetson.tailscale_ip
+  - name: ollama
+    node: ace2             # resolves to networking.nodes.ace2.tailscale_ip (ADR-028: ace2=Ollama)
+  - name: jetson
+    node: jetson           # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
 
@@ -65,11 +65,11 @@ networking:
       root: "/opt/backups"
       retention: 3
       filesystem_paths:
-        - "/opt/traefik"
-        - "/opt/headscale"
+      - "/opt/traefik"
+      - "/opt/headscale"
       exclude_volumes:
-        - "jekyll-staging-data"
-        - "jekyll-staging-site-data"
+      - "jekyll-staging-data"
+      - "jekyll-staging-site-data"
   # AWS management plane (ADR-023 Phase 3)
   aws:
     region: "eu-central-1"
@@ -293,19 +293,19 @@ k3s:
 #                     (ADR-025: Tailscale IPs rotate on node re-registration).
 #   optional   (opt)  skip (don't fail) when a render target is unreachable (node off).
 cluster_bootstrap:
-  - name: agent-sandbox
-    namespace: agent-sandbox-system
-    manifest: infra/k8s/cluster/agent-sandbox/manifest.yaml
-    version: v0.5.0rc1          # K8s SIG runtime substrate for iris (agents.x-k8s.io/v1beta1)
-    source:                     # `make sync-operators` re-fetches this pinned release asset
-      repo: kubernetes-sigs/agent-sandbox
-      asset: manifest.yaml
-  - name: coredns-custom
-    namespace: kube-system
-    manifest: infra/k8s/base/edge/coredns-custom.yaml
-    optional: true              # RPi4 is on-demand — skip pod-hairpin DNS when it is off
-    render:
-      RESOLVE_RPI4_TAILSCALE_IP: rpi4.kubelab.internal
+- name: agent-sandbox
+  namespace: agent-sandbox-system
+  manifest: infra/k8s/cluster/agent-sandbox/manifest.yaml
+  version: v0.5.0rc1            # K8s SIG runtime substrate for iris (agents.x-k8s.io/v1beta1)
+  source:                       # `make sync-operators` re-fetches this pinned release asset
+    repo: kubernetes-sigs/agent-sandbox
+    asset: manifest.yaml
+- name: coredns-custom
+  namespace: kube-system
+  manifest: infra/k8s/base/edge/coredns-custom.yaml
+  optional: true                # RPi4 is on-demand — skip pod-hairpin DNS when it is off
+  render:
+    RESOLVE_RPI4_TAILSCALE_IP: rpi4.kubelab.internal
 
 # ===========================================================================
 # ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
@@ -352,7 +352,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.1.1"
+    version: "1.1.4"
     port: 8080
     health_path: /health
     resources:
@@ -416,12 +416,12 @@ edge:
     # ACME
     acme_server: "https://acme-v02.api.letsencrypt.org/directory"
     acme_domains:
-      - main: mlorente.dev
-        sans:
-          - "*.mlorente.dev"
-      - main: kubelab.live
-        sans:
-          - "*.kubelab.live"
+    - main: mlorente.dev
+      sans:
+      - "*.mlorente.dev"
+    - main: kubelab.live
+      sans:
+      - "*.kubelab.live"
     # Resources
     resources:
       cpu_limit: "1.0"
@@ -695,33 +695,33 @@ apps:
         jwt_secret_reset_password: some_dummy_secret_for_jwt_reset
         # Moved OIDC client definitions to a list structure
         oidc_clients:
-          - client_id: kubelab-oidc
-            client_name: KubeLab OIDC Client (General)
-            redirect_uris:
-              - https://auth.kubelab.live/oauth2/callback
-            scopes:
-              - openid
-              - profile
-              - email
-              - groups
-          - client_id: grafana-oidc
-            client_name: Grafana OIDC Client
-            redirect_uris:
-              - https://grafana.kubelab.live/login/generic_oauth
-            scopes:
-              - openid
-              - profile
-              - email
-              - groups
-          - client_id: minio-oidc
-            client_name: MinIO OIDC Client
-            redirect_uris:
-              - https://console.minio.kubelab.live/oauth_callback
-            scopes:
-              - openid
-              - profile
-              - email
-              - groups
+        - client_id: kubelab-oidc
+          client_name: KubeLab OIDC Client (General)
+          redirect_uris:
+          - https://auth.kubelab.live/oauth2/callback
+          scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        - client_id: grafana-oidc
+          client_name: Grafana OIDC Client
+          redirect_uris:
+          - https://grafana.kubelab.live/login/generic_oauth
+          scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        - client_id: minio-oidc
+          client_name: MinIO OIDC Client
+          redirect_uris:
+          - https://console.minio.kubelab.live/oauth_callback
+          scopes:
+          - openid
+          - profile
+          - email
+          - groups
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
@@ -730,18 +730,18 @@ apps:
           # (generator_authelia.py + k8s_secrets._build_users_database) resolve
           # `is_admin=true` → admin_username. Renaming "manu" later (Phase B /
           # SEC-PRIVACY-001) becomes a 1-line change in apps.auth.
-          - is_admin: true
-            displayname: Administrator
+        - is_admin: true
+          displayname: Administrator
             # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
-            disabled: false
-            groups:
-              - admins
-              - users
-          - username: testuser
-            displayname: "E2E Test User"
-            email: "testuser@kubelab.test"
-            groups:
-              - users
+          disabled: false
+          groups:
+          - admins
+          - users
+        - username: testuser
+          displayname: "E2E Test User"
+          email: "testuser@kubelab.test"
+          groups:
+          - users
 
       crowdsec:
         name: crowdsec
@@ -754,7 +754,8 @@ apps:
         auth_level: one_factor
         default_port: 8080
         health_path: /health
-        bouncer_api_key: secrets://apps.services.security.crowdsec.bouncer_api_key
+        bouncer_api_key: 
+          secrets://apps.services.security.crowdsec.bouncer_api_key
 
     # Network services (bare-metal, external to K3s)
     network:
@@ -782,8 +783,8 @@ apps:
         keep_alive: "5m"
         memory_limit: "10G"
         models:
-          - "qwen2.5-coder:7b"
-          - "qwen2.5:7b"
+        - "qwen2.5-coder:7b"
+        - "qwen2.5:7b"
         # SSOT reference — real value in SOPS. Consumed by toolkit
         # `apply_middleware_secrets` (k8s_middlewares.py MIDDLEWARE_CATALOG).
         api_key: secrets://apps.services.ai.ollama.api_key
