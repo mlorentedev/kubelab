@@ -16,13 +16,13 @@ created: "2026-05-13"
 
 - [x] Add `tmux` to `base_system` role packages list (one-line YAML change) ✓ 2026-06-29
 - [ ] Run `make provision NODE=ace2 ENV=staging` (or equivalent) — verify idempotent, `tmux` installed (homelab-on + ts-bridge)
-- [ ] Run on remaining hosts: ace1, rpi4, rpi3, beelink, vps, aws1
-- [ ] Execute smoke loop: `for h in ace1 ace2 rpi4 rpi3 beelink vps aws1; do ssh "$h" tmux -V; done` — capture output
+- [ ] Run on remaining hosts: ace1, aws1, beelink, rpi4 (vps + rpi3 deferred to ANSIBLE-029 / #817)
+- [ ] Execute smoke loop: `for h in ace1 ace2 aws1 beelink rpi4; do ssh "$h" tmux -V; done` — capture output
 
 ## Closing
 
 - [ ] All hosts return `tmux 3.x` (or similar)
 - [ ] Jetson explicitly excluded — confirm
-- [ ] Diff is a single-line role change + zero changes elsewhere (no scope creep)
+- [ ] Role diff is a single line in `base_packages` (spec doc updates excluded; no role scope creep)
 - [ ] `verification.md` filled in (or marked deferred — low risk)
-- [ ] PR opened; close #814 on merge — built-in workflow sets bitácora Done (ADR-018, no more `11-tasks.md`)
+- [ ] PR opened; close #420 on merge — built-in workflow sets bitácora Done (ADR-018, no more `11-tasks.md`)
