@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/mlorentedev/kubelab/compare/api-v1.1.2...api-v1.1.3) (2026-06-29)
+
+
+### Bug Fixes
+
+* **k3s:** auto-restart Traefik on Cloudflare token change + toolkit restart command ([#805](https://github.com/mlorentedev/kubelab/issues/805)) ([006f53d](https://github.com/mlorentedev/kubelab/commit/006f53df3a14ec974b9a9f9ad61d18078735cd0d))
+
 ## [1.1.2](https://github.com/mlorentedev/kubelab/compare/api-v1.1.1...api-v1.1.2) (2026-06-28)
 
 
