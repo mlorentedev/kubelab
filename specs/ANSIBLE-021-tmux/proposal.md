@@ -47,6 +47,6 @@ No open questions.
 
 ## References
 
-- Backlog: `kubelab/11-tasks.md` ANSIBLE-021
+- Issue: [#814](https://github.com/mlorentedev/kubelab/issues/814) (bitácora; tasks live in GitHub per ADR-018)
 - Dotfiles: `~/Projects/dotfiles/.zsh/functions.zsh` — `sshmux` function
 - Role: `infra/ansible/roles/base_system/`

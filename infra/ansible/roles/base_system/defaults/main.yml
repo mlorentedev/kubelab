@@ -5,6 +5,7 @@ base_packages:
   - git
   - htop
   - vim
+  - tmux
   - jq
   - unzip
   - ca-certificates
