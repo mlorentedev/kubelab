@@ -21,7 +21,7 @@ from toolkit.core.logging import logger
 
 def _entries() -> list[dict[str, Any]]:
     common = settings.project_root / "infra/config/values/common.yaml"
-    with open(common) as f:
+    with open(common, encoding="utf-8") as f:
         return yaml.safe_load(f).get("cluster_bootstrap", []) or []
 
 

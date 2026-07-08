@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.sync import (
+    HOMEPAGE_DYNAMIC_PATTERNS,
     _get_oidc_output_files,
     _normalize_content,
     _restore_snapshots,
@@ -91,6 +92,24 @@ class TestNormalizeContent:
         patterns = [(r"will_not_match", "REPLACED")]
         content = b"unchanged content"
         assert _normalize_content(content, patterns) == content
+
+    def test_crlf_and_lf_normalize_equal(self) -> None:
+        # TOOL-020: a Windows write (CRLF) and a Linux write (LF) of the same
+        # generated content must compare equal — the newline convention isn't
+        # SSOT drift.
+        lf_content = b"images:\n  - name: foo\n    newTag: v1\n"
+        crlf_content = lf_content.replace(b"\n", b"\r\n")
+        assert _normalize_content(lf_content, []) == _normalize_content(crlf_content, [])
+
+    def test_svg_payload_normalizes_regardless_of_length(self) -> None:
+        # TOOL-020: mermaid.ink is an external, best-effort dependency (now
+        # gated in CI for the first time). A transient failure on one run
+        # must not look like SSOT drift against a run where it succeeded.
+        succeeded = '  topology: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0i",'
+        failed = '  topology: "data:image/svg+xml;base64,",'  # empty payload, key still present
+        assert _normalize_content(succeeded.encode(), HOMEPAGE_DYNAMIC_PATTERNS) == _normalize_content(
+            failed.encode(), HOMEPAGE_DYNAMIC_PATTERNS
+        )
 
 
 class TestRestoreSnapshots:

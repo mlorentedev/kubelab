@@ -7,3 +7,6 @@
 # Markdown too: docs/lessons.md and others are edited from Windows; eol=lf keeps
 # diffs to the actual content change instead of a whole-file CRLF churn.
 *.md   text eol=lf
+# TOOL-020: homepage-config/custom.js is toolkit-generated too (sync_homepage_config.py) —
+# same CRLF-churn risk as the YAML above.
+*.js   text eol=lf

@@ -13,6 +13,8 @@ from pathlib import Path
 
 import yaml
 
+from toolkit.core.io import write_text_lf
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMMON_YAML = PROJECT_ROOT / "infra/config/values/common.yaml"
 KUSTOMIZATION = PROJECT_ROOT / "infra/k8s/base/kustomization.yaml"
@@ -111,10 +113,10 @@ def sync(common_yaml: Path = COMMON_YAML, kustomization: Path = KUSTOMIZATION) -
     Paths are injectable so callers (e.g. ``deployment promote --app errors``) can
     re-sync a working tree other than the module default. Returns 0 on success.
     """
-    with open(common_yaml) as f:
+    with open(common_yaml, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    content = kustomization.read_text()
+    content = kustomization.read_text(encoding="utf-8")
 
     images = collect_images(config)
 
@@ -137,7 +139,7 @@ def sync(common_yaml: Path = COMMON_YAML, kustomization: Path = KUSTOMIZATION) -
         # No images section yet -- append
         content = content.rstrip("\n") + "\n\n" + new_block
 
-    kustomization.write_text(content)
+    write_text_lf(kustomization, content)
     print(f"Synced {len(images)} image tags from common.yaml -> kustomization.yaml")
     return 0
 
