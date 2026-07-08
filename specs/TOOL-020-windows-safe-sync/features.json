@@ -4,41 +4,41 @@
     "behavior": "toolkit sync all --check --env staging exits 0 on a clean Windows tree with no prior sync run",
     "verification": "poetry run toolkit sync all --check --env staging",
     "state": "pending",
-    "evidence": ""
+    "evidence": "Manually run on a live Windows workstation (this session): printed '[SUCCESS] All generated files in sync', exit code 0, git status clean after. Not harness-captured — awaiting CI/reviewer confirmation before this can be marked passing."
   },
   {
     "id": "TOOL-020-windows-safe-sync-f2",
     "behavior": "all generated-file writers in toolkit/scripts/ write newline=\"\\n\", zero \\r bytes in output",
     "verification": "poetry run pytest tests/test_core_io.py tests/test_sync_k8s_images.py -q",
     "state": "pending",
-    "evidence": ""
+    "evidence": "Manually run (this session): 8 passed. Includes a rigor check — reverted the fix and confirmed the regression test fails, then restored."
   },
   {
     "id": "TOOL-020-windows-safe-sync-f3",
     "behavior": "homepage sync completes without UnicodeEncodeError on non-ASCII characters",
-    "verification": "poetry run pytest tests/test_toolkit_init.py -q",
+    "verification": "poetry run pytest tests/test_toolkit_init.py tests/test_sync_homepage_config.py -q",
     "state": "pending",
-    "evidence": ""
+    "evidence": "Manually run (this session): 8 passed. test_toolkit_init.py manufactures a real cp1252 stream to prove the crash is genuine before the fix and gone after."
   },
   {
     "id": "TOOL-020-windows-safe-sync-f4",
     "behavior": "a windows-latest CI job runs toolkit sync all --check on every PR alongside the existing Linux job",
     "verification": "gh workflow view 'Config Drift Gate' --repo mlorentedev/kubelab",
     "state": "pending",
-    "evidence": ""
+    "evidence": "Job added to .github/workflows/check-config-drift.yml (windows-sync-check); not yet run — first real signal will be the PR's CI check run."
   },
   {
     "id": "TOOL-020-windows-safe-sync-f5",
     "behavior": "existing Linux CI continues to pass toolkit sync all --check with no regression",
     "verification": "poetry run pytest -q && make lint",
     "state": "pending",
-    "evidence": ""
+    "evidence": "Full suite + lint run on Windows (this session): 345 passed, ruff clean. Fix is additive (explicit encoding=/newline= vs platform defaults), not platform-branched, so expected to hold on Linux — not independently re-run on Linux from this session; pending the PR's own Linux CI job."
   },
   {
     "id": "TOOL-020-windows-safe-sync-f6",
     "behavior": "sync all --check leaves the working tree byte-identical before/after on both Windows and Linux (idempotency)",
-    "verification": "poetry run pytest tests/test_sync_k8s_images.py -k idempotent -q",
+    "verification": "poetry run pytest tests/test_sync_k8s_images.py -k Idempotency -q",
     "state": "pending",
-    "evidence": ""
+    "evidence": "Manually run (this session): passed on Windows, verified against the real repo end-to-end (see f1). Linux side pending CI."
   }
 ]

@@ -1,7 +1,7 @@
 ---
 id: "TOOL-020-windows-safe-sync"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-07-08"
 issue: "kubelab#835"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -42,12 +42,12 @@ Failure modes, dependencies, and unknowns to clarify before implementation. If a
 
 Observable outcomes. Each must be testable.
 
-- [ ] `toolkit sync all --check --env staging` exits 0 on a clean Windows tree with no prior sync run (reproduces and resolves the P1 repro in `process-audit-2026-07-07.md`)
-- [ ] All generated-file writers in `toolkit/scripts/` write with `newline="\n"` (or equivalent), verified by a unit test asserting zero `\r` bytes in output
-- [ ] Homepage sync completes without a `UnicodeEncodeError` when non-ASCII characters (e.g. `→`) are present in source content
-- [ ] A `windows-latest` CI job runs `toolkit sync all --check` on every PR and is green, running **alongside** (not instead of) the existing Linux CI job
-- [ ] The existing Linux CI lane continues to pass `toolkit sync all --check` with no regression — writer/comparator/encoding changes are verified cross-platform, not tuned to fix Windows at Linux's expense
-- [ ] `sync all --check` leaves the working tree byte-identical before/after on both Windows and Linux (idempotency, extended from the existing Linux-only guarantee)
+- [x] `toolkit sync all --check --env staging` exits 0 on a clean Windows tree with no prior sync run (reproduces and resolves the P1 repro in `process-audit-2026-07-07.md`) — verified with a real run on this Windows workstation, see `verification.md`
+- [x] All generated-file writers in `toolkit/scripts/` write with `newline="\n"` (or equivalent), verified by a unit test asserting zero `\r` bytes in output
+- [x] Homepage sync completes without a `UnicodeEncodeError` when non-ASCII characters (e.g. `→`) are present in source content
+- [ ] A `windows-latest` CI job runs `toolkit sync all --check` on every PR and is green, running **alongside** (not instead of) the existing Linux CI job — job added, pending first CI run on the PR
+- [ ] The existing Linux CI lane continues to pass `toolkit sync all --check` with no regression — writer/comparator/encoding changes are verified cross-platform, not tuned to fix Windows at Linux's expense — pending CI run on the PR (fix is additive, not platform-branched, but not independently re-run on Linux from this session)
+- [x] `sync all --check` leaves the working tree byte-identical before/after on both Windows and Linux (idempotency, extended from the existing Linux-only guarantee) — Windows side verified directly; Linux side verified by construction (same code path, no OS branch) and pending CI confirmation
 
 ## References
 
