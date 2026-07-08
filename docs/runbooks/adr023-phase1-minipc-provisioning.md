@@ -1,14 +1,21 @@
 ---
 id: adr023-phase1-minipc-provisioning
 type: runbook
-status: active
+status: historical
 created: "2026-03-16"
+updated: "2026-07-07"
 owner: manu
 ---
 
 # ADR-023 Phase 1: MiniPC Bare Metal Provisioning
 
 > Step-by-step runbook for re-provisioning Acemagic MiniPCs from Proxmox VMs to Ubuntu Server 24.04 LTS bare metal.
+
+> **Completed — one-shot migration record.** This migration finished in March 2026:
+> ace1/ace2 run Ubuntu 24.04 bare metal and the Proxmox VMs are gone. Do not re-run.
+> Note the `-K`/`ASK_PASS` bootstrap steps below predate the fleet-wide NOPASSWD sudo
+> hardening (2026-03-20) — current provisioning does not need them.
+> (Docs audit D78, `docs/audits/docs-audit-2026-07-07.md`.)
 
 ## Prerequisites
 

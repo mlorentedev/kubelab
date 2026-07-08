@@ -14,35 +14,35 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
                           │  Hetzner VPS │  162.55.57.175
                           │  (ARM, prod) │
                           ├─────────────┤
-                          │ Traefik     │──→ api, web, errors,
-                          │ Headscale   │   grafana, gitea, n8n,
-                          │ (Docker     │   loki, portainer
-                          │  Compose)   │──→ Uptime Kuma (RPi3)
-                          └──────┬──────┘   via Tailscale proxy
+                          │ K3s: Traefik│──→ api, web, errors,
+                          │  apps, obs, │   grafana, loki, gitea,
+                          │  postgres   │   authelia, n8n, redis
+                          │ Headscale   │──→ Uptime Kuma (RPi3)
+                          │ (Compose)   │   via Tailscale proxy
+                          └──────┬──────┘
                                  │
-                    Headscale VPN mesh (WireGuard)
+                 Headscale VPN mesh (WireGuard, 8 nodes)
+                 Argo CD hub on AWS (aws1) syncs both spokes
                     ┌────────────┼────────────────────┐
                     │            │                     │
           ┌────────┴───┐  ┌─────┴──────┐    ┌────────┴────────┐
           │   RPi4     │  │   ace1     │    │  Other nodes    │
           │  Gateway   │  │  Staging   │    │                 │
-          ├────────────┤  ├────────────┤    │ ace2: GH Runner │
-          │ Pi-hole    │  │ K3s single │    │       + MinIO   │
-          │ CoreDNS    │  │ 13 pods:   │    │ Beelink: Ollama │
-          │ DHCP       │  │ api, web,  │    │ RPi3: Uptime    │
-          │            │  │ authelia,  │    │       Kuma      │
-          │ Split DNS: │  │ grafana,   │    │ Jetson: Pollex  │
-          │ *.staging  │  │ crowdsec,  │    │  (llama.cpp)    │
-          │ .kubelab   │  │ gitea, n8n │    │                 │
-          │ .live      │  │ loki, minio│    │                 │
-          └────────────┘  │ redis,     │    └─────────────────┘
-                          │ vector     │
-                          └────────────┘
+          ├────────────┤  ├────────────┤    │ aws1: Argo CD   │
+          │ Pi-hole    │  │ K3s single │    │       hub       │
+          │ CoreDNS    │  │ node: api, │    │ ace2: Ollama    │
+          │ DHCP       │  │ web, auth- │    │ Beelink: GH     │
+          │            │  │ elia, graf-│    │  Runner + MinIO │
+          │ Split DNS: │  │ ana, loki, │    │ RPi3: Uptime    │
+          │ *.staging  │  │ postgres,  │    │       Kuma      │
+          │ .kubelab   │  │ gitea, n8n,│    │ Jetson: Pollex  │
+          │ .live      │  │ redis, ... │    │  (llama.cpp)    │
+          └────────────┘  └────────────┘    └─────────────────┘
                    *.staging.kubelab.live
                    staging.mlorente.dev
 ```
 
-**Production:** Hetzner VPS running Docker Compose (migrating to K3s in Phase 2), public via `*.kubelab.live` and `mlorente.dev`.
+**Production:** K3s single-node on the Hetzner VPS (Headscale stays in Docker Compose per ADR-015), public via `*.kubelab.live` and `mlorente.dev`. Delivery is GitOps: an Argo CD hub on AWS (aws1) syncs the prod and staging spokes.
 **Staging:** K3s single-node on ace1 (bare metal), accessible via Headscale VPN at `*.staging.kubelab.live` and `staging.mlorente.dev`.
 **Development:** Docker Compose on localhost with `*.kubelab.test` domains.
 
@@ -68,6 +68,8 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 | DNS | Cloudflare (prod) + CoreDNS (staging) |
 | VPN | Headscale + Tailscale clients |
 | Secrets | SOPS (age encryption) |
+| Data | PostgreSQL (shared), Redis, MinIO |
+| GitOps | Argo CD (hub on AWS, spokes staging/prod) |
 | CI/CD | GitHub Actions, multi-arch Docker builds |
 | IaC | Terraform, Ansible, Python toolkit |
 
@@ -75,13 +77,13 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 
 | App | Stack | Description |
 |-----|-------|------------|
-| [Web](apps/web/) | Astro + TypeScript + Tailwind | Portfolio and landing page |
+| Web | Astro + TypeScript + Tailwind | Extracted to its own repository (ADR-053); images arrive via the `web-image-receiver` workflow |
 | [API](apps/api/) | Go + Gin | Backend services (newsletter, lead magnets) |
 | [Errors](edge/errors/) | HTML + Nginx | Custom Traefik error pages |
 
 ### Self-hosted services
 
-Grafana, Loki, Authelia, CrowdSec, Gitea, MinIO, n8n, Redis.
+Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, MinIO, n8n, Redis, PostgreSQL, Apprise, Homepage. Argo CD runs on the AWS hub; Ollama is external (ace2) behind a K3s EndpointSlice.
 
 ## Project Structure
 
@@ -89,15 +91,17 @@ Grafana, Loki, Authelia, CrowdSec, Gitea, MinIO, n8n, Redis.
 kubelab/
 ├── apps/                        Application source code
 │   ├── api/                     Go REST API
-│   └── web/                     Astro portfolio site
+│   └── wiki/                    Generated docs output (not an app)
 │
 ├── infra/
 │   ├── k8s/                     Kubernetes manifests
 │   │   ├── base/                Base manifests (staging defaults)
 │   │   └── overlays/            Kustomize overlays (staging, prod)
 │   ├── stacks/                  Docker Compose stacks (dev environment)
-│   ├── terraform/               Terraform DNS (Cloudflare)
+│   ├── terraform/               Terraform: DNS (Cloudflare) + AWS hub
 │   ├── ansible/                 Server provisioning playbooks
+│   ├── helm/                    Helm values for third-party services (Argo CD)
+│   ├── n8n/                     n8n workflow definitions
 │   └── config/
 │       ├── values/              Environment config (YAML per env)
 │       └── secrets/             SOPS-encrypted secrets
@@ -120,7 +124,7 @@ poetry install
 make setup
 
 # Start development stack
-make dev
+make up-dev
 ```
 
 Services available at `*.kubelab.test` (requires `/etc/hosts` entries — see `make setup-local-dns`).
@@ -131,7 +135,7 @@ Services available at `*.kubelab.test` (requires `/etc/hosts` entries — see `m
 |-------------|---------------|--------|---------|
 | Development | Docker Compose (local) | localhost | `*.kubelab.test` |
 | Staging | K3s on ace1 (bare metal) | Headscale VPN | `*.staging.kubelab.live`, `staging.mlorente.dev` |
-| Production | Docker Compose on VPS (→ K3s Phase 2) | Public internet | `*.kubelab.live`, `mlorente.dev` |
+| Production | K3s single-node on VPS (Argo CD synced) | Public internet | `*.kubelab.live`, `mlorente.dev` |
 
 ## CI/CD Pipeline
 
@@ -166,10 +170,11 @@ See [`toolkit/README.md`](toolkit/README.md) for full command reference.
 ## Hardware Topology
 
 ```
-Hetzner VPS (ARM)      — Production: Docker Compose + Headscale
-Acemagic-1 (bare metal)— K3s staging (13 pods, all-in-one)
-Acemagic-2 (bare metal)— Platform node (GH Runner + MinIO)
-Beelink (bare metal)   — Ollama (LLM inference)
+Hetzner VPS (ARM)      — Production: K3s + Headscale (Docker Compose)
+AWS t4g.small (aws1)   — Argo CD hub (management plane)
+Acemagic-1 (ace1)      — K3s staging (all-in-one)
+Acemagic-2 (ace2)      — Ollama bare metal (LLM compute)
+Beelink (bare metal)   — Platform node: GH Runner + MinIO
 RPi 4 (8GB)            — Network gateway: Pi-hole, CoreDNS, DHCP
 RPi 3 (1GB)            — External monitoring (Uptime Kuma)
 Jetson Nano (4GB)      — Pollex (llama.cpp, GPU inference)

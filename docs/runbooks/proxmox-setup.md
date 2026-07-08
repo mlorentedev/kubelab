@@ -1,13 +1,22 @@
 ---
 id: "kubelab-runbook-proxmox-setup"
 type: runbook
-status: active
+status: superseded
+superseded_by: adr023-phase1-minipc-provisioning
 tags: [runbook, kubelab]
 created: "2026-02-10"
+updated: "2026-07-07"
 owner: manu
 ---
 
 # Proxmox Setup
+
+> **Retired (2026-07-07):** Proxmox was removed from the fleet by ADR-023 Phase 1 — the
+> MiniPCs run Ubuntu 24.04 bare metal and the three K3s VMs were deleted on 2026-03-19.
+> No node runs Proxmox today. Kept for historical reference only; for current node
+> bring-up see [hardware-setup.md](hardware-setup.md) and
+> [adr023-phase1-minipc-provisioning.md](adr023-phase1-minipc-provisioning.md).
+> (Docs audit D10, `docs/audits/docs-audit-2026-07-07.md`.)
 
 ## Overview
 
