@@ -51,7 +51,7 @@ ON-DEMAND (homelab, powered when working):
 - v1.34.4+k3s1, namespace: `kubelab`
 - Node: ace1 (172.16.1.2) — single all-in-one (no separate agents since ADR-023 Phase 1)
 - Kubeconfig: `~/.kube/kubelab-{env}-config` (e.g. `kubelab-staging-config`)
-- Deploy: `make deploy-k8s ENV=staging` (Kustomize only — Helm chart removed, ADR-021 Rev2)
+- Deploy: `make deploy-k8s ENV=staging` (Kustomize only for custom apps — in-house Helm chart removed, ADR-021 revised 2026-03-19)
 - K8s packaging: custom apps (api/web/errors) = Kustomize, third-party = Helm official charts (H2 pending)
 
 ### VPN mesh
@@ -97,11 +97,11 @@ ON-DEMAND (homelab, powered when working):
 - **Jetson Nano (Ubuntu 18.04)**: Cannot reuse Ubuntu 24.04 Ansible roles. Use `raw` module. NetworkManager (not netplan). Static IP via `nmcli`. Pollex deployment lives in pollex repo, not kubelab.
 - **yamllint directives inside `|` blocks don't work**: `# yamllint disable` is string content inside literal block scalars, not a YAML comment. yamllint max line-length is 130 (accommodates argon2 hashes).
 - **Trunk-based development**: `master` is the only permanent branch. Feature branches use `feature/`, `fix/`, `hotfix/`, `chore/` prefixes. All PRs squash-merge to master. No `develop` branch.
-- **RC versioning**: Feature branches produce `{next-version}-rc.{N}` Docker tags. Master produces stable `{version}` tags. No more `0.0.0-dev.{sha}` builds.
+- **Image tagging**: feature-branch/staging builds produce `sha-<short>` tags (the RC scheme was dropped). release-please produces per-app semver tags (`api-vX.Y.Z`, `errors-vX.Y.Z`); prod images are digest re-tags of the staging `sha-` image (ADR-056).
 - **Errors service lives in `edge/errors/`** (not `apps/`). It's an edge service, not a platform app. CI path filter reflects this.
 - **K3s HelmChartConfig managed by Ansible**: Template at `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2`. Includes ACME config. Do NOT create static HelmChartConfig in `infra/k8s/`.
 - **All nodes use NOPASSWD sudo**: SSH hardened + NOPASSWD on all nodes (2026-03-20). No `-K` needed. For NEW nodes, bootstrap NOPASSWD manually first, then provision with `make provision NODE=x ENV=y ASK_PASS=1`.
-- **Pattern C ports are in prod.yaml only**: common.yaml has 80/443 (default). prod.yaml overrides to 8080/8443 for side-by-side validation. Do NOT put alternate ports in common.yaml.
+- **Pattern C cutover is complete (ADR-015)**: prod serves 80/443 and prod.yaml no longer carries the 8080/8443 side-by-side ports. Do NOT reintroduce alternate ports in common.yaml.
 - **Authelia does NOT auto-reload configuration.yml**: ConfigMap changes require pod restart. Long-term: use configMapGenerator hash suffix for automatic rolling updates.
 - **Gitea OIDC CLI vs web process**: `gitea admin auth add-oauth` writes to SQLite but the web process caches in memory. Always restart Gitea after CLI auth changes.
 - **Argo CD OIDC is native (no dex)**: Uses `configs.cm.oidc.config` in Helm values. Client secret stored as `$oidc.authelia.clientSecret` in `configs.secret.extra`, injected by `deploy-argocd` via `--set`. Dex disabled (not needed with native OIDC). Admin local account is apiKey-only (CLI fallback). RBAC: Authelia `admins` group → `role:admin`.
@@ -160,7 +160,7 @@ ON-DEMAND (homelab, powered when working):
 - **CI runs on self-hosted runner (ADR-030)**: All workflows use `fromJSON(vars.RUNNER_DOCKER)` for runner routing. Toggle: `gh variable set RUNNER_DOCKER --body '["self-hosted","linux","docker"]'`. Fork PRs forced to `ubuntu-latest` (Docker socket = host access). Runner resources: 4CPU/6GB. Tool cache persists via `runner_toolcache` volume.
 - **Docker buildx state corruption**: If `docker buildx inspect/create/rm` all fail for the same builder, clean filesystem state: `rm -rf /root/.docker/buildx/instances/<name>`. Caused by mixing `become: true/false` in Ansible Docker tasks.
 - **ace2 is on-demand LLM compute (ADR-028)**: Ollama only. Previous services (MinIO, GH Runner) migrated to Beelink. Swap order: ANSIBLE-013 (Beelink gets services) THEN IDP-024 (ace2 loses them).
-- **Ollama EndpointSlice IP changes with swap**: Currently `172.16.1.3` (Beelink) → will become `172.16.1.5` (ace2) after IDP-024. Update `infra/k8s/base/external/ollama.yaml`.
+- **Ollama EndpointSlice targets ace2 via Tailscale IP**: `100.64.0.5` (= `networking.nodes.ace2.tailscale_ip`) in `infra/k8s/base/external/ollama.yaml`. The IDP-024 swap is done; the slice uses the mesh IP, never a LAN IP.
 
 ## Key paths (repo)
 
@@ -171,11 +171,11 @@ infra/stacks/                      — Docker Compose stacks (local dev)
 infra/ansible/roles/k3s_server/    — K3s server provisioning (ADR-020 Phase 3)
 infra/ansible/roles/k3s_agent/     — K3s agent provisioning
 infra/ansible/roles/errors/        — Error pages container (VPS)
-infra/helm/                        — Helm charts for third-party services (ADR-021 Rev2, H2 pending)
+infra/helm/                        — Helm values for third-party services (currently Argo CD only; ADR-021 revised, H2 pending)
 edge/                              — Traefik, DNS gateway configs
 edge/errors/                       — Error pages source (Dockerfile + HTML)
 toolkit/                           — Python CLI (will become kubelab-cli)
-apps/                              — Application source (api, web, blog)
+apps/                              — Application source (api; wiki/ = generated docs). web extracted to own repo (ADR-053); blog killed
 .github/workflows/                 — CI pipeline
 ```
 
@@ -191,7 +191,6 @@ docs/architecture/            — system/design docs (overview, diagram, service
 docs/architecture/components/ — component-level architecture docs
 docs/architecture/infra/      — infrastructure docs (DNS, networking)
 docs/architecture/hardware/   — hardware allocation and topology
-docs/architecture/plans/      — implementation plans
 docs/runbooks/                — operational runbooks
 docs/troubleshooting/         — troubleshooting guides
 docs/lessons.md               — patterns learned, gotchas, post-mortems
