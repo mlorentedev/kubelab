@@ -53,7 +53,7 @@ created: "2026-07-08"
 - [x] Lint passes
 - [x] No unrelated changes in the diff — two adjacent bugs (non-ASCII read encoding, n8n path) were fixed because they directly blocked this ticket's own acceptance criteria; both confirmed with the user before fixing and documented separately from the core CRLF/UTF-8 fix
 - [x] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder — PR #843, `Closes #835`, all CI checks passing including the new `windows-sync-check` job
 
 ## Machine-readable features
 

@@ -10,9 +10,9 @@ created: "2026-07-08"
 - **AC1** (`sync all --check` exits 0 on a clean Windows tree) -> real end-to-end run on this Windows workstation: `poetry run toolkit sync all --check --env staging` printed `[SUCCESS] All generated files in sync`, exit code 0; `git status --short` clean afterward. Not a synthetic test — the actual repo, actual OS.
 - **AC2** (writers use `newline="\n"`, unit-tested) -> `tests/test_core_io.py::TestWriteTextLf` (3 tests), `tests/test_sync.py::TestNormalizeContent::test_crlf_and_lf_normalize_equal`, `tests/test_sync_k8s_images.py::TestWindowsSafeCheckIdempotency` (2 tests, includes the non-ASCII read-encoding regression).
 - **AC3** (homepage sync survives non-ASCII without crashing) -> `tests/test_toolkit_init.py::TestForceUtf8Stdio` (4 tests, real `cp1252` stream repro + fix proof) and `tests/test_sync_homepage_config.py::TestRenderMermaidSvgRetries` (3 tests).
-- **AC4** (`windows-latest` CI job alongside Linux) -> `.github/workflows/check-config-drift.yml` `windows-sync-check` job (added, not yet run in CI — will confirm green on the PR).
-- **AC5** (no regression) -> full suite 345 passed / 108 deselected; `ruff check` + `ruff format --check` clean; `mypy` shows only the 2 pre-existing, unrelated `generator_authelia.py` errors confirmed present on `master` via `git stash`.
-- **AC6** (idempotent on both OSes) -> `tests/test_sync_k8s_images.py::TestWindowsSafeCheckIdempotency::test_check_reports_in_sync_after_its_own_write`, and the AC1 real-run evidence above (Windows). Linux side not independently re-verified on this branch — CI (AC4) is the cross-platform proof once the PR runs.
+- **AC4** (`windows-latest` CI job alongside Linux) -> **confirmed on PR #843**: "Sync check (Windows)" job passed in 2m1s, running alongside "Drift / staging" (41s) and "Drift / prod" (44s).
+- **AC5** (no regression) -> full suite 345 passed / 108 deselected; `ruff check` + `ruff format --check` clean; `mypy` shows only the 2 pre-existing, unrelated `generator_authelia.py` errors confirmed present on `master` via `git stash`. Cross-platform: PR #843's "Drift / staging" and "Drift / prod" (Linux, self-hosted runner) both passed alongside the new Windows job.
+- **AC6** (idempotent on both OSes) -> `tests/test_sync_k8s_images.py::TestWindowsSafeCheckIdempotency::test_check_reports_in_sync_after_its_own_write`, the AC1 real-run evidence (Windows), and PR #843's green Linux drift jobs (Linux side).
 
 ## Test status
 
