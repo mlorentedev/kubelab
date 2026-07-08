@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 
@@ -155,10 +156,25 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
 
     logger.success(f"Loaded {len(env_vars)} env vars from config + SOPS")
 
-    # 2. Build dynamic secrets that need config + SOPS merging
+    # 2. Pre-deploy guard (TOOL-019 / C6): never push a placeholder value to a cluster.
+    placeholder_hits = sorted(
+        f"{mapping.name}.{k8s_key}"
+        for mapping in SECRET_DEFINITIONS
+        for k8s_key, env_var in mapping.keys.items()
+        if is_placeholder(env_vars.get(env_var))
+    )
+    if placeholder_hits:
+        logger.error(
+            "Refusing to apply — placeholder value(s) still in the vault: "
+            + ", ".join(placeholder_hits)
+            + ". Configure them (toolkit secrets set …) before deploying."
+        )
+        return False
+
+    # 3. Build dynamic secrets that need config + SOPS merging
     dynamic_literals = _build_dynamic_literals(cm)
 
-    # 3. Apply each secret
+    # 4. Apply each secret
     all_ok = True
     for mapping in SECRET_DEFINITIONS:
         extra = dynamic_literals.get(mapping.name, {})
