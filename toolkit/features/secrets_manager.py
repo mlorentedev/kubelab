@@ -19,7 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
+from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES, is_placeholder
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
@@ -507,7 +507,9 @@ class SecretsManager:
             if env not in spec.envs:
                 continue
             value = self._resolve_key(decrypted, spec.key_path)
-            if value is not None and str(value).strip():
+            # A placeholder sentinel (REPLACE_WITH_SOPS_VALUE/CHANGE_ME) is syntactically
+            # present but not configured — treat as missing (TOOL-019 / C6).
+            if value is not None and str(value).strip() and not is_placeholder(value):
                 result.present.append(spec.key_path)
             else:
                 result.missing.append(spec.key_path)

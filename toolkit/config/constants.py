@@ -214,6 +214,23 @@ class ValidationRules:
 
 
 # =============================================================================
+# VAULT PLACEHOLDERS
+# =============================================================================
+
+# A decrypted secret equal to one of these sentinels is NOT actually configured,
+# even though it is syntactically present. audit() and the K8s apply guard treat
+# these as "missing" so a half-configured vault can neither report clean nor reach
+# a cluster (TOOL-019 / audit C6). REPLACE_WITH_SOPS_VALUE is the literal the K8s
+# overlay secrets.yaml manifests ship by design.
+VAULT_PLACEHOLDERS: frozenset[str] = frozenset({"REPLACE_WITH_SOPS_VALUE", "CHANGE_ME"})
+
+
+def is_placeholder(value: object) -> bool:
+    """True if ``value`` is a known 'not configured yet' placeholder sentinel."""
+    return isinstance(value, str) and value.strip() in VAULT_PLACEHOLDERS
+
+
+# =============================================================================
 # MESSAGES - SIMPLIFIED
 # =============================================================================
 
