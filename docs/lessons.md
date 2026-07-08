@@ -3129,3 +3129,25 @@ The agent stays alive for the shell session, so `make connect` + `kubectl get ns
 **Rule:** A migration's definition of done must include retiring or banner-marking the docs that described the old world — same PR or a named follow-up ticket, never "later". Docs that restate SSOT data (node roles, IPs, service lists, command tables) drift by construction: reference `common.yaml`/the CLI instead of copying, or generate the table. When retiring a doc, replace it with a stub that redirects to the canonical successor so inbound links keep working.
 
 **Tags:** `#docs` `#drift` `#ssot` `#audit` `#migrations`
+
+### [2026-07-08] Windows CRLF/encoding bugs come in matched read+write pairs, and pytest's own capture can hide the bug you're testing for (TOOL-020)
+
+**Context:** Fixed `toolkit sync all --check` permanently failing on Windows (process-audit P1) — CRLF writer drift plus a homepage `charmap` crash. Two more instances of the same bug class only surfaced by running the full check end-to-end on a real Windows workstation, not from unit tests alone.
+
+**Problem:** Two traps. (1) Every unguarded `open()`/`read_text()` in the sync scripts had a write-side counterpart already suspected, but the read side stayed invisible until non-ASCII content (em-dashes, middots) already committed to the repo got silently mis-decoded under a non-UTF-8 locale (cp1252) and re-encoded as mojibake on the next write — corruption, not a crash, so it never announces itself. (2) A test asserting `sys.stdout.encoding == "utf-8"` after importing the fixed module passed even with the fix commented out, because pytest's own capture stream is already UTF-8 regardless of host OS — the test proved nothing about the real Windows-console crash it was supposed to guard.
+
+**Solution:** For the read side, add `encoding="utf-8"` to every `open(`/`read_text(` call in the same lane the writes were fixed in — the fix search doesn't stop at `write_text()`. For the test, manufacture a real `cp1252` `io.TextIOWrapper` via monkeypatch and prove it genuinely raises `UnicodeEncodeError` before asserting the fix neutralizes it.
+
+**Rule:** When fixing a platform-encoding bug in a script, grep the whole module for `open(`/`read_text(`/`write_text(` — the fix is rarely one-sided. When a test claims to reproduce an environment-dependent crash, verify the harness reproduces it independent of the test runner's own defaults (pytest capture, CI locale) before trusting the green — a test that cannot fail without the fix teaches nothing.
+
+**Tags:** `#windows` `#encoding` `#utf-8` `#cp1252` `#testing` `#tdd` `#tool-020` `#gotcha`
+
+### [2026-07-08] A base-image CVE fixed upstream doesn't need a new base image tag — `apk upgrade` at build time gets it sooner
+
+**Context:** The `errors` image's release build failed the Trivy gate (3 HIGH CVEs in `libexpat` 2.8.1-r0, fixed upstream in 2.8.2-r0) even though `edge/errors/Dockerfile` hadn't changed — the cached `nginx:1.31-alpine` layer simply predates the distro's patch.
+
+**Solution:** `RUN apk update && apk upgrade --no-cache` right after `FROM` pulls the patched package from Alpine's live index at build time, without waiting for the upstream base image tag to be rebuilt and republished. Verified locally: the build log shows the exact package upgrade (`libexpat (2.8.1-r0 -> 2.8.2-r0)`), and a local Trivy scan with the same severity/ignore-unfixed filters as CI reports 0 vulnerabilities.
+
+**Rule:** A sudden Trivy failure on an unchanged Dockerfile usually means "the distro shipped a fix today", not "we introduced a regression" — check whether the flagged package already has a newer version in the base distro's own repo before assuming the code changed.
+
+**Tags:** `#docker` `#trivy` `#cve` `#alpine` `#security` `#ci`
