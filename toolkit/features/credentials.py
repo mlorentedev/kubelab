@@ -16,6 +16,7 @@ from argon2 import PasswordHasher
 from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
+from toolkit.core.sops import age_key_env
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.docker_service import DockerService
 
@@ -236,6 +237,7 @@ class CredentialsManager:
                 capture_output=True,
                 text=True,
                 check=True,
+                env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
             data = yaml.safe_load(result.stdout) or {}
             return self._flatten_dict(data)
