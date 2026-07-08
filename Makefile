@@ -414,6 +414,10 @@ _deploy-argocd-helm:
 	OIDC_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show apps.services.security.authelia.oidc_client_secret_argocd --env common 2>/dev/null | tail -1) && \
 	SLACK_WEBHOOK=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.slack_webhook_url --env common 2>/dev/null | tail -1) && \
 	GH_WEBHOOK_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.github_webhook_secret --env common 2>/dev/null | tail -1) && \
+	test -n "$$ARGOCD_HASH"       || { echo "FATAL: argocd.admin_password_hash decrypted empty — refusing to install Argo CD with a blank admin password (check SOPS age key)" >&2; exit 1; } && \
+	test -n "$$OIDC_SECRET"       || { echo "FATAL: oidc_client_secret_argocd decrypted empty — refusing to install Argo CD with blank OIDC (check SOPS age key)" >&2; exit 1; } && \
+	test -n "$$SLACK_WEBHOOK"     || { echo "FATAL: argocd.slack_webhook_url decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
+	test -n "$$GH_WEBHOOK_SECRET" || { echo "FATAL: argocd.github_webhook_secret decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
 	helm upgrade --install argocd argo/argo-cd \
 		--namespace argocd --create-namespace \
 		--kubeconfig $(HUB_KUBECONFIG) \
