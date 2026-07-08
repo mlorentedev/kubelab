@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.5](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.4...errors-v1.1.5) (2026-07-08)
+
+
+### Bug Fixes
+
+* **errors:** patch libexpat HIGH CVEs failing the release Trivy gate ([#844](https://github.com/mlorentedev/kubelab/issues/844)) ([22d9cbd](https://github.com/mlorentedev/kubelab/commit/22d9cbd1620261b83205af365d998976dc5bc8c2))
+
+
+### Documentation
+
+* **audit:** 2026-07-06 adversarial codebase audit report ([#840](https://github.com/mlorentedev/kubelab/issues/840)) ([82570dd](https://github.com/mlorentedev/kubelab/commit/82570dda3cd0330a238fa8e407acf1c781fdfc9d))
+
 ## [1.1.4](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.3...errors-v1.1.4) (2026-06-29)
 
 
