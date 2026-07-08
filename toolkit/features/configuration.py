@@ -1,4 +1,3 @@
-import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -338,7 +337,7 @@ class ConfigurationManager:
                 capture_output=True,
                 text=True,
                 check=True,
-                env=os.environ,
+                env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
             decrypted_data = yaml.safe_load(result.stdout) or {}
 

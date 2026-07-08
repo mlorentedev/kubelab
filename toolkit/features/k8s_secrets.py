@@ -307,11 +307,17 @@ def _apply_single_secret(
     for k8s_key, value in extra_literals.items():
         from_literals.append(f"--from-literal={k8s_key}={value}")
 
+    # Fail closed (TOOL-018 / audit C2): a Secret is applied via `kubectl create …
+    # | kubectl apply -f -`, which REPLACES the whole Secret. Applying a subset would
+    # shrink the live Secret and silently drop the missing keys on the next pod
+    # restart. Never apply a partial render — refuse and let apply_secrets report it.
     if missing:
-        logger.warning(f"  Missing values: {', '.join(missing)}")
-        if not from_literals:
-            logger.error(f"  No values resolved for {mapping.name} — skipping")
-            return False
+        logger.error(
+            f"  Refusing to apply {mapping.name}: {len(missing)} of {len(mapping.keys)} "
+            f"source value(s) missing — {', '.join(missing)}. Applying a partial Secret "
+            f"would drop those keys from the live Secret."
+        )
+        return False
 
     # kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -
     create_cmd = [
