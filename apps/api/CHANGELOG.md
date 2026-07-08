@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/mlorentedev/kubelab/compare/api-v1.1.3...api-v1.1.4) (2026-07-08)
+
+
+### Documentation
+
+* **audit:** 2026-07-06 adversarial codebase audit report ([#840](https://github.com/mlorentedev/kubelab/issues/840)) ([82570dd](https://github.com/mlorentedev/kubelab/commit/82570dda3cd0330a238fa8e407acf1c781fdfc9d))
+
 ## [1.1.3](https://github.com/mlorentedev/kubelab/compare/api-v1.1.2...api-v1.1.3) (2026-06-29)
 
 
