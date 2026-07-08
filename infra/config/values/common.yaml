@@ -352,7 +352,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.1.4"
+    version: "1.1.5"
     port: 8080
     health_path: /health
     resources:
