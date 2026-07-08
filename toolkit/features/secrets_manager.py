@@ -22,6 +22,7 @@ from typing import Any
 from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
+from toolkit.core.sops import age_key_env
 from toolkit.features.configuration import ConfigurationManager
 
 # =============================================================================
@@ -733,6 +734,7 @@ class SecretsManager:
             ["sops", "-d", str(sops_file)],
             capture_output=True,
             text=True,
+            env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
         if result.returncode != 0:
             return None
@@ -765,6 +767,7 @@ class SecretsManager:
             ["sops", "set", str(sops_file), sops_path, f'"{value}"'],
             capture_output=True,
             text=True,
+            env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
         if result.returncode != 0:
@@ -794,6 +797,7 @@ class SecretsManager:
             ["sops", "unset", str(sops_file), sops_path],
             capture_output=True,
             text=True,
+            env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
         if result.returncode != 0:
