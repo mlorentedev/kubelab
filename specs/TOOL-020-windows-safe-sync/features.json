@@ -1,0 +1,44 @@
+[
+  {
+    "id": "TOOL-020-windows-safe-sync-f1",
+    "behavior": "toolkit sync all --check --env staging exits 0 on a clean Windows tree with no prior sync run",
+    "verification": "poetry run toolkit sync all --check --env staging",
+    "state": "passing",
+    "evidence": "Local run on a live Windows workstation: '[SUCCESS] All generated files in sync', exit 0. Cross-confirmed by CI (harness-captured): PR #843 'Sync check (Windows)' job passed in 2m1s (https://github.com/mlorentedev/kubelab/actions/runs/28946007365/job/85879938053)."
+  },
+  {
+    "id": "TOOL-020-windows-safe-sync-f2",
+    "behavior": "all generated-file writers in toolkit/scripts/ write newline=\"\\n\", zero \\r bytes in output",
+    "verification": "poetry run pytest tests/test_core_io.py tests/test_sync_k8s_images.py -q",
+    "state": "passing",
+    "evidence": "8 passed on this Windows workstation. Includes a rigor check — reverted the fix and confirmed the regression test genuinely fails, then restored and re-passed. Cross-confirmed by PR #843's green 'Sync check (Windows)' CI job, which exercises the same code path end-to-end."
+  },
+  {
+    "id": "TOOL-020-windows-safe-sync-f3",
+    "behavior": "homepage sync completes without UnicodeEncodeError on non-ASCII characters",
+    "verification": "poetry run pytest tests/test_toolkit_init.py tests/test_sync_homepage_config.py -q",
+    "state": "passing",
+    "evidence": "8 passed on this Windows workstation. test_toolkit_init.py manufactures a real cp1252 stream to prove the crash is genuine before the fix and gone after. Cross-confirmed by PR #843's green 'Sync check (Windows)' CI job (homepage sync runs as part of `sync all --check`)."
+  },
+  {
+    "id": "TOOL-020-windows-safe-sync-f4",
+    "behavior": "a windows-latest CI job runs toolkit sync all --check on every PR alongside the existing Linux job",
+    "verification": "gh pr checks 843 --repo mlorentedev/kubelab",
+    "state": "passing",
+    "evidence": "PR #843, 'Sync check (Windows)' job: pass, 2m1s. Ran alongside 'Drift / staging' and 'Drift / prod' (the existing Linux jobs), not instead of them."
+  },
+  {
+    "id": "TOOL-020-windows-safe-sync-f5",
+    "behavior": "existing Linux CI continues to pass toolkit sync all --check with no regression",
+    "verification": "gh pr checks 843 --repo mlorentedev/kubelab",
+    "state": "passing",
+    "evidence": "PR #843: 'Drift / staging' pass (41s), 'Drift / prod' pass (44s) — both include the base kustomization image-sync check (#792). No regression from this branch."
+  },
+  {
+    "id": "TOOL-020-windows-safe-sync-f6",
+    "behavior": "sync all --check leaves the working tree byte-identical before/after on both Windows and Linux (idempotency)",
+    "verification": "poetry run pytest tests/test_sync_k8s_images.py -k Idempotency -q",
+    "state": "passing",
+    "evidence": "Passed locally on Windows (verified against the real repo end-to-end, see f1) and cross-confirmed on Linux via PR #843's green Drift/Sync-check jobs (f4/f5)."
+  }
+]

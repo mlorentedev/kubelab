@@ -19,6 +19,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from toolkit.core.io import write_text_lf  # noqa: E402
 from toolkit.features.configuration import ConfigurationManager  # noqa: E402
 
 
@@ -140,7 +141,7 @@ def main() -> int:
             continue
 
         file_path = FILE_PATHS[target_key]
-        content = file_path.read_text()
+        content = file_path.read_text(encoding="utf-8")
         client_id = str(client_info["client_id"])
         try:
             new_content = update_client_secret(content, client_id, hash_value)
@@ -149,7 +150,7 @@ def main() -> int:
             return 1
 
         if new_content != content:
-            file_path.write_text(new_content)
+            write_text_lf(file_path, new_content)
             print(f"UPDATED: {client_info['client_id']} hash in {file_path.name}")
             updated += 1
         else:

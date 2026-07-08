@@ -37,8 +37,10 @@ HOMEPAGE_DYNAMIC_PATTERNS: list[tuple[str, str]] = [
     (r"synced \d{4}-\d{2}-\d{2} \u00b7 [a-f0-9]{7,}", "synced DATE HASH"),
     (r'"today": "\d{4}-\d{2}-\d{2}"', '"today": "DATE"'),
     (r'"traefik_cluster_ip": "\d+\.\d+\.\d+\.\d+"', '"traefik_cluster_ip": "IP"'),
-    # SVGs are base64-encoded from external Kroki service — not SSOT-derived
-    (r'"data:image/svg\+xml;base64,[A-Za-z0-9+/=]+"', '"data:image/svg+xml;base64,SVG_BASE64"'),
+    # SVGs are base64-encoded from external mermaid.ink — not SSOT-derived.
+    # `*` (not `+`): a transient fetch failure emits an empty payload rather
+    # than dropping the key (TOOL-020), so both must normalize equal.
+    (r'"data:image/svg\+xml;base64,[A-Za-z0-9+/=]*"', '"data:image/svg+xml;base64,SVG_BASE64"'),
 ]
 
 
@@ -49,6 +51,10 @@ def _normalize_content(content: bytes, patterns: list[tuple[str, str]]) -> bytes
     except UnicodeDecodeError:
         logger.warning("File contains non-UTF-8 bytes, comparing raw bytes")
         return content
+    # TOOL-020: normalize newlines as defense-in-depth. Writers now pin LF via
+    # write_text_lf(), but this keeps --check correct against files written
+    # before that fix, or by any path that bypasses the helper.
+    text = text.replace("\r\n", "\n")
     for pattern, replacement in patterns:
         text = re.sub(pattern, replacement, text)
     return text.encode()

@@ -12,6 +12,7 @@ import base64
 import json
 import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ from urllib.request import Request, urlopen
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
+
+from toolkit.core.io import write_text_lf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMMON_YAML = PROJECT_ROOT / "infra/config/values/common.yaml"
@@ -203,7 +206,7 @@ def build_service_tables(
         crowdsec = services.get("security", {}).get("crowdsec", {})
         traefik = services.get("core", {}).get("traefik", {})
         gitea = services.get("core", {}).get("gitea", {})
-        n8n = services.get("core", {}).get("n8n", {})
+        n8n = services.get("automation", {}).get("n8n", {})
         minio = services.get("data", {}).get("minio", {})
         grafana = services.get("observability", {}).get("grafana", {})
         loki = services.get("observability", {}).get("loki", {})
@@ -714,17 +717,31 @@ MERMAID_DEPLOY_PIPELINE = """graph LR
   class HELM1,HELM2 helm"""
 
 
-def render_mermaid_svg(mermaid_def: str) -> str:
-    """Render Mermaid to SVG via mermaid.ink. Returns SVG string or empty on failure."""
-    try:
-        encoded = base64.urlsafe_b64encode(mermaid_def.encode()).decode()
-        url = f"https://mermaid.ink/svg/{encoded}"
-        req = Request(url, headers={"User-Agent": "kubelab-sync/1.0"})
-        with urlopen(req, timeout=20) as resp:
-            return resp.read().decode()
-    except Exception as e:
-        print(f"  WARNING: mermaid.ink render failed: {e}", file=sys.stderr)
-        return ""
+def render_mermaid_svg(mermaid_def: str, retries: int = 2, backoff_seconds: float = 1.0) -> str:
+    """Render Mermaid to SVG via mermaid.ink. Returns SVG string or empty on failure.
+
+    Retries transient failures (network blip, rate limit) — this call is now
+    exercised by CI (TOOL-020), not just local runs, so a single flaky
+    request must not fail the whole sync. Still degrades gracefully to an
+    empty string after exhausting retries; the caller treats that the same
+    as any other fetch failure.
+    """
+    encoded = base64.urlsafe_b64encode(mermaid_def.encode()).decode()
+    url = f"https://mermaid.ink/svg/{encoded}"
+    req = Request(url, headers={"User-Agent": "kubelab-sync/1.0"})
+
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            with urlopen(req, timeout=20) as resp:
+                return resp.read().decode()
+        except Exception as e:
+            last_error = e
+            if attempt < retries:
+                time.sleep(backoff_seconds * (attempt + 1))
+
+    print(f"  WARNING: mermaid.ink render failed after {retries + 1} attempts: {last_error}", file=sys.stderr)
+    return ""
 
 
 def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
@@ -738,12 +755,15 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
         "deploy_pipeline": MERMAID_DEPLOY_PIPELINE,
     }
 
-    # Generate Kroki SVGs
+    # Generate SVGs via mermaid.ink. Always emit every key, even on failure
+    # (empty payload rather than a dropped key) — TOOL-020: a transient
+    # network failure must produce a comparable file, not a structurally
+    # different one that reads as SSOT drift under --check.
     svgs = {}
     for name, mermaid_def in diagrams.items():
         svg = render_mermaid_svg(mermaid_def)
+        svgs[name] = svg
         if svg:
-            svgs[name] = svg
             print(f"  Kroki SVG: {name} ({len(svg)} bytes)")
         else:
             print(f"  Kroki SVG: {name} FAILED")
@@ -1155,12 +1175,12 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
     footer_text = f"KubeLab IDP \u00b7 synced {date.today().isoformat()} \u00b7 {git_short}"
     js_content = js_content.replace("KUBELAB_FOOTER_PLACEHOLDER", footer_text)
 
-    (OUTPUT_DIR / "custom.js").write_text(js_content)
+    write_text_lf(OUTPUT_DIR / "custom.js", js_content)
     print(f"  Generated custom.js ({len(js_content)} bytes)")
 
 
 def main() -> int:
-    with open(COMMON_YAML) as f:
+    with open(COMMON_YAML, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     apps = config.get("apps", {})
@@ -1203,7 +1223,7 @@ def main() -> int:
         output_path = OUTPUT_DIR / output_name
 
         rendered = template.render(**context)
-        output_path.write_text(rendered)
+        write_text_lf(output_path, rendered)
         synced += 1
         print(f"  {template_path.name} → {output_name}")
 
