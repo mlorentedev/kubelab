@@ -42,6 +42,7 @@ class SecretKind(str, Enum):
     HTPASSWD = "htpasswd"  # bcrypt hash of user:pass
     EXTERNAL = "external"  # User must provide (API tokens, etc.)
     CROWDSEC_API = "crowdsec_api"  # Generated via cscli
+    HUB_MANAGED = "hub_managed"  # Written to common.enc.yaml by `credentials generate`, never by per-env `secrets init`
 
 
 @dataclass(frozen=True)
@@ -300,6 +301,79 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("minio", "authelia"),
         rotate_note="Must also regenerate authelia.oidc_client_secret_minio_hash.",
+    ),
+    # =========================================================================
+    # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]
+    # =========================================================================
+    # Four of these are read by `make deploy-argocd` (Makefile ~413-416) straight
+    # from common.enc.yaml (admin_password_hash, oidc_client_secret_argocd, the two
+    # webhooks); admin_password (plaintext) + oidc_client_secret_argocd_hash are the
+    # sibling hub secrets `credentials generate` also writes to common. The hub is a
+    # single always-on management plane, not a per-spoke deployment, so its
+    # credentials live in common SOPS (see CLAUDE.md "Hub credentials always in
+    # common SOPS"), NOT per-env. Registered here so `secrets audit` actually checks
+    # them (previously invisible → a blank hub OIDC secret reported "all present").
+    # Audited under `prod` as the always-on plane;
+    # common.enc.yaml merges into the prod audit. `HUB_MANAGED` = written by
+    # `toolkit credentials generate`, never by per-env `secrets init`; `EXTERNAL` =
+    # operator-supplied. Both are inert to init/hash/rotate (per-env machinery).
+    SecretSpec(
+        key_path="argocd.admin_password",
+        description="Argo CD local admin account password (plaintext; CLI/apiKey fallback account)",
+        kind=SecretKind.HUB_MANAGED,
+        services=("argocd",),
+        format_hint="plaintext password (source of argocd.admin_password_hash)",
+        rotate_note="Regenerate via `toolkit credentials generate` (→ common.enc.yaml), then `make deploy-argocd`.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="argocd.admin_password_hash",
+        description="Argo CD local admin account password hash (bcrypt; CLI fallback account)",
+        kind=SecretKind.HUB_MANAGED,
+        services=("argocd",),
+        derived_from="argocd.admin_password",
+        format_hint="bcrypt hash ($2y$/$2a$...)",
+        rotate_note="Regenerate via `toolkit credentials generate` (→ common.enc.yaml), then `make deploy-argocd`.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_argocd",
+        description="Authelia→Argo CD OIDC client secret (plaintext; injected as $oidc.authelia.clientSecret)",
+        kind=SecretKind.HUB_MANAGED,
+        services=("argocd", "authelia"),
+        rotate_note=(
+            "Regenerate via `toolkit credentials generate` (also refreshes oidc_client_secret_argocd_hash), "
+            "then `make deploy-argocd`."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_argocd_hash",
+        description="Argon2 hash of the Authelia→Argo CD OIDC client secret (Authelia client registry)",
+        kind=SecretKind.HUB_MANAGED,
+        services=("authelia",),
+        derived_from=f"{_AUTH}.oidc_client_secret_argocd",
+        format_hint="$argon2id$v=19$...",
+        rotate_note="Auto-refreshed by `toolkit credentials generate` alongside oidc_client_secret_argocd.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="argocd.slack_webhook_url",
+        description="Slack incoming webhook URL for Argo CD notifications (argocd-notifications)",
+        kind=SecretKind.EXTERNAL,
+        services=("argocd",),
+        format_hint="https://hooks.slack.com/services/...",
+        rotate_note="Re-create the webhook in Slack, update common.enc.yaml, then `make deploy-argocd`.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="argocd.github_webhook_secret",
+        description="Shared secret validating GitHub webhook deliveries to the Argo CD webhook receiver",
+        kind=SecretKind.EXTERNAL,
+        services=("argocd",),
+        format_hint="opaque shared secret (must match the GitHub webhook config)",
+        rotate_note="Rotate on the GitHub webhook + common.enc.yaml, then `make deploy-argocd`.",
+        envs=("prod",),
     ),
     # =========================================================================
     # Infrastructure (external — not auto-generated, but must exist in SOPS)
