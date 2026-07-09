@@ -99,7 +99,7 @@ logs/
 # AI assistants
 .claude/
 .chat/
-AGENTS.md
+# AGENTS.md is the committed cross-agent SSOT (like web/iris/mail2markdown) — NOT ignored.
 GEMINI.md
 MEMORY.md
 
