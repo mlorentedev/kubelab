@@ -3151,3 +3151,27 @@ The agent stays alive for the shell session, so `make connect` + `kubectl get ns
 **Rule:** A sudden Trivy failure on an unchanged Dockerfile usually means "the distro shipped a fix today", not "we introduced a regression" — check whether the flagged package already has a newer version in the base distro's own repo before assuming the code changed.
 
 **Tags:** `#docker` `#trivy` `#cve` `#alpine` `#security` `#ci`
+
+### [2026-07-08] `kubectl create secret | kubectl apply -f -` REPLACES the whole Secret — a partial render silently deletes keys (TOOL-018)
+
+**Context:** Hardening K8s secret delivery (TOOL-018, #829). `_apply_single_secret` in `k8s_secrets.py` assembles a Secret from a mapping of SOPS keys → resolved values and ships it with `kubectl create secret … --dry-run=client -o yaml | kubectl apply -f -`.
+
+**Problem:** `kubectl apply` of a Secret is a **whole-object replace of `.data`**, not a per-key merge. When the SOPS→K8s mapping only *partially* resolves (a key missing, an empty decrypt — see the TOOL-017 lesson below for how that happens), the old code still built a Secret from whatever resolved and applied it — **silently shrinking the live Secret** and dropping keys that running pods depend on. No error surfaced: the deploy "succeeded" with a truncated Secret, and the failure only shows up later as a consumer that can't find its key.
+
+**Solution:** Fail closed — if *any* key in a mapping fails to resolve, raise before the apply, so a partial render can never overwrite a complete live Secret. This is deliberately narrow: true additive merge-semantics (patch instead of replace) is the harder problem, deferred to the SEC-SECRETS-001 capstone (#831). The pre-existing gap of a *dynamic* builder returning empty (apprise/authelia-users → empty Secret) is flagged there too, not patched blind.
+
+**Rule:** Treat `kubectl apply -f - <Secret>` as **replace-all**: the manifest you feed it must be the *complete* desired key set, or you silently delete every key you left out. Any generator that assembles a Secret from N independent sources must fail closed on a partial resolve — never apply the subset it happened to get.
+
+**Tags:** `#secrets` `#kubernetes` `#kubectl` `#fail-closed` `#sops` `#tool-018` `#gotcha`
+
+### [2026-07-08] A `sops` subprocess with a bare `os.environ` passes in your shell and returns empty in CI (TOOL-017)
+
+**Context:** TOOL-017 (#828) — wrapping every `sops` subprocess in the toolkit with `age_key_env()`, a helper that injects `SOPS_AGE_KEY_FILE` into the child process env.
+
+**Problem:** A `sops` call launched with a **bare `os.environ`** (no explicit age key) works fine in an interactive shell that already `export`ed `SOPS_AGE_KEY_FILE` — so the unit suite and every local run go green. But in a **fresh shell or a CI runner** without that ambient export, `sops` can't locate the key and, depending on the code path, either errors or hands back an **empty decrypt** — silently yielding empty secret values. The bug is invisible precisely in the environment a developer would test in, and only bites in automation.
+
+**Solution:** Route *every* sops invocation through `age_key_env()` (five call sites: `secrets_manager` show/set/unset, `configuration` batch-decrypt, `credentials` read-existing) so the key file is injected regardless of the ambient shell. Then add an **AST-based regression guard** that scans `toolkit/` for any `subprocess` call to `sops` using a bare `os.environ` and fails the suite — the invariant is enforced structurally, not by reviewer memory.
+
+**Rule:** A subprocess that depends on an env var you *happen* to have exported is a latent bug — the passing local test proves nothing about a clean shell. Inject the dependency explicitly at every call site and enforce it with an AST scan (not a convention the next call site can quietly skip). "Works in my shell" ≠ "works in CI" — same failure class as the TOOL-020 encoding lesson above.
+
+**Tags:** `#secrets` `#sops` `#age` `#subprocess` `#ci` `#ast-guard` `#tool-017` `#gotcha`
