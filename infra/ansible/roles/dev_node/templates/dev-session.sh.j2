@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Managed by Ansible (dev_node role, ANSIBLE-028) — do not edit by hand.
+#
+# Launch (or attach to) named tmux sessions: one per isolated agent workspace
+# plus an editor session. tmux-resurrect persists these across a reboot, so
+# re-running this is idempotent — existing sessions are left untouched.
+set -euo pipefail
+
+declare -A SESSIONS=(
+{% for a in dev_node_agent_workspaces %}
+  ["{{ a | regex_replace('-agent$', '') }}"]="$HOME/workspaces/{{ a }}"
+{% endfor %}
+  ["editor"]="$HOME/Projects"
+)
+
+for name in "${!SESSIONS[@]}"; do
+  if ! tmux has-session -t "$name" 2>/dev/null; then
+    tmux new-session -d -s "$name" -c "${SESSIONS[$name]}"
+    echo "created session: $name (${SESSIONS[$name]})"
+  fi
+done
+
+tmux list-sessions
+echo "Attach with: tmux attach -t <name>"

@@ -1,0 +1,57 @@
+---
+# =============================================================================
+# dev_node role defaults (ANSIBLE-028 / ADR-058 D1)
+# Turns a node into a centralized self-hosted CDE. Additive and idempotent.
+# PR-1a: tooling + dotfiles + workspace + dev-session + tmux-resurrect.
+# D6 housekeeping timers are split to ANSIBLE-030; routing (PR-1b) and secret
+# scoping (PR-1c) are out of scope here.
+# =============================================================================
+
+# Interactive developer user. SSOT: networking.ssh_users.homelab (== the SSH
+# connection user), so the role provisions the same account it logs in as.
+dev_node_user: "{{ ansible_user }}"
+dev_node_home: "/home/{{ dev_node_user }}"
+
+# --- mise (polyglot runtime manager) --------------------------------------
+# The mise binary itself; empty => the installer's latest. The reproducible
+# SSOT that matters is the toolchain pins below, materialized in mise config.
+dev_node_mise_version: ""
+# node/go/python pinned in the global mise config (single source of truth).
+dev_node_toolchains:
+  node: "lts"
+  go: "latest"
+  python: "3.12"
+
+# --- tmux-resurrect (vendored git clone: idempotent, offline-tolerant) ----
+# Base `tmux` ships via base_system (do NOT re-declare it here).
+dev_node_tmux_plugins_dir: "{{ dev_node_home }}/.tmux/plugins"
+dev_node_tmux_resurrect_repo: "https://github.com/tmux-plugins/tmux-resurrect.git"
+dev_node_tmux_resurrect_version: "v4.0.0"
+
+# --- dotfiles bootstrap ----------------------------------------------------
+# A dev-node IS a development machine, so the "never clone on deploy targets"
+# rule does not apply (ADR-058 D1). setup-linux.sh must be idempotent + secret-free.
+dev_node_dotfiles_repo: "https://github.com/mlorentedev/dotfiles.git"
+dev_node_dotfiles_dir: "{{ dev_node_home }}/Projects/Workspace/dotfiles"
+dev_node_dotfiles_version: "master"
+# Run the (long) dotfiles bootstrap. Toggle off to only clone/update the repo.
+dev_node_dotfiles_run_setup: true
+
+# --- workspace skeleton ----------------------------------------------------
+# Each agent gets its own clone dir for filesystem isolation between concurrent
+# agents (ADR-058 D1 / #809). v1 is tmux isolation only — no orchestration.
+dev_node_agent_workspaces:
+  - claude-agent
+  - codex-agent
+  - pi-agent
+dev_node_project_dirs:
+  - "{{ dev_node_home }}/Projects"
+  - "{{ dev_node_home }}/Projects/Workspace"
+  - "{{ dev_node_home }}/workspaces"
+  - "{{ dev_node_home }}/bin"
+
+# --- apt tooling -----------------------------------------------------------
+# neovim (headless editing). gh CLI adds its own apt repo (below).
+dev_node_apt_packages:
+  - neovim
+  - build-essential

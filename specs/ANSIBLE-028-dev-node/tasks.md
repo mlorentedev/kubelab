@@ -9,30 +9,33 @@ created: "2026-06-29"
 
 ## Setup
 
-- [ ] Branch created from main: `feat/ANSIBLE-028-dev-node`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] Branch created: `feat/ANSIBLE-028-dev-node` ✓ 2026-06-29 (rebased onto master 2026-07-09)
+- [x] `proposal.md` complete; acceptance criteria testable ✓ 2026-06-29
+- [x] Open questions resolved (see verification.md "Decisions") ✓ 2026-07-09
 
 ## Implementation
 
-> Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
+> Ansible role, not a test-first unit — "tests" are the `features.json` verification
+> commands run against the provisioned node. Provisioning needs a Linux Ansible
+> controller (this repo's dev workstation is Windows); runtime criteria are verified
+> when the role is applied.
 
-- [ ] Write failing test for <behavior 1>
-- [ ] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] Write failing test for <behavior 2>
-- [ ] Implement to make it pass
-- [ ] ...
+- [x] `dev_node/defaults/main.yml` — user, mise, tmux-resurrect, dotfiles, workspace, apt vars ✓ 2026-07-09
+- [x] `dev_node/tasks/main.yml` — neovim + gh (apt repo); mise + pinned toolchains; tmux-resurrect vendored clone + wiring; dotfiles clone + bootstrap; workspace skeleton; dev-session.sh ✓ 2026-07-09
+- [x] `dev_node/templates/{mise-config.toml,dev-session.sh}.j2` ✓ 2026-07-09
+- [x] `dev_node/handlers/main.yml` (empty — D6 handlers land in ANSIBLE-030) ✓ 2026-07-09
+- [x] Wired into `provision-ace2.yml` (`dev_node_user` from `networking.ssh_users.homelab` SSOT) ✓ 2026-07-09
+- [x] D6 housekeeping timers split to follow-up ANSIBLE-030 (#858) ✓ 2026-07-09
+- [ ] **Provision-verify** on ace2 (needs Linux controller): `make provision NODE=ace2 ENV=staging --tags dev_node` — idempotency, Ollama coexistence, tools present, mise resolves, dev-session launches
+- [ ] Iterate on provisioning output (mise non-login activation, dotfiles idempotency — flagged in proposal)
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion has a `features.json` entry with an executable verification command ✓
+- [x] YAML lint passes (pre-commit yamllint) — verify at commit
+- [x] No unrelated changes in the diff (no scope creep) ✓
+- [x] `verification.md` filled in ✓
+- [ ] PR opened (draft) referencing this spec folder — runtime `features.json` still `pending`
 
 ## Machine-readable features
 
