@@ -670,16 +670,20 @@ def k8s_deploy(
         raise typer.Exit(1)
     logger.console.print(apply_result.stdout)
 
-    # 4. Wait for rollout
+    # 5. Wait for rollout. A timed-out/failed rollout is a FAILED deploy, not a
+    #    warning: fail closed like every step above so `make deploy-k8s && <next>`
+    #    and CI/agents chaining on the exit code stop instead of proceeding over
+    #    CrashLooping pods (TOOL-021 / process-audit P6).
     logger.info("Waiting for rollout completion...")
     rollout = command.run(
         f"{kctl} rollout status deployment -n kubelab --timeout=120s",
         check=False,
     )
     if rollout.returncode != 0:
-        logger.warning(f"Rollout not fully complete:\n{rollout.stderr}")
-    else:
-        logger.success("All deployments rolled out successfully")
+        logger.error(f"Rollout did not complete:\n{rollout.stderr or rollout.stdout}")
+        logger.error(f"Inspect a failing deployment: make logs SVC=<name> ENV={env}")
+        raise typer.Exit(1)
+    logger.success("All deployments rolled out successfully")
 
 
 @k8s_app.command("dry-run")
