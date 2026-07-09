@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import yaml
 
 from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
@@ -229,16 +232,16 @@ def _build_apprise_config(cm: ConfigurationManager) -> str:
         logger.warning("Apprise telegram bot_token/chat_page missing — skipping routing config")
         return ""
 
-    lines = ["version: 1", "urls:"]
-    lines.append(f'  - "tgram://{bot_token}/{chat_page}":')
-    lines.append("      tag: page")
+    # Build as a dict and yaml.safe_dump it (audit C13): a bot-token/chat id with a
+    # YAML-special char must not break the routing table. Each url is a single-key
+    # map {url: {tag: ...}} — the shape Apprise's `simple` mode expects.
+    urls: list[dict[str, dict[str, str]]] = [{f"tgram://{bot_token}/{chat_page}": {"tag": "page"}}]
     if chat_log:
-        lines.append(f'  - "tgram://{bot_token}/{chat_log}":')
-        lines.append("      tag: log")
+        urls.append({f"tgram://{bot_token}/{chat_log}": {"tag": "log"}})
     else:
         logger.warning("apprise chat_log not set — the 'log' tier will not deliver until it is")
 
-    return "\n".join(lines) + "\n"
+    return yaml.safe_dump({"version": 1, "urls": urls}, sort_keys=False, default_flow_style=False)
 
 
 def _build_users_database(cm: ConfigurationManager) -> str:
@@ -253,7 +256,10 @@ def _build_users_database(cm: ConfigurationManager) -> str:
         logger.warning("No Authelia users found in config")
         return ""
 
-    lines = ["users:"]
+    # Build as a dict and yaml.safe_dump it (audit C13): a displayname/email/hash
+    # containing a quote, colon or newline must NOT be able to break the user DB —
+    # an invalid users_database.yml locks everyone out of Authelia.
+    db: dict[str, dict[str, object]] = {}
     for user in users:
         username = admin_username if user.get("is_admin") else user.get("username", "")
         hash_key = f"users_{username}_password_hash"
@@ -263,21 +269,37 @@ def _build_users_database(cm: ConfigurationManager) -> str:
             logger.warning(f"  No password hash for user '{username}' (key: {hash_key})")
             continue
 
-        disabled = str(user.get("disabled", False)).lower()
-        displayname = user.get("displayname", username)
-        email = user.get("email", "")
-        groups = user.get("groups", [])
+        db[username] = {
+            "disabled": bool(user.get("disabled", False)),
+            "displayname": user.get("displayname", username),
+            "password": password_hash,
+            "email": user.get("email", ""),
+            "groups": list(user.get("groups", []) or []),
+        }
 
-        lines.append(f"  {username}:")
-        lines.append(f"    disabled: {disabled}")
-        lines.append(f'    displayname: "{displayname}"')
-        lines.append(f"    email: {email}")
-        lines.append(f'    password: "{password_hash}"')
-        lines.append("    groups:")
-        for group in groups:
-            lines.append(f"      - {group}")
+    if not db:
+        return ""
 
-    return "\n".join(lines)
+    return yaml.safe_dump({"users": db}, sort_keys=False, default_flow_style=False, allow_unicode=True)
+
+
+def _render_secret_manifest(name: str, namespace: str, data: dict[str, str]) -> str:
+    """Render an Opaque Secret as YAML with base64-encoded `data` — in-process.
+
+    The single delivery primitive (audit C5 / Design Tension #2): building the
+    manifest here and applying it via `kubectl apply -f -` (stdin) means no secret
+    value is ever passed as a subprocess argument (readable in /proc/<pid>/cmdline).
+    `data` + base64 is byte-equivalent to what `kubectl create secret -o yaml`
+    emitted, so the applied object is unchanged. `yaml.safe_dump` owns escaping.
+    """
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": name, "namespace": namespace},
+        "type": "Opaque",
+        "data": {k: base64.b64encode(v.encode("utf-8")).decode("ascii") for k, v in data.items()},
+    }
+    return yaml.safe_dump(manifest, sort_keys=False, default_flow_style=False)
 
 
 def _apply_single_secret(
@@ -292,8 +314,8 @@ def _apply_single_secret(
     ns_label = f" ({namespace})" if namespace != "kubelab" else ""
     logger.info(f"Processing secret: {mapping.name}{ns_label}")
 
-    # Build --from-literal args from env var keys
-    from_literals: list[str] = []
+    # Collect the desired key set from env vars + pre-rendered literals.
+    data: dict[str, str] = {}
     missing: list[str] = []
 
     for k8s_key, env_var in mapping.keys.items():
@@ -301,16 +323,15 @@ def _apply_single_secret(
         if not value:
             missing.append(f"{k8s_key} (from {env_var})")
             continue
-        from_literals.append(f"--from-literal={k8s_key}={value}")
+        data[k8s_key] = value
 
-    # Add pre-rendered literals (from dynamic builders)
     for k8s_key, value in extra_literals.items():
-        from_literals.append(f"--from-literal={k8s_key}={value}")
+        data[k8s_key] = value
 
-    # Fail closed (TOOL-018 / audit C2): a Secret is applied via `kubectl create …
-    # | kubectl apply -f -`, which REPLACES the whole Secret. Applying a subset would
-    # shrink the live Secret and silently drop the missing keys on the next pod
-    # restart. Never apply a partial render — refuse and let apply_secrets report it.
+    # Fail closed (TOOL-018 / audit C2): a Secret is applied via `kubectl apply -f -`,
+    # which REPLACES the whole Secret. Applying a subset would shrink the live Secret
+    # and silently drop the missing keys on the next pod restart. Never apply a
+    # partial render — refuse and let apply_secrets report it.
     if missing:
         logger.error(
             f"  Refusing to apply {mapping.name}: {len(missing)} of {len(mapping.keys)} "
@@ -319,37 +340,16 @@ def _apply_single_secret(
         )
         return False
 
-    # kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -
-    create_cmd = [
-        *_kubectl_base(env, namespace),
-        "create",
-        "secret",
-        "generic",
-        mapping.name,
-        *from_literals,
-        "--dry-run=client",
-        "-o",
-        "yaml",
-    ]
-
     if dry_run:
-        all_keys = list(mapping.keys.keys()) + list(extra_literals.keys())
-        logger.info(f"  [DRY-RUN] Would create secret '{mapping.name}' with keys: {all_keys}")
+        logger.info(f"  [DRY-RUN] Would apply secret '{mapping.name}' with keys: {list(data)}")
         return True
 
+    # Render in-process (no secret in argv) and apply via stdin.
+    manifest = _render_secret_manifest(mapping.name, namespace, data)
     try:
-        # Generate YAML
-        create_result = subprocess.run(
-            create_cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        # Pipe to kubectl apply
-        apply_cmd = [*_kubectl_base(env, namespace), "apply", "-f", "-"]
         apply_result = subprocess.run(
-            apply_cmd,
-            input=create_result.stdout,
+            [*_kubectl_base(env, namespace), "apply", "-f", "-"],
+            input=manifest,
             capture_output=True,
             text=True,
             check=True,
