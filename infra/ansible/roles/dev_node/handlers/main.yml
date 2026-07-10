@@ -1,0 +1,4 @@
+---
+# dev_node has no long-running services in PR-1a (host tooling only), so there
+# are no restart handlers yet. The D6 housekeeping systemd timers (ANSIBLE-030)
+# will add `systemctl daemon-reload` + timer-enable handlers here.

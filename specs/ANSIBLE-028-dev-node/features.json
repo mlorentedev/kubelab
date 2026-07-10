@@ -1,0 +1,58 @@
+[
+  {
+    "id": "ANSIBLE-028-dev-node-f1",
+    "behavior": "dev_node role exists (defaults/tasks/templates/handlers) and is wired into provision-ace2.yml",
+    "verification": "test -f infra/ansible/roles/dev_node/tasks/main.yml && test -f infra/ansible/roles/dev_node/defaults/main.yml && test -d infra/ansible/roles/dev_node/templates && test -f infra/ansible/roles/dev_node/handlers/main.yml && grep -q 'roles/dev_node' infra/ansible/playbooks/provision-ace2.yml",
+    "state": "verified",
+    "evidence": "2026-07-10: static criterion, controller-agnostic. Verification command exits 0 — all four role files present under infra/ansible/roles/dev_node/ and provision-ace2.yml wires `- role: ../roles/dev_node`."
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f2",
+    "behavior": "make provision NODE=ace2 ENV=staging is idempotent (second run 0 changed) and coexists with the running Ollama service",
+    "verification": "make provision NODE=ace2 ENV=staging --tags dev_node | tee /tmp/p1 && make provision NODE=ace2 ENV=staging --tags dev_node | tee /tmp/p2 && grep -qE 'changed=0 .*failed=0' /tmp/p2",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f3",
+    "behavior": "After provisioning: tmux-resurrect, neovim, gh, and dotfiles are present for the interactive user",
+    "verification": "ssh ace2 'command -v nvim && command -v gh && test -d ~/.tmux/plugins/tmux-resurrect && test -d ~/Projects/Workspace/dotfiles'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f4",
+    "behavior": "mise is installed; the global config pins node/go/python; they resolve in a fresh non-login shell",
+    "verification": "ssh ace2 'bash -lc \"mise list\" && bash -c \"node --version && go version && python --version\"'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f5",
+    "behavior": "~/bin/dev-session.sh launches named tmux sessions (editor + one per agent workspace)",
+    "verification": "ssh ace2 '~/bin/dev-session.sh && tmux has-session -t editor && tmux has-session -t claude'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f6",
+    "behavior": "Workspace skeleton exists; per-agent isolated dirs are present",
+    "verification": "ssh ace2 'test -d ~/workspaces/claude-agent && test -d ~/workspaces/codex-agent && test -d ~/workspaces/pi-agent && test -d ~/bin'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f7",
+    "behavior": "D6 housekeeping timers are split to a tracked follow-up (ANSIBLE-030) rather than dropped",
+    "verification": "gh issue view 858 --json title | grep -q 'ANSIBLE-030'",
+    "state": "verified",
+    "evidence": "2026-07-10: static criterion, controller-agnostic. gh issue #858 open, title 'ANSIBLE-030: dev_node D6 housekeeping systemd timers (split from ANSIBLE-028)' — verification command exits 0."
+  },
+  {
+    "id": "ANSIBLE-028-dev-node-f8",
+    "behavior": "Ollama still runs on ace2 after provisioning (additive PR, no removal)",
+    "verification": "ssh ace2 'docker ps --filter name=ollama --format {{.Status}} | grep -qi up'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

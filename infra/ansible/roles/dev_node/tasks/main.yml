@@ -1,0 +1,156 @@
+---
+# =============================================================================
+# dev_node — centralized self-hosted CDE (ANSIBLE-028 / ADR-058 D1)
+# Additive + idempotent. Coexists with ace2_services (Ollama) — touches only the
+# interactive user's home + a couple of apt packages, never Docker/firewall/Ollama.
+# =============================================================================
+
+# --- System tooling (root) -------------------------------------------------
+- name: Install dev tooling apt packages (neovim, build-essential)
+  ansible.builtin.apt:
+    name: "{{ dev_node_apt_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [dev_node, tooling]
+
+# GitHub CLI ships from its own apt repo (modeled on the docker role).
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  tags: [dev_node, tooling, gh]
+
+- name: Download GitHub CLI GPG key
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+  tags: [dev_node, tooling, gh]
+
+- name: Add GitHub CLI apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+    filename: github-cli
+    state: present
+    update_cache: true
+  tags: [dev_node, tooling, gh]
+
+- name: Install GitHub CLI (gh)
+  ansible.builtin.apt:
+    name: gh
+    state: present
+  tags: [dev_node, tooling, gh]
+
+# --- User-level provisioning (runs as the interactive dev user) ------------
+- name: Provision the developer user's environment
+  become: true
+  become_user: "{{ dev_node_user }}"
+  block:
+    - name: Create workspace skeleton (Projects, workspaces, bin)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ dev_node_project_dirs }}"
+      tags: [dev_node, workspace]
+
+    - name: Create per-agent isolated workspace dirs
+      ansible.builtin.file:
+        path: "{{ dev_node_home }}/workspaces/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ dev_node_agent_workspaces }}"
+      tags: [dev_node, workspace]
+
+    # --- mise (polyglot runtime manager) ---
+    - name: Install mise (idempotent — skips if the binary already exists)
+      ansible.builtin.shell:
+        cmd: "curl -fsSL https://mise.run | sh"
+        creates: "{{ dev_node_home }}/.local/bin/mise"
+      environment:
+        MISE_VERSION: "{{ dev_node_mise_version }}"
+      tags: [dev_node, mise]
+
+    # `template` does not create the destination's parent dir; on a fresh node
+    # ~/.config/mise does not exist yet (mise.run installs only the binary), so
+    # the render below would fail on the first run without this.
+    - name: Ensure the mise config directory exists
+      ansible.builtin.file:
+        path: "{{ dev_node_home }}/.config/mise"
+        state: directory
+        mode: "0755"
+      tags: [dev_node, mise]
+
+    - name: Render global mise config (pins node/go/python — reproducible SSOT)
+      ansible.builtin.template:
+        src: mise-config.toml.j2
+        dest: "{{ dev_node_home }}/.config/mise/config.toml"
+        mode: "0644"
+      tags: [dev_node, mise]
+
+    - name: Activate mise in interactive shells (bash + zsh)
+      ansible.builtin.blockinfile:
+        path: "{{ dev_node_home }}/{{ item }}"
+        create: true
+        mode: "0644"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK — dev_node mise"
+        block: |
+          export PATH="$HOME/.local/bin:$PATH"
+          eval "$("$HOME/.local/bin/mise" activate {{ 'zsh' if item == '.zshrc' else 'bash' }})"
+      loop:
+        - .bashrc
+        - .zshrc
+      tags: [dev_node, mise]
+
+    - name: Install the pinned toolchains (node, go, python)
+      ansible.builtin.command:
+        cmd: "{{ dev_node_home }}/.local/bin/mise install"
+      register: _mise_install
+      changed_when: "'installing' in (_mise_install.stderr | lower) or 'installing' in (_mise_install.stdout | lower)"
+      tags: [dev_node, mise]
+
+    # --- tmux-resurrect (vendored plugin; base tmux comes from base_system) ---
+    - name: Vendor tmux-resurrect at a pinned version
+      ansible.builtin.git:
+        repo: "{{ dev_node_tmux_resurrect_repo }}"
+        dest: "{{ dev_node_tmux_plugins_dir }}/tmux-resurrect"
+        version: "{{ dev_node_tmux_resurrect_version }}"
+        depth: 1
+      tags: [dev_node, tmux]
+
+    - name: Wire tmux-resurrect into .tmux.conf (load line only; prefs are dotfiles')
+      ansible.builtin.blockinfile:
+        path: "{{ dev_node_home }}/.tmux.conf"
+        create: true
+        mode: "0644"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK — dev_node tmux-resurrect"
+        block: |
+          run-shell {{ dev_node_tmux_plugins_dir }}/tmux-resurrect/resurrect.tmux
+      tags: [dev_node, tmux]
+
+    # --- dotfiles bootstrap ---
+    - name: Clone/update the dotfiles repo
+      ansible.builtin.git:
+        repo: "{{ dev_node_dotfiles_repo }}"
+        dest: "{{ dev_node_dotfiles_dir }}"
+        version: "{{ dev_node_dotfiles_version }}"
+      register: _dotfiles
+      tags: [dev_node, dotfiles]
+
+    - name: Run the dotfiles bootstrap (idempotent, secret-free — see verification.md)
+      ansible.builtin.command:
+        cmd: "bash {{ dev_node_dotfiles_dir }}/setup-linux.sh"
+      when: dev_node_dotfiles_run_setup | bool
+      register: _dotfiles_setup
+      changed_when: _dotfiles.changed
+      tags: [dev_node, dotfiles]
+
+    # --- dev-session launcher ---
+    - name: Install ~/bin/dev-session.sh (tmux session launcher)
+      ansible.builtin.template:
+        src: dev-session.sh.j2
+        dest: "{{ dev_node_home }}/bin/dev-session.sh"
+        mode: "0755"
+      tags: [dev_node, dev-session]

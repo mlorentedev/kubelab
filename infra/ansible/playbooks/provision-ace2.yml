@@ -166,3 +166,10 @@
         glances_port: "{{ config.apps.services.observability.glances.default_port }}"
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
+
+    # Centralized self-hosted CDE (ADR-058 D1 / ANSIBLE-028). Additive: coexists
+    # with the Ollama service above (touches only the dev user's home + apt).
+    - role: ../roles/dev_node
+      tags: [dev_node, cde]
+      vars:
+        dev_node_user: "{{ config.networking.ssh_users.homelab }}"
