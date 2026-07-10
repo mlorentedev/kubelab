@@ -19,9 +19,15 @@ criteria are `pending` until the role is provision-applied (needs a Linux contro
 - Ansible role, not a unit suite — verification is `features.json` commands run
   against the provisioned node.
 - Static: role structure + playbook wiring + spec artifacts present.
-- **Provisioning NOT yet run**: the dev workstation is Windows, and Ansible's control
-  node must be Linux/macOS (`ansible-playbook` is unavailable here). Runtime criteria
-  are verified from a Linux controller.
+- **Provisioning NOT yet run**: the dev workstation is Windows. Ansible does not
+  support Windows as a *control node* by design (the controller needs POSIX
+  primitives — `os.fork()`, ptys, `ssh`/`sshpass` — and there is no native
+  `ansible-playbook` for Windows; confirmed: absent from Git Bash). Windows can only
+  be a *managed* node. The supported path is a Linux controller: a remote homelab box
+  (Beelink, same LAN as ace2) or this box's WSL Ubuntu — but that WSL is currently
+  bare (no ansible/sops/poetry/make/tailscale) and mesh reachability + the SOPS/age
+  key inside WSL are unproven, so the low-friction controller is a provisioned Linux
+  host, not WSL here. Runtime criteria are verified from that controller.
 - No regressions: additive only — new role + one `roles:` entry; no existing role,
   var, or the Ollama/glances stack is touched.
 
@@ -34,28 +40,33 @@ criteria are `pending` until the role is provision-applied (needs a Linux contro
   offline-tolerant; a single marked `run-shell` line is added to `.tmux.conf` (only
   the resurrect wiring; general tmux prefs stay a dotfiles concern per the proposal).
 - **mise: install script + pinned toolchains in the global config**; activation added
-  to `.bashrc`/`.zshrc` via marked blocks. **Open for provision validation:** node/go/
-  python resolving in a *non-login* shell (the proposal's flagged risk) — confirm the
-  shims path is visible to Ansible `command` tasks and agent processes, not just zsh.
+  to `.bashrc`/`.zshrc` via marked blocks. An explicit `file: state=directory` creates
+  `~/.config/mise` before the config `template` — `template`/`copy` do not create the
+  destination's parent dir, so the first run would fail on a fresh node without it.
+  **Open for provision validation:** node/go/python resolving in a *non-login* shell
+  (the proposal's flagged risk) — confirm the shims path is visible to Ansible
+  `command` tasks and agent processes, not just zsh.
 - **`dev_node_user` from `networking.ssh_users.homelab`** (SSOT), not a hardcoded name.
 - **dotfiles bootstrap runs `setup-linux.sh`** with `changed_when` tied to the repo
-  clone state. **Open for provision validation:** setup-linux.sh idempotency + that it
-  pulls no secret material (secrets are PR-1c's concern).
+  clone state (`_dotfiles.changed`). **Open for provision validation, two named
+  checks:** (1) setup-linux.sh idempotency — the `changed_when` proxy reports `ok`
+  whenever the clone is unchanged, so it can MASK a non-idempotent script and give a
+  false-green on f2 (`changed=0`); the Linux run must diff node state across the two
+  passes, not trust the aggregate `changed=0` alone. (2) that it pulls no secret
+  material (secrets are PR-1c's concern). A robust fix (gate the run on
+  `_dotfiles.changed` or a success marker) is deferred to the provision session where
+  the script's real behaviour can be observed — noted here, not churned blind.
 
 ## Promotion candidates
 
-- [ ] Lesson for `docs/lessons.md`? Maybe — "Ansible control node can't be Windows;
-  provisioning needs a Linux controller" (decide after first provision run).
+- [x] **Lesson for `docs/lessons.md` (HARNESS-024) — YES, promote at archive.** Wording:
+  "Ansible has no native Windows control node (needs POSIX: fork/pty/ssh). Provision
+  from a Linux controller — a homelab box on ace2's LAN, or WSL, but WSL needs its own
+  ansible/sops/tailscale toolchain + SOPS key + mesh transport first." Fact is proven
+  now; graduates to `docs/lessons.md` at archive (post first provision run) per the
+  spec flow, so the WSL-viability caveat can be confirmed empirically then.
 - [ ] ADR-worthy? No — ADR-058 already covers the decision.
 - [ ] New pattern for `00_meta/patterns/`? No.
-
-## Promotion candidates
-
-Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
-
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
 
 ## Archive checklist
 

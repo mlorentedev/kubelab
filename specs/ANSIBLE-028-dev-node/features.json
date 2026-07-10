@@ -3,8 +3,8 @@
     "id": "ANSIBLE-028-dev-node-f1",
     "behavior": "dev_node role exists (defaults/tasks/templates/handlers) and is wired into provision-ace2.yml",
     "verification": "test -f infra/ansible/roles/dev_node/tasks/main.yml && test -f infra/ansible/roles/dev_node/defaults/main.yml && test -d infra/ansible/roles/dev_node/templates && test -f infra/ansible/roles/dev_node/handlers/main.yml && grep -q 'roles/dev_node' infra/ansible/playbooks/provision-ace2.yml",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-07-10: static criterion, controller-agnostic. Verification command exits 0 — all four role files present under infra/ansible/roles/dev_node/ and provision-ace2.yml wires `- role: ../roles/dev_node`."
   },
   {
     "id": "ANSIBLE-028-dev-node-f2",
@@ -45,8 +45,8 @@
     "id": "ANSIBLE-028-dev-node-f7",
     "behavior": "D6 housekeeping timers are split to a tracked follow-up (ANSIBLE-030) rather than dropped",
     "verification": "gh issue view 858 --json title | grep -q 'ANSIBLE-030'",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-07-10: static criterion, controller-agnostic. gh issue #858 open, title 'ANSIBLE-030: dev_node D6 housekeeping systemd timers (split from ANSIBLE-028)' — verification command exits 0."
   },
   {
     "id": "ANSIBLE-028-dev-node-f8",

@@ -73,6 +73,16 @@
         MISE_VERSION: "{{ dev_node_mise_version }}"
       tags: [dev_node, mise]
 
+    # `template` does not create the destination's parent dir; on a fresh node
+    # ~/.config/mise does not exist yet (mise.run installs only the binary), so
+    # the render below would fail on the first run without this.
+    - name: Ensure the mise config directory exists
+      ansible.builtin.file:
+        path: "{{ dev_node_home }}/.config/mise"
+        state: directory
+        mode: "0755"
+      tags: [dev_node, mise]
+
     - name: Render global mise config (pins node/go/python — reproducible SSOT)
       ansible.builtin.template:
         src: mise-config.toml.j2
