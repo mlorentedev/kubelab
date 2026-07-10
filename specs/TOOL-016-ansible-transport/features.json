@@ -1,0 +1,44 @@
+[
+  {
+    "id": "TOOL-016-ansible-transport-f1",
+    "behavior": "transport=bastion adds a ProxyCommand (SSOT-derived) to every mesh-only node and none to the public-IP VPS",
+    "verification": "poetry run pytest tests/test_generator_ansible.py -k bastion -q",
+    "state": "verified",
+    "evidence": "2026-07-10: pytest -k bastion → 2 passed. Smoke (real generate --transport bastion): ace2 & aws1 carry `ProxyCommand=ssh -i ~/.ssh/id_ed25519 -W %h:%p -q ... deployer@<vps.public_ip>`; kubelab-vps has no per-host args (inherits global, jump-free)."
+  },
+  {
+    "id": "TOOL-016-ansible-transport-f2",
+    "behavior": "Default / transport=mesh reproduces the current inventory unchanged (regression guard)",
+    "verification": "poetry run pytest tests/test_generator_ansible.py -k mesh -q",
+    "state": "verified",
+    "evidence": "2026-07-10: pytest -k mesh → 3 passed (no per-host ssh args in mesh; global args unchanged; mesh is the default). Full non-e2e suite: 375 passed, 0 failed."
+  },
+  {
+    "id": "TOOL-016-ansible-transport-f3",
+    "behavior": "The bastion target derives from networking.* SSOT — no public IP hardcoded in generator source",
+    "verification": "! grep -REn '([0-9]{1,3}\\.){3}[0-9]{1,3}' toolkit/features/generator_ansible.py",
+    "state": "verified",
+    "evidence": "2026-07-10: grep finds 0 dotted-quad IPs in generator_ansible.py (exit 1). Bastion host/user/key derived from networking.vps.public_ip / ssh_users.cloud / networking.ssh_key."
+  },
+  {
+    "id": "TOOL-016-ansible-transport-f4",
+    "behavior": "CLI exposes --transport and the Makefile provision target threads TRANSPORT= into generate",
+    "verification": "poetry run toolkit infra ansible generate --help | grep -q -- '--transport' && grep -q 'TRANSPORT' Makefile",
+    "state": "verified",
+    "evidence": "2026-07-10: `--transport` present in `ansible generate --help` (validated to mesh|bastion); Makefile provision regenerates via `--transport $(TRANSPORT)` then restores mesh."
+  },
+  {
+    "id": "TOOL-016-ansible-transport-f5",
+    "behavior": "The new AnsibleGenerator unit suite passes (backfills previously-absent coverage)",
+    "verification": "poetry run pytest tests/test_generator_ansible.py -q",
+    "state": "verified",
+    "evidence": "2026-07-10: tests/test_generator_ansible.py → 5 passed. ruff clean, mypy clean on generator_ansible.py."
+  },
+  {
+    "id": "TOOL-016-ansible-transport-f6",
+    "behavior": "End-to-end: make provision NODE=x TRANSPORT=bastion reaches a mesh-only node from a non-mesh Linux controller through the bastion (RUNTIME, Linux-gated)",
+    "verification": "make provision NODE=ace2 ENV=staging TRANSPORT=bastion --tags dev_node",
+    "state": "pending",
+    "evidence": ""
+  }
+]

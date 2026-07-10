@@ -605,24 +605,27 @@ rotate-spoke-token:
 # Infrastructure (Ansible)
 # -----------------------------------------------------------------------------
 # Usage:
-#   make provision NODE=ace1 ENV=staging               Normal (uses Tailscale IP)
-#   make provision NODE=ace1 ENV=staging BOOTSTRAP=1   First run (uses LAN IP from common.yaml)
+#   make provision NODE=ace1 ENV=staging                  Normal (uses Tailscale IP)
+#   make provision NODE=ace1 ENV=staging BOOTSTRAP=1      First run (uses LAN IP from common.yaml)
+#   make provision NODE=ace2 ENV=staging TRANSPORT=bastion  From a non-mesh controller (TOOL-016, jump via VPS)
 #   make deploy TARGET=vps ENV=prod
 #   make deploy TARGET=k3s ENV=staging
 #   make backup ENV=prod
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [ASK_PASS=1] [TAGS=tag1,tag2]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [ASK_PASS=1] [TAGS=tag1,tag2]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
-	@if [ -n "$(BOOTSTRAP)" ]; then \
-		echo "=== Bootstrap: generating inventory with LAN IPs ==="; \
-		$(TOOLKIT) infra ansible generate --env $(_ENV) --bootstrap; \
+	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
+	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
+	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
+		echo "=== Generating inventory ($(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),)) ==="; \
+		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT); \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS); \
 		_exit=$$?; \
-		echo "=== Restoring: inventory with Tailscale IPs ==="; \
+		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
