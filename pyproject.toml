@@ -28,7 +28,7 @@ ruamel-yaml = "^0.19"
 httpx = "^0.28.1" # HTTP client for registry tag verification (deployment promote)
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.15.20"
+ruff = "^0.15.22"
 mypy = "^2.1.0"
 pre-commit = "^4.6.0"
 pytest = "^8.2.3"
