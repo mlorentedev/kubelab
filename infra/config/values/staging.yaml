@@ -52,7 +52,7 @@ apps:
       enable_homelabs: false
       enable_contact: false
   # Third-party services
-      version: sha-7f01312
+      version: sha-5537540
   services:
     core:
       gitea:
