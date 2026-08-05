@@ -8,7 +8,7 @@ packages = [{include = "toolkit"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
-typer = "^0.26.8"
+typer = "^0.27.0"
 rich = "^15.0.0"
 pydantic = "^2.13.4"
 pydantic-settings = "^2.14.2"
