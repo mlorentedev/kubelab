@@ -33,7 +33,9 @@ dev_node_tmux_resurrect_version: "v4.0.0"
 # rule does not apply (ADR-058 D1). setup-linux.sh must be idempotent + secret-free.
 dev_node_dotfiles_repo: "https://github.com/mlorentedev/dotfiles.git"
 dev_node_dotfiles_dir: "{{ dev_node_home }}/Projects/Workspace/dotfiles"
-dev_node_dotfiles_version: "master"
+# The dotfiles repo's default branch is `main` (kubelab's own `master` convention
+# does not apply here) — verified via `git ls-remote --symref … HEAD`.
+dev_node_dotfiles_version: "main"
 # Run the (long) dotfiles bootstrap. Toggle off to only clone/update the repo.
 dev_node_dotfiles_run_setup: true
 

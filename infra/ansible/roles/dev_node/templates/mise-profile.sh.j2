@@ -1,0 +1,25 @@
+# Managed by Ansible (dev_node role, ANSIBLE-028) — do not edit by hand.
+#
+# Puts the mise shims on PATH for every login shell on this node.
+#
+# Why shims and not `mise activate`: `activate` is an eval that hooks the shell
+# prompt, so it only ever exists in an interactive session. Shims are real
+# executables on disk — they resolve from scripts, cron jobs and Ansible tasks
+# too, which is what the dev_node role actually needs.
+#
+# Why /etc/profile.d and not ~/.bashrc: the dotfiles bootstrap deploys its own
+# ~/.bashrc and ~/.zshrc, clobbering anything we write there. It does not own
+# /etc, so this file survives a dotfiles redeploy.
+
+MISE_SHIMS="{{ dev_node_home }}/.local/share/mise/shims"
+
+# profile.d is read by every user's login shell, but the shims live in one
+# user's home — so scope this to the dev_node user instead of putting another
+# account's toolchain on root's PATH.
+if [ "$(id -un)" = "{{ dev_node_user }}" ] && [ -d "$MISE_SHIMS" ]; then
+    # Shims take precedence over the system toolchain: that is what makes the
+    # `config.toml` pins (node/go/python) actually take effect. Ubuntu's own
+    # tooling is unaffected — it uses absolute shebangs (#!/usr/bin/python3),
+    # and neither cron nor systemd reads profile.d at all.
+    export PATH="$MISE_SHIMS:$PATH"
+fi
