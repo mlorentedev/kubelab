@@ -19,17 +19,49 @@ criteria are `pending` until the role is provision-applied (needs a Linux contro
 - Ansible role, not a unit suite — verification is `features.json` commands run
   against the provisioned node.
 - Static: role structure + playbook wiring + spec artifacts present.
-- **Provisioning NOT yet run**: the dev workstation is Windows. Ansible does not
-  support Windows as a *control node* by design (the controller needs POSIX
-  primitives — `os.fork()`, ptys, `ssh`/`sshpass` — and there is no native
-  `ansible-playbook` for Windows; confirmed: absent from Git Bash). Windows can only
-  be a *managed* node. The supported path is a Linux controller: a remote homelab box
-  (Beelink, same LAN as ace2) or this box's WSL Ubuntu — but that WSL is currently
-  bare (no ansible/sops/poetry/make/tailscale) and mesh reachability + the SOPS/age
-  key inside WSL are unproven, so the low-friction controller is a provisioned Linux
-  host, not WSL here. Runtime criteria are verified from that controller.
+- ~~**Provisioning NOT yet run**~~ — **resolved 2026-08-06.** The historical note was
+  that the dev workstation was Windows, which cannot be an Ansible *control node* by
+  design (the controller needs POSIX primitives — `os.fork()`, ptys, `ssh`). Runtime
+  criteria have now been exercised from a Linux controller on the mesh
+  (`msi`, 100.64.0.1, ansible-core 2.20.0) against a powered-on ace2. Note the
+  bastion transport (TOOL-016 / #818) was **not** needed: from a mesh controller the
+  default `mesh` transport reaches ace2 directly.
+
+### First real provision run — four defects (2026-08-06)
+
+Every one of these needed a real remote repo and a real target node. None was
+reachable by lint, unit tests, or code review — which is the empirical
+justification for having kept f2–f6/f8 `pending` instead of assuming them.
+
+1. **`dev_node_dotfiles_version: "master"`** — that repo's default branch is `main`
+   (`git ls-remote --symref … HEAD`). The kubelab branch convention leaked into a repo
+   that does not share it. `git checkout master` failed outright.
+2. **`setup-linux.sh` run from the wrong CWD** — it sources `./scripts/utils.sh`
+   relative to the CWD and documents `Usage: ./setup-linux.sh`, so repo root is part
+   of its contract. Ansible ran it from `$HOME`; it died in 0.002s. Added `chdir`.
+3. **mise activation clobbered by the dotfiles bootstrap** — the activation block was
+   written to `.bashrc`/`.zshrc` *before* the bootstrap, which deploys its own copies
+   of both files. The managed block vanished silently (the task still reported
+   `changed`). Ordering is now load-bearing and documented as such in `tasks/main.yml`.
+4. **`become: true` was not enough for `/etc/profile.d`** — the enclosing `block:`
+   sets `become_user: dev_node_user`, which a task-level `become: true` inherits.
+   Needed an explicit `become_user: root`.
+
+### Cross-repo dependency — BLOCKING f2 (and the dotfiles half of f3)
+
+`setup-linux.sh` aborts on any node whose user has **no crontab yet**: it runs
+`(crontab -l 2>/dev/null; echo …) | crontab -` under `set -euo pipefail`, and
+`crontab -l` exits 1 on an empty crontab, killing the subshell before the `echo` and
+propagating via `pipefail`. Invisible on every machine that already had a crontab —
+i.e. every machine the script had ever run on.
+
+Fix: **mlorentedev/dotfiles#783**. The role clones from GitHub `main`, so the fix
+reaches ace2 only once that PR **merges** — not when it is opened. Until then the
+full-role run cannot complete and f2 cannot be proven.
+
 - No regressions: additive only — new role + one `roles:` entry; no existing role,
-  var, or the Ollama/glances stack is touched.
+  var, or the Ollama/glances stack is touched. Confirmed at runtime: the Ollama
+  container stayed up across every provision pass, 11434 listening throughout.
 
 ## Decisions made during implementation
 

@@ -11,35 +11,35 @@
     "behavior": "make provision NODE=ace2 ENV=staging is idempotent (second run 0 changed) and coexists with the running Ollama service",
     "verification": "make provision NODE=ace2 ENV=staging --tags dev_node | tee /tmp/p1 && make provision NODE=ace2 ENV=staging --tags dev_node | tee /tmp/p2 && grep -qE 'changed=0 .*failed=0' /tmp/p2",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-08-06: NOT yet provable for the full role. The tag-sliced run (TAGS=tooling,gh,mise,tmux,workspace,dev-session) is idempotent — 2nd pass ok=27 changed=0 failed=0 — but the dotfiles slice still aborts, so a full two-pass run has never completed. BLOCKED on mlorentedev/dotfiles#783 merging to `main` (the role clones from GitHub main, so the fix reaches ace2 only on merge, not on PR open). NOTE: the verification command below used `--tags dev_node`, which make swallows as its own flag; the correct invocation is TAGS=dev_node."
   },
   {
     "id": "ANSIBLE-028-dev-node-f3",
     "behavior": "After provisioning: tmux-resurrect, neovim, gh, and dotfiles are present for the interactive user",
     "verification": "ssh ace2 'command -v nvim && command -v gh && test -d ~/.tmux/plugins/tmux-resurrect && test -d ~/Projects/Workspace/dotfiles'",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-06: exact criterion command PASS on ace2 — nvim (/usr/bin/nvim), gh (/usr/bin/gh), ~/.tmux/plugins/tmux-resurrect and ~/Projects/Workspace/dotfiles all present."
   },
   {
     "id": "ANSIBLE-028-dev-node-f4",
     "behavior": "mise is installed; the global config pins node/go/python; they resolve in a fresh non-login shell",
     "verification": "ssh ace2 'bash -lc \"mise list\" && bash -c \"node --version && go version && python --version\"'",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-08-06: PARTIAL — the criterion's own command has two halves and they disagree. Login shell (`bash -lc`) PASSES: node/npm/go/python3 all resolve to ~/.local/share/mise/shims with the pinned versions (v24.19.0, go1.26.5, Python 3.12.13). Non-interactive (`bash -c`) FAILS: `node: command not found`. Root cause chain, all fixed except the last: (a) the activation block ran before the dotfiles bootstrap, which deploys its own .bashrc/.zshrc and clobbered it — reordered; (b) `mise activate` is an interactive-only eval — replaced with shims on PATH via /etc/profile.d/mise.sh, scoped to dev_node_user. Remaining gap is not fixable by this role: `ssh host 'cmd'` reads neither profile.d nor .bashrc (Ubuntu's stock .bashrc returns at line 14 on `[[ $- != *i* ]]`). OPEN QUESTION for the human: does 'fresh non-login shell' in this criterion mean interactive-non-login (now passing) or non-interactive (unreachable without ~/.ssh/environment or an explicit shims path in each Ansible task)? Criterion wording needs a decision before this can be marked verified."
   },
   {
     "id": "ANSIBLE-028-dev-node-f5",
     "behavior": "~/bin/dev-session.sh launches named tmux sessions (editor + one per agent workspace)",
     "verification": "ssh ace2 '~/bin/dev-session.sh && tmux has-session -t editor && tmux has-session -t claude'",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-06: exact criterion command PASS. ~/bin/dev-session.sh (0755) created 4 detached sessions — codex, claude, pi (one per agent workspace) and editor (~/Projects); `tmux has-session -t editor` and `-t claude` both succeed. Re-invocation is idempotent (still 4 sessions, has-session guard)."
   },
   {
     "id": "ANSIBLE-028-dev-node-f6",
     "behavior": "Workspace skeleton exists; per-agent isolated dirs are present",
     "verification": "ssh ace2 'test -d ~/workspaces/claude-agent && test -d ~/workspaces/codex-agent && test -d ~/workspaces/pi-agent && test -d ~/bin'",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-06: exact criterion command PASS — ~/workspaces/{claude,codex,pi}-agent and ~/bin all present on ace2."
   },
   {
     "id": "ANSIBLE-028-dev-node-f7",
@@ -52,7 +52,7 @@
     "id": "ANSIBLE-028-dev-node-f8",
     "behavior": "Ollama still runs on ace2 after provisioning (additive PR, no removal)",
     "verification": "ssh ace2 'docker ps --filter name=ollama --format {{.Status}} | grep -qi up'",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-06: exact criterion command PASS — ollama container Up (45+ min, predating the provision), port 11434 still listening after all provision passes. The role is additive as designed: it never touched Docker. NOTE: Ollama runs as a Docker container, not bare metal or systemd — CLAUDE.md's topology says 'bare metal', which is doc drift, tracked separately."
   }
 ]
