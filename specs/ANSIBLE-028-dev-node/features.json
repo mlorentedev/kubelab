@@ -10,8 +10,8 @@
     "id": "ANSIBLE-028-dev-node-f2",
     "behavior": "make provision NODE=ace2 ENV=staging is idempotent (second run 0 changed) and coexists with the running Ollama service",
     "verification": "make provision NODE=ace2 ENV=staging --tags dev_node | tee /tmp/p1 && make provision NODE=ace2 ENV=staging --tags dev_node | tee /tmp/p2 && grep -qE 'changed=0 .*failed=0' /tmp/p2",
-    "state": "pending",
-    "evidence": "2026-08-06: NOT yet provable for the full role. The tag-sliced run (TAGS=tooling,gh,mise,tmux,workspace,dev-session) is idempotent — 2nd pass ok=27 changed=0 failed=0 — but the dotfiles slice still aborts, so a full two-pass run has never completed. BLOCKED on mlorentedev/dotfiles#783 merging to `main` (the role clones from GitHub main, so the fix reaches ace2 only on merge, not on PR open). NOTE: the verification command below used `--tags dev_node`, which make swallows as its own flag; the correct invocation is TAGS=dev_node."
+    "state": "verified",
+    "evidence": "2026-08-06: PASS after the ownership refactor. Two consecutive full runs (TAGS=dev_node): pass 1 ok=29 changed=4 failed=0, pass 2 ok=29 changed=0 failed=0, exit 0 both. No task reports changed on the second pass. The earlier failure (changed=2 forever) was dual ownership: the role injected into ~/.bashrc, ~/.zshrc and ~/.tmux.conf, which setup-linux.sh redeploys wholesale every run. Fixed by writing only to files dotfiles never touches — ~/.bashrc.local + ~/.zshrc.local (the IDEAS-001 seam, sourced last by the tracked rc files) and ~/.tmux.conf.local (new seam, mlorentedev/dotfiles#788) — plus /etc/profile.d/mise.sh. Ownership proof: after pass 2, ~/.bashrc mtime 04:38:21 (rewritten by the bootstrap) vs ~/.bashrc.local mtime 04:37:55 (written in pass 1, untouched). CAVEAT (#863): this proves the ROLE converges. It does not measure setup-linux.sh's own idempotency — that task always runs and its changed_when is bound to the git clone, so its changed=0 is structural, not evidence. Unchanged by this work; still tracked in ANSIBLE-031."
   },
   {
     "id": "ANSIBLE-028-dev-node-f3",

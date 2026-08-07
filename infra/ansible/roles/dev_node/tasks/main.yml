@@ -106,9 +106,14 @@
         depth: 1
       tags: [dev_node, tmux]
 
-    - name: Wire tmux-resurrect into .tmux.conf (load line only; prefs are dotfiles')
+    # Writes ~/.tmux.conf.local, NOT ~/.tmux.conf: the dotfiles bootstrap redeploys
+    # ~/.tmux.conf wholesale on every run, so injecting there means re-adding the
+    # block on every pass — never idempotent, whatever the task order. The `.local`
+    # file is the dotfiles-side seam (mlorentedev/dotfiles#788) and is never
+    # overwritten, which is what makes this task converge.
+    - name: Wire tmux-resurrect into .tmux.conf.local (load line only; prefs are dotfiles')
       ansible.builtin.blockinfile:
-        path: "{{ dev_node_home }}/.tmux.conf"
+        path: "{{ dev_node_home }}/.tmux.conf.local"
         create: true
         mode: "0644"
         marker: "# {mark} ANSIBLE MANAGED BLOCK — dev_node tmux-resurrect"
@@ -137,10 +142,12 @@
       tags: [dev_node, dotfiles]
 
     # --- mise activation (MUST run after the dotfiles bootstrap) ---
-    # Ordering is load-bearing: setup-linux.sh deploys its own .bashrc/.zshrc and
-    # overwrites whatever we wrote earlier. Activating mise before it silently
-    # loses the block (observed on the first real provision of ace2, 2026-08-07).
-    # profile.d is the durable half — dotfiles does not own /etc, so it survives.
+    # Ownership rule: Ansible owns /etc and the gitignored *.local override files;
+    # the dotfiles bootstrap owns ~/.bashrc, ~/.zshrc and ~/.tmux.conf and redeploys
+    # them on EVERY run. Writing to a file with two owners can never converge — the
+    # last writer wins and the other re-does its work next pass — so nothing here
+    # touches a dotfiles-owned file. Observed on the first real provision of ace2
+    # (2026-08-06): the mise block was silently lost, then churned every run.
     - name: Put the mise shims on PATH system-wide (survives the dotfiles deploy)
       ansible.builtin.template:
         src: mise-profile.sh.j2
@@ -154,6 +161,11 @@
       become_user: root
       tags: [dev_node, mise]
 
+    # ~/.bashrc.local and ~/.zshrc.local are the dotfiles-side seam (IDEAS-001):
+    # gitignored, sourced LAST by the tracked rc files, and never redeployed by
+    # setup-linux.sh — so this block survives a bootstrap and stops churning.
+    # Shims (not `mise activate`): shims are real executables, so they also resolve
+    # from scripts; activate is an interactive-only eval.
     - name: Activate mise in interactive shells (bash + zsh)
       ansible.builtin.blockinfile:
         path: "{{ dev_node_home }}/{{ item }}"
@@ -161,11 +173,10 @@
         mode: "0644"
         marker: "# {mark} ANSIBLE MANAGED BLOCK — dev_node mise"
         block: |
-          export PATH="$HOME/.local/bin:$PATH"
-          eval "$("$HOME/.local/bin/mise" activate {{ 'zsh' if item == '.zshrc' else 'bash' }})"
+          export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
       loop:
-        - .bashrc
-        - .zshrc
+        - .bashrc.local
+        - .zshrc.local
       tags: [dev_node, mise]
 
     # --- dev-session launcher ---

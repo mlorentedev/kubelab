@@ -7,12 +7,25 @@ created: "2026-06-29"
 
 ## Evidence
 
-Criteria map to `features.json` (f1–f8). Static criteria are proven now; runtime
-criteria are `pending` until the role is provision-applied (needs a Linux controller).
+Criteria map to `features.json` (f1–f8). All runtime criteria have now been exercised
+against a real ace2 from a Linux controller (2026-08-06).
 
 - [x] f1 (role exists + wired) — files under `infra/ansible/roles/dev_node/`, wired in `provision-ace2.yml`
+- [x] f2 (idempotent + coexists with Ollama) — pass 1 `changed=4`, pass 2 `changed=0`, exit 0 both
+- [x] f3 (nvim, gh, tmux-resurrect, dotfiles present) — criterion command PASS
+- [x] f5 (`dev-session.sh` launches named sessions) — 4 detached sessions, idempotent re-invoke
+- [x] f6 (workspace skeleton + per-agent dirs) — criterion command PASS
 - [x] f7 (D6 split tracked) — ANSIBLE-030 (#858)
-- [ ] f2, f3, f4, f5, f6, f8 — verified on provision-apply (`make provision NODE=ace2`)
+- [x] f8 (Ollama still up) — container up throughout, 11434 listening
+- [ ] **f4 (toolchain resolves in a "fresh non-login shell") — the one open criterion.**
+      Login and interactive shells PASS (shims via `/etc/profile.d` + the `.local`
+      files). Non-interactive (`ssh host 'cmd'`) FAILS and is not fixable from this
+      role: it reads neither `profile.d` nor `.bashrc`, whose Ubuntu stock copy
+      returns at `[[ $- != *i* ]]`. **Needs a human wording decision** — see
+      `features.json` f4 evidence. Options: (a) narrow the criterion to
+      login+interactive (passes today), (b) add `/etc/environment` (static PATH,
+      system-wide, loses the per-user guard), (c) keep it narrow and have Ansible
+      tasks use the explicit shims path.
 
 ## Test status
 
@@ -47,7 +60,36 @@ justification for having kept f2–f6/f8 `pending` instead of assuming them.
    sets `become_user: dev_node_user`, which a task-level `become: true` inherits.
    Needed an explicit `become_user: root`.
 
-### Cross-repo dependency — BLOCKING f2 (and the dotfiles half of f3)
+### Config ownership — the fix that made f2 converge (2026-08-06)
+
+The first full run exposed a fifth, structural defect: two consecutive passes gave
+`changed=2`, forever. The recurring tasks were the tmux-resurrect wiring and the mise
+activation — both writing into `~/.bashrc`, `~/.zshrc`, `~/.tmux.conf`, which
+`setup-linux.sh` **redeploys wholesale on every run**.
+
+No task ordering can fix that. While two writers own one file, the last one wins and
+the other re-does its work next pass; convergence is impossible by construction.
+Reordering (defect 3) fixed the silent *loss* of the block, which looked like the same
+bug from outside but was not.
+
+Resolved by giving every file a single owner:
+
+| File | Owner | Written by |
+| --- | --- | --- |
+| `~/.bashrc`, `~/.zshrc`, `~/.tmux.conf` | dotfiles | `setup-linux.sh` only |
+| `~/.bashrc.local`, `~/.zshrc.local`, `~/.tmux.conf.local` | Ansible | this role only |
+| `/etc/profile.d/mise.sh` | Ansible | this role only |
+
+`~/.bashrc.local` / `~/.zshrc.local` already existed as the dotfiles-side seam
+(IDEAS-001): gitignored, sourced last by the tracked rc files, never redeployed. tmux
+had no equivalent, so the seam was added upstream (**mlorentedev/dotfiles#788**,
+`if-shell`-guarded, no-op where the file is absent). Note #788 does not gate f2 — the
+role converges regardless — but tmux-resurrect will not *load* on ace2 until it merges.
+
+Also dropped `eval "$(mise activate …)"` in favour of shims on PATH, so the `.local`
+files and `/etc/profile.d` use one mechanism instead of two for the same job.
+
+### Cross-repo dependency — was BLOCKING f2 (resolved 2026-08-06)
 
 `setup-linux.sh` aborts on any node whose user has **no crontab yet**: it runs
 `(crontab -l 2>/dev/null; echo …) | crontab -` under `set -euo pipefail`, and
@@ -55,9 +97,9 @@ justification for having kept f2–f6/f8 `pending` instead of assuming them.
 propagating via `pipefail`. Invisible on every machine that already had a crontab —
 i.e. every machine the script had ever run on.
 
-Fix: **mlorentedev/dotfiles#783**. The role clones from GitHub `main`, so the fix
-reaches ace2 only once that PR **merges** — not when it is opened. Until then the
-full-role run cannot complete and f2 cannot be proven.
+Fix: **mlorentedev/dotfiles#783**, merged 2026-08-06. The role clones from GitHub
+`main`, so the fix reached ace2 on merge — not when the PR was opened. The first full
+run to complete end-to-end came immediately after.
 
 - No regressions: additive only — new role + one `roles:` entry; no existing role,
   var, or the Ollama/glances stack is touched. Confirmed at runtime: the Ollama
@@ -69,15 +111,17 @@ full-role run cannot complete and f2 cannot be proven.
   atomic-PR cap, exactly as the proposal foresaw. `handlers/main.yml` ships empty
   with a note that the timer handlers land there.
 - **tmux-resurrect via a vendored, pinned `git` clone** (not TPM) — idempotent and
-  offline-tolerant; a single marked `run-shell` line is added to `.tmux.conf` (only
-  the resurrect wiring; general tmux prefs stay a dotfiles concern per the proposal).
-- **mise: install script + pinned toolchains in the global config**; activation added
-  to `.bashrc`/`.zshrc` via marked blocks. An explicit `file: state=directory` creates
-  `~/.config/mise` before the config `template` — `template`/`copy` do not create the
-  destination's parent dir, so the first run would fail on a fresh node without it.
-  **Open for provision validation:** node/go/python resolving in a *non-login* shell
-  (the proposal's flagged risk) — confirm the shims path is visible to Ansible
-  `command` tasks and agent processes, not just zsh.
+  offline-tolerant; a single marked `run-shell` line goes to **`.tmux.conf.local`**
+  (revised 2026-08-06 from `.tmux.conf`, which dotfiles owns — see the ownership
+  section above; general tmux prefs stay a dotfiles concern per the proposal).
+- **mise: install script + pinned toolchains in the global config**; activation via
+  **`/etc/profile.d/mise.sh` + `.bashrc.local`/`.zshrc.local`** (revised 2026-08-06
+  from `.bashrc`/`.zshrc`). An explicit `file: state=directory` creates `~/.config/mise`
+  before the config `template` — `template`/`copy` do not create the destination's
+  parent dir, so the first run would fail on a fresh node without it.
+  **Resolved at provision:** shims (not `mise activate`) are used precisely so the
+  toolchain resolves outside interactive shells; verified for login and interactive.
+  The residual non-interactive gap is f4's open wording question, not a mise defect.
 - **`dev_node_user` from `networking.ssh_users.homelab`** (SSOT), not a hardcoded name.
 - **dotfiles bootstrap runs `setup-linux.sh`** with `changed_when` tied to the repo
   clone state (`_dotfiles.changed`). **Open for provision validation, two named
