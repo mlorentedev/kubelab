@@ -141,8 +141,24 @@ run to complete end-to-end came immediately after.
   ansible/sops/tailscale toolchain + SOPS key + mesh transport first." Fact is proven
   now; graduates to `docs/lessons.md` at archive (post first provision run) per the
   spec flow, so the WSL-viability caveat can be confirmed empirically then.
+- [x] **Lesson for `docs/lessons.md` — YES, promote at archive.** Working title: "A
+  config file with two writers can never converge — idempotence is a property of the
+  system, not of the task." Body: the role injected blocks into `~/.bashrc`,
+  `~/.zshrc`, `~/.tmux.conf` while the dotfiles bootstrap redeployed those same files
+  wholesale every run, so two consecutive passes reported `changed=2` forever.
+  Reordering only fixed the *loss* of the block (a different bug that presents
+  identically from outside); the churn needed single ownership — the provisioner
+  writes `/etc` and the gitignored `*.local` seams, the dotfiles bootstrap owns the
+  tracked rc files. Diagnostic rule: an Ansible task that reports `changed` on every
+  run is almost always contending for a file with another writer, not misconfigured.
+  Corollary: one green pass proves nothing about idempotence — the second pass is the
+  test, and the criterion must read the *task list*, not just the aggregate count.
+- [x] **Cross-project? YES — candidate for `00_meta/patterns/`.** The rule generalizes
+  past Ansible to any provisioner-plus-dotfiles pairing (chezmoi, Nix home-manager,
+  Puppet). Suggest folding into an existing pattern rather than a new file — closest
+  homes are `pattern-setup-script-idempotence` and `pattern-contract-defaults-per-machine-override`.
+  Decide at archive per [[feedback_no_doc_proliferation]].
 - [ ] ADR-worthy? No — ADR-058 already covers the decision.
-- [ ] New pattern for `00_meta/patterns/`? No.
 
 ## Archive checklist
 
