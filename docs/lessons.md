@@ -3175,3 +3175,27 @@ The agent stays alive for the shell session, so `make connect` + `kubectl get ns
 **Rule:** A subprocess that depends on an env var you *happen* to have exported is a latent bug — the passing local test proves nothing about a clean shell. Inject the dependency explicitly at every call site and enforce it with an AST scan (not a convention the next call site can quietly skip). "Works in my shell" ≠ "works in CI" — same failure class as the TOOL-020 encoding lesson above.
 
 **Tags:** `#secrets` `#sops` `#age` `#subprocess` `#ci` `#ast-guard` `#tool-017` `#gotcha`
+
+### [2026-07-09] `kubectl create secret` leaks every value into `/proc/<pid>/cmdline` — render the manifest in-process and apply over stdin (SEC-SECRETS-001)
+
+**Context:** SEC-SECRETS-001 (#831), the capstone of the secret-delivery hardening cluster. `_apply_single_secret` in `k8s_secrets.py` shipped Secrets with `kubectl create secret generic … --from-literal=k=v … --dry-run=client -o yaml | kubectl apply -f -`.
+
+**Problem:** Two distinct exposures. (1) `--from-literal=key=value` puts **every plaintext secret in the child process's argv**, world-readable in `/proc/<pid>/cmdline` for the life of the call and visible to any `ps` on the box — a local-user disclosure that no amount of SOPS-at-rest encryption prevents. (2) The dynamic builders (`_build_users_database`, `_build_apprise_config`) assembled their YAML by **f-string interpolation**, so a value containing a `:`, a leading `%`, or a newline (an argon2 hash, a bot token, a display name) could produce malformed or reinterpreted YAML — an injection seam in the config a service then parses as truth.
+
+**Solution:** One delivery primitive, `_render_secret_manifest(name, namespace, data)`: build the Secret as a **dict** with base64-encoded `data`, `yaml.safe_dump` it, and hand it to `kubectl apply -f -` via **stdin** (`input=manifest`). No value ever becomes a subprocess argument. `data` + base64 is byte-equivalent to what `kubectl create secret -o yaml` emitted, so the applied object is unchanged — a pure delivery-path swap, not a semantic one. The two builders became `yaml.safe_dump(dict)` as well, so the serializer owns escaping instead of the caller. TOOL-018's fail-closed-on-partial-resolve behaviour is preserved on top.
+
+**Rule:** Secrets belong on **stdin, never in argv** — the process table is a disclosure channel, and `--from-literal` is the idiom that walks straight into it. Equally: never build YAML that will carry a secret by string interpolation; hand a dict to `safe_dump` and let it own the escaping. Both are the same discipline — stop treating a structured, sensitive payload as text you concatenate.
+
+**Tags:** `#secrets` `#kubernetes` `#kubectl` `#argv` `#proc` `#yaml-injection` `#safe-dump` `#sec-secrets-001` `#gotcha`
+
+### [2026-07-09] A deploy step that warns and exits 0 is a silent failure — the exit code is the only thing the next step reads (TOOL-021)
+
+**Context:** TOOL-021 (#838), from the process audit (P6). `infra k8s deploy` applied the manifests, then ran `kubectl rollout status … --timeout=120s` as a final check.
+
+**Problem:** Every earlier step in the command failed closed (`raise typer.Exit(1)`), but the **rollout wait only logged a warning and returned 0**. So a deploy that left pods CrashLooping reported success. That matters precisely because nothing downstream reads the log: `make deploy-k8s && <next step>` proceeds, CI goes green, and an agent chaining on the exit code marches on over a broken cluster. The failure is loud to a human watching the terminal and completely invisible to every automated consumer.
+
+**Solution:** Fail closed on a non-zero rollout — log the stderr, print a `make logs SVC=<name> ENV=<env>` pointer so the next step is obvious, and `raise typer.Exit(1)`. Made the **default**, not an opt-in `--strict`: a healthy deploy rolls out well inside the 120s timeout, so the only thing an opt-in flag buys is the chance to forget it. Covered by two TDD tests.
+
+**Rule:** In any CLI meant to be chained, the **exit code is the contract** — a warning is a comment, not a signal. If a step's failure invalidates the steps after it, it must be non-zero by default; "strict mode" as an opt-in just relocates the silent failure to whoever didn't pass the flag. Audit the last step of every command specially: it's the one that most often degrades to a warning because "the real work already succeeded".
+
+**Tags:** `#cli` `#exit-code` `#silent-failure` `#kubernetes` `#rollout` `#fail-closed` `#tool-021` `#gotcha`
