@@ -25,6 +25,13 @@ glances_opts: "-w --disable-autodiscover"
 # ~900MB RAM and runs the aarch64 `-full` image, so the API can take well over
 # a minute to answer while the container is perfectly healthy. A check that
 # fails on a working deploy is worse than no check — it teaches you to ignore
-# the red. 12x5s (~60s) covers the slowest node in the fleet.
+# the red.
+#
+# Budget, stated honestly because the two cases differ a lot (the request
+# `timeout` in tasks/main.yml is part of the total, not separate from it):
+#   - connection refused (still starting): fails instantly → ~12x5s ≈ 60s
+#   - endpoint hangs: each attempt burns the full timeout → 12x(10+5) ≈ 180s
+# 60s is the case this was tuned for; 180s is the worst case accepted as the
+# price of not going red on a healthy slow node.
 glances_health_retries: 12
 glances_health_delay: 5

@@ -110,11 +110,16 @@
       register: glances_status
       changed_when: false
 
+    # `--disable-autodiscover` mirrors roles/glances/defaults/main.yml and is
+    # load-bearing for the same reason: Glances 4.5.x web mode starts a zeroconf
+    # client that dies on `gethostbyname(None)`, crash-looping the container.
+    # Jetson cannot use the shared role (Ubuntu 18.04 → `raw` module only), so
+    # the flag is duplicated here on purpose. Change both together.
     - name: Start Glances container
       raw: >
         docker run -d --name glances --restart unless-stopped
         -p 61208:61208
-        -e GLANCES_OPT=-w
+        -e GLANCES_OPT='-w --disable-autodiscover'
         -v /var/run/docker.sock:/var/run/docker.sock:ro
         -v /etc/os-release:/etc/os-release:ro
         --pid host
