@@ -40,7 +40,7 @@ A new `infra/ansible/roles/dev_node/` role, wired into `provision-ace2.yml`, so 
 ## Risks / open questions
 
 - **Atomic-PR size.** The role (tooling + dotfiles + workspace + dev-session + tmux-resurrect + D6 timers) may exceed the ~300 LOC cap. Mitigation: if the core role alone approaches the cap, split the D6 housekeeping timers into a follow-up (ANSIBLE-030) and ship core first. Decide during `tasks.md`.
-- **mise activation in non-interactive contexts.** mise must resolve tool shims for (a) Ansible tasks that invoke node/go/python, (b) agent processes launched by `dev-session.sh`, and (c) plain SSH login shells. Pin the mise version; verify activation works in a non-login shell, not only in an interactive zsh.
+- ~~**mise activation in non-interactive contexts.**~~ **Resolved 2026-08-07.** Shims (not `mise activate`) on PATH via `/etc/profile.d/mise.sh` + the `.bashrc.local`/`.zshrc.local` seam cover (b) agent processes under `dev-session.sh` (interactive, inside tmux) and (c) SSH login shells. (a) is moot — no role task invokes a bare `node|go|python`; the toolchain task calls `mise` by absolute path. Truly non-interactive `ssh host 'cmd'` is out of scope by decision; see `verification.md` "Scope of f4".
 - **Coexistence with `ace2_services` (Ollama).** `dev_node` must not stomp ace2's existing Docker config, firewall, or the Ollama service. Verify additive provisioning leaves Ollama healthy.
 - **dotfiles idempotency + no secret material.** The dotfiles bootstrap must be safe to re-run and must not pull secrets onto the box (secrets are PR-1c's concern via BW scoping). Confirm the dotfiles `setup` is idempotent and secret-free.
 - **tmux-resurrect install method** (TPM vs vendored git clone) — resolve in `tasks.md`; prefer the method that is idempotent and offline-tolerant.
@@ -51,7 +51,7 @@ A new `infra/ansible/roles/dev_node/` role, wired into `provision-ace2.yml`, so 
 - [ ] `infra/ansible/roles/dev_node/` exists (`defaults/`, `tasks/`, `templates/`, `handlers/`) and is wired into `provision-ace2.yml`.
 - [ ] `make provision NODE=ace2 ENV=staging` is idempotent (only "changed" on first run per item) and coexists with the running Ollama service.
 - [ ] After provisioning: `tmux-resurrect`, `neovim`, `gh`, and dotfiles are present for the interactive user.
-- [ ] `mise` is installed; `.mise.toml` pins node/go/python; `mise list` shows them and `node|go|python --version` resolve in a fresh non-login shell.
+- [ ] `mise` is installed; the global config pins node/go/python; `mise list` shows them and `node|go|python --version` resolve in **login and interactive** shells. (Narrowed 2026-08-07 from "a fresh non-login shell": non-interactive `ssh host 'cmd'` reads neither `/etc/profile.d` nor `~/.bashrc` and is out of scope — see `verification.md` "Scope of f4".)
 - [ ] `~/bin/dev-session.sh` launches named tmux sessions; tmux-resurrect restores them across a reboot.
 - [ ] Workspace skeleton exists; `~/workspaces/{claude,codex,pi}-agent/` are present and re-clonable.
 - [ ] Housekeeping timers are installed + active **or** split to a tracked follow-up (ANSIBLE-030); disk-threshold alert wired through NOTIFY-001.

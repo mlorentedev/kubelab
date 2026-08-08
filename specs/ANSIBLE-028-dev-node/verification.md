@@ -8,24 +8,51 @@ created: "2026-06-29"
 ## Evidence
 
 Criteria map to `features.json` (f1–f8). All runtime criteria have now been exercised
-against a real ace2 from a Linux controller (2026-08-06).
+against a real ace2 from a Linux controller (2026-08-06); the last open criterion (f4)
+was closed by a scope decision on 2026-08-07.
 
 - [x] f1 (role exists + wired) — files under `infra/ansible/roles/dev_node/`, wired in `provision-ace2.yml`
 - [x] f2 (idempotent + coexists with Ollama) — pass 1 `changed=4`, pass 2 `changed=0`, exit 0 both
 - [x] f3 (nvim, gh, tmux-resurrect, dotfiles present) — criterion command PASS
+- [x] f4 (toolchain resolves in login + interactive shells) — both classes PASS; see "Scope of f4"
 - [x] f5 (`dev-session.sh` launches named sessions) — 4 detached sessions, idempotent re-invoke
 - [x] f6 (workspace skeleton + per-agent dirs) — criterion command PASS
 - [x] f7 (D6 split tracked) — ANSIBLE-030 (#858)
 - [x] f8 (Ollama still up) — container up throughout, 11434 listening
-- [ ] **f4 (toolchain resolves in a "fresh non-login shell") — the one open criterion.**
-      Login and interactive shells PASS (shims via `/etc/profile.d` + the `.local`
-      files). Non-interactive (`ssh host 'cmd'`) FAILS and is not fixable from this
-      role: it reads neither `profile.d` nor `.bashrc`, whose Ubuntu stock copy
-      returns at `[[ $- != *i* ]]`. **Needs a human wording decision** — see
-      `features.json` f4 evidence. Options: (a) narrow the criterion to
-      login+interactive (passes today), (b) add `/etc/environment` (static PATH,
-      system-wide, loses the per-user guard), (c) keep it narrow and have Ansible
-      tasks use the explicit shims path.
+
+### Scope of f4 — decided 2026-08-07
+
+f4 originally said "a fresh non-login shell", which conflates two shell classes that
+behave differently. The criterion now reads **login + interactive**, and both PASS —
+re-run as rewritten against a live ace2 on 2026-08-07, `rc=0` both halves, node
+v24.19.0 / go1.26.5 / Python 3.12.13 in each. `/etc/profile.d/mise.sh` covers login,
+the `.bashrc.local`/`.zshrc.local` seam covers interactive, and both put the same mise
+shims on PATH.
+
+**Non-interactive (`ssh host 'cmd'`) is explicitly out of scope.** That shell class
+reads neither `/etc/profile.d` nor `~/.bashrc` — Ubuntu's stock `.bashrc` returns at
+`[[ $- != *i* ]]` — so no change inside this role can reach it. This is a property of
+the Unix shell startup model, not a defect in the role.
+
+Accepted because every consumer named in ADR-058 D1 is already covered:
+
+| Consumer | Shell class | Covered by |
+| --- | --- | --- |
+| Agents launched by `dev-session.sh` | interactive (inside tmux) | `.bashrc.local` seam |
+| Operator SSH into the box | login | `/etc/profile.d/mise.sh` |
+| This role's own toolchain task | none — absolute path | `~/.local/bin/mise install` |
+
+Rejected, and why:
+
+- **(b) `/etc/environment`** — would cover the non-interactive case, but the PATH there
+  is static and system-wide, losing the `id -un` guard in `mise-profile.sh.j2`. Root
+  and every other account would inherit `dev_node_user`'s toolchain.
+- **(c) explicit shims path in each task** — works, but is a permanent discipline cost:
+  every future task must remember the variable. No task needs it today.
+
+**Consequence to know:** a future Ansible task, cron job, or CI step that shells into
+ace2 non-interactively and calls a bare `node`/`go`/`python` will get the system
+binary, not the pinned one. Such a caller must invoke via the absolute shims path.
 
 ## Test status
 
@@ -121,7 +148,8 @@ run to complete end-to-end came immediately after.
   parent dir, so the first run would fail on a fresh node without it.
   **Resolved at provision:** shims (not `mise activate`) are used precisely so the
   toolchain resolves outside interactive shells; verified for login and interactive.
-  The residual non-interactive gap is f4's open wording question, not a mise defect.
+  The residual non-interactive gap is an accepted scope boundary (see "Scope of f4"),
+  not a mise defect.
 - **`dev_node_user` from `networking.ssh_users.homelab`** (SSOT), not a hardcoded name.
 - **dotfiles bootstrap runs `setup-linux.sh`** with `changed_when` tied to the repo
   clone state (`_dotfiles.changed`). **Open for provision validation, two named

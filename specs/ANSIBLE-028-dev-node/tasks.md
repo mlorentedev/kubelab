@@ -17,17 +17,17 @@ created: "2026-06-29"
 
 > Ansible role, not a test-first unit — "tests" are the `features.json` verification
 > commands run against the provisioned node. Provisioning needs a Linux Ansible
-> controller (this repo's dev workstation is Windows); runtime criteria are verified
-> when the role is applied.
+> controller (Ansible has no native Windows control node); runtime criteria were
+> verified from `msi` (mesh Linux controller) against a live ace2 on 2026-08-06.
 
 - [x] `dev_node/defaults/main.yml` — user, mise, tmux-resurrect, dotfiles, workspace, apt vars ✓ 2026-07-09
 - [x] `dev_node/tasks/main.yml` — neovim + gh (apt repo); mise + pinned toolchains; tmux-resurrect vendored clone + wiring; dotfiles clone + bootstrap; workspace skeleton; dev-session.sh ✓ 2026-07-09
-- [x] `dev_node/templates/{mise-config.toml,dev-session.sh}.j2` ✓ 2026-07-09
+- [x] `dev_node/templates/{mise-config.toml,dev-session.sh,mise-profile.sh}.j2` ✓ 2026-07-09 (`mise-profile.sh.j2` added 2026-08-06 — `/etc/profile.d` login-shell activation)
 - [x] `dev_node/handlers/main.yml` (empty — D6 handlers land in ANSIBLE-030) ✓ 2026-07-09
 - [x] Wired into `provision-ace2.yml` (`dev_node_user` from `networking.ssh_users.homelab` SSOT) ✓ 2026-07-09
 - [x] D6 housekeeping timers split to follow-up ANSIBLE-030 (#858) ✓ 2026-07-09
-- [ ] **Provision-verify** on ace2 (needs Linux controller): `make provision NODE=ace2 ENV=staging --tags dev_node` — idempotency, Ollama coexistence, tools present, mise resolves, dev-session launches
-- [ ] Iterate on provisioning output (mise non-login activation, dotfiles idempotency — flagged in proposal)
+- [x] **Provision-verify** on ace2 (Linux controller `msi`): `make provision NODE=ace2 ENV=staging --tags dev_node` — idempotency (`changed=0` on pass 2), Ollama coexistence, tools present, mise resolves, dev-session launches ✓ 2026-08-06
+- [x] Iterate on provisioning output — five defects fixed (dotfiles branch `main`, `chdir` for `setup-linux.sh`, bootstrap ordering, `become_user: root` for `/etc/profile.d`, single-owner config split); mise shell activation scoped by decision ✓ 2026-08-07
 
 ## Closing
 
@@ -35,7 +35,7 @@ created: "2026-06-29"
 - [x] YAML lint passes (pre-commit yamllint) — verify at commit
 - [x] No unrelated changes in the diff (no scope creep) ✓
 - [x] `verification.md` filled in ✓
-- [ ] PR opened (draft) referencing this spec folder — runtime `features.json` still `pending`
+- [x] PR opened ([#859](https://github.com/mlorentedev/kubelab/pull/859)) referencing this spec folder — all 8 `features.json` entries `verified` ✓ 2026-08-07
 
 ## Machine-readable features
 
