@@ -16,11 +16,20 @@ dev_node_home: "/home/{{ dev_node_user }}"
 # The mise binary itself; empty => the installer's latest. The reproducible
 # SSOT that matters is the toolchain pins below, materialized in mise config.
 dev_node_mise_version: ""
+#
 # node/go/python pinned in the global mise config (single source of truth).
+# EXACT versions, deliberately — `lts`/`latest`/`3.12` are moving aliases that
+# resolve differently on every reprovision, which would make ADR-058 D1's
+# "reproducible by construction" false: two nodes provisioned a month apart
+# would get different toolchains from identical IaC. Bumping is a reviewed
+# one-line edit here, which is the point.
+#
+# These are the versions verified on ace2 (2026-08-07). To bump: change the
+# value, reprovision, and update the version claims in the spec's f4 evidence.
 dev_node_toolchains:
-  node: "lts"
-  go: "latest"
-  python: "3.12"
+  node: "24.19.0"
+  go: "1.26.5"
+  python: "3.12.13"
 
 # --- tmux-resurrect (vendored git clone: idempotent, offline-tolerant) ----
 # Base `tmux` ships via base_system (do NOT re-declare it here).

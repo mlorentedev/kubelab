@@ -73,6 +73,51 @@ present, but a real power-cycle test has never run. Tracked as **ANSIBLE-032
 ([#884](https://github.com/mlorentedev/kubelab/issues/884))** rather than claimed — the
 boundary is deliberate, not an oversight.
 
+### Toolchain pins: aliases replaced with exact versions — 2026-08-07
+
+Review (CodeRabbit and Codex, independently) caught a contradiction between the code and
+everything written about it: `dev_node_toolchains` held `node: lts`, `go: latest`,
+`python: "3.12"` — three moving aliases — while five separate sites called them "pinned"
+and the whole point of ADR-058 D1 is a dev env "reproducible by construction". Two nodes
+provisioned a month apart from identical IaC would have gotten different toolchains, and
+f4's evidence names concrete versions the config could not guarantee.
+
+Fixed by pinning the exact versions already running on ace2. This is the cheaper half of
+the trade: bumping is now a reviewed one-line edit instead of an invisible drift.
+
+Verified on a live ace2, both passes:
+
+- Pass 1 `changed=1` — only the mise config template re-rendered. `mise install`
+  reported `ok`, confirming the exact pins resolve to what was already installed, so the
+  change is a no-op at runtime and a correctness fix going forward.
+- Pass 2 `changed=0` — convergence holds.
+- `mise list` now reports the *requested* column as `24.19.0` / `1.26.5` / `3.12.13`
+  rather than `lts` / `latest` / `3.12`, and `node|go|python --version` still resolve.
+
+### What f2 does and does not measure — scoped 2026-08-07
+
+The deferral recorded below ("*a robust fix … deferred to the provision session where
+the script's real behaviour can be observed*") had its precondition met: that session
+ran on 2026-08-06/07. The observation is in, so the boundary is now stated rather than
+left open.
+
+**Measured:** the role converges. Two consecutive passes, second reports `changed=0`,
+and no task flips to `changed` on the second pass — including the passes that ran
+immediately after `setup-linux.sh` redeployed the tracked rc files.
+
+**Not measured:** whether `setup-linux.sh` is *internally* idempotent. Its task derives
+`changed_when` from the clone's state (`_dotfiles.changed`), so a non-idempotent script
+would still report `ok` on an unchanged clone. `f2`'s `behavior` text was narrowed
+accordingly — it claims role-level convergence, which is what the instrument sees.
+
+The fix (gate on a success marker rather than the clone, so a half-failed bootstrap
+re-runs and local drift heals) is **ANSIBLE-031
+([#863](https://github.com/mlorentedev/kubelab/issues/863))**, deliberately not folded
+into this spec-scoped PR. Note a CodeRabbit thread on this PR marks this item
+"✅ Addressed in commits 072a5c7 to bfce919" — **that marker is wrong**; those commits
+did the config-ownership split and never touched the gating. Do not resolve the thread
+on the bot's say-so.
+
 ### Criterion commands must be executable as written
 
 f2's command read `make provision NODE=ace2 ENV=staging --tags dev_node`. `make` rejects

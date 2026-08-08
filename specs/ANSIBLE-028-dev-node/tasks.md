@@ -31,10 +31,10 @@ created: "2026-06-29"
 
 ## Closing
 
-- [x] Every acceptance criterion has a `features.json` entry with an executable verification command ✓
-- [x] YAML lint passes (pre-commit yamllint) — verify at commit
-- [x] No unrelated changes in the diff (no scope creep) ✓
-- [x] `verification.md` filled in ✓
+- [x] Every acceptance criterion has a `features.json` entry with an executable verification command — each one confirmed runnable verbatim (f2's was corrected from `--tags` to `TAGS=`) ✓ 2026-08-07
+- [x] YAML lint passes (pre-commit yamllint) — green on every commit in this branch ✓ 2026-08-07
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-07
+- [x] `verification.md` filled in ✓ 2026-08-07
 - [x] PR opened ([#859](https://github.com/mlorentedev/kubelab/pull/859)) referencing this spec folder — all 8 `features.json` entries `verified` ✓ 2026-08-07
 
 ## Machine-readable features

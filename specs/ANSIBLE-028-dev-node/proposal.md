@@ -19,12 +19,12 @@ A new `infra/ansible/roles/dev_node/` role, wired into `provision-ace2.yml`, so 
 
 - **tmux-resurrect** layered on the base `tmux` package (base `tmux` ships via ANSIBLE-021 / #420; this role does **not** re-declare the package).
 - **neovim** (headless editing).
-- **mise**-managed language toolchains — `node`, `go`, `python` pinned in a versioned `.mise.toml` (single reproducible source of truth for tool versions).
+- **mise**-managed language toolchains — `node`, `go`, `python` pinned to **exact versions** in the global mise config (`~/.config/mise/config.toml`, rendered from `dev_node_toolchains`), the single reproducible source of truth for tool versions. Moving aliases (`lts`/`latest`) are deliberately avoided: they would resolve differently on every reprovision and make D1's reproducibility claim false.
 - **gh** CLI.
 - **dotfiles** applied for the interactive user (`networking.ssh_users.homelab`, e.g. `manu`): the role clones the dotfiles repo and runs its `setup`/`dotf` bootstrap (a dev-node is a development machine, so the "never clone on deploy targets" rule does not apply).
 - **workspace skeleton**: `~/Projects/*`, `~/workspaces/{claude,codex,pi}-agent/` (each its own clone, for filesystem isolation between concurrent agents), `~/bin/`.
 - **`~/bin/dev-session.sh`**: a tmux session launcher that opens named sessions per agent + editor; `tmux-resurrect` persists them across reboot.
-- **housekeeping** (ADR-058 D6), codified as `systemd` timers: docker/buildx prune (size-capped), git branch+worktree prune + periodic gc, language-cache prune, agent-workspace reset script, and a disk-usage threshold alert via the existing Glances + notify fabric (NOTIFY-001).
+- ~~**housekeeping** (ADR-058 D6), codified as `systemd` timers: docker/buildx prune (size-capped), git branch+worktree prune + periodic gc, language-cache prune, agent-workspace reset script, and a disk-usage threshold alert via the existing Glances + notify fabric (NOTIFY-001).~~ **Split to ANSIBLE-030 ([#858](https://github.com/mlorentedev/kubelab/issues/858))** to keep PR-1a within the atomic-PR cap, as this proposal's own risk section foresaw. Not delivered by this PR.
 
 **ace2 keeps Ollama running alongside** — this PR is purely additive (12GB holds both; on-demand `keep_alive` does not consume when idle).
 
