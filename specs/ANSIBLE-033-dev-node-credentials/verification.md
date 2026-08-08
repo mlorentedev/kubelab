@@ -76,8 +76,33 @@ gap is visible rather than assumed closed:
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- **The role does not run `gh auth setup-git`; it asserts the helper instead.**
+  That command writes `~/.gitconfig`, which the dotfiles bootstrap — run earlier
+  in this same role — redeploys wholesale every pass. Deleting the helper and
+  re-provisioning showed the bootstrap restoring it *before* the role's own check
+  ran, so a write here is erased next pass and the task would report `changed`
+  forever. A guarded write is not a fallback in that situation, it is a churn
+  generator. Split: the token is this role's, the helper is dotfiles'. Rejected
+  alternative — writing to a `~/.gitconfig.local` seam: no such seam exists, and
+  creating one is a dotfiles change (the `dotfiles#788` precedent for
+  `.tmux.conf.local`), not a kubelab one. Cost: a cross-repo coupling, named in
+  the assert's failure message.
+- **`SECRET_CATALOG` registered `envs=("staging",)`, not a `common` env.** No
+  `common` pseudo-env exists — `envs` is the audit dimension, and `audit()`
+  merges common into each environment. Staging is the env ace2 provisions with,
+  so it is where the token's absence must be reported. Same construction as the
+  Argo CD hub keys under `prod`.
+- **The playbook's SOPS decryption needed `tags: [always]`.** Without it a
+  `TAGS=dev_node` run — the command AC4 prescribes — skipped decryption and every
+  SOPS-sourced var silently fell back to its default. The play reported success
+  and delivered no credential. The same pattern in the other `provision-*.yml`
+  playbooks is tracked as ANSIBLE-034 (#893); they fail loudly rather than
+  silently because their secret vars carry no `default`.
+- **f4 was strengthened after it passed while proving nothing.** Convergence
+  alone cannot distinguish "converged with the credential in place" from
+  "converged because every identity task skipped". It now also asserts the role
+  saw a non-empty token, keyed on the token *read* rather than the login — the
+  login legitimately skips on an already-converged node.
 
 ## Promotion candidates
 

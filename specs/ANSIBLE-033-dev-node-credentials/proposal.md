@@ -29,7 +29,11 @@ Observable after this PR, none of which is possible today:
 2. An agent working in `~/workspaces/<agent>/` clones a **private** repository of this owner, commits, pushes a branch and opens a PR — with no human at the keyboard and no agent forwarding. (Deliberately not "a kubelab repository": `mlorentedev/kubelab` is **public**, so proving the flow against it would prove nothing about private access. The acceptance fixture is a private repo — see AC2.)
 3. That identity is **not the operator's**. It reaches only the repositories named in the token's scope, carries only `contents` + `pull-requests` write, and **stops working on a date GitHub enforces** rather than a date someone remembers.
 
-The mechanism is one credential, not two: `gh auth login --with-token` followed by `gh auth setup-git` makes the same PAT serve git pushes over HTTPS, so there is one secret to rotate and one to revoke. No SSH private key is placed on the node.
+The mechanism is one credential, not two: `gh auth login --with-token` installs the token, and `gh` registered as git's credential helper makes that same PAT serve git pushes over HTTPS — so there is one secret to rotate and one to revoke. No SSH private key is placed on the node.
+
+**Who writes the helper changed during implementation** (2026-08-08). The obvious form is for this role to run `gh auth setup-git`, and that is what it originally did. But that command writes `~/.gitconfig`, and the dotfiles bootstrap — which this same role runs, earlier — redeploys that file wholesale on every pass. Deleting the helper by hand and re-provisioning showed the bootstrap restoring it *before* the role's own check ran, so a write here is erased next pass and the task would report `changed` forever. That is the "one writer per file" failure ANSIBLE-028 already paid for with `~/.bashrc` and `~/.tmux.conf`.
+
+The split is therefore: **the token is this role's, the helper is dotfiles'**. The role asserts the wiring and fails loudly if it is missing, rather than fighting for a file it does not own. The observable outcome in AC1/AC2 is unchanged — the acceptance probe proves it by pushing over HTTPS under the PAT, which does not care which file declares the helper. The cross-repo coupling this creates (a dev node's git identity depends on `mlorentedev/dotfiles` keeping its `[credential "https://github.com"]` block) is named in the assert's failure message.
 
 ### The token contract
 

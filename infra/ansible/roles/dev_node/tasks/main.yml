@@ -226,12 +226,25 @@
       changed_when: true
       tags: [dev_node, gh, identity]
 
-    # `gh auth setup-git` registers gh as git's credential helper, which is what
-    # makes ONE token serve both tools — the "one secret to rotate, one to
-    # revoke" claim. It is not idempotent on its own: it appends a helper entry
-    # every run, so it needs the guard below or f4's second pass never reports
-    # changed=0.
-    - name: Check whether gh is already git's credential helper
+    # Registering gh as git's credential helper is what makes ONE token serve
+    # both tools. That wiring lives in ~/.gitconfig — a file the dotfiles
+    # bootstrap (run earlier in THIS role) redeploys wholesale every pass.
+    #
+    # So this role does NOT run `gh auth setup-git`. Measured on ace2
+    # 2026-08-08: the helper was deleted by hand, and the bootstrap had already
+    # restored it before the check below ran. Anything written here is erased on
+    # the next pass, and a role that keeps rewriting it reports `changed`
+    # forever — the "one writer per file" failure ANSIBLE-028 already paid for
+    # with ~/.bashrc and ~/.tmux.conf. A guarded write is not a fallback here;
+    # in the only case it would ever fire it is a churn generator.
+    #
+    # Division of labour: the token is this role's, the wiring is dotfiles'
+    # (the `[credential "https://github.com"]` block in its .gitconfig). We
+    # verify the contract instead of fighting for the file, so a missing helper
+    # fails loudly rather than silently costing the "one credential, not two"
+    # property. There is no ~/.gitconfig.local seam to write into; creating one
+    # is a dotfiles change, not a kubelab one.
+    - name: Check whether gh is git's credential helper
       ansible.builtin.command:
         cmd: git config --global --get-regexp '^credential\..*helper$'
       environment:
@@ -243,13 +256,16 @@
       when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
 
-    - name: Make the same token serve git over HTTPS
-      ansible.builtin.command:
-        cmd: gh auth setup-git
-      environment:
-        HOME: "{{ dev_node_home }}"
-      when:
-        - dev_node_github_token | length > 0
-        - "'gh auth git-credential' not in (_git_credential_helper.stdout | default(''))"
-      changed_when: true
+    - name: Assert the same token serves git over HTTPS
+      ansible.builtin.assert:
+        that:
+          - "'gh auth git-credential' in (_git_credential_helper.stdout | default(''))"
+        fail_msg: >-
+          The dev-node token is installed, but git will not use it over HTTPS:
+          no `gh auth git-credential` helper is configured. ~/.gitconfig is owned
+          by the dotfiles bootstrap, so this role must not write it (one writer
+          per file). Restore the [credential "https://github.com"] block in
+          mlorentedev/dotfiles .gitconfig, then re-provision.
+        success_msg: gh is git's credential helper — one credential serves both.
+      when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
