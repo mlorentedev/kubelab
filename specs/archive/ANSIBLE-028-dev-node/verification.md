@@ -266,7 +266,11 @@ run to complete end-to-end came immediately after.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/ANSIBLE-028-dev-node/` -> `specs/archive/ANSIBLE-028-dev-node/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-08-07
+- [x] Folder moved: `specs/ANSIBLE-028-dev-node/` -> `specs/archive/ANSIBLE-028-dev-node/` ✓ 2026-08-07
+- [x] Bitácora ticket closed with PR link — [#816](https://github.com/mlorentedev/kubelab/issues/816) auto-closed by [PR #859](https://github.com/mlorentedev/kubelab/pull/859) (`Closes #816`, merged as `43fd3e8`) ✓ 2026-08-07
+- [x] Promotions above executed ✓ 2026-08-07:
+  - Both lessons appended to the repo's `docs/lessons.md` (config-ownership; Ansible has no native Windows control node).
+  - Cross-project promotion **folded into the existing `00_meta/patterns/pattern-setup-script-idempotence.md`** as its 4th rule ("One writer per file") rather than creating a new pattern file — decided at archive per `feedback_no_doc_proliferation`. The alternative home named in the candidate list, `pattern-contract-defaults-per-machine-override`, does not exist in the vault.
+  - ADR: none — ADR-058 already covers the decision, as recorded.
+- [x] Follow-ups tracked, not dropped: ANSIBLE-030 ([#858](https://github.com/mlorentedev/kubelab/issues/858), D6 timers), ANSIBLE-031 ([#863](https://github.com/mlorentedev/kubelab/issues/863), bootstrap `changed_when`), ANSIBLE-032 ([#884](https://github.com/mlorentedev/kubelab/issues/884), reboot restore) ✓ 2026-08-07
