@@ -2,3 +2,36 @@
 # Default deploy dir for the shared Glances role.
 # Overridable per-node via the playbook role vars block.
 glances_deploy_dir: /opt/glances
+
+# Flags passed to the container as GLANCES_OPT.
+#
+# `--disable-autodiscover` is load-bearing, not tuning. In web mode (`-w`)
+# Glances 4.5.x starts a zeroconf autodiscover client; on a host where it
+# cannot resolve a bind address it passes None into socket.gethostbyname()
+# and dies on TypeError, so the container crash-loops forever:
+#
+#   File "/app/glances/servers_list_dynamic.py", line 194, in __init__
+#       zeroconf_bind_address = socket.gethostbyname(zeroconf_bind_address)
+#   TypeError: gethostbyname() argument 1 must be str, bytes or bytearray, not None
+#
+# Autodiscover exists to find *other* Glances servers on the LAN to browse
+# from one UI. This fleet does not use that — each node is scraped at its own
+# Tailscale address — so the feature is pure liability here.
+glances_opts: "-w --disable-autodiscover"
+
+# Health-check retry window after `compose up`.
+#
+# 5x5s was tuned on x86 nodes and is a FALSE RED on the RPi 3: that node has
+# ~900MB RAM and runs the aarch64 `-full` image, so the API can take well over
+# a minute to answer while the container is perfectly healthy. A check that
+# fails on a working deploy is worse than no check — it teaches you to ignore
+# the red.
+#
+# Budget, stated honestly because the two cases differ a lot (the request
+# `timeout` in tasks/main.yml is part of the total, not separate from it):
+#   - connection refused (still starting): fails instantly → ~12x5s ≈ 60s
+#   - endpoint hangs: each attempt burns the full timeout → 12x(10+5) ≈ 180s
+# 60s is the case this was tuned for; 180s is the worst case accepted as the
+# price of not going red on a healthy slow node.
+glances_health_retries: 12
+glances_health_delay: 5

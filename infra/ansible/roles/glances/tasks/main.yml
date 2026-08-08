@@ -78,8 +78,8 @@
     method: GET
     status_code: 200
     timeout: 10
-  retries: 5
-  delay: 5
+  retries: "{{ glances_health_retries }}"
+  delay: "{{ glances_health_delay }}"
 
 - name: Report Glances status
   debug:
