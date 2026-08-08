@@ -69,8 +69,9 @@ permanent delta.
 **Still unverified:** actual session restore across a reboot. The proposal's f5 criterion
 said "tmux-resurrect restores them across a reboot"; `features.json` f5 only verifies
 that `dev-session.sh` launches the sessions. The bindings and options are now proven
-present, but a real power-cycle test has never run. Tracked separately rather than
-claimed — the boundary is deliberate, not an oversight.
+present, but a real power-cycle test has never run. Tracked as **ANSIBLE-032
+([#884](https://github.com/mlorentedev/kubelab/issues/884))** rather than claimed — the
+boundary is deliberate, not an oversight.
 
 ### Criterion commands must be executable as written
 
