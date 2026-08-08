@@ -390,7 +390,28 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="GitHub PAT for self-hosted Actions runner registration",
         kind=SecretKind.EXTERNAL,
         services=("github-runner",),
-        rotate_note="Re-provision ace2 (Ansible). Token must have repo + workflow scope.",
+        # The runner moved ace2 -> Beelink with ADR-028 / IDP-024; the note still
+        # said ace2, which would send a rotation to the wrong host.
+        rotate_note="Re-provision beelink (Ansible). Token must have repo + workflow scope.",
+    ),
+    # Dev-node machine identity (ANSIBLE-033, ADR-058 D1/D3). Lives in
+    # common.enc.yaml, NOT per-env: it authenticates ace2 to GitHub, and GitHub is
+    # not an environment. Audited under `staging` because that is the env ace2
+    # provisions with (`make provision NODE=ace2 ENV=staging`) and common merges
+    # into the staging audit — same shape as the Argo CD hub keys above, which are
+    # audited under `prod`. There is no `common` pseudo-env in this catalog.
+    SecretSpec(
+        key_path="apps.services.automation.dev_node.github_token",
+        description="Fine-grained GitHub PAT giving the ace2 dev node its own machine identity (gh + git over HTTPS)",
+        kind=SecretKind.EXTERNAL,
+        services=("dev-node",),
+        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, 90d expiry",
+        rotate_note=(
+            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Mint a replacement, "
+            "`toolkit secrets set` it in common.enc.yaml, `make provision NODE=ace2 ENV=staging "
+            "TAGS=dev_node`, then revoke the old one."
+        ),
+        envs=("staging",),
     ),
     # Apprise notification gateway (NOTIFY-001, ADR-044). Promoted to staging+prod.
     # bot-token is shared (common SOPS); chat IDs are per-env (dedicated Telegram
