@@ -17,7 +17,7 @@ created: "2026-08-07"
 - [x] `proposal.md` is complete and acceptance criteria are testable ✓ 2026-08-07
 - [x] No open questions left in `proposal.md` "Risks / open questions" — expiry resolved to 90d; the GitHub App is deferred to its own ADR, which is a decision, not an open question ✓ 2026-08-07
 - [x] Token minted and stored: `apps.services.automation.dev_node.github_token` present in `staging.enc.yaml` (verified structurally, never decrypted) ✓ 2026-08-07
-- [ ] **BLOCKING — human input:** the enumerated repository list for the token's scope. Everything below is written; this is the value that fixes the real blast radius, and it cannot be inferred.
+- [x] Repository scope decided: **All repositories**, deliberately and against the agent's recommendation; rationale and compensating controls recorded in `proposal.md`. Token moved to `common.enc.yaml`; `staging` no longer carries it (both verified structurally) ✓ 2026-08-07
 
 ## Implementation
 
@@ -31,7 +31,7 @@ created: "2026-08-07"
 - [ ] [AC4] Confirm idempotence the way ANSIBLE-028 learned to: two consecutive passes, second reports `changed=0`, and read the **task list**, not just the aggregate count.
 - [ ] [AC2] End-to-end from a tmux session on ace2: clone a private repo, commit, push a branch, `gh pr create`. No agent forwarding, no human at the keyboard. Delete the test PR and branch afterwards.
 - [ ] [AC5] Assert the negative: no prod SOPS key, no prod kubeconfig context, no prod-scoped token reachable from ace2. Pin the exact paths here against the real prod artefact names.
-- [ ] [AC7] Write the rotation runbook in `docs/runbooks/`: what breaks on expiry day (agent pushes start failing 401), how it surfaces, and the exact mint + re-provision + revoke sequence. Due 2026-11-05.
+- [ ] [AC7] Write the rotation runbook in `docs/runbooks/`: what breaks on expiry day (agent pushes start failing 401), how it surfaces, and the exact mint + re-provision + revoke sequence. Due 2026-11-05. Include a **"narrow repository access?"** step — with the repo axis open, rotation is the natural moment to reconsider it.
 - [ ] [AC6] Confirm the token never reaches a log, a process argument, or a world-readable file — `no_log` on the auth task, and `gh`'s own store holding the credential rather than a hand-rolled dotfile.
 
 ## Closing
