@@ -14,13 +14,36 @@ agent may not promote a feature out of `pending`.
 
 | AC | Feature | What it proves | State | Evidence |
 | --- | --- | --- | --- | --- |
-| AC1 | f1 | `gh` authenticated on ace2, working non-interactively | `pending` | Role tasks written; **requires a live ace2** |
-| AC2 | f2 | Private clone → commit → push → PR from tmux, no agent forwarding | `pending` | **requires a live ace2** |
-| AC3 | f3 | Fine-grained token; `workflows: write` actually refused | `pending` | **requires a live ace2**; expiry/scope halves are manual |
-| AC4 | f4 | Role delivers the credential from SOPS; second pass `changed=0` | `pending` | Catalog + playbook wiring done and audited (below); convergence **requires a live ace2** |
-| AC5 | f5 | No prod credential reachable from ace2 | `pending` | **requires a live ace2** |
-| AC6 | f6 | Token never in argv/logs/world-readable files; `gh` owns the sink | `pending` | Static half **PASS** 2026-08-08 (below); `hosts.yml` mode check requires a live ace2 |
-| AC7 | f7 | Rotation runbook exists and is operational | `pending` | Verification command **PASS** 2026-08-08, run verbatim (below) |
+| AC1 | f1 | `gh` authenticated on ace2, working non-interactively | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
+| AC2 | f2 | Private clone → commit → push → PR from tmux, no agent forwarding | `pending` | **BLOCKED** — fixture archived; clone half proven, push half unproven |
+| AC3 | f3 | Fine-grained token; `workflows: write` actually refused | `pending` | Not run — blocked on the same fixture; expiry/scope halves are manual |
+| AC4 | f4 | Role delivers the credential from SOPS; second pass `changed=0` | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
+| AC5 | f5 | No prod credential reachable from ace2 | `pending` | **PASS** 2026-08-08 — re-run last, after every node mutation |
+| AC6 | f6 | Token never in argv/logs/world-readable files; `gh` owns the sink | `pending` | **PASS** 2026-08-08 — verbatim, both halves, exit 0 |
+| AC7 | f7 | Rotation runbook exists and is operational | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
+
+**5 of 7 verified.** AC2/AC3 are blocked on one thing only: a private, **non-archived** fixture repository (see f2's evidence). Not a credential problem — see below.
+
+### Node-side evidence 2026-08-08
+
+- **f1 PASS.** `gh auth status` on ace2: logged in to github.com as `mlorentedev`,
+  *Git operations protocol: https*, token `github_pat_…` (fine-grained), stored at
+  `/home/manu/.config/gh/hosts.yml`. `gh api /user --jq .login` → `mlorentedev`.
+- **f4 PASS.** Pass 1 `ok=35 changed=1 failed=0`; pass 2 `ok=35 changed=0 failed=0`.
+  The two `changed` events in an intermediate run were the dotfiles clone + bootstrap
+  (the known ANSIBLE-028 behaviour), not identity churn.
+- **f6 PASS**, both halves — including `stat -c %a ~/.config/gh/hosts.yml` = `600`.
+- **f5 PASS**, deliberately re-run **after** all provisioning: no age key, no `sops`
+  binary, no prod context in `~/.kube/`. The assumption the spec rests on still holds
+  once the node has an identity.
+- **f2 BLOCKED, and the distinction matters.** The push failed 403 *"This repository
+  was archived so it is read-only"*. Everything before it succeeded on the node:
+  the fixture was confirmed private via the API **under the dev-node token**, and
+  `git clone` over HTTPS completed. So private read access via the PAT is proven;
+  only the write half is unproven. The probe now checks `.archived` up front and
+  reports `F2_FIXTURE_ARCHIVED`, so this cannot be misread as a credential fault.
+  Cleanup behaved correctly throughout — trap fired, no stray branch, no stray
+  tmux session, `F2_FAIL` written immediately rather than after the poll window.
 
 ### Controller-side evidence captured 2026-08-08
 

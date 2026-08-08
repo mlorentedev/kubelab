@@ -50,6 +50,18 @@ rm -f "$RESULT"
 #    public — a public clone would prove nothing about private access.
 gh api "repos/${REPO}" --jq .private | grep -qx true
 
+# 1b. ...and it must be WRITABLE. An archived repo is read-only no matter what
+#     the token grants: the push returns 403 "This repository was archived",
+#     which reads exactly like a permissions failure and sends you auditing the
+#     credential instead of the fixture. Learned the hard way 2026-08-08, when
+#     the first fixture was picked for being dormant — and dormant turned out to
+#     mean archived. Fail here, with a verdict that names the real cause.
+if [ "$(gh api "repos/${REPO}" --jq .archived)" = "true" ]; then
+    echo "F2_FIXTURE_ARCHIVED" >"$RESULT"
+    echo "fixture ${REPO} is archived (read-only) — this is a fixture problem, not a token problem" >&2
+    exit 1
+fi
+
 # 2. Clone over HTTPS explicitly. `gh repo clone` would honour a configured git
 #    protocol and could pick SSH, which would test a key instead of the PAT.
 git clone --quiet --depth 1 "https://github.com/${REPO}" "$WORK"
