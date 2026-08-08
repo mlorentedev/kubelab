@@ -8,13 +8,14 @@ tags: [spec, proposal]
 template_version: "1.0"
 ---
 
-# ANSIBLE-033: Dev node credentials — interim staging-scoped identity
+# ANSIBLE-033: Dev node credentials — interim repo-scoped identity
 
 > **Naming**: file lives at `<repo>/specs/ANSIBLE-033-dev-node-credentials/proposal.md`. `ANSIBLE-033-dev-node-credentials` is `AREA-NNN-slug` (e.g. `TOOL-001-secret-drift`).
 
 ## Why
 
-<!-- from issue #888: ANSIBLE-033: dev node credentials — interim staging-scoped identity (PR-1c of ADR-058) -->
+<!-- from issue #888: ANSIBLE-033: dev node credentials — interim repo-scoped identity (PR-1c of ADR-058) -->
+<!-- Renamed 2026-08-07 from "staging-scoped": that wording was inherited from ADR-058 D3 and is wrong for this credential. The identity is scoped by repository and permission, not by environment — it authenticates a machine to GitHub, and GitHub has no environments. The D3 quote further down keeps "staging-scoped" deliberately: there it refers to the SOPS key ADR-058 claims exists, and altering a quote to match a later rename would falsify it. -->
 
 The dev node ships with a working toolchain and no identity. Verified on ace2 2026-08-07: node/go/python pinned and resolving, `nvim`/`gh`/`git`/`docker`/`tmux` present, agent workspaces created — but `gh auth status` reports not logged in and `~/.ssh` holds only a public key. You can edit, build and run; you cannot clone a private repo, push, or use `gh`. That gap is the whole distance between "there is a dev node" and "I work there", and it blocks the agent workflow D1 exists to enable.
 
