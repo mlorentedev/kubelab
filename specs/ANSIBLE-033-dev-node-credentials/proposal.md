@@ -30,6 +30,34 @@ Observable after this PR, none of which is possible today:
 
 The mechanism is one credential, not two: `gh auth login --with-token` followed by `gh auth setup-git` makes the same PAT serve git pushes over HTTPS, so there is one secret to rotate and one to revoke. No SSH private key is placed on the node.
 
+### The token contract
+
+**Name:** `ace2-dev-node-2026-08`, following `<host>-<purpose>-<YYYY-MM>`.
+
+The host leads because the question a token name has to answer is asked during an incident: *which machine loses access if I revoke this?* The purpose (not the project) follows, per OPS-007's per-purpose convention. The issue month is **not** redundant with the expiry GitHub already displays: a 90-day rotation means two live tokens during the overlap, and you need to tell the new one from the old at a glance. Next is `ace2-dev-node-2026-11`. Deliberately no ticket id — the token rotates, the ticket does not; that traceability lives here.
+
+**SOPS path:** `apps.services.automation.dev_node.github_token`, mirroring the existing `apps.services.automation.github_runner.token`.
+
+**Permissions — granted:**
+
+| Permission | Level | Why |
+| --- | --- | --- |
+| Contents | Read and write | Clone private, and push. Without write there is no `git push` |
+| Pull requests | Read and write | `gh pr create` |
+| Metadata | Read | Mandatory — GitHub forces it alongside any repository permission |
+| Checks | Read | So the agent can see whether its own PR went green |
+| Commit statuses | Read | Same purpose; some checks report here rather than through the Checks API |
+
+The two read permissions close the loop: an agent that opens a PR and cannot observe whether CI passed is only half-useful. They widen no blast radius.
+
+**Permissions — refused, with the consequence stated up front:**
+
+- **`Workflows: write` — refused.** Consequence to know before it surprises someone: **any push touching `.github/workflows/` will be rejected by GitHub.** That is the intended behaviour. This repo's CI runs on a self-hosted runner with access to secrets, so a token that can rewrite a workflow is a token that can execute arbitrary code with those secrets. It is the single largest privilege jump available in this list and it arrives disguised as "I just need to edit a YAML". Workflow changes go through a human.
+- **`Issues: write` — refused.** Agents have no need to file tickets yet; add it the day that changes rather than pre-granting.
+- **`Actions: write` — refused.** No part of the flow triggers or cancels workflow runs.
+
+General rule this list follows: **write only where the flow demands it, read where the agent only needs to observe.**
+
 ## Out of scope
 
 - **Implementing Bitwarden-over-API** (`dotfiles#585`). This spec is the interim that exists *because* that is missing, and its exit trigger.
