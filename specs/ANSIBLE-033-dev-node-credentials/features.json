@@ -2,50 +2,50 @@
   {
     "id": "ANSIBLE-033-dev-node-credentials-f1",
     "behavior": "gh is authenticated on ace2 and works from a NON-interactive shell, not only a login shell (the f4 lesson from ANSIBLE-028: shell class matters)",
-    "verification": "ssh ace2 'gh auth status' && ssh ace2 'gh api /user --jq .login'",
+    "verification": "ssh -o ForwardAgent=no ace2 'gh auth status' && ssh -o ForwardAgent=no ace2 'gh api /user --jq .login'",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "ANSIBLE-033-dev-node-credentials-f2",
-    "behavior": "An agent inside a tmux session clones a private repo, commits, pushes a branch and opens a PR with no human and no agent forwarding; the test artefacts are cleaned up afterwards",
-    "verification": "ssh ace2 'tmux new-session -d -s acceptance-f2 \"set -e; cd /tmp && rm -rf f2 && gh repo clone mlorentedev/kubelab f2 -- --depth 1 && cd f2 && git checkout -b acceptance/ansible-033-$$ && date > .acceptance-probe && git add -A && git commit -m \\\"test(ANSIBLE-033): acceptance probe\\\" && git push -u origin HEAD && gh pr create --fill --draft > /tmp/f2.url && gh pr close --delete-branch \\$(cat /tmp/f2.url) && echo F2_OK > /tmp/f2.result\"' && sleep 60 && ssh ace2 'grep -q F2_OK /tmp/f2.result'",
+    "behavior": "An agent inside a tmux session clones a PRIVATE repo, commits, pushes a branch and opens a PR with no human and no agent forwarding; the test artefacts are cleaned up afterwards",
+    "verification": "scp specs/ANSIBLE-033-dev-node-credentials/probes/f2-private-repo-flow.sh ace2:/tmp/ansible-033-f2.sh && ssh -o ForwardAgent=no ace2 'tmux kill-session -t ansible033f2 2>/dev/null; tmux new-session -d -s ansible033f2 \"bash /tmp/ansible-033-f2.sh\"' && for i in $(seq 1 60); do ssh -o ForwardAgent=no ace2 'test -f /tmp/ansible-033-f2.result' && break; sleep 5; done && ssh -o ForwardAgent=no ace2 'grep -qx F2_OK /tmp/ansible-033-f2.result'",
     "state": "pending",
-    "evidence": ""
+    "evidence": "NOTE at authoring time: the probe body lives in probes/f2-private-repo-flow.sh rather than inline. Inline it would need three quoting layers (ssh -> tmux -> bash) and would expand $WORK on the controller instead of the node — the same class of defect as ANSIBLE-028's f4, whose criterion text turned out to be unrunnable as written. The fixture is mlorentedev/go-dsa-sample: PRIVATE (the earlier draft cloned mlorentedev/kubelab, which is public, so it could have passed without ever proving private access), 15KB, and untouched since 2024-11 so an acceptance branch cannot collide with real work. The probe asserts the fixture is private, clones over an explicit HTTPS URL, and asserts origin is HTTPS — otherwise a configured git protocol could route the push over SSH and test a forwarded key instead of the PAT."
   },
   {
     "id": "ANSIBLE-033-dev-node-credentials-f3",
-    "behavior": "The token is fine-grained (not classic) and its refused permissions are actually refused — a workflow-file push is rejected by GitHub",
-    "verification": "ssh ace2 'gh auth token | grep -q \"^github_pat_\"' && ssh ace2 'gh api -X GET /user/starred --silent' ",
+    "behavior": "The token is fine-grained (not classic) and its refused permissions are actually refused — a push touching .github/workflows/ is rejected by GitHub, and rejected for that reason rather than incidentally",
+    "verification": "scp specs/ANSIBLE-033-dev-node-credentials/probes/f3-workflow-refusal.sh ace2:/tmp/ansible-033-f3.sh && ssh -o ForwardAgent=no ace2 'tmux kill-session -t ansible033f3 2>/dev/null; tmux new-session -d -s ansible033f3 \"bash /tmp/ansible-033-f3.sh\"' && for i in $(seq 1 60); do ssh -o ForwardAgent=no ace2 'test -f /tmp/ansible-033-f3.result' && break; sleep 5; done && ssh -o ForwardAgent=no ace2 'grep -qx F3_OK /tmp/ansible-033-f3.result'",
     "state": "pending",
-    "evidence": "NOTE at authoring time: the `github_pat_` prefix distinguishes fine-grained from classic (`ghp_`) and IS executable. The 90-day expiry and the All-repositories scope are NOT machine-readable from the API for fine-grained PATs — they are confirmed by inspecting the token's settings page, and that manual step is part of this criterion rather than pretended to be automated. Do not mark this feature verified on the executable half alone."
+    "evidence": "NOTE at authoring time: the `github_pat_` prefix distinguishes fine-grained from classic (`ghp_`) and IS executable, as is the workflow-write refusal — the probe pushes a file under .github/workflows/ and requires GitHub to reject it, distinguishing F3_OK (rejected naming the workflow scope) from F3_WRONG_REASON (rejected by a network or auth fault, which proves nothing). The 90-day expiry and the All-repositories scope are NOT machine-readable from the API for fine-grained PATs — they are confirmed by inspecting the token's settings page, and that manual step is part of this criterion rather than pretended to be automated. Do not mark this feature verified on the executable half alone."
   },
   {
     "id": "ANSIBLE-033-dev-node-credentials-f4",
     "behavior": "The credential is delivered reproducibly by the dev_node role from SOPS common, and provisioning converges: a second pass reports changed=0 with no task flipping to changed",
-    "verification": "make provision NODE=ace2 ENV=staging TAGS=dev_node | tee /tmp/c1 && make provision NODE=ace2 ENV=staging TAGS=dev_node | tee /tmp/c2 && grep -qE 'changed=0 .*failed=0' /tmp/c2",
+    "verification": "bash -o pipefail -c \"make provision NODE=ace2 ENV=staging TAGS=dev_node | tee /tmp/ansible-033-c1\" && bash -o pipefail -c \"make provision NODE=ace2 ENV=staging TAGS=dev_node | tee /tmp/ansible-033-c2\" && grep -qE 'changed=0 .*failed=0' /tmp/ansible-033-c2",
     "state": "pending",
-    "evidence": ""
+    "evidence": "NOTE at authoring time: each pass runs under `bash -o pipefail` because `make ... | tee` otherwise reports tee's exit status, so a FAILED first pass would be silently ignored and only the second recap checked. TAGS=, not --tags: make rejects --tags (the ANSIBLE-028 f2 lesson). The aggregate `changed=0` is necessary but not sufficient — tasks.md requires reading the per-task list of the second pass, not just the recap line."
   },
   {
     "id": "ANSIBLE-033-dev-node-credentials-f5",
     "behavior": "No prod credential is reachable from ace2. The age-key absence is the load-bearing part: per SEC-SOPS-001 (#889) any age key on this node would decrypt prod, so this criterion guards the assumption the whole spec rests on",
-    "verification": "ssh ace2 '! test -e ~/.config/sops/age/keys.txt && ! test -e ~/.age/key.txt && ! test -e /etc/sops/age.key && ! command -v sops >/dev/null && ! ls ~/.kube/*prod* 2>/dev/null'",
+    "verification": "ssh -o ForwardAgent=no ace2 '! test -e ~/.config/sops/age/keys.txt && ! test -e ~/.age/key.txt && ! test -e /etc/sops/age.key && ! command -v sops >/dev/null && ! grep -rqi prod ~/.kube/ 2>/dev/null'",
     "state": "pending",
-    "evidence": ""
+    "evidence": "NOTE at authoring time: the kubeconfig half greps the CONTENTS of ~/.kube/ rather than matching filenames. A prod context can sit inside ~/.kube/config while no ~/.kube/*prod* file exists, so the filename-only check in the first draft would have passed with prod cluster access present. The check deliberately does NOT assert ~/.kube is absent: AC5 claims no *prod* credential, and ADR-058 D2's dev loop may legitimately add a staging kubeconfig later. grep on a missing directory exits 2, so the negation still holds on a node with no ~/.kube at all."
   },
   {
     "id": "ANSIBLE-033-dev-node-credentials-f6",
     "behavior": "The token never lands in a process argument, a log line, or a world-readable file; gh owns it in its own credential store",
-    "verification": "grep -rn 'no_log: true' infra/ansible/roles/dev_node/tasks/main.yml && ! grep -rEn 'gh auth login .*--with-token[^|]*\\$\\{?dev_node_github_token' infra/ansible/roles/dev_node/tasks/main.yml && ssh ace2 'test \"$(stat -c %a ~/.config/gh)\" -le 700'",
+    "verification": "grep -A8 'gh auth login' infra/ansible/roles/dev_node/tasks/main.yml | grep -q 'no_log: true' && ! grep -qE -- '--with-token[^|]*dev_node_github_token' infra/ansible/roles/dev_node/tasks/main.yml && ssh -o ForwardAgent=no ace2 'test \"$(stat -c %a ~/.config/gh/hosts.yml)\" = 600'",
     "state": "pending",
-    "evidence": ""
+    "evidence": "NOTE at authoring time: the no_log check is scoped to the 8 lines following the `gh auth login` task, because a bare file-wide grep passes whenever ANY task in the role carries no_log — including one unrelated to the credential. The permission check targets gh's actual secret sink (~/.config/gh/hosts.yml) and asserts mode 600 exactly; the first draft compared the containing directory with `-le 700`, which is a numeric comparison on an octal string and would accept 0644."
   },
   {
     "id": "ANSIBLE-033-dev-node-credentials-f7",
     "behavior": "Expiry day is a scheduled event, not a mystery outage: a rotation runbook exists naming the failure symptom, the mint/re-provision/revoke sequence, and a prompt to reconsider the repository scope",
-    "verification": "test -f docs/runbooks/dev-node-token-rotation.md && grep -qi '401' docs/runbooks/dev-node-token-rotation.md && grep -qi 'revoke' docs/runbooks/dev-node-token-rotation.md && grep -qi 'repository access' docs/runbooks/dev-node-token-rotation.md",
+    "verification": "test -f docs/runbooks/dev-node-token-rotation.md && grep -qi '401' docs/runbooks/dev-node-token-rotation.md && grep -qi 'revoke' docs/runbooks/dev-node-token-rotation.md && grep -qi 'repository access' docs/runbooks/dev-node-token-rotation.md && grep -qi 'mint' docs/runbooks/dev-node-token-rotation.md && grep -q 'make provision NODE=ace2' docs/runbooks/dev-node-token-rotation.md",
     "state": "pending",
-    "evidence": ""
+    "evidence": "NOTE at authoring time: keyword greps cannot prove a runbook is operational, only that it is not empty. The list is therefore anchored on the things whose ABSENCE would make rotation fail in practice — the symptom (401), the re-provision command as it must actually be typed, and the revoke step that is easiest to forget once the replacement works. Due 2026-11-05."
   }
 ]

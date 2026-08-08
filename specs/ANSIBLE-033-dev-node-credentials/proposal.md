@@ -26,7 +26,7 @@ ace2 gains a **machine identity of its own**: a single fine-grained GitHub PAT, 
 Observable after this PR, none of which is possible today:
 
 1. `gh auth status` on ace2 reports an authenticated account, and `gh pr create` works from a non-interactive shell inside a tmux session.
-2. An agent working in `~/workspaces/<agent>/` clones a **private** kubelab-org repository, commits, pushes a branch and opens a PR — with no human at the keyboard and no agent forwarding.
+2. An agent working in `~/workspaces/<agent>/` clones a **private** repository of this owner, commits, pushes a branch and opens a PR — with no human at the keyboard and no agent forwarding. (Deliberately not "a kubelab repository": `mlorentedev/kubelab` is **public**, so proving the flow against it would prove nothing about private access. The acceptance fixture is a private repo — see AC2.)
 3. That identity is **not the operator's**. It reaches only the repositories named in the token's scope, carries only `contents` + `pull-requests` write, and **stops working on a date GitHub enforces** rather than a date someone remembers.
 
 The mechanism is one credential, not two: `gh auth login --with-token` followed by `gh auth setup-git` makes the same PAT serve git pushes over HTTPS, so there is one secret to rotate and one to revoke. No SSH private key is placed on the node.
@@ -94,11 +94,17 @@ General rule this list follows: **write only where the flow demands it, read whe
 ## Acceptance criteria
 
 - [ ] AC1: `ssh ace2 'gh auth status'` reports an authenticated account and exits 0 — i.e. `gh` works non-interactively, not only in a login shell.
-- [ ] AC2: From a tmux session on ace2, a private repository clones, accepts a commit, pushes a branch and opens a PR via `gh pr create`, with no agent forwarding and no human interaction.
-- [ ] AC3: The token is fine-grained with a **90-day** expiry, scoped to **All repositories** (a recorded, deliberate decision — the criterion asserts what was chosen, not what was originally recommended), and grants only `contents` + `pull-requests` write plus `checks` + `commit statuses` read — **no** `workflows`, `issues` or `actions` write. Verified by inspecting the token's own metadata (`gh api /rate_limit -i` surfaces the scopes header; expiry and repo list from the token's settings page or `gh api /user` under the token), not by intent.
+- [ ] AC2: From a tmux session on ace2, a **private** repository clones, accepts a commit, pushes a branch and opens a PR via `gh pr create`, with no agent forwarding and no human interaction. Fixture: `mlorentedev/go-dsa-sample` — private, small, and dormant since 2024-11, so an acceptance branch cannot collide with real work. The probe asserts the fixture really is private and that `origin` is HTTPS: a public fixture would pass without proving private access, and a repo cloned over SSH would exercise a forwarded key rather than the PAT. Test artefacts are removed by a cleanup trap, including on failure.
+- [ ] AC3: The token is fine-grained with a **90-day** expiry, scoped to **All repositories** (a recorded, deliberate decision — the criterion asserts what was chosen, not what was originally recommended), and grants only `contents` + `pull-requests` write plus `checks` + `commit statuses` read — **no** `workflows`, `issues` or `actions` write.
+
+  Split honestly between what a machine can check and what it cannot. **Executable:** the `github_pat_` prefix proves fine-grained rather than classic, and the `workflows: write` refusal is observable — a push touching `.github/workflows/` must be rejected *by GitHub, naming the workflow scope*. That last one matters most, since it is the largest privilege jump on the list; the probe separates "rejected for the right reason" from "rejected by a network fault", because a bare non-zero exit would let a blip masquerade as a working control. **Manual:** for fine-grained PATs the expiry and the repository scope are not exposed by the API, so they are read off the token's settings page. That step stays a stated manual check rather than being dressed up as automated.
 - [ ] AC4: The credential is delivered by the `dev_node` role from SOPS — `make provision NODE=ace2 ENV=staging TAGS=dev_node` provisions it reproducibly, and a second pass reports `changed=0`.
-- [ ] AC5: No prod credential is reachable from ace2. Runnable as written, not intent: `ssh ace2 '! test -e ~/.config/sops/age/keys.txt && ! test -e ~/.age/key.txt && ! test -e /etc/sops/age.key && ! command -v sops && ! ls ~/.kube/*prod* 2>/dev/null'` exits 0. The age-key half is **load-bearing, not belt-and-braces**: per SEC-SOPS-001 (#889) any age key on this node decrypts prod, so its absence is the actual control. (Final path list to be pinned in `tasks.md` against the real prod artefact names.)
-- [ ] AC6: The token value never appears in a process argument, a log line, or a world-readable file on the node (SEC-SECRETS-001 discipline). The token lands in `gh`'s own credential store with `0600` on the containing directory — not a hand-rolled dotfile — so `gh` owns its lifecycle.
+- [ ] AC5: No prod credential is reachable from ace2. Runnable as written, not intent: `ssh -o ForwardAgent=no ace2 '! test -e ~/.config/sops/age/keys.txt && ! test -e ~/.age/key.txt && ! test -e /etc/sops/age.key && ! command -v sops >/dev/null && ! grep -rqi prod ~/.kube/ 2>/dev/null'` exits 0. The age-key half is **load-bearing, not belt-and-braces**: per SEC-SOPS-001 (#889) any age key on this node decrypts prod, so its absence is the actual control.
+
+  The kubeconfig half greps **contents, not filenames**. Kubeconfigs here follow `kubelab-<env>-config`, but a prod *context* can sit inside a plain `~/.kube/config` with no `*prod*` file anywhere — so the filename-only check this criterion originally carried would have passed on a node with working prod cluster access. It deliberately stops short of asserting `~/.kube` is absent: the claim is "no **prod** credential", and ADR-058 D2's own dev loop may legitimately put a staging kubeconfig here later.
+- [ ] AC6: The token value never appears in a process argument, a log line, or a world-readable file on the node (SEC-SECRETS-001 discipline). The token lands in `gh`'s own credential store — not a hand-rolled dotfile — so `gh` owns its lifecycle, and its sink `~/.config/gh/hosts.yml` is mode **0600** exactly.
+
+  Stated on the file rather than the directory, and as equality rather than a bound: a directory's mode says nothing about the secret inside it, and the `-le 700` comparison this criterion first used is arithmetic on an octal string, so it would have accepted a world-readable `0644`. The `no_log` assertion is likewise scoped to the `gh auth login` task itself — a role-wide grep passes as soon as *any* task carries `no_log`, including one that never touches the credential.
 - [ ] AC7: Expiry day is not a mystery outage. A one-line rotation procedure lives in `docs/runbooks/` naming what breaks (agent pushes start failing with 401), who is notified, and the exact command to mint and re-provision the replacement.
 
 <!-- Completeness pass (the fill's Q6), run against this draft:
@@ -113,6 +119,9 @@ General rule this list follows: **write only where the flow demands it, read whe
 
 ## References
 
-- Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
-- Related ADR: `<repo>/docs/adr/adr-XXX.md` (if any)
-- Related patterns: `00_meta/patterns/<pattern>.md` (if any)
+- Bitácora board: [kubelab#888](https://github.com/mlorentedev/kubelab/issues/888) (see the `issue:` frontmatter field)
+- Related ADR: [`docs/adr/adr-058-ace2-dev-node.md`](../../docs/adr/adr-058-ace2-dev-node.md) — this spec is PR-1c of D1/D3
+- Predecessor spec: `specs/archive/ANSIBLE-028-dev-node/` — PR-1a, the toolchain this credential completes
+- Blocking finding: [SEC-SOPS-001 (#889)](https://github.com/mlorentedev/kubelab/issues/889) — the staging-scoped SOPS key ADR-058 D3 assumes does not exist
+- Exit trigger: `mlorentedev/dotfiles#585` — Bitwarden-over-API, the mechanism this interim substitutes for
+- Acceptance probes: `probes/f2-private-repo-flow.sh`, `probes/f3-workflow-refusal.sh`
