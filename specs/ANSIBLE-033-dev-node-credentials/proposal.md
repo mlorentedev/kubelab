@@ -20,8 +20,6 @@ The dev node ships with a working toolchain and no identity. Verified on ace2 20
 
 ## What
 
-> `[AGENT-DRAFT — review before archive]` — drafted by the agent at the user's request; the user approves or edits before archive.
-
 ace2 gains a **machine identity of its own**: a single fine-grained GitHub PAT, provisioned by the `dev_node` role, that authenticates both `gh` and `git` over HTTPS.
 
 Observable after this PR, none of which is possible today:
@@ -34,8 +32,6 @@ The mechanism is one credential, not two: `gh auth login --with-token` followed 
 
 ## Out of scope
 
-> `[AGENT-DRAFT — review before archive]`
-
 - **Implementing Bitwarden-over-API** (`dotfiles#585`). This spec is the interim that exists *because* that is missing, and its exit trigger.
 - **The autonomous-agent jail** — ADR-058 D3 peldaño-2 (policy jail, `NOPASSWD` reversal for the agent user, human-approval channel). Trigger-gated, and mixing it in would make this unreviewable.
 - **Any prod credential**: no prod SOPS key, no prod kubeconfig, no prod-scoped token. Non-negotiable per D3 and not softened by anything here.
@@ -44,20 +40,20 @@ The mechanism is one credential, not two: `gh auth login --with-token` followed 
 
 ## Risks / open questions
 
-> `[AGENT-DRAFT — review before archive]`
-
-- **The at-rest credential is the whole deviation.** ADR-058 D3 says secrets are "fetched on unlock, not stored at rest". A PAT in SOPS rendered onto the node is at rest. Accepted deliberately and time-boxed by the token's own expiry — **this is why expiry is a hard requirement, not a nicety**: it is the only part of the time-box that does not depend on anyone remembering. **MUST be resolved before implementation: what expiry?** A short one (30-90d) forces the migration honestly and costs a rotation each time; a long one (1y) is comfortable and lets the interim quietly become permanent.
+- **The at-rest credential is the whole deviation.** ADR-058 D3 says secrets are "fetched on unlock, not stored at rest". A PAT in SOPS rendered onto the node is at rest. Accepted deliberately and time-boxed by the token's own expiry — **this is why expiry is a hard requirement, not a nicety**: it is the only part of the time-box that does not depend on anyone remembering. **Resolved 2026-08-07: 90 days.** The honest middle — it forces the interim to be revisited four times a year without making rotation a chore, and with `dotfiles#585` parked since 2026-07-02 the recurring reminder is the point. 30d was rejected because ace2 is on-demand and could well be powered off on expiry day; 1y was rejected as indistinguishable from permanent.
 - **A token on a build host is reachable by anything that runs there.** A malicious transitive dependency in an `npm install`, or an agent executing its own generated code, runs as the same user and can read it. This is the argument for the narrowest possible repo list and for `contents`+`pull-requests` only — no `admin`, no `workflow`, no org scopes. The dev node is a wider attack surface than a laptop, and the token must be sized for that, not for convenience.
 - **Rejected: SSH key on the operator's GitHub account.** Cannot be scoped — GitHub account keys are all-or-nothing, so ace2 would reach every private repo the operator reaches, in every org, for as long as the key lives. Revocability per node gives traceability, not isolation. This was the agent's initial recommendation and it was wrong; recorded so the reasoning is not re-litigated.
 - **Rejected: SSH deploy keys.** Genuinely per-repo, but GitHub forbids reusing one key across repositories (N repos = N keys), and `gh` cannot authenticate with them at all — so it solves half the requirement and scales badly against a dev node that touches several repos.
-- **Graduation path: GitHub App.** Short-lived (~1h) installation tokens, scoped to the installation. Note the nuance that decides *when* it is worth it: minting tokens needs **no hosting** (sign a JWT locally, exchange it for a token — webhooks are what require a public endpoint, and we want none). But if the App private key lives on ace2, it is a non-expiring key that mints tokens forever — strictly worse than a PAT with an expiry. The App only pays off when the key lives **off** the node, on the always-on tier (VPS or aws1), which makes it a service to build and operate. **Open question for a later ADR, not this spec:** the App and D3's Bitwarden-over-API solve the same problem — no long-lived secret at rest — and for *machine* identity the App is arguably the better fit than a human-oriented secret manager. Worth reconciling before #585 lands and settles it by default.
+- **Graduation path: GitHub App.** Short-lived (~1h) installation tokens, scoped to the installation. Note the nuance that decides *when* it is worth it: minting tokens needs **no hosting** (sign a JWT locally, exchange it for a token — webhooks are what require a public endpoint, and we want none). But if the App private key lives on ace2, it is a non-expiring key that mints tokens forever — strictly worse than a PAT with an expiry. The App only pays off when the key lives **off** the node, on the always-on tier (VPS or aws1), which makes it a service to build and operate. **Open question for a later ADR, not this spec** (confirmed 2026-08-07): the App and D3's Bitwarden-over-API solve the same problem — no long-lived secret at rest — and for *machine* identity the App is arguably the better fit than a human-oriented secret manager. Worth reconciling before #585 lands and settles it by default.
+
+  Placement, so that ADR does not start from zero. The obvious candidate is **aws1**: it is the always-on management plane (ADR-023 hub-and-spoke), and issuing credentials is a management-plane function. The objection is that Argo CD lives there **with prod deploy rights** — colocating the App's private key puts two credential authorities on one host, so compromising aws1 would yield both "deploy anything to prod" and "mint a GitHub token for any repo". That sits badly with D3's own principle that a compromised dev-node cannot reach prod: the issuer would be *adjacent* to prod. The VPS has the same shape (prod K3s runs there), so **every always-on option colocates with something sensitive** — which is exactly why this is an architecture decision and not a slot to fill. Note also aws1 is a t4g.small with roughly 1GB headroom and a prior OOM history, so "small service, plenty of room" is not automatic. Worth stating plainly: Argo CD and a token minter share the always-on tier, they do not share a function — Argo *reads* git to deploy, the minter would issue *write* credentials for development. Opposite directions, different consumers.
 - **Dependency risk, stated plainly:** `dotfiles#585` has not moved since 2026-07-02. An interim whose exit depends on a parked ticket is how "temporary" becomes permanent. The token's expiry is the mitigation.
 
 ## Acceptance criteria
 
 - [ ] AC1: `ssh ace2 'gh auth status'` reports an authenticated account and exits 0 — i.e. `gh` works non-interactively, not only in a login shell.
 - [ ] AC2: From a tmux session on ace2, a private repository clones, accepts a commit, pushes a branch and opens a PR via `gh pr create`, with no agent forwarding and no human interaction.
-- [ ] AC3: The token is fine-grained with an explicit expiry, limited to an enumerated repository list, and grants only `contents` + `pull-requests` write. Verified by inspecting the token's own metadata, not by intent.
+- [ ] AC3: The token is fine-grained with a **90-day** expiry, limited to an enumerated repository list, and grants only `contents` + `pull-requests` write. Verified by inspecting the token's own metadata (`gh api /rate_limit -i` surfaces the scopes header; expiry and repo list from the token's settings page or `gh api /user` under the token), not by intent.
 - [ ] AC4: The credential is delivered by the `dev_node` role from SOPS — `make provision NODE=ace2 ENV=staging TAGS=dev_node` provisions it reproducibly, and a second pass reports `changed=0`.
 - [ ] AC5: No prod credential is reachable from ace2. Runnable as written, not intent: `ssh ace2 '! test -e ~/.config/sops/age/keys.txt && ! ls ~/.kube/*prod* 2>/dev/null && ! kubectl config get-contexts -o name 2>/dev/null | grep -q prod'` exits 0. (Final path list to be pinned in `tasks.md` against the real prod artefact names.)
 - [ ] AC6: The token value never appears in a process argument, a log line, or a world-readable file on the node (SEC-SECRETS-001 discipline). The token lands in `gh`'s own credential store with `0600` on the containing directory — not a hand-rolled dotfile — so `gh` owns its lifecycle.
