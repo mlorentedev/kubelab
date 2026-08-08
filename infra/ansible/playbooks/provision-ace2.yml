@@ -173,3 +173,9 @@
       tags: [dev_node, cde]
       vars:
         dev_node_user: "{{ config.networking.ssh_users.homelab }}"
+        # Machine identity (ANSIBLE-033). Sourced from COMMON secrets, decrypted
+        # controller-side above — the node never sees an age key. `default('')`
+        # is what makes the role's "not configured" path reachable: an operator
+        # without the secret gets a provisioned node with no identity, not a
+        # failed play or an empty credential handed to `gh`.
+        dev_node_github_token: "{{ secrets.apps.services.automation.dev_node.github_token | default('') }}"

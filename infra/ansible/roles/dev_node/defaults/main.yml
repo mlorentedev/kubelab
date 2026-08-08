@@ -66,3 +66,20 @@ dev_node_project_dirs:
 dev_node_apt_packages:
   - neovim
   - build-essential
+
+# --- machine identity (ANSIBLE-033 / ADR-058 D1-D3) ------------------------
+# Fine-grained GitHub PAT giving this node an identity of its own — it serves
+# BOTH `gh` and git-over-HTTPS (via `gh auth setup-git`), so there is one secret
+# to rotate and one to revoke, and no SSH private key ships to the node.
+#
+# SSOT: `apps.services.automation.dev_node.github_token` in **common.enc.yaml**
+# (machine identity, not environment config). The CONTROLLER decrypts it and
+# passes it in — ace2 holds no age key and cannot decrypt anything. That absence
+# is load-bearing: per SEC-SOPS-001 (#889) every SOPS file is encrypted to the
+# same recipients, so any age key here would also open prod.
+#
+# Empty by default ON PURPOSE. A run without the secret must degrade to "not
+# configured" and skip the auth tasks, rather than authenticate with an empty
+# credential — which `gh` accepts syntactically and which then fails later, far
+# from the cause.
+dev_node_github_token: ""
