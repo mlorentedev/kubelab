@@ -3199,3 +3199,29 @@ The agent stays alive for the shell session, so `make connect` + `kubectl get ns
 **Rule:** In any CLI meant to be chained, the **exit code is the contract** — a warning is a comment, not a signal. If a step's failure invalidates the steps after it, it must be non-zero by default; "strict mode" as an opt-in just relocates the silent failure to whoever didn't pass the flag. Audit the last step of every command specially: it's the one that most often degrades to a warning because "the real work already succeeded".
 
 **Tags:** `#cli` `#exit-code` `#silent-failure` `#kubernetes` `#rollout` `#fail-closed` `#tool-021` `#gotcha`
+
+### [2026-08-07] A config file with two writers can never converge — idempotence is a property of the system, not of the task (ANSIBLE-028)
+
+**Context:** ANSIBLE-028 (#816), the `dev_node` role that provisions ace2 as a self-hosted CDE. The role wired mise activation and tmux-resurrect by injecting marked blocks into `~/.bashrc`, `~/.zshrc` and `~/.tmux.conf`. It also clones the dotfiles repo and runs its `setup-linux.sh` bootstrap.
+
+**Problem:** Two consecutive provision passes reported `changed=2`, forever. Not flaky — *stable*, at exactly two. The dotfiles bootstrap redeploys those three rc files **wholesale on every run**, erasing whatever the role had written; the role then rewrote them on the next pass, and the cycle repeated. There is no ordering of those two tasks that converges: whoever runs last wins and the other one redoes its work next time.
+
+The trap is that an earlier, *different* bug presented identically from outside. Initially the role wrote its block **before** the bootstrap, so the block vanished silently and the task still reported `changed`. Reordering fixed that — the block stopped disappearing — and the `changed=2` remained, which made it look like the same bug was only half-fixed. It was not: the first was a loss-of-write, the second was contention. Ordering cured one and could never cure the other.
+
+**Solution:** Give every file exactly one owner. Ansible owns `/etc/profile.d/mise.sh` and the gitignored `*.local` seams (`~/.bashrc.local`, `~/.zshrc.local`, `~/.tmux.conf.local`); the dotfiles bootstrap owns the tracked rc files it deploys. The bash/zsh seams already existed upstream — gitignored, sourced last, never redeployed. tmux had none, so it was added upstream (`mlorentedev/dotfiles#788`). Second pass then reported `changed=0`, and stayed there even across a subsequent upstream dotfiles change (one changed pass to absorb it, then zero).
+
+**Rule:** An Ansible task (or any provisioning step) that reports `changed` on **every** run is almost always contending for a file with another writer — look for the second writer before you touch the task's logic. The fix is ownership, not ordering. Corollary, and the more expensive half: **one green pass proves nothing about idempotence — the second pass is the test**, and the criterion must read the *task list*, not just the aggregate `changed=` count, because a task whose `changed_when` is derived from something else (a git clone's state, a marker file) can mask a non-converging step inside an otherwise clean total.
+
+**Tags:** `#ansible` `#idempotence` `#dotfiles` `#config-ownership` `#provisioning` `#ansible-028` `#gotcha`
+
+### [2026-08-07] Ansible has no native Windows control node — provision from Linux, and budget for the controller's own toolchain (ANSIBLE-028)
+
+**Context:** ANSIBLE-028 (#816) sat with its runtime acceptance criteria `pending` for ten days. The role was written and statically verified, but no provision run had happened because the dev workstation was Windows.
+
+**Problem:** This is not a missing package or a configuration gap — Ansible's control node requires POSIX primitives (`os.fork()`, ptys, a native `ssh`) that Windows does not provide. `ansible-playbook` is not shipped for native Windows and will not be. Windows is fully supported as a *target*, which is what makes the limitation easy to misread. The practical cost was ten days of a spec sitting at "written but unproven", with five real defects latent in it — every one of which needed a live target and a real remote repo to surface, and none of which lint, unit tests, or code review would have caught.
+
+**Solution:** Run the controller on a Linux box already on the mesh (`msi`, ansible-core 2.20.0) against a powered-on ace2. Note that the bastion transport (TOOL-016 / #818) was **not** needed: from a mesh controller the default transport reaches the target directly, so the "merge the bastion PR first" ordering assumed earlier did not apply.
+
+**Rule:** Provision from a Linux controller — a homelab box on the target's LAN, or WSL. But WSL is not free: it needs its own `ansible`, `sops` and `tailscale` toolchain, plus the SOPS key and mesh membership, before it can run a single playbook. Budget that as real setup work rather than assuming the dev box can stand in. More generally: when a spec's runtime criteria are blocked on an environment you don't have, that blockage is itself the risk — keep the criteria `pending` and say so, rather than marking them verified from static inspection.
+
+**Tags:** `#ansible` `#control-node` `#windows` `#wsl` `#provisioning` `#ansible-028` `#gotcha`

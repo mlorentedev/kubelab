@@ -1,6 +1,6 @@
 ---
 id: "ANSIBLE-028-dev-node"
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-29"
 issue: "mlorentedev/kubelab#816"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, ansible, dev-node, cde]
