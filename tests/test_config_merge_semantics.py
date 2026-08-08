@@ -90,3 +90,48 @@ class TestMergeOrderContract:
         _merge(merged, {"argocd": {"admin_password": "hub"}})
         _merge(merged, {"argocd": {}})
         assert merged["argocd"]["admin_password"] == "hub"
+
+
+class TestWritePathCannotDestroySecrets:
+    """The same merge runs on a path that ENCRYPTS ITS RESULT BACK TO DISK.
+
+    `credentials.py` (`_promote_shared_secrets`) lifts shared subtrees out of an
+    env file via `_partition_secrets`, deep-merges them into the decrypted
+    `common.enc.yaml`, and re-encrypts the result. `_partition_secrets` copies
+    subtrees verbatim, and `apps.services.automation` is one of its SHARED_NESTED
+    paths — so an empty mapping in an env file was carried straight into the
+    write.
+
+    Under the old semantics that silently DELETED the corresponding subtree from
+    `common.enc.yaml` and persisted the deletion. This was not hypothetical:
+    `staging.enc.yaml` carried `apps.services.automation.dev_node: {}` while
+    `common.enc.yaml` held the dev-node PAT at exactly that path, so a
+    `credentials generate` run would have destroyed the credential.
+
+    Read-path breakage is recoverable — you re-run the tool. This is not.
+    """
+
+    SHARED_PATH = ("apps", "services", "automation")
+
+    def test_empty_mapping_in_promoted_payload_preserves_the_secret(self) -> None:
+        common = {"apps": {"services": {"automation": {"dev_node": {"github_token": "PAT"}}}}}
+        promoted = {"apps": {"services": {"automation": {"dev_node": {}}}}}
+        _merge(common, promoted)
+        automation = common["apps"]["services"]["automation"]
+        assert automation["dev_node"] == {"github_token": "PAT"}
+
+    def test_sibling_secrets_survive_an_empty_mapping_promotion(self) -> None:
+        common = {
+            "apps": {
+                "services": {
+                    "automation": {
+                        "dev_node": {"github_token": "PAT"},
+                        "github_runner": {"token": "RUNNER"},
+                    }
+                }
+            }
+        }
+        _merge(common, {"apps": {"services": {"automation": {"dev_node": {}}}}})
+        automation = common["apps"]["services"]["automation"]
+        assert automation["github_runner"] == {"token": "RUNNER"}
+        assert automation["dev_node"] == {"github_token": "PAT"}
