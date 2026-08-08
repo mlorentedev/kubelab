@@ -87,13 +87,27 @@ class ConfigurationManager:
         return dict(items)
 
     def _deep_update(self, source: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursive dict update."""
+        """Recursive dict update, matching Ansible's ``combine(recursive=True)``.
+
+        Recurse only when the override is a mapping; an empty mapping therefore
+        overrides nothing and leaves ``source`` intact. The previous guard was
+        ``isinstance(value, dict) and value`` — an empty dict is falsy, so it fell
+        through to assignment and *deleted* the base subtree. The playbooks merge
+        the very same files with ``combine(recursive=True)``, which preserves it,
+        so `common.enc.yaml` + `<env>.enc.yaml` meant two different things
+        depending on which tool read them (ANSIBLE-033: a PAT that provisioned
+        fine but audited as missing). Use `key:` (null) to blank a value.
+
+        Recursing into a non-mapping base is what raised `TypeError` when a
+        mapping override met a scalar base; the mapping now replaces it, as
+        `merge_hash` does.
+        """
         for key, value in overrides.items():
-            if isinstance(value, dict) and value:
-                returned = self._deep_update(source.get(key, {}), value)
-                source[key] = returned
+            if isinstance(value, dict):
+                base = source.get(key)
+                source[key] = self._deep_update(base if isinstance(base, dict) else {}, value)
             else:
-                source[key] = overrides[key]
+                source[key] = value
         return source
 
     def get_merged_config(self) -> Dict[str, Any]:
