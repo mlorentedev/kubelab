@@ -12,8 +12,8 @@ against a real ace2 from a Linux controller (2026-08-06); the last open criterio
 was closed by a scope decision on 2026-08-07.
 
 - [x] f1 (role exists + wired) — files under `infra/ansible/roles/dev_node/`, wired in `provision-ace2.yml`
-- [x] f2 (idempotent + coexists with Ollama) — pass 1 `changed=4`, pass 2 `changed=0`, exit 0 both
-- [x] f3 (nvim, gh, tmux-resurrect, dotfiles present) — criterion command PASS
+- [x] f2 (idempotent + coexists with Ollama) — pass 1 `changed=4`, pass 2 `changed=0`, exit 0 both; re-verified 2026-08-07 with the corrected command across a dotfiles update (`changed=2` then `changed=0`)
+- [x] f3 (nvim, gh, tmux-resurrect, dotfiles present) — criterion command PASS; resurrect confirmed *loading* 2026-08-07
 - [x] f4 (toolchain resolves in login + interactive shells) — both classes PASS; see "Scope of f4"
 - [x] f5 (`dev-session.sh` launches named sessions) — 4 detached sessions, idempotent re-invoke
 - [x] f6 (workspace skeleton + per-agent dirs) — criterion command PASS
@@ -53,6 +53,36 @@ Rejected, and why:
 **Consequence to know:** a future Ansible task, cron job, or CI step that shells into
 ace2 non-interactively and calls a bare `node`/`go`/`python` will get the system
 binary, not the pinned one. Such a caller must invoke via the absolute shims path.
+
+### tmux-resurrect closed the loop — 2026-08-07
+
+`mlorentedev/dotfiles#788` (the `~/.tmux.conf.local` seam) merged 2026-08-07. A
+re-provision pulled it, and resurrect went from *installed* to *loading*: `~/.tmux.conf`
+now carries the `if-shell` source line, and on an isolated socket the plugin binds
+`prefix C-s` -> `save.sh` and `prefix C-r` -> `restore.sh`.
+
+That run also re-verified f2 under the harder condition — convergence *across* an
+upstream dotfiles change: `changed=2` (clone + bootstrap) then `changed=0`. This is the
+single-owner split paying off: an upstream change costs exactly one changed pass, not a
+permanent delta.
+
+**Still unverified:** actual session restore across a reboot. The proposal's f5 criterion
+said "tmux-resurrect restores them across a reboot"; `features.json` f5 only verifies
+that `dev-session.sh` launches the sessions. The bindings and options are now proven
+present, but a real power-cycle test has never run. Tracked separately rather than
+claimed — the boundary is deliberate, not an oversight.
+
+### Criterion commands must be executable as written
+
+f2's command read `make provision NODE=ace2 ENV=staging --tags dev_node`. `make` rejects
+that outright (`make: unrecognized option '--tags'`); the Makefile's interface is
+`TAGS=dev_node`. The criterion had been *satisfied* in practice by running the correct
+form by hand, but the recorded command could never reproduce it. Corrected 2026-08-07
+and re-run as written.
+
+Same failure mode as the f4 rewrite: a criterion whose text drifts from what was
+actually executed is not a criterion, it is a note. Every command in `features.json` is
+now confirmed runnable verbatim.
 
 ## Test status
 

@@ -26,7 +26,7 @@ created: "2026-06-29"
 - [x] `dev_node/handlers/main.yml` (empty — D6 handlers land in ANSIBLE-030) ✓ 2026-07-09
 - [x] Wired into `provision-ace2.yml` (`dev_node_user` from `networking.ssh_users.homelab` SSOT) ✓ 2026-07-09
 - [x] D6 housekeeping timers split to follow-up ANSIBLE-030 (#858) ✓ 2026-07-09
-- [x] **Provision-verify** on ace2 (Linux controller `msi`): `make provision NODE=ace2 ENV=staging --tags dev_node` — idempotency (`changed=0` on pass 2), Ollama coexistence, tools present, mise resolves, dev-session launches ✓ 2026-08-06
+- [x] **Provision-verify** on ace2 (Linux controller `msi`): `make provision NODE=ace2 ENV=staging TAGS=dev_node` — idempotency (`changed=0` on pass 2), Ollama coexistence, tools present, mise resolves, dev-session launches ✓ 2026-08-06
 - [x] Iterate on provisioning output — five defects fixed (dotfiles branch `main`, `chdir` for `setup-linux.sh`, bootstrap ordering, `become_user: root` for `/etc/profile.d`, single-owner config split); mise shell activation scoped by decision ✓ 2026-08-07
 
 ## Closing
