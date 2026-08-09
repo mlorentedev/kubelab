@@ -44,6 +44,9 @@ created: "2026-08-09"
 - [ ] [AC6] Delete `tests/e2e/test_ollama_public.py`; clean the entries in `expectations.py`, `conftest.py` and `tests/test_k8s_middlewares.py`
 - [ ] [AC1] Correct the rationale comments that outlive the service: `dev_node/tasks/main.yml` (coexistence header), `beelink_services` + `provision-bee.yml` ("moved to ace2"), `headscale/policy.hujson.j2` (the `tag:hermes → vps:443` justification — the **rule stays**, it also covers Gitea)
 - [ ] [AC7] Amend ADR-028 and ADR-029; fold in the two `CLAUDE.md` doc-drift fixes named in ADR-058 D4
+- [ ] [AC8] Delete `docs/runbooks/ollama-api-key-rotation.md` — a 118-line runbook for a service that will not exist
+- [ ] [AC8] Clear the present-tense claims from `docs/architecture/{service-catalog,architecture-overview}.md`, `docs/runbooks/{monitoring,operations,dns-homelab,hardware-setup,energy-consumption,non-admin-workstation-access}.md` and `docs/troubleshooting/docker-containers.md`
+- [ ] [AC8] **Do NOT touch** the other 15 ADRs, `docs/audits/*`, `current-state-2026-03-22.md`, or `components/kubelab-*.md`. They are historical records or unbuilt-product design positions; erasing Ollama from them would falsify the record. Verify by re-reading, not by grepping them clean
 - [ ] [AC1] Run the survivor check and confirm only the deliberate matches remain
 
 ## Closing

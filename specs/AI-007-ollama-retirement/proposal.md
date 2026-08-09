@@ -89,6 +89,12 @@ The order is enforced by **merge order, not by a runbook step someone has to rem
 - [ ] **AC5** — In prod, no `Middleware/api-key-ollama` and no backing Secret remain — the out-of-band objects Argo never tracked are gone, verified against the live cluster rather than against git.
 - [ ] **AC6** — `make test` and the prod e2e suite pass with no Ollama module, no skipped Ollama expectation, and no new failures.
 - [ ] **AC7** — ADR-028 and ADR-029 each carry an amendment note referencing AI-007 and #905.
+- [ ] **AC8** — No operational document still describes Ollama as a running service: `docs/runbooks/` and `docs/troubleshooting/` are clean, `docs/architecture/service-catalog.md` and `architecture-overview.md` are clean, and `docs/runbooks/ollama-api-key-rotation.md` (118 lines, a runbook for a service that will not exist) is deleted.
+
+  **Deliberate survivors, untouched by AC8** — the same allowlist discipline AC1 needs, for the same reason:
+  - **The 17 ADRs.** An ADR records a decision taken at a time; rewriting it to remove Ollama falsifies the record. ADR-035 *did* use Ollama as its first consumer. Only ADR-028 and ADR-029 change, and only by the amendment notes in AC7 — "amended, not superseded", per ADR-058 itself.
+  - **`docs/audits/*` and `docs/architecture/current-state-2026-03-22.md`** — dated snapshots. Same argument as ADRs.
+  - **`docs/architecture/components/kubelab-*.md`** — design positions for unbuilt L1 products, not claims about running infrastructure.
 
 ## References
 

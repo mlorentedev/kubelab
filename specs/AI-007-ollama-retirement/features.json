@@ -47,5 +47,12 @@
     "verification": "grep -q 'AI-007' docs/adr/adr-028-operational-topology.md && grep -q 'AI-007' docs/adr/adr-029-intelligence-layer.md",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f8",
+    "behavior": "No operational doc still describes Ollama as running; the dedicated rotation runbook is gone. ADRs, dated audits/snapshots and unbuilt-product component specs are deliberate survivors and are NOT checked - rewriting a historical record to erase Ollama would falsify it",
+    "verification": "! test -f docs/runbooks/ollama-api-key-rotation.md && ! git grep -il ollama -- docs/runbooks docs/troubleshooting docs/architecture/service-catalog.md docs/architecture/architecture-overview.md",
+    "state": "pending",
+    "evidence": ""
   }
 ]
