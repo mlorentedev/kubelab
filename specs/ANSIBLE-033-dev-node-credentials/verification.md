@@ -15,14 +15,14 @@ agent may not promote a feature out of `pending`.
 | AC | Feature | What it proves | State | Evidence |
 | --- | --- | --- | --- | --- |
 | AC1 | f1 | `gh` authenticated on ace2, working non-interactively | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
-| AC2 | f2 | Private clone → commit → push → PR from tmux, no agent forwarding | `pending` | **AWAITING NODE** 2026-08-08 — fixture replaced, two probe defects fixed, flow proven workstation-side; ace2 run outstanding |
-| AC3 | f3 | Fine-grained token; `workflows: write` actually refused | `pending` | Not run — fixture no longer blocks it; awaiting a powered ace2. Expiry/scope halves are manual |
+| AC2 | f2 | Private clone → commit → push → PR from tmux, no agent forwarding | `pending` | **PASS** 2026-08-08 — verbatim on ace2, `F2_OK`, exit 0 |
+| AC3 | f3 | Fine-grained token; `workflows: write` actually refused | `pending` | **PASS (executable half)** 2026-08-08 — verbatim, `F3_OK`, exit 0. Expiry + repository-scope halves remain manual and unread |
 | AC4 | f4 | Role delivers the credential from SOPS; second pass `changed=0` | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
 | AC5 | f5 | No prod credential reachable from ace2 | `pending` | **PASS** 2026-08-08 — re-run last, after every node mutation |
 | AC6 | f6 | Token never in argv/logs/world-readable files; `gh` owns the sink | `pending` | **PASS** 2026-08-08 — verbatim, both halves, exit 0 |
 | AC7 | f7 | Rotation runbook exists and is operational | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
 
-**5 of 7 verified.** AC2/AC3 are no longer blocked on the fixture — that is resolved. They now wait only on ace2 being powered on (on-demand node, ADR-028). Neither has ever indicated a credential problem; see below.
+**7 of 7 executable criteria pass**, every one run verbatim from `features.json` against a live ace2. One gap remains and it is not executable: AC3's **expiry** and **repository access** are not exposed by the GitHub API for fine-grained PATs and must be read off the token's settings page by its owner. AC3 is therefore **not** fully satisfied — see the manual-check block below.
 
 ### Node-side evidence 2026-08-08
 
@@ -69,6 +69,29 @@ workstation run could not exercise.
 Side effect worth noting: the local run also proved **draft PRs work on a private
 repo for this account**, a documented GitHub Free limitation that would otherwise
 have failed f2 at its last line and looked like yet another credential fault.
+
+### Node-side evidence, second sitting 2026-08-08
+
+ace2 powered on; `f1` re-run first as a precondition after the reboot — still
+authenticated, still a `github_pat_` token, git protocol HTTPS.
+
+- **f2 PASS.** Verbatim, `F2_OK`, exit 0. The write half is now proven: on the
+  node, inside tmux, with `SSH_AUTH_SOCK` unset, the dev-node PAT cloned a
+  private repo over HTTPS, committed, pushed a branch and opened a draft PR.
+  This also settles the open question about scope: the fixture was created
+  *after* the token was minted, so All-repositories does pre-authorise
+  later-created repositories, as the rotation runbook claims.
+- **f3 PASS.** Verbatim, `F3_OK`, exit 0. GitHub rejected the workflow push with
+  `refusing to allow a Personal Access Token to create or update workflow`
+  `` `.github/workflows/ansible-033-probe.yml` without `workflow` scope ``. The
+  refusal is observed and attributed, not inferred — `F3_WRONG_REASON` would have
+  caught a network fault masquerading as a working control.
+- **f5 PASS**, re-run **last**, after both mutations. No age key, no `sops`
+  binary, no prod context in `~/.kube/`. The isolation the spec rests on survives
+  the node having an identity and having exercised it.
+- **Cleanup verified independently of the probes' own verdicts:** the fixture
+  holds only `main` with zero open PRs, and `tmux ls` on ace2 reports no server
+  running. Neither probe left residue.
 
 ### Controller-side evidence captured 2026-08-08
 
