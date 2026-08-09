@@ -36,9 +36,9 @@
   },
   {
     "id": "TOOL-016-ansible-transport-f6",
-    "behavior": "End-to-end: make provision NODE=x TRANSPORT=bastion reaches a mesh-only node from a non-mesh Linux controller through the bastion (RUNTIME, Linux-gated)",
-    "verification": "make provision NODE=ace2 ENV=staging TRANSPORT=bastion --tags dev_node",
+    "behavior": "End-to-end: make provision TRANSPORT=bastion reaches a MESH-ONLY node from an OFF-MESH Linux controller through the VPS bastion (RUNTIME, off-mesh-gated)",
+    "verification": "make provision NODE=aws1 ENV=prod TRANSPORT=bastion CHECK=1 TAGS=transport-probe-only",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-08-09 DRESS REHEARSAL ONLY, run while the controller was still ON the mesh — NOT f6: exit 0, `TASK [Gathering Facts] ok: [aws1]`, PLAY RECAP ok=3 changed=0 unreachable=0, 34s, inventory auto-restored to mesh. That proves the bastion path, the SSOT-derived ProxyCommand and the remote MagicDNS resolution of aws1.kubelab.internal by the VPS. It does NOT prove the one thing f6 asserts — that it works with no mesh route — because a mesh route existed. Still pending: the same command after `tailscale down`."
   }
 ]

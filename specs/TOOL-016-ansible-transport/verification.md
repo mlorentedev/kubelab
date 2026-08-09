@@ -14,7 +14,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 - [x] AC3 (bastion target from SSOT, no hardcoded IP) -> f3 (grep: 0 IPs in generator source)
 - [x] AC4 (`--transport` flag + Makefile `TRANSPORT=`) -> f4
 - [x] AC-coverage (new AnsibleGenerator unit suite) -> f5 (5 passed; was 0 coverage before)
-- [ ] Runtime end-to-end through the bastion -> f6 (Linux-gated; provision session)
+- [ ] Runtime end-to-end through the bastion -> f6 (off-mesh-gated; retargeted to `aws1`, see below)
 
 ## Test status
 
@@ -43,8 +43,25 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 - Smoke (real `toolkit infra ansible generate --transport bastion`): ace2 (100.64.0.5) and
   aws1 (MagicDNS) carry `ProxyCommand=ssh -i ~/.ssh/id_ed25519 -W %h:%p -q … deployer@<vps.public_ip>`;
   kubelab-vps (public IP) has no per-host args — it is the jump. Inventory restored to mesh after.
-- f6 is Linux-gated: the real provision through the bastion uses the passphrase-gated key
-  from a Linux controller — same runtime shape as #816/#859.
+- **f6 was retargeted from `ace2` to `aws1` on 2026-08-09, and that unblocked it.** The
+  behavior f6 asserts is reaching a **mesh-only node** from an off-mesh controller — it never
+  named ace2. `aws1` is equally mesh-only (`networking.aws` has no `public_ip`, so the
+  generator gives it a ProxyCommand exactly like ace2's) and, unlike ace2, it is **always-on**
+  per ADR-028. The old command `NODE=ace2 --tags dev_node` chose a node that also happened to
+  carry an interesting role, and that incidental choice is what made f6 look homelab-gated for
+  a month. The `behavior` field was right; the `verification` command was narrower than it.
+- **The probe is now non-invasive.** `CHECK=1` plus a tag no task carries means Ansible
+  connects, gathers facts, and skips every task — so it proves the transport and changes
+  nothing on the Argo CD hub. Verified `changed=0`. `CHECK=1` is a new passthrough on the
+  `provision` target, added here because f6 needs it to be a `make` command rather than a
+  raw toolkit invocation.
+- **Dress rehearsal, 2026-08-09 — explicitly NOT f6.** The probe was run while the controller
+  was still on the mesh: exit 0, `Gathering Facts ok: [aws1]`, `ok=3 changed=0 unreachable=0`,
+  34s. It proves the ProxyCommand is well-formed, that the hop authenticates with the SSOT
+  key, and that `aws1.kubelab.internal` resolves — resolution happens on the **VPS**, because
+  `-W %h:%p` hands the name to the jump host, which is why the path can work with no local
+  mesh route at all. It does **not** prove f6, because a mesh route existed and Ansible was
+  free to prefer it. f6 stays `pending` until the same command passes after `tailscale down`.
 - No regression: mesh transport asserted to carry no per-host ssh args and an unchanged
   `all.vars` block.
 

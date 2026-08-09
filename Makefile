@@ -614,22 +614,23 @@ rotate-spoke-token:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [ASK_PASS=1] [TAGS=tag1,tag2]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
 	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
+	$(eval _CHECK := $(if $(CHECK),--check,))
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Generating inventory ($(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),)) ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT); \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK); \
 	fi
 
 .PHONY: maintain
