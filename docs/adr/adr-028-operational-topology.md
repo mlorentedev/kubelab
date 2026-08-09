@@ -12,6 +12,26 @@ created: "2026-03-28"
 
 Accepted (2026-03-28). Refines ADR-023 (Hub-and-Spoke), ADR-027 (Intelligence Layer).
 
+## Amendment — 2026-08-09 (staging mirrors the manifest set; prod stays the monitoring of record)
+
+Context bullet 3 below states that "observability should run on prod (always-on)" because "Grafana monitoring staging from staging is circular". Measured against the live clusters on 2026-08-09, staging runs Grafana, Loki and Vector anyway, and has done for 142 days — `infra/k8s/base/kustomization.yaml` lists all three and the staging overlay consumes `../../base` with no patch removing them, so both environments deploy them by construction.
+
+That is drift, but the resolution is to amend the decision rather than the deployment, because the original bullet **conflates two independent questions**:
+
+1. **Where does the monitoring of record live?** It must be always-on and must not share a failure domain with what it watches. Answer: prod, plus an external monitor outside both clusters. **Unchanged** — and better satisfied now than in March 2026, because that external monitor exists: Uptime Kuma on the RPi3 (ADR-028 §Always-on tier, deployed since), which post-dates this ADR's writing. The circularity the bullet feared is covered by the RPi3, not by removing staging's stack.
+2. **Which manifest set does each environment deploy?** Staging deploys prod's shared Kustomize base so that a change to any manifest — observability manifests included — is exercised in staging before it reaches prod. This is the validation flow ADR-037 depends on. Staging's Grafana observes staging only; it is never the monitor of prod, so its existence introduces no circularity.
+
+**Resolution.** Observability manifests stay in the shared base and therefore run in both environments. Bullet 3 is narrowed to its first meaning: the *monitoring of record* for production is prod plus the RPi3, never staging.
+
+**Costs accepted with this amendment:**
+
+- Staging carries the observability stack's memory footprint. Both environments measured identical on 2026-08-09 — 15 pods, 4.88 Gi of memory limits — against 11.47 Gi allocatable on ace1 and 7.55 Gi on the VPS. This is an input to IDP-031 (namespace resource governance), which sizes a single ceiling applied to both.
+- Staging observability shares a failure domain with what it observes. Accepted: staging is on-demand and non-critical, and no alert of record is routed from it.
+
+**Scope.** This amendment covers the stack that actually runs — Grafana, Loki, Vector. ADR-032 (Observability Stack — Execution Plan, still `Proposed`) inherits this ADR's placement premise for the not-yet-deployed Prometheus and Alertmanager. When ADR-032 promotes to `accepted` it should state their placement explicitly under the two-question split above rather than re-inheriting the old bullet; in particular, **Alertmanager is a monitoring-of-record component** and belongs on prod by question 1, even though its manifests may live in the shared base by question 2.
+
+Raised as ARCH-001 (#917), which also gated #799 (cert-expiry alerting, whose leading indicator is a Grafana alert over a Loki query of staging Traefik logs) and #918 (quota-utilization alerting). Both remain viable unchanged under this resolution.
+
 ## Date
 
 2026-03-28
@@ -133,7 +153,7 @@ RPi4 only serves staging DNS (CoreDNS + Pi-hole) and LAN subnet routing. Prod DN
 ### Positive
 
 - Homelab can be fully powered off without affecting production or public services
-- Observability on prod (not staging) follows enterprise pattern
+- Observability on prod (not staging) follows enterprise pattern — narrowed by the 2026-08-09 amendment above to the *monitoring of record*; the manifests themselves run in both environments
 - "Chat with Manu" works 24/7 without homelab dependency
 - Embedding pipeline autonomous on VPS — vault updates indexed regardless of homelab state
 - CI has self-hosted runner for speed + GitHub-hosted fallback for availability
