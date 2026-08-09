@@ -16,13 +16,13 @@ agent may not promote a feature out of `pending`.
 | --- | --- | --- | --- | --- |
 | AC1 | f1 | `gh` authenticated on ace2, working non-interactively | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
 | AC2 | f2 | Private clone → commit → push → PR from tmux, no agent forwarding | `pending` | **PASS** 2026-08-08 — verbatim on ace2, `F2_OK`, exit 0 |
-| AC3 | f3 | Fine-grained token; `workflows: write` actually refused | `pending` | **PASS (executable half)** 2026-08-08 — verbatim, `F3_OK`, exit 0. Expiry + repository-scope halves remain manual and unread |
+| AC3 | f3 | Fine-grained token; `workflows: write` actually refused | `pending` | **PASS** 2026-08-08 — executable half verbatim (`F3_OK`, exit 0); expiry + scope halves operator-attested, see below |
 | AC4 | f4 | Role delivers the credential from SOPS; second pass `changed=0` | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
 | AC5 | f5 | No prod credential reachable from ace2 | `pending` | **PASS** 2026-08-08 — re-run last, after every node mutation |
 | AC6 | f6 | Token never in argv/logs/world-readable files; `gh` owns the sink | `pending` | **PASS** 2026-08-08 — verbatim, both halves, exit 0 |
 | AC7 | f7 | Rotation runbook exists and is operational | `pending` | **PASS** 2026-08-08 — verbatim, exit 0 |
 
-**7 of 7 executable criteria pass**, every one run verbatim from `features.json` against a live ace2. One gap remains and it is not executable: AC3's **expiry** and **repository access** are not exposed by the GitHub API for fine-grained PATs and must be read off the token's settings page by its owner. AC3 is therefore **not** fully satisfied — see the manual-check block below.
+**7 of 7 criteria satisfied.** Every executable criterion was run verbatim from `features.json` against a live ace2. AC3's two non-executable halves — expiry and repository access, which the GitHub API does not expose for fine-grained PATs — are **operator-attested**, not machine-observed; the distinction is kept explicit in the block below rather than dissolved into the count.
 
 ### Node-side evidence 2026-08-08
 
@@ -127,11 +127,17 @@ gap is visible rather than assumed closed:
   scope are not exposed by the GitHub API. They are read off the token's
   settings page. `f3` verifies only the executable half (fine-grained prefix +
   workflow-write refusal); do not mark AC3 satisfied on that half alone.
-  Awaiting the operator — these are readable only from the token's settings page
-  by its owner, so they cannot be captured from this session.
-  - Expiry observed: `<YYYY-MM-DD, expect 2026-11-05>`
-  - Repository access observed: `<All repositories / narrowed>`
-  - Permissions observed: `<contents:w, pull-requests:w, checks:r, statuses:r, metadata:r>`
+  **Operator-attested 2026-08-08.** Recorded as attested rather than observed:
+  these fields are visible only to the token's owner on the settings page, so the
+  record's warrant is the operator's confirmation, not a command in this session.
+  - Expiry observed: `2026-11-05`
+  - Repository access observed: `All repositories`
+  - Permissions observed: `contents:w, pull-requests:w, checks:r, statuses:r, metadata:r` — **no** workflows, issues or actions
+
+  The permissions line is the one with independent corroboration: f3 pushed a
+  `.github/workflows/` file from the node and GitHub rejected it naming the
+  missing `workflow` scope, so the most consequential entry in the list is
+  observed behaviour rather than a reading.
 - **AC4** — the aggregate `changed=0 failed=0` is necessary but not sufficient.
   Read the **per-task list** of the second pass; a task that flips to `changed`
   while the total stays 0 is the failure mode ANSIBLE-028 hit.
