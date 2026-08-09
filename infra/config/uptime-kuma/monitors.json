@@ -608,34 +608,6 @@
     "expiryNotification": true
   },
   {
-    "name": "Services \u00b7 Data \u00b7 Ollama API",
-    "type": "http",
-    "url": "http://100.64.0.5:11434/api/tags",
-    "hostname": null,
-    "port": null,
-    "interval": 300,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": "Ollama LLM inference API on ace2 Docker (ADR-028). SSOT: networking.nodes.ace2.tailscale_ip:11434. VPN-only.",
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      "data",
-      "service"
-    ]
-  },
-  {
     "name": "Staging \u00b7 Web \u00b7 staging.mlorente.dev",
     "type": "http",
     "url": "https://staging.mlorente.dev",
