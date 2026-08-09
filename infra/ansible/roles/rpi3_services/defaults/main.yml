@@ -1,3 +1,17 @@
 ---
 rpi3_deploy_dir: /opt/monitoring
 rpi3_kuma_data_dir: /opt/monitoring/uptime-kuma-data
+
+# MagicDNS MUST come first. Uptime Kuma probes staging by FQDN, and
+# `*.staging.kubelab.live` resolves only through the Headscale split-DNS route
+# to the RPi4 (there is no public record). The host already resolves it, but
+# Docker does not inherit the host's MagicDNS resolver -- its embedded resolver
+# falls through to the DHCP/ISP nameservers, so every staging monitor reports
+# ENOTFOUND while prod stays green. Pinning 100.100.100.100 puts the container
+# back on the split-DNS path.
+#
+# Do NOT "simplify" this to the headscale role's ["1.1.1.1", "8.8.8.8"]: those
+# resolvers cannot see staging either, which is the exact bug this fixes.
+# The public resolver stays as a second entry so the prod monitors keep
+# resolving if Tailscale is down on this node.
+docker_dns_servers: ["100.100.100.100", "1.1.1.1"]
