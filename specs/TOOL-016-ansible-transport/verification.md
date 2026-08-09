@@ -26,6 +26,13 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
   option), `pytest ^8 -> ^9`, `ruff ^0.15 -> ^0.16`, `mypy ^2.1 -> ^2.3` — plus `a7d3722`,
   which changed config merge semantics the generator reads through. f1-f5 all re-run
   verbatim: exit 0.
+- **Re-verified again after the second rebase**, onto master at `2e9541f` (8 further commits,
+  no conflicts, no overlap with the generator, the `provision` target or the aws1 path). f1-f5
+  re-run verbatim: f1 2 passed / 3 deselected, f2 4 passed / 1 deselected, f3 exit 0, f4 exit
+  0, f5 5 passed. Full non-e2e suite 394 passed, `make type` 59 files 0 issues. f6 was **not**
+  re-run: none of the eight commits touches `generator_ansible.py`, the Makefile `provision`
+  target, or anything on the aws1 path, and re-running it costs an off-mesh window of the
+  operator's time. That is a stated judgement, not an omission.
 - **f2's recorded count was corrected, not regressed.** `-k mesh` selects 4, not 3: pytest
   substring-matches the full node ID, so `test_mesh_only_nodes_get_proxy_via_ssot_bastion`
   satisfies both filters. What is verifiable is that **3 does not reproduce against the
@@ -34,12 +41,16 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
   a transcription of the mesh class's size and a rename landing after the capture are
   indistinguishable. Either way the entry had stopped tracking the command; it now records
   what the command prints.
-- `make type` fails on `toolkit/features/notify_smoke.py` (missing `types-requests` stubs).
-  **Pre-existing on master** — reproduced there with an identical error, untouched by this
-  branch. Filed as CI-GATE-005 (#902) and fixed in #903; not folded in here, to keep this PR
-  atomic. The reason it could survive on `master` at all is CI-GATE-006 (#904): no CI job
-  runs the toolkit suite, ruff, or mypy — including on this PR, whose 394 passing tests were
-  produced locally and are not backed by any green check above.
+- **`make type` now passes: 59 source files, 0 issues.** It previously failed on
+  `toolkit/features/notify_smoke.py` for missing `types-requests` stubs — **pre-existing on
+  master**, reproduced there with an identical error and untouched by this branch. Filed as
+  CI-GATE-005 (#902), fixed in #903, and deliberately not folded in here to keep this PR
+  atomic; the second rebase (2026-08-09, onto master at `2e9541f`) carried the fix in, so the
+  failure is resolved by its own PR rather than by this one.
+- **CI-GATE-006 (#904) is still open and still applies.** No CI job runs the toolkit suite,
+  ruff, or mypy — including on this PR. The 394 passing tests and the clean mypy run above
+  were produced locally and are **not** backed by any green check on the PR. That gap is why
+  the failure above could survive on `master` in the first place.
 - Smoke (real `toolkit infra ansible generate --transport bastion`): ace2 (100.64.0.5) and
   aws1 (MagicDNS) carry `ProxyCommand=ssh -i ~/.ssh/id_ed25519 -W %h:%p -q … deployer@<vps.public_ip>`;
   kubelab-vps (public IP) has no per-host args — it is the jump. Inventory restored to mesh after.
