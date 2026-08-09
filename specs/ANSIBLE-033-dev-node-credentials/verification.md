@@ -218,7 +218,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
   A second pattern would fragment the answer to a single question ("can I trust
   this verification command?"). Promotion left for `/spec archive`, per
-  `pattern-spec-driven-development`, and not executed unilaterally.>
+  `pattern-spec-driven-development`, and not executed unilaterally.
 
 ## Archive checklist
 
