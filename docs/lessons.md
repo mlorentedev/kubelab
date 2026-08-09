@@ -3299,3 +3299,49 @@ Verification was the render, not the file: `kubectl kustomize infra/k8s/overlays
 **Rule:** For any scheduled workload, ask what happens after N consecutive misses, not just after one. Controllers that give up quietly are worse than controllers that fail loudly, and "the job did not run" produces no signal unless something is watching for absence. Corollary for Kustomize: the unit of verification is the **built output**, never the source file you edited.
 
 **Tags:** `#kubernetes` `#cronjob` `#backup` `#kustomize` `#silent-failure` `#idp-032` `#gotcha`
+
+### [2026-08-09] The same linter behind two gates in different environments is two linters — and only the lenient one was running (CI-GATE-005/006)
+
+**Context:** Rebasing #865 and re-running the local gate showed `make type` failing on `toolkit/features/notify_smoke.py` — missing `types-requests` stubs. The obvious suspicion was the rebase, since master had just moved mypy `^2.1 → ^2.3`. Checking out `master` and running `make type` there reproduced the identical error, so it was not the rebase and not the bump. It had been red for a while: the `requests` import dates from #670.
+
+**Problem:** mypy runs behind two gates in this repo, and they do not agree.
+
+| Gate | Environment | `types-requests` | Extra args |
+| --- | --- | --- | --- |
+| `make type` | the project venv (`pyproject.toml`) | absent | none |
+| pre-commit `mirrors-mypy` | its own isolated env | present via `additional_dependencies` | `--ignore-missing-imports` |
+
+`[tool.mypy]` overrides `ignore_missing_imports` for `sh`, `yaml`, `argon2`, `uptime_kuma_api` — not `requests`. So the venv had neither the stubs nor a suppression, while pre-commit had both. Every commit passed; the documented pre-push gate had been failing on an untouched tree the whole time.
+
+The second, larger question is why nobody tripped over it. Because nothing ever ran it: `.github/workflows/ci.yml` has four jobs — branch-name regex, `yamllint` on the workflow dir, `make -n help`, and the two path-filtered app pipelines. **No CI job runs pytest, ruff, or mypy over `toolkit/`.** The PR that surfaced this changes only toolkit code, and all nine of its checks were green while its test suite never executed in CI. The first failure was invisible because the only gate that would have caught it does not exist.
+
+**Solution:** Add `types-requests` to the dev dependency group (#903) so the venv matches what pre-commit already supplies. Real stubs rather than widening the `ignore_missing_imports` list — the calls then get type-checked instead of skipped, and they pass, so the annotations were correct all along and merely unverified. `make check` now completes all four legs; it had been aborting at `type` and never reaching `test` or `validate-sync`. The missing CI gate is filed separately as CI-GATE-006 because choosing what CI should run is a design call, not a fix.
+
+**Rule:** When the same tool is configured in two places, treat them as two tools until proven identical — an isolated hook environment with its own dependency list and its own flags is not the environment your Makefile uses, and the discrepancy surfaces as "works for me". Corollary: a gate whose failure nothing observes will eventually be red, so before trusting a green check, ask which command it actually ran. Green checks on a PR are evidence about the checks that ran, not about the code.
+
+**Tags:** `#mypy` `#pre-commit` `#ci` `#tooling` `#silent-failure` `#ci-gate-005` `#ci-gate-006` `#gotcha`
+
+### [2026-08-09] A monitor that is green for prod and red for staging is reporting on its own resolver, not on your infrastructure (MON-001)
+
+**Context:** Every `*.staging.kubelab.live` monitor in Uptime Kuma read DOWN. Staging is on `ace1`, an on-demand homelab node, so the first available story — the homelab is powered off — fitted perfectly and was wrong. `toolkit infra headscale probe` passed end to end: `ace1` SSH, `hub->spoke :6443 (staging)`, the RPi4 subnet route, the intra-K3s spoke API. The infrastructure being monitored was entirely up.
+
+**Problem:** The RPi3 host resolved `api.staging.kubelab.live` to `100.64.0.11` correctly, through the Headscale split-DNS route to the RPi4. The `uptime-kuma` container, on the same host, returned `ENOTFOUND`.
+
+Docker had declined to inherit the host's MagicDNS resolver and substituted its own upstreams, which its generated resolv.conf records in a comment that is easy to read past:
+
+```
+nameserver 127.0.0.11
+# ExtServers: [host(75.75.75.75) host(75.75.76.76) ...]
+```
+
+Those are the ISP's resolvers. Staging DNS is VPN-only and has no public record, so every staging FQDN failed — while prod monitors stayed green, because prod resolves publicly through Cloudflare. That asymmetry is the whole trap: a resolver defect that only affects names with no public record is *indistinguishable from a real outage of exactly those services*, and it points the investigation at the infrastructure instead of at the prober.
+
+The repo already carried a gotcha about Docker not inheriting host DNS, written for the systemd-resolved `127.0.0.53` stub, prescribing `dns: [1.1.1.1, 8.8.8.8]`. Applying it here would have been a plausible-looking change that fixed nothing: those resolvers cannot see staging either.
+
+**Solution:** Pin the container to MagicDNS (`100.100.100.100`) via the `docker_dns_servers` idiom the `headscale` role already established, keeping a public resolver as a second entry so prod monitors survive Tailscale being down on the node. The CLAUDE.md gotcha was rewritten to separate the two cases and name the `# ExtServers:` line as the way to tell them apart.
+
+One near-miss is worth recording. The first attempt to verify the fix queried MagicDNS from inside the container with `dns.setServers(['100.100.100.100'])` followed by `dns.lookup()`, and returned `ENOTFOUND` — apparently proving the fix would not work. `dns.setServers()` governs `dns.resolve*()` only; `dns.lookup()` goes through `getaddrinfo` and ignores it entirely, so the test had re-measured the broken path. `dns.resolve4()` returned `100.64.0.11`. A verification that silently exercises the thing you are trying to bypass is worse than no verification, because it carries the authority of evidence.
+
+**Rule:** When a prober reports a partition of its targets down, first ask what distinguishes the failing set from the passing set. If the discriminator is a property of *name resolution* — public record vs split-DNS, internal vs external zone — suspect the prober's resolver before the targets. Check reachability from inside the probing container, not from its host; the host resolving correctly is not evidence, and on a split-DNS mesh it is the single most misleading observation available. And treat a documented gotcha as scoped to the mechanism it was written for: the same symptom from a different cause can make the recorded fix precisely inverted.
+
+**Tags:** `#dns` `#docker` `#tailscale` `#magicdns` `#split-dns` `#uptime-kuma` `#monitoring` `#false-positive` `#mon-001` `#gotcha`
