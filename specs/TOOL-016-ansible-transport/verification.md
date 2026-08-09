@@ -36,7 +36,10 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
   what the command prints.
 - `make type` fails on `toolkit/features/notify_smoke.py` (missing `types-requests` stubs).
   **Pre-existing on master** — reproduced there with an identical error, untouched by this
-  branch. Tracked separately; not fixed here to keep this PR atomic.
+  branch. Filed as CI-GATE-005 (#902) and fixed in #903; not folded in here, to keep this PR
+  atomic. The reason it could survive on `master` at all is CI-GATE-006 (#904): no CI job
+  runs the toolkit suite, ruff, or mypy — including on this PR, whose 394 passing tests were
+  produced locally and are not backed by any green check above.
 - Smoke (real `toolkit infra ansible generate --transport bastion`): ace2 (100.64.0.5) and
   aws1 (MagicDNS) carry `ProxyCommand=ssh -i ~/.ssh/id_ed25519 -W %h:%p -q … deployer@<vps.public_ip>`;
   kubelab-vps (public IP) has no per-host args — it is the jump. Inventory restored to mesh after.
