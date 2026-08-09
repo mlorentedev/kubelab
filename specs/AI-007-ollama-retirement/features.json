@@ -29,10 +29,10 @@
   },
   {
     "id": "AI-007-ollama-retirement-f5",
-    "behavior": "The out-of-band Middleware and its Secret are gone from the LIVE prod cluster - the objects Argo never tracked, so a git-only check cannot see them",
+    "behavior": "The out-of-band Middleware is gone from the LIVE prod cluster - the object Argo never tracked, so a git-only check cannot see it. NOTE: there is no backing Secret and there never was; the API key is inline in the Middleware spec (keys: [${API_KEY}] in api-key.yaml.tpl). The secret clause below is kept as a guard against a future variant, not because one existed",
     "verification": "! kubectl --kubeconfig ~/.kube/kubelab-prod-config get middleware api-key-ollama -n kubelab 2>/dev/null && ! kubectl --kubeconfig ~/.kube/kubelab-prod-config get secret -n kubelab -o name 2>/dev/null | grep -qi ollama",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: before deletion `kubectl get middleware api-key-ollama -n kubelab` returned it at AGE 78d, and `get secret -n kubelab -o name | grep -i ollama` was already empty — confirming no Secret ever backed it. Deleted with a supervised one-off (`kubectl delete middleware api-key-ollama -n kubelab`, authorized by Manu) because the toolkit has an apply path and no delete path; filed as its own gap. Post-check: both clauses pass. The two remaining ollama middlewares, ollama-inflight and ollama-ratelimit, are git-tracked in overlays/prod/ollama-throttle.yaml and are Argo's to prune on PR-B merge, not this probe's concern. Edge smoke after deletion: api.kubelab.live 200, auth.kubelab.live 200 — removing a middleware referenced by a soon-to-be-pruned IngressRoute did not affect other routers. Deleting it also removed a plaintext prod API key from etcd, since the key is inline in the Middleware spec rather than in a Secret."
   },
   {
     "id": "AI-007-ollama-retirement-f6",

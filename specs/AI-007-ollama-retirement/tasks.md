@@ -37,9 +37,9 @@ created: "2026-08-09"
 > real notification (`interval: 300`, `maxretries: 3`, `notificationIDList: [1]`); removing it
 > first costs nothing. See Risk 7.
 
-- [ ] Remove the Uptime Kuma monitor from `infra/config/uptime-kuma/monitors.json` and deploy with `make monitoring-apply`. **Do this before touching the container.** RPi3 is always-on, so this step never waits on ace2 — but it is a git-tracked file, so it rides this branch rather than being edited live, or it creates the same git-vs-reality drift the DNS step just closed
-- [ ] [AC5] Delete the live `Middleware/api-key-ollama` **and its Secret** from prod. Argo never tracked them (ADR-035 Stage 1, applied over stdin), so no merge will ever remove them. **Open, task-level:** there is an apply path (`apply_middleware_secrets`) but no delete path — decide between a supervised one-off and a small toolkit removal command before running it
-- [ ] [AC5] Delete the untracked local render `infra/k8s/overlays/prod/middlewares/.rendered/api-key-ollama.yaml` — it holds the real prod key and is invisible to every git-based check here (Risk 5)
+- [x] Remove the Uptime Kuma monitor from `infra/config/uptime-kuma/monitors.json` and deploy with `make monitoring-apply` ✓ 2026-08-09 — 31 live monitors, 0 duplicates, no Ollama. The apply's own log claimed "Removed 32 (32 remaining)" and proceeded anyway; the result was correct but the check is a race, filed as MON-003 (#925)
+- [x] [AC5] Delete the live `Middleware/api-key-ollama` from prod ✓ 2026-08-09 — supervised one-off, authorized. Argo never tracked it (ADR-035 Stage 1, applied over stdin), so no merge would ever have removed it. **There was no backing Secret**: the key is inline in the Middleware spec, so this deletion is what took the plaintext key out of etcd. The toolkit has an apply path and no delete path — gap filed separately. Edge smoke after: api and auth both 200
+- [x] [AC5] Delete the untracked local render `infra/k8s/overlays/prod/middlewares/.rendered/api-key-ollama.yaml` ✓ 2026-08-09 — held the real prod key and was invisible to every git-based check here (Risk 5)
 - [ ] [P] Remove Ollama from ace2: strip it from the `ace2_services` role/compose, then `make provision NODE=ace2 ENV=staging`
 
 ### PR-B — the sweep (merging fires the Argo prune)
