@@ -122,9 +122,8 @@ ssh -o ForwardAgent=no ace2 'cat /tmp/ansible-033-f2.result'   # want: F2_OK
 It clones, commits, pushes and opens a draft PR against the fixture, then removes
 both. `F2_FIXTURE_ARCHIVED` means the fixture, not the token, is the problem.
 
-The path says `specs/archive/` because rotation falls after the spec is archived —
-first rotation is 2026-11-05, archival happens once AC3 closes. If you are running
-this before then, drop `archive/` from the path.
+The `specs/archive/` path is correct as written: the spec was archived on
+2026-08-08, and the runbook outlives it by design.
 
 ### 5. Revoke the old token
 
