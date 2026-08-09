@@ -1,0 +1,51 @@
+[
+  {
+    "id": "AI-007-ollama-retirement-f1",
+    "behavior": "No Ollama reference survives in tracked files except the deliberate ones (docs, specs, CHANGELOG, CLAUDE.md, and the beelink legacy-cleanup tasks kept by Out of scope)",
+    "verification": "! git grep -il ollama -- ':!docs' ':!specs' ':!CHANGELOG.md' ':!CLAUDE.md' ':!infra/ansible/roles/beelink_services' ':!infra/ansible/playbooks/provision-bee.yml'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f2",
+    "behavior": "The drift gate is green and no generated artifact still carries an Ollama reference",
+    "verification": "make validate-sync && ! git grep -il ollama -- 'infra/k8s/overlays/*/generated' 'infra/k8s/base/services/homepage-config'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f3",
+    "behavior": "The prod API key is unset in SOPS, not merely de-registered from SECRET_CATALOG into an orphan no audit can see",
+    "verification": "! (poetry run toolkit secrets audit --env prod | grep -qi ollama) && ! (sops -d infra/config/secrets/prod.enc.yaml | grep -qi ollama)",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f4",
+    "behavior": "The public Cloudflare record is destroyed and the name no longer resolves",
+    "verification": "! dig +short ollama.kubelab.live @1.1.1.1 | grep -q .",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f5",
+    "behavior": "The out-of-band Middleware and its Secret are gone from the LIVE prod cluster - the objects Argo never tracked, so a git-only check cannot see them",
+    "verification": "! kubectl --kubeconfig ~/.kube/kubelab-prod-config get middleware api-key-ollama -n kubelab 2>/dev/null && ! kubectl --kubeconfig ~/.kube/kubelab-prod-config get secret -n kubelab -o name 2>/dev/null | grep -qi ollama",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f6",
+    "behavior": "The suites pass with the Ollama e2e module gone and no dangling expectation left behind",
+    "verification": "make test && ! git grep -il ollama -- tests/",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-007-ollama-retirement-f7",
+    "behavior": "ADR-028 and ADR-029 are amended rather than silently outdated, each naming AI-007",
+    "verification": "grep -q 'AI-007' docs/adr/adr-028-operational-topology.md && grep -q 'AI-007' docs/adr/adr-029-intelligence-layer.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
