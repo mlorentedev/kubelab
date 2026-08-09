@@ -76,6 +76,11 @@
         config: "{{ common | combine(env_overrides, recursive=True) }}"
       tags: [always]
 
+    # `always`, matching the config loads above. Without it a tagged run
+    # (`TAGS=dev_node`, the command AC4 prescribes) skips decryption entirely,
+    # leaving `secrets` undefined — so every role var sourced from SOPS silently
+    # resolves to its default. Observed 2026-08-08: the dev_node identity tasks
+    # skipped on a full provision while the play still reported failed=0.
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
       register: sops_common
@@ -84,6 +89,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Decrypt env secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
@@ -93,11 +99,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]
 
     - name: Generate Headscale pre-auth key (via VPS)
       command: >
@@ -173,3 +181,9 @@
       tags: [dev_node, cde]
       vars:
         dev_node_user: "{{ config.networking.ssh_users.homelab }}"
+        # Machine identity (ANSIBLE-033). Sourced from COMMON secrets, decrypted
+        # controller-side above — the node never sees an age key. `default('')`
+        # is what makes the role's "not configured" path reachable: an operator
+        # without the secret gets a provisioned node with no identity, not a
+        # failed play or an empty credential handed to `gh`.
+        dev_node_github_token: "{{ secrets.apps.services.automation.dev_node.github_token | default('') }}"

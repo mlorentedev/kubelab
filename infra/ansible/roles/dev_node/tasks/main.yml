@@ -186,3 +186,86 @@
         dest: "{{ dev_node_home }}/bin/dev-session.sh"
         mode: "0755"
       tags: [dev_node, dev-session]
+
+    # --- machine identity: one PAT for gh AND git over HTTPS (ANSIBLE-033) ---
+    # Every task here is guarded on the token being configured, so a run without
+    # the secret leaves a working dev node with no identity rather than half of
+    # one. HOME is set explicitly: `become_user` does not reliably export it, and
+    # both `gh` (~/.config/gh/hosts.yml) and `git config --global` resolve their
+    # target file from HOME — get it wrong and the credential lands in root's
+    # home, which is both a leak and an invisible failure.
+    - name: Read the token gh currently holds
+      ansible.builtin.command:
+        cmd: gh auth token
+      environment:
+        HOME: "{{ dev_node_home }}"
+      register: _gh_current_token
+      # Exits non-zero when not logged in — that is a state to read, not a failure.
+      failed_when: false
+      changed_when: false
+      no_log: true
+      when: dev_node_github_token | length > 0
+      tags: [dev_node, gh, identity]
+
+    - name: Authenticate gh with the dev-node token
+      ansible.builtin.command:
+        cmd: gh auth login --with-token
+        # stdin, NEVER argv: a token passed as a command argument is readable by
+        # any user via /proc/<pid>/cmdline for the lifetime of the process, and
+        # lands in the process accounting log (SEC-SECRETS-001).
+        stdin: "{{ dev_node_github_token }}"
+      environment:
+        HOME: "{{ dev_node_home }}"
+      no_log: true
+      when:
+        - dev_node_github_token | length > 0
+        - (_gh_current_token.stdout | default('') | trim) != dev_node_github_token
+      # The guard above IS the state check, so reaching this task means the stored
+      # credential genuinely differed. Convergence therefore comes from `when`,
+      # not from a post-hoc parse of gh's output.
+      changed_when: true
+      tags: [dev_node, gh, identity]
+
+    # Registering gh as git's credential helper is what makes ONE token serve
+    # both tools. That wiring lives in ~/.gitconfig — a file the dotfiles
+    # bootstrap (run earlier in THIS role) redeploys wholesale every pass.
+    #
+    # So this role does NOT run `gh auth setup-git`. Measured on ace2
+    # 2026-08-08: the helper was deleted by hand, and the bootstrap had already
+    # restored it before the check below ran. Anything written here is erased on
+    # the next pass, and a role that keeps rewriting it reports `changed`
+    # forever — the "one writer per file" failure ANSIBLE-028 already paid for
+    # with ~/.bashrc and ~/.tmux.conf. A guarded write is not a fallback here;
+    # in the only case it would ever fire it is a churn generator.
+    #
+    # Division of labour: the token is this role's, the wiring is dotfiles'
+    # (the `[credential "https://github.com"]` block in its .gitconfig). We
+    # verify the contract instead of fighting for the file, so a missing helper
+    # fails loudly rather than silently costing the "one credential, not two"
+    # property. There is no ~/.gitconfig.local seam to write into; creating one
+    # is a dotfiles change, not a kubelab one.
+    - name: Check whether gh is git's credential helper
+      ansible.builtin.command:
+        cmd: git config --global --get-regexp '^credential\..*helper$'
+      environment:
+        HOME: "{{ dev_node_home }}"
+      register: _git_credential_helper
+      # Exits 1 when no key matches — an unconfigured helper, not an error.
+      failed_when: false
+      changed_when: false
+      when: dev_node_github_token | length > 0
+      tags: [dev_node, gh, identity]
+
+    - name: Assert the same token serves git over HTTPS
+      ansible.builtin.assert:
+        that:
+          - "'gh auth git-credential' in (_git_credential_helper.stdout | default(''))"
+        fail_msg: >-
+          The dev-node token is installed, but git will not use it over HTTPS:
+          no `gh auth git-credential` helper is configured. ~/.gitconfig is owned
+          by the dotfiles bootstrap, so this role must not write it (one writer
+          per file). Restore the [credential "https://github.com"] block in
+          mlorentedev/dotfiles .gitconfig, then re-provision.
+        success_msg: gh is git's credential helper — one credential serves both.
+      when: dev_node_github_token | length > 0
+      tags: [dev_node, gh, identity]
