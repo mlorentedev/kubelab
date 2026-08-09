@@ -893,6 +893,14 @@ def ansible_generate(
     bootstrap: Annotated[
         bool, typer.Option("--bootstrap", help="Use LAN IPs instead of Tailscale (first-time provisioning)")
     ] = False,
+    transport: Annotated[
+        str,
+        typer.Option(
+            "--transport",
+            help="SSH transport (TOOL-016): 'mesh' (default, controller on the Tailscale mesh) "
+            "or 'bastion' (jump mesh-only nodes through the VPS public bastion — for a non-mesh controller)",
+        ),
+    ] = "mesh",
 ) -> None:
     """Generate Ansible inventory from common.yaml (SSOT).
 
@@ -903,13 +911,22 @@ def ansible_generate(
     Use --bootstrap for first-time provisioning when Tailscale
     is not yet configured on target nodes. This uses lan_ip
     as ansible_host instead of tailscale_ip.
+
+    Use --transport bastion when provisioning from a controller that is NOT on the
+    mesh (non-admin box / bare WSL): mesh-only nodes are reached via a ProxyCommand
+    through the VPS public bastion (ADR-052 sibling for SSH).
     """
-    logger.section("Ansible Generate" + (" (bootstrap)" if bootstrap else ""))
+    if transport not in {"mesh", "bastion"}:
+        logger.error(f"Invalid --transport '{transport}' (expected: mesh | bastion)")
+        raise typer.Exit(1) from None
+
+    _suffix = (" (bootstrap)" if bootstrap else "") + (f" [{transport}]" if transport != "mesh" else "")
+    logger.section("Ansible Generate" + _suffix)
 
     try:
         from toolkit.features.generator_ansible import ansible_generator
 
-        result = ansible_generator.generate(env, bootstrap=bootstrap)
+        result = ansible_generator.generate(env, bootstrap=bootstrap, transport=transport)
         if result.get("success"):
             for f in result.get("files", []):
                 logger.info(f"  {f}")
