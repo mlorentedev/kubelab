@@ -24,8 +24,8 @@
     "id": "AI-007-ollama-retirement-f4",
     "behavior": "The public Cloudflare record is destroyed and the name no longer resolves",
     "verification": "! dig +short ollama.kubelab.live @1.1.1.1 | grep -q .",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: `make tf-dns-plan` reported `Plan: 0 to add, 0 to change, 1 to destroy`, the single resource being cloudflare_record.kubelab_svc[\"ollama\"] (A, ollama.kubelab.live -> 162.55.57.175, proxied=false, id b5a3dc58a24db92a83c1ed81c0f00c73). Terraform's stated reason is `because key [\"ollama\"] is not in for_each map` — the record was removed by shrinking the desired set in services.json (#915), which is why merging that PR was inert until the apply. Applied: outputs went kubelab_record_count 16 -> 15 and the ollama entry left kubelab_service_urls. Verified after: `dig +short ollama.kubelab.live @1.1.1.1` empty, and empty at the authoritative NS too, while api.kubelab.live still resolves (104.21.56.20 / 172.67.175.250) — so the zone was not damaged."
   },
   {
     "id": "AI-007-ollama-retirement-f5",

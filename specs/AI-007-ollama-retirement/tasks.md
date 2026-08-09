@@ -13,29 +13,39 @@ created: "2026-08-09"
 
 ## Setup
 
-- [x] Branch created from main: `feat/AI-007-ollama-retirement`
-- [ ] `proposal.md` acceptance criteria confirmed by Manu (currently `[AGENT-DRAFT]`)
-- [ ] Risks 2 and 3 answered — both are task-level/scope, neither blocks PR-A
+- [x] Branch created from main: `feat/AI-007-ollama-sweep` ✓ 2026-08-09 (the earlier
+      `feat/AI-007-ollama-retirement` was discarded — it had fallen behind master and a PR
+      from it would have reverted #903, #911 and #913)
+- [x] `proposal.md` acceptance criteria confirmed by Manu ✓ 2026-08-09 — all eight stand
+- [x] Risks 2 and 3 answered ✓ 2026-08-09 — plugin **stays** registered (ADR-035 Stage 1 has
+      two further anchored consumers, DT-004 and AI-004/#914); `beelink_services` cleanup
+      tasks **stay**, only their rationale comment is corrected
 
 ## Implementation
 
 ### PR-A — spec + public DNS (merging is inert; the apply is the first real act)
 
-- [ ] [AC4] Remove the `ollama` record from `infra/terraform/dns/services.json`
-- [ ] [AC4] `make tf-dns-plan` — confirm **exactly one** resource destroyed and no other change
-- [ ] Open PR-A; merge only on explicit authorization (public DNS)
-- [ ] [AC4] `make tf-dns-apply`, then confirm `ollama.kubelab.live` no longer resolves
+- [x] [AC4] Remove the `ollama` record from `infra/terraform/dns/services.json` ✓ 2026-08-09
+- [x] [AC4] `make tf-dns-plan` — confirm **exactly one** resource destroyed and no other change ✓ 2026-08-09 (`0 to add, 0 to change, 1 to destroy`)
+- [x] Open PR-A; merge only on explicit authorization (public DNS) ✓ 2026-08-09 — #915, plus #919 for AC8
+- [x] [AC4] `make tf-dns-apply`, then confirm `ollama.kubelab.live` no longer resolves ✓ 2026-08-09
 
-### Manual window — requires ace2 powered on; nothing here fires on merge
+### Manual window — nothing here fires on merge
 
-- [ ] [AC5] Delete the live `Middleware/api-key-ollama` **and its Secret** from prod. Argo never tracked them (ADR-035 Stage 1, applied over stdin), so no merge will ever remove them
+> **The monitor goes FIRST and is not ace2-gated.** Only the container and the live cluster
+> objects need ace2 powered on. Removing the monitor after the container lights a fuse to a
+> real notification (`interval: 300`, `maxretries: 3`, `notificationIDList: [1]`); removing it
+> first costs nothing. See Risk 7.
+
+- [ ] Remove the Uptime Kuma monitor from `infra/config/uptime-kuma/monitors.json` and deploy with `make monitoring-apply`. **Do this before touching the container.** RPi3 is always-on, so this step never waits on ace2 — but it is a git-tracked file, so it rides this branch rather than being edited live, or it creates the same git-vs-reality drift the DNS step just closed
+- [ ] [AC5] Delete the live `Middleware/api-key-ollama` **and its Secret** from prod. Argo never tracked them (ADR-035 Stage 1, applied over stdin), so no merge will ever remove them. **Open, task-level:** there is an apply path (`apply_middleware_secrets`) but no delete path — decide between a supervised one-off and a small toolkit removal command before running it
+- [ ] [AC5] Delete the untracked local render `infra/k8s/overlays/prod/middlewares/.rendered/api-key-ollama.yaml` — it holds the real prod key and is invisible to every git-based check here (Risk 5)
 - [ ] [P] Remove Ollama from ace2: strip it from the `ace2_services` role/compose, then `make provision NODE=ace2 ENV=staging`
-- [ ] Remove the Uptime Kuma monitor from `infra/config/uptime-kuma/monitors.json` and deploy to RPi3 — **same window as the container**, since the monitor targets the Tailscale IP and only trips when the container dies
 
 ### PR-B — the sweep (merging fires the Argo prune)
 
 - [ ] [AC3] `toolkit secrets unset` the prod `apps.services.ai.ollama.api_key` **first**, then drop its `SECRET_CATALOG` entry. The reverse order leaves a value no audit can see
-- [ ] [AC1] [AC5] Delete `infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl` and its `MIDDLEWARE_CATALOG` entry
+- [ ] [AC1] [AC5] Delete `infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl` and its `MIDDLEWARE_CATALOG` entry. **Leave the `api-key:` plugin registered** in `traefik-helmconfig.yaml.j2` — resolved Risk 2. **Sweep on `ollama`, never on `api-key`**: the `api-key` in `infra/k8s/overlays/{staging,prod}/secrets.yaml` is CrowdSec's bouncer key, and deleting it breaks the bouncer (Risk 4)
 - [ ] [AC1] Delete `infra/k8s/base/external/ollama.yaml` and `infra/k8s/overlays/prod/ollama-throttle.yaml`; drop the references from both `kustomization.yaml` files and prod `patches.yaml`
 - [ ] [AC1] Remove `apps.services.ai.ollama.*` from `common.yaml` and `staging.yaml`
 - [ ] [AC1] Drop `ollama` from `SERVICES_AI` in `toolkit/config/constants.py`
