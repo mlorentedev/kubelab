@@ -14,7 +14,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 - [x] AC3 (bastion target from SSOT, no hardcoded IP) -> f3 (grep: 0 IPs in generator source)
 - [x] AC4 (`--transport` flag + Makefile `TRANSPORT=`) -> f4
 - [x] AC-coverage (new AnsibleGenerator unit suite) -> f5 (5 passed; was 0 coverage before)
-- [ ] Runtime end-to-end through the bastion -> f6 (off-mesh-gated; retargeted to `aws1`, see below)
+- [x] Runtime end-to-end through the bastion -> f6 (**passed 2026-08-09 off-mesh for real**, see below)
 
 ## Test status
 
@@ -62,6 +62,18 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
   `-W %h:%p` hands the name to the jump host, which is why the path can work with no local
   mesh route at all. It does **not** prove f6, because a mesh route existed and Ansible was
   free to prefer it. f6 stays `pending` until the same command passes after `tailscale down`.
+- **f6 PASSED for real, 2026-08-09.** Same command, controller genuinely off the mesh. The
+  precondition was *established and checked*, not assumed: `tailscale status` printed
+  "Tailscale is stopped", `tailscale0` retained only a link-local `fe80::/64` with no
+  `100.64.0.1`, and `ping -c1 100.64.0.7` to aws1 failed — while `getent hosts
+  vpn.kubelab.live` still returned the public `162.55.57.175`, so the jump stayed reachable
+  exactly as the design requires. Result: exit 0, `TASK [Gathering Facts] ok: [aws1]`,
+  `PLAY RECAP ok=3 changed=0 unreachable=0 failed=0 skipped=2`, 35.6s wall — within a second
+  of the on-mesh rehearsal's 34s, which is itself evidence that the mesh route was never
+  what carried the connection. The target's restore leg ran: 0 `ProxyCommand` left in the
+  generated inventory and `aws1` back to `ansible_host: aws1.kubelab.internal`.
+  **Verifying the negative was the point of the run** — an off-mesh test that never confirms
+  it is off-mesh proves the same nothing the rehearsal did.
 - No regression: mesh transport asserted to carry no per-host ssh args and an unchanged
   `all.vars` block.
 
