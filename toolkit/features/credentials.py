@@ -188,7 +188,7 @@ class CredentialsManager:
 
         Args:
             key_path: The dot-separated path to the key in the secrets file
-                      (e.g., "apps.authelia.users_admin_password_hash").
+                      (e.g., "apps.services.security.authelia.users_operator_password_hash").
             env: The target environment (e.g., "dev").
         """
         logger.section(f"Generate Hashed Secret for '{key_path}' - {env.upper()}")
