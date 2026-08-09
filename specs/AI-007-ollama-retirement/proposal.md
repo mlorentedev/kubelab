@@ -44,26 +44,51 @@ This is a **subtractive** change, so most of the "what" is absence. Observable a
 - **ANSIBLE-030 (#858) D6 housekeeping timers.** Separate ADR-058 item, separate ticket.
 - **The `dev_node` role itself.** Only its header comments about coexisting with `ace2_services` change.
 
+## Retirement sequence — RESOLVED 2026-08-09
+
+The 38 surfaces do not divide by file type. They divide by **what triggers them**:
+
+| Actor | Surfaces | Fires |
+|---|---|---|
+| **Argo CD** | K8s manifests (IngressRoute, external Service/EndpointSlice, `ollama-throttle.yaml`) | **by itself, on merge** (`prune: true`, `selfHeal: true`) |
+| **Operator** | Terraform public DNS, Ansible on ace2, Uptime Kuma monitor on RPi3, the out-of-band `api-key-ollama` Middleware | when run by hand |
+| Nobody | toolkit catalogs, tests, homepage, docs, ADR amendments | when the code next runs |
+
+Exactly one actor moves on its own, and it is the one that cannot be held back. **So Argo goes last.** Every operator-triggered surface is removed while the cluster still serves, so each intermediate state is *unreachable*, never *reachable and broken* — and each step reverts on its own (re-apply Terraform, re-run the provision).
+
+The order is enforced by **merge order, not by a runbook step someone has to remember** — the principle ADR-058 D6 already applies to housekeeping ("automation, not willpower").
+
+### Implementation split (2 PRs, linear deps)
+
+| PR | Scope | Trigger semantics |
+|----|-------|-------------------|
+| **PR-A** (this spec + DNS) | `proposal.md` sequence + `tasks.md` + `features.json`, and the `ollama` record removed from `infra/terraform/dns/services.json` | Merging is inert — the record only dies on a manual `make tf-dns-apply`, the deliberate first act |
+| **manual window** | `make provision NODE=ace2` (container gone), Uptime Kuma monitor removed, out-of-band Middleware + Secret deleted from prod | Needs ace2 powered on |
+| **PR-B** (the sweep) | manifests, SOPS key, toolkit catalogs, tests, homepage, Ansible role, docs, ADR-028/029 amendments | Merging fires the Argo prune — safe, because by then nothing points at anything |
+
 ## Risks / open questions
 
 [AGENT-DRAFT — review before archive]
 
-1. **Ordering is load-bearing, and prod self-heals.** Argo CD prod runs `selfHeal: true` (ADR-037), so merging the manifest deletion prunes prod the moment it syncs. If the Cloudflare record still exists at that point, `ollama.kubelab.live` resolves to an edge with no backend. **MUST be resolved before code:** decide the order — Terraform DNS destroy first, then manifests, or a single window.
-2. **The API key must be unset, not just de-registered.** Dropping it from `SECRET_CATALOG` while leaving the value in `prod.enc.yaml` creates a secret no audit can see. This repo already carries exactly that debt (`users_admin_password_hash` orphaned in `staging.enc.yaml`), so it is a demonstrated failure mode, not a hypothetical.
-3. **Uptime Kuma monitors a service that will stop existing.** Left in place it alerts forever; the monitor lives in `infra/config/uptime-kuma/monitors.json` on RPi3, outside the K8s sweep.
-4. **e2e coupling.** `test_ollama_public.py` is a whole module, and `expectations.py` / `conftest.py` also carry entries. Deleting the module alone leaves dangling expectations.
-5. **Terraform touches live public DNS.** Requires a reviewed `plan` showing exactly one record destroyed and nothing else — this is the only surface in the sweep that is not recoverable by re-running a generator.
+1. **Argo will not prune the `api-key-ollama` Middleware — it never tracked it.** Per ADR-035 Stage 1 the Middleware is deliberately outside Kustomize/git: the toolkit renders it from `infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl` and applies it over stdin. Verified — no `kustomization.yaml` references it. Deleting the `.tpl` and the `MIDDLEWARE_CATALOG` entry therefore leaves the live object **and its Secret** running in prod. The sweep needs an explicit live-object deletion step; a git-only sweep looks complete and is not.
+2. **Open, task-level:** whether to also deregister the `api-key:` plugin from `traefik-helmconfig.yaml.j2`. That is an Ansible change implying a prod Traefik restart, and the plugin is generic rather than Ollama-specific. Drafted as "leave it" — ADR-035 Stage 2 may want it.
+3. **Open, scope:** `beelink_services` keeps idempotent tasks that strip a bare-metal Ollama binary. They are harmless and guard a re-imaged node, so this spec keeps them and only corrects their stated rationale. Confirm that rather than full removal is wanted.
+4. **The API key must be unset, not just de-registered.** Dropping it from `SECRET_CATALOG` while leaving the value in `prod.enc.yaml` creates a secret no audit can see. This repo already carries exactly that debt (`users_admin_password_hash` orphaned in `staging.enc.yaml`), so it is a demonstrated failure mode, not a hypothetical.
+5. **Uptime Kuma monitors a service that will stop existing.** The monitor targets `http://100.64.0.5:11434/api/tags` — the Tailscale IP directly, **not** the public FQDN — so removing the DNS record does not trip it; removing the container does. It must therefore go in the same manual window as the container, or it pages. It lives in `infra/config/uptime-kuma/monitors.json` on RPi3, outside both the K8s sweep and the Argo prune.
+6. **e2e coupling.** `test_ollama_public.py` is a whole module, and `expectations.py` / `conftest.py` also carry entries. Deleting the module alone leaves dangling expectations.
+7. **Terraform touches live public DNS.** Requires a reviewed `plan` showing exactly one record destroyed and nothing else — the only surface in the sweep not recoverable by re-running a generator.
 
 ## Acceptance criteria
 
 [AGENT-DRAFT — review before archive]
 
-- [ ] A tree-wide search for `ollama` (case-insensitive, excluding `docs/`, `specs/`, `CHANGELOG.md`) returns **zero** matches in tracked files.
-- [ ] `make validate-sync` exits 0 with no Ollama reference in any generated artifact.
-- [ ] `toolkit secrets audit --env prod` shows no Ollama entry, and decrypting `prod.enc.yaml` confirms `apps.services.ai.ollama` is absent — proving the value was unset, not orphaned.
-- [ ] `terraform plan` for the DNS module shows exactly one resource destroyed (the `ollama` record) and no other change.
-- [ ] `make test` and the prod e2e suite pass with no Ollama module, no skipped Ollama expectation, and no new failures.
-- [ ] ADR-028 and ADR-029 each carry an amendment note referencing AI-007 and #905.
+- [ ] **AC1** — A case-insensitive search for `ollama` across tracked files matches **only** the deliberate survivors: `docs/`, `specs/`, `CHANGELOG.md`, `CLAUDE.md`, and the `beelink_services` / `provision-bee.yml` legacy-cleanup tasks kept by Out of scope. No match anywhere else.
+- [ ] **AC2** — `make validate-sync` exits 0, and no generated artifact (ConfigMaps, homepage `custom.js`, image pins) contains an Ollama reference.
+- [ ] **AC3** — `toolkit secrets audit --env prod` reports no Ollama entry, and decrypting `prod.enc.yaml` shows `apps.services.ai.ollama` absent — proving the value was unset, not merely de-registered into an orphan.
+- [ ] **AC4** — `make tf-dns-plan` shows exactly one resource destroyed (the `ollama` record) and no other change; after apply, `ollama.kubelab.live` does not resolve.
+- [ ] **AC5** — In prod, no `Middleware/api-key-ollama` and no backing Secret remain — the out-of-band objects Argo never tracked are gone, verified against the live cluster rather than against git.
+- [ ] **AC6** — `make test` and the prod e2e suite pass with no Ollama module, no skipped Ollama expectation, and no new failures.
+- [ ] **AC7** — ADR-028 and ADR-029 each carry an amendment note referencing AI-007 and #905.
 
 ## References
 
