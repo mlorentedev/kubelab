@@ -63,7 +63,6 @@ owner: manu
 | Service | Planned Node | Purpose | When |
 | --- | --- | --- | --- |
 | GitHub Runner | Acemagic | Self-hosted CI runner | When CI load grows |
-| Ollama + WebUI | Acemagic (homelab) | AI/ML inference + chat UI | Stream B-ai |
 | Vaultwarden | VPS | Password management | Prod deployment |
 | Headlamp | Acemagic (K8s pod) | Kubernetes web UI (behind Authelia IngressRoute) | B6 / PROD-K3S-000b |
 | Vikunja | Acemagic / VPS | Task management (replaces Google Keep) + agent delegation UI | Stream F |

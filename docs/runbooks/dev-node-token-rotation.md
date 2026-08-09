@@ -31,7 +31,7 @@ the failure shows up as work not happening:
 The last row is the dangerous one — an agent that cannot push may look busy
 rather than broken. **If an agent stops producing PRs, check the token first.**
 
-Nothing else on ace2 is affected: Ollama, the toolchain and the dev sessions do
+Nothing else on ace2 is affected: the toolchain and the dev sessions do
 not use this credential.
 
 ## Who is notified

@@ -86,14 +86,20 @@ The order is enforced by **merge order, not by a runbook step someone has to rem
 `[AGENT-DRAFT]` tags above cover narrative sections only (Why / What / Out of
 scope / Risks) and are review-before-archive, not gates.
 
-- [ ] **AC1** — A case-insensitive search for `ollama` across tracked files matches **only** the deliberate survivors: `docs/`, `specs/`, `CHANGELOG.md`, `CLAUDE.md`, and the `beelink_services` / `provision-bee.yml` legacy-cleanup tasks kept by Out of scope. No match anywhere else.
+- [x] **AC1** — No **live wiring** for Ollama survives in tracked files. ✓ 2026-08-09.
+
+  **Rewritten during implementation, because the original was unsatisfiable.** It asked for a case-insensitive search for the *word* `ollama` to match only an allowlist of paths. That check can never pass, for two independent reasons discovered while running it:
+  - **`videollamada`** — the Calendly URL in `common.yaml`, and therefore both generated ConfigMaps — contains the substring `ollama`. Nothing about the retirement can remove it.
+  - After a complete sweep, **every remaining match is either the ace2 teardown or an explanation of the retirement**. The teardown in `dev_node` must name `/opt/ollama` and port `11434` to remove them; the comments say things like "empty since AI-007 retired Ollama", and deleting them would leave an empty catalog with no explanation.
+
+  So the criterion now asserts the **identifiers that would make the service reachable** — `ollama.kubelab.live`, `apps.services.ai.ollama`, `api-key-ollama`, `ollama/ollama`, `:11434` — rather than the word. Prose about a retirement never matches an identifier that would make it live, so the check is stable rather than needing a growing allowlist. Deliberate survivors: `docs/`, `specs/`, `CHANGELOG.md`, `CLAUDE.md`, the `dev_node` teardown, and the `beelink_services` / `provision-bee.yml` cleanup kept by Out of scope.
 - [ ] **AC2** — `make validate-sync` exits 0, and no generated artifact (ConfigMaps, homepage `custom.js`, image pins) contains an Ollama reference.
 - [ ] **AC3** — `toolkit secrets audit --env prod` reports no Ollama entry, and decrypting `prod.enc.yaml` shows `apps.services.ai.ollama` absent — proving the value was unset, not merely de-registered into an orphan.
 - [ ] **AC4** — `make tf-dns-plan` shows exactly one resource destroyed (the `ollama` record) and no other change; after apply, `ollama.kubelab.live` does not resolve.
 - [x] **AC5** — In prod, no `Middleware/api-key-ollama` remains — the out-of-band object Argo never tracked is gone, verified against the live cluster rather than against git. ✓ 2026-08-09. **Correction:** there is no backing Secret and there never was. The API key is inline in the Middleware spec (`keys: [${API_KEY}]`), so deleting the Middleware is what removes the plaintext key from etcd. The Secret named in ADR-035 belongs to the CrowdSec bouncer, a different object.
 - [ ] **AC6** — `make test` and the prod e2e suite pass with no Ollama module, no skipped Ollama expectation, and no new failures.
 - [ ] **AC7** — ADR-028 and ADR-029 each carry an amendment note referencing AI-007 and #905.
-- [ ] **AC8** — No operational document still describes Ollama as a running service: `docs/runbooks/` and `docs/troubleshooting/` are clean, `docs/architecture/service-catalog.md` and `architecture-overview.md` are clean, and `docs/runbooks/ollama-api-key-rotation.md` (118 lines, a runbook for a service that will not exist) is deleted.
+- [x] **AC8** — No operational document still describes Ollama as a running service, and `docs/runbooks/ollama-api-key-rotation.md` (118 lines) is deleted. ✓ 2026-08-09. Checked by live wiring rather than by word, for the same reason as AC1: `docs/runbooks/hardware-setup.md` deliberately keeps its 2026-02-19 setup log under an explicit "Historical record" banner — it documents how the Beelink was *built*, which remains true — while its verification `curl`s were removed, because a copy-pasteable probe for a dead endpoint is worse than none.
 
   **Deliberate survivors, untouched by AC8** — the same allowlist discipline AC1 needs, for the same reason:
   - **The 17 ADRs.** An ADR records a decision taken at a time; rewriting it to remove Ollama falsifies the record. ADR-035 *did* use Ollama as its first consumer. Only ADR-028 and ADR-029 change, and only by the amendment notes in AC7 — "amended, not superseded", per ADR-058 itself.

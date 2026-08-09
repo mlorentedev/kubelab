@@ -106,7 +106,7 @@ Folded into `make deploy-k8s` (ADR-047 / TOOL-009 — the old `deploy-external` 
 
 - coredns-custom (RPi4 hairpin DNS) and versioned operators (agent-sandbox) are rendered
   (MagicDNS) + server-side applied via the `cluster_bootstrap` layer.
-- External EndpointSlices (ollama / pihole / uptime-kuma) ship in the Kustomize base.
+- External EndpointSlices (pihole / uptime-kuma) ship in the Kustomize base.
 
 ```bash
 make deploy-k8s ENV=staging   # covers cluster_bootstrap + external EndpointSlices
@@ -181,11 +181,8 @@ make provision NODE=ace1 ENV=staging
 make provision NODE=rpi3 ENV=prod
 make provision NODE=jetson ENV=prod
 # Beelink: ANSIBLE-013 (pending)
-# ace2 Ollama (IDP-024 ✓ 2026-03-29)
-# Docker on ace2 (100.64.0.5:11434), models: qwen2.5-coder:7b + qwen2.5:7b
+# ace2 developer node (ADR-058 D1)
 # Provisioned via: make provision NODE=ace2 ENV=staging
-# Health: curl http://100.64.0.5:11434/api/tags
-# Via Traefik: curl https://ollama.staging.kubelab.live/api/tags
 ```
 
 ## Decision tree: What to run when

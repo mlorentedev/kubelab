@@ -17,7 +17,7 @@ owner: manu
 |------|--------|---------|---------------|----------------|------|
 | Acemagic-1 | Mini PC (12GB) | 15 | 8-10 | 15 | K3s server + agent-1 VMs |
 | Acemagic-2 | Mini PC (12GB) | 15 | 8-10 | 15 | K3s agent-2 |
-| Beelink | Mini PC (8GB) | 15 | 8-10 | 15 | Ollama bare metal |
+| Beelink | Mini PC (8GB) | 15 | 8-10 | 15 | Platform node (GH Runner + MinIO) |
 | RPi 4 | Raspberry Pi (8GB) | 6.5 | 3-4 | 6 | Network gateway |
 | RPi 3 | Raspberry Pi (1GB) | 5 | 2-3 | 4 | Uptime Kuma monitoring |
 | Jetson Nano | NVIDIA Jetson | 10 | 5-6 | 10 | Pollex (llama.cpp) |
@@ -51,7 +51,7 @@ Running the same services on cloud (3 small VMs + managed services):
 
 ## Notes
 
-- Jetson Nano and Beelink/Ollama can be powered off when not needed
+- Jetson Nano and Beelink can be powered off when not needed
 - RPi3 (Uptime Kuma) should stay 24/7 for external monitoring
 - Staging cluster (Acemagic-1 + Acemagic-2) can be powered off between dev sessions
 - Current strategy: power off staging when not in use, saving ~16-20W

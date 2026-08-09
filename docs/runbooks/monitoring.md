@@ -212,7 +212,6 @@ Accept Self-Signed Certificate = ON for Proxmox UI monitors.
 | VPS SSH | TCP Port | `162.55.57.175:22` | 120 | `public` |
 | Beelink LAN | Ping | `172.16.1.3` | 120 | `lan` |
 | Beelink Tailscale | Ping | `100.64.0.3` | 120 | `tailscale` |
-| Beelink Ollama API | HTTP | `http://100.64.0.3:11434/api/tags` | 300 | `tailscale`, `app` |
 | Jetson LAN | Ping | `172.16.1.4` | 120 | `lan` |
 | Jetson Tailscale | Ping | `100.64.0.8` | 120 | `tailscale` |
 | Headscale | HTTP(s) | `https://vpn.kubelab.live/health` | 120 | `public`, `app` |
@@ -253,7 +252,7 @@ Home network devices, separate from kubelab infrastructure.
 |----|------|------|
 | .1 | kubelab-rpi4 | Gateway, Pi-hole, CoreDNS |
 | .2 | kubelab-ace1 | Proxmox (k3s-server + k3s-agent-1 VMs) |
-| .3 | kubelab-bee | Beelink, Ollama bare metal |
+| .3 | kubelab-bee | Beelink, platform node |
 | .4 | kubelab-jet1 | Jetson Nano, Pollex |
 | .5 | kubelab-ace2 | Proxmox (k3s-agent-2 VM) |
 | .10 | k3s-server | K3s control plane (VM on ace1) |

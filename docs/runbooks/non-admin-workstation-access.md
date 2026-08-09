@@ -51,7 +51,7 @@ from here. The two workarounds below avoid needing a local route.
 | rpi4 | 100.64.0.10 | manu | home-LAN jump host (`rpi4-lan` = 10.0.0.131) |
 | rpi3 | 100.64.0.6  | manu | |
 | ace1 | 100.64.0.11 | manu | K3s staging |
-| ace2 | 100.64.0.5  | manu | Ollama |
+| ace2 | 100.64.0.5  | manu | Developer node / CDE |
 | bee  | 100.64.0.3  | manu | |
 | jet1 | 100.64.0.8  | manu | |
 

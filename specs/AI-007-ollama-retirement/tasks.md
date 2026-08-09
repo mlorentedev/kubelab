@@ -44,29 +44,29 @@ created: "2026-08-09"
 
 ### PR-B — the sweep (merging fires the Argo prune)
 
-- [ ] [AC3] `toolkit secrets unset` the prod `apps.services.ai.ollama.api_key` **first**, then drop its `SECRET_CATALOG` entry. The reverse order leaves a value no audit can see
-- [ ] [AC1] [AC5] Delete `infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl` and its `MIDDLEWARE_CATALOG` entry. **Leave the `api-key:` plugin registered** in `traefik-helmconfig.yaml.j2` — resolved Risk 2. **Sweep on `ollama`, never on `api-key`**: the `api-key` in `infra/k8s/overlays/{staging,prod}/secrets.yaml` is CrowdSec's bouncer key, and deleting it breaks the bouncer (Risk 4)
-- [ ] [AC1] Delete `infra/k8s/base/external/ollama.yaml` and `infra/k8s/overlays/prod/ollama-throttle.yaml`; drop the references from both `kustomization.yaml` files and prod `patches.yaml`
-- [ ] [AC1] Remove `apps.services.ai.ollama.*` from `common.yaml` and `staging.yaml`
-- [ ] [AC1] Drop `ollama` from `SERVICES_AI` in `toolkit/config/constants.py`
-- [ ] [AC1] Remove the DNS entries from `deploy-dns.yml`, `provision-rpi4.yml` and the CoreDNS `Corefile.j2`
-- [ ] [AC2] Regenerate the homepage config; `make validate-sync` green
-- [ ] [AC6] Delete `tests/e2e/test_ollama_public.py`; clean the entries in `expectations.py`, `conftest.py` and `tests/test_k8s_middlewares.py`
-- [ ] [AC1] Correct the rationale comments that outlive the service: `dev_node/tasks/main.yml` (coexistence header), `beelink_services` + `provision-bee.yml` ("moved to ace2"), `headscale/policy.hujson.j2` (the `tag:hermes → vps:443` justification — the **rule stays**, it also covers Gitea)
-- [ ] [AC7] Amend ADR-028 and ADR-029; fold in the two `CLAUDE.md` doc-drift fixes named in ADR-058 D4
-- [ ] [AC8] Delete `docs/runbooks/ollama-api-key-rotation.md` — a 118-line runbook for a service that will not exist
-- [ ] [AC8] Clear the present-tense claims from `docs/architecture/{service-catalog,architecture-overview}.md`, `docs/runbooks/{monitoring,operations,dns-homelab,hardware-setup,energy-consumption,non-admin-workstation-access}.md` and `docs/troubleshooting/docker-containers.md`
-- [ ] [AC8] **Do NOT touch** the other 15 ADRs, `docs/audits/*`, `current-state-2026-03-22.md`, or `components/kubelab-*.md`. They are historical records or unbuilt-product design positions; erasing Ollama from them would falsify the record. Verify by re-reading, not by grepping them clean
-- [ ] [AC1] Run the survivor check and confirm only the deliberate matches remain
+- [x] [AC3] `toolkit secrets unset` the prod `apps.services.ai.ollama.api_key` **first**, then drop its `SECRET_CATALOG` entry. The reverse order leaves a value no audit can see ✓ 2026-08-09
+- [x] [AC1] [AC5] Delete `infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl` and its `MIDDLEWARE_CATALOG` entry. **Leave the `api-key:` plugin registered** in `traefik-helmconfig.yaml.j2` — resolved Risk 2. **Sweep on `ollama`, never on `api-key`**: the `api-key` in `infra/k8s/overlays/{staging,prod}/secrets.yaml` is CrowdSec's bouncer key, and deleting it breaks the bouncer (Risk 4) ✓ 2026-08-09
+- [x] [AC1] Delete `infra/k8s/base/external/ollama.yaml` and `infra/k8s/overlays/prod/ollama-throttle.yaml`; drop the references from both `kustomization.yaml` files and prod `patches.yaml` ✓ 2026-08-09
+- [x] [AC1] Remove `apps.services.ai.ollama.*` from `common.yaml` and `staging.yaml` ✓ 2026-08-09
+- [x] [AC1] Drop `ollama` from `SERVICES_AI` in `toolkit/config/constants.py` ✓ 2026-08-09
+- [x] [AC1] Remove the DNS entries from `deploy-dns.yml`, `provision-rpi4.yml` and the CoreDNS `Corefile.j2` ✓ 2026-08-09
+- [x] [AC2] Regenerate the homepage config; `make validate-sync` green ✓ 2026-08-09
+- [x] [AC6] Delete `tests/e2e/test_ollama_public.py`; clean the entries in `expectations.py`, `conftest.py` and `tests/test_k8s_middlewares.py` ✓ 2026-08-09
+- [x] [AC1] Correct the rationale comments that outlive the service: `dev_node/tasks/main.yml` (coexistence header), `beelink_services` + `provision-bee.yml` ("moved to ace2"), `headscale/policy.hujson.j2` (the `tag:hermes → vps:443` justification — the **rule stays**, it also covers Gitea) ✓ 2026-08-09
+- [x] [AC7] Amend ADR-028 and ADR-029; fold in the two `CLAUDE.md` doc-drift fixes named in ADR-058 D4 ✓ 2026-08-09
+- [x] [AC8] Delete `docs/runbooks/ollama-api-key-rotation.md` — a 118-line runbook for a service that will not exist ✓ 2026-08-09
+- [x] [AC8] Clear the present-tense claims from `docs/architecture/{service-catalog,architecture-overview}.md`, `docs/runbooks/{monitoring,operations,dns-homelab,hardware-setup,energy-consumption,non-admin-workstation-access}.md` and `docs/troubleshooting/docker-containers.md` ✓ 2026-08-09
+- [x] [AC8] **Do NOT touch** the other 15 ADRs, `docs/audits/*`, `current-state-2026-03-22.md`, or `components/kubelab-*.md`. They are historical records or unbuilt-product design positions; erasing Ollama from them would falsify the record. Verify by re-reading, not by grepping them clean ✓ 2026-08-09
+- [x] [AC1] Run the survivor check and confirm only the deliberate matches remain ✓ 2026-08-09
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-08-09
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-08-09
+- [x] Type checks pass ✓ 2026-08-09
+- [x] Lint passes ✓ 2026-08-09
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-09
+- [x] `verification.md` filled in ✓ 2026-08-09
 - [ ] PR opened referencing this spec folder
 
 ## Machine-readable features

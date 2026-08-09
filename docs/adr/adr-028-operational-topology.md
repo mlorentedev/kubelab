@@ -12,6 +12,14 @@ created: "2026-03-28"
 
 Accepted (2026-03-28). Refines ADR-023 (Hub-and-Spoke), ADR-027 (Intelligence Layer).
 
+## Amendment — 2026-08-09 (ace2 is a developer node; local inference is deferred)
+
+This ADR assigns ace2 the role of on-demand LLM compute running Ollama. **AI-007 (#905) retired Ollama entirely on 2026-08-09**; ace2 is now the self-hosted developer node / CDE per ADR-058 D1, and hosts no services.
+
+The rationale ADR-058 gave for the retirement — "ace2's 12 GB are effectively idle" — had already expired when its own PR-1 made ace2 the dev node. The reason recorded here is the one that was actually true at the time of removal: `ollama.kubelab.live` was a **public** endpoint (Cloudflare record, prod API key, Traefik middleware) whose backend was a node powered off most of the time, and the sweep confirmed **zero runtime consumers** — nothing in `apps/` or `edge/` ever called it — against roughly 36 documents describing it as live.
+
+**Amended, not superseded**: the always-on / on-demand split this ADR establishes is unchanged, and ace2 stays in the on-demand tier. Only its workload changes. Local inference is deferred rather than replaced — see the matching amendment in ADR-029.
+
 ## Amendment — 2026-08-09 (staging mirrors the manifest set; prod stays the monitoring of record)
 
 Context bullet 3 below states that "observability should run on prod (always-on)" because "Grafana monitoring staging from staging is circular". Measured against the live clusters on 2026-08-09, staging runs Grafana, Loki and Vector anyway, and has done for 142 days — `infra/k8s/base/kustomization.yaml` lists all three and the staging overlay consumes `../../base` with no patch removing them, so both environments deploy them by construction.
