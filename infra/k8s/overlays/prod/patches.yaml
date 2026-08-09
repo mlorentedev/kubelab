@@ -81,7 +81,17 @@ spec:
       services:
         - name: loki
           port: 3100
-  tls: {}  # No certResolver — .local TLD can't get ACME certs
+  tls:
+    # MUST be an explicit null, not `tls: {}`. An empty map in a strategic-merge
+    # patch is a no-op: it says "change nothing about tls", so the base's
+    # `certResolver: letsencrypt` survives into the rendered output. An explicit
+    # null is what deletes the key. This file carried `tls: {}` with a comment
+    # claiming the resolver was gone, while prod ran with it for months and
+    # Traefik retried an ACME order for a `.local` domain roughly once a day —
+    # an order Let's Encrypt can never fulfil, since it only issues for public
+    # TLDs. Verify any change here with `kubectl kustomize infra/k8s/overlays/prod`
+    # and read the emitted `tls:` block; the comment is not the behaviour.
+    certResolver: null
 ---
 # Override base gitea ConfigMap with prod domain
 apiVersion: v1
