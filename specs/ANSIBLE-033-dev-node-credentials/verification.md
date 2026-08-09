@@ -201,10 +201,24 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? **No.** This is
   PR-1c *of* ADR-058 and changes none of its decisions. The interim PAT's
   replacement (GitHub App) is already deferred to its own ADR.
-- [ ] New pattern candidate for `00_meta/patterns/`? **Operator's call.** The
-  blocked-probe lesson is project-independent — it is about acceptance probes and
-  expensive environments, not about Ansible or GitHub — so it may belong in the
-  cross-project store. Not promoted unilaterally; flagged here.>
+- [ ] New pattern candidate for `00_meta/patterns/`? **No — an amendment to an
+  existing one.** Searched before proposing: `pattern-feature-list-as-primitive`
+  already owns this ground and is cross-project by construction, being the harness
+  contract for every SDD repo. Its **Anti-patterns** section catalogues untrustworthy
+  verification commands but only the crude case (`"verification": "echo ok"`).
+  ANSIBLE-033 produced the two subtle and symmetric ones, both about what a
+  composite command's exit code actually means:
+  - **Exit 0 for the wrong reason** — f4 measured convergence, which cannot
+    distinguish "converged with the credential" from "converged because every
+    task that would install it was skipped". Ask what *else* could make it pass.
+  - **Exit ≠0 concealing the untested remainder** — f2 blocked at step 2, so
+    steps 3 and 4 never ran; both were broken. A blockage says nothing about
+    what is below it, and where the environment is expensive to reach, that
+    ignorance costs one round trip per hidden defect.
+
+  A second pattern would fragment the answer to a single question ("can I trust
+  this verification command?"). Promotion left for `/spec archive`, per
+  `pattern-spec-driven-development`, and not executed unilaterally.>
 
 ## Archive checklist
 
