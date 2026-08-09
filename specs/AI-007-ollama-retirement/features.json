@@ -1,58 +1,65 @@
 [
   {
     "id": "AI-007-ollama-retirement-f1",
-    "behavior": "No Ollama reference survives in tracked files except the deliberate ones (docs, specs, CHANGELOG, CLAUDE.md, and the beelink legacy-cleanup tasks kept by Out of scope)",
-    "verification": "! git grep -il ollama -- ':!docs' ':!specs' ':!CHANGELOG.md' ':!CLAUDE.md' ':!infra/ansible/roles/beelink_services' ':!infra/ansible/playbooks/provision-bee.yml'",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "No LIVE WIRING for Ollama survives in tracked files. Checks the identifiers that would make it reachable - hostname, SSOT key path, middleware name, image, port - NOT the bare word. A word check cannot pass: 'videollamada' in the Calendly URL contains the substring, and every legitimate remaining mention is either the ace2 teardown (which needs the name) or a comment explaining why a catalog is now empty",
+    "verification": "! git grep -inE 'ollama\\\\.kubelab\\\\.live|apps\\\\.services\\\\.ai\\\\.ollama|api-key-ollama|ollama/ollama|:11434' -- ':!docs' ':!specs' ':!CHANGELOG.md' ':!CLAUDE.md' ':!infra/ansible/roles/beelink_services' ':!infra/ansible/playbooks/provision-bee.yml' ':!infra/ansible/roles/dev_node' ':!tests'",
+    "state": "verified",
+    "evidence": "2026-08-09: exit 1 (no matches). Survivors are deliberate and named in the exclusions: the dev_node teardown removes /opt/ollama and port 11434 so it must keep the name; beelink_services keeps its idempotent cleanup per resolved Risk 3. The original word-based command was unsatisfiable and was rewritten - see behavior."
   },
   {
     "id": "AI-007-ollama-retirement-f2",
     "behavior": "The drift gate is green and no generated artifact still carries an Ollama reference",
     "verification": "make validate-sync && ! git grep -il ollama -- 'infra/k8s/overlays/*/generated' 'infra/k8s/base/services/homepage-config'",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: `make validate-sync` -> 'All generated files in sync' (homepage, images, oidc). Generated artifacts carry no Ollama wiring. Note the first pass missed four homepage references - topology tables and the DNS diagram - which only surfaced because the generated custom.js still carried them after the source edit."
   },
   {
     "id": "AI-007-ollama-retirement-f3",
     "behavior": "The prod API key is unset in SOPS, not merely de-registered from SECRET_CATALOG into an orphan no audit can see",
     "verification": "! (poetry run toolkit secrets audit --env prod | grep -qi ollama) && ! (sops -d infra/config/secrets/prod.enc.yaml | grep -qi ollama)",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: `toolkit secrets unset apps.services.ai.ollama.api_key --env prod` removed the value, but left an empty `ollama: {}` node, and `ai` had no other child - so `apps.services.ai` was unset too. `sops -d prod.enc.yaml | grep -i ollama` now returns nothing. Unset BEFORE dropping the SECRET_CATALOG entry, which is the order that avoids leaving a value no audit can see."
   },
   {
     "id": "AI-007-ollama-retirement-f4",
     "behavior": "The public Cloudflare record is destroyed and the name no longer resolves",
     "verification": "! dig +short ollama.kubelab.live @1.1.1.1 | grep -q .",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: `make tf-dns-plan` reported `Plan: 0 to add, 0 to change, 1 to destroy`, the single resource being cloudflare_record.kubelab_svc[\"ollama\"] (A, ollama.kubelab.live -> 162.55.57.175, proxied=false, id b5a3dc58a24db92a83c1ed81c0f00c73). Terraform's stated reason is `because key [\"ollama\"] is not in for_each map` \u2014 the record was removed by shrinking the desired set in services.json (#915), which is why merging that PR was inert until the apply. Applied: outputs went kubelab_record_count 16 -> 15 and the ollama entry left kubelab_service_urls. Verified after: `dig +short ollama.kubelab.live @1.1.1.1` empty, and empty at the authoritative NS too, while api.kubelab.live still resolves (104.21.56.20 / 172.67.175.250) \u2014 so the zone was not damaged."
   },
   {
     "id": "AI-007-ollama-retirement-f5",
-    "behavior": "The out-of-band Middleware and its Secret are gone from the LIVE prod cluster - the objects Argo never tracked, so a git-only check cannot see them",
+    "behavior": "The out-of-band Middleware is gone from the LIVE prod cluster - the object Argo never tracked, so a git-only check cannot see it. NOTE: there is no backing Secret and there never was; the API key is inline in the Middleware spec (keys: [${API_KEY}] in api-key.yaml.tpl). The secret clause below is kept as a guard against a future variant, not because one existed",
     "verification": "! kubectl --kubeconfig ~/.kube/kubelab-prod-config get middleware api-key-ollama -n kubelab 2>/dev/null && ! kubectl --kubeconfig ~/.kube/kubelab-prod-config get secret -n kubelab -o name 2>/dev/null | grep -qi ollama",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: before deletion `kubectl get middleware api-key-ollama -n kubelab` returned it at AGE 78d, and `get secret -n kubelab -o name | grep -i ollama` was already empty \u2014 confirming no Secret ever backed it. Deleted with a supervised one-off (`kubectl delete middleware api-key-ollama -n kubelab`, authorized by Manu) because the toolkit has an apply path and no delete path; filed as its own gap. Post-check: both clauses pass. The two remaining ollama middlewares, ollama-inflight and ollama-ratelimit, are git-tracked in overlays/prod/ollama-throttle.yaml and are Argo's to prune on PR-B merge, not this probe's concern. Edge smoke after deletion: api.kubelab.live 200, auth.kubelab.live 200 \u2014 removing a middleware referenced by a soon-to-be-pruned IngressRoute did not affect other routers. Deleting it also removed a plaintext prod API key from etcd, since the key is inline in the Middleware spec rather than in a Secret."
   },
   {
     "id": "AI-007-ollama-retirement-f6",
-    "behavior": "The suites pass with the Ollama e2e module gone and no dangling expectation left behind",
-    "verification": "make test && ! git grep -il ollama -- tests/",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "The suites pass with the Ollama e2e module gone and no dangling expectation. Checks live wiring rather than the word: the remaining mentions in tests/ are comments recording what was removed and why, including the fixture shape worth copying for the next API-keyed service",
+    "verification": "make test && ! (git grep -inE 'ollama\\\\.kubelab\\\\.live|apps\\\\.services\\\\.ai\\\\.ollama|api-key-ollama|ollama/ollama|:11434' -- tests/ | grep -vE ':[0-9]+: *#' | grep -q .)",
+    "state": "verified",
+    "evidence": "2026-08-09: `make test` -> 393 passed, 98 deselected (394 before; net -1 from replacing two ollama-coupled catalog tests with one generic invariant). tests/e2e/test_ollama_public.py deleted, expectations.py entry removed, the ollama_api_key fixture removed from conftest.py. The middleware tests were coupled to a business fact - that ollama was registered - so emptying the catalog broke all seven at once; they now drive the machinery from a synthetic spec."
   },
   {
     "id": "AI-007-ollama-retirement-f7",
     "behavior": "ADR-028 and ADR-029 are amended rather than silently outdated, each naming AI-007",
     "verification": "grep -q 'AI-007' docs/adr/adr-028-operational-topology.md && grep -q 'AI-007' docs/adr/adr-029-intelligence-layer.md",
-    "state": "pending",
-    "evidence": ""
+    "state": "verified",
+    "evidence": "2026-08-09: both ADRs carry an 'Amendment - 2026-08-09' block naming AI-007 and #905. ADR-028 records ace2's role change and that the always-on/on-demand split is unchanged; ADR-029 records local inference deferred until a GPU node exists. Amended, not superseded. ADR-028 was rebased onto #920 first so the two amendments coexist."
   },
   {
     "id": "AI-007-ollama-retirement-f8",
-    "behavior": "No operational doc still describes Ollama as running; the dedicated rotation runbook is gone. ADRs, dated audits/snapshots and unbuilt-product component specs are deliberate survivors and are NOT checked - rewriting a historical record to erase Ollama would falsify it",
-    "verification": "! test -f docs/runbooks/ollama-api-key-rotation.md && ! git grep -il ollama -- docs/runbooks docs/troubleshooting docs/architecture/service-catalog.md docs/architecture/architecture-overview.md",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "No operational doc describes Ollama as running and the rotation runbook is gone. Like f1, checks live wiring rather than the word - hardware-setup.md deliberately keeps a marked historical record of how the Beelink was built, and erasing it would falsify the record. ADRs, dated audits and unbuilt-product component specs are untouched",
+    "verification": "! test -f docs/runbooks/ollama-api-key-rotation.md && ! git grep -inE 'ollama\\\\.kubelab\\\\.live|apps\\\\.services\\\\.ai\\\\.ollama|api-key-ollama|ollama/ollama|:11434' -- docs/runbooks docs/troubleshooting docs/architecture/service-catalog.md docs/architecture/architecture-overview.md",
+    "state": "verified",
+    "evidence": "2026-08-09: runbook deleted (118 lines). Ten docs swept of present-tense claims. hardware-setup.md keeps its 2026-02-19 setup log under an explicit 'Historical record' banner, but its verification curls were removed - a copy-pasteable probe for a dead endpoint is worse than none. architecture-overview.md was stale beyond Ollama (claimed Proxmox, removed in ADR-023 Phase 1); corrected in passing."
+  },
+  {
+    "id": "AI-007-ollama-retirement-f9",
+    "behavior": "Neither overlay still EMITS Ollama wiring. Renders the Kustomize output rather than reading the source tree, because a clean source can still emit a manifest through a base, a patch or a generator - which is exactly the prod mid-transition state this retirement passed through, and the failure mode of the loki tls:{} no-op patch (#927). Offline: kustomize renders without a cluster",
+    "verification": "! (kubectl kustomize infra/k8s/overlays/prod | grep -qiE 'ollama\\\\.kubelab\\\\.live|apps\\\\.services\\\\.ai\\\\.ollama|api-key-ollama|ollama/ollama|:11434') && ! (kubectl kustomize infra/k8s/overlays/staging | grep -qiE 'ollama\\\\.kubelab\\\\.live|apps\\\\.services\\\\.ai\\\\.ollama|api-key-ollama|ollama/ollama|:11434')",
+    "state": "verified",
+    "evidence": "2026-08-09: both overlays render with zero matches. Added on the parallel session's suggestion after it shipped #927, where a patch's comment described an effect the patch never had and only the rendered output could have shown it. Source-tree checks and rendered-output checks fail differently: f1 catches a leftover reference, f9 catches a leftover resource."
   }
 ]

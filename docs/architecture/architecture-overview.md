@@ -55,13 +55,14 @@ future-static-sites      → Each static site in its own repo
 
 ## Hardware Allocation
 
-> **Updated 2026-02-19**: 2x Acemagic (Proxmox) + Beelink (Ollama) + VPS.
+> **Updated 2026-08-09**: bare-metal MiniPCs (no Proxmox since ADR-023 Phase 1);
+> ace2 is the developer node since ADR-058 D1. Local inference retired (AI-007).
 
 ```
 VPS Hetzner: Production (Docker Compose -> K3s)
-Acemagic-1:  Proxmox VE (K3s server + agent VM)
-Acemagic-2:  Proxmox VE (K3s agent VM)
-Beelink:     Ollama (Bare metal)
+Acemagic-1:  K3s staging (all-in-one, bare metal)
+Acemagic-2:  Developer node / CDE (bare metal)
+Beelink:     Platform node (GH Runner + MinIO, bare metal)
 RPi 4:       Gateway / VPN / DNS
 RPi 3:       Monitoring (Uptime Kuma)
 Jetson Nano: AI Workloads (Pollex)

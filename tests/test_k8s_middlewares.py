@@ -25,25 +25,27 @@ def _mock_kubectl(*outputs: str) -> MagicMock:
     return MagicMock(side_effect=completed)
 
 
+# A synthetic spec, deliberately not any real service.
+#
+# These tests used to drive the machinery through the live `api-key-ollama`
+# entry, which coupled them to a business fact — that a particular service is
+# registered — rather than to the behaviour under test. AI-007 retired Ollama
+# and emptied the catalog, which broke every apply test at once and exposed the
+# coupling. The machinery is now exercised against a fabricated spec, so the
+# catalog can be empty, or hold anything, without these tests caring.
+_FAKE_SPEC = MiddlewareSpec(
+    name="api-key-testsvc",
+    service="testsvc",
+    secret_key_path="apps.services.test.testsvc.api_key",
+    template_path=Path("infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl"),
+)
+
+
 # ── Catalog ───────────────────────────────────────────────────────────────────
 
 
 class TestMiddlewareCatalog:
     """Catalog is the source of truth for which services get a Middleware."""
-
-    def test_ollama_api_key_registered(self) -> None:
-        ollama = next((s for s in MIDDLEWARE_CATALOG if s.service == "ollama"), None)
-        assert ollama is not None, "MIDDLEWARE_CATALOG must register ollama (AI-001)"
-        assert ollama.name == "api-key-ollama"
-        assert ollama.secret_key_path == "apps.services.ai.ollama.api_key"
-
-    def test_ollama_is_prod_only_per_adr035_stage1(self) -> None:
-        ollama = next(s for s in MIDDLEWARE_CATALOG if s.service == "ollama")
-        assert "prod" in ollama.envs
-        assert "staging" not in ollama.envs, (
-            "Staging is VPN-only per CLAUDE.md; api-key middleware is prod-only "
-            "per ADR-035 Stage 1."
-        )
 
     def test_catalog_names_are_unique(self) -> None:
         names = [s.name for s in MIDDLEWARE_CATALOG]
@@ -51,10 +53,22 @@ class TestMiddlewareCatalog:
             f"Duplicate Middleware names in catalog: {names}"
         )
 
+    def test_every_entry_is_prod_only_per_adr035_stage1(self) -> None:
+        """Stage 1 is prod-only: staging is VPN-gated and carries no API key.
+
+        Vacuously true while the catalog is empty (AI-007 retired its only
+        entry), and the guard that matters the moment DT-004 or AI-004 adds one.
+        """
+        for spec in MIDDLEWARE_CATALOG:
+            assert "prod" in spec.envs, f"{spec.name} must target prod"
+            assert "staging" not in spec.envs, (
+                f"{spec.name} must not target staging — VPN-only per CLAUDE.md, "
+                "api-key middleware is prod-only per ADR-035 Stage 1."
+            )
+
     def test_spec_is_frozen_dataclass(self) -> None:
-        spec = MIDDLEWARE_CATALOG[0]
         with pytest.raises((AttributeError, Exception)):
-            spec.name = "mutated"  # type: ignore[misc]
+            _FAKE_SPEC.name = "mutated"  # type: ignore[misc]
 
 
 # ── Pure render ───────────────────────────────────────────────────────────────
@@ -134,7 +148,20 @@ def fake_project(tmp_path: Path) -> Path:
 class TestApplyMiddlewareSecrets:
     """End-to-end: SOPS dict → render → kubectl apply → audit copy."""
 
-    _SOPS_OK = {"apps.services.ai.ollama.api_key": "PROD_KEY_42"}
+    _SOPS_OK = {"apps.services.test.testsvc.api_key": "PROD_KEY_42"}
+
+    @pytest.fixture(autouse=True)
+    def _catalog(self):
+        """Drive the machinery from a synthetic catalog, not the live one.
+
+        The real catalog is empty since AI-007, and its contents are a product
+        decision. What these tests assert is the apply path, so they supply
+        their own entry.
+        """
+        with patch(
+            "toolkit.features.k8s_middlewares.MIDDLEWARE_CATALOG", [_FAKE_SPEC]
+        ):
+            yield
 
     def _patch_targets(self, sops_data: dict[str, str] | None):
         """Return contextmanager-stack helper. Patches both the config loader
@@ -148,7 +175,7 @@ class TestApplyMiddlewareSecrets:
         return cm_mock
 
     def test_skips_when_env_not_in_spec_envs(self, fake_project: Path) -> None:
-        """Calling with env='staging' must skip the ollama Middleware
+        """Calling with env='staging' must skip a prod-only Middleware
         (registered envs={'prod'}) and NOT touch kubectl."""
         cm = self._patch_targets(self._SOPS_OK)
         run_mock = _mock_kubectl()  # zero outputs, will assert call_count == 0
@@ -165,8 +192,8 @@ class TestApplyMiddlewareSecrets:
         cm = self._patch_targets(self._SOPS_OK)
         # Two outputs: apply + legacy-annotation scrub (SEC-AI-002).
         run_mock = _mock_kubectl(
-            "middleware.traefik.io/api-key-ollama serverside-applied",
-            "middleware.traefik.io/api-key-ollama annotated",
+            "middleware.traefik.io/api-key-testsvc serverside-applied",
+            "middleware.traefik.io/api-key-testsvc annotated",
         )
 
         with patch(
@@ -196,13 +223,13 @@ class TestApplyMiddlewareSecrets:
         )
         stdin = apply_call.kwargs.get("input", "")
         assert "PROD_KEY_42" in stdin
-        assert "api-key-ollama" in stdin
+        assert "api-key-testsvc" in stdin
 
         scrub_call = run_mock.call_args_list[1]
         scrub_argv = scrub_call.args[0]
         assert "annotate" in scrub_argv
         assert "middleware" in scrub_argv
-        assert "api-key-ollama" in scrub_argv
+        assert "api-key-testsvc" in scrub_argv
         assert "kubectl.kubernetes.io/last-applied-configuration-" in scrub_argv, (
             "Must strip the legacy annotation that pre-SEC-AI-002 client-side "
             "applies left behind (it embeds the plaintext API key)"
@@ -232,8 +259,8 @@ class TestApplyMiddlewareSecrets:
     def test_audit_copy_written_to_generated_dir(self, fake_project: Path) -> None:
         cm = self._patch_targets(self._SOPS_OK)
         run_mock = _mock_kubectl(
-            "middleware.traefik.io/api-key-ollama serverside-applied",
-            "middleware.traefik.io/api-key-ollama annotated",
+            "middleware.traefik.io/api-key-testsvc serverside-applied",
+            "middleware.traefik.io/api-key-testsvc annotated",
         )
 
         with patch(
@@ -241,7 +268,7 @@ class TestApplyMiddlewareSecrets:
         ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
             apply_middleware_secrets(env="prod", project_root=fake_project)
 
-        audit = fake_project / "infra/k8s/overlays/prod/middlewares/.rendered/api-key-ollama.yaml"
+        audit = fake_project / "infra/k8s/overlays/prod/middlewares/.rendered/api-key-testsvc.yaml"
         assert audit.exists(), "Audit copy must be written for forensic review"
         content = audit.read_text()
         assert "PROD_KEY_42" in content
@@ -272,7 +299,7 @@ class TestApplyMiddlewareSecrets:
 
         assert ok is True
         assert run_mock.call_count == 0, "dry-run must NOT touch the cluster"
-        audit = fake_project / "infra/k8s/overlays/prod/middlewares/.rendered/api-key-ollama.yaml"
+        audit = fake_project / "infra/k8s/overlays/prod/middlewares/.rendered/api-key-testsvc.yaml"
         assert audit.exists(), "dry-run still writes audit copy for inspection"
 
     def test_missing_template_file_returns_false(self, tmp_path: Path) -> None:

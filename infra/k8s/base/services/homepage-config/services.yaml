@@ -118,7 +118,7 @@
           metric: info
     - "ace2":
         icon: mdi-server
-        description: "LLM · 12GB"
+        description: "Dev node · 12GB"
         widget:
           type: glances
           url: http://100.64.0.5:61208

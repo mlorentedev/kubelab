@@ -15,6 +15,16 @@ depends_on: [adr-026-idp-evolution]
 > **Supersedes:** kubelab-gateway (absorbed), kubelab-memory (simplified)
 > **Related:** ADR-026 (IDP Evolution), ADR-022 (OpenClaw), ADR-023 (Hub-and-Spoke GitOps)
 
+## Amendment — 2026-08-09 (local inference deferred until a GPU node exists)
+
+**AI-007 (#905) retired Ollama from ace2 on 2026-08-09.** This ADR's local-inference tier no longer has an implementation, and `/v1/llm` stays decided-but-unbuilt. The interim path is a hosted API; local inference returns when a GPU node exists, at which point this amendment should be revisited rather than the original decision rewritten.
+
+The retirement is evidence for something this ADR asserted and could not yet demonstrate: the sweep found **zero runtime consumers** of Ollama — nothing in `apps/` or `edge/` referenced it — against roughly 36 documents describing it as a running service. A capability decided but never wired in accumulates documentation, not dependencies, and the documentation is what makes it expensive to remove.
+
+No re-add runbook is written deliberately: a speculative one would rot faster than the hardware assumption it encodes.
+
+**Amended, not superseded**: the gateway consolidation and RAG strategy in this ADR are unaffected. See the matching amendment in ADR-028 for ace2's new role.
+
 ## Context
 
 Three unresolved gaps in the KubeLab platform:

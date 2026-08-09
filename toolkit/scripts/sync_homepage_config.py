@@ -382,15 +382,6 @@ def build_service_tables(
             "DNS filtering",
             version="v6",
         ),
-        _svc(
-            "Ollama",
-            f"http://ollama.{base}",
-            f"http://ollama.{base}/api/tags",
-            "Public",
-            "AI",
-            "ace2",
-            "LLM inference",
-        ),
         _svc("Pollex", f"http://pollex.{base}", f"http://pollex.{base}", "Public", "AI", "Jetson", "Edge AI"),
     ]
 
@@ -416,7 +407,7 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
   end
   subgraph OnDemand["On-Demand homelab {lan_cidr} — ADR-028"]
     ACE1["ace1 {n["ace1"]["lan_ip"]} / {n["ace1"]["tailscale_ip"]}<br/>K3s Staging 12GB"]
-    ACE2["ace2 {n["ace2"]["lan_ip"]} / {n["ace2"]["tailscale_ip"]}<br/>Ollama LLM 12GB"]
+    ACE2["ace2 {n["ace2"]["lan_ip"]} / {n["ace2"]["tailscale_ip"]}<br/>Dev node / CDE 12GB"]
     BEE["Beelink {n["beelink"]["lan_ip"]} / {n["beelink"]["tailscale_ip"]}<br/>Platform Node 8GB"]
     RPI4["RPi4 {n["rpi4"]["lan_ip"]} / {n["rpi4"]["tailscale_ip"]}<br/>DNS Gateway 8GB"]
     JET["Jetson {n["jetson"]["lan_ip"]} / {n["jetson"]["tailscale_ip"]}<br/>Pollex 4GB"]
@@ -465,7 +456,7 @@ def build_mermaid_dns(config: dict[str, Any]) -> str:
   CFDNS --> VPS["VPS Traefik {vps.get("public_ip")}"]
   C -->|VPN| HS[Headscale]
   HS -->|"split DNS<br/>*.staging.kubelab.live ONLY"| PH["Pi-hole RPi4"]
-  HS -->|extra_records| ER["ollama/pihole<br/>direct to host"]
+  HS -->|extra_records| ER["pihole/jetson<br/>direct to host"]
   PH -->|forward staging| CD["CoreDNS RPi4"]
   CD --> ACE1["ace1 Traefik {n["ace1"]["tailscale_ip"]}"]
   PH -->|non-staging| UP[1.1.1.1 / 8.8.8.8]
@@ -536,7 +527,7 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
         "",
         f"ON-DEMAND homelab {lan_cidr} (ADR-028)",
         f"  ace1       {a1l} / {a1t}   K3s Staging 12GB",
-        f"  ace2       {a2l} / {a2t}     Ollama LLM 12GB",
+        f"  ace2       {a2l} / {a2t}     Dev node / CDE 12GB",
         f"  Beelink    {bel} / {bet}     Platform Node 8GB",
         f"  RPi4       {r4l} / {r4t}    DNS Gateway 8GB",
         f"  Jetson     {jel} / {jet}     Pollex 4GB",
@@ -580,7 +571,7 @@ def build_ip_reference(config: dict[str, Any]) -> str:  # noqa: E501
         _row("VPS", vps.get("public_ip", "?"), vps.get("tailscale_ip", "?"), "K3s Prod · 8GB"),
         _row("aws1", "—", aws.get("tailscale_ip", "?"), "Argo CD Hub · 2GB"),
         _row("ace1", a1l, a1t, "K3s Staging · 12GB"),
-        _row("ace2", a2l, a2t, "Ollama LLM · 12GB"),
+        _row("ace2", a2l, a2t, "Dev node / CDE · 12GB"),
         _row("RPi4", r4l, r4t, "DNS Gateway · 8GB"),
         _row("RPi3", "—", r3t, "Uptime Kuma · 1GB"),
         _row("Beelink", bel, bet, "Platform Node · 8GB"),
@@ -612,7 +603,6 @@ def build_dns_map(config: dict[str, Any]) -> str:
         "",
         "VPN-ONLY (Headscale extra_records)",
         f"  {'pihole.kubelab.live':<34} RPi4 ({rpi4_lan})",
-        f"  {'ollama.kubelab.live':<34} ace2 ({n.get('ace2', {}).get('lan_ip', '?')})",
     ]
     return "\n".join(rows)
 

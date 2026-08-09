@@ -1,9 +1,59 @@
 ---
 # =============================================================================
 # dev_node — centralized self-hosted CDE (ANSIBLE-028 / ADR-058 D1)
-# Additive + idempotent. Coexists with ace2_services (Ollama) — touches only the
-# interactive user's home + a couple of apt packages, never Docker/firewall/Ollama.
+# Additive + idempotent. Since AI-007 this role owns ace2 outright: the
+# ace2_services role (Ollama) was deleted, and its teardown lives below.
 # =============================================================================
+
+# --- Cleanup legacy Ollama (Docker) ----------------------------------------
+# AI-007: Ollama was retired from ace2. Ansible is additive, so deleting the
+# ace2_services role does NOT remove what it installed — the teardown has to be
+# carried by the role that now owns the node. Same pattern as beelink_services,
+# which still strips the bare-metal Ollama it replaced.
+#
+# Port 11434 is written literally on purpose: AI-007 removes
+# apps.services.ai.ollama.* from common.yaml, so a cleanup task that read the
+# value from config would break the moment the sweep lands. This is a
+# historical fact about what to remove, not live configuration.
+- name: Check if the legacy Ollama compose stack exists
+  ansible.builtin.stat:
+    path: /opt/ollama/compose.yml
+  register: _ollama_compose
+  tags: [dev_node, cleanup]
+
+- name: Stop the legacy Ollama stack
+  ansible.builtin.command: docker compose -f /opt/ollama/compose.yml down --remove-orphans --volumes
+  when: _ollama_compose.stat.exists
+  register: _ollama_down
+  changed_when: "'Stopped' in _ollama_down.stderr or 'Removed' in _ollama_down.stderr"
+  tags: [dev_node, cleanup]
+
+- name: Remove the legacy Ollama deployment directory and model data
+  ansible.builtin.file:
+    path: /opt/ollama
+    state: absent
+  tags: [dev_node, cleanup]
+
+- name: Remove the legacy Ollama UFW rules
+  community.general.ufw:
+    rule: allow
+    port: "11434"
+    proto: tcp
+    from_ip: "{{ item }}"
+    delete: true
+  loop:
+    - "{{ config.networking.tailscale_cidr }}"
+    - "{{ config.networking.lan_cidr }}"
+  tags: [dev_node, cleanup]
+
+- name: Remove the legacy Ollama UFW interface rule
+  community.general.ufw:
+    rule: allow
+    interface_in: tailscale0
+    port: "11434"
+    proto: tcp
+    delete: true
+  tags: [dev_node, cleanup]
 
 # --- System tooling (root) -------------------------------------------------
 - name: Install dev tooling apt packages (neovim, build-essential)

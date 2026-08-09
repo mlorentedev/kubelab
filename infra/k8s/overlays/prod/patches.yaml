@@ -285,41 +285,6 @@ spec:
   tls:
     certResolver: letsencrypt
 ---
-# Override base ollama IngressRoute — prod host + X-API-Key auth + post-auth throttle.
-# `api-key-ollama` Middleware: rendered out-of-band by `make apply-middleware-secrets ENV=prod`
-# (plaintext key from SOPS → kubectl apply stdin; NOT in Kustomize / git).
-# `ollama-ratelimit` + `ollama-inflight`: declarative in `ollama-throttle.yaml` (SEC-AI-001 MVP).
-# Order: auth FIRST (anything unauth dies in 403 before consuming quota), throttle AFTER.
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: ollama
-  namespace: kubelab
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`ollama.kubelab.live`)
-      kind: Rule
-      middlewares:
-        - name: secure-headers
-          namespace: kubelab
-        - name: crowdsec-bouncer
-          namespace: kubelab
-        - name: api-key-ollama
-          namespace: kubelab
-        - name: ollama-ratelimit
-          namespace: kubelab
-        - name: ollama-inflight
-          namespace: kubelab
-        - name: error-pages
-          namespace: kubelab
-      services:
-        - name: ollama
-          port: 11434
-  tls:
-    certResolver: letsencrypt
----
 # Override base catch-all IngressRoute with prod wildcard cert
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

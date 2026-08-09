@@ -218,7 +218,7 @@ docker system prune -a --volumes
 toolkit apps restart api
 
 # Scale down non-critical services in staging
-toolkit services down ollama
+toolkit services down <service>
 ```
 
 ### Prevention

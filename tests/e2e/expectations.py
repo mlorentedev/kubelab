@@ -105,11 +105,7 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     # -- Data --
     "minio": ServiceExpectation(),
-    # -- AI / ML --
-    "ollama": ServiceExpectation(
-        api_json_keys={"/api/tags": ["models"]},
-        skip_in_envs=("dev", "prod"),  # Docker on ace2 (ADR-028), reachable only via VPN (staging)
-    ),
+    # -- AI / ML -- (empty since AI-007 retired Ollama; see ADR-029)
     # -- Network (bare-metal, external to K3s) --
     "pihole": ServiceExpectation(
         health_status=(200, 302),

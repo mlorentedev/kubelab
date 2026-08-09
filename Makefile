@@ -452,7 +452,7 @@ watch-argocd:
 # `deploy-external` removed (ADR-047 / TOOL-009). Its two actions are now covered by
 # `make deploy-k8s ENV=x`:
 #   - coredns-custom (RPi4 hairpin DNS, MagicDNS-rendered) → the cluster_bootstrap layer.
-#   - external EndpointSlices (ollama / pihole / uptime-kuma) → the Kustomize base.
+#   - external EndpointSlices (pihole / uptime-kuma) → the Kustomize base.
 # The aws1 (argocd) EndpointSlice render moved to `toolkit infra k8s render-apply`
 # inside `_deploy-argocd-helm`. No more inline dig|sed|kubectl in this Makefile.
 
@@ -777,7 +777,9 @@ restart-service:
 	@$(TOOLKIT) infra k8s restart $(SVC) --env $(ENV) $(if $(NS),--namespace $(NS),)
 
 # Renders Traefik Middlewares that wrap SOPS-sourced API keys (ADR-035 Stage 1).
-# Currently only api-key-ollama (prod). Adding a new auth-protected service:
+# MIDDLEWARE_CATALOG is empty since AI-007 retired Ollama, Stage 1's first
+# consumer — this target is a no-op until the next one registers. Adding a new
+# auth-protected service:
 #   1. Append a SecretSpec to SECRET_CATALOG (toolkit/features/secrets_manager.py)
 #   2. Append a MiddlewareSpec to MIDDLEWARE_CATALOG (toolkit/features/k8s_middlewares.py)
 #   3. Put the api_key in SOPS, then `make apply-middleware-secrets ENV=prod`

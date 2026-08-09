@@ -30,7 +30,7 @@ Any Tailscale node — resolves api.staging.kubelab.live or status.kubelab.live
         ▼
    [3] CoreDNS on RPi4 (port 5353)
         Zone: staging.kubelab.live → 100.64.0.4 (K3s Traefik)
-        Zone: kubelab.live → bare-metal services (status, ollama, jetson)
+        Zone: kubelab.live → bare-metal services (status, jetson)
         Fallback: forward to 1.1.1.1 / 8.8.8.8
         │
         ▼
@@ -183,7 +183,6 @@ kubelab.live {
     hosts {
         # Bare-metal services: individual Tailscale IPs
         100.64.0.6 status.kubelab.live       # RPi3
-        100.64.0.3 ollama.kubelab.live       # Beelink
         100.64.0.8 jetson.kubelab.live       # Jetson Nano
         # K3s prod services: VPS Tailscale IP
         100.64.0.2 kubelab.live

@@ -141,8 +141,8 @@ deployment:
     - calcom
     - immich
 
-  ai_services:
-    - ollama
+  # Empty since AI-007 retired Ollama; category kept per ADR-029.
+  ai_services: []
 
  Application port mappings (for health checks and service discovery)
 app_ports:

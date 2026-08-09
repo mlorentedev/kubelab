@@ -1,9 +1,10 @@
 ---
 # =============================================================================
-# ace2 Provisioning — On-Demand LLM Compute Node (ADR-028)
+# ace2 Provisioning — On-Demand Developer Node / CDE (ADR-028, ADR-058 D1)
 #
-# Full provisioning: base system, SSH hardening, Docker, Tailscale,
-# then deploys Ollama in Docker (replaces legacy MinIO + GH Runner).
+# Full provisioning: base system, SSH hardening, Docker, Tailscale, Glances,
+# then the self-hosted CDE. Ollama was retired here by AI-007; its teardown is
+# carried by the dev_node role, since removing a role does not undo its work.
 #
 # Usage:
 #   make provision NODE=ace2 ENV=staging
@@ -123,13 +124,6 @@
       no_log: true
       tags: [tailscale]
 
-    - name: Allow Ollama port on Tailscale interface
-      community.general.ufw:
-        rule: allow
-        interface_in: tailscale0
-        port: "{{ config.apps.services.ai.ollama.default_port }}"
-        proto: tcp
-
   roles:
     - role: ../roles/base_system
       tags: [base]
@@ -152,19 +146,6 @@
         tailscale_accept_routes: false  # LAN node — must NOT accept subnet routes
         tailscale_auth_key: "{{ _tailscale_auth_key | default('') }}"
 
-    - role: ../roles/ace2_services
-      tags: [services, ollama]
-      vars:
-        restart_policy: "{{ config.global.restart_policy }}"
-        tailscale_ip: "{{ config.networking.nodes.ace2.tailscale_ip }}"
-        tailscale_cidr: "{{ config.networking.tailscale_cidr }}"
-        lan_cidr: "{{ config.networking.lan_cidr }}"
-        ollama_image: "{{ config.apps.services.ai.ollama.image }}"
-        ollama_port: "{{ config.apps.services.ai.ollama.default_port }}"
-        ollama_keep_alive: "{{ config.apps.services.ai.ollama.keep_alive }}"
-        ollama_memory_limit: "{{ config.apps.services.ai.ollama.memory_limit }}"
-        ollama_models: "{{ config.apps.services.ai.ollama.models }}"
-
     - role: ../roles/glances
       tags: [monitoring, glances]
       vars:
@@ -175,8 +156,9 @@
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
 
-    # Centralized self-hosted CDE (ADR-058 D1 / ANSIBLE-028). Additive: coexists
-    # with the Ollama service above (touches only the dev user's home + apt).
+    # Centralized self-hosted CDE (ADR-058 D1 / ANSIBLE-028). Since AI-007 this
+    # role owns the node outright and carries the Ollama teardown, because
+    # deleting ace2_services does not undo what it installed.
     - role: ../roles/dev_node
       tags: [dev_node, cde]
       vars:

@@ -122,7 +122,6 @@
         service_domains:
           vpn: "{{ config.apps.services.core.headscale.domain }}"
           status: "{{ config.apps.services.observability.uptime_kuma.domain }}"
-          ollama: "ollama.{{ config.global.base_domain }}"
           jetson: "jetson.{{ config.global.base_domain }}"
 
     - role: ../roles/glances

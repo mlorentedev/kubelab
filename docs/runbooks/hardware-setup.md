@@ -14,7 +14,7 @@ Provision KubeLab homelab hardware with the correct OS, SSH access, and networki
 **Devices to provision:**
 1. Acemagic-1 (12GB) → Proxmox VE 9.x (K3s server + agent-1 VMs) ✓ Done 2026-02-19
 2. Acemagic-2 (12GB) → Proxmox VE 9.x (K3s agent-2 VM) ✓ Done 2026-02-19
-3. Beelink (8GB) → Ubuntu Server 24.04 LTS + Ollama (OS installed ✓ 2026-02-19, Ollama pending)
+3. Beelink (8GB) → Ubuntu Server 24.04 LTS, platform node (OS installed ✓ 2026-02-19)
 4. Raspberry Pi 4B (8GB) → Ubuntu Server 24.04 LTS (gateway + agents) ✓ Done
 5. Raspberry Pi 3B+ (1GB) → Raspberry Pi OS Lite (external monitor) ✓ Done
 6. Jetson Nano (4GB) → JetPack (Ubuntu) + CUDA ✓ Done (hostname renamed 2026-02-19)
@@ -97,7 +97,14 @@ RAM: 12GB | Storage: SSD
 - [x] Install Debian 13 (minimal, SSH server enabled) ✓ 2026-02-19
 - [ ] Add `manu` user + SSH key
 
-### 1.3 Beelink — Ollama LLM API (`kubelab-bee`) — OS installed ✓ 2026-02-19, Ollama pending
+### 1.3 Beelink (`kubelab-bee`) — OS installed ✓ 2026-02-19
+
+> **Historical record — the LLM steps below no longer apply.** This node ran a
+> bare-metal Ollama from 2026-02-19; it moved to ace2 and was retired outright
+> by AI-007 on 2026-08-09. `beelink_services` still strips it idempotently to
+> guard a re-imaged node. The steps are kept because they document how this
+> machine was built, not what it runs. Beelink is now the platform node
+> (GH Runner + MinIO + Glances) per ADR-028.
 
 ```
 Hostname: kubelab-bee
@@ -147,16 +154,9 @@ ollama pull qwen2.5:7b  # ~4.7GB, best quality that fits in 8GB RAM
 # Alternatives considered: vLLM (overkill, needs GPU), LocalAI (more complex), llama.cpp (already on Jetson)
 ```
 
-- [x] Verify (local + LAN) ✓ 2026-02-19:
-
-```bash
-# Local
-curl http://localhost:11434/api/tags
-# LAN (from RPi 4 — confirms agent→Ollama path works)
-curl http://172.16.1.3:11434/api/tags
-# Smoke test
-ollama run qwen2.5:7b "Say hello in 3 words"
-```
+- [x] Verify (local + LAN) ✓ 2026-02-19 — commands removed by AI-007, since the
+      endpoint no longer exists and a copy-pasteable probe for a dead service is
+      worse than none.
 
 ### 1.4 RPi 4 — Gateway + Agent Node (`kubelab-rpi4`) ✓ Already provisioned
 

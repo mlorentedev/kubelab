@@ -33,8 +33,6 @@ networking:
   # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:
-  - name: ollama
-    node: ace2             # resolves to networking.nodes.ace2.tailscale_ip (ADR-028: ace2=Ollama)
   - name: jetson
     node: jetson           # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
@@ -115,11 +113,11 @@ networking:
       tailscale_ip: "100.64.0.5"
       lan_ip: "172.16.1.5"
       lan_interface: "enp1s0"
-      ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-028: Ollama only
+      ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-058 D1: dev-node
       dashboard:
         order: 5
         icon: mdi-server
-        description: "LLM · 12GB"
+        description: "Dev node · 12GB"
         widget: glances
     rpi4:
       hostname: "rpi4"
@@ -754,7 +752,7 @@ apps:
         auth_level: one_factor
         default_port: 8080
         health_path: /health
-        bouncer_api_key: 
+        bouncer_api_key:
           secrets://apps.services.security.crowdsec.bouncer_api_key
 
     # Network services (bare-metal, external to K3s)
@@ -767,24 +765,7 @@ apps:
         default_port: 80
         health_path: /admin/
 
-    # AI / ML services (bare-metal, accessed via Tailscale)
-    ai:
-      ollama:
-        name: ollama
-        image: ollama/ollama:0.16.2
-        domain: ollama.kubelab.live
-        # `enable_auth: false` = no Authelia ForwardAuth. Public prod access is
-        # gated by the X-API-Key Traefik plugin via the `api-key-ollama`
-        # Middleware (ADR-035 Stage 1, AI-001 prod-only). Staging stays VPN-only.
-        enable_auth: false
-        auth_level: bypass
-        default_port: 11434
-        health_path: /api/tags
-        keep_alive: "5m"
-        memory_limit: "10G"
-        models:
-        - "qwen2.5-coder:7b"
-        - "qwen2.5:7b"
-        # SSOT reference — real value in SOPS. Consumed by toolkit
-        # `apply_middleware_secrets` (k8s_middlewares.py MIDDLEWARE_CATALOG).
-        api_key: secrets://apps.services.ai.ollama.api_key
+    # AI / ML services — empty since AI-007 retired Ollama from ace2.
+    # The category is kept because ADR-029 still plans local inference once a
+    # GPU node exists; until then the interim path is a hosted API.
+    ai: {}

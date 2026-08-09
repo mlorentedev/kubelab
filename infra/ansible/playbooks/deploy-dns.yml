@@ -42,5 +42,4 @@
         service_domains:
           vpn: "{{ common.apps.services.core.headscale.domain }}"
           status: "{{ common.apps.services.observability.uptime_kuma.domain }}"
-          ollama: "ollama.{{ common.global.base_domain }}"
           jetson: "jetson.{{ common.global.base_domain }}"
