@@ -10,6 +10,10 @@ services:
       - "{{ uptime_kuma_port }}:3001"
     volumes:
       - uptime-kuma-data:/app/data
+    dns:
+{% for dns_ip in docker_dns_servers %}
+      - {{ dns_ip }}
+{% endfor %}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001', r => {process.exit(r.statusCode === 200 || r.statusCode === 302 ? 0 : 1)})\""]
       interval: 30s
