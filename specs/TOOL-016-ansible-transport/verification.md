@@ -10,7 +10,7 @@ created: "2026-07-10"
 Map every acceptance criterion from `proposal.md` to concrete proof.
 
 - [x] AC1 (bastion adds ProxyCommand to mesh-only, none on VPS) -> f1 (`pytest -k bastion`, 2 passed) + smoke
-- [x] AC2 (mesh unchanged / regression) -> f2 (`pytest -k mesh`, 3 passed) + full suite 375 passed
+- [x] AC2 (mesh unchanged / regression) -> f2 (`pytest -k mesh`, 4 passed, 1 deselected) + full suite 394 passed
 - [x] AC3 (bastion target from SSOT, no hardcoded IP) -> f3 (grep: 0 IPs in generator source)
 - [x] AC4 (`--transport` flag + Makefile `TRANSPORT=`) -> f4
 - [x] AC-coverage (new AnsibleGenerator unit suite) -> f5 (5 passed; was 0 coverage before)
@@ -19,7 +19,24 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 ## Test status
 
 - Unit suite: `poetry run pytest tests/test_generator_ansible.py` -> **5 passed**.
-- Full non-e2e suite: **375 passed, 0 failed** (no regression). `ruff` + `mypy` clean.
+- Full non-e2e suite: **394 passed, 0 failed** (no regression). `ruff` clean.
+- **Re-verified 2026-08-09** after rebasing onto master (23 commits, no file overlap, no
+  conflicts). The rebase carried the branch across four dependency bumps that its original
+  evidence predates — `typer ^0.26.8 -> ^0.27.0` (which validates the new `--transport`
+  option), `pytest ^8 -> ^9`, `ruff ^0.15 -> ^0.16`, `mypy ^2.1 -> ^2.3` — plus `a7d3722`,
+  which changed config merge semantics the generator reads through. f1-f5 all re-run
+  verbatim: exit 0.
+- **f2's recorded count was corrected, not regressed.** `-k mesh` selects 4, not 3: pytest
+  substring-matches the full node ID, so `test_mesh_only_nodes_get_proxy_via_ssot_bastion`
+  satisfies both filters. What is verifiable is that **3 does not reproduce against the
+  committed test names** — under any pytest version, since `-k` node-ID matching is not new
+  in 9. Why July recorded 3 cannot be recovered: the branch is a single squashed commit, so
+  a transcription of the mesh class's size and a rename landing after the capture are
+  indistinguishable. Either way the entry had stopped tracking the command; it now records
+  what the command prints.
+- `make type` fails on `toolkit/features/notify_smoke.py` (missing `types-requests` stubs).
+  **Pre-existing on master** — reproduced there with an identical error, untouched by this
+  branch. Tracked separately; not fixed here to keep this PR atomic.
 - Smoke (real `toolkit infra ansible generate --transport bastion`): ace2 (100.64.0.5) and
   aws1 (MagicDNS) carry `ProxyCommand=ssh -i ~/.ssh/id_ed25519 -W %h:%p -q … deployer@<vps.public_ip>`;
   kubelab-vps (public IP) has no per-host args — it is the jump. Inventory restored to mesh after.

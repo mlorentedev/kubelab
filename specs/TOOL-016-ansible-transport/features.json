@@ -11,7 +11,7 @@
     "behavior": "Default / transport=mesh reproduces the current inventory unchanged (regression guard)",
     "verification": "poetry run pytest tests/test_generator_ansible.py -k mesh -q",
     "state": "verified",
-    "evidence": "2026-07-10: pytest -k mesh → 3 passed (no per-host ssh args in mesh; global args unchanged; mesh is the default). Full non-e2e suite: 375 passed, 0 failed."
+    "evidence": "2026-08-09 (re-run after rebase onto master): pytest -k mesh → 4 passed, 1 deselected. The three TestMeshTransportRegression cases (no per-host ssh args in mesh; global args unchanged; mesh is the default) plus test_mesh_only_nodes_get_proxy_via_ssot_bastion, whose name carries both tokens — -k substring-matches the full node ID, class name included. The 2026-07-10 entry recorded 3, which does not reproduce against the committed test names under any pytest version; the branch is a single squashed commit, so whether that was a transcription of the mesh class's size or a rename landing after the capture cannot be recovered. Full non-e2e suite: 394 passed, 0 failed."
   },
   {
     "id": "TOOL-016-ansible-transport-f3",
