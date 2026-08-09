@@ -15,6 +15,15 @@ metadata:
 spec:
   schedule: "0 3 * * *"  # Daily at 3 AM UTC (5 AM CEST)
   concurrencyPolicy: Forbid
+  # Bounds how late a missed 03:00 run may still start. Two effects:
+  # 1. A schedule missed because the controller was down (K3s restart, node
+  #    pressure) still runs, instead of being skipped silently until tomorrow.
+  # 2. It caps the controller's missed-schedule counter. With this field unset,
+  #    a CronJob that accumulates 100 missed schedules stops scheduling
+  #    altogether and only reports it as an event — a silent backup outage.
+  # The value gives a missed run until 04:00 to start, so the 1800s
+  # activeDeadlineSeconds below still completes inside the maintenance window.
+  startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   jobTemplate:
