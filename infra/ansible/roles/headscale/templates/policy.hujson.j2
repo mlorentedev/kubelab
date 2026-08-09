@@ -30,8 +30,10 @@
     //    Headscale v0.28 requires the "user@" form for user references in ACLs.
     { "action": "accept", "src": ["kubelab@", "manu@", "work@"], "dst": ["*:*"] },
 
-    // 2) agent egress — node-like, controlled. Gitea + Ollama via the prod ingress
-    //    (vps:443, token / api-key auth over TLS); MinIO via its S3 API (own access keys).
+    // 2) agent egress — node-like, controlled. Gitea via the prod ingress
+    //    (vps:443, token auth over TLS); MinIO via its S3 API (own access keys).
+    //    The vps:443 rule predates AI-007 and also covered Ollama; it stays for
+    //    Gitea, and for whatever ADR-035 Stage 1 registers next.
     //    No rule grants tag:hermes → vps:8080 (Headscale CP), *:6443 (K3s API), or peer :22.
     { "action": "accept", "src": ["tag:hermes"], "dst": ["vps:443", "beelink:9000"] },
   ],

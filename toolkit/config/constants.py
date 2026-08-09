@@ -69,7 +69,10 @@ class Components:
     SERVICES_MISC: Sequence[str] = ("calcom", "immich", "nextcloud")
 
     # AI services (apps.services.ai.*)
-    SERVICES_AI: Sequence[str] = ("ollama",)
+    # Empty since AI-007 retired Ollama. The namespace is kept because ADR-029
+    # still plans local inference once a GPU node exists; an empty tuple simply
+    # contributes nothing to ALL_SERVICES.
+    SERVICES_AI: Sequence[str] = ()
 
     # Legacy compatibility alias
     @property

@@ -77,9 +77,6 @@ apps:
         disable_require_tls: false
       crowdsec:
         domain: crowdsec.staging.kubelab.live
-    ai:
-      ollama:
-        domain: ollama.staging.kubelab.live
     data:
       minio:
         domain: minio.staging.kubelab.live

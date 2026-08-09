@@ -2,7 +2,9 @@
 # =============================================================================
 # Beelink Services — MinIO + GH Runner (ADR-028: on-demand platform).
 # Glances was extracted to the shared `roles/glances/` role (DASH-DT-014b).
-# Replaces bare-metal Ollama (moved to ace2 via ace2_services).
+# Replaces the bare-metal Ollama that once ran here. It moved to ace2 in 2026
+# and was retired outright by AI-007; the cleanup below stays because it guards
+# a re-imaged node, and its cost is one systemctl probe.
 # =============================================================================
 
 # --- Cleanup legacy Ollama (bare metal) ---

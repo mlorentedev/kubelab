@@ -47,7 +47,6 @@
     hosts {
         # Bare-metal services: individual Tailscale IPs
         {{ node_ips.rpi3 }} {{ service_domains.status }}
-        {{ node_ips.beelink }} {{ service_domains.ollama | default('ollama.' + base_domain) }}
         {{ node_ips.jetson }} {{ service_domains.jetson | default('jetson.' + base_domain) }}
         # K3s prod services: VPS Tailscale IP
         {{ node_ips.vps }} {{ base_domain }}

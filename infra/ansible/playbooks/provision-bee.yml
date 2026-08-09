@@ -4,7 +4,8 @@
 #
 # Deploys: base system, SSH hardening, Docker, Tailscale,
 # then MinIO (object storage) + GitHub Actions Runner + Glances.
-# Removes legacy bare-metal Ollama (moved to ace2).
+# Removes legacy bare-metal Ollama (retired outright by AI-007; the idempotent
+# cleanup stays to guard a re-imaged node).
 #
 # Usage:
 #   make provision NODE=bee ENV=staging

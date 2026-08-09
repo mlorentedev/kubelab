@@ -208,32 +208,10 @@ def authenticated_client(
     client.close()
 
 
-@pytest.fixture(scope="session")
-def ollama_api_key(e2e_config: dict[str, Any], env: str) -> str | None:
-    """Resolve the public Ollama X-API-Key from SOPS-merged config.
-
-    Path mirrors `MIDDLEWARE_CATALOG["api-key-ollama"].secret_key_path`
-    (toolkit.features.k8s_middlewares) — the same value the Traefik
-    Middleware reads.
-
-    In prod the key MUST resolve — SOPS decrypt failure or config drift is
-    a hard failure, not a skip (a missing key would otherwise silently
-    let CI pass while the positive-auth path goes unverified). In
-    non-prod envs (staging/dev) a missing key returns None; auth-gated
-    tests already skip themselves out via the `env != "prod"` check.
-    """
-    ai = e2e_config.get("apps", {}).get("services", {}).get("ai", {})
-    key = ai.get("ollama", {}).get("api_key")
-    if not key or (isinstance(key, str) and key.startswith("secrets://")):
-        if env == "prod":
-            pytest.fail(
-                "ollama_api_key not resolved in prod — SOPS decrypt failure or "
-                "config drift at apps.services.ai.ollama.api_key. Refusing to "
-                "skip auth-boundary tests in prod (would mask a broken secret "
-                "pipeline as a green CI run)."
-            )
-        return None
-    return str(key)
+# The `ollama_api_key` fixture lived here until AI-007 retired the service. It
+# resolved apps.services.ai.ollama.api_key and hard-failed in prod rather than
+# skipping, so a broken secret pipeline could not pass as green. That shape is
+# worth copying when ADR-035 Stage 1 registers its next API-keyed service.
 
 
 # ---------------------------------------------------------------------------

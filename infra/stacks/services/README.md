@@ -21,9 +21,7 @@ infra/stacks/services/
 │   └── authelia/          SSO authentication
 ├── misc/                  Productivity tools
 │   ├── calcom/            Scheduling
-│   └── immich/            Photo management
-└── ai/                    AI/ML services
-    └── ollama/            Local LLM runtime
+    └── immich/            Photo management
 ```
 
  Deployment
@@ -92,10 +90,6 @@ Authentication and access control:
 Productivity and utility tools:
 - calcom: Scheduling and calendar management
 - immich: Self-hosted photo and video backup
-
- AI
-AI and machine learning services:
-- ollama: Local large language model runtime
 
  Adding New Services
 

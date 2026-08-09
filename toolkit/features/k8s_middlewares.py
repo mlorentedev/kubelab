@@ -47,7 +47,7 @@ class MiddlewareSpec:
     """Logical service id. Cross-references SECRET_CATALOG and CLAUDE.md service list."""
 
     secret_key_path: str
-    """SOPS dotted path (e.g. `apps.services.ai.ollama.api_key`)."""
+    """SOPS dotted path (e.g. `apps.services.<category>.<service>.api_key`)."""
 
     template_path: Path
     """Template file path RELATIVE to project_root."""
@@ -63,14 +63,12 @@ class MiddlewareSpec:
 # Single source of truth. Adding a new auth-protected service means a new row
 # here PLUS a matching SECRET_CATALOG entry (toolkit/features/secrets_manager.py).
 
-MIDDLEWARE_CATALOG: list[MiddlewareSpec] = [
-    MiddlewareSpec(
-        name="api-key-ollama",
-        service="ollama",
-        secret_key_path="apps.services.ai.ollama.api_key",
-        template_path=Path("infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl"),
-    ),
-]
+# Empty since AI-007 retired Ollama, which was Stage 1's first and only consumer.
+# The machinery stays: ADR-035's anchored decisions name widget-proxy (DT-004) and
+# Pollex public (AI-004) as the next entries, and the `api-key:` Traefik plugin
+# remains registered in traefik-helmconfig.yaml.j2 for them. An empty catalog is a
+# clean no-op — apply_middleware_secrets() logs and returns True.
+MIDDLEWARE_CATALOG: list[MiddlewareSpec] = []
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
