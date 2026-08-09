@@ -3225,3 +3225,61 @@ The trap is that an earlier, *different* bug presented identically from outside.
 **Rule:** Provision from a Linux controller — a homelab box on the target's LAN, or WSL. But WSL is not free: it needs its own `ansible`, `sops` and `tailscale` toolchain, plus the SOPS key and mesh membership, before it can run a single playbook. Budget that as real setup work rather than assuming the dev box can stand in. More generally: when a spec's runtime criteria are blocked on an environment you don't have, that blockage is itself the risk — keep the criteria `pending` and say so, rather than marking them verified from static inspection.
 
 **Tags:** `#ansible` `#control-node` `#windows` `#wsl` `#provisioning` `#ansible-028` `#gotcha`
+
+### [2026-08-08] Two merge implementations over the same files meant `common.enc.yaml` had two different meanings (ANSIBLE-033)
+
+**Context:** The ace2 dev-node PAT lives in `common.enc.yaml`. Ansible provisioned it correctly; `toolkit secrets audit` reported it missing.
+
+**Problem:** `ConfigurationManager._deep_update` guarded its recursive branch with `isinstance(value, dict) and value`. An empty mapping is **falsy**, so it fell to the assignment branch and *replaced* the base subtree instead of recursing into it. Moving the token to `common` had left a `dev_node: {}` behind in `staging.enc.yaml`, and that empty mapping erased the common subtree — but only on the toolkit side. The playbooks merge the same two files with `combine(recursive=True)`, which treats an empty mapping as a Mapping and recurses, preserving it. The same two files therefore meant different things depending on which tool read them.
+
+The dangerous half was not the read. `credentials.py` `_promote_shared_secrets` runs the same merge into the decrypted `common.enc.yaml` and **re-encrypts the result to disk**, and `_partition_secrets` copies subtrees verbatim from a `SHARED_NESTED` path — `apps.services.automation`, exactly where the token lives. One `credentials generate` run would have silently and permanently destroyed the credential. A broken read is recoverable by re-running the tool; that write is not.
+
+**Solution:** Recurse whenever the override is a mapping, into the base only when that is a mapping too — matching Ansible's `merge_hash` on all four edge cases (empty mapping, mapping-over-scalar, scalar-over-mapping, explicit null). The same guard also fixed a latent `TypeError` where a mapping override onto a scalar base recursed *into the scalar*. Blast radius was enumerated rather than assumed: a redacted path→hash image of the merged config for all three environments showed exactly two deltas, and the generated staging manifests were byte-identical before and after.
+
+**Rule:** When two tools consume the same configuration files, their merge semantics are a **contract**, and an untested contract drifts. Pin it with tests that assert parity against the reference implementation, not just against your own intent. And when auditing a merge bug, find every call site before judging severity — a merge that only ever fed reads is an inconvenience; the one that feeds an encrypt-and-write is data loss.
+
+**Tags:** `#sops` `#config-merge` `#ansible` `#toolkit` `#data-loss` `#ansible-033` `#gotcha`
+
+### [2026-08-08] When you cannot own the file, verify it — a guarded write is not a fallback (ANSIBLE-033)
+
+**Context:** The `dev_node` role ran `gh auth setup-git` so one PAT would serve both `gh` and git-over-HTTPS. Follows directly from the ANSIBLE-028 one-writer-per-file lesson above.
+
+**Problem:** `gh auth setup-git` writes `~/.gitconfig` — a file the dotfiles bootstrap, run *earlier in the same role*, redeploys wholesale every pass. The task looked harmless because it never fired: the helper was always already present, so the idempotence guard skipped it. Deleting the helper by hand and re-provisioning revealed why — the bootstrap restored it **mid-run**, before the role's own check executed. So the role can never durably write that file at all, and in the one scenario where the task would have fired (dotfiles dropping the helper), it would have churned forever: bootstrap wipes, `setup-git` rewrites, `changed` every pass. The "guarded fallback" was a churn generator wearing a safety guard.
+
+**Solution:** Split ownership by concern. The token is the role's; the credential helper is dotfiles'. The role asserts the wiring and fails loudly with a message naming the owner, instead of writing a file it does not own. The `~/.gitconfig.local` seam alternative was rejected: no such seam exists, and creating one is a change to the dotfiles repo (the `dotfiles#788` precedent), not to this one.
+
+**Rule:** One-writer-per-file has a second half nobody states: when the file's owner is someone else, the answer is **verify, don't write** — assert the contract and fail loudly, naming who owns it. Also: a task that never fires is not automatically safe. Test the branch you think is dead, because "it always skips" and "it would churn if it ran" look identical from a green pipeline.
+
+**Tags:** `#ansible` `#idempotence` `#config-ownership` `#dotfiles` `#ansible-033` `#gotcha`
+
+### [2026-08-08] A tag asymmetry made the play report success while delivering no credential — and the acceptance probe agreed (ANSIBLE-033)
+
+**Context:** `make provision NODE=ace2 ENV=staging TAGS=dev_node` — the exact command the spec's acceptance criterion prescribes.
+
+**Problem:** In every `provision-*.yml`, the config-loading `pre_tasks` carry `tags: [always]` but the three SOPS decryption tasks carry no tags. A `TAGS=` run therefore skipped decryption and left `secrets` undefined — while `config` stayed fully populated, which is precisely what made it look healthy. The role var used `| default('')` (deliberately, so an operator without the secret gets a node with no identity rather than a failed play), so the token silently became the empty string and all four identity tasks skipped. The play reported `ok=29 changed=2 failed=0`.
+
+Worse, the acceptance probe passed. It asserted convergence — a second pass reporting `changed=0` — which cannot distinguish "converged with the credential in place" from "converged because every task that would install it was skipped". A criterion claiming *delivery* was verified by a command that only measured *stability*.
+
+**Solution:** Tag the decryption tasks `always`, matching the config loads directly above them. Then strengthen the probe to also assert the role saw a non-empty token — keyed on the token *read* rather than the login, because the login legitimately skips on an already-converged node while the read is guarded only by the token being non-empty. The same untagged pattern in the other playbooks is tracked separately (#893); those fail loudly instead of silently, because their secret vars carry no `default`.
+
+**Rule:** A `default` on a value sourced from a secret store converts a loud failure into a silent one — pair it with something that proves the value actually arrived. And when writing an acceptance command, ask what *else* could make it exit 0: if the answer includes "the feature was never installed", the command measures the wrong thing. Convergence is not delivery.
+
+**Tags:** `#ansible` `#sops` `#tags` `#verification` `#false-green` `#ansible-033` `#gotcha`
+
+### [2026-08-08] A blocked probe hides every defect downstream of where it stops (ANSIBLE-033)
+
+**Context:** ANSIBLE-033's f2 probe — clone a private repo, commit, push, open a PR, all from a tmux session on ace2 under the dev-node PAT. It had one known blocker: the fixture, `go-dsa-sample`, was archived and therefore read-only.
+
+**Problem:** Two defects, stacked, and the first made the second invisible.
+
+The fixture was chosen for being *dormant*, so an acceptance branch could not collide with real work. That criterion turned out to select for archived repositories — dormant is what archiving produces. The push returned `403 This repository was archived`, which is indistinguishable from a permissions failure and sends you auditing the credential.
+
+Replacing the fixture let the probe reach step 4 for the first time, where `gh pr create` aborted with *"you must first push the current branch to a remote"* — immediately after a `git push -u origin HEAD` that had returned 0. `git clone --depth 1` implies `--single-branch`, which pins the fetch refspec to the default branch. The push therefore writes `branch.<name>.remote` and `branch.<name>.merge`, but nothing can create `refs/remotes/origin/<branch>` because no refspec covers it. `@{upstream}` fails with *"not stored as a remote-tracking branch"*, and `gh` reads that as an unpushed branch. The `-u` had not lied about the config, only about the ref.
+
+Both defects had been in the probe since it was written. The first one is why nobody knew about the second, and each round trip to discover one cost powering on an on-demand node.
+
+**Solution:** A purpose-built private fixture (`kubelab-devnode-fixture`) rather than a borrowed one — of 41 private repos, 36 were archived and the other 5 were in active use, one of them the vault. Being permanent, it also turns post-rotation re-verification into a command instead of a manual step. For the PR, pass `--head` explicitly and skip the inference; widening the clone would trade away a real property of the probe for nothing. The corrected probe was then run end to end **from the workstation under the operator's own token** — enough to prove the flow, explicitly not enough to satisfy AC2, which needs the node and the dev-node PAT.
+
+**Rule:** When a probe is blocked at step N, treat steps N+1 onward as **unverified, not working** — a green record above the blockage says nothing about what is below it. Where the environment is expensive to reach (an on-demand node, a physical device), buy down that cost first: run the probe against a local stand-in to shake out flow defects, then spend the real environment on the one axis the stand-in cannot exercise. And when picking a test fixture, state the property you actually need — *writable* — instead of a proxy like *dormant*, which quietly selected for the opposite.
+
+**Tags:** `#verification` `#probes` `#git` `#github-cli` `#shallow-clone` `#test-fixtures` `#ansible-033` `#gotcha`

@@ -16,9 +16,13 @@
 
 set -euo pipefail
 
-# A dormant 15KB private repo. Small so the clone is fast, untouched since
-# 2024-11 so an acceptance branch cannot collide with real work.
-REPO="mlorentedev/go-dsa-sample"
+# A private repo that exists only to be this probe's fixture: empty but for a
+# README, so the clone is instant and an acceptance branch cannot collide with
+# real work. Purpose-built rather than borrowed — every other private repo of
+# this owner is either archived (read-only, see 1b) or actively used. Being a
+# permanent fixture, it also makes this probe the re-verification step after
+# each token rotation (docs/runbooks/dev-node-token-rotation.md).
+REPO="mlorentedev/kubelab-devnode-fixture"
 WORK="/tmp/ansible-033-f2"
 RESULT="/tmp/ansible-033-f2.result"
 BRANCH="acceptance/ansible-033-$(date +%s)"
@@ -50,6 +54,18 @@ rm -f "$RESULT"
 #    public — a public clone would prove nothing about private access.
 gh api "repos/${REPO}" --jq .private | grep -qx true
 
+# 1b. ...and it must be WRITABLE. An archived repo is read-only no matter what
+#     the token grants: the push returns 403 "This repository was archived",
+#     which reads exactly like a permissions failure and sends you auditing the
+#     credential instead of the fixture. Learned the hard way 2026-08-08, when
+#     the first fixture was picked for being dormant — and dormant turned out to
+#     mean archived. Fail here, with a verdict that names the real cause.
+if [ "$(gh api "repos/${REPO}" --jq .archived)" = "true" ]; then
+    echo "F2_FIXTURE_ARCHIVED" >"$RESULT"
+    echo "fixture ${REPO} is archived (read-only) — this is a fixture problem, not a token problem" >&2
+    exit 1
+fi
+
 # 2. Clone over HTTPS explicitly. `gh repo clone` would honour a configured git
 #    protocol and could pick SSH, which would test a key instead of the PAT.
 git clone --quiet --depth 1 "https://github.com/${REPO}" "$WORK"
@@ -66,7 +82,15 @@ git -c user.name="ace2 dev node" -c user.email="dev-node@kubelab.live" \
 git push --quiet -u origin HEAD
 
 # 4. Open the PR. `gh pr create` prints the URL last.
-PR_URL="$(gh pr create --fill --draft | tail -1)"
+#
+#    `--head` is not optional here, despite the `-u` above. `clone --depth 1`
+#    implies `--single-branch`, which pins the fetch refspec to the default
+#    branch — so the push writes branch.<name>.{remote,merge} but CANNOT create
+#    refs/remotes/origin/<branch>. `@{upstream}` then fails with "not stored as
+#    a remote-tracking branch" and gh aborts with "you must first push the
+#    current branch", immediately after a push that returned 0. Naming the head
+#    explicitly sidesteps the inference entirely.
+PR_URL="$(gh pr create --fill --draft --head "$BRANCH" | tail -1)"
 case "$PR_URL" in
     https://github.com/*) ;;
     *) exit 1 ;;

@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-033-dev-node-credentials"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-07"
 issue: "kubelab#888"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -29,7 +29,11 @@ Observable after this PR, none of which is possible today:
 2. An agent working in `~/workspaces/<agent>/` clones a **private** repository of this owner, commits, pushes a branch and opens a PR — with no human at the keyboard and no agent forwarding. (Deliberately not "a kubelab repository": `mlorentedev/kubelab` is **public**, so proving the flow against it would prove nothing about private access. The acceptance fixture is a private repo — see AC2.)
 3. That identity is **not the operator's**. It reaches only the repositories named in the token's scope, carries only `contents` + `pull-requests` write, and **stops working on a date GitHub enforces** rather than a date someone remembers.
 
-The mechanism is one credential, not two: `gh auth login --with-token` followed by `gh auth setup-git` makes the same PAT serve git pushes over HTTPS, so there is one secret to rotate and one to revoke. No SSH private key is placed on the node.
+The mechanism is one credential, not two: `gh auth login --with-token` installs the token, and `gh` registered as git's credential helper makes that same PAT serve git pushes over HTTPS — so there is one secret to rotate and one to revoke. No SSH private key is placed on the node.
+
+**Who writes the helper changed during implementation** (2026-08-08). The obvious form is for this role to run `gh auth setup-git`, and that is what it originally did. But that command writes `~/.gitconfig`, and the dotfiles bootstrap — which this same role runs, earlier — redeploys that file wholesale on every pass. Deleting the helper by hand and re-provisioning showed the bootstrap restoring it *before* the role's own check ran, so a write here is erased next pass and the task would report `changed` forever. That is the "one writer per file" failure ANSIBLE-028 already paid for with `~/.bashrc` and `~/.tmux.conf`.
+
+The split is therefore: **the token is this role's, the helper is dotfiles'**. The role asserts the wiring and fails loudly if it is missing, rather than fighting for a file it does not own. The observable outcome in AC1/AC2 is unchanged — the acceptance probe proves it by pushing over HTTPS under the PAT, which does not care which file declares the helper. The cross-repo coupling this creates (a dev node's git identity depends on `mlorentedev/dotfiles` keeping its `[credential "https://github.com"]` block) is named in the assert's failure message.
 
 ### The token contract
 
@@ -93,19 +97,27 @@ General rule this list follows: **write only where the flow demands it, read whe
 
 ## Acceptance criteria
 
-- [ ] AC1: `ssh ace2 'gh auth status'` reports an authenticated account and exits 0 — i.e. `gh` works non-interactively, not only in a login shell.
-- [ ] AC2: From a tmux session on ace2, a **private** repository clones, accepts a commit, pushes a branch and opens a PR via `gh pr create`, with no agent forwarding and no human interaction. Fixture: `mlorentedev/go-dsa-sample` — private, small, and dormant since 2024-11, so an acceptance branch cannot collide with real work. The probe asserts the fixture really is private and that `origin` is HTTPS: a public fixture would pass without proving private access, and a repo cloned over SSH would exercise a forwarded key rather than the PAT. Test artefacts are removed by a cleanup trap, including on failure.
-- [ ] AC3: The token is fine-grained with a **90-day** expiry, scoped to **All repositories** (a recorded, deliberate decision — the criterion asserts what was chosen, not what was originally recommended), and grants only `contents` + `pull-requests` write plus `checks` + `commit statuses` read — **no** `workflows`, `issues` or `actions` write.
+> All seven ticked 2026-08-08 on merge of [#897](https://github.com/mlorentedev/kubelab/pull/897).
+> Dated evidence per criterion is in `verification.md` — that file, not this list, is
+> the ledger. One caveat survives the tick: **AC3 is satisfied on an executable half
+> plus an attested half.** The `workflows: write` refusal was observed (f3 pushed and
+> GitHub refused, naming the scope); the 90-day expiry and the All-repositories scope
+> are not exposed by the API for fine-grained PATs and rest on the token owner's
+> reading. Do not re-derive AC3 as machine-verified.
+
+- [x] AC1: `ssh ace2 'gh auth status'` reports an authenticated account and exits 0 — i.e. `gh` works non-interactively, not only in a login shell.
+- [x] AC2: From a tmux session on ace2, a **private** repository clones, accepts a commit, pushes a branch and opens a PR via `gh pr create`, with no agent forwarding and no human interaction. Fixture: `mlorentedev/kubelab-devnode-fixture` — private, README-only, and created for this purpose. Dormancy was the first selection criterion and it was the wrong one: `go-dsa-sample` was dormant *because* it was archived, hence read-only, and its push returned a 403 indistinguishable from a permissions failure. The probe now asserts the fixture is private, **not archived**, and that `origin` is HTTPS: a public fixture would pass without proving private access, an archived one cannot prove the write half, and a repo cloned over SSH would exercise a forwarded key rather than the PAT. Test artefacts are removed by a cleanup trap, including on failure.
+- [x] AC3: The token is fine-grained with a **90-day** expiry, scoped to **All repositories** (a recorded, deliberate decision — the criterion asserts what was chosen, not what was originally recommended), and grants only `contents` + `pull-requests` write plus `checks` + `commit statuses` read — **no** `workflows`, `issues` or `actions` write.
 
   Split honestly between what a machine can check and what it cannot. **Executable:** the `github_pat_` prefix proves fine-grained rather than classic, and the `workflows: write` refusal is observable — a push touching `.github/workflows/` must be rejected *by GitHub, naming the workflow scope*. That last one matters most, since it is the largest privilege jump on the list; the probe separates "rejected for the right reason" from "rejected by a network fault", because a bare non-zero exit would let a blip masquerade as a working control. **Manual:** for fine-grained PATs the expiry and the repository scope are not exposed by the API, so they are read off the token's settings page. That step stays a stated manual check rather than being dressed up as automated.
-- [ ] AC4: The credential is delivered by the `dev_node` role from SOPS — `make provision NODE=ace2 ENV=staging TAGS=dev_node` provisions it reproducibly, and a second pass reports `changed=0`.
-- [ ] AC5: No prod credential is reachable from ace2. Runnable as written, not intent: `ssh -o ForwardAgent=no ace2 '! test -e ~/.config/sops/age/keys.txt && ! test -e ~/.age/key.txt && ! test -e /etc/sops/age.key && ! command -v sops >/dev/null && ! grep -rqi prod ~/.kube/ 2>/dev/null'` exits 0. The age-key half is **load-bearing, not belt-and-braces**: per SEC-SOPS-001 (#889) any age key on this node decrypts prod, so its absence is the actual control.
+- [x] AC4: The credential is delivered by the `dev_node` role from SOPS — `make provision NODE=ace2 ENV=staging TAGS=dev_node` provisions it reproducibly, and a second pass reports `changed=0`.
+- [x] AC5: No prod credential is reachable from ace2. Runnable as written, not intent: `ssh -o ForwardAgent=no ace2 '! test -e ~/.config/sops/age/keys.txt && ! test -e ~/.age/key.txt && ! test -e /etc/sops/age.key && ! command -v sops >/dev/null && ! grep -rqi prod ~/.kube/ 2>/dev/null'` exits 0. The age-key half is **load-bearing, not belt-and-braces**: per SEC-SOPS-001 (#889) any age key on this node decrypts prod, so its absence is the actual control.
 
   The kubeconfig half greps **contents, not filenames**. Kubeconfigs here follow `kubelab-<env>-config`, but a prod *context* can sit inside a plain `~/.kube/config` with no `*prod*` file anywhere — so the filename-only check this criterion originally carried would have passed on a node with working prod cluster access. It deliberately stops short of asserting `~/.kube` is absent: the claim is "no **prod** credential", and ADR-058 D2's own dev loop may legitimately put a staging kubeconfig here later.
-- [ ] AC6: The token value never appears in a process argument, a log line, or a world-readable file on the node (SEC-SECRETS-001 discipline). The token lands in `gh`'s own credential store — not a hand-rolled dotfile — so `gh` owns its lifecycle, and its sink `~/.config/gh/hosts.yml` is mode **0600** exactly.
+- [x] AC6: The token value never appears in a process argument, a log line, or a world-readable file on the node (SEC-SECRETS-001 discipline). The token lands in `gh`'s own credential store — not a hand-rolled dotfile — so `gh` owns its lifecycle, and its sink `~/.config/gh/hosts.yml` is mode **0600** exactly.
 
   Stated on the file rather than the directory, and as equality rather than a bound: a directory's mode says nothing about the secret inside it, and the `-le 700` comparison this criterion first used is arithmetic on an octal string, so it would have accepted a world-readable `0644`. The `no_log` assertion is likewise scoped to the `gh auth login` task itself — a role-wide grep passes as soon as *any* task carries `no_log`, including one that never touches the credential.
-- [ ] AC7: Expiry day is not a mystery outage. A one-line rotation procedure lives in `docs/runbooks/` naming what breaks (agent pushes start failing with 401), who is notified, and the exact command to mint and re-provision the replacement.
+- [x] AC7: Expiry day is not a mystery outage. A one-line rotation procedure lives in `docs/runbooks/` naming what breaks (agent pushes start failing with 401), who is notified, and the exact command to mint and re-provision the replacement.
 
 <!-- Completeness pass (the fill's Q6), run against this draft:
      ADDED — rotation runbook (AC7): an expiry-as-timebox only works if expiry day

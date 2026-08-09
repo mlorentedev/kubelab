@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-REPO="mlorentedev/go-dsa-sample"
+REPO="mlorentedev/kubelab-devnode-fixture"
 WORK="/tmp/ansible-033-f3"
 RESULT="/tmp/ansible-033-f3.result"
 PUSH_ERR="/tmp/ansible-033-f3.stderr"
