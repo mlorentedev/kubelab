@@ -95,9 +95,10 @@ The 128/256 Mi defaults are the tier `postgres`, `gitea`, `authelia` and `crowds
 ## References
 
 - Bitácora board: **kubelab#811** (see the `issue:` frontmatter field)
-- **#917 / PR #920** — the ADR-028 amendment this spec's "identical workloads in both environments" premise rests on. Must merge before this spec is frozen.
+- **#917 / PR #920 (merged 2026-08-09)** — the ADR-028 amendment this spec's "identical workloads in both environments" premise rests on.
 - `docs/adr/adr-037-*` — the staging-validates-prod flow that makes a single shared ceiling the right design, and that dictates the validation order in `tasks.md`.
 - `docs/adr/adr-024-pvc-backup-strategy.md` — the prod backup CronJob whose 0.5 Gi limit is inside the ceiling window.
 - `docs/adr/adr-032-observability-stack-execution.md` — Prometheus and Alertmanager are planned into the shared base; MET-001 is the foreseeable first raise of this ceiling.
-- **#918 (OBS-008)** — quota utilization alerting. Where the early warning lives, deliberately *outside* this admission gate.
+- **#918 (OBS-010)** — quota utilization alerting. Where the early warning lives, deliberately *outside* this admission gate.
+- **#924 (OBS-009)** — Traefik and `svclb` run unbounded in `kube-system`, which is why the ~0.17 Gi reserved for that namespace in the ceiling derivation is an optimistic figure rather than a measured one.
 - Measurement method: `kubectl get pods -o json` summed over `spec.containers` **and** `spec.initContainers`, both clusters, 2026-08-09. Summing only `spec.containers` is what produced the false "zero unbounded containers" claim in the first draft.
