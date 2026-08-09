@@ -17,7 +17,7 @@ created: "2026-08-09"
 
 - [x] Branch created from main: `chore/IDP-031-namespace-resource-governance` ✓ 2026-08-09
 - [x] `proposal.md` is complete and acceptance criteria are testable ✓ 2026-08-09
-- [ ] No open questions left in `proposal.md` "Risks / open questions" — **blocked on PR #920 merging** (the ADR-028 amendment this spec's shared-ceiling premise cites)
+- [x] No open questions left in `proposal.md` "Risks / open questions" ✓ 2026-08-09 — unblocked by PR #920 (the ADR-028 amendment this spec's shared-ceiling premise cites) merging
 
 ## Implementation
 
