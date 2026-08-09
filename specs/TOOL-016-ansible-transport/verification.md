@@ -86,7 +86,17 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 - [ ] Lesson for the repo's `docs/lessons.md`? <decide at archive>
 - [ ] ADR-worthy? Likely a short note or an ADR-052 addendum (SSH transport mirrors the
       kubectl transport) — decide at archive.
-- [ ] New pattern candidate for `00_meta/patterns/`? No — repo-specific.
+- [x] New pattern candidate for `00_meta/patterns/`? **Yes — an amendment to
+      [[pattern-feature-list-as-primitive]], not a new pattern.** Its Anti-patterns section
+      already carries two failure modes from ANSIBLE-033, both about a command that passes
+      when it should not. This spec produced the mirror image: **a `verification` narrower
+      than the `behavior` it claims to verify, which manufactures a false blocker.** f6's
+      behavior said "a mesh-only node"; its command said `NODE=ace2`, a node that is also
+      on-demand. Nothing was wrong with the code, the probe, or the gate — and the PR still
+      sat in draft for a month waiting on a precondition its own stated behavior never
+      required. Decide the wording at archive; the pattern is the SSOT, so this is one more
+      entry under the same question ("can I trust this verification command?"), not a
+      sibling pattern.
 
 ## Archive checklist
 
