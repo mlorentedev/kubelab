@@ -70,10 +70,11 @@ so rotation is the natural moment to revisit it.
 > **Ask:** which repositories has the dev node actually needed this quarter?
 > If the answer is a short list, enumerate it instead of granting All.
 
-**If you narrow it, check the acceptance fixture still resolves.** The
-ANSIBLE-033 f2 probe clones `mlorentedev/go-dsa-sample`. If narrowing drops that
-repo, the probe fails at the clone with a generic auth error that reads like a
-broken credential rather than a moved goalpost.
+**If you narrow it, keep the acceptance fixture in scope.** The ANSIBLE-033 f2
+probe clones and pushes to `mlorentedev/kubelab-devnode-fixture` — a private repo
+that exists for no other reason. If narrowing drops it, the probe fails at the
+clone with a generic auth error that reads like a broken credential rather than a
+moved goalpost. Whatever list you enumerate, that repo is on it.
 
 ### 3. Store it
 
@@ -99,11 +100,27 @@ passes the token in; **ace2 never holds a decryption key**, and must not be give
 one (SEC-SOPS-001 / #889: every SOPS file is encrypted to the same recipients, so
 any age key on that node would also open prod).
 
-Verify:
+Verify — in two steps, because the first one is weaker than it looks:
 
 ```bash
 ssh -o ForwardAgent=no ace2 'gh auth status'
 ```
+
+That proves the node *stored* a credential. It does not prove the credential can
+do the job: a token minted with the wrong permissions, or scoped to a repository
+list that omits the fixture, passes this check and still cannot push. Run the
+acceptance probe for the write path:
+
+```bash
+scp specs/archive/ANSIBLE-033-dev-node-credentials/probes/f2-private-repo-flow.sh \
+    ace2:/tmp/ansible-033-f2.sh
+ssh -o ForwardAgent=no ace2 'tmux kill-session -t ansible033f2 2>/dev/null; \
+    tmux new-session -d -s ansible033f2 "bash /tmp/ansible-033-f2.sh"'
+ssh -o ForwardAgent=no ace2 'cat /tmp/ansible-033-f2.result'   # want: F2_OK
+```
+
+It clones, commits, pushes and opens a draft PR against the fixture, then removes
+both. `F2_FIXTURE_ARCHIVED` means the fixture, not the token, is the problem.
 
 ### 5. Revoke the old token
 
