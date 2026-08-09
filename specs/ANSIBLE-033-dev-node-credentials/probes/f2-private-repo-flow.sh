@@ -16,9 +16,13 @@
 
 set -euo pipefail
 
-# A dormant 15KB private repo. Small so the clone is fast, untouched since
-# 2024-11 so an acceptance branch cannot collide with real work.
-REPO="mlorentedev/go-dsa-sample"
+# A private repo that exists only to be this probe's fixture: empty but for a
+# README, so the clone is instant and an acceptance branch cannot collide with
+# real work. Purpose-built rather than borrowed — every other private repo of
+# this owner is either archived (read-only, see 1b) or actively used. Being a
+# permanent fixture, it also makes this probe the re-verification step after
+# each token rotation (docs/runbooks/dev-node-token-rotation.md).
+REPO="mlorentedev/kubelab-devnode-fixture"
 WORK="/tmp/ansible-033-f2"
 RESULT="/tmp/ansible-033-f2.result"
 BRANCH="acceptance/ansible-033-$(date +%s)"
@@ -78,7 +82,15 @@ git -c user.name="ace2 dev node" -c user.email="dev-node@kubelab.live" \
 git push --quiet -u origin HEAD
 
 # 4. Open the PR. `gh pr create` prints the URL last.
-PR_URL="$(gh pr create --fill --draft | tail -1)"
+#
+#    `--head` is not optional here, despite the `-u` above. `clone --depth 1`
+#    implies `--single-branch`, which pins the fetch refspec to the default
+#    branch — so the push writes branch.<name>.{remote,merge} but CANNOT create
+#    refs/remotes/origin/<branch>. `@{upstream}` then fails with "not stored as
+#    a remote-tracking branch" and gh aborts with "you must first push the
+#    current branch", immediately after a push that returned 0. Naming the head
+#    explicitly sidesteps the inference entirely.
+PR_URL="$(gh pr create --fill --draft --head "$BRANCH" | tail -1)"
 case "$PR_URL" in
     https://github.com/*) ;;
     *) exit 1 ;;
