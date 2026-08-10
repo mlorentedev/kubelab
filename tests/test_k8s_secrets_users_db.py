@@ -16,6 +16,11 @@ import yaml
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.k8s_secrets import _build_users_database
 
+#: Asserts the generator output against the REAL values in SOPS, so it needs the
+#: age key. Skipped (not deselected) where decryption is impossible, so the gap
+#: stays visible in the summary — see pytest_collection_modifyitems in conftest.
+pytestmark = pytest.mark.requires_sops
+
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
 class TestUsersDatabaseGenerator:
