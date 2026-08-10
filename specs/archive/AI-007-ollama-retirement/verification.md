@@ -86,22 +86,42 @@ reachable-and-broken:
 
 ## Promotion candidates
 
-- [x] **Lesson for `docs/lessons.md`? Yes — and it is not about Ollama.** *A completeness
-      check written against a name cannot distinguish a live reference from an explanation
-      of its absence.* Both AC1 and AC8 failed this way, and the `videollamada` collision
-      shows the failure can also be pure coincidence. The fix generalises: assert the
-      identifiers that make a thing **work**, not the string that names it. Write at archive.
-- [ ] ADR-worthy? No. ADR-028 and ADR-029 amendments cover it; the retirement is an
-      instance of existing decisions, not a new one.
-- [ ] New pattern for `00_meta/patterns/`? Possibly a sibling of the
-      `pattern-feature-list-as-primitive` amendment TOOL-016 proposed — that one was about a
-      `verification` narrower than its `behavior`; this is a `verification` that cannot
-      distinguish two meanings of a match. Decide the wording at archive, together.
+- [x] **Lesson for `docs/lessons.md`? Yes — and it is not about Ollama.** ✓ 2026-08-09,
+      written as *"A check never observed failing is a claim in executable syntax, not a
+      check"*. *A completeness check written against a name cannot distinguish a live
+      reference from an explanation of its absence.* Both AC1 and AC8 failed this way, and
+      the `videollamada` collision shows the failure can also be pure coincidence. The
+      entry carries both halves — the name-vs-identifier fix, and the negative-control rule
+      that generalises it — plus the four instances of the same shape found in one week
+      (`tls: {}`, `hash-password`, CI-GATE-007, AC1/AC8), which is what promoted it from
+      anecdote to rule.
+- [x] ADR-worthy? **No** — confirmed at archive. ADR-028 and ADR-029 amendments cover it;
+      the retirement is an instance of existing decisions, not a new one.
+- [x] New pattern for `00_meta/patterns/`? **No new pattern — amended
+      [[pattern-feature-list-as-primitive]] instead** ✓ 2026-08-09 (Manu's call). Two
+      additions: a third anti-pattern (*a verification with no reachable failing state*,
+      completing the set ANSIBLE-033 started) and a **negative-control precondition** — no
+      feature may enter `verifying` until its command has been observed exiting non-zero
+      once. Kept in the existing pattern rather than split into a verification-methodology
+      sibling because the precondition binds to exactly one transition this pattern already
+      owns (`in-progress → verifying`). **TOOL-016's amendment stays pending its own
+      archive** — it is a different entry under the same question and belongs to that
+      spec's closure, not this one.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved to `specs/archive/AI-007-ollama-retirement/`
-- [ ] #905 closed with the PR link (ADR-018)
-- [ ] Promotions above executed
-- [ ] **Ping the peer session** — #910's prod half is deliberately blocked on this PR merging
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-08-09. The four
+      agent-draft review markers on the narrative sections were cleared at the same time;
+      Risks 2, 3 and 9 had been answered by Manu in-session and are recorded in place.
+      Written without the literal bracketed token on purpose: the skill's archive lock
+      greps for the marker name, and prose *about* a cleared marker is indistinguishable
+      from a live one — the same defect as AC1, reproduced inside its own archive
+- [x] Folder moved to `specs/archive/AI-007-ollama-retirement/` ✓ 2026-08-09
+- [x] #905 closed with the PR link (ADR-018) ✓ 2026-08-09 — closed `completed`; its
+      timeline cross-references all three PRs (#915, #919, #935) plus the three tickets
+      filed during implementation, so no separate closing comment was needed
+- [x] Promotions above executed ✓ 2026-08-09 — lesson written, ADR declined, pattern
+      amended instead of duplicated
+- [x] **Ping the peer session** — #910's prod half was deliberately blocked on this PR
+      merging ✓ 2026-08-09, notified after the merge and the prune verification. That
+      session has since closed, so the prod half returns to this track

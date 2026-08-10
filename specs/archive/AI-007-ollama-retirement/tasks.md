@@ -67,7 +67,7 @@ created: "2026-08-09"
 - [x] Lint passes ✓ 2026-08-09
 - [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-09
 - [x] `verification.md` filled in ✓ 2026-08-09
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder ✓ 2026-08-09 — three, split by trigger semantics: **#915** (PR-A, inert on merge), **#919** (AC8 documentation surface), **#935** (PR-B, the sweep whose merge fires the Argo prune). Prune verified against the live cluster after merge, not inferred from it: zero Ollama objects in prod, edge smoke api 200 / auth 200
 
 ## Machine-readable features
 
