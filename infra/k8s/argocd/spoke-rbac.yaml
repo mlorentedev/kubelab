@@ -89,6 +89,19 @@ rules:
       - secrets
       - services
       - serviceaccounts
+      # Namespace governance objects (IDP-031). Both are listed together on
+      # purpose: `limitranges` is what phase 1 (#940) actually needs, and
+      # omitting `resourcequotas` would mean hitting this identical wall again
+      # in phase 2 — after a merge, in prod, discovered the same slow way.
+      #
+      # Why this was missed: this Role enumerates writes explicitly while reads
+      # are wildcarded, so a manifest introducing a NEW kind is invisible to
+      # every check until Argo tries to apply it in a cluster. `kubectl apply`
+      # from a workstation uses the operator's own credentials and succeeds, so
+      # staging went green through the manual ADR-037 flow and the gap only
+      # surfaced on the GitOps path, in prod.
+      - limitranges
+      - resourcequotas
     verbs: ["create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
     resources:
