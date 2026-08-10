@@ -40,7 +40,7 @@ EXPECTED_RECEIVER = {"staging": "apprise-log", "prod": "apprise-page"}
 #: it. `behavior: merge` keeps the siblings; `behavior: replace` would drop them
 #: and leave prod routing to a receiver that no longer exists — a failure that
 #: only shows up as alerts going nowhere.
-REQUIRED_KEYS = {"contact-points.yaml", "templates.yaml", "policies.yaml"}
+REQUIRED_KEYS = {"contact-points.yaml", "templates.yaml", "policies.yaml", "rules.yaml"}
 
 
 def _kustomize(path: str) -> list[dict]:

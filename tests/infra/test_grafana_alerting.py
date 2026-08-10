@@ -57,6 +57,9 @@ EXPECTED_APPRISE_URL = "http://apprise:8000/notify/kubelab"
 #: an unknown environment would make this whole module vacuous for that value.
 EXPECTED_TAG_BY_ENV = {"staging": "log", "prod": "page"}
 
+#: Title of the rule OBS-007 phase 2 provisions. Literal on purpose.
+EXPECTED_RULE_TITLE = "ACME certificate failure"
+
 
 def _kubeconfig(env: str) -> str:
     """Path to the per-environment kubeconfig."""
@@ -271,4 +274,49 @@ class TestAlertDelivery:
             f"Contact point {expected_receiver!r} in {env} sends Apprise tag {tag!r}, "
             f"expected {expected_tag!r}. The name and the tag have diverged, so alerts "
             f"would be delivered to the wrong Telegram channel while every name looks right."
+        )
+
+
+class TestAcmeAlertRule:
+    """The rule that watches certificate renewal (OBS-007 phase 2).
+
+    Phase 1 proved the delivery path with a throwaway rule, so anything failing
+    from here is the query rather than the plumbing. That separation is the whole
+    reason the phases are ordered this way.
+    """
+
+    def test_acme_rule_is_provisioned(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """The rule must come from the ConfigMap, not from Grafana's database.
+
+        Reading the provisioning API rather than the mounted file is deliberate:
+        a malformed rule mounts perfectly and provisions nothing.
+        """
+        rules = grafana_api("alert-rules")
+        titles = {r.get("title") for r in rules}
+
+        assert EXPECTED_RULE_TITLE in titles, (
+            f"Grafana in {env} has no {EXPECTED_RULE_TITLE!r} rule — certificate "
+            f"renewal is unwatched. Found: {sorted(t for t in titles if t) or 'no rules at all'}."
+        )
+
+    def test_acme_rule_treats_no_data_as_healthy(
+        self, grafana_api: ProvisioningGet, env: str
+    ) -> None:
+        """`noDataState` must be OK, or the rule alerts whenever things are fine.
+
+        A LogQL query matching nothing returns no series rather than zero, so the
+        healthy state IS NoData. Left at Grafana's default this rule would fire
+        continuously while certificates were renewing perfectly — the exact
+        inversion that makes people mute an alert channel.
+        """
+        rule = next(
+            (r for r in grafana_api("alert-rules") if r.get("title") == EXPECTED_RULE_TITLE), None
+        )
+        if rule is None:
+            pytest.skip(f"{EXPECTED_RULE_TITLE!r} not provisioned in {env} — see the test above")
+
+        assert rule.get("noDataState") == "OK", (
+            f"{EXPECTED_RULE_TITLE!r} in {env} has noDataState="
+            f"{rule.get('noDataState')!r}, expected 'OK'. Healthy means no matching "
+            f"log lines, which Loki returns as no series, not as zero."
         )

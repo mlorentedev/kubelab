@@ -1,0 +1,111 @@
+# Grafana alerting — the ACME failure rule (OBS-007 phase 2).
+#
+# Runs in both environments from the shared base; the root notification policy
+# decides which Apprise tier it reaches (prod pages, staging archives).
+#
+# Every element of the query below was chosen against seven days of real Traefik
+# logs rather than from the issue's description, which proposed matching
+# `Error renewing ACME certificate` — a string that appears nowhere in the
+# retained window of either cluster.
+---
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: certificates
+    folder: kubelab
+    # Sampled every 5 minutes against a 10-minute window, so a single failure is
+    # seen by two consecutive evaluations and `for: 5m` can be satisfied without
+    # depending on the scrape landing inside one window.
+    interval: 5m
+    rules:
+      - uid: obs007-acme-failure
+        title: ACME certificate failure
+        condition: C
+        # Must hold across two evaluations. Traefik retries transient CA errors
+        # on its own, and a rule that pages on the first blip trains people to
+        # ignore it. Five weeks of silent failure is the problem being solved
+        # here, not five minutes of latency.
+        for: 5m
+        # A query that matches nothing returns NO SERIES, not zero: `sum by` over
+        # an empty selection produces an empty vector. So the healthy state is
+        # NoData, and it MUST map to OK. Left at the default this rule would
+        # alert continuously whenever certificates were working.
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: >-
+            Traefik reported an ACME failure. Certificates are not renewing, and
+            they will expire silently unless this is fixed.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/acme-alerting.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # Three deliberate choices, each measured on 2026-08-09/10:
+              #
+              # 1. Match ACME lines that ALSO carry an error indicator, rather
+              #    than matching ACME lines and excluding the known heartbeat by
+              #    name. A denylist would have fired on `Starting provider
+              #    *acme.Provider`, which staging logs on every Traefik boot — 8
+              #    occurrences in seven days. Every future benign ACME line would
+              #    be another false alarm to chase.
+              #
+              # 2. No `detected_level` filter. Traefik colours its output, and
+              #    Loki reads these lines as `unknown` rather than `error`.
+              #
+              # 3. The domain extraction tolerates an ANSI reset between
+              #    `domains=` and the value — the raw line is
+              #    `\x1b[36mdomains=\x1b[0m["host"]`, so the obvious
+              #    `domains=\["` matches nothing at all. Verified that a line
+              #    without a `domains=` field is still counted, with an empty
+              #    domain label, so a failure whose wording we have never seen
+              #    still alerts instead of being silently dropped.
+              expr: >-
+                sum by (domain) (
+                  count_over_time(
+                    {container="traefik"}
+                      |~ "(?i)acme"
+                      |~ "(?i)\\b(err|unable|fail(ed|ure)?)\\b"
+                      | regexp `domains=(?:\x1b\[[0-9;]*m)*\["(?P<domain>[^"]+)"`
+                    [10m]
+                  )
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              datasource:
+                type: __expr__
+                uid: __expr__
