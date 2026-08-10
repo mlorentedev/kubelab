@@ -734,7 +734,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · synced 2026-08-09 · ee7448a";
+    footer.textContent = "KubeLab IDP · config 0a85bd63";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);
