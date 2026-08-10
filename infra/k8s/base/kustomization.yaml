@@ -35,6 +35,25 @@ configMapGenerator:
       - services/homepage-config/docker.yaml
       - services/homepage-config/custom.css
       - services/homepage-config/custom.js
+    options:
+      annotations:
+        # custom.js embeds six base64 SVG diagrams (~246 KB, 92% of the object),
+        # which pushes the serialized ConfigMap past the 262144-byte cap on
+        # kubectl's `last-applied-configuration` annotation. Client-side apply
+        # writes the whole object into that annotation; server-side apply
+        # writes no such annotation, so the ceiling becomes the 1 MiB ConfigMap
+        # limit instead (OPS-015 / #938).
+        #
+        # Scoped to this ONE generator deliberately. App-wide SSA would change
+        # field-ownership semantics for ~90 resources to fix a single object.
+        # Migration risk here is nil: the hash suffix makes every regeneration a
+        # NEW object name, so there is no client-side manager history to conflict
+        # with — the failing `homepage-config-t88c6mm6ch` was never created.
+        #
+        # This raises the ceiling; it does not bound the growth. The object gains
+        # ~32 KB per upstream renderer change (TOOL-027 / #941), which is the
+        # durable fix.
+        argocd.argoproj.io/sync-options: ServerSideApply=true
 
   # Authelia config — hash suffix triggers auto rolling restart on configuration.yml change
   # (SECRET-RELOAD-001a fix: configuration.yml is mounted via subPath so updates would otherwise
