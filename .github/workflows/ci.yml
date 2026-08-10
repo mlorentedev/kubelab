@@ -52,6 +52,67 @@ jobs:
       - name: Validate Makefile
         run: make -n help >/dev/null
 
+  # The toolkit drives every deploy, renders every manifest and applies every
+  # secret, and until CI-001 its 420 tests ran only when a human remembered to.
+  # Several safeguards exist SPECIFICALLY to be runnable with the on-demand
+  # homelab powered off — tests/test_spoke_rbac_covers_manifests.py says so in
+  # its own docstring — and that promise was not being kept anywhere.
+  #
+  # Deliberately unconditional: no paths filter. A toolkit test can break from a
+  # change to infra/config/values (the tests read common.yaml as SSOT) or to
+  # infra/k8s (the RBAC and render tests walk the manifests), so filtering on
+  # `toolkit/**` would skip exactly the cross-cutting breakage worth catching.
+  # The job is well under a minute; a filter would buy nothing and cost coverage.
+  tests:
+    name: Tests
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        # `make setup` also provisions SOPS, certs and Ansible — none of which a
+        # unit test touches, and all of which need credentials CI does not have.
+        run: poetry install --no-interaction --no-ansi
+
+      # Same three gates the Definition of Done requires locally, in the same
+      # order, through the same Makefile targets — so a green CI run and a green
+      # workstation run mean the same thing. Cluster-dependent suites carry the
+      # `infra`/`e2e` markers and are deselected by the pytest config, so nothing
+      # here needs VPN or a kubeconfig.
+      - name: Tests
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+      - name: Types
+        run: make type
+
+      # Report, do not gate. `kubectl kustomize` renders the overlays for the
+      # OBS-007 tier assertions; if the runner image ever drops kubectl those
+      # tests skip with CANNOT CHECK rather than passing vacuously, and this step
+      # is how that becomes visible instead of silent.
+      - name: Record whether kubectl was available
+        if: always()
+        run: |
+          if command -v kubectl >/dev/null; then
+            kubectl version --client -o yaml | head -3 >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::kubectl absent — rendered-manifest tests skipped"
+            echo "kubectl absent: rendered-manifest tests were CANNOT CHECK, not verified." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   detect-changes:
     name: Detect Changes
     needs: validate
