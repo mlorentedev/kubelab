@@ -85,7 +85,10 @@ def show_secrets(
 def hash_password(
     key_path: Annotated[
         str,
-        typer.Argument(help="Dot-separated path to the secret key (e.g., 'apps.authelia.users_admin_password_hash')"),
+        typer.Argument(
+            help="Dot-separated path to the secret key "
+            "(e.g., 'apps.services.security.authelia.users_operator_password_hash')"
+        ),
     ],
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
 ) -> None:
