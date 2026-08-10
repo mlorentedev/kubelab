@@ -6,8 +6,19 @@ services:
     image: {{ uptime_kuma_image }}
     container_name: uptime-kuma
     restart: {{ restart_policy }}
+    # Bound to the Tailscale address, NOT 0.0.0.0 — same pattern as
+    # roles/glances. Previously {% raw %}`"{{ uptime_kuma_port }}:3001"`{% endraw %}, which made
+    # Docker listen on every interface: this node has a home-WiFi address
+    # (10.0.0.157) and GLOBALLY ROUTABLE IPv6, so `[::]:3001` was a path to
+    # Uptime Kuma that bypassed VPS Traefik, CrowdSec and the security headers
+    # entirely. Public access is intentional but must arrive through the edge:
+    #   internet -> Cloudflare (DNS only) -> VPS Traefik -> tailnet -> here.
+    #
+    # A ufw rule cannot substitute for this. Docker's DNAT is evaluated before
+    # ufw's filter chains and DOCKER-USER is empty fleet-wide, so the bind
+    # address is the only control that actually holds.
     ports:
-      - "{{ uptime_kuma_port }}:3001"
+      - "{{ tailscale_ip }}:{{ uptime_kuma_port }}:3001"
     volumes:
       - uptime-kuma-data:/app/data
     dns:
