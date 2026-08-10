@@ -53,6 +53,25 @@
     group: "{{ ansible_user }}"
     mode: "0755"
 
+# Must precede the compose template: the compose file bind-mounts this path,
+# and Docker silently creates a *directory* at a bind source that does not
+# exist yet — which Glances would then skip, leaving the API wide open with no
+# error anywhere.
+#
+# Registered rather than notifying `Restart glances`: a handler fires at the
+# END of the play, i.e. AFTER "Verify Glances health" below. A config-only
+# change would then be validated against the container that is about to be
+# replaced, and the play would go green on a Glances that had not read the new
+# file yet. Registering instead lets the recreate happen before the check.
+- name: Template Glances configuration file
+  template:
+    src: glances.conf.j2
+    dest: "{{ glances_deploy_dir }}/glances.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: _glances_conf
+
 - name: Template Glances Docker Compose stack
   template:
     src: compose.yml.j2
@@ -67,8 +86,14 @@
   register: _pull
   changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
 
+# `--force-recreate` only when glances.conf actually changed. Plain `up -d`
+# compares the compose spec, not the contents of a bind-mounted file, so it is
+# a no-op after a config-only edit — the container would keep serving the old
+# allowlist while this task reported success.
 - name: Start Glances container
-  command: docker compose -f {{ glances_deploy_dir }}/compose.yml up -d
+  command: >-
+    docker compose -f {{ glances_deploy_dir }}/compose.yml up -d
+    {{ '--force-recreate' if _glances_conf.changed else '' }}
   register: _compose_up
   changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 
