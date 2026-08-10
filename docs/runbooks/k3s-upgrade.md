@@ -14,8 +14,12 @@ owner: manu
 > short **maintenance window** with control-plane and ingress downtime. This is
 > the planned, idempotent procedure; do not run `curl | sh` by hand.
 
-> **Not yet exercised against a live cluster** (`last_tested: null`). Empirical
-> validation in staging is tracked in OPS-011 (#722).
+> **Partially exercised** (`last_tested: null`, deliberately). The read-only
+> pre-flight was run against ace1 on 2026-08-09 and corrected one factual error
+> (see "Confirming this on a live cluster" below). The *procedure itself* — the
+> binary swap, the restart, the verification and the rollback — has still never
+> been run, so `last_tested` stays null until it has. A runbook whose steps have
+> only been read is not a tested runbook. Tracked in OPS-011 (#722).
 
 ## The core constraint: no drain target
 
@@ -56,6 +60,39 @@ state in **kine — a shim that presents an etcd API over a local SQLite file** 
 ```text
 /var/lib/rancher/k3s/server/db/state.db
 ```
+
+### Confirming this on a live cluster — and the check that gets it wrong
+
+The intuitive test is "does `/var/lib/rancher/k3s/server/db/etcd` exist?". **That
+test is wrong and inverts the answer.** K3s creates that directory with a single
+13-byte `name` file at bootstrap on a kine cluster too, and it stays there
+forever. Measured on ace1, 2026-08-09 — a healthy kine/SQLite cluster:
+
+```console
+$ sudo ls -la /var/lib/rancher/k3s/server/db/etcd
+-rw------- 1 root root 13 Mar 19 02:41 name        # <-- the only entry
+```
+
+Reading that as "embedded etcd is in play" would send you down the
+`k3s etcd-snapshot` path, which silently does nothing here, and skip the
+file-level SQLite backup that is the *only* rollback net.
+
+Three signals that actually discriminate — all must agree:
+
+```bash
+# 1. The SQLite datastore exists and is being written (WAL is recent)
+sudo ls -la /var/lib/rancher/k3s/server/db/state.db*
+
+# 2. db/etcd holds only `name` — no member/, no snap/, no wal/
+sudo ls /var/lib/rancher/k3s/server/db/etcd
+
+# 3. No cluster-init and no external datastore in the server config
+sudo grep -E 'cluster-init|datastore-endpoint' /etc/rancher/k3s/config.yaml || echo "neither present -> kine"
+```
+
+Note that `kubectl get --raw /readyz?verbose` reports `[+]etcd ok` on a kine
+cluster. That is not evidence of etcd — it is kine doing its job of presenting
+an etcd API, exactly as described above. Do not use it as a discriminator.
 
 Operational consequences for upgrades:
 
