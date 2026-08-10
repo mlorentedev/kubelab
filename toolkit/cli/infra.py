@@ -643,10 +643,29 @@ def k8s_deploy(
         logger.error(f"Overlay directory not found: {overlay_dir}")
         raise typer.Exit(1)
 
-    # 2. Dry-run validation
+    # Server-side apply, used identically by the dry-run and the real apply below
+    # (OPS-015 / #938). Client-side apply stores a full copy of every object in its
+    # `last-applied-configuration` annotation to compute future three-way merges,
+    # and that annotation is capped at 262144 bytes. The generated homepage
+    # ConfigMap exceeds it, which blocked this path and Argo CD alike. SSA keeps
+    # ownership in `metadata.managedFields` and writes no such annotation.
+    #
+    # `--force-conflicts` is the documented pattern for a declarative pipeline
+    # taking ownership, not a workaround: every object already in the cluster
+    # carries `kubectl-client-side-apply` manager history, so the first SSA pass
+    # conflicts on all of them by design. Scoped to this overlay apply — the
+    # middleware path (`k8s_middlewares.py`) avoids SSA deliberately and is
+    # untouched.
+    ssa_flags = "--server-side --force-conflicts --field-manager=kubelab-toolkit"
+
+    # 2. Dry-run validation.
+    #    `--dry-run=server`, not `client`: a client dry-run never contacts the API
+    #    server, so it structurally cannot fail on admission, quota or field-size
+    #    limits — it could not have caught #938 no matter how often it ran. Using
+    #    the same flags as the real apply keeps the gate honest about what ships.
     logger.info("Running dry-run validation...")
     dry_run = command.run(
-        f"{kctl} apply --dry-run=client -k {overlay_dir}",
+        f"{kctl} apply --dry-run=server {ssa_flags} -k {overlay_dir}",
         check=False,
     )
     if dry_run.returncode != 0:
@@ -664,7 +683,7 @@ def k8s_deploy(
 
     # 4. Apply namespace-scoped manifests
     logger.info("Applying manifests...")
-    apply_result = command.run(f"{kctl} apply -k {overlay_dir}", check=False)
+    apply_result = command.run(f"{kctl} apply {ssa_flags} -k {overlay_dir}", check=False)
     if apply_result.returncode != 0:
         logger.error(f"Apply failed:\n{apply_result.stderr}")
         raise typer.Exit(1)

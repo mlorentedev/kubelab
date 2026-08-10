@@ -3375,3 +3375,62 @@ The measurement also corrected the alarm. The instinct on seeing a repeated ACME
 **Rule:** An empty map is not a deletion. When a patch is meant to *remove* something, verify by rendering the output and reading the field, never by reading the patch — and treat a comment describing what a patch achieves as a claim awaiting evidence, especially when it sits directly beside the code that fails to achieve it. More generally: a config that silently fails open leaves no trace in the thing it configures, so the only place it shows up is the runtime logs of the component downstream. If nothing watches those logs, the config is unfalsifiable.
 
 **Tags:** `#kustomize` `#strategic-merge` `#traefik` `#acme` `#letsencrypt` `#loki` `#silent-failure` `#drift-detection` `#obs-007` `#gotcha`
+
+---
+
+### [2026-08-09] A LimitRange can *reject* pods — the guardrail has the same failure mode as the thing it guards (IDP-031)
+
+**Context:** Implementing IDP-031 Phase 1 — landing a `LimitRange` on the `kubelab` namespace so that a `ResourceQuota` could safely follow. The spec's whole design rests on ordering: a quota rejects any pod omitting a dimension it constrains, and this namespace ships two initContainers that declare no resources at all (`apprise/seed-config`, `crowdsec/inject-whitelist`). So the LimitRange has to be live and proven before the quota exists.
+
+**Problem:** The plan treated the LimitRange itself as risk-free — a pure floor that can only add. It is not. `default` is injected as a *limit* into every container that omits one, `defaultRequest` as a request, and the `request <= limit` invariant is validated *after* that injection. Two ways that bites:
+
+- a container declaring `requests.memory: 512Mi` with no limit gets `limits.memory: 256Mi` injected — 512 > 256 — and is **rejected at admission**;
+- a container declaring `limits.memory: 64Mi` with no request gets a 128Mi request injected, and is rejected the same way.
+
+Neither is exotic: declaring a request without a limit is a common and otherwise valid manifest. The object introduced to stop the namespace exhausting the node could have made healthy pods inadmissible on their next restart — and it would have surfaced not at apply time but hours later, on the next unrelated rollout.
+
+**Solution:** Measure before writing the manifest. One pass over both clusters intersecting *declares a request* with *declares no limit*, filtered to requests above the proposed default, plus the mirror case. Result: 0 in either category across both environments, 35 safe containers, only the 2 known unbounded initContainers — so the chosen 128Mi/256Mi were safe and the phase proceeded unchanged. Had the set been non-empty, the values or those manifests would have needed fixing first, and the spec would have been wrong about its own risk. The acceptance check then captured before/after across a real restart: both initContainers went `UNBOUNDED` → `128Mi`/`256Mi`.
+
+The generic regression test uses `kubectl create --dry-run=server` rather than create-then-delete. A server-side dry run traverses the real admission chain — LimitRanger is a member of it — and returns the mutated object without persisting anything. That tests precisely the thing that can reject a pod, while keeping the infra suite read-only and therefore safe to run against prod.
+
+**Rule:** Before adding an admission-time defaulter, enumerate the inputs it will *change*, not just the ones it will fill. A default that completes a partially-specified object can contradict what the object already declares, and admission validates the merged result, not your intent. State the check as "which existing objects would this reject?" — and if the answer is "none", have run the query that says so. The corollary for the test: assert against the admission chain, not against a sample of today's pods, or the check quietly stops covering anything the moment those pods are given explicit resources.
+
+**Tags:** `#kubernetes` `#limitrange` `#resourcequota` `#admission` `#idp-031` `#preflight` `#dry-run-server` `#gotcha`
+
+---
+
+### [2026-08-09] A check never observed failing is a claim in executable syntax, not a check (AI-007)
+
+**Context:** AI-007 retired Ollama across 38 SSOT surfaces. Two of its eight acceptance criteria carried the weight of the whole change — AC1 ("no live wiring survives in tracked files") and AC8 ("no operational document still describes it as running") — because a subtractive change has no feature to demo. Both asserted completeness the obvious way: search every tracked file, case-insensitively, for the word `ollama`; the criterion passes when the only matches fall inside a declared allowlist of paths.
+
+**Problem:** Neither criterion could ever have passed, on the day it was written, for two independent reasons — and the failure was found by *running* them, not by reviewing them.
+
+1. **`videollamada`.** The Calendly URL in `common.yaml`, and therefore both generated ConfigMaps, contains the substring `ollama`. Nothing about retiring an inference service can remove a Spanish word for "video call". The check was coupled to a coincidence of spelling.
+2. **The check fires harder the better the work is.** After a complete sweep, every remaining match is either the ace2 teardown — which *must* name `/opt/ollama` and port `11434` in order to delete them — or a comment explaining why a catalog is now empty. A criterion asserting absence, written against a name, cannot distinguish a live reference from an explanation of its absence. Its false-positive rate is proportional to how thoroughly the retirement was documented.
+
+Neither is a defect in the regex. Both are a category error about what was being asserted, and no amount of reviewing the criterion would have surfaced it: it reads as obviously correct, which is precisely why it was approved.
+
+The second-order problem is the transferable one. There are two ways a verification fails to protect you, and they are not equally bad. A verification that **never runs** is visibly missing — someone eventually notices the gap. A verification that **runs and cannot fail** is strictly worse, because it *reports* protection: it occupies the slot where a real check would go, and it consumes the attention that would have written one. The green tick is the damage.
+
+This exact shape appeared four more times in this repo inside a single week, which is what promoted it from an anecdote to a rule:
+
+| Instance | What it claimed | Why it could not fail |
+|---|---|---|
+| `tls: {}` in the prod overlay | "no certResolver — `.local` can't get ACME certs" | an empty map in a strategic-merge patch changes nothing; prod retried an impossible LE order ~1/day for months while `config-check-drift` stayed green |
+| `credentials hash-password` | prints `[SUCCESS]`, help says it writes SOPS | it prints the hash and tells you to edit by hand (#934) |
+| CI-GATE-007 (#933) | pre-commit lints YAML | it only lints *changed* files, so `common.yaml` sat 21 errors red on master, invisibly |
+| AC1 / AC8 | the sweep is complete | matched a coincidence and its own documentation |
+
+The common ancestor is that every one of these compares **intent against intent**. Drift detection compares the committed overlay to the generator and finds them in perfect agreement; it has no way to notice that the agreed-upon intent does not do what its comment says.
+
+**Solution:** Rewrite both criteria to assert the **identifiers that make the service reachable** — `ollama.kubelab.live`, `apps.services.ai.ollama`, `api-key-ollama`, `ollama/ollama`, `:11434` — instead of the word that names it. Prose about a retirement never contains an identifier that would make the thing live, so the check needs no allowlist and does not decay as documentation accumulates around it. A second probe (`f9`) was added asserting the **rendered** `kubectl kustomize` output of both overlays rather than the source tree, on the same reasoning that produced the `tls: {}` bug: a clean source still emits through a base or a patch.
+
+**Rule:** **Run every verification command once against a state where it is expected to FAIL, before trusting it.** A negative control costs one command — `git stash`, re-add the line, point it at the pre-fix commit — and it is the only evidence that separates a check from a sentence. Until a check has been observed going red, its green is unfalsifiable and means nothing.
+
+Three corollaries, each of which independently killed one of the cases above:
+
+- **Assert the identifiers that make a thing work, not the string that names it.** Names appear in explanations, comments, changelogs and unrelated words; identifiers appear only in wiring.
+- **Assert rendered output, not source.** Verify by reading what the system emits (`kubectl kustomize`, the generated ConfigMap, the live object), never by reading the patch or the config that was supposed to produce it.
+- **A check that only inspects what changed cannot report on what is already broken.** Scoping a gate to the diff is a performance decision that silently becomes a correctness one.
+
+**Tags:** `#verification` `#negative-control` `#acceptance-criteria` `#spec-driven-development` `#silent-failure` `#grep` `#false-positive` `#ai-007` `#ci-gate-007` `#gotcha`
