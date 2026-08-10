@@ -110,11 +110,40 @@ plus a scheduled run of `tests/e2e/test_tls_routing.py` for staging.
 Waiting for a real failure is not a test. Induce one:
 
 ```bash
-# 1. Apply a router asking for a certificate Let's Encrypt cannot issue.
-#    A `.local` host is rejected at the new-order step, BEFORE any DNS-01
-#    challenge — so nothing is written to Cloudflare and no failed-validation
-#    rate limit is consumed. It also reproduces the exact shape of the real
-#    prod failure rather than a different one that happens to be convenient.
+make alert-smoke ENV=staging
+```
+
+That applies a throwaway IngressRoute asking Let's Encrypt for a certificate it
+can never issue, waits for the rule to fire, confirms Apprise delivered, removes
+the route, and confirms the rule clears with a resolved notification. It reports
+each of those four stages separately, because a single pass/fail would hide which
+link broke.
+
+Expect **10-20 minutes**: the rule evaluates every 5 minutes with a 5-minute
+pending period, and recovery needs the failures to age out of its own 10-minute
+window. Confirm both Telegram messages afterwards — there is no Telegram
+read-back yet.
+
+Two properties worth knowing rather than rediscovering:
+
+- **It refuses to run against prod**, and exits non-zero if you try. Prod's
+  notification policy routes to the push tier, so running it there would wake
+  someone up to demonstrate that waking someone up works.
+- **The throwaway route is removed even if the run times out or you interrupt
+  it.** Leaving it behind would make Traefik retry an impossible order roughly
+  once a day, forever — which is precisely the bug this alert exists to catch,
+  caused by its own test.
+
+Why a `.local` host specifically: Let's Encrypt rejects it at the `new-order`
+step, *before* any DNS-01 challenge, so nothing is written to Cloudflare and no
+failed-validation rate limit is consumed. It also reproduces the exact shape of
+the real prod failure from #927 rather than a different one that happens to be
+convenient.
+
+If you need to do it by hand — the command is unavailable, or you want to hold
+the failure open longer than the smoke does:
+
+```bash
 kubectl --kubeconfig ~/.kube/kubelab-staging-config apply -f - <<'EOF'
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -133,16 +162,10 @@ spec:
     certResolver: letsencrypt
 EOF
 
-# 2. Traefik attempts the order within seconds. The rule evaluates every 5m and
-#    holds for 5m, so expect Alerting within roughly 10-11 minutes.
-
-# 3. Tear down, and confirm the rule returns to Normal with a resolved message.
+# Remember to delete it. This is the step that matters.
 kubectl --kubeconfig ~/.kube/kubelab-staging-config \
   delete ingressroute obs007-induced-failure -n kubelab
 ```
-
-**Do this in staging.** Staging routes to the archive tier, so it does not
-interrupt anyone; prod routes to the push tier and would.
 
 ## Related
 
