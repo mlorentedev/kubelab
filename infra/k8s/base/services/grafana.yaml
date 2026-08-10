@@ -154,6 +154,11 @@ spec:
             - name: dashboards
               mountPath: /var/lib/grafana/dashboards
               readOnly: true
+            # OBS-007. Read once at startup, not hot-reloaded — the ConfigMap
+            # keeps its name hash so a change rolls the pod (see base/kustomization.yaml).
+            - name: alerting
+              mountPath: /etc/grafana/provisioning/alerting
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /api/health
@@ -190,6 +195,9 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboards
+        - name: alerting
+          configMap:
+            name: grafana-alerting
 ---
 apiVersion: v1
 kind: Service
