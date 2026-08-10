@@ -424,6 +424,10 @@
 
   roles:
     - role: ../roles/glances
+      # The other six playbooks tag this role; the VPS did not, so
+      # `make provision NODE=vps TAGS=glances` selected nothing and reported
+      # success — the role was unreachable through the documented entry point.
+      tags: [monitoring, glances]
       vars:
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_ip: "{{ config.networking.vps.tailscale_ip }}"
