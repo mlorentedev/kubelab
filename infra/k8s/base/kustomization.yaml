@@ -5,6 +5,7 @@ namespace: kubelab
 
 resources:
   - namespace.yaml
+  - governance/limitrange.yaml
   - edge/errors.yaml
   - external/pihole.yaml
   - external/uptime-kuma.yaml
