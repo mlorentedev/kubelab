@@ -27,6 +27,16 @@ configMapGenerator:
     files:
       - authelia-config/configuration.yml
 
+  # Route prod's alerts to the push tier (OBS-007). `merge` — not `replace` —
+  # so the base's contact-points.yaml and templates.yaml carry through untouched
+  # and only this one key is overridden. Using `replace` here would silently drop
+  # the contact points and leave prod routing to a receiver that does not exist.
+  - name: grafana-alerting
+    namespace: kubelab
+    behavior: merge
+    files:
+      - grafana-alerting/policies.yaml
+
 # Override base resources with prod-specific domains and config
 patches:
   - path: patches.yaml

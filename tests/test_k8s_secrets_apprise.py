@@ -12,10 +12,16 @@ test_k8s_secrets_users_db.py (the _build_users_database sibling generator).
 
 from __future__ import annotations
 
+import pytest
 import yaml
 
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.k8s_secrets import _build_apprise_config
+
+#: Asserts the generator output against the REAL values in SOPS, so it needs the
+#: age key. Skipped (not deselected) where decryption is impossible, so the gap
+#: stays visible in the summary — see pytest_collection_modifyitems in conftest.
+pytestmark = pytest.mark.requires_sops
 
 # The notification fabric is staging-only until promoted to prod
 # (SECRET_CATALOG entries declare envs=("staging",)).

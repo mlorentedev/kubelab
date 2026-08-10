@@ -80,6 +80,25 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
 
+  # Grafana alerting provisioning (OBS-007). NOTE the deliberate difference from
+  # its grafana-dashboards sibling directly above: that one disables the name
+  # hash, this one keeps it. Dashboards are re-read on a timer
+  # (`updateIntervalSeconds: 60` in grafana-dashboard-provider), so a stable name
+  # is fine there. Alerting provisioning is read ONCE at Grafana startup, so
+  # without the hash suffix a rule change would land on disk and never take
+  # effect. The hash makes every change a new object name, which rolls the pod.
+  # Same rationale as authelia-config. Do not "align" this with the sibling.
+  #
+  # `policies.yaml` is replaced per environment via `behavior: merge` in the prod
+  # overlay — prod pages, staging archives.
+  - name: grafana-alerting
+    namespace: kubelab
+    files:
+      - services/grafana-alerting/contact-points.yaml
+      - services/grafana-alerting/templates.yaml
+      - services/grafana-alerting/policies.yaml
+      - services/grafana-alerting/rules.yaml
+
 # Image tags synced from infra/config/values/common.yaml (SSOT).
 # Run `make sync-k8s-images` to refresh after bumping versions.
 images:
