@@ -459,6 +459,64 @@ def _kubectl_cmd(kubeconfig: str) -> str:
     return f"kubectl --kubeconfig {kubeconfig}"
 
 
+#: Escape hatch for `k8s deploy`: apply with the operator's own credentials
+#: instead of impersonating the spoke service account. See `_impersonation_flag`.
+DEPLOY_AS_OPERATOR_ENV = "KUBELAB_DEPLOY_AS_OPERATOR"
+
+#: Where the spoke's identity is declared. Single source of truth for both the
+#: ServiceAccount that Argo CD authenticates as and the RBAC it is granted.
+SPOKE_RBAC_MANIFEST = Path("infra/k8s/argocd/spoke-rbac.yaml")
+
+
+def _spoke_service_account() -> str:
+    """Resolve the spoke ServiceAccount Argo CD delivers as, from the RBAC manifest.
+
+    Returned in impersonation form: ``system:serviceaccount:<ns>:<name>``.
+
+    Parsed rather than hardcoded so renaming the ServiceAccount cannot silently
+    detach this from the identity it is meant to mirror — the manifest is the
+    SSOT for who Argo CD is, and duplicating that here would create exactly the
+    kind of drift TOOL-029 exists to prevent.
+    """
+    manifest = settings.project_root / SPOKE_RBAC_MANIFEST
+    for doc in yaml.safe_load_all(manifest.read_text(encoding="utf-8")):
+        if doc and doc.get("kind") == "ServiceAccount":
+            meta = doc["metadata"]
+            return f"system:serviceaccount:{meta['namespace']}:{meta['name']}"
+    raise ValueError(f"No ServiceAccount found in {SPOKE_RBAC_MANIFEST} — cannot determine the spoke identity")
+
+
+def _impersonation_flag() -> str:
+    """Return the ``--as=`` flag for the namespaced apply, or "" if opted out.
+
+    Why this exists (TOOL-029, from the #948 post-mortem): `make deploy-k8s` runs
+    with the operator's unrestricted kubeconfig, while delivery to prod runs as a
+    least-privilege ServiceAccount (ADR-041). Those are different actors, so a
+    manifest the operator can apply is not necessarily one Argo CD can apply.
+    IDP-031 shipped a `LimitRange` that passed lint, render, tests and a full
+    staging deploy, then was refused in prod because the spoke's write role never
+    granted that kind. Nothing in the pipeline could have caught it: the GitOps
+    path is only exercised *after* merge.
+
+    Impersonating the spoke here makes the manual path incapable of succeeding
+    where GitOps would fail. It is not a check — there is no list of known
+    failures to keep updated — but an invariant, so it also covers privilege
+    divergence nobody predicted (admission webhooks, quotas, policy engines).
+
+    Deliberately scoped to the namespaced overlay apply. `_apply_cluster_bootstrap`
+    installs CRDs and cluster-scoped resources that the spoke SA legitimately
+    cannot, and must keep running as the operator.
+    """
+    if os.environ.get(DEPLOY_AS_OPERATOR_ENV, "").strip().lower() in ("1", "true", "yes"):
+        logger.warning(
+            f"ESCAPE HATCH ({DEPLOY_AS_OPERATOR_ENV}): applying with YOUR credentials, "
+            "not the spoke service account. Argo CD may be unable to apply what this "
+            "deploy creates, and the failure will surface after merge, in prod. TOOL-029."
+        )
+        return ""
+    return f"--as={_spoke_service_account()}"
+
+
 def _generate_k8s_manifests(env: str) -> bool:
     """Generate K8s manifests via K8sGenerator. Returns True on success."""
     from toolkit.features.generator_k8s import K8sGenerator
@@ -658,6 +716,14 @@ def k8s_deploy(
     # untouched.
     ssa_flags = "--server-side --force-conflicts --field-manager=kubelab-toolkit"
 
+    # Apply the namespaced overlay AS the identity that will deliver it to prod,
+    # not as the operator (TOOL-029). Applied to the dry-run and the real apply
+    # alike — the dry-run is where this is most valuable, since it turns a
+    # post-merge prod refusal into a pre-merge local failure.
+    as_flag = _impersonation_flag()
+    if as_flag:
+        logger.info(f"Applying manifests as {_spoke_service_account()}")
+
     # 2. Dry-run validation.
     #    `--dry-run=server`, not `client`: a client dry-run never contacts the API
     #    server, so it structurally cannot fail on admission, quota or field-size
@@ -665,7 +731,7 @@ def k8s_deploy(
     #    the same flags as the real apply keeps the gate honest about what ships.
     logger.info("Running dry-run validation...")
     dry_run = command.run(
-        f"{kctl} apply --dry-run=server {ssa_flags} -k {overlay_dir}",
+        f"{kctl} apply --dry-run=server {ssa_flags} {as_flag} -k {overlay_dir}",
         check=False,
     )
     if dry_run.returncode != 0:
@@ -683,7 +749,7 @@ def k8s_deploy(
 
     # 4. Apply namespace-scoped manifests
     logger.info("Applying manifests...")
-    apply_result = command.run(f"{kctl} apply {ssa_flags} -k {overlay_dir}", check=False)
+    apply_result = command.run(f"{kctl} apply {ssa_flags} {as_flag} -k {overlay_dir}", check=False)
     if apply_result.returncode != 0:
         logger.error(f"Apply failed:\n{apply_result.stderr}")
         raise typer.Exit(1)
