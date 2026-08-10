@@ -29,6 +29,22 @@ owner: manu
 **Rule**: Pattern to follow going forward
 ```
 
+### [2026-08-10] "No matching data" is not zero — it is NoData, and the default acts on it
+
+**Context**: OBS-007 phase 2/3. A Grafana alert rule over a Loki query that counts ACME failures in Traefik's logs. The healthy state is "no failures", which felt like it should evaluate to zero.
+
+**Problem**: It does not. `sum by (domain) (count_over_time({...} |~ "..." [10m]))` over a selection that matches nothing returns **no series at all**, not a series with value 0. Grafana therefore evaluates the rule as **NoData**, and Grafana's default `noDataState` is to alert on it.
+
+Left at that default, this rule would have fired continuously in prod *while certificates were renewing perfectly*, and it would have fired into the `page` tier. The inversion is total: the alert would be loudest exactly when nothing was wrong, which is the fastest way to get an alert channel muted permanently.
+
+This was confirmed in production rather than reasoned about. Every prod evaluation logs `framesLength=0`, because prod has no ACME failures.
+
+**Solution**: `noDataState: OK` on any rule whose healthy state is an empty result set — which is every log-matching alert, as opposed to a metric-threshold alert where the series exists continuously and only its value moves. Give it its own test; it is one word in a manifest and it inverts the entire behaviour of the alert.
+
+**Rule**: For log-based alerting, ask "what does the query return when everything is fine?" before writing the condition. If the answer is "nothing", then NoData is the healthy state and the default is wrong. The same question separates log-matching rules from metric-threshold rules, and they need opposite `noDataState` settings.
+
+**Corollary on proving a negative.** The criterion "the rule must not fire on the periodic heartbeat" was written as "leave it enabled across at least one heartbeat and confirm it stays Normal". That is the weaker test: it shows the rule was quiet, without ever establishing that a heartbeat was inside an evaluated window — 24 hours of silence over an absent input proves nothing. Constructing the case is stronger and instant: evaluate the alert expression at a timestamp one minute *after* a known heartbeat, so the heartbeat is provably inside the `[10m]` range, then assert the result is empty. Prefer constructing the condition you want to disprove over waiting for it to occur.
+
 ### [2026-08-10] A config that provisions cleanly can still fail at delivery
 
 **Context**: OBS-007 phase 1 — building the Grafana -> Apprise -> Telegram path before writing any alert query. The spec ordered it that way deliberately: "the substrate is the work; the rule is the easy part."
