@@ -47,8 +47,15 @@ def _kustomize(path: str) -> list[dict]:
     """Render a Kustomize directory, or skip loudly if kubectl is unavailable.
 
     A skip here means CANNOT CHECK, which is not the same as OK and must never be
-    reported as one. GitHub-hosted runners may not carry kubectl; a developer
-    workstation and any pre-deploy run do.
+    reported as one.
+
+    Note on where this actually runs: no CI workflow invokes pytest at all — CI
+    runs `go test` for the API plus bandit/pip-audit over the toolkit, and the
+    Python suite executes only on a workstation (there is no pre-commit pytest
+    hook either). So this guard exists for the local case, not for CI, and the
+    coverage question for this module is answered by whoever runs `make test`
+    before deploying. Tracked separately; do not read a green PR as having run
+    these assertions.
     """
     if shutil.which("kubectl") is None:
         pytest.skip(
@@ -71,6 +78,7 @@ def _kustomize(path: str) -> list[dict]:
 
 
 def _alerting_configmap(env: str) -> dict:
+    """The single grafana-alerting ConfigMap emitted by an overlay's render."""
     docs = _kustomize(f"infra/k8s/overlays/{env}")
     cms = [
         d
@@ -87,6 +95,7 @@ def _alerting_configmap(env: str) -> dict:
 
 
 def _rendered_receiver(cm: dict) -> str:
+    """The root notification policy's receiver, as actually rendered."""
     policies = yaml.safe_load(cm["data"]["policies.yaml"])
     return policies["policies"][0]["receiver"]
 
@@ -96,6 +105,7 @@ class TestRenderedAlertTier:
 
     @pytest.mark.parametrize("env", sorted(EXPECTED_RECEIVER))
     def test_rendered_receiver_matches_the_tier(self, env: str) -> None:
+        """Each environment must render its own tier: prod pages, staging archives."""
         cm = _alerting_configmap(env)
         actual = _rendered_receiver(cm)
 
