@@ -1,0 +1,87 @@
+# Grafana alerting — contact points (OBS-007).
+#
+# Both severity tiers are declared HERE, in the shared base, and both exist in
+# every cluster. What differs per environment is which one the root notification
+# policy selects — see `policies.yaml` and the prod overlay's copy of it.
+#
+# Why that seam and not a per-environment contact point: the two receivers are
+# byte-identical apart from one tag, so splitting them across base and overlay
+# would duplicate the whole payload template and let the copies drift silently.
+# Splitting at the policy instead puts five lines in the overlay and makes drift
+# impossible. The effective tag still differs per environment, which is what
+# ADR-044's two tiers are for.
+#
+# No credential appears here, by design: ADR-044 Option B puts the Telegram bot
+# token inside `apprise-secrets` and has callers send only a tag. That is why
+# this is an ordinary ConfigMap and not an ADR-035 out-of-band Middleware.
+---
+apiVersion: 1
+
+contactPoints:
+  # Tier `page` — the push channel. Prod's root policy routes here.
+  - orgId: 1
+    name: apprise-page
+    receivers:
+      - uid: apprise-page
+        type: webhook
+        # Resolved notifications must be delivered: a rule that fires and never
+        # clears is a rule people learn to ignore.
+        disableResolveMessage: false
+        settings:
+          url: http://apprise:8000/notify/kubelab
+          httpMethod: POST
+          payload:
+            vars:
+              tag: page
+            # Grafana's stock webhook body is its own alert JSON — `title` and
+            # `message`, no `body` and no `tag`. Apprise requires `body` and
+            # routes on `tag`, so the default payload would be rejected. This
+            # template reshapes it to the contract in
+            # infra/n8n/workflows/notify-router.json.
+            #
+            # Built with coll.Dict | data.ToJSON rather than hand-written JSON so
+            # that quotes and newlines inside an alert annotation are escaped
+            # rather than producing a malformed body. Traefik's ACME errors do
+            # contain quotes.
+            # NOTE the conditional for `type` lives in a named sub-template
+            # rather than inline. Grafana's custom-payload parser rejects
+            # variable assignment: `{{ $type := "success" }}` fails at delivery
+            # time with `template: :1: unexpected ":=" in command`, and it fails
+            # at DELIVERY, not at provisioning — the contact point provisions
+            # cleanly and the API reports it present. Measured 2026-08-10.
+            # Full template syntax is fine inside a `templates.yaml` define.
+            template: |
+              {{- coll.Dict
+                    "tag"   .Vars.tag
+                    "type"  (tmpl.Exec "apprise.type" .)
+                    "title" (printf "%s: %s" .Status .CommonLabels.alertname)
+                    "body"  (tmpl.Exec "apprise.body" .)
+                  | data.ToJSON -}}
+
+  # Tier `log` — the archive channel. Staging's root policy routes here.
+  - orgId: 1
+    name: apprise-log
+    receivers:
+      - uid: apprise-log
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: http://apprise:8000/notify/kubelab
+          httpMethod: POST
+          payload:
+            vars:
+              tag: log
+            # NOTE the conditional for `type` lives in a named sub-template
+            # rather than inline. Grafana's custom-payload parser rejects
+            # variable assignment: `{{ $type := "success" }}` fails at delivery
+            # time with `template: :1: unexpected ":=" in command`, and it fails
+            # at DELIVERY, not at provisioning — the contact point provisions
+            # cleanly and the API reports it present. Measured 2026-08-10.
+            # Full template syntax is fine inside a `templates.yaml` define.
+            template: |
+              {{- coll.Dict
+                    "tag"   .Vars.tag
+                    "type"  (tmpl.Exec "apprise.type" .)
+                    "title" (printf "%s: %s" .Status .CommonLabels.alertname)
+                    "body"  (tmpl.Exec "apprise.body" .)
+                  | data.ToJSON -}}

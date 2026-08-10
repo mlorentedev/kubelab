@@ -23,10 +23,27 @@ created: "2026-08-09"
 
 ### Phase 1 — the delivery path, proven end to end before any query exists
 
-- [ ] [P] [AC1] Add a test to `tests/infra/test_k3s.py` asserting Grafana's provisioning API returns a non-empty contact-point list. **Fails now** — measured `[]` in both environments.
-- [ ] [AC1] Add `infra/k8s/base/services/grafana-alerting/` with the contact point (`http://apprise:8000/notify/kubelab`, tag `log`) and a notification policy, wired via `configMapGenerator` with `files:` following the `grafana-dashboards` sibling. Add the `provisioning/alerting` volume and mount to the Grafana Deployment — the deployed-config-schema change that put this through the Discipline Gate.
-- [ ] [AC6] Patch the tag to `page` in the prod overlay, then assert `kubectl kustomize` renders `log` for staging and `page` for prod. **Read the rendered output, not the patch** — #927 is the precedent for why that distinction is the whole point.
-- [ ] [AC1] [AC2] Deploy to staging and prove delivery with a throwaway always-firing rule: confirm a Telegram message actually arrives. Then remove the rule. Until a message lands, nothing downstream is trustworthy.
+- [x] [P] [AC1] Add a test asserting Grafana's provisioning API returns a non-empty contact-point list. **Fails now** — measured `[]` in both environments. ✓ 2026-08-10 — landed in a new `tests/infra/test_grafana_alerting.py` rather than `test_k3s.py`, whose docstring scopes it to "node status, pods, PVCs". Observed failing against staging before the manifest existed. A second test was added alongside it: Grafana's default root policy has receiver `empty`, so a contact point can provision cleanly while every alert is still discarded.
+- [x] [AC1] Add `infra/k8s/base/services/grafana-alerting/` with the contact points and a notification policy, wired via `configMapGenerator` with `files:`. Add the `provisioning/alerting` volume and mount to the Grafana Deployment — the deployed-config-schema change that put this through the Discipline Gate. ✓ 2026-08-10. **Diverges from the `grafana-dashboards` sibling on purpose:** that generator sets `disableNameSuffixHash: true` because dashboards are re-read on a timer. Alerting provisioning is read once at startup, so the hash suffix is what rolls the pod on a rule change. Same rationale as `authelia-config`.
+- [x] [AC6] Route prod to the `page` tier in the overlay, then assert `kubectl kustomize` renders the right tier per environment. **Read the rendered output, not the patch.** ✓ 2026-08-10 — `tests/test_grafana_alerting_render.py`. See the AC6 amendment in `proposal.md`: the overridden field is the root policy's `receiver`, not the tag, which shrinks the per-environment surface from ~25 lines to 5 and makes drift structurally impossible. Negative control: rendering `infra/k8s/base` alone emits the staging value, so a no-op merge in prod is visible.
+- [x] [AC1] [AC2] Deploy to staging and prove delivery with a throwaway always-firing rule: confirm a Telegram message actually arrives. Then remove the rule. Until a message lands, nothing downstream is trustworthy. ✓ 2026-08-10 — operator confirmed both messages in the archive channel.
+  - Deployed to staging 2026-08-10; contact points provisioned and both AC1 tests went red -> green.
+  - **The ordering earned its keep immediately.** The first delivery attempt failed with `template: :1: unexpected ":=" in command` — Grafana's custom-payload parser rejects variable assignment. It failed at *delivery*, not at provisioning: the contact point was present and healthy in the API the whole time. Had the LogQL rule been written first, this would have looked like a query that matches nothing. Fixed by moving the conditional into a `templates.yaml` define, where full template syntax is accepted.
+
+> **Both branches exercised — corrected 2026-08-10.** This note first recorded the
+> resolved path as unexercised, because the probe rule was deleted without checking
+> for a resolved delivery. It was wrong: deleting the rule DID fire the resolve, and
+> the operator received both messages five minutes apart —
+> `firing: OBS-007 delivery probe` then `resolved: OBS-007 delivery probe`. So the
+> `apprise.type` else-branch and `disableResolveMessage: false` are both confirmed
+> working, and AC5's *mechanism* is proven for the delivery path. AC5 itself still
+> belongs to phase 3, which must show the real ACME rule recovers rather than latches.
+>
+> The delivered body also settles AC4 ahead of schedule: it carried
+> `Domain: probe.staging.kubelab.live` from the rule's label and
+> `Source: https://grafana.staging.kubelab.live/` from `.ExternalURL`, so the
+> recipient can identify both the domain and the environment without opening Grafana
+> — and without any per-environment value in the config.
 
 ### Phase 2 — the query, on a delivery path already known to work
 
@@ -48,7 +65,7 @@ created: "2026-08-09"
 
 - [ ] Record in `docs/runbooks/` what a firing alert looks like and what to do about it. An alert whose recipient does not know the next step is a notification, not an alert. (Housekeeping, not tied to a criterion — it documents the change rather than producing an observable behaviour.)
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command — **still owed; not started.** The file does not exist yet.
 - [ ] `make test-infra ENV=staging` and `ENV=prod` green
 - [ ] Type checks pass (`make type`)
 - [ ] Lint passes (`make lint`)
