@@ -111,6 +111,8 @@
         uptime_kuma_image: "{{ config.apps.services.observability.uptime_kuma.image }}"
         uptime_kuma_port: "{{ config.apps.services.observability.uptime_kuma.default_port }}"
         restart_policy: "{{ config.global.restart_policy }}"
+        # Consumed by the compose port bind (see the comment in the template).
+        tailscale_ip: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
 
     - role: ../roles/glances
       tags: [monitoring, glances]
