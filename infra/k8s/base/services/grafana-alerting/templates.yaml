@@ -1,0 +1,31 @@
+# Grafana alerting — the shared message body (OBS-007).
+#
+# Defined once and referenced by both contact points in `contact-points.yaml`,
+# so the two severity tiers cannot drift apart in what they actually say.
+#
+# The environment is identified by `.ExternalURL`, which Grafana derives from
+# GF_SERVER_ROOT_URL — already per-environment in the existing config
+# (`grafana.staging.kubelab.live` in base, patched to the prod domain in the prod
+# overlay). That means the recipient can tell staging from prod without this file
+# carrying an environment name, and without a second per-environment value to
+# keep in sync. Satisfies the "names the environment" half of AC4; the affected
+# domain comes from the alert rule's own labels, which is the other half.
+---
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: apprise-body
+    template: |
+      {{- define "apprise.type" -}}
+      {{ if eq .Status "firing" }}failure{{ else }}success{{ end }}
+      {{- end -}}
+
+      {{ define "apprise.body" }}
+      {{- range .Alerts }}
+      {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Labels.alertname }}{{ end }}
+      {{ if .Labels.domain }}Domain: {{ .Labels.domain }}
+      {{ end }}Started: {{ .StartsAt }}
+      {{ end }}
+      Source: {{ .ExternalURL }}
+      {{- end }}
