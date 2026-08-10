@@ -41,7 +41,12 @@ This was confirmed in production rather than reasoned about. Every prod evaluati
 
 **Solution**: `noDataState: OK` on any rule whose healthy state is an empty result set — which is every log-matching alert, as opposed to a metric-threshold alert where the series exists continuously and only its value moves. Give it its own test; it is one word in a manifest and it inverts the entire behaviour of the alert.
 
-**Rule**: For log-based alerting, ask "what does the query return when everything is fine?" before writing the condition. If the answer is "nothing", then NoData is the healthy state and the default is wrong. The same question separates log-matching rules from metric-threshold rules, and they need opposite `noDataState` settings.
+**Rule**: Before writing the condition, ask **what the query returns when everything is fine**. That question — not the query's type — decides `noDataState`:
+
+- Healthy result is **empty** (alerting on the *presence* of bad lines: errors, failures, rejections) → NoData is the healthy state → `noDataState: OK`. This rule.
+- Healthy result is **non-empty** (alerting on the *absence* of expected lines: a missing heartbeat, a job that stopped reporting) → NoData is precisely the failure → leave it alerting, and `noDataState: OK` would blind you to the exact outage you built it for.
+
+Both are log-based alerts, and they need opposite settings, so "log query" is not the discriminator. Getting it backwards is silent in both directions: one alerts forever while healthy, the other stays quiet through the outage.
 
 **Corollary on proving a negative.** The criterion "the rule must not fire on the periodic heartbeat" was written as "leave it enabled across at least one heartbeat and confirm it stays Normal". That is the weaker test: it shows the rule was quiet, without ever establishing that a heartbeat was inside an evaluated window — 24 hours of silence over an absent input proves nothing. Constructing the case is stronger and instant: evaluate the alert expression at a timestamp one minute *after* a known heartbeat, so the heartbeat is provably inside the `[10m]` range, then assert the result is empty. Prefer constructing the condition you want to disprove over waiting for it to occur.
 

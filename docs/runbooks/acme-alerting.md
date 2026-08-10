@@ -14,8 +14,10 @@ owner: manu
 > affected certificate expires and the service starts serving a browser error.
 
 > **Tested 2026-08-10.** The failure was induced deliberately in staging rather
-> than waited for, using the procedure in "Testing this alert" at the end. The
-> alert fired, the notification arrived, and it cleared on teardown.
+> than waited for, using the procedure in "Testing this alert" at the end.
+> Measured: route applied 04:55, Traefik error 04:55:44, rule firing 05:03:00,
+> notification delivered 05:03:31; route deleted 05:04, rule `inactive` 05:18:08,
+> resolved notification delivered 05:18:30.
 
 ## Why this alert exists
 
@@ -37,7 +39,7 @@ silently now announces itself.
 A Telegram message, routed by environment — prod goes to the push channel
 (`page`), staging to the archive channel (`log`):
 
-```
+```text
 kubelab · page · firing: ACME certificate failure
 Traefik reported an ACME failure. Certificates are not renewing, and they
 will expire silently unless this is fixed.
@@ -82,16 +84,36 @@ boundary — the same property that made the alert's own regexp non-obvious.
 
 ### 3. Confirm the fix
 
-The rule clears on its own once the failures stop appearing in the 10-minute
-window, and a `resolved` message is delivered. Do not assume — wait for it. A
-rule that fires and never clears is a rule people learn to ignore, so the
-recovery path is part of what is being verified here.
+The rule clears on its own, but **not immediately, and not on the next
+evaluation**. `count_over_time(… [10m])` keeps counting the failure until it ages
+out of that window, so recovery takes up to the window plus one evaluation
+interval. Measured on 2026-08-10: last failure 05:04, rule `inactive` 05:18:08,
+resolved message delivered 05:18:30 — about fourteen minutes.
+
+Do not assume it cleared. Wait for the `resolved` message: a rule that fires and
+never clears is a rule people learn to ignore, so the recovery path is part of
+what is being verified.
+
+Check the logs **since the fix**, not the last N lines — on a low-traffic Traefik
+pod `--tail=200` reaches back weeks and will show you historical failures that
+have nothing to do with now. This is not hypothetical; it produced a false alarm
+while this runbook was being written.
 
 ```bash
-# Should return nothing once healthy.
+# ACME failures in the last 15 minutes only. Silence here means healthy.
 kubectl --kubeconfig ~/.kube/kubelab-<env>-config \
-  logs -n kube-system -l app.kubernetes.io/name=traefik --tail=200 \
+  logs -n kube-system -l app.kubernetes.io/name=traefik --since=15m \
   | sed 's/\x1b\[[0-9;]*m//g' | grep -iE 'acme.*(err|unable|fail)'
+
+# Rule back to Normal? Confirm across TWO evaluations, five minutes apart --
+# one clean evaluation can simply mean the window has not caught up yet.
+kubectl --kubeconfig ~/.kube/kubelab-<env>-config exec -n kubelab deploy/grafana -- \
+  wget -qO- http://localhost:3000/api/prometheus/grafana/api/v1/rules \
+  | grep -o '"name":"ACME certificate failure","state":"[a-z]*"'
+
+# The resolved notification actually left the building.
+kubectl --kubeconfig ~/.kube/kubelab-<env>-config \
+  logs -n kubelab deploy/apprise --since=20m | grep 'Delivered Notification'
 ```
 
 ## What this alert does NOT cover

@@ -10,34 +10,34 @@
   {
     "id": "OBS-007-cert-expiry-alerting-f2",
     "behavior": "A deliberately induced ACME failure in staging drives the rule to Alerting and delivers a message through Apprise within the evaluation interval plus the pending period.",
-    "verification": "bash -c 'kubectl --kubeconfig ~/.kube/kubelab-staging-config apply -f docs/runbooks/acme-alerting.md#induced-failure && sleep 700 && kubectl --kubeconfig ~/.kube/kubelab-staging-config logs -n kubelab deploy/apprise --tail=50 | grep -q \"Delivered Notification\"'",
+    "verification": "make alert-smoke ENV=staging",
     "state": "pending",
     "evidence": "",
-    "notes": "Covers AC2. NOT a self-contained command: it mutates a live cluster and takes ~12 minutes. The runbook holds the real procedure; this entry exists so the criterion is not silently untracked. Automating it properly is the `make alert-smoke` idea, deliberately not built yet."
+    "notes": "Covers AC2. Runs the real loop: induces the failure, waits for firing, confirms Apprise delivered, tears the route down, confirms the rule cleared and a resolved notification arrived. Refuses prod and exits non-zero there. Takes 10-20 minutes and mutates a live cluster, so it is not a CI check -- but it is repeatable and it cleans up in a finally block. Replaces an earlier entry whose command could not run at all: `kubectl apply -f <markdown>#fragment` is not a thing, and it never deleted the induced route."
   },
   {
     "id": "OBS-007-cert-expiry-alerting-f3",
     "behavior": "The rule does not fire on the periodic 'Testing certificate renew...' heartbeat, nor on 'Starting provider *acme.Provider', which staging logs on every Traefik boot.",
-    "verification": "python3 -c \"import sys; sys.exit(0)\"",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
     "state": "pending",
     "evidence": "",
-    "notes": "Covers AC3. Verified by evaluating the alert expression at an instant one minute after a known heartbeat, so the heartbeat is provably inside the [10m] range, and asserting the result is empty. Needs a live Loki, so there is no offline command; the placeholder above is deliberately vacuous and MUST NOT be marked passing on its strength. Making this a real check means a toolkit command that queries Loki -- see the OBS-007 follow-ups."
+    "notes": "Covers AC3. Verified by hand on 2026-08-10: the alert expression was evaluated at an instant one minute after a known heartbeat, so the heartbeat is provably inside the [10m] range, and the result was empty. **The command deliberately FAILS.** An earlier revision used `python3 -c 'sys.exit(0)'` with a note calling it vacuous -- but the harness judges by exit code, not by notes, so that would have let this be marked passing without checking anything. A sentinel that exits non-zero cannot. Closing it for real means a toolkit command that queries Loki."
   },
   {
     "id": "OBS-007-cert-expiry-alerting-f4",
     "behavior": "The alert payload names the affected domain and the environment it came from, so the recipient can act without opening Grafana.",
-    "verification": "python3 -c \"import sys; sys.exit(0)\"",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
     "state": "pending",
     "evidence": "",
-    "notes": "Covers AC4. The domain arrives as a label extracted from the log line; the environment arrives via Grafana's .ExternalURL, which is already per-environment. An EMPTY domain is expected behaviour, not a defect: the rule still fires on ACME errors whose shape omits the domains= field, because dropping an unrecognised failure would be worse than reporting it without a name."
+    "notes": "Covers AC4. Confirmed by the operator on 2026-08-10: the delivered message carried `Domain: obs007-induced-failure.kubelab.local`, extracted from the log line rather than a static label, and `Source: https://grafana.staging.kubelab.live/` from .ExternalURL. An EMPTY domain is expected behaviour, not a defect -- the rule still fires on ACME errors whose shape omits the domains= field, because dropping an unrecognised failure is worse than reporting one without a name. **Exits non-zero**: there is no automated read-back of Telegram."
   },
   {
     "id": "OBS-007-cert-expiry-alerting-f5",
     "behavior": "Removing the induced failure returns the rule to Normal and delivers a resolved notification, so the rule recovers rather than latching.",
-    "verification": "python3 -c \"import sys; sys.exit(0)\"",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
     "state": "pending",
     "evidence": "",
-    "notes": "Covers AC5. Same shape as f2: mutates a live cluster and takes about ten minutes for the failures to fall out of the [10m] window. A rule that fires and never clears is a rule people learn to ignore, which is why this is a criterion of its own rather than an afterthought."
+    "notes": "Covers AC5. Measured 2026-08-10: route deleted 05:04, rule `inactive` 05:18:08, resolved notification delivered 05:18:30. `make alert-smoke` (f2) exercises this same path, but this record stays separate because a rule that fires and never clears is its own failure mode. **Exits non-zero** until a check asserts the resolved half independently."
   },
   {
     "id": "OBS-007-cert-expiry-alerting-f6",
