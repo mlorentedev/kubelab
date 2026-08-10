@@ -47,9 +47,15 @@ created: "2026-08-09"
 
 ### Phase 2 — the query, on a delivery path already known to work
 
-- [ ] [AC3] Write the LogQL match against the two known lines: it must catch `Unable to obtain ACME certificate` and must **not** catch the `Testing certificate renew…` heartbeat. Prefer a pattern robust to wording over an exact phrase — the issue's proposed string appears nowhere in seven days of logs, and no renewal failure exists inside retention to confirm its wording. Do not filter on `detected_level`: Traefik's ANSI codes make Loki read these lines as `unknown`.
-- [ ] [AC1] [AC3] Add the real alert rule to the ConfigMap, deploy to staging, and confirm the provisioning API returns it.
-- [ ] [AC1] `rollout restart` Grafana and confirm the rule and contact point survive — the check that they are provisioned from the ConfigMap rather than living in Grafana's database.
+- [x] [AC3] Write the LogQL match against the two known lines: it must catch `Unable to obtain ACME certificate` and must **not** catch the `Testing certificate renew…` heartbeat. ✓ 2026-08-10 — validated against seven days of real logs, not reasoned about.
+
+  Final shape: match ACME lines that ALSO carry an error indicator, rather than matching ACME lines and excluding the heartbeat by name. **The data decided this**: staging logs `Starting provider *acme.Provider` on every Traefik boot (8 in seven days), so the denylist variant would have alerted on a startup message, and would have kept doing so for every future benign ACME line. Measured: prod returns exactly the 1 real failure and none of its 7 heartbeats; staging returns 0, which is correct because its DNS-01 flow works.
+
+  **New finding — the ANSI codes break field extraction too, not only `detected_level`.** The raw line is `\x1b[36mdomains=\x1b[0m["host"]`, so the obvious `domains=\["` matches nothing. The rule's regexp tolerates an ANSI reset between the key and the value. Verified that a line *without* a `domains=` field is still counted with an empty domain label, so a failure whose wording we have never seen still alerts rather than being silently dropped — which was the whole worry about extracting at all.
+
+  Original text follows. Prefer a pattern robust to wording over an exact phrase — the issue's proposed string appears nowhere in seven days of logs, and no renewal failure exists inside retention to confirm its wording. Do not filter on `detected_level`: Traefik's ANSI codes make Loki read these lines as `unknown`.
+- [x] [AC1] [AC3] Add the real alert rule to the ConfigMap, deploy to staging, and confirm the provisioning API returns it. ✓ 2026-08-10 — `infra/k8s/base/services/grafana-alerting/rules.yaml`. Two tests added, both observed failing first. `noDataState: OK` is load-bearing and has its own test: a LogQL query matching nothing returns **no series rather than zero**, so healthy IS NoData, and at Grafana's default the rule would fire continuously while certificates renewed perfectly.
+- [x] [AC1] `rollout restart` Grafana and confirm the rule and contact point survive — the check that they are provisioned from the ConfigMap rather than living in Grafana's database. ✓ 2026-08-10 — restarted, 5/5 green afterwards. Rule reports `state=inactive health=ok` in staging, which is the correct resting state there.
 
 ### Phase 3 — exercise the failure rather than wait for it
 
