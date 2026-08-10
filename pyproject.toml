@@ -106,6 +106,7 @@ markers = [
     "slow: Slow running tests",
     "e2e: End-to-end tests (require network access to target environment)",
     "infra: Infrastructure tests (require VPN + SSH access to homelab nodes)",
+    "requires_sops: Needs real SOPS decryption (age key); skipped where unavailable",
 ]
 
 [tool.coverage.run]

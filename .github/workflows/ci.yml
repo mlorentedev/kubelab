@@ -69,6 +69,19 @@ jobs:
       ${{ github.event.pull_request.head.repo.fork
           && 'ubuntu-latest'
           || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    env:
+      # Rich detects GitHub Actions and turns colour ON, which splits option
+      # names with escape codes: `--check` renders as
+      # `\x1b[1;36m-\x1b[0m\x1b[1;36m-check\x1b[0m`, so the CLI help tests in
+      # tests/test_sync.py cannot find their own substring. Measured, not
+      # guessed: `GITHUB_ACTIONS=true` reproduces it on a workstation and
+      # `TERM=dumb` fixes it, while NO_COLOR and FORCE_COLOR=0 do not.
+      #
+      # This makes CI deterministic; it does not make the assertions robust.
+      # Those tests match rendered human-facing output and would break again in
+      # any colour-enabled terminal — worth normalising at the assertion, which
+      # is a change to test_sync.py and therefore a different PR.
+      TERM: dumb
     steps:
       - uses: actions/checkout@v7
 
