@@ -1,7 +1,7 @@
 ---
 id: "OBS-007-cert-expiry-alerting"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-08-09"
 issue: "kubelab#799"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -68,7 +68,9 @@ Two findings that shrink the work, both measured today rather than assumed:
 - [ ] The rule does **not** fire on the `Testing certificate renew…` heartbeat, verified by leaving it enabled through at least one heartbeat with no ACME failure present.
 - [ ] The alert payload names the affected domain and the environment it came from, so the recipient can act without opening Grafana.
 - [ ] The teardown of the induced failure returns the rule to `Normal` and a resolved notification is delivered, confirming the rule recovers rather than latching.
-- [ ] `kubectl kustomize` renders tag `log` for the staging overlay and tag `page` for the prod overlay — asserted against the **rendered output**, not the patch file. #927 is the precedent: a patch that looked correct changed nothing, and only reading the rendered field would have caught it.
+- [x] `kubectl kustomize` renders the `log` tier for the staging overlay and the `page` tier for the prod overlay — asserted against the **rendered output**, not the patch file. #927 is the precedent: a patch that looked correct changed nothing, and only reading the rendered field would have caught it. ✓ 2026-08-10 — `tests/test_grafana_alerting_render.py`
+
+  **Amended during implementation (2026-08-10).** The criterion originally said the rendered *tag* differs per environment. It does not, and should not: the two contact points (`apprise-page`, `apprise-log`) are byte-identical apart from one tag, so putting one in base and one in the overlay would have duplicated the whole payload template across two files and let the copies drift silently. Both contact points now ship in the shared base, and what the prod overlay overrides is the **root notification policy's `receiver`** — five lines instead of twenty-five, with drift made structurally impossible. The effective tier per environment is unchanged, which is what the criterion was for. The rendered-output requirement is untouched and is the half that carries the weight.
 
 ## References
 

@@ -1,0 +1,26 @@
+# Grafana alerting — prod's root notification policy (OBS-007).
+#
+# The ONLY thing that differs between environments: prod routes to the push
+# channel. Everything else — the two contact points and the shared message body —
+# comes from the base generator unchanged, so there is nothing here that can
+# drift out of step with it.
+#
+# Merged over the base ConfigMap via `behavior: merge` in kustomization.yaml,
+# which replaces this one key and leaves the sibling keys alone. Verify the
+# result by reading the RENDERED output of `kubectl kustomize`, never this file:
+# a patch that looks correct and changes nothing is exactly how a dead
+# certResolver survived months in prod (docs/lessons.md, 2026-08-09).
+---
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    # prod -> push channel. Prod is always-on and user-facing; a certificate
+    # failing here is worth an interruption.
+    receiver: apprise-page
+    group_by:
+      - grafana_folder
+      - alertname
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
