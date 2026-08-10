@@ -59,19 +59,33 @@ created: "2026-08-09"
 
 ### Phase 3 — exercise the failure rather than wait for it
 
-- [ ] [AC2] [AC4] Induce a real ACME failure in staging: apply a throwaway IngressRoute requesting an unissuable domain, and confirm the rule transitions to `Alerting` and a Telegram message arrives naming the affected domain and the environment. This is the only honest test — #927 removes the one live signal that existed, and staging's DNS-01 flow produces no failures on its own.
-- [ ] [AC5] Delete the throwaway IngressRoute, confirm the rule returns to `Normal` and a resolved notification is delivered. A rule that fires but never clears is a rule people learn to ignore.
-- [ ] [AC3] Leave the rule enabled across at least one `Testing certificate renew…` heartbeat with no failure present, and confirm it stays `Normal`. The false-positive half of the query, which the firing test cannot show.
+- [x] [AC2] [AC4] Induce a real ACME failure in staging: apply a throwaway IngressRoute requesting an unissuable domain, and confirm the rule transitions to `Alerting` and a Telegram message arrives naming the affected domain and the environment. ✓ 2026-08-10
+
+  Chose a `.local` host deliberately: Let's Encrypt rejects it at the **new-order** step with `rejectedIdentifier`, *before* any DNS-01 challenge — so nothing is written to Cloudflare and no failed-validation rate limit is consumed. It also reproduces the exact shape of the real prod failure (#927) rather than a different one that happens to be convenient.
+
+  Timeline, all measured: IngressRoute applied 04:55; Traefik's `ERR Unable to obtain ACME certificate` at 04:55:44; rule `pending` 04:58; **`firing` 05:03:00**; Apprise `POST /notify/kubelab 200`, `Tags: log` at **05:03:34**. The firing instance carried `domain=obs007-induced-failure.kubelab.local` as a label extracted from the log line, which is AC4's domain half arriving from real data rather than from a static label as in the phase 1 probe. This is the only honest test — #927 removes the one live signal that existed, and staging's DNS-01 flow produces no failures on its own.
+- [x] [AC5] Delete the throwaway IngressRoute, confirm the rule returns to `Normal` and a resolved notification is delivered. A rule that fires but never clears is a rule people learn to ignore. ✓ 2026-08-10 — route deleted 05:04, rule `inactive` **05:18:08**, resolved notification delivered **05:18:30**. Recovery is not instant and should not be expected to be: `count_over_time(… [10m])` keeps counting the failure until it ages out of the window, so the first clean evaluation was 05:18 with evaluations landing on :03/:08/:13/:18.
+- [x] [AC3] Leave the rule enabled across at least one `Testing certificate renew…` heartbeat with no failure present, and confirm it stays `Normal`. The false-positive half of the query, which the firing test cannot show. ✓ 2026-08-10 — **proved directly instead of by waiting.**
+
+  Waiting ~24h for the next heartbeat would have been the weaker test: it demonstrates the rule stayed quiet, without establishing that a heartbeat was ever in the evaluated window. Instead the alert expression was evaluated at an instant one minute *after* a known heartbeat, so the heartbeat is provably inside the `[10m]` range. Result: heartbeats in window = 1, alert query = **empty**. The heartbeat is isolated as the only ACME line present, which is the property the criterion is actually about.
 
 ### Phase 4 — prod
 
-- [ ] [AC6] Merge and let Argo CD sync prod. Confirm prod's rendered tag is `page`, and that the rule and contact point are present in prod's provisioning API.
+- [x] [AC6] Merge and let Argo CD sync prod. Confirm prod's rendered tag is `page`, and that the rule and contact point are present in prod's provisioning API. ✓ 2026-08-10 — verified against the live prod cluster after #958 merged.
+
+  `grafana-alerting-d9b2569g6f` carries all four keys, and prod's rendered `policies.yaml` selects **`apprise-page`** — the per-environment tier confirmed in the cluster, not only in the render. Prod's scheduler evaluates `rule_uid=obs007-acme-failure` every 5m.
+
+  **This is where `noDataState: OK` proved itself in production.** Every prod evaluation returns `framesLength=0`, because prod has no ACME failures. At Grafana's default that is `NoData` → alerting, so prod would have been paging continuously from the moment this merged. Zero deliveries to Apprise since the sync.
+
+  **Ticked for the rendering and scheduler halves only.** The direct `/api/v1/provisioning` proof in prod is NOT done and is blocked by **#951** — prod's Grafana refuses the admin username its Secret declares, so the endpoint returns 401 and the infra test skips there naming that ticket rather than reporting a false pass. Evidence available today is the rendered ConfigMap in the cluster plus the scheduler's own logs showing `rule_uid=obs007-acme-failure` evaluating; that is real but indirect.
+
+- [!] [AC1] Read prod's `/api/v1/provisioning/{contact-points,alert-rules}` directly and confirm both are present. **BLOCKED on #951.** Deliberately left open rather than folded into the tick above: the two are different evidence, and merging them would let a blocked check disappear behind a completed one.
 
 ## Closing
 
-- [ ] Record in `docs/runbooks/` what a firing alert looks like and what to do about it. An alert whose recipient does not know the next step is a notification, not an alert. (Housekeeping, not tied to a criterion — it documents the change rather than producing an observable behaviour.)
+- [x] Record in `docs/runbooks/` what a firing alert looks like and what to do about it. An alert whose recipient does not know the next step is a notification, not an alert. ✓ 2026-08-10 — `docs/runbooks/acme-alerting.md`. Written because the rule's `runbook_url` annotation already promised the page existed. Carries the four known causes with their fixes, the recovery check (wait for the resolved message; do not assume), and the induced-failure procedure so the alert can be re-tested by anyone. States that an empty `Domain` field is expected rather than a bug.
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command — **still owed; not started.** The file does not exist yet.
+- [~] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command. **File written 2026-08-10 with all six records; three are not yet non-vacuous.** f1/f2/f6 carry real commands (`make test-infra`, `make alert-smoke`, `make test`). f3/f4/f5 carry a sentinel that **exits non-zero on purpose**, so they can never be marked passing before a real check exists — an earlier revision used a command that exited 0 with a note calling it vacuous, which the harness would have honoured as a pass, because it judges by exit code and not by notes. Closing them means a toolkit command that queries Loki and a Telegram read-back.
 - [ ] `make test-infra ENV=staging` and `ENV=prod` green
 - [ ] Type checks pass (`make type`)
 - [ ] Lint passes (`make lint`)
