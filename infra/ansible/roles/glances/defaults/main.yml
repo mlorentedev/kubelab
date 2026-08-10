@@ -19,6 +19,47 @@ glances_deploy_dir: /opt/glances
 # Tailscale address — so the feature is pure liability here.
 glances_opts: "-w --disable-autodiscover"
 
+# Host headers the Glances REST API / WebUI will answer to.
+#
+# Rendered into [outputs] webui_allowed_hosts by templates/glances.conf.j2.
+# Absent that key, Glances accepts ANY Host header and warns on every start.
+# That warning is not cosmetic: it is a DNS-rebinding hole. An attacker page can
+# point a hostname it owns at this node's Tailscale address, and the browser of
+# anyone on the tailnet then reads the whole API -- processes, containers,
+# filesystems, network -- as a same-origin request. CORS cannot stop it, because
+# after the rebind the attacker's origin is the legitimate one; validating the
+# Host header is the only mitigation (GHSA-hhcg-r27j-fhv9, shipped in 4.5.2).
+#
+# Every entry is derived from the node's own variables, so this stays one list
+# for the whole fleet rather than a per-node literal:
+#   - tailscale_ip      the only address the container is published on, and the
+#                       Host sent by both the health check in tasks/main.yml and
+#                       the Homepage cockpit widget (which uses the raw
+#                       Tailscale IP -- see infra/k8s/base/services/
+#                       homepage-config/services.yaml)
+#   - ansible_hostname  the MagicDNS short name, i.e. `http://ace1:61208`.
+#                       All six playbooks invoking this role gather facts;
+#                       inventory_hostname is a fail-soft fallback so a future
+#                       facts-off play degrades instead of erroring at template
+#                       time.
+#   - localhost/127.0.0.1  on-node curl and the container's own UI
+#
+# KNOWN GAP, stated rather than papered over: the MagicDNS FQDN
+# (`ace1.kubelab.internal`) is deliberately NOT here. Its suffix has no SSOT key
+# -- `base_domain: kubelab.internal` is a literal inside
+# roles/headscale/templates/config.yaml.j2 -- and hardcoding it a second time
+# here would create exactly the drift this list exists to avoid. Consequence:
+# browsing by FQDN returns 400 "Invalid host header"; the short name works.
+# Give the suffix an SSOT key and this list can grow one entry.
+#
+# No `:61208` entries are needed: Starlette's TrustedHostMiddleware splits the
+# port off the Host header before matching.
+glances_webui_allowed_hosts:
+  - localhost
+  - 127.0.0.1
+  - "{{ tailscale_ip }}"
+  - "{{ ansible_hostname | default(inventory_hostname, true) }}"
+
 # Health-check retry window after `compose up`.
 #
 # 5x5s was tuned on x86 nodes and is a FALSE RED on the RPi 3: that node has

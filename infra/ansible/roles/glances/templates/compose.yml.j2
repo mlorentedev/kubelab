@@ -12,6 +12,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/os-release:/etc/os-release:ro
+      # Host-header allowlist (DNS-rebinding protection). No `-C` in
+      # GLANCES_OPT: /etc/glances/glances.conf is already the first path
+      # Glances finds, and it is the file the image ships there -- mounting
+      # over it is what makes ours win. See templates/glances.conf.j2.
+      - {{ glances_deploy_dir }}/glances.conf:/etc/glances/glances.conf:ro
     deploy:
       resources:
         limits:

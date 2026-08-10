@@ -68,13 +68,28 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         body_contains="<html",
     ),
     # blog: removed 2026-03-15
+    # -- Dashboard --
+    # Homepage cockpit (DASH-001). Registered here after #967: home.kubelab.live was
+    # advertised by the dashboard and by the DASH-001 docs but no prod route ever existed,
+    # and nothing failed because the service had no entry at all.
+    # NOTE: this entry cannot fail yet — there is no apps.services.*.homepage block with
+    # domain + health_path in any values file, so _extract_service_configs() never yields
+    # it and every env reports "homepage not in <env> config". CANNOT CHECK, not OK.
+    "homepage": ServiceExpectation(
+        content_type="text/html",
+        body_contains="<html",
+        auth_protected=False,  # Dashboard is unauthenticated — no Authelia middleware on the IngressRoute
+        skip_in_envs=("dev",),  # Not in the dev Docker Compose stack (absent from dev.yaml)
+    ),
     # -- Security --
     "authelia": ServiceExpectation(
         content_type="text/html",
     ),
     "crowdsec": ServiceExpectation(
         health_status=(200, 302),
-        skip_in_envs=("staging",),  # LAPI is ClusterIP only, no public IngressRoute
+        # LAPI is ClusterIP only, no public IngressRoute in either env. crowdsec.kubelab.live
+        # holds a live Cloudflare record but returns 404 — a prod run would fail on a dead endpoint.
+        skip_in_envs=("staging", "prod"),
     ),
     # -- Observability --
     "grafana": ServiceExpectation(

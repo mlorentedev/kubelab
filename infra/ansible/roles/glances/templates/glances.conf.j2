@@ -1,0 +1,138 @@
+# {{ ansible_managed }}
+# Glances configuration, bind-mounted read-only at /etc/glances/glances.conf.
+#
+# WHY A CONFIG FILE AT ALL
+# ------------------------
+# The only thing this role wants is `webui_allowed_hosts` in [outputs]. In
+# Glances 4.5.2 that key has no CLI flag and no environment variable:
+# glances/outputs/glances_restful_api.py:398 reads it exclusively through
+# `config.get_list_value('outputs', 'webui_allowed_hosts')`, and glances/main.py
+# exposes only `-C/--config`. So GLANCES_OPT cannot express it -- a file is the
+# only channel.
+#
+# WHY THE FILE IS NOT JUST THOSE TWO LINES
+# ----------------------------------------
+# Glances does NOT merge config files. `Config.read()` in glances/config.py
+# walks its candidate paths (-C, ~/.config/glances/, /etc/glances/,
+# $prefix/share/doc/glances/) and `break`s at the FIRST one that exists. The
+# nicolargo/glances image already ships one -- its Dockerfile does
+# `COPY ./docker-compose/glances.conf /etc/glances/glances.conf` -- so whatever
+# we mount REPLACES that file instead of extending it. A two-line config would
+# not be a small change; it would silently drop every setting the image tunes.
+#
+# `Config.sections_set_default()` re-creates the careful/warning/critical
+# thresholds in code, so those are safely absent here. It does NOT re-create
+# anything below. Every line in this file is therefore either the fix itself or
+# a value carried over from the image's own conf because losing it changes
+# behaviour. Nothing here is decoration.
+#
+# UPGRADE NOTE: this mirrors the conf shipped in nicolargo/glances:4.5.2-full
+# (apps.services.observability.glances.image in common.yaml). The mirror is not
+# self-updating. When that pin moves, re-read the new image's
+# /etc/glances/glances.conf and reconcile this file against it.
+
+[global]
+# Image conf sets this; the Glances code default is `true`, which makes every
+# node call PyPI at startup to ask whether a newer Glances exists. The version
+# is pinned in common.yaml, so the answer is never actionable -- it is only
+# outbound traffic from seven hosts.
+check_update=False
+# Per-plugin history ring buffer, in samples. Image conf: 1200 (~1h at the 2s
+# refresh). The Glances code default is 28800 -- 24x more retained samples for
+# every plugin, inside a container capped at 256M
+# (apps.services.observability.glances.resources.memory_limit). On the RPi3
+# (1GB, aarch64 `-full` image) that is an OOMKill, not a slowdown.
+history_size=1200
+
+[outputs]
+# THE FIX. DNS-rebinding protection for the REST API and WebUI
+# (GHSA-hhcg-r27j-fhv9, mitigation shipped in 4.5.2). Without this key Glances
+# answers ANY Host header, and a page on the public internet can point a
+# hostname it controls at this node's Tailscale address and read the full API
+# from the browser of anyone on the tailnet. CORS does not help: after the
+# rebind the attacker's origin IS the allowed one, so the Host header is the
+# only thing left to check.
+#
+# Rendered from glances_webui_allowed_hosts (defaults/main.yml), which derives
+# every entry from the node's own variables. Two mechanics constrain the
+# rendering:
+#   - Glances splits this value on "," with NO whitespace stripping
+#     (config.py get_list_value), so it must be `join(',')`, never `join(', ')`.
+#   - Starlette's TrustedHostMiddleware strips the port before matching, so
+#     bare addresses already cover `<host>:{{ glances_port }}`.
+webui_allowed_hosts={{ glances_webui_allowed_hosts | join(',') }}
+# Cap the process table serialised into the WebUI/REST payload (image conf).
+max_processes_display=25
+
+# --- plugins the image's conf disables, kept disabled ------------------------
+# Glances enables every plugin unless a section says otherwise: init_plugins()
+# in glances/main.py walks the config sections and only disables the ones
+# carrying `disable`. Omitting these sections would therefore switch all seven
+# back on across the fleet. None has a consumer here -- the Homepage cockpit
+# widget reads cpu/mem/load -- and several are not free: `connections` walks
+# nf_conntrack, `irq` re-reads /proc/interrupts every refresh, and
+# `smart`/`raid`/`npu` probe hardware these nodes do not have.
+[npu]
+disable=True
+
+[connections]
+disable=True
+
+[irq]
+disable=True
+
+[cloud]
+disable=True
+
+[raid]
+disable=True
+
+[smart]
+disable=True
+
+[vms]
+disable=True
+
+# --- payload and noise reduction carried over from the image's conf ----------
+# These bound what each refresh collects and serialises. Barely noticeable on a
+# MiniPC; it is the RPi3 that pays for the difference.
+[cpu]
+# Whether a CPU-total alert is recorded in the alert history the WebUI shows.
+# `get_limit_log()` in glances/plugins/plugin/model.py falls back to False when
+# the key is absent, so omitting this would quietly stop the one plugin whose
+# alerts anyone actually looks at from logging any. The sibling user_log /
+# system_log keys in the image's conf are False, which is already the fallback.
+total_log=True
+
+[quicklook]
+list=cpu,mem,load
+
+[percpu]
+max_cpu_display=4
+
+[network]
+hide_no_up=True
+hide_no_ip=True
+
+[diskio]
+hide=loop.*,/dev/loop.*
+
+[fs]
+hide=/boot.*,.*/snap.*
+
+[sensors]
+hide=unknown.*
+
+[processlist]
+disable_stats=cpu_num
+
+[containers]
+max_name_size=20
+disable_stats=command
+
+[ip]
+# Left explicit. Without it the public-IP lookup would have every node call an
+# external geo-IP API on a 5 min timer. The code path happens to end up
+# disabled anyway when `public_api` is unset, but a default that is safe by
+# accident is not the same thing as a stated intent.
+public_disabled=True
