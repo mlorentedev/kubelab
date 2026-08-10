@@ -1,7 +1,7 @@
 ---
 id: "AI-007-ollama-retirement"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-09"
 issue: "kubelab#905"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -10,21 +10,19 @@ template_version: "1.0"
 
 # AI-007: Ollama retirement
 
-> **Naming**: file lives at `<repo>/specs/<feature-id>/proposal.md`. `<feature-id>` is `AREA-NNN-slug` (e.g. `TOOL-001-secret-drift`).
+> ADR-058 PR-2. Retires Ollama across 38 SSOT surfaces, ordered by **what triggers
+> each surface** rather than by file type — Argo CD is the only actor that fires by
+> itself, so it goes last and the ordering is enforced by merge order.
 
 ## Why
 
 <!-- from issue #905: AI-007: retire Ollama from ace2 (ADR-058 PR-2, multi-SSOT sweep) -->
-
-[AGENT-DRAFT — review before archive]
 
 ADR-058 justified retiring Ollama by "ace2's 12GB are effectively idle". **That argument expired when PR-1 shipped**: ace2 is now the dev-node, no longer idle, and Ollama coexists without cost (`keep_alive` does not consume at rest). The reason to retire it today is different and sharper — `ollama.kubelab.live` is a **public** endpoint (Cloudflare DNS record, prod API key in SOPS, Traefik middleware) whose backend is a node that is powered off most of the time. That is standing attack surface plus an Uptime Kuma monitor that reports on something nobody consumes, and 38 files of SSOT that every future refactor must keep coherent for a capability with zero consumers (`/v1/llm` per ADR-029 is decided but unbuilt).
 
 If this is not shipped, nothing breaks — which is precisely the problem. It persists as quiet, unowned surface, and ADR-028/029 keep describing a local-inference capability that does not exist in practice.
 
 ## What
-
-[AGENT-DRAFT — review before archive]
 
 This is a **subtractive** change, so most of the "what" is absence. Observable after the PR:
 
@@ -36,8 +34,6 @@ This is a **subtractive** change, so most of the "what" is absence. Observable a
 **Open for Manu:** whether anything positive is also required — e.g. a documented return path for when a GPU node arrives. Drafted as "no": the ADR amendment already states the deferral, and a speculative re-add runbook would rot.
 
 ## Out of scope
-
-[AGENT-DRAFT — review before archive]
 
 - **Building `/v1/llm` or any OpenRouter-backed replacement.** ADR-029 stays deferred; this PR removes a capability, it does not substitute one.
 - **Removing Ollama from Beelink.** Already done. `beelink_services` keeps its cleanup tasks — only their stated rationale ("moved to ace2") expires.
@@ -68,8 +64,6 @@ The order is enforced by **merge order, not by a runbook step someone has to rem
 
 ## Risks / open questions
 
-[AGENT-DRAFT — review before archive]
-
 1. **Argo will not prune the `api-key-ollama` Middleware — it never tracked it.** Per ADR-035 Stage 1 the Middleware is deliberately outside Kustomize/git: the toolkit renders it from `infra/k8s/overlays/prod/middlewares/api-key.yaml.tpl` and applies it over stdin. Verified — no `kustomization.yaml` references it. Deleting the `.tpl` and the `MIDDLEWARE_CATALOG` entry therefore leaves the live object running in prod. The sweep needs an explicit live-object deletion step; a git-only sweep looks complete and is not. **Verified 2026-08-09 and one detail corrected:** there is no backing Secret — the API key is inline in the Middleware spec, so the live object *is* the plaintext-at-rest surface, and deleting it is what removes the key from etcd. The toolkit has an apply path and **no delete path**, so this step was a supervised one-off; the gap is filed separately.
 2. **RESOLVED 2026-08-09 — the `api-key:` plugin stays registered** in `traefik-helmconfig.yaml.j2`. Only the Ollama-specific Middleware, its `.tpl` and its `MIDDLEWARE_CATALOG` entry go. The restart cost was raised and dismissed (development phase, restarting prod Traefik is acceptable), so the binding reason is the other one — and the original draft stated it wrongly. It said "ADR-035 Stage 2 may want it"; Stage 2 in fact **replaces** the plugin with an Authelia ForwardAuth introspection middleware. The real reason is **Stage 1**: ADR-035's "Anchored decisions" table names two further consumers of *this same plugin* — `widget-proxy` (DT-004, "pending spec impl") and `Pollex public` (AI-004, "pending"), the latter live as #914. Deregistering now means re-registering for both.
 3. **RESOLVED 2026-08-09 — `beelink_services` keeps its cleanup tasks.** They are idempotent, they guard a re-imaged node, and only their stated rationale ("moved to ace2") expires. Correct the comment, keep the tasks.
@@ -82,9 +76,13 @@ The order is enforced by **merge order, not by a runbook step someone has to rem
 
 ## Acceptance criteria
 
-**CONFIRMED by Manu 2026-08-09.** All eight stand as written. The remaining
-`[AGENT-DRAFT]` tags above cover narrative sections only (Why / What / Out of
-scope / Risks) and are review-before-archive, not gates.
+**CONFIRMED by Manu 2026-08-09.** All eight stood as written and all eight are met.
+Two of them — AC1 and AC8 — were **rewritten during implementation** because as
+originally phrased they could never have passed; the reasoning is kept inline below
+rather than silently corrected, since it is the most transferable thing this spec
+produced. The narrative sections above (Why / What / Out of scope / Risks) carried
+agent-draft review markers throughout implementation; they were reviewed and cleared
+at archive, with Risks 2, 3 and 9 answered by Manu in-session and recorded in place.
 
 - [x] **AC1** — No **live wiring** for Ollama survives in tracked files. ✓ 2026-08-09.
 
@@ -93,12 +91,12 @@ scope / Risks) and are review-before-archive, not gates.
   - After a complete sweep, **every remaining match is either the ace2 teardown or an explanation of the retirement**. The teardown in `dev_node` must name `/opt/ollama` and port `11434` to remove them; the comments say things like "empty since AI-007 retired Ollama", and deleting them would leave an empty catalog with no explanation.
 
   So the criterion now asserts the **identifiers that would make the service reachable** — `ollama.kubelab.live`, `apps.services.ai.ollama`, `api-key-ollama`, `ollama/ollama`, `:11434` — rather than the word. Prose about a retirement never matches an identifier that would make it live, so the check is stable rather than needing a growing allowlist. Deliberate survivors: `docs/`, `specs/`, `CHANGELOG.md`, `CLAUDE.md`, the `dev_node` teardown, and the `beelink_services` / `provision-bee.yml` cleanup kept by Out of scope.
-- [ ] **AC2** — `make validate-sync` exits 0, and no generated artifact (ConfigMaps, homepage `custom.js`, image pins) contains an Ollama reference.
-- [ ] **AC3** — `toolkit secrets audit --env prod` reports no Ollama entry, and decrypting `prod.enc.yaml` shows `apps.services.ai.ollama` absent — proving the value was unset, not merely de-registered into an orphan.
-- [ ] **AC4** — `make tf-dns-plan` shows exactly one resource destroyed (the `ollama` record) and no other change; after apply, `ollama.kubelab.live` does not resolve.
+- [x] **AC2** — `make validate-sync` exits 0, and no generated artifact (ConfigMaps, homepage `custom.js`, image pins) contains an Ollama reference. ✓ 2026-08-09 (f2). The generated output was a **second, independent read** of the sweep and earned its place: the first pass looked clean in source and `custom.js` still carried four homepage references (topology tables, DNS diagram).
+- [x] **AC3** — `toolkit secrets audit --env prod` reports no Ollama entry, and decrypting `prod.enc.yaml` shows `apps.services.ai.ollama` absent — proving the value was unset, not merely de-registered into an orphan. ✓ 2026-08-09 (f3). Unset **before** the `SECRET_CATALOG` entry was dropped; the reverse order is what produced this repo's existing orphan (#910).
+- [x] **AC4** — `make tf-dns-plan` shows exactly one resource destroyed (the `ollama` record) and no other change; after apply, `ollama.kubelab.live` does not resolve. ✓ 2026-08-09 (f4) — plan `0 to add, 0 to change, 1 to destroy`, applied, NXDOMAIN at the authoritative NS with `api.kubelab.live` still resolving.
 - [x] **AC5** — In prod, no `Middleware/api-key-ollama` remains — the out-of-band object Argo never tracked is gone, verified against the live cluster rather than against git. ✓ 2026-08-09. **Correction:** there is no backing Secret and there never was. The API key is inline in the Middleware spec (`keys: [${API_KEY}]`), so deleting the Middleware is what removes the plaintext key from etcd. The Secret named in ADR-035 belongs to the CrowdSec bouncer, a different object.
-- [ ] **AC6** — `make test` and the prod e2e suite pass with no Ollama module, no skipped Ollama expectation, and no new failures.
-- [ ] **AC7** — ADR-028 and ADR-029 each carry an amendment note referencing AI-007 and #905.
+- [x] **AC6** — `make test` and the prod e2e suite pass with no Ollama module, no skipped Ollama expectation, and no new failures. ✓ 2026-08-09 (f6) — **393 passed, 98 deselected**. 394 before; the net −1 is two ollama-coupled catalog tests replaced by one generic invariant that no longer depends on which services are registered.
+- [x] **AC7** — ADR-028 and ADR-029 each carry an amendment note referencing AI-007 and #905. ✓ 2026-08-09 (f7) — amended, not superseded: ADR-029's local-inference tier is deferred until a GPU node exists, ADR-028 records ace2's new role. No speculative re-add runbook, deliberately.
 - [x] **AC8** — No operational document still describes Ollama as a running service, and `docs/runbooks/ollama-api-key-rotation.md` (118 lines) is deleted. ✓ 2026-08-09. Checked by live wiring rather than by word, for the same reason as AC1: `docs/runbooks/hardware-setup.md` deliberately keeps its 2026-02-19 setup log under an explicit "Historical record" banner — it documents how the Beelink was *built*, which remains true — while its verification `curl`s were removed, because a copy-pasteable probe for a dead endpoint is worse than none.
 
   **Deliberate survivors, untouched by AC8** — the same allowlist discipline AC1 needs, for the same reason:
@@ -108,6 +106,10 @@ scope / Risks) and are review-before-archive, not gates.
 
 ## References
 
-- Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
-- Related ADR: `<repo>/docs/adr/adr-XXX.md` (if any)
-- Related patterns: `00_meta/patterns/<pattern>.md` (if any)
+- Bitácora board: kubelab#905
+- PRs: **#915** (spec + DNS record removal, PR-A), **#919** (AC8 documentation surface), **#935** (the sweep, PR-B — merging fired the Argo prune)
+- Amended ADRs: `docs/adr/adr-028-operational-topology.md`, `docs/adr/adr-029-intelligence-layer.md`
+- Parent decision: ADR-058 (ace2 repurposing, D4 splits PR-1/PR-2). Unchanged: ADR-035 (Stage 1 middleware injection — the `api-key:` plugin stays registered for DT-004 and AI-004/#914)
+- Filed during implementation: **MON-003 (#925)**, **TOOL-025 (#926)**, **CI-GATE-007 (#933)**
+- Lesson promoted at archive: `docs/lessons.md` — "A check that has never been observed failing is a claim in executable syntax"
+- Related patterns: `00_meta/patterns/pattern-feature-list-as-primitive.md` (this spec's `features.json`)
