@@ -9,6 +9,7 @@ Run: `make sync-homepage` or `python toolkit/scripts/sync_homepage_config.py`
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import subprocess
 import sys
@@ -1148,21 +1149,26 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
 
     js_content = "\n".join(js_parts)
 
-    # Embed build metadata in footer
-    git_short = "unknown"
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            git_short = result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    footer_text = f"KubeLab IDP \u00b7 synced {date.today().isoformat()} \u00b7 {git_short}"
+    # Footer build metadata \u2014 a pure function of the generated content.
+    #
+    # This previously embedded `date.today()` and `git rev-parse --short HEAD`.
+    # Both are ambient state, and because custom.js is a GENERATED FILE THAT IS
+    # COMMITTED, that made it change on every commit and every new calendar day
+    # even when nothing about the dashboard had changed. Each such change is a
+    # new configMapGenerator hash, so a new ConfigMap name, so a fresh apply of
+    # a ~260 KB object \u2014 which is how #938 stayed lit and how a Deployment ended
+    # up referencing `homepage-config-t4chht7t47`, a name present in no commit.
+    #
+    # The two ambient values were also misleading on their own terms: the date
+    # recorded when someone last ran this script, not when anything deployed, so
+    # a months-stale generation displayed as if it were current.
+    #
+    # A digest of the content answers the question the footer is actually for \u2014
+    # "which configuration is live?" \u2014 and by construction only changes when the
+    # configuration does. Computed over the pre-substitution text, so it is
+    # well-defined and independent of itself.
+    config_digest = hashlib.sha256(js_content.encode("utf-8")).hexdigest()[:8]
+    footer_text = f"KubeLab IDP \u00b7 config {config_digest}"
     js_content = js_content.replace("KUBELAB_FOOTER_PLACEHOLDER", footer_text)
 
     write_text_lf(OUTPUT_DIR / "custom.js", js_content)
