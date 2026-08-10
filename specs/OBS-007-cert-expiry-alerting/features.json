@@ -1,0 +1,50 @@
+[
+  {
+    "id": "OBS-007-cert-expiry-alerting-f1",
+    "behavior": "Grafana's provisioning API returns the Apprise contact point and the ACME alert rule, and both survive a rollout restart because they come from a ConfigMap rather than Grafana's database.",
+    "verification": "make test-infra ENV=staging",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC1. The prod half is blocked on #951: prod's Grafana refuses the admin username its Secret declares, so the test skips there naming that ticket rather than reporting a false pass."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f2",
+    "behavior": "A deliberately induced ACME failure in staging drives the rule to Alerting and delivers a message through Apprise within the evaluation interval plus the pending period.",
+    "verification": "make alert-smoke ENV=staging",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC2. Runs the real loop: induces the failure, waits for firing, confirms Apprise delivered, tears the route down, confirms the rule cleared and a resolved notification arrived. Refuses prod and exits non-zero there. Takes 10-20 minutes and mutates a live cluster, so it is not a CI check -- but it is repeatable and it cleans up in a finally block. Replaces an earlier entry whose command could not run at all: `kubectl apply -f <markdown>#fragment` is not a thing, and it never deleted the induced route."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f3",
+    "behavior": "The rule does not fire on the periodic 'Testing certificate renew...' heartbeat, nor on 'Starting provider *acme.Provider', which staging logs on every Traefik boot.",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC3. Verified by hand on 2026-08-10: the alert expression was evaluated at an instant one minute after a known heartbeat, so the heartbeat is provably inside the [10m] range, and the result was empty. **The command deliberately FAILS.** An earlier revision used `python3 -c 'sys.exit(0)'` with a note calling it vacuous -- but the harness judges by exit code, not by notes, so that would have let this be marked passing without checking anything. A sentinel that exits non-zero cannot. Closing it for real means a toolkit command that queries Loki."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f4",
+    "behavior": "The alert payload names the affected domain and the environment it came from, so the recipient can act without opening Grafana.",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC4. Confirmed by the operator on 2026-08-10: the delivered message carried `Domain: obs007-induced-failure.kubelab.local`, extracted from the log line rather than a static label, and `Source: https://grafana.staging.kubelab.live/` from .ExternalURL. An EMPTY domain is expected behaviour, not a defect -- the rule still fires on ACME errors whose shape omits the domains= field, because dropping an unrecognised failure is worse than reporting one without a name. **Exits non-zero**: there is no automated read-back of Telegram."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f5",
+    "behavior": "Removing the induced failure returns the rule to Normal and delivers a resolved notification, so the rule recovers rather than latching.",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC5. Measured 2026-08-10: route deleted 05:04, rule `inactive` 05:18:08, resolved notification delivered 05:18:30. `make alert-smoke` (f2) exercises this same path, but this record stays separate because a rule that fires and never clears is its own failure mode. **Exits non-zero** until a check asserts the resolved half independently."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f6",
+    "behavior": "kubectl kustomize renders the archive tier for staging and the push tier for prod, asserted against the rendered output rather than the patch file.",
+    "verification": "make test",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC6, via tests/test_grafana_alerting_render.py. The only entry here with a genuinely self-contained command. Reading the render rather than the patch is the whole point: #927 was a patch that looked correct, changed nothing, and went unnoticed for months."
+  }
+]

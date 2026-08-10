@@ -806,6 +806,17 @@ notify-smoke:
 	@test -n "$(ENV)" || (echo "Usage: make notify-smoke ENV=staging" && exit 1)
 	@$(TOOLKIT) infra n8n smoke --env $(ENV)
 
+# End-to-end smoke of the certificate ALERTING path (OBS-007), one layer above
+# notify-smoke: that one proves the fabric can deliver, this one proves the alert
+# rule notices a real failure and recovers from it. Induces a genuine ACME
+# failure with a throwaway route, waits for the rule to fire and notify, tears it
+# down, and waits for the resolved message. Takes 10-20 minutes — the rule
+# evaluates every 5m with a 5m pending period. Staging only; prod pages.
+.PHONY: alert-smoke
+alert-smoke:
+	@test -n "$(ENV)" || (echo "Usage: make alert-smoke ENV=staging" && exit 1)
+	@$(TOOLKIT) infra k8s alert-smoke --env $(ENV)
+
 .PHONY: flush-sessions
 flush-sessions:
 	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)

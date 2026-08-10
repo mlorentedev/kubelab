@@ -206,6 +206,31 @@ def n8n_smoke(
         raise typer.Exit(1)
 
 
+@k8s_app.command("alert-smoke")
+def k8s_alert_smoke(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment (staging only)")],
+) -> None:
+    """Prove the certificate-alerting path still works, end to end (OBS-007).
+
+    Induces a REAL ACME failure with a throwaway IngressRoute, waits for the alert
+    rule to fire, confirms Apprise delivered a notification, removes the failure,
+    and confirms the rule clears with a resolved notification.
+
+    Takes 10-20 minutes: the rule evaluates every 5m with a 5m pending period, and
+    recovery needs the failures to age out of its own 10m window.
+
+    Staging only, and refused elsewhere rather than merely discouraged — prod's
+    policy routes to the page tier, so running it there would wake someone up to
+    demonstrate that waking someone up works.
+    """
+    validate_environment_config(env)
+
+    from toolkit.features.alert_smoke import run_alert_smoke
+
+    if not run_alert_smoke(env).ok:
+        raise typer.Exit(1)
+
+
 # =============================================================================
 # BACKUP COMMANDS
 # =============================================================================
