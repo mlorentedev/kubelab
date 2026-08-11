@@ -94,6 +94,7 @@ help:
 	@echo "  make format             Ruff formatting (auto-fix)"
 	@echo "  make type               Mypy type checking"
 	@echo "  make test               Run pytest suite (unit/integration only)"
+	@echo "  make test-fast          Same, minus the container-backed integration tests"
 	@echo "  make test-e2e ENV=x     Run e2e tests (ENV=dev|staging|prod)"
 	@echo "  make test-infra ENV=x   Run infra tests (ENV=staging|prod, requires VPN)"
 	@echo "  make validate           Validate toolkit config"
@@ -873,9 +874,17 @@ validate:
 
 ENV ?= dev
 
+# `test` stays the complete local suite — CI runs this target, so anything
+# excluded here is excluded from CI too. The integration tests start a real
+# Uptime Kuma container (~90s); `test-fast` skips them for the inner loop, but
+# the safe option is the default one on purpose.
 .PHONY: test
 test:
 	@$(POETRY) run pytest
+
+.PHONY: test-fast
+test-fast:
+	@$(POETRY) run pytest -m "not e2e and not infra and not integration"
 
 .PHONY: test-e2e
 test-e2e:
