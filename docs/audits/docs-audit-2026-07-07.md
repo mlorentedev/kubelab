@@ -510,7 +510,7 @@ Priority = unblocking value for onboarding/operations.
 
 ## 7. Open questions (maintainer)
 
-1. **ci-release.yml** — is the CalVer zip-bundle release still wanted alongside release-please, or retire it? (D62; affects the cicd.md rewrite.)
+1. ~~**ci-release.yml** — is the CalVer zip-bundle release still wanted alongside release-please, or retire it? (D62; affects the cicd.md rewrite.)~~ **Resolved 2026-08-11**: retired. See [ADR-059](../adr/adr-059-retire-calver-release-bundle.md) and #564.
 2. **apps/wiki/generated_docs** — who consumes the wiki today? Regenerate in CI, or gitignore the mirror and treat docs/ as the only SoT? (D59)
 3. **components/kubelab-{agents,console}.md** — retire to stubs pointing at the vault, or re-import the vault specs into the repo? The extraction note says vault is SoT; the repo copies disagree with it. (D46)
 4. **toolkit.md vs toolkit/README.md** — agree the runbook dies and the README is regenerated? Or keep a thin "toolkit concepts" runbook? (D20)

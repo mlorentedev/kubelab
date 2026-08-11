@@ -56,19 +56,15 @@ blog: (no changes)         → (no build, no version bump)
 
 `REGISTRY_PREFIX` defaults to `kubelab` (configurable via GitHub repo variable).
 
-## 2. Global CalVer System Releases
+## 2. No global release bundle
 
-The entire system (infra + apps) gets a global release bundle for deployment tracking.
-
-**Tool:** `ncipollo/release-action@v1` in `ci-release.yml`
-**Trigger:** After CI completes on `master` or `develop`
-
-| Branch | Tag | Type | Artifact |
-|--------|-----|------|----------|
-| `master` | `v{YYYY.MM.DD}` | Latest Release | `kubelab-v{tag}.zip` |
-| `develop` | `v{YYYY.MM.DD}-rc.{sha}` | Pre-release | `kubelab-v{tag}.zip` |
-
-The ZIP bundle contains infra config, compose files, toolkit, and a `MANIFEST.txt` with build metadata.
+`ci-release.yml` (the CalVer `vYYYY.MM.DD` + zip bundle described in earlier versions of
+this doc) was retired — see
+[ADR-059](../adr/adr-059-retire-calver-release-bundle.md). Nothing in the repo pinned to it,
+and its `make deploy` instructions predated the K3s/Argo CD GitOps deploy path. `infra/` and
+`toolkit/` are applied at git `HEAD` (Argo CD sync, Ansible, `poetry run toolkit`) and have no
+release of their own — see ADR-059 for the pin-vs-HEAD rationale and the optional showcase-release
+follow-up.
 
 ## GitOps Auto-Update
 
@@ -79,13 +75,13 @@ On `master` and `develop`, the CI automatically commits version bumps to config 
 
 Commit format: `chore(infra): update {app} version to {version} [skip ci]`
 
-## Current Baseline (2026-02-28)
+## Current Baseline
 
-All stale tags and releases from pre-restructuring CI were deleted. The versioning starts clean:
-
-- **Per-app baseline:** `0.0.0` (no `{app}-v*` tags exist yet)
-- **First stable release:** Will be created on first `develop → master` merge
-- **Expected first versions:** `api-v0.1.0`, `blog-v0.1.0`, `web-v0.1.0` (accumulated `feat:` commits)
+Stale from the 2026-02-28 pre-restructuring reset (`develop → master`, `blog`, no tags yet
+are no longer real — see DOCS-002 for the full rewrite). Current state: `api-v*` and
+`errors-v*` tags exist and are cut by release-please as described above; `web-v*` tags remain
+from before the `web` app was extracted to its own repo (ADR-048) and are not produced here
+anymore. Nothing resets this baseline going forward — releases accumulate normally.
 
 ## Workflow Files
 
@@ -94,7 +90,7 @@ All stale tags and releases from pre-restructuring CI were deleted. The versioni
 | `ci.yml` | Orchestrator: validate, detect changes, dispatch per-app pipelines |
 | `ci-pipeline.yml` | Per-app: version calculation, build, test, security scan, Docker push, GitOps update |
 | `ci-publish.yml` | Reusable: Docker build + push + Trivy scan |
-| `ci-release.yml` | Global: system release bundle creation |
+| `release.yml` | release-please: per-component semver; `api` re-tags the staging digest instead of rebuilding (build-once, ADR-056), `errors` still rebuilds |
 
 ## Best Practices
 

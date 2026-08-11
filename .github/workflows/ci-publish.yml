@@ -155,39 +155,57 @@ jobs:
           echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Commit SHA: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
 
+  # ADR-044 / NOTIFY-004: envelope-shaped notification into the n8n routing
+  # brain (domain/severity/title/body/source) instead of an ad-hoc payload.
+  # page-on-fail, log-on-ok, per ADR-044's reference audit for this source.
+  #
+  # All workflow/context values arrive via `env:`, never interpolated directly
+  # into the script text — a `${{ }}` expansion inside `run:` is expanded by
+  # the Actions runner into raw script text before bash sees it, so any of
+  # these values (ref_name and tag can carry attacker-influenced text, e.g. a
+  # fork PR's branch name) could otherwise inject shell commands. `env:` sets
+  # a real environment variable instead, which bash treats as inert data.
+  # `jq -n --arg` builds the JSON so it's escaped, not string-concatenated.
   notify-build-completion:
     name: Notify Build Completion
     runs-on: ${{ fromJSON(inputs.runner) }}
     needs: [docker-build-push]
-    if: always() && (needs.docker-build-push.result == 'success')
+    if: always()
+    env:
+      APP: ${{ inputs.app }}
+      TAG: ${{ inputs.tag }}
+      SHA: ${{ inputs.sha }}
+      REF_NAME: ${{ github.ref_name }}
+      REPOSITORY: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
+      RESULT: ${{ needs.docker-build-push.result }}
+      IMAGE: ${{ needs.docker-build-push.outputs.full_image }}
+      REGISTRY: ${{ needs.docker-build-push.outputs.registry_url }}
+      WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      WEBHOOK_TOKEN: ${{ secrets.N8N_DEPLOY_TOKEN }}
     steps:
       - name: Notify via Secure Webhook
         run: |
-          # Create enhanced payload for build completion
-          PAYLOAD=$(cat <<EOF
-          {
-            "type": "docker_build_completed",
-            "app": "${{ inputs.app }}",
-            "docker_version": "${{ inputs.tag }}",
-            "tag_type": "${{ needs.docker-build-push.outputs.tag_type }}",
-            "full_image": "${{ needs.docker-build-push.outputs.full_image }}",
-            "registry": "${{ needs.docker-build-push.outputs.registry_url }}",
-            "all_tags": "${{ needs.docker-build-push.outputs.image_tag }}",
-            "sha": "${{ inputs.sha }}",
-            "branch": "${{ github.ref_name }}",
-            "context": "${{ inputs.context }}",
-            "status": "success",
-            "timestamp": "${{ github.event.head_commit.timestamp }}",
-            "build_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "simplified_strategy": true,
-            "versioning_approach": "unified_prerelease"
-          }
-          EOF
-          )
+          BUILD_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}"
 
-          # Send notification with retry logic and better error handling
-          WEBHOOK_URL="${{ secrets.N8N_WEBHOOK_URL }}"
-          WEBHOOK_TOKEN="${{ secrets.N8N_DEPLOY_TOKEN }}"
+          if [ "$RESULT" = "success" ]; then
+            SEVERITY="log"
+            TITLE="Docker build completed: ${APP} ${TAG}"
+            BODY="${IMAGE} pushed to ${REGISTRY}. Branch ${REF_NAME}, commit ${SHA}. ${BUILD_URL}"
+          elif [ "$RESULT" = "failure" ]; then
+            SEVERITY="page"
+            TITLE="Docker build FAILED: ${APP} ${TAG}"
+            BODY="Branch ${REF_NAME}, commit ${SHA}. ${BUILD_URL}"
+          else
+            echo "Build result was '$RESULT' (cancelled/skipped) — no notification"
+            exit 0
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg severity "$SEVERITY" \
+            --arg title "$TITLE" \
+            --arg body "$BODY" \
+            '{domain: "dev", severity: $severity, title: $title, body: $body, source: "github-actions/ci-publish"}')
 
           if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_TOKEN" ]; then
             echo "::warning::Webhook URL or token not configured, skipping notification"
@@ -205,7 +223,6 @@ jobs:
               --retry 0 2>/dev/null)
 
             HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-            RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
 
             if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
               echo "✅ Docker build notification sent successfully (HTTP $HTTP_CODE)"
