@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from uptime_kuma_api import UptimeKumaApi
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.monitoring_diff import diff_monitors, embed_key, extract_key, strip_key
 
 # Fields to export per monitor (skip volatile/internal fields)
 _MONITOR_EXPORT_FIELDS = [
@@ -86,8 +88,18 @@ def _connect(project_root: Path) -> tuple[UptimeKumaApi, dict[str, Any]]:
 
 
 def _clean_monitor(monitor: dict[str, Any]) -> dict[str, Any]:
-    """Strip volatile fields, keep only exportable config."""
-    return {k: monitor[k] for k in _MONITOR_EXPORT_FIELDS if k in monitor}
+    """Strip volatile fields, keep only exportable config.
+
+    Lifts the identity marker back out of `description` into a first-class `key`,
+    so the seed stays human-readable and the round-trip is lossless: `apply`
+    embeds the marker, `export` extracts it.
+    """
+    clean = {k: monitor[k] for k in _MONITOR_EXPORT_FIELDS if k in monitor}
+    key = extract_key(clean.get("description"))
+    if key is not None:
+        clean["description"] = strip_key(clean["description"])
+        clean = {"key": key, **clean}
+    return clean
 
 
 def _clean_notification(notification: dict[str, Any]) -> dict[str, Any]:
@@ -156,10 +168,48 @@ def import_monitors(project_root: Path) -> None:
         api.disconnect()
 
 
-def apply_monitors(project_root: Path) -> None:
-    """Declarative sync: delete all monitors and recreate from seed.
+def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float = 30.0) -> None:
+    """Block until every id is gone, or raise. Never proceed on an unmet precondition.
 
-    This is the IaC approach — seed JSON is the source of truth.
+    Replaces a fixed `time.sleep(3)` whose result was computed, logged at SUCCESS
+    level and then never branched on (#925) — a race with a reassuring message.
+
+    The poll reads `get_monitor(id)` rather than `get_monitors()` on purpose:
+    `get_monitors()` returns a client-side cache fed by socket events and can lag
+    a write by many seconds, so polling it would replace a fixed guess with a
+    longer one and still be racing. `get_monitor(id)` is an authoritative read.
+    """
+    if not deleted_ids:
+        return
+
+    deadline = time.monotonic() + timeout
+    pending = list(deleted_ids)
+    while pending and time.monotonic() < deadline:
+        still_here = []
+        for monitor_id in pending:
+            try:
+                api.get_monitor(monitor_id)
+                still_here.append(monitor_id)
+            except Exception:
+                pass  # Gone — which is the outcome we are waiting for.
+        pending = still_here
+        if pending:
+            time.sleep(0.5)
+
+    if pending:
+        raise RuntimeError(
+            f"{len(pending)} monitor(s) still present {timeout}s after deletion: {pending}. "
+            "Refusing to create — proceeding here is how the instance ends up with duplicates."
+        )
+    logger.success(f"Deleted {len(deleted_ids)} monitor(s), confirmed gone")
+
+
+def apply_monitors(project_root: Path) -> None:
+    """Declarative sync: converge the live instance onto the seed by upserting.
+
+    The seed JSON is the source of truth. Monitors are matched by an immutable
+    `key` carried in `description` (marker-first, name fallback), so a rename is
+    an edit rather than a delete + create and uptime history survives a sync.
     Adds monitors one-by-one via API (avoids upload_backup timeout on RPi3).
     """
     api, info = _connect(project_root)
@@ -191,18 +241,22 @@ def apply_monitors(project_root: Path) -> None:
                         pass
             logger.success(f"Tags ready: {len(tag_id_map)} ({', '.join(tag_id_map)})")
 
-        # Delete all existing monitors
-        existing = api.get_monitors()
-        if existing:
-            logger.info(f"Removing {len(existing)} existing monitors...")
-            for m in existing:
-                api.delete_monitor(m["id"])
-            # Wait for deletes to propagate (Uptime Kuma v2 deferred cleanup)
-            import time
+        # Decide before doing. The plan is computed by a pure function so it can
+        # be tested without a live instance (tests/test_monitoring_diff.py).
+        live = api.get_monitors()
+        to_create, to_edit, to_delete = diff_monitors(seed_monitors, live)
+        logger.info(
+            f"Sync plan: {len(to_create)} create, {len(to_edit)} edit, "
+            f"{len(to_delete)} delete (live={len(live)}, seed={len(seed_monitors)})"
+        )
 
-            time.sleep(3)
-            remaining = api.get_monitors()
-            logger.success(f"Removed {len(existing)} monitors ({len(remaining)} remaining)")
+        # Deletes only for monitors the seed dropped — never the whole set. The
+        # previous implementation deleted all 31 and recreated them, discarding
+        # every monitor's accumulated uptime history on each run (#962).
+        for m in to_delete:
+            logger.info(f"Deleting '{m.get('name')}' (id={m['id']}) — not in seed")
+            api.delete_monitor(m["id"])
+        _assert_deleted(api, [m["id"] for m in to_delete])
 
         # Get default notification ID for linking
         default_notif_ids = [n["id"] for n in api.get_notifications() if n.get("isDefault")]
@@ -237,23 +291,37 @@ def apply_monitors(project_root: Path) -> None:
             # After apply, link notifications manually or via separate sync step.
         }
 
-        # Create monitors from seed one-by-one
-        logger.info(f"Creating {len(seed_monitors)} monitors from seed...")
-        created = 0
-        for m in seed_monitors:
+        def _params(m: dict[str, Any]) -> dict[str, Any]:
+            """Map a seed entry onto the fields the API accepts."""
+            params: dict[str, Any] = {}
+            for k, v in m.items():
+                if v is None:
+                    continue
+                # Map snake_case export fields to camelCase API fields
+                if k == "retry_interval":
+                    params["retryInterval"] = v
+                elif k in _ACCEPTED:
+                    params[k] = v
+            # The key rides inside description — Uptime Kuma has no custom field.
+            if m.get("key"):
+                params["description"] = embed_key(params.get("description", ""), m["key"])
+            return params
+
+        # Edits keep the monitor id, and with it the uptime history.
+        edited = 0
+        for m in to_edit:
             try:
-                params: dict[str, Any] = {}
-                for k, v in m.items():
-                    if v is None:
-                        continue
-                    # Map snake_case export fields to camelCase API fields
-                    if k == "retry_interval":
-                        params["retryInterval"] = v
-                    elif k in _ACCEPTED:
-                        params[k] = v
+                api.edit_monitor(m["id"], **_params(m["_seed"]))
+                edited += 1
+            except Exception as e:
+                logger.warning(f"Failed to edit '{m.get('name')}': {type(e).__name__}: {e!r}")
+
+        created = 0
+        for m in to_create:
+            try:
                 # Uptime Kuma v2.x requires conditions (NOT NULL in DB)
                 # Use low-level sio.call — lib's _call wrapper has issues with v2 responses
-                monitor_data = api._build_monitor_data(**params)
+                monitor_data = api._build_monitor_data(**_params(m))
                 monitor_data["conditions"] = []
                 if default_notif_ids:
                     # Uptime Kuma v2 expects {id: true} format, not [id]
@@ -275,7 +343,9 @@ def apply_monitors(project_root: Path) -> None:
             except Exception as e:
                 logger.warning(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
 
-        logger.success(f"Applied {created}/{len(seed_monitors)} monitors from seed")
+        logger.success(
+            f"Synced: {created}/{len(to_create)} created, {edited}/{len(to_edit)} edited, {len(to_delete)} deleted"
+        )
     finally:
         api.disconnect()
 
