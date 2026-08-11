@@ -116,6 +116,74 @@ class TestDiffMatching:
         assert delete == []
 
 
+class TestComparisonUsesOnlyFieldsTheSyncWrites:
+    """Regression: comparing a field the apply path never writes is a dirty flag
+    that no edit can clear, so the monitor is rewritten on every single run.
+
+    The first version of this module stripped `active`, `tags` and
+    `notificationIDList` from the live side but not from the seed side, so all 31
+    real monitors reported dirty forever. The unit fixtures missed it because they
+    carried none of those fields — which is why these use the real seed's shape.
+    """
+
+    REAL_SHAPE = {
+        "name": "Infra · Node · VPS SSH",
+        "type": "port",
+        "hostname": "162.55.57.175",
+        "port": 22,
+        "interval": 120,
+        "active": True,
+        "tags": ["infra"],
+        "notificationIDList": [1],
+        "description": "Hetzner CAX21 VPS SSH port.",
+    }
+
+    def test_a_converged_monitor_with_the_real_seed_shape_is_a_no_op(self):
+        seed = [{**self.REAL_SHAPE, "key": "vps-ssh"}]
+        live = [
+            {
+                **self.REAL_SHAPE,
+                "id": 1,
+                "description": embed_key(self.REAL_SHAPE["description"], "vps-ssh"),
+            }
+        ]
+
+        create, edit, delete = diff_monitors(seed, live)
+
+        assert (create, edit, delete) == ([], [], [])
+
+    def test_tags_alone_never_mark_a_monitor_dirty(self):
+        # Tags are applied by a separate API call, not by the edit. Flagging them
+        # would request an edit that cannot fix the difference.
+        seed = [{**self.REAL_SHAPE, "key": "k", "tags": ["infra", "new"]}]
+        live = [
+            {
+                **self.REAL_SHAPE,
+                "id": 1,
+                "description": embed_key(self.REAL_SHAPE["description"], "k"),
+            }
+        ]
+
+        _, edit, _ = diff_monitors(seed, live)
+
+        assert edit == []
+
+    def test_a_field_the_sync_does_write_still_marks_it_dirty(self):
+        # The guard above must not silence real drift.
+        seed = [{**self.REAL_SHAPE, "key": "k", "interval": 300}]
+        live = [
+            {
+                **self.REAL_SHAPE,
+                "id": 1,
+                "description": embed_key(self.REAL_SHAPE["description"], "k"),
+            }
+        ]
+
+        _, edit, _ = diff_monitors(seed, live)
+
+        assert [m["id"] for m in edit] == [1]
+
+
 class TestDiffIsNonDestructiveOnASteadyState:
     """The regression that #962 is actually about."""
 

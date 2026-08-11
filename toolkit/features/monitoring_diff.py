@@ -23,12 +23,22 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# Fields that are ours, not Uptime Kuma's — excluded from the comparison because
-# the live monitor will never carry them.
-_SEED_ONLY_FIELDS = frozenset({"key"})
-
-# Live-only bookkeeping that must never count as a difference.
-_LIVE_ONLY_FIELDS = frozenset({"id", "active", "tags", "notificationIDList"})
+# Fields excluded from the comparison, applied to BOTH sides.
+#
+# The rule is: compare exactly the fields the sync would write. A field that the
+# apply path never sends can never be reconciled, so flagging it as a difference
+# produces an edit that cannot clear the flag — the monitor is then rewritten on
+# every run, forever. An earlier version stripped these from the live side only,
+# which made all 31 real monitors permanently dirty.
+_IGNORED_IN_COMPARISON = frozenset(
+    {
+        "key",  # ours, not Uptime Kuma's — it travels inside `description`
+        "id",  # assigned by the instance
+        "active",  # paused/resumed at runtime, not owned by the seed
+        "tags",  # applied through add_monitor_tag, not through edit
+        "notificationIDList",  # excluded from `_ACCEPTED`: ids differ per instance
+    }
+)
 
 _MARKER_TEMPLATE = "[kuma-key:{key}]"
 _MARKER_RE = re.compile(r"\n?\[kuma-key:(?P<key>[A-Za-z0-9._-]+)\]")
@@ -61,9 +71,13 @@ def embed_key(description: str | None, key: str) -> str:
     return f"{base}\n{marker}" if base else marker
 
 
-def _comparable(monitor: dict[str, Any], fields: frozenset[str]) -> dict[str, Any]:
-    """Project a monitor onto the fields that decide whether it differs."""
-    out = {k: v for k, v in monitor.items() if k not in fields}
+def _comparable(monitor: dict[str, Any]) -> dict[str, Any]:
+    """Project a monitor onto the fields that decide whether it differs.
+
+    Both sides go through this, with the same exclusion set — an asymmetric
+    projection is what made every monitor look permanently dirty.
+    """
+    out = {k: v for k, v in monitor.items() if k not in _IGNORED_IN_COMPARISON}
     # The marker is an implementation detail of identity, not a user-visible
     # difference — compare the human text so a stamped monitor is not seen as
     # permanently drifted from its own seed entry.
@@ -91,8 +105,8 @@ def _needs_edit(seed_entry: dict[str, Any], live_monitor: dict[str, Any]) -> boo
         # steady state would never be a no-op.
         return True
 
-    desired = _comparable(seed_entry, _SEED_ONLY_FIELDS)
-    current = _comparable(live_monitor, _LIVE_ONLY_FIELDS)
+    desired = _comparable(seed_entry)
+    current = _comparable(live_monitor)
     return any(current.get(field) != value for field, value in desired.items())
 
 
