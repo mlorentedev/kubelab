@@ -19,14 +19,16 @@ Accepted — 2026-08-11
 
 ## Context
 
-Two independent mechanisms created GitHub Releases on every push to `master`:
+Two independent mechanisms ran on every push to `master`, both capable of producing a GitHub
+Release:
 
-- `release.yml` (release-please) — per-component semver (`api-vX.Y.Z`, `errors-vX.Y.Z`),
-  gated on conventional commits touching that component's path, with a real changelog.
-  This is the sole semver authority per [ADR-046](adr-046-gitops-delivery-promotion-strategy.md) D2.
-- `ci-release.yml` ("Create Global Release Bundle") — unconditional on every push, tagged
-  `vYYYY.MM.DD[-HHMMSS]`, built a zip of `Makefile` + `infra/` + `toolkit/` + compose files,
-  and published it as a GitHub Release with instructions to `unzip && make deploy`.
+- `release.yml` (release-please) — per-component semver (`api-vX.Y.Z`, `errors-vX.Y.Z`), but
+  a release only cuts when conventional commits touching that component's path warrant a
+  bump, with a real changelog. This is the sole semver authority per
+  [ADR-046](adr-046-gitops-delivery-promotion-strategy.md) D2.
+- `ci-release.yml` ("Create Global Release Bundle") — unconditional: a release on every push,
+  no gate, tagged `vYYYY.MM.DD[-HHMMSS]`, with a zip of `Makefile` + `infra/` + `toolkit/` +
+  compose files attached, and instructions to `unzip && make deploy`.
 
 `ci-release.yml` predates the K3s/Argo CD migration. Its own deploy instructions no longer
 match the GitOps pull model (Argo CD syncs manifests directly from git; `make deploy` is not

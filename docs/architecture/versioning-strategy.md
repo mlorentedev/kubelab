@@ -75,13 +75,13 @@ On `master` and `develop`, the CI automatically commits version bumps to config 
 
 Commit format: `chore(infra): update {app} version to {version} [skip ci]`
 
-## Current Baseline (2026-02-28)
+## Current Baseline
 
-All stale tags and releases from pre-restructuring CI were deleted. The versioning starts clean:
-
-- **Per-app baseline:** `0.0.0` (no `{app}-v*` tags exist yet)
-- **First stable release:** Will be created on first `develop → master` merge
-- **Expected first versions:** `api-v0.1.0`, `blog-v0.1.0`, `web-v0.1.0` (accumulated `feat:` commits)
+Stale from the 2026-02-28 pre-restructuring reset (`develop → master`, `blog`, no tags yet
+are no longer real — see DOCS-002 for the full rewrite). Current state: `api-v*` and
+`errors-v*` tags exist and are cut by release-please as described above; `web-v*` tags remain
+from before the `web` app was extracted to its own repo (ADR-048) and are not produced here
+anymore. Nothing resets this baseline going forward — releases accumulate normally.
 
 ## Workflow Files
 
