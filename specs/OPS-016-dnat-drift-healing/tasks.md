@@ -26,7 +26,7 @@ created: "2026-08-11"
 
 - [x] Prove the load-bearing API assumption FIRST — `edit_monitor(id_, description=...)` round-trips and a rename preserves the id ✓ 2026-08-11, against a throwaway 2.2.1 container. Three findings recorded in `proposal.md` Risks; two of them changed the design below
 - [ ] Move the throwaway harness into the repo — pytest fixture (skip when Docker is absent) or make target carrying `UPTIME_KUMA_DB_TYPE=sqlite`, the raw-emit setup, and the image tag read from `common.yaml:639` rather than hardcoded a second time. A scratchpad script is not a dev loop
-- [ ] Add `kuma_v2_compat` — the `conditions` default on create and the raw-emit `setup()`, each with a comment naming why the wrapper needs it. **Fixes a broken recovery path**: `monitoring-apply` currently cannot populate a rebuilt Kuma at all
+- [ ] Fix `bootstrap`'s setup path — raw-emit `setup()` (verified ack `successAdded`) and narrow the `except Exception` at `monitoring.py:298` that currently reports a timeout as "Admin user already exists". **This is the broken recovery path**; `apply_monitors` was wrongly accused and already handles `conditions` itself at lines 254-261
 - [ ] [P] [AC1] Write failing test: applying an unchanged seed twice preserves every monitor `id` and issues zero deletes
 - [ ] [AC1] [AC2] Replace the delete-all/recreate body of `apply_monitors` with a keyed three-way diff (create / edit / delete) over `api.edit_monitor`
 - [ ] [P] [AC2] Write failing test: a seed with one added, one modified and one removed monitor converges, leaving untouched monitors' ids stable
