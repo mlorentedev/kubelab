@@ -1,5 +1,5 @@
 ---
-id: "adr-059-strands-agents-reference-only"
+id: "adr-060-strands-agents-reference-only"
 type: adr
 status: accepted
 created: "2026-08-10"
@@ -11,7 +11,7 @@ issue: mlorentedev/kubelab#990
 owner: manu
 ---
 
-# ADR-059: Strands Agents — reference only, not adopted
+# ADR-060: Strands Agents — reference only, not adopted
 
 ## Status
 
