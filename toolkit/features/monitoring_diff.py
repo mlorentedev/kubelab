@@ -23,22 +23,51 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# Fields excluded from the comparison, applied to BOTH sides.
+# The fields the sync actually writes, named as they appear in the seed.
 #
-# The rule is: compare exactly the fields the sync would write. A field that the
-# apply path never sends can never be reconciled, so flagging it as a difference
-# produces an edit that cannot clear the flag — the monitor is then rewritten on
-# every run, forever. An earlier version stripped these from the live side only,
-# which made all 31 real monitors permanently dirty.
-_IGNORED_IN_COMPARISON = frozenset(
+# This is the SSOT for both halves of the contract: `monitoring._params()` builds
+# its payload from it, and the comparison below is restricted to it. Deriving one
+# from the other is the point — the rule "compare exactly the fields you write"
+# has to be structural, because maintaining it as two hand-kept lists is how the
+# seed ended up with 31 permanently-dirty monitors.
+#
+# A field absent here is one the apply path never sends, so flagging it as a
+# difference would request an edit that cannot clear the flag. Known members of
+# that set, all observed live: `expiryNotification` (in the seed but in neither
+# `_MONITOR_EXPORT_FIELDS` nor the API payload — 20 monitors), `tags` (applied via
+# add_monitor_tag), `notificationIDList` (ids differ per instance), `active`
+# (paused/resumed at runtime), `id`, and `key` (ours; it travels in `description`).
+WRITABLE_FIELDS = frozenset(
     {
-        "key",  # ours, not Uptime Kuma's — it travels inside `description`
-        "id",  # assigned by the instance
-        "active",  # paused/resumed at runtime, not owned by the seed
-        "tags",  # applied through add_monitor_tag, not through edit
-        "notificationIDList",  # excluded from `_ACCEPTED`: ids differ per instance
+        "type",
+        "name",
+        "url",
+        "hostname",
+        "port",
+        "interval",
+        "retry_interval",  # sent as `retryInterval`
+        "maxretries",
+        "method",
+        "keyword",
+        "ignoreTls",
+        "upsideDown",
+        "accepted_statuscodes",
+        "description",
+        "httpBodyEncoding",
+        "maxredirects",
+        "parent",
+        "resendInterval",
+        "body",
+        "headers",
+        "basic_auth_user",
+        "basic_auth_pass",
+        "proxyId",
+        "timeout",
     }
 )
+
+# Seed field names that the API expects under a different name.
+SEED_TO_API_FIELD = {"retry_interval": "retryInterval"}
 
 _MARKER_TEMPLATE = "[kuma-key:{key}]"
 _MARKER_RE = re.compile(r"\n?\[kuma-key:(?P<key>[A-Za-z0-9._-]+)\]")
@@ -74,10 +103,10 @@ def embed_key(description: str | None, key: str) -> str:
 def _comparable(monitor: dict[str, Any]) -> dict[str, Any]:
     """Project a monitor onto the fields that decide whether it differs.
 
-    Both sides go through this, with the same exclusion set — an asymmetric
+    Both sides go through this, restricted to the same set — an asymmetric
     projection is what made every monitor look permanently dirty.
     """
-    out = {k: v for k, v in monitor.items() if k not in _IGNORED_IN_COMPARISON}
+    out = {k: v for k, v in monitor.items() if k in WRITABLE_FIELDS}
     # The marker is an implementation detail of identity, not a user-visible
     # difference — compare the human text so a stamped monitor is not seen as
     # permanently drifted from its own seed entry.
@@ -107,7 +136,10 @@ def _needs_edit(seed_entry: dict[str, Any], live_monitor: dict[str, Any]) -> boo
 
     desired = _comparable(seed_entry)
     current = _comparable(live_monitor)
-    return any(current.get(field) != value for field, value in desired.items())
+    # A `None` in the seed is skipped by the apply path rather than written, so it
+    # cannot be reconciled either. 11 seed entries carry `httpBodyEncoding: null`
+    # against a live `'json'`, which is Uptime Kuma's own default.
+    return any(current.get(field) != value for field, value in desired.items() if value is not None)
 
 
 def diff_monitors(

@@ -11,7 +11,14 @@ from uptime_kuma_api import UptimeKumaApi
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
-from toolkit.features.monitoring_diff import diff_monitors, embed_key, extract_key, strip_key
+from toolkit.features.monitoring_diff import (
+    SEED_TO_API_FIELD,
+    WRITABLE_FIELDS,
+    diff_monitors,
+    embed_key,
+    extract_key,
+    strip_key,
+)
 
 # Fields to export per monitor (skip volatile/internal fields)
 _MONITOR_EXPORT_FIELDS = [
@@ -261,47 +268,18 @@ def apply_monitors(project_root: Path) -> None:
         # Get default notification ID for linking
         default_notif_ids = [n["id"] for n in api.get_notifications() if n.get("isDefault")]
 
-        # Only pass fields that _build_monitor_data accepts
-        _ACCEPTED = {
-            "type",
-            "name",
-            "url",
-            "hostname",
-            "port",
-            "interval",
-            "retryInterval",
-            "maxretries",
-            "method",
-            "keyword",
-            "ignoreTls",
-            "upsideDown",
-            "accepted_statuscodes",
-            "description",
-            "httpBodyEncoding",
-            "maxredirects",
-            "parent",
-            "resendInterval",
-            "body",
-            "headers",
-            "basic_auth_user",
-            "basic_auth_pass",
-            "proxyId",
-            "timeout",
-            # notificationIDList excluded — IDs change between instances.
-            # After apply, link notifications manually or via separate sync step.
-        }
-
         def _params(m: dict[str, Any]) -> dict[str, Any]:
-            """Map a seed entry onto the fields the API accepts."""
+            """Map a seed entry onto the fields the API accepts.
+
+            Both the payload and the diff's comparison derive from
+            `WRITABLE_FIELDS`, so "compare exactly what you write" holds by
+            construction instead of by two hand-maintained lists.
+            """
             params: dict[str, Any] = {}
             for k, v in m.items():
-                if v is None:
+                if v is None or k not in WRITABLE_FIELDS:
                     continue
-                # Map snake_case export fields to camelCase API fields
-                if k == "retry_interval":
-                    params["retryInterval"] = v
-                elif k in _ACCEPTED:
-                    params[k] = v
+                params[SEED_TO_API_FIELD.get(k, k)] = v
             # The key rides inside description — Uptime Kuma has no custom field.
             if m.get("key"):
                 params["description"] = embed_key(params.get("description", ""), m["key"])
