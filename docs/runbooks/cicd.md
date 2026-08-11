@@ -36,11 +36,16 @@ ci.yml (entry point)
         ├── Trivy scan → GitHub Security tab
         └── n8n webhook notification
 
-ci-release.yml (triggered by workflow_run after CI succeeds)
-├── CalVer tag        → v{YYYY}.{MM}.{DD} (master) or v{...}-rc.{sha} (develop)
-├── Deployment ZIP    → Makefile + infra/ + toolkit/ + compose files
-└── GitHub Release    → artifact + changelog
+release.yml (release-please, on push to master)
+├── Per-component semver PR → api-v{X.Y.Z}, errors-v{X.Y.Z}
+└── On merge → re-tag the staging-validated digest (build-once, ADR-056)
 ```
+
+There is no global/CalVer release step. `ci-release.yml` (the `vYYYY.MM.DD` + zip bundle
+this diagram used to show here) was retired — see
+[ADR-059](../adr/adr-059-retire-calver-release-bundle.md). This file otherwise predates the
+current pipeline (`ci-pipeline.yml`, `paulhatch/semantic-version`, `develop`, `blog`/`web`
+below are no longer real) — full rewrite tracked as DOCS-002.
 
 ## Docker Registry
 
@@ -197,7 +202,7 @@ git push
 - `.github/workflows/ci.yml` — entry point, validation, change detection
 - `.github/workflows/ci-pipeline.yml` — build, test, version, security scan
 - `.github/workflows/ci-publish.yml` — Docker build + push + Trivy
-- `.github/workflows/ci-release.yml` — deployment bundle + GitHub Release
+- `.github/workflows/release.yml` — release-please, per-component semver + build-once re-tag (ADR-056)
 
 ## Branch Protection Rules
 

@@ -91,7 +91,6 @@ All stale tags and releases from pre-restructuring CI were deleted. The versioni
 | `ci-pipeline.yml` | Per-app: version calculation, build, test, security scan, Docker push, GitOps update |
 | `ci-publish.yml` | Reusable: Docker build + push + Trivy scan |
 | `release.yml` | release-please: per-component semver, build-once re-tag (ADR-056) |
-| `ci-release.yml` | Global: system release bundle creation |
 
 ## Best Practices
 
