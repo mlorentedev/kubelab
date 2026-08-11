@@ -17,3 +17,8 @@ rules:
   braces:
     min-spaces-inside: 0
     max-spaces-inside: 1
+  # Hand-written SSOT values files (infra/config/values/*.yaml) use flush-left
+  # sequences throughout; `whatever` accepts both that style and indented
+  # sequences instead of forcing a repo-wide reformat.
+  indentation:
+    indent-sequences: whatever

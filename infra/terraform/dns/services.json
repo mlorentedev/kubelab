@@ -30,12 +30,6 @@
     "environments": ["prod"]
   },
   {
-    "name": "loki",
-    "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
     "name": "gitea",
     "zone": "kubelab",
     "proxied": false,
@@ -55,12 +49,6 @@
   },
   {
     "name": "console.minio",
-    "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "crowdsec",
     "zone": "kubelab",
     "proxied": false,
     "environments": ["prod"]

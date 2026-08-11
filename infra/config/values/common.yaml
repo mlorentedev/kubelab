@@ -620,7 +620,7 @@ apps:
 
       loki:
         name: loki
-        domain: loki.kubelab.live
+        # Internal-only, no public DNS record — each env overrides its own domain.
         image: grafana/loki:3.6.4
         vector_image: timberio/vector:0.43.1-alpine
         enable_auth: true
@@ -743,7 +743,7 @@ apps:
 
       crowdsec:
         name: crowdsec
-        domain: crowdsec.kubelab.live
+        # Internal-only, no public DNS record — each env overrides its own domain.
         image: crowdsecurity/crowdsec:v1.7.6
         bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
         bouncer_name: crowdsec-bouncer-traefik

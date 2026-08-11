@@ -82,14 +82,14 @@ owner: manu
 | Traefik | `traefik.kubelab.test` | `traefik.staging.kubelab.live` | `traefik.kubelab.live` |
 | Authelia | `auth.kubelab.test` | `auth.staging.kubelab.live` | `auth.kubelab.live` |
 | Grafana | `grafana.kubelab.test` | `grafana.staging.kubelab.live` | `grafana.kubelab.live` |
-| Loki | `loki.kubelab.test` | `loki.staging.kubelab.live` | `loki.kubelab.live` |
+| Loki | `loki.kubelab.test` | `loki.staging.kubelab.live` | internal only (in-cluster `loki:3100`) |
 | Portainer | `portainer.kubelab.test` | `portainer.staging.kubelab.live` | — |
 | Gitea | `gitea.kubelab.test` | `gitea.staging.kubelab.live` | `gitea.kubelab.live` |
 | n8n | `n8n.kubelab.test` | `n8n.staging.kubelab.live` | `n8n.kubelab.live` |
 | MinIO | `minio.kubelab.test` | `minio.staging.kubelab.live` | `minio.kubelab.live` |
 | MinIO Console | `console.minio.kubelab.test` | `console.minio.staging.kubelab.live` | `console.minio.kubelab.live` |
 | Uptime Kuma | `status.kubelab.test` | `status.staging.kubelab.live` | `status.kubelab.live` |
-| CrowdSec | `crowdsec.kubelab.test` | `crowdsec.staging.kubelab.live` | `crowdsec.kubelab.live` |
+| CrowdSec | `crowdsec.kubelab.test` | internal only (ClusterIP, no IngressRoute) | internal only (ClusterIP, no IngressRoute) |
 | Headscale | — | — | `vpn.kubelab.live` |
 
 ## Summary
