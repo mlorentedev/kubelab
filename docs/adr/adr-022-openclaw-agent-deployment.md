@@ -13,6 +13,8 @@ owner: manu
 
 Accepted (2026-03-15). Refines ADR-007 (execution model, hardware, LLM strategy). ADR-007 remains valid for the full task delegation vision (Vikunja + n8n + human-in-the-loop).
 
+Superseded by `adr-002-orchestrator-architecture` in the **`mlorentedev/iris`** repo (per the knowledge-placement model, iris keeps its own ADRs) — not a local `docs/adr/` entry in this repo.
+
 ## Context
 
 ADR-007 defined the agent orchestration architecture (Vikunja + n8n + OpenClaw) with OpenClaw on RPi 4. Since then:
