@@ -14,6 +14,8 @@ owner: manu
 
 Accepted (2026-02-12)
 
+Superseded by `adr-002-orchestrator-architecture` in the **`mlorentedev/iris`** repo (per the knowledge-placement model, iris keeps its own ADRs) — not a local `docs/adr/` entry in this repo.
+
 ## Context
 
 The project needs a self-hosted task management system that:
