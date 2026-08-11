@@ -90,8 +90,7 @@ All stale tags and releases from pre-restructuring CI were deleted. The versioni
 | `ci.yml` | Orchestrator: validate, detect changes, dispatch per-app pipelines |
 | `ci-pipeline.yml` | Per-app: version calculation, build, test, security scan, Docker push, GitOps update |
 | `ci-publish.yml` | Reusable: Docker build + push + Trivy scan |
-| `release.yml` | release-please: per-component semver, build-once re-tag (ADR-056) |
-| `ci-release.yml` | Global: system release bundle creation |
+| `release.yml` | release-please: per-component semver; `api` re-tags the staging digest instead of rebuilding (build-once, ADR-056), `errors` still rebuilds |
 
 ## Best Practices
 
