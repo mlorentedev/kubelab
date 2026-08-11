@@ -38,7 +38,7 @@ ci.yml (entry point)
 
 release.yml (release-please, on push to master)
 ├── Per-component semver PR → api-v{X.Y.Z}, errors-v{X.Y.Z}
-└── On merge → re-tag the staging-validated digest (build-once, ADR-056)
+└── On merge → api re-tags the staging digest (build-once, ADR-056); errors rebuilds
 ```
 
 There is no global/CalVer release step. `ci-release.yml` (the `vYYYY.MM.DD` + zip bundle
@@ -202,7 +202,7 @@ git push
 - `.github/workflows/ci.yml` — entry point, validation, change detection
 - `.github/workflows/ci-pipeline.yml` — build, test, version, security scan
 - `.github/workflows/ci-publish.yml` — Docker build + push + Trivy
-- `.github/workflows/release.yml` — release-please, per-component semver + build-once re-tag (ADR-056)
+- `.github/workflows/release.yml` — release-please, per-component semver; `api` build-once re-tag (ADR-056), `errors` rebuilds
 
 ## Branch Protection Rules
 
