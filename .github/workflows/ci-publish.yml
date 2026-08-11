@@ -155,29 +155,43 @@ jobs:
           echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Commit SHA: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
 
-  # ADR-044: envelope-shaped notification into the n8n routing brain (domain/
-  # severity/title/body/source) instead of an ad-hoc payload. `severity: log`
-  # matches ADR-044's reference audit ("push on failure, log on success") — this
-  # job only runs on success, so it never needs a push tier.
+  # ADR-044 / NOTIFY-004: envelope-shaped notification into the n8n routing
+  # brain (domain/severity/title/body/source) instead of an ad-hoc payload.
+  # page-on-fail, log-on-ok, per ADR-044's reference audit for this source.
   notify-build-completion:
     name: Notify Build Completion
     runs-on: ${{ fromJSON(inputs.runner) }}
     needs: [docker-build-push]
-    if: always() && (needs.docker-build-push.result == 'success')
+    if: always()
     steps:
       - name: Notify via Secure Webhook
         run: |
+          RESULT="${{ needs.docker-build-push.result }}"
           BUILD_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          IMAGE="${{ needs.docker-build-push.outputs.full_image }}"
-          REGISTRY="${{ needs.docker-build-push.outputs.registry_url }}"
-          BODY="${IMAGE} pushed to ${REGISTRY}."
-          BODY="${BODY} Branch ${{ github.ref_name }}, commit ${{ inputs.sha }}."
-          BODY="${BODY} ${BUILD_URL}"
+
+          if [ "$RESULT" = "success" ]; then
+            SEVERITY="log"
+            TITLE="Docker build completed: ${{ inputs.app }} ${{ inputs.tag }}"
+            IMAGE="${{ needs.docker-build-push.outputs.full_image }}"
+            REGISTRY="${{ needs.docker-build-push.outputs.registry_url }}"
+            BODY="${IMAGE} pushed to ${REGISTRY}."
+            BODY="${BODY} Branch ${{ github.ref_name }}, commit ${{ inputs.sha }}."
+            BODY="${BODY} ${BUILD_URL}"
+          elif [ "$RESULT" = "failure" ]; then
+            SEVERITY="page"
+            TITLE="Docker build FAILED: ${{ inputs.app }} ${{ inputs.tag }}"
+            BODY="Branch ${{ github.ref_name }}, commit ${{ inputs.sha }}."
+            BODY="${BODY} ${BUILD_URL}"
+          else
+            echo "Build result was '$RESULT' (cancelled/skipped) — no notification"
+            exit 0
+          fi
+
           PAYLOAD=$(cat <<EOF
           {
             "domain": "dev",
-            "severity": "log",
-            "title": "Docker build completed: ${{ inputs.app }} ${{ inputs.tag }}",
+            "severity": "${SEVERITY}",
+            "title": "${TITLE}",
             "body": "${BODY}",
             "source": "github-actions/ci-publish"
           }
