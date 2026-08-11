@@ -158,7 +158,7 @@ ON-DEMAND (homelab, powered when working):
 
 - **Commits**: User commits manually or via Claude when explicitly requested. Never commit autonomously.
 - **Branching**: Trunk-based development. `master` only. PRs with squash merge. See CI workflows.
-- **New git worktree**: run `make worktree-init` once in every new worktree under `.worktrees/`. Installs the per-worktree `.venv` via Poetry (~30s first run, ~1s no-op afterwards). Pre-commit hooks are shared automatically via `core.hooksPath` set at `make setup` time — no per-worktree re-install needed.
+- **New git worktree**: run `make worktree-init` once in **every** new worktree, wherever it lives. Installs the per-worktree `.venv` via Poetry (~30s first run, ~1s no-op afterwards). Pre-commit hooks are shared automatically via `core.hooksPath` set at `make setup` time — no per-worktree re-install needed. **Two locations are in use today** and this line used to name only the first: `<repo>/.worktrees/<topic>` (e.g. `.worktrees/dns-cleanup`) and the sibling form `~/Projects/kubelab-<topic>-wt` (`kubelab-improvements-wt`, `kubelab-release-wt`, `kubelab-architecture-wt`). The global Standing Order is *worktrees-outside-repo*, so the sibling form is the one to use for anything new; the in-repo ones are pre-existing. Skipping the init is not a soft failure — the toolkit package is not importable without the `.venv`, so `make test-e2e` dies on `PackageNotFoundError: No package metadata was found for toolkit` rather than on anything that names the real cause.
 - **IaC-first**: Version-controlled config > declarative > automated > manual.
 - **Source of truth**: `infra/config/values/*.yaml` (never .env files)
 - **VPS is ARM**: Multi-arch Docker builds (amd64+arm64) required.
