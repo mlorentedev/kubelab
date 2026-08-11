@@ -12,7 +12,15 @@
   command: systemctl cat ollama
   register: _ollama_check
   changed_when: false
-  ignore_errors: true
+  # `failed_when: false`, not `ignore_errors: true`. Both let the play continue,
+  # but ignore_errors still prints a red `fatal:` — and this probe is EXPECTED to
+  # fail on every node where the cleanup already ran, i.e. everywhere since
+  # AI-007 retired Ollama (2026-08-09). A green play that prints a fatal on every
+  # run teaches the operator to skim past red output, which is the same habit
+  # this role's sibling warns about in roles/glances/defaults/main.yml: "a check
+  # that fails on a working deploy is worse than no check". The probe's non-zero
+  # rc is still the signal — it is consumed by `when: _ollama_check.rc == 0`.
+  failed_when: false
 
 - name: Stop Ollama systemd service
   systemd:
