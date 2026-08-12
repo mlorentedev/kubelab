@@ -477,7 +477,9 @@ recover-argocd:
 deploy-apps:
 	@echo "=== Deploying Argo CD Applications ==="
 	@kubectl apply -f infra/k8s/argocd/applications/ --kubeconfig $(HUB_KUBECONFIG)
-	@echo "✓ Applications deployed. Check sync status:"
+	@echo "--- Verifying the live objects now match git (#1016) ---"
+	@$(TOOLKIT) infra argo check-drift --kubeconfig $(HUB_KUBECONFIG)
+	@echo "✓ Applications deployed and verified clean. Check sync status:"
 	@echo "  kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get applications"
 
 # Check Argo CD Application sync status
@@ -493,6 +495,8 @@ check-apps:
 			echo ""; \
 		fi; \
 	done
+	@echo "=== Drift check: live Applications vs git (#1016) ==="
+	@$(TOOLKIT) infra argo check-drift --kubeconfig $(HUB_KUBECONFIG)
 
 # Restart Argo CD (controller + server + redis cache flush)
 .PHONY: restart-argocd
@@ -852,7 +856,7 @@ logs:
 deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
-	@$(MAKE) import-n8n ENV=$(ENV)
+	@$(MAKE) import-n8n ENV=$(ENV) || echo "⚠️  n8n workflow import failed after a successful K8s deploy — the deploy itself is fine; re-run: make import-n8n ENV=$(ENV)"
 
 # Apply ONLY the cluster-wide bootstrap layer (cluster_bootstrap SSOT, ADR-047/TOOL-009):
 # CRDs/operators/kube-system config outside the Argo CD overlay, without touching workloads.

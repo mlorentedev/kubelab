@@ -16,6 +16,10 @@ from toolkit.core.logging import console, logger
 from toolkit.features import command
 from toolkit.features.argo_manager import (
     ApplicationNotFoundError,
+    HubUnreachableError,
+)
+from toolkit.features.argo_manager import (
+    check_drift as argo_check_drift_feature,
 )
 from toolkit.features.argo_manager import (
     set_revision as argo_set_revision_feature,
@@ -144,6 +148,44 @@ def argo_set_revision(
     logger.info(f"targetRevision: {result.old_revision} → {result.new_revision}")
     logger.info(f"sync status: {result.sync_status}")
     logger.success("Application patched")
+
+
+@argo_app.command("check-drift")
+def argo_check_drift(
+    kubeconfig: Annotated[
+        str,
+        typer.Option(
+            "--kubeconfig",
+            help="Hub kubeconfig path (env: KUBECONFIG_HUB)",
+            envvar="KUBECONFIG_HUB",
+        ),
+    ] = os.path.expanduser("~/.kube/kubelab-hub-config"),
+    applications_dir: Annotated[
+        str, typer.Option("--dir", help="Directory of Argo CD Application manifests")
+    ] = "infra/k8s/argocd/applications",
+) -> None:
+    """Compare live Argo CD Applications against their git manifests (#1016).
+
+    A manifest changed in git is a claim, not a deployed fact, until this
+    reads back the live object. Exit 0 = clean, 1 = drift found, 2 = the hub
+    could not be reached — the last case is deliberately distinct from
+    "clean": a check that cannot run must never report success.
+    """
+    logger.section("Argo CD Application drift check")
+    try:
+        result = argo_check_drift_feature(applications_dir=applications_dir, kubeconfig=kubeconfig)
+    except HubUnreachableError as exc:
+        logger.error(f"CANNOT CHECK: {exc}")
+        raise typer.Exit(2) from exc
+
+    if result.clean:
+        logger.success("No drift — live Applications match git.")
+        return
+
+    logger.error("Drift detected between live Argo CD Applications and git:")
+    console.print(result.diff)
+    logger.error("Fix with: make deploy-apps")
+    raise typer.Exit(1)
 
 
 # =============================================================================

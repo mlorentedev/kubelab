@@ -1,6 +1,13 @@
 # Pi-hole admin UI — RPi4 bare metal (Docker Compose, not K3s)
 # LAN: 172.16.1.1, Tailscale: 100.64.0.10
 # SSOT: networking.nodes.rpi4.lan_ip, networking.nodes.rpi4.tailscale_ip in common.yaml
+#
+# Staging-overlay-only (OPS-022, #969): the LAN EndpointSlice below is only
+# reachable from a K3s node sharing RPi4's LAN — ace1 does, the VPS never
+# will (ADR-028's 3 AM doctrine — RPi4 is on-demand homelab). Prod shipping
+# this from base/ meant an IngressRoute it could never serve and certs
+# ordered for a name it never answered. Same overlay-only pattern as prod's
+# own headscale.yaml (overlays/prod/headscale.yaml).
 ---
 apiVersion: v1
 kind: Service
@@ -38,8 +45,9 @@ ports:
     port: 80
     protocol: TCP
 endpoints:
-  # Pi-hole is staging-only (RPi4 unreachable from VPS when VPN is down,
-  # no public DNS). LAN IP works because ace1 and RPi4 share LAN.
+  # Pi-hole is staging-only: RPi4 is never reachable from the VPS (different
+  # LAN entirely, no VPN dependency involved). LAN IP works because ace1 and
+  # RPi4 share LAN.
   - addresses:
       - "172.16.1.1"   # = networking.nodes.rpi4.lan_ip
     conditions:
@@ -59,7 +67,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`pihole.staging.kubelab.live`)
+    - match: Host(`pihole.kubelab.live`)
       kind: Rule
       # No authelia middleware — Pi-hole v6 has built-in auth (same pattern as n8n)
       middlewares:
