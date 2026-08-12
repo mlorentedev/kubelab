@@ -126,7 +126,12 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         health_status=(200, 302),
         auth_protected=False,  # Pi-hole v6 has built-in auth (same pattern as n8n)
         content_type="text/html",
-        skip_in_envs=("dev", "staging", "prod"),  # RPi4 bare metal, VPN-only — domain doesn't resolve outside VPN
+        # dev: not in the dev Docker Compose stack. prod: absence asserted by
+        # tests/test_pihole_overlay_render.py, not by this e2e HTTP suite — the
+        # apex name resolves to ace1's Tailscale IP regardless of what prod
+        # ships, so no HTTP probe run against prod could ever see a regression
+        # here (OPS-022, #969).
+        skip_in_envs=("dev", "prod"),
     ),
     # -- Edge --
     # errors is Traefik's internal error page backend, not a user-facing service.

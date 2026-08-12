@@ -7,17 +7,31 @@ created: "2026-08-11"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+- [x] AC1 (staging e2e 200/302) -> `poetry run pytest tests/e2e/ -m e2e --env staging -k pihole` — 5 passed. Live manual check: `curl -sk https://pihole.kubelab.live/admin/` → `HTTP 302`.
+- [x] AC2 (public resolution to ace1) -> `dig +short pihole.kubelab.live @vita.ns.cloudflare.com` → `100.64.0.11`, matches `networking.nodes.ace1.tailscale_ip`.
+- [x] AC3 (prod absence, staging presence) -> `pytest tests/test_pihole_overlay_render.py` — 2 passed (`test_staging_renders_all_three_pihole_objects`, `test_prod_renders_nothing_pihole`).
+- [x] AC4 (target field backward-inert) -> `make tf-dns-plan` → `Plan: 1 to add, 0 to change, 0 to destroy.`, content `100.64.0.11`, all 11 existing records untouched. Applied via `make tf-dns-apply` → `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+- [x] AC5 (old name dark) -> `curl -sk https://pihole.staging.kubelab.live/admin/` → `HTTP 404`.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+Commit: implementation on `feat/OPS-022-pihole-apex-rename` (pre-PR at verification time). Spec scaffold: `cb4ebb3`.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test — split-DNS resolution (planned, not run yet): from a tailnet client using MagicDNS, `dig +short pihole.kubelab.live` should return `networking.nodes.ace1.tailscale_ip` — the same answer as AC2's authoritative-NS check, arrived at via the forward path (apex zone is outside the narrowed split-DNS, so rpi4/CoreDNS forwards to public DNS and picks up the Cloudflare record). Not a blocking acceptance criterion — Pi-hole's reachability is gated by network routing (tailnet-only IP), not by DNS, so this only verifies the resolution *path* works for VPN/LAN clients. If it fails while AC2 passes, the defect is in the rpi4/Headscale resolution chain, not in this change — record it and file a ticket against that chain rather than reopening this spec.
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test` -> 458 passed, 0 failed (2026-08-11, before the staging deploy pass).
+- `tests/test_pihole_overlay_render.py` -> 2 passed. `tests/e2e/ -k pihole --env staging` -> 5 passed.
+- Manual smoke test — split-DNS resolution: not run from tailnet MagicDNS specifically (the authoritative-NS check in AC2 and the live `curl` in AC1 together cover the same resolution path from this session's tailnet client — no separate MagicDNS-only client was available to test in isolation). Not a blocking criterion per the design note below.
+- No regressions in existing test suite: yes — 458/458 passed before the deploy pass; the render test (2) and e2e pihole subset (5) both green after.
+
+## Live-verification incident (found and worked around during this pass, not part of OPS-022's own scope)
+
+1. **n8n exec flake** — `import-n8n`'s `kubectl exec` failed once (exit 137) because the n8n pod restarted mid-exec (liveness probe timeout under CPU throttling — confirmed via `cpu.stat`: `nr_throttled=211/554` periods). Filed **#1009** with the cgroup evidence. Fixed the underlying flakiness with a bounded retry (`_run_with_retry` in `toolkit/features/n8n_import.py`, waits for rollout-Ready before retrying) and decoupled `deploy-k8s`'s exit code from `import-n8n`'s (Makefile `||` with a loud warning) so a transient import failure no longer reports the whole K8s deploy as failed. This fix is orthogonal to OPS-022 — landing in its own branch/PR, not this one.
+2. **Argo CD staging selfHeal drift** — the live `kubelab-staging` Argo CD Application had `selfHeal: true` although git has said `false` since PR #211 (ADR-037, merged 2026-05-24); nobody ran `make deploy-apps` after that PR merged. This reverted the first staging deploy of this change 19 seconds after applying it. Confirmed via `kubectl diff -f infra/k8s/argocd/applications/` (staging: exactly the `selfHeal` field differs; prod: zero diff). Filed **#1016** with the full timeline (`managedFields` predates PR #211's merge) and a proposed structural fix (`kubectl diff` folded into `check-apps`). The live fix (`make deploy-apps`) is NOT yet applied — blocked on aws1 (Argo CD hub) being unreachable (Spot reclaim in progress, user is tracking via Uptime Kuma). Worked around for this verification pass because the same outage means nothing can revert a direct `kubectl apply` right now — re-ran `make deploy-k8s ENV=staging` and confirmed the IngressRoute's `Host()` before running the ACs above. This is a point-in-time verification, not proof the drift is fixed; #1016 tracks the real fix for whenever the hub returns.
+
+## Decisions made during implementation
+
+- Risk 2 (prod-absence assertion): resolved via advisor consult — a static `kubectl kustomize` render test, not a `ServiceExpectation` field, because after the rename no live HTTP probe can ever see a regression (the apex name resolves to ace1 regardless of what prod ships). See `proposal.md` Risk 2 for the full argument.
+- `target` field content resolution lives in Terraform `locals` (`services_resolved`), computed once and shared by both `records_kubelab.tf` and `records_mlorente.tf` — kept symmetric even though only a kubelab-zone record uses it today, so a future mlorente-zone `target` doesn't silently no-op.
+- An unresolvable `target` name is a hard Terraform error (direct map index, not wrapped in `try`), not a silent fallback to `var.vps_ip` — deliberate, matches the repo's "loud failure over silent" convention.
 
 ## Decisions made during implementation
 

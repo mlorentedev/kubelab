@@ -1,7 +1,7 @@
 ---
 id: "OPS-022-pihole-apex-rename"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-08-11"
 issue: "kubelab#969"
 tags: [spec, proposal]

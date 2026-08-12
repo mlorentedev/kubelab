@@ -15,22 +15,22 @@ created: "2026-08-11"
 
 ## Implementation
 
-- [ ] [P] Housekeeping: post the `target` field schema as a comment on #973 (node-name key, resolved via a Terraform variable map, absent → `var.vps_ip`) — coordination step, not itself AC-testable; shared-state action, confirm with the user before posting
-- [ ] [AC4] `services.json`: add the `pihole` entry with `"target": "ace1"`. Terraform: variable map in `dns.tfvars` resolving node name → `networking.nodes.ace1.tailscale_ip` (same indirection as `vpn_extra_records`'s `node:` key), absent-target records keep resolving to `var.vps_ip`
-- [ ] [AC4] `make tf-dns-plan` — review the plan output (the review gate; apply runs `-auto-approve`), confirm exactly `1 to add, 0 to change, 0 to destroy`
-- [ ] [P] [AC3] Write failing test `tests/test_pihole_overlay_render.py`: `kubectl kustomize` both overlays, assert pihole Service/EndpointSlice/IngressRoute present (>0) in staging's render and absent (==0) in prod's — model `test_grafana_alerting_render.py` (subprocess kubectl, skip-loudly-if-missing), not `test_spoke_rbac_covers_manifests.py` (reads files, not the render)
-- [ ] [AC3] [AC5] Move `infra/k8s/base/external/pihole.yaml` to the staging overlay (model: prod's `headscale.yaml` overlay-only pattern); update both overlays' `kustomization.yaml` resource lists; rename the `Host()` rule from `pihole.staging.kubelab.live` to `pihole.kubelab.live` — render test goes green
-- [ ] [AC1] `expectations.py`: shrink `pihole`'s `skip_in_envs` to `("dev", "prod")`; rewrite the prod entry's inline comment — no longer "domain doesn't resolve outside VPN" (it does now), instead "absence asserted by `tests/test_pihole_overlay_render.py`, not the e2e HTTP suite"
-- [ ] Refactor for clarity (extract, rename, dedupe)
+- [x] [P] Housekeeping: post the `target` field schema as a comment on #973 ✓ 2026-08-12
+- [x] [AC4] `services.json`: added the `pihole` entry with `"target": "ace1"`; Terraform variable map `node_tailscale_ips` in `main.tf` (`services_resolved` local), absent-target records unchanged ✓ 2026-08-12
+- [x] [AC4] `make tf-dns-plan` reviewed — exactly `1 to add, 0 to change, 0 to destroy`, content `100.64.0.11` ✓ 2026-08-12
+- [x] [P] [AC3] `tests/test_pihole_overlay_render.py` written (model `test_grafana_alerting_render.py`) ✓ 2026-08-12
+- [x] [AC3] [AC5] `pihole.yaml` moved to the staging overlay; both `kustomization.yaml`s updated; `Host()` renamed to `pihole.kubelab.live` — render test green ✓ 2026-08-12
+- [x] [AC1] `expectations.py`: `skip_in_envs` shrunk to `("dev", "prod")`, prod comment rewritten ✓ 2026-08-12
+- [x] Refactor for clarity — n/a, no rework needed ✓ 2026-08-12
 
 ### Deploy & verify (ADR-037: staging → verify → merge)
 
-- [ ] Housekeeping: `make tf-dns-apply` — creates the new `pihole.kubelab.live` A record (after the plan reviewed above); enables AC2/AC5 verification below, not itself an AC
-- [ ] Housekeeping: `make deploy-k8s ENV=staging` — ships the overlay move; enables AC1/AC5 verification below, not itself an AC
-- [ ] [AC1] `make test-e2e ENV=staging` observes 200/302 for Pi-hole, asserted live (not carried over from the 2026-08-11 measurement — #959's trigger is unreproduced; a reappearing 502 blocks this spec)
-- [ ] [AC2] `dig +short pihole.kubelab.live @vita.ns.cloudflare.com` returns `networking.nodes.ace1.tailscale_ip` (authoritative NS, not a public resolver — TTL caching)
-- [ ] [AC5] `curl -sk https://pihole.staging.kubelab.live/admin/` from a tailnet client returns the staging catch-all 404 — not 502, not Pi-hole
-- [ ] [AC3] `make test` (workstation, homelab may be off) confirms the render test passes — no CI workflow runs pytest, so this AC is workstation-verified
+- [x] Housekeeping: `make tf-dns-apply` — 1 added, 0 changed, 0 destroyed ✓ 2026-08-12
+- [x] Housekeeping: `make deploy-k8s ENV=staging` — applied; see verification.md for the live Argo CD selfHeal drift (#1016) hit and worked around along the way ✓ 2026-08-12
+- [x] [AC1] `make test-e2e ENV=staging -k pihole` — 5 passed ✓ 2026-08-12
+- [x] [AC2] `dig +short pihole.kubelab.live @vita.ns.cloudflare.com` → `100.64.0.11`, matches `networking.nodes.ace1.tailscale_ip` ✓ 2026-08-12
+- [x] [AC5] `curl` against the old name → HTTP 404 (staging catch-all) ✓ 2026-08-12
+- [x] [AC3] `pytest tests/test_pihole_overlay_render.py` — 2 passed ✓ 2026-08-12
 
 ## Closing
 

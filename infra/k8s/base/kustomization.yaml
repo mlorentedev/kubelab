@@ -7,7 +7,6 @@ resources:
   - namespace.yaml
   - governance/limitrange.yaml
   - edge/errors.yaml
-  - external/pihole.yaml
   - external/uptime-kuma.yaml
   - edge/secure-headers.yaml
   - services/grafana.yaml
