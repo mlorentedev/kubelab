@@ -3607,3 +3607,63 @@ A reference audit found no counter-example: `khuedoan/homelab` declares multi-en
 - **Reformatting to satisfy a linter and relaxing the linter to match reality are different fixes with different blast radii.** The existing style was uniform across the whole file, not sloppy — that made it the file's convention, not a defect, and the config was wrong for not accepting it.
 
 **Tags:** `#yamllint` `#ci-gap` `#pre-commit` `#false-assumption` `#config-drift` `#ops-020` `#gotcha`
+
+### [2026-08-12] A stage-agnostic pre-commit hook silently redundant since hooks went machine-wide
+
+**Context:** Noticed directly in this session's own commit output: the pre-commit hook block (trim-whitespace, gitleaks, the local env-file check, etc.) printed twice per `git commit`, sometimes three times. Traced instead of dismissed as cosmetic.
+
+**Problem:** A pre-commit hook that declares no `stages:` of its own defaults to running at **every** stage. That was harmless while `.git/hooks/` only held what `pre-commit install` wrote per-repo — a stage-agnostic hook still only fired at commit time, because nothing else invoked it. Once hooks are dispatched machine-wide via `core.hooksPath` (shared across every repo/worktree on the machine), every git hook type — `pre-commit`, `prepare-commit-msg`, `commit-msg`, `pre-push` — reaches `pre-commit hook-impl`, and each stage-agnostic hook in `.pre-commit-config.yaml` runs once per hook type that fires: 2-3x per commit, plus once per checkout, plus once per push. Confirmed directly: invoking each dispatcher against a repo whose only hook was `gitleaks` ran `gitleaks` on `pre-commit`, `prepare-commit-msg`, and `commit-msg` alike.
+
+**Solution:** One line, `default_stages: [pre-commit]`, at the top level of `.pre-commit-config.yaml` (DX-001, #895). A hook that genuinely needs another stage still declares its own `stages:`, which overrides the default — nothing else changes. Verified before/after in this repo's own commits: the hook block went from running 2-3 times to once. The one deliberate tradeoff (gitleaks' pre-push re-check, the safety net for a `--no-verify` commit) was confirmed with the maintainer before applying — accepted, since the real gate for that case is CI, not a local hook `--no-verify` already bypasses for everything else.
+
+**Rule:**
+- **A shared hook dispatcher (`core.hooksPath` set once, machine-wide) changes what "no `stages:`" means.** It stops being "runs once, whenever commit happens" and starts being "runs at every hook type this machine's git ever fires" — the migration from per-repo to machine-wide hooks silently multiplied every stage-agnostic hook's invocation count.
+- **Redundant-but-correct output is easy to stop noticing.** The duplicated block had been printing in commit output for long enough to go unremarked in at least one other repo (`dotfiles`) before this session traced it here — results were never wrong, just repeated, which is exactly the kind of noise that trains a reader to stop reading.
+- **Tightening a security-relevant default (dropping the pre-push net) is a decision to surface, not infer.** The technical fix and the security tradeoff were separable; only the tradeoff needed a human call.
+
+**Tags:** `#pre-commit` `#hooks-path` `#dx-001` `#redundant-checks` `#security-tradeoff` `#gotcha`
+
+### [2026-08-12] `bootstrap-sha` in `release-please-config.json` is a manifest-level option, not a per-package one
+
+**Context:** Evaluating VER-009 (#989) — adding `infra`/`toolkit` as new release-please packages in a repo with years of pre-existing history under both paths. Set a per-package `bootstrap-sha` on each, expecting it to scope the first release-please pass to commits after that SHA.
+
+**Problem:** It had no effect. A local dry-run (`release-please release-pr --dry-run --local`, against an isolated scratch clone — never the real repo) proposed `toolkit: 1.0.0` with a changelog spanning the entire commit history under `toolkit/`, back through the original K3s migration. `debug-config` showed why: the per-package `ReleaserConfig` object that `extractReleaserConfig` builds from `packages.<path>` has no `bootstrapSha` field at all — it silently accepted and dropped the unrecognized key. Confirmed against the published JSON schema (`raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json`): `bootstrap-sha` is a sibling of `packages` at the top level of the whole config document, described as "For the initial release of a library, only consider as far back as this commit SHA" — global to the run, not scoped per path.
+
+**Solution:** Moved `bootstrap-sha` to the top level. Confirmed dormant for already-released packages (`api`/`errors` — they have real tags, so `latestRelease` lookup succeeds and the SHA is never consulted) and effective for the new ones (re-ran the same dry-run: `infra`/`toolkit` correctly showed 0 commits at the bootstrap point, then correctly picked up exactly one synthetic commit each in a follow-up test, with no cross-contamination between paths). VER-009 itself was later declined on unrelated grounds (SemVer without a consumer is decorative) — the config mechanics stayed correct regardless.
+
+**Rule:**
+- **An unrecognized key in a nested config object is not validated — it is dropped.** `release-please`'s config parser (`extractReleaserConfig`) pulls only the fields `ReleaserConfig` defines; anything else nested under `packages.<path>` vanishes with no warning, so a wrong-scope option looks identical to a correctly-scoped one until you read the actual dry-run output.
+- **A schema field's own description states its scope — read it before placing the key.** The published schema literally says "for the initial release of *a* library" (singular, global), which was the tell; the assumption that "if it's about one package, it must go inside that package's block" was never verified against the schema before the first (wrong) placement.
+- **`debug-config` (or the equivalent introspection command) beats re-reading docs when a config option "has no effect."** Docs describe intent; a dump of the parsed config shows what the tool actually saw.
+
+**Tags:** `#release-please` `#config-schema` `#ver-009` `#silent-failure` `#dry-run` `#gotcha`
+
+### [2026-08-12] "The app was extracted" and "the app is dead here" are different claims
+
+**Context:** Researching a docs rewrite (`versioning-strategy.md`/`cicd.md`), found `promote-prod.yml`'s `workflow_dispatch` dropdown offered `web`/`api`, and the toolkit's `promote`/`image-tag` CLI help text still said "(api|web)". Read this as leftover debt from `web`'s extraction to its own repo (ADR-053) — about to file a ticket for it.
+
+**Problem:** The premise was half right and half wrong. `web`'s *source* did move to `mlorentedev/web`. Its *deployment* — `apps.platform.web.version` in `common.yaml`/`staging.yaml`/`prod.yaml`, the `PLATFORM_APPS` constant, the `promote` command's `web` branch — never left, because `web-image-receiver.yml` (a `repository_dispatch` cross-repo receiver, ADR-053 §2) is how the other repo's CI hands a built image back to this one for staging/prod promotion. Reading that one workflow file — which the docs rewrite needed anyway — resolved it before any ticket got filed: `web` in those five places is correct, current, load-bearing config, not residue.
+
+**Solution:** No fix needed for `web`. The search that surfaced it also found genuine (much smaller) dead-app residue elsewhere in the same file family — `orchestrator.py` iterating `["api", "web", "blog", "wiki"]` for local dev build/deploy, and hardcoded prod-status URLs for `blog.mlorente.dev`/`wiki.mlorente.dev` (blog killed, wiki retired into a toolkit command, neither resolves to anything this platform serves) — fixed in #1010, after the same one-more-file-read standard applied to confirm those two really were dead (checked `apps/` had no `blog`/`wiki` directories, and DNS had no records for either).
+
+**Rule:**
+- **"Extracted to its own repo" describes where the code lives, not whether the artifact is still deployed from here.** A platform/product repo split (ADR-053's own shape) routinely keeps deployment tracking in the platform repo after the source leaves it — the split is about code ownership, not runtime responsibility.
+- **Before filing a debt ticket for "dead" references, find the mechanism that would make them live, not just the absence of a local Dockerfile.** A cross-repo `repository_dispatch` receiver is exactly the kind of live wiring that a same-repo grep for `apps/web/` will never surface.
+- **The false alarm and the real finding came from the same search.** Casting the net wide enough to catch one meant catching the other too — the discipline was verifying each hit individually rather than accepting the first plausible story for all of them.
+
+**Tags:** `#adr-053` `#platform-product-split` `#false-positive` `#verify-before-ticketing` `#debt-triage` `#gotcha`
+
+### [2026-08-12] Rebasing a PR onto another PR's pre-merge branch tip conflicts against the real post-squash master
+
+**Context:** #1019 depended on #1015 (both touched the tail of `docs/lessons.md`). Once #1015 merged, a peer session rebased #1019's branch onto #1015's original branch tip (`54c1254`) to resolve the shared conflict, resolved it cleanly, force-pushed — and reported #1019 mergeable.
+
+**Problem:** GitHub reported #1019 as `CONFLICTING`/`DIRTY` anyway. This repo squash-merges every PR (ADR trunk-based rule), so `master`'s actual tip after #1015 was a *new* commit (`e0fb86f`) with `master`'s pre-#1015 tip as its parent — `54c1254` was never one of its ancestors, despite carrying identical file content. `git merge-base origin/master origin/<branch>` therefore resolved to the commit *before* #1015's change on both sides, not to `54c1254`/`e0fb86f`. From that base, git saw both `master` and the rebased branch independently inserting the same `docs/lessons.md` entry — a real conflict, confirmed by reproducing the merge in a scratch clone (`git merge-base --is-ancestor 54c1254 origin/master` → `NO`).
+
+**Solution:** Merged current `origin/master` into the PR branch (not another rebase) — a squash-merged base only needs to be picked up once, and a merge commit is squashed away at final merge anyway so it costs nothing. Resolved the now-trivial conflict (branch content already had everything `master`'s side lacked), verified with `markdownlint`, pushed as a normal fast-forward (`350a541`, no force needed). `mergeable` flipped `CONFLICTING` → `MERGEABLE`.
+
+**Rule:**
+- **After a dependency PR squash-merges, rebase the dependent branch onto the new `master` tip — never onto the source branch's pre-merge commits.** They carry the same file content but are not the same commit; git's 3-way merge cares about ancestry, not content equality.
+- **`mergeable: CONFLICTING` from the GitHub API is ground truth — a peer's local conflict-resolution success is not,** if that resolution happened against a branch tip that never reached `master`. Verify against `origin/master`, not against the branch that was rebased onto.
+- **Once truly caught up, prefer a merge commit over a second rebase to reconcile a dependent branch.** It avoids a second force-push (and the coordination risk of two sessions racing on the same ref) and gets squashed away regardless at merge time.
+
+**Tags:** `#git` `#squash-merge` `#rebase` `#merge-conflict` `#cross-session-coordination` `#gotcha`

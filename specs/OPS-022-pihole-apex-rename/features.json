@@ -1,0 +1,37 @@
+[
+  {
+    "id": "OPS-022-pihole-apex-rename-f1",
+    "behavior": "Staging e2e asserts Pi-hole 200/302 instead of skipping it",
+    "verification": "poetry run pytest tests/e2e/ -m e2e --env staging -k pihole",
+    "state": "pending",
+    "evidence": "2026-08-12: 5 passed (test_content_type_matches, test_health_returns_expected_status, test_service_responds, test_security_headers_present, test_hsts_header). Manual: curl -sk https://pihole.kubelab.live/admin/ -> HTTP 302."
+  },
+  {
+    "id": "OPS-022-pihole-apex-rename-f2",
+    "behavior": "pihole.kubelab.live resolves publicly to ace1's tailnet address",
+    "verification": "dig +short pihole.kubelab.live @vita.ns.cloudflare.com",
+    "state": "pending",
+    "evidence": "2026-08-12: returned 100.64.0.11, matches networking.nodes.ace1.tailscale_ip in common.yaml."
+  },
+  {
+    "id": "OPS-022-pihole-apex-rename-f3",
+    "behavior": "Prod render has zero pihole objects, staging render has all three",
+    "verification": "poetry run pytest tests/test_pihole_overlay_render.py",
+    "state": "pending",
+    "evidence": "2026-08-12: 2 passed (test_staging_renders_all_three_pihole_objects, test_prod_renders_nothing_pihole)."
+  },
+  {
+    "id": "OPS-022-pihole-apex-rename-f4",
+    "behavior": "target field is backward-inert for the other 11 records",
+    "verification": "make tf-dns-plan",
+    "state": "pending",
+    "evidence": "2026-08-12: 'Plan: 1 to add, 0 to change, 0 to destroy.' New record content=100.64.0.11. Applied: 'Apply complete! Resources: 1 added, 0 changed, 0 destroyed.'"
+  },
+  {
+    "id": "OPS-022-pihole-apex-rename-f5",
+    "behavior": "Old staging-scoped name is dark, not aliased",
+    "verification": "curl -sk -o /dev/null -w '%{http_code}' https://pihole.staging.kubelab.live/admin/",
+    "state": "pending",
+    "evidence": "2026-08-12: HTTP 404 (staging catch-all)."
+  }
+]

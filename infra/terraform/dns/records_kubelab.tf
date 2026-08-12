@@ -29,7 +29,7 @@ resource "cloudflare_record" "kubelab_svc" {
 
   zone_id = var.zone_id_kubelab
   name    = each.value.name
-  content = var.vps_ip
+  content = each.value.content
   type    = "A"
   ttl     = each.value.proxied ? 1 : var.dns_ttl
   proxied = each.value.proxied

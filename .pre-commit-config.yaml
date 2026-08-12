@@ -2,6 +2,18 @@
 # Install: poetry run pre-commit install
 # Run manually: poetry run pre-commit run --all-files
 
+# A hook with no `stages:` of its own defaults to EVERY stage. Hooks are
+# dispatched machine-wide via `core.hooksPath`, so every git hook type fires
+# `pre-commit hook-impl`, and each stage-agnostic hook here ran once per
+# commit, once per checkout, and once per push — 3x redundant, not 3x safer
+# (DX-001, #895). Pinning the default to pre-commit is a tightening, not a
+# relaxation: it drops the pre-push re-check (the net for a `--no-verify`
+# commit), but the real gate for that case is CI (gitleaks-action +
+# GitGuardian on the PR), not a local hook that --no-verify already bypasses
+# for everything else. A hook that genuinely needs another stage can still
+# declare its own `stages:` — that overrides this default.
+default_stages: [pre-commit]
+
 repos:
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
