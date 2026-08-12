@@ -9,7 +9,10 @@ import pytest
 
 from toolkit.features.argo_manager import (
     ApplicationNotFoundError,
+    DriftCheckResult,
+    HubUnreachableError,
     SetRevisionResult,
+    check_drift,
     set_revision,
 )
 
@@ -157,3 +160,89 @@ class TestArgoSetRevisionCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["argo", "set-revision"])
         assert result.exit_code != 0
+
+
+# ── check_drift (#1016) ────────────────────────────────────────────────────
+
+
+def _diff_run(returncode: int, stdout: str = "", stderr: str = "") -> MagicMock:
+    """subprocess.run mock for a single `kubectl diff` invocation."""
+    return MagicMock(return_value=MagicMock(returncode=returncode, stdout=stdout, stderr=stderr))
+
+
+class TestCheckDrift:
+    def test_exit_0_is_clean(self) -> None:
+        with patch("toolkit.features.argo_manager.subprocess.run", _diff_run(0)):
+            result = check_drift(applications_dir="infra/k8s/argocd/applications", kubeconfig="/tmp/kc")
+        assert result == DriftCheckResult(clean=True, diff="")
+
+    def test_exit_1_is_drift_with_diff_captured(self) -> None:
+        diff_text = "-      selfHeal: true\n+      selfHeal: false\n"
+        with patch("toolkit.features.argo_manager.subprocess.run", _diff_run(1, stdout=diff_text)):
+            result = check_drift(applications_dir="infra/k8s/argocd/applications", kubeconfig="/tmp/kc")
+        assert result.clean is False
+        assert result.diff == diff_text
+
+    def test_exit_2_raises_hub_unreachable_not_reported_clean(self) -> None:
+        # This is the failure #1016 itself taught: a check that cannot run must
+        # never be silently treated as "no drift found".
+        with patch(
+            "toolkit.features.argo_manager.subprocess.run",
+            _diff_run(2, stderr="dial tcp 100.64.0.7:6443: i/o timeout"),
+        ):
+            with pytest.raises(HubUnreachableError) as exc:
+                check_drift(applications_dir="infra/k8s/argocd/applications", kubeconfig="/tmp/kc")
+        assert "i/o timeout" in str(exc.value)
+
+    def test_uses_provided_dir_and_kubeconfig(self) -> None:
+        with patch("toolkit.features.argo_manager.subprocess.run", _diff_run(0)) as run:
+            check_drift(applications_dir="some/dir", kubeconfig="/path/kc")
+        argv = run.call_args.args[0]
+        assert "diff" in argv
+        assert "some/dir" in argv
+        assert "/path/kc" in argv
+
+
+class TestArgoCheckDriftCLI:
+    def test_clean_exits_0(self) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        runner = CliRunner()
+        with patch(
+            "toolkit.cli.infra.argo_check_drift_feature",
+            MagicMock(return_value=DriftCheckResult(clean=True, diff="")),
+        ):
+            result = runner.invoke(app, ["argo", "check-drift"])
+        assert result.exit_code == 0, result.stdout
+        assert "no drift" in result.stdout.lower()
+
+    def test_drift_found_exits_1_and_prints_diff(self) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        runner = CliRunner()
+        with patch(
+            "toolkit.cli.infra.argo_check_drift_feature",
+            MagicMock(return_value=DriftCheckResult(clean=False, diff="selfHeal: true vs false")),
+        ):
+            result = runner.invoke(app, ["argo", "check-drift"])
+        assert result.exit_code == 1
+        assert "selfHeal" in result.stdout
+        assert "deploy-apps" in result.stdout
+
+    def test_hub_unreachable_exits_2_not_0(self) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        runner = CliRunner()
+        with patch(
+            "toolkit.cli.infra.argo_check_drift_feature",
+            MagicMock(side_effect=HubUnreachableError("i/o timeout")),
+        ):
+            result = runner.invoke(app, ["argo", "check-drift"])
+        assert result.exit_code == 2, "hub-unreachable must be distinguishable from both clean(0) and drift(1)"
+        assert "cannot check" in result.stdout.lower()

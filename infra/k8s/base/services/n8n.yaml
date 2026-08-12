@@ -95,9 +95,17 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 3
           resources:
+            # cpu limit raised 1.0 -> 2.0 (#1009): cgroup cpu.stat measured
+            # nr_throttled=211/554 accounting periods with throttled_usec
+            # (30.9s) exceeding usage_usec (27.5s) over that window — n8n was
+            # regularly hitting the 1-core ceiling, and the liveness probe's
+            # tight timeout (5s) turned that throttling into repeated kills.
+            # ace1 has 4 allocatable cores at 59% CPU *requests* utilization
+            # (raising a limit doesn't change scheduling accounting, only how
+            # far the container may burst) — real headroom, not a guess.
             limits:
               memory: 512Mi
-              cpu: "1.0"
+              cpu: "2.0"
             requests:
               memory: 256Mi
               cpu: "0.2"
