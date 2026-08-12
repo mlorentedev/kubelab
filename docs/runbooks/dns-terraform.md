@@ -45,6 +45,26 @@ infra/terraform/dns/
   .terraform.lock.hcl  # Provider lock (committed)
 ```
 
+## Working from a fresh git worktree
+
+The local backend (`terraform.tfstate`, gitignored) lives only in whichever checkout
+last ran `terraform init` there — it is NOT shared automatically across worktrees.
+Running a bare `terraform init` in a new worktree creates an **empty** state; the
+next `apply` would then try to recreate every live Cloudflare record from scratch.
+
+Before running `make tf-dns-plan`/`tf-dns-apply` (or raw `terraform`) from a new
+worktree, point its backend at the canonical state file instead:
+
+```bash
+cd infra/terraform/dns
+terraform init -backend-config="path=<path-to-canonical-checkout>/infra/terraform/dns/terraform.tfstate"
+```
+
+`<path-to-canonical-checkout>` is whichever checkout (usually the primary clone, not
+a `.worktrees/*` branch worktree) most recently ran terraform here — check
+`git worktree list` if unsure which one that is. This only needs doing once per
+worktree; after `init`, `make tf-dns-plan`/`tf-dns-apply` work normally.
+
 ## Daily Operations
 
 > **Golden rule:** Every change follows the same 3-step cycle: **Edit → Plan → Apply**.
