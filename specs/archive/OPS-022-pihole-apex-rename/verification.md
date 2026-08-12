@@ -43,11 +43,11 @@ Requested from an independent session/subagent since self-review is forbidden by
 
 - [x] Lesson for the repo's `docs/lessons.md`? Yes — three: n8n cgroup-throttling diagnosis and Argo CD live-vs-git drift (PR #1026, merged), plus the review's own finding (a domain rename silently staling a generator's hardcoded output, with no test coverage for generated-artifact accuracy).
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No — this is a routing/naming fix within ADR-037's existing promotion strategy, not a new architectural decision.
-- [x] New pattern candidate for `00_meta/patterns/`? No — single-occurrence so far (this repo, this generator); revisit if the same "generator hardcodes a domain instead of deriving it from SSOT" shape recurs elsewhere.
+- [x] New pattern candidate for `00_meta/patterns/`? No, not at this gate — the vault criterion is "recurs in >1 project," and this session's evidence is single-project. But the broader shape ("a declaration in git is not a deployed fact until something reads back live state") recurred five times this session alone: the yamllint header, the `tls: {}` patch, the Argo CD selfHeal drift, the committed `custom.js` vs its generator, and the pass-1 review that was never persisted to git. Flagged for the next `/crystallize` pass to evaluate pattern promotion, rather than decided here — advisor consult (2026-08-12).
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-08-12
+- [x] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/` ✓ 2026-08-12
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018) ✓ 2026-08-12 — #969 auto-closed on #1017's merge (verified via `gh issue view`, not re-closed)
+- [x] Promotions above executed (if any) ✓ 2026-08-12 — 3 lessons already merged in `docs/lessons.md`; ADR/pattern both declined per advisor consult, pattern signal flagged for `/crystallize`
