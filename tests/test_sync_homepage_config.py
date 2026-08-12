@@ -46,6 +46,47 @@ class TestBuildServiceTables:
         assert n8n_entries
         assert all(s["version"] == "2.12.3" for s in n8n_entries)
 
+    def test_pihole_url_matches_the_apex_ssot_not_the_retired_staging_name(self) -> None:
+        # Adversarial review of OPS-022 (#969): the rename moved pihole off
+        # base/ and onto pihole.kubelab.live, but this generator hardcoded
+        # "pihole.staging.{base}" — unlike its "shared" siblings (Argo CD,
+        # Headscale, Uptime Kuma), which all use {base} directly with no env
+        # prefix. Both the clickable link AND the live client-side health
+        # fetch (custom.js checkHealth(), no-cors mode) pointed at a name
+        # that now 404s, and no-cors resolves on any reachable response —
+        # so the dashboard would have shown a false "up" dot for a dead link.
+        config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {}, "platform": {}}}
+        _staging, _prod, shared = sync_homepage_config.build_service_tables(config)
+        pihole = next(s for s in shared if s["name"] == "Pi-hole")
+        assert pihole["url"] == "https://pihole.kubelab.live"
+        assert pihole["health"] == "https://pihole.kubelab.live/admin/"
+        assert "staging" not in pihole["url"]
+        assert "staging" not in pihole["health"]
+
+
+class TestBuildDnsMap:
+    def test_no_stale_staging_pihole_row_or_dead_extra_records_row(self) -> None:
+        config = {"networking": {"vps": {"public_ip": "1.2.3.4"}, "nodes": {"ace1": {"tailscale_ip": "100.64.0.11"}}}}
+        dns_map = sync_homepage_config.build_dns_map(config)
+        assert "pihole.staging.kubelab.live" not in dns_map
+        assert "extra_records" not in dns_map
+
+    def test_pihole_apex_name_lists_ace1_tailscale_ip(self) -> None:
+        config = {"networking": {"vps": {"public_ip": "1.2.3.4"}, "nodes": {"ace1": {"tailscale_ip": "100.64.0.11"}}}}
+        dns_map = sync_homepage_config.build_dns_map(config)
+        pihole_line = next(line for line in dns_map.splitlines() if line.strip().startswith("pihole.kubelab.live"))
+        assert "100.64.0.11" in pihole_line
+
+
+class TestBuildMermaidDns:
+    def test_extra_records_edge_no_longer_names_pihole(self) -> None:
+        # pihole never actually used this path (extra_records has never
+        # resolved for anything, #964) and definitely doesn't now.
+        config = {"networking": {"vps": {"public_ip": "1.2.3.4"}, "nodes": {"ace1": {"tailscale_ip": "100.64.0.11"}}}}
+        diagram = sync_homepage_config.build_mermaid_dns(config)
+        extra_records_line = next(line for line in diagram.splitlines() if "extra_records" in line)
+        assert "pihole" not in extra_records_line
+
 
 class TestRenderMermaidSvgRetries:
     def test_succeeds_on_first_attempt_without_retrying(self, monkeypatch: object) -> None:

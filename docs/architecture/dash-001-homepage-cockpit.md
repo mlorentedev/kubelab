@@ -60,7 +60,7 @@ Long-term: when ARGO-011 (notifications) + Grafana alerting are configured, Upti
 | 11 | Traefik | ace1 | K8s HelmChartConfig | `traefik.staging.kubelab.live` |
 | 12 | Uptime Kuma | RPi3 | Docker → K8s proxy | `status.staging.kubelab.live` |
 | 13 | Ollama | Beelink | Bare metal → K8s proxy | `ollama.staging.kubelab.live` |
-| 14 | Pi-hole | RPi4 | Docker → K8s proxy (NEW) | `pihole.staging.kubelab.live` |
+| 14 | Pi-hole | RPi4 | Docker → K8s proxy (NEW) | `pihole.kubelab.live` (renamed from the staging-scoped name, OPS-022) |
 | 15 | Error Pages | ace1 | K8s Deployment | (middleware, no direct UI) |
 
 ### Prod (16 services)
@@ -162,7 +162,7 @@ home.{staging.}kubelab.live (Authelia one_factor)
 
 **0.1 — Pi-hole EndpointSlice (staging only)**
 - Create `infra/k8s/base/external/pihole.yaml` (Service + EndpointSlice → 100.64.0.10:80)
-- IngressRoute `pihole.staging.kubelab.live` + Authelia `one_factor`
+- IngressRoute `pihole.staging.kubelab.live` + Authelia `one_factor` (historical: shipped instead without Authelia — Pi-hole v6's built-in auth conflicts with it, see CLAUDE.md gotcha — and the name was later moved to the apex `pihole.kubelab.live`, OPS-022)
 - Pattern: copy Ollama, change IPs/ports
 - Pi-hole only in staging — RPi4 is LAN-only, no prod proxy needed
 
