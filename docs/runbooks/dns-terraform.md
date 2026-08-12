@@ -67,6 +67,7 @@ infra/terraform/dns/
 | `zone` | `"kubelab"` or `"mlorente"` | Which domain to create the record under |
 | `proxied` | `true` / `false` | See proxied decision matrix below |
 | `environments` | `["prod"]` | Must include `"prod"` for the record to be created |
+| `target` | node name (optional) | Points the record at `networking.nodes.<name>.tailscale_ip` (via the `node_tailscale_ips` map in `main.tf`) instead of `var.vps_ip`. Absent → unchanged VPS behavior. Used by VPN-only-reachable services with a publicly-resolvable name, e.g. `pihole` → `ace1` (OPS-022). |
 
 2. Plan and review:
 ```bash
