@@ -39,6 +39,8 @@ This directory had two full audits on 2026-07-07 (`audits/docs-audit-2026-07-07.
 outer ring a newcomer reads first — architecture diagram, service catalog, versioning/CI/CD,
 hardware/VPN setup — describing a platform two or three migrations old. Fixes are tracked
 incrementally as **DOCS-002** ([#825](https://github.com/mlorentedev/kubelab/issues/825));
-`versioning-strategy.md` and `cicd.md` are done, the rest of the table above is not. If a doc
+`versioning-strategy.md` and `cicd.md` are rewritten in
+[#1011](https://github.com/mlorentedev/kubelab/pull/1011), the rest of the table above is not.
+If a doc
 you're reading contradicts what you observe in the code or cluster, trust the code — and file
 or update the DOCS-002 ticket.
