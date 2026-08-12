@@ -62,9 +62,93 @@ Both the R3 amendment and the AC4 amendment are proposal.md changes — `proposa
 
 ## R2 — Ansible-managed platform plane (decided 2026-08-12)
 
-Asked directly, since this is a doctrine call that cascades into R1's deployment task and into R3's backup.yaml edit, and standing practice on this project is not to make that call unilaterally. **Decision: deliberate, not a regression.** Gitea (and n8n, on the same footing) moving to Docker Compose on an Ansible-managed node is the intended shape, not a GitOps gap to be closed. It is the same pattern already in the repo twice — Headscale staying outside K3s (ADR-015) and the Argo CD hub living outside both K3s clusters — for the same structural reason: a platform component cannot be reconciled by the GitOps system that depends on it being reachable to do the reconciling. Gitea hosting private repos that Argo CD would need to fetch from is exactly that shape, which is also why the proposal already commits Argo CD to reconciling from GitHub, never from Gitea.
+Asked directly, since this is a doctrine call that cascades into R1's deployment task and into R3's backup.yaml edit, and standing practice on this project is not to make that call unilaterally. **Decision: deliberate, not a regression.** Gitea moving to Docker Compose on an Ansible-managed node is the intended shape, not a GitOps gap to be closed. It is the same pattern already in the repo twice — Headscale staying outside K3s (ADR-015) and the Argo CD hub living outside both K3s clusters — for the same structural reason: a platform component cannot be reconciled by the GitOps system that depends on it being reachable to do the reconciling. Gitea hosting private repos that Argo CD would need to fetch from is exactly that shape, which is also why the proposal already commits Argo CD to reconciling from GitHub, never from Gitea.
 
 **Consequence for R1's task and R3's backup.yaml edit:** both proceed as scoped — Gitea's move task deploys via the `beelink_services`-style Ansible role (Docker Compose), not a Kustomize resource, and the same task drops `gitea-data` from `backup.yaml`. No revision to R1's node choice is needed.
+
+**Correction, written after R5 (below):** this section originally said "Gitea (and n8n, on the same footing)" — that generalization was wrong and unexamined. n8n has no circular-dependency problem (it isn't a GitOps source Argo CD depends on) and its prod instance is the live alerting path, which by ADR-028's own 3 AM test has to stay on the always-on K3s tier, not follow Gitea to on-demand Beelink. n8n needed no R2-style doctrine call at all — it simply never moves. See the R5 write-up for the full reasoning.
+
+## R5 — Per-instance emptiness proof (staging, 2026-08-12)
+
+**Gitea — confirmed empty.** Unauthenticated `/api/v1/repos/search` structurally cannot see private repos, and private-only is Gitea's settled role — a 0 there can't distinguish "empty" from "invisible." Re-ran authenticated (admin credentials via `toolkit secrets show apps.services.core.gitea.admin_password --env staging`, live username read from the `gitea-secrets` K8s Secret): `X-Total-Count: 0` with `private=true`, 0 repos including private. Clean.
+
+**MinIO — confirmed empty.** `/data` inside the pod contains only `.minio.sys` (MinIO's own internal metadata dir). No buckets.
+
+**n8n — NOT empty, and the proposal's "Why" section overclaims.** `proposal.md`'s Why section states "gitea, n8n and minio... are verified empty and unused" — that was always operator-reported, not verified (R5 exists precisely because the report might be wrong for one of the three). It was wrong for n8n. Copied `database.sqlite` + `-wal` + `-shm` out via `kubectl cp` (bytes-out, zero cgroup cost — no exec inside the pod, unlike the CLI attempt below) and queried locally:
+
+| table | count |
+|---|---|
+| workflow_entity | 1 — `notify-router`, `active=1` |
+| credentials_entity | 1 — `notify-webhook` |
+| execution_entity | 0 |
+
+This is not stray test data — it's the notification-fabric workflow (NOTIFY-001), reconstructable by name from git+SOPS: `toolkit/features/n8n_import.py` targets `infra/n8n/workflows/notify-router.json` + credential `notify-webhook` explicitly. `toolkit infra n8n import` (TOOL-009, #691 closed) exists for exactly this workflow — the proposal's "no export/import route" claim in Out of Scope was always about the *general* case (arbitrary user workflows, the APP-CONFIG-003 gap), not this one bootstrapped workflow, and that reading is already in the proposal's own text.
+
+**Consequence for the spec — n8n's classification changed, not just its emptiness bar.** The initial read was "singleton survives, strengthened" (state is reconstructable, so deleting the PVC loses nothing). That's true but incomplete: it only asks whether it's *safe* to delete the staging twin, not whether there's a *reason* to keep it. Two facts, both already in evidence, argue for keeping it:
+
+1. The workflow is `active=1`, and `toolkit/features/notify_smoke.py` (`make notify-smoke ENV=staging`) drives the real `/webhook/notify` endpoint against the domain resolved for that env — confirmed by reading the module, which explicitly handles `n8n.staging.kubelab.live`'s cert quirk. Staging n8n is the pre-prod validation leg for notification-fabric changes, the same shape ADR-028's observability amendment already established for Grafana/Loki/Vector.
+2. n8n's prod instance is the live alerting path — the thing that has to work at 3 AM — which by ADR-028's own test means it stays on the always-on K3s tier. It was never a candidate to follow Gitea to on-demand Beelink in the first place; R2's generalization to n8n (corrected above) was wrong on this point too.
+
+### Decision: n8n stays dual, in place (decided 2026-08-12, with industry research)
+
+Asked the user directly, then researched rather than asserting an opinion — this changes the spec's own classification, not an implementation detail.
+
+**The framing that resolves it: "staging vs. test-in-prod" is a false dichotomy for alerting pipelines, because they validate two different failure modes.**
+
+- **Staging n8n + git-based promotion validates *changes*** — did a routing edit break something, checked before it reaches prod. This is n8n's own vendor-documented pattern: n8n's official docs describe a git-backed "Environments" model (dev/staging → production, promoted via git branches) as the recommended way to run multiple instances — [Environments in n8n](https://docs.n8n.io/source-control-environments/understand/environments/), [Git and n8n](https://docs.n8n.io/source-control-environments/understand/git/). `toolkit infra n8n import` (TOOL-009) is a hand-built, single-workflow version of that same pattern on community edition (no native multi-environment feature there). That's the honest CV framing: replicated the vendor's enterprise pattern's *shape*, not the feature itself.
+- **A watchdog/dead-man's-switch validates *runtime*** — is the live prod pipeline actually alive right now. Standard SRE pattern: an always-firing check routed through the real pipeline, watched by something external that pages on the check's *absence* — [How to Set Up a Dead Man's Switch in Prometheus](https://blog.ediri.io/how-to-set-up-a-dead-mans-switch-in-prometheus), [End-to-End Watchdog Alerts, PromLabs](https://training.promlabs.com/training/monitoring-and-debugging-prometheus/metrics-based-meta-monitoring/end-to-end-watchdog-alerts/). Professionals run both — one doesn't substitute for the other, since a passing staging test says nothing about whether prod is currently up, and a healthy prod heartbeat says nothing about whether an untested change will route correctly.
+
+**Verified this repo has neither redundancy nor the second half:** the staging leg exists as described. The watchdog does not — checked `infra/config/uptime-kuma/monitors.json`, 0 of 31 monitors are type `push` (heartbeat). Searched the tracker before concluding it was a gap (`gh issue list --search "watchdog OR heartbeat OR dead man"` — zero hits); `NOTIFY-007` (#686)'s n8n Error Trigger only reports a failed *execution*, requiring n8n to already be up and receiving the webhook — it does nothing for the exact failure mode #1009 already demonstrated (pod unresponsive under CPU throttling). Filed as **NOTIFY-009 (#1021)**, out of scope for this spec (monitoring configuration, not a placement decision), noted as the monitoring lane's territory to coordinate with (seed-key migration in progress there per #963's chain).
+
+**Decision: n8n stays dual, exactly where it is — no R1/R2-style move, no new machinery.** Condition, which must land in the ADR row, not stay implicit: legal only while git + `toolkit infra n8n import` remains the sole write path for its state. A workflow authored by hand in either instance's UI forks it instantly, and the general-case fix for that (#501/#688, `APP-CONFIG-003`) is still open — this is the same "declared doctrine, not yet enforced" shape the spec already accepted for Gitea's restore-from-backup test path, applied to n8n's git-promotion path instead.
+
+**0 executions, reported neutrally:** n8n prunes execution history by default, so this cannot distinguish "never fired" from "fired and pruned." Not claimed as evidence the workflow is unused — and moot to the decision either way, since the case for dual rests on the promotion path and the always-on requirement, not on usage volume.
+
+## Incident: kubectl exec into the n8n pod, and the confirmed root cause (2026-08-12)
+
+Attempting to count workflows via `kubectl exec ... -- n8n list:workflow` (the official n8n CLI) coincided with the pod failing its liveness probe and restarting. Sequence from `kubectl get events`: the exec'd process exited 137 (SIGKILL) after the command ran past its interactive timeout; the pod's liveness probe then timed out (`context deadline exceeded`) and kubelet killed and restarted the container.
+
+**Root cause, confirmed — not by this session.** The `dns-cleanup` lane (running `make deploy-k8s ENV=staging` + `make import-n8n ENV=staging` against the same pod concurrently, for unrelated OPS-022 work) measured the container's own `cpu.stat` directly: `nr_throttled=211/554` periods, `throttled_usec` (30.9s) exceeding `usage_usec` (27.5s) — the container is **CPU-throttled under its 1-core limit**, and the 5s `healthz` timeout doesn't survive that throttling. Filed with full evidence as **#1009** (open). This pod already carried 4 restarts in 45h before either session touched it today. My `kubectl exec` most likely added contention on top of an already-throttled container rather than causing the instability from scratch — consistent with, not contradicted by, the CPU-cgroup evidence.
+
+**Durable lesson, independent of #1009's specific fix:** `kubectl exec` runs inside the target container's own cgroup (CPU and memory both). Any command whose CLI boots a second copy of the app runtime (n8n CLI here; `gitea admin <cmd>` would hit the same shape against Gitea's 256Mi/0.5-CPU limit) competes with the already-running server process for the same ceiling — and will make a marginal container measurably worse, as it did here. The repo already contains the correct pattern for exactly this: the backup CronJob (`overlays/prod/backup.yaml`) runs its tooling — including `sqlite3` reading the same class of PVC — in a **separate pod with its own resource limits**, never via exec into the live service pod. This is the piece worth a `docs/lessons.md` entry (not yet written, pending the user's call) — it's a methodology point that outlives #1009's specific CPU-limit fix, and applies to any resource-constrained stateful pod, not just this one.
+
+**Mystery resolved, not by this session:** the second pod replacement (new ReplicaSet `n8n-85bcc9fcb4`, only the `kubectl.kubernetes.io/restartedAt` annotation differed) was `make import-n8n ENV=staging` from the `dns-cleanup` lane — that target explicitly restarts the n8n Deployment after importing the workflow. Not an unexplained `kubectl rollout restart`; confirmed directly by that session. This also explains `notify-router`'s very recent `updatedAt`: the peer's `import-n8n` run re-imported it minutes before I copied the DB.
+
+## R4 — Where the classification is asserted from (resolved 2026-08-12)
+
+Confirmed the nine stateful PVCs in `infra/k8s/base/` map to eight distinct services (`crowdsec` owns two PVCs — `crowdsec-db`, `crowdsec-config`): `loki`, `n8n`, `minio`, `crowdsec`, `grafana`, `authelia`, `postgres`, `gitea`.
+
+**Nothing blocks fields under `common.yaml`** — confirmed by checking each service resolves to a config block there. Seven of eight live under `apps.services.<category>.<name>`, a free-form dict already carrying many attributes (`name`, `image`, `domain`, `resources`, ...) — adding `state_promotion`/`location` keys is no different from any other attribute already there.
+
+**The eighth, `postgres`, does not live there — and that's deliberate, not a gap.** It's at `infra.postgres.*`, not `apps.services.data.postgres`. Its own comment names why: "Shared data-service (ADR-051, implements ADR-050 D7)... pgvector/memory (ADR-027/043) is the planned second consumer — hence `infra.*`, not a per-app namespace" — the same `infra.*` pattern ADR-036 established for SMTP, for services with more than one consumer. **Consequence for the static test's design:** it cannot assume a single tree to walk. The correct shape is: enumerate stateful services from the K8s manifests (ground truth — PVC-bearing files in `base/`), then for each, resolve its classification by checking wherever that service's config block actually lives (`apps.services.*` for seven, `infra.postgres` for the eighth) — not by walking `apps.services.*` alone and assuming coverage.
+
+**Test blueprint, mirroring the one existing precedent for this exact shape** (`tests/test_spoke_rbac_covers_manifests.py`, TOOL-029 — chosen deliberately because it already solved "discover shipped resources from manifest files with no cluster, cross-reference against a declared SSOT, fail loudly and specifically, never silently skip"):
+1. `_stateful_services()` — walk `infra/k8s/base/*.yaml` for `kind: PersistentVolumeClaim`, return the owning service name per file.
+2. `_declared_classification()` — load `common.yaml`, resolve each service's block from wherever it lives, return `(state_promotion, location)` or `None` if either is missing.
+3. Fail listing every stateful service missing either field, by name — the same actionable-failure shape TOOL-029's test uses, not a bare assertion count.
+4. A guard test proving the check can go red — mirroring `test_create_exemptions_are_still_needed`: assert the check fails when a service's block genuinely lacks the fields (not "assert True", an actual removed-field fixture), matching R4's own stated bar in `proposal.md` ("a test that cannot be shown to fail is not a gate").
+
+Not built in this session — this is the design the ADR/task-list work will implement, once `tasks.md` unfreezes. R4 asked whether anything *prevents* this; nothing does, and the one wrinkle (`postgres`) is now a known, documented input to that implementation rather than a surprise it would hit.
+
+## R6 — Blast-radius sweep (verified 2026-08-12)
+
+Checked every consumer R6 names, plus the one R3 added (`backup.yaml`), against the actual repo — not re-asserting the list, verifying it.
+
+**Confirmed exact as stated:**
+- `overlays/prod/patches.yaml` — all seven targets present at the claimed identity: `gitea-config`, `gitea`, `n8n-config`, `n8n`, `minio-config`, `minio-api`, `minio-console`.
+- `tests/e2e/expectations.py` — `gitea` (111), `n8n` (114), `minio` (122), all present.
+- `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`) — gitea and minio entries present (`apps.services.core.gitea.*`, `apps.services.data.minio.*`).
+- `overlays/prod/backup.yaml` — R3's finding, mounts `gitea-data`/`n8n-data`.
+
+**Corrected — the pointer was imprecise, the claim behind it was right:** "Homepage `services.yaml`" is not the file to edit. The committed `infra/k8s/base/services/homepage-config/services.yaml` is a static scaffold (placeholder widgets only, no service names). The actual consumer is `toolkit/scripts/sync_homepage_config.py` lines ~209-299, which hardcodes construction of Gitea/n8n/MinIO homepage tiles by reading their `apps.services.*` blocks by name — retiring a service without touching this script leaves a broken tile pointing at a domain that no longer resolves.
+
+**Split into two, only one needs an edit:** "Authelia's staging access rules and OIDC clients" was one bullet for two different mechanisms.
+- **Access rules are auto-derived**, not hardcoded — `toolkit/features/generator_authelia.py` builds `access_control` generically from each component's `enable_auth`/`auth_level`. Retiring a service here is already safe; no manual edit point.
+- **OIDC client registrations are hardcoded** — `apps.services.security.authelia.oidc.clients` in `common.yaml` lists `gitea-oidc` and `minio-oidc` explicitly (n8n has none; it uses built-in auth per `expectations.py`'s own comment). These entries need manual removal on retirement — this is the real edit point the original bullet was gesturing at.
+
+**Confirmed, distinct from Authelia's own list:** `staging.yaml` overrides `apps.services.{core.gitea,automation.n8n,data.minio}.domain` (and MinIO's `console_domain`) to the `*.staging.kubelab.live` forms — the staging-layer half of "the `apps.services.*` tree," separate from Authelia's OIDC list above.
+
+**Net effect on the task list this unblocks, narrowed after R5 kept n8n dual:** every count above included n8n's entry alongside gitea's and minio's. Once R5 settled n8n as staying dual, in place, its entries in each of these 7 files no longer move: `overlays/prod/patches.yaml` moves 5 resources (not 7 — `n8n-config`/`n8n` stay in `base/`), `overlays/prod/backup.yaml` drops 1 mount (not 2 — `n8n-data` stays), `tests/e2e/expectations.py`'s `n8n` entry is untouched, `sync_homepage_config.py` loses 2 hardcoded tiles (not 3 — n8n's stays), `staging.yaml` loses 2 domain overrides (not 3 — n8n's stays). `SECRET_CATALOG` and the OIDC client list were already gitea+minio only, unchanged. Same 7 files, smaller diff in each. AC3 (render + `test-e2e ENV=staging` green) still stays the outcome check, since a static list can still miss something a future service adds.
 
 ## Test status
 
