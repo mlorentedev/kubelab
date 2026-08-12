@@ -16,9 +16,10 @@ owner: manu
 ```
 services.json    ← single source of truth (service list)
      ↓
-main.tf          ← parses JSON, filters by zone + environment
+main.tf          ← parses JSON, filters by zone + environment, resolves target
      ↓
 records_*.tf     ← for_each creates A records per service
+zone_settings.tf ← TLS/HSTS zone settings + CAA records (not from services.json)
      ↓
 Cloudflare API   ← via cloudflare/cloudflare provider ~> 4.0
 ```
@@ -32,13 +33,14 @@ SOPS (common.enc.yaml) → cloudflare.api_token → toolkit _get_terraform_env()
 
 ```
 infra/terraform/dns/
-  main.tf              # Provider config, data sources (zone lookups), locals (JSON parsing)
+  main.tf              # Provider config, data sources (zone lookups), locals (JSON parsing + target resolution)
   variables.tf         # cloudflare_api_token (sensitive), zone IDs, vps_ip, dns_ttl
   records_kubelab.tf   # Root A (@), www CNAME, service A records via for_each
   records_mlorente.tf  # Root A, service A records via for_each
+  zone_settings.tf     # TLS/HSTS zone settings + CAA records (SEC-AUDIT-001/002/004/006) — not services.json-driven
   outputs.tf           # Service URLs, record counts
-  services.json        # Service catalog: name, zone, proxied, environments
-  prod.tfvars          # Zone IDs, VPS IP, TTL
+  services.json        # Service catalog: name, zone, proxied, environments, target (optional)
+  dns.tfvars           # Zone IDs, VPS IP, TTL
   terraform.tfstate    # Local state (gitignored)
   .terraform.lock.hcl  # Provider lock (committed)
 ```
@@ -71,15 +73,15 @@ infra/terraform/dns/
 
 2. Plan and review:
 ```bash
-toolkit infra terraform plan --env prod
+make tf-dns-plan
 # Expected output: "Plan: 1 to add, 0 to change, 0 to destroy."
-# Verify the record name, type (A), content (VPS IP), and proxied status
+# Verify the record name, type (A), content (VPS IP or target's Tailscale IP), and proxied status
 ```
 
 3. Apply:
 ```bash
-toolkit infra terraform apply --env prod
-# Type "yes" when prompted
+make tf-dns-apply
+# Runs with -auto-approve — the plan above is the real review gate
 ```
 
 4. Verify:
@@ -100,20 +102,19 @@ This creates `console.minio.kubelab.live`.
 
 ### Change VPS IP address (migration)
 
-1. Edit `infra/terraform/dns/prod.tfvars`:
+1. Edit `infra/terraform/dns/dns.tfvars`:
 ```hcl
 vps_ip = "NEW.IP.ADDRESS"
 ```
 
-2. Plan — expect ALL A records to show "change":
+2. Plan — expect every A record WITHOUT a `target` to show "change" (records with `target` set, e.g. `pihole`, are unaffected — they resolve to their node's Tailscale IP, not `vps_ip`):
 ```bash
-toolkit infra terraform plan --env prod
-# Expected: "Plan: 0 to add, 28 to change, 0 to destroy."
+make tf-dns-plan
 ```
 
 3. Apply — all records update atomically:
 ```bash
-toolkit infra terraform apply --env prod
+make tf-dns-apply
 ```
 
 4. Verify propagation (may take up to TTL seconds = 300s for non-proxied):
@@ -129,7 +130,7 @@ Edit `services.json` → change `"proxied": true/false` → `plan` → `apply`.
 **Proxied decision matrix:**
 | Proxied | When to use | Effect |
 |---------|-------------|--------|
-| `true`  | Public-facing: api, blog, wiki, status | CF CDN + DDoS protection, hides real IP, TTL=auto |
+| `true`  | Public-facing, no client-IP requirement: `api` (currently the only one) | CF CDN + DDoS protection, hides real IP, TTL=auto |
 | `false` | VPN/internal: vpn, auth, grafana, gitea | Real client IP visible, TTL=300, no CF overhead |
 
 **Warning:** Changing `proxied` from `false` to `true` hides the real VPS IP. Services that need client IP for rate limiting (auth, Authelia) must stay `proxied=false`.
@@ -139,13 +140,13 @@ Edit `services.json` → change `"proxied": true/false` → `plan` → `apply`.
 1. Delete the entry from `services.json`
 2. Plan — expect "1 to destroy":
 ```bash
-toolkit infra terraform plan --env prod
+make tf-dns-plan
 # Expected: "Plan: 0 to add, 0 to change, 1 to destroy."
 # Verify it's destroying the correct record
 ```
 3. Apply:
 ```bash
-toolkit infra terraform apply --env prod
+make tf-dns-apply
 ```
 
 **Warning:** Removing a DNS record makes the service unreachable. Ensure the service is already decommissioned.
@@ -158,11 +159,11 @@ Not directly supported. Delete from old zone + add to new zone in `services.json
 
 ```bash
 # Non-proxied records → should return VPS IP directly
-dig +short api.kubelab.live @1.1.1.1     # → 162.55.57.175 (or CF proxy IPs if proxied)
+dig +short vpn.kubelab.live @1.1.1.1     # → 162.55.57.175 (proxied=false)
 dig +short mlorente.dev @1.1.1.1          # → 162.55.57.175
 
 # Proxied records → return Cloudflare IPs (104.x.x.x / 172.x.x.x)
-dig +short blog.kubelab.live @1.1.1.1    # → 104.21.x.x (CF proxy)
+dig +short api.kubelab.live @1.1.1.1     # → 104.21.x.x (CF proxy, proxied=true)
 
 # Check from multiple resolvers
 dig +short api.kubelab.live @8.8.8.8     # Google DNS
@@ -178,7 +179,7 @@ terraform state list                      # List all managed resources
 terraform state show 'cloudflare_record.kubelab_svc["api"]'  # Single record detail
 ```
 
-## Manual Usage (without toolkit)
+## Manual Usage (without make)
 
 ```bash
 cd infra/terraform/dns
@@ -187,8 +188,8 @@ cd infra/terraform/dns
 export TF_VAR_cloudflare_api_token="$(sops -d ../../config/secrets/common.enc.yaml | grep api_token | awk '{print $2}')"
 
 terraform init          # First time only
-terraform plan -var-file=prod.tfvars
-terraform apply -var-file=prod.tfvars
+terraform plan -var-file=dns.tfvars
+terraform apply -var-file=dns.tfvars
 ```
 
 ## Bootstrap from Zero (New VPS / New Provider)
@@ -228,7 +229,7 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
 # {"name": "mlorente.dev", "id": "4d0a0cf660577b845df5df982ad834a9"}
 ```
 
-Update `prod.tfvars` with the zone IDs and new VPS IP if it changed.
+Update `dns.tfvars` with the zone IDs and new VPS IP if it changed.
 
 ### Step 3: Initialize Terraform
 
@@ -243,11 +244,11 @@ terraform init
 If the zones are empty (new Cloudflare account or new domains):
 
 ```bash
-terraform plan -var-file=prod.tfvars    # Review what will be created
-terraform apply -var-file=prod.tfvars   # Create all records
+terraform plan -var-file=dns.tfvars    # Review what will be created
+terraform apply -var-file=dns.tfvars   # Create all records
 ```
 
-This creates all 28 records from scratch. No imports needed.
+This creates every record in one pass: root + www + CAA records (both zones, from `zone_settings.tf`) plus every entry in `services.json`. No imports needed. Record count isn't fixed — see `terraform state list` after apply for the live count instead of trusting a number written down here.
 
 ### Step 4b: Adopt existing records (state rebuild)
 
@@ -264,44 +265,52 @@ curl -s "https://api.cloudflare.com/client/v4/zones/$KUBELAB_ZONE/dns_records" \
 curl -s "https://api.cloudflare.com/client/v4/zones/$MLORENTE_ZONE/dns_records" \
   -H "Authorization: Bearer $CF_TOKEN" | jq '.result[] | {name, id, type, content}'
 
-# 2. Import root records
-terraform import -var-file=prod.tfvars \
+# 2. Import root + CAA records (zone_settings.tf; not services.json-driven)
+terraform import -var-file=dns.tfvars \
   'cloudflare_record.kubelab_root' "$KUBELAB_ZONE/<RECORD_ID>"
-terraform import -var-file=prod.tfvars \
+terraform import -var-file=dns.tfvars \
   'cloudflare_record.kubelab_www' "$KUBELAB_ZONE/<RECORD_ID>"
-terraform import -var-file=prod.tfvars \
+terraform import -var-file=dns.tfvars \
   'cloudflare_record.mlorente_root' "$MLORENTE_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.kubelab_caa_letsencrypt' "$KUBELAB_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.kubelab_caa_digicert' "$KUBELAB_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.kubelab_caa_google' "$KUBELAB_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.mlorente_caa_letsencrypt' "$MLORENTE_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.mlorente_caa_digicert' "$MLORENTE_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.mlorente_caa_google' "$MLORENTE_ZONE/<RECORD_ID>"
 
-# 3. Import service records (for_each uses service name as key)
-terraform import -var-file=prod.tfvars \
+# 3. Import service records (for_each uses service name as key — check
+#    services.json for the current list; mlorente has zero entries today,
+#    so the mlorente_svc for_each is empty and needs no imports)
+terraform import -var-file=dns.tfvars \
   'cloudflare_record.kubelab_svc["api"]' "$KUBELAB_ZONE/<RECORD_ID>"
-terraform import -var-file=prod.tfvars \
-  'cloudflare_record.kubelab_svc["blog"]' "$KUBELAB_ZONE/<RECORD_ID>"
+terraform import -var-file=dns.tfvars \
+  'cloudflare_record.kubelab_svc["gitea"]' "$KUBELAB_ZONE/<RECORD_ID>"
 # ... repeat for each service in services.json
 
-terraform import -var-file=prod.tfvars \
-  'cloudflare_record.mlorente_svc["api"]' "$MLORENTE_ZONE/<RECORD_ID>"
-terraform import -var-file=prod.tfvars \
-  'cloudflare_record.mlorente_svc["web"]' "$MLORENTE_ZONE/<RECORD_ID>"
-# ... repeat for each mlorente service
-
 # 4. Verify zero drift
-terraform plan -var-file=prod.tfvars
+terraform plan -var-file=dns.tfvars
 # MUST show "No changes" — if drift, adjust .tf to match reality
 ```
 
 ### Step 5: Verify DNS resolution
 
 ```bash
-dig +short api.kubelab.live @1.1.1.1     # Should return VPS IP (or CF proxy IPs if proxied)
-dig +short mlorente.dev @1.1.1.1          # Should return VPS IP
-dig +short blog.kubelab.live @1.1.1.1     # Should return CF proxy IPs (proxied=true)
+dig +short api.kubelab.live @1.1.1.1     # proxied=true → CF proxy IPs (104.x.x.x / 172.x.x.x)
+dig +short mlorente.dev @1.1.1.1          # → VPS IP
+dig +short vpn.kubelab.live @1.1.1.1      # proxied=false → VPS IP directly
 ```
 
-### Step 6: Verify toolkit integration
+### Step 6: Verify the Makefile targets
 
 ```bash
-toolkit infra terraform plan --env prod   # Should work without manual token setup
+make tf-dns-plan   # Should work without manual token setup — pulls from SOPS via `toolkit secrets show`
 ```
 
 ## Disaster Recovery
@@ -315,41 +324,37 @@ Follow **Step 4b** above. Records still exist in Cloudflare — just need re-imp
 The `vps_ip` variable makes rollback a one-liner:
 ```bash
 # If K3s migration fails → revert IP to original VPS
-# Edit prod.tfvars → vps_ip = "162.55.57.175"
-toolkit infra terraform apply --env prod --auto-approve
+# Edit dns.tfvars → vps_ip = "162.55.57.175"
+make tf-dns-apply
 ```
 
-## Records Inventory (2026-02-27)
+## Records Inventory
 
-### kubelab.live — 17 records
+This table is a hand-maintained copy of the state — it has gone stale in exactly this
+way more than once (see `docs/lessons.md`: the yamllint header, the `tls: {}` patch,
+this file's own `prod.tfvars` references). The authoritative live list is one command:
 
-| Record | Type | Proxied | TTL |
-|--------|------|---------|-----|
-| @ (root) | A | Yes | auto |
-| www | CNAME → kubelab.live | Yes | auto |
-| api | A | Yes | auto |
-| blog | A | Yes | auto |
-| wiki | A | Yes | auto |
-| status | A | No | 300 |
-| auth | A | No | 300 |
+```bash
+cd infra/terraform/dns && terraform state list
+```
 
-| vpn | A | No | 300 |
-| grafana | A | No | 300 |
-| loki | A | No | 300 |
-| portainer | A | No | 300 |
-| gitea | A | No | 300 |
-| n8n | A | No | 300 |
-| minio | A | No | 300 |
-| console.minio | A | No | 300 |
-| crowdsec | A | No | 300 |
-| traefik | A | No | 300 |
+`services.json` is the SSOT for which service records exist; `zone_settings.tf`
+separately owns the root/CAA records for both zones (not services.json-driven).
 
-### mlorente.dev — 11 records
+### Fixed records (both zones, from `zone_settings.tf` + `records_*.tf` — rarely change)
 
-| Record | Type | Proxied | TTL |
-|--------|------|---------|-----|
-| @ (root) | A | No | 300 |
-| api, grafana, loki, minio, n8n, portainer, status, traefik, web, wiki | A | No | 300 |
+| Record | Zone | Type | Notes |
+|--------|------|------|-------|
+| @ (root) | kubelab.live | A | `var.vps_ip` |
+| www | kubelab.live | CNAME → kubelab.live | |
+| @ (root) | mlorente.dev | A | `var.vps_ip` |
+| CAA (Let's Encrypt, DigiCert, Google) | both zones | CAA | 3 per zone, restricts cert issuance (SEC-AUDIT-004) |
+
+### Service records — snapshot as of 2026-08-12, verify against `services.json`
+
+**kubelab.live** (12 entries in `services.json`, all zone=kubelab): `api` (proxied), `status`, `auth`, `vpn`, `grafana`, `gitea`, `n8n`, `minio`, `console.minio`, `traefik`, `argo`, `pihole` (`target: ace1` — resolves to a Tailscale IP, not `var.vps_ip`; OPS-022).
+
+**mlorente.dev**: zero entries in `services.json` today — only the fixed root + CAA records above exist for this zone. (The `mlorente_svc` `for_each` is empty until a service targets this zone again.)
 
 ### NOT managed by Terraform
 
