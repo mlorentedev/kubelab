@@ -3682,3 +3682,33 @@ A reference audit found no counter-example: `khuedoan/homelab` declares multi-en
 - **A container's official CLI is not automatically a safe diagnostic tool.** It was built to be run once, by an operator, with the resources to spare — not assumed to be free against a pod already near its ceiling.
 
 **Tags:** `#kubectl` `#kubectl-exec` `#cgroup` `#n8n` `#resource-limits` `#diagnostics` `#adr028-004` `#gotcha`
+
+### [2026-08-12] `kubectl describe pod`'s "Reason" field distinguishes OOM from a probe-triggered kill — a bare exit 137 does not
+
+**Context:** Verifying OPS-022 (#969) in staging, `import-n8n`'s `kubectl exec` failed mid-`deploy-k8s` with exit 137. First instinct: OOM — 137 is `128+SIGKILL`, and that's the textbook cgroup-OOM signature.
+
+**Problem:** It wasn't OOM. `kubectl describe pod` showed `Last State: Terminated, Reason: Error` (not `OOMKilled`, which the kubelet reports verbatim when the cgroup OOM-killer fires) alongside a very specific event: `Liveness probe failed: ... context deadline exceeded` immediately followed by `Killing: Container n8n failed liveness probe, will be restarted`. The actual cause was CPU starvation, not memory: `kubectl top` showed 378m against a 200m request, which is not evidence of anything (requests don't throttle; only the limit does, and one sample can't show whether the limit was ever hit). The discriminating check was the container's own cgroup counters (`kubectl exec ... -- cat /sys/fs/cgroup/cpu.stat`): `nr_throttled=211/554` accounting periods (38%), with `throttled_usec` (30.9s) *exceeding* `usage_usec` (27.5s) — the container spent more wall-clock time waiting on its 1-core limit than it spent running. That, not memory pressure, is what made `/healthz` miss its 5s liveness timeout often enough to get killed.
+
+**Solution:** Raised the CPU limit 1.0→2.0 cores (`infra/k8s/base/services/n8n.yaml`, PR #1022) and re-measured the same counter after a staging soak: throttled periods dropped 38%→3.3%, throttled/usage ratio dropped 112%→24%. The fix was verified by the same instrument that diagnosed the defect, not by "restarts stopped happening" (too slow a signal, and this session's soak window was too short to prove restarts alone).
+
+**Rule:**
+- **Exit 137 is SIGKILL — it says *who* ended the process, not *why*.** OOM-kill, a liveness-probe-triggered `Killing`, and a manual `kubectl delete --force` all produce it. `kubectl describe pod`'s `Last State.Reason` and the Events block distinguish them; the exit code alone does not.
+- **CPU throttling needs its own evidence, not an inference from `kubectl top`.** A single usage sample can't show whether a *limit* was ever hit — only `cpu.stat`'s `nr_throttled`/`throttled_usec` can, and it was one `kubectl exec` away the whole time.
+- **A tight liveness-probe timeout turns "slow" into "dead."** The mechanism connecting CPU throttling to a restart loop was the probe's 5s `timeoutSeconds` — under 38%-throttled periods, that budget just isn't enough, independent of whether the process was actually unhealthy.
+
+**Tags:** `#kubernetes` `#cgroup` `#cpu-throttling` `#liveness-probe` `#n8n` `#ops-020` `#gotcha`
+
+### [2026-08-12] A manifest changed in git is a claim, not a deployed fact — nothing was reading back the live Argo CD Application
+
+**Context:** Verifying OPS-022 (#969) in staging, `make deploy-k8s ENV=staging` applied the Pi-hole overlay move correctly — then the live IngressRoute reverted to its old `Host()` 19 seconds later, with no action taken in between.
+
+**Problem:** The live `kubelab-staging` Argo CD Application had `selfHeal: true`, even though git (`infra/k8s/argocd/applications/staging.yaml`) has said `selfHeal: false` since PR #211 (ARGO-015/ADR-037, merged 2026-05-24) — the whole point of that PR being that staging needed to tolerate a direct `make deploy-k8s` without Argo CD reverting it within seconds. `kubectl diff -f infra/k8s/argocd/applications/ --kubeconfig ~/.kube/kubelab-hub-config` confirmed this was the *only* delta — prod's live object matched its git file exactly, so this wasn't a deliberate override drifting elsewhere too. `managedFields` on the live object showed why: its last full `kubectl apply` was 2026-03-29, *before* PR #211 existed, and a `kubectl-patch` on 2026-05-19 never touched `syncPolicy`. Nobody ran `make deploy-apps` after PR #211 merged, and nothing checked that the live object had actually changed — the same defect shape as the yamllint header overstating CI coverage and the `overlays/prod/patches.yaml` `tls: {}` comment claiming a resolver was gone (both earlier entries in this file): a comment, a merged PR, or a config file all *describe an intent*, and none of them are the same fact as "the live object matches."
+
+**Solution:** Structural fix in PR #1020 — `toolkit infra argo check-drift` runs `kubectl diff` against the Applications directory and treats its exit code as three-way, not two: clean, drift-found, or *hub unreachable* (the last one found live, for free, because aws1 happened to be down for an unrelated Spot-reclaim reason during this exact investigation — measured kubectl's own default timeout there at ~60s, bounded to ~30s with `--request-timeout=15s`). Wired into `check-apps` for visibility and as a post-apply read-back inside `deploy-apps` itself, so the fix step verifies its own result instead of trusting `kubectl apply`'s exit code. The actual live fix (`make deploy-apps`) is a one-line no-op-on-git-side operation, but it was still blocked on the hub being reachable — the drift persisted for the rest of this session for exactly that reason.
+
+**Rule:**
+- **A `make <target>` that exists is not evidence it was ever run.** PR #211 shipped both the git change and the target that applies it, and still went undeployed for ~3 months — the review gate that would have caught it (`make deploy-apps` in the PR's own "how to verify" section) was never itself made mandatory or automated.
+- **"Hub unreachable" must be a third state, never silently folded into "clean."** Collapsing "couldn't check" into "no drift found" is the exact mechanism that let this go unnoticed — any read-back check with only two possible answers (clean/dirty) will eventually make that mistake the first time its target goes offline.
+- **The fastest way to prove staleness in a live object is a fresh, targeted `kubectl diff` against its exact git manifest — not a memory of when it was supposed to have changed.** `managedFields` timestamps were the tie-breaker between "deliberately overridden" and "simply never redeployed"; without them this would have needed a guess.
+
+**Tags:** `#argocd` `#gitops` `#drift-detection` `#adr-037` `#silent-failure` `#ops-020` `#gotcha`
