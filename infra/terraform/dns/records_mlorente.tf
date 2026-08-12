@@ -23,7 +23,7 @@ resource "cloudflare_record" "mlorente_svc" {
 
   zone_id = var.zone_id_mlorente
   name    = each.value.name
-  content = var.vps_ip
+  content = each.value.content
   type    = "A"
   ttl     = each.value.proxied ? 1 : var.dns_ttl
   proxied = each.value.proxied
