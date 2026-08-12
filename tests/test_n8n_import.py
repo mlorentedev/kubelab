@@ -17,6 +17,7 @@ Contract under test (resolved against n8n docs + repo SSOT, 2026-06-15):
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -35,13 +36,21 @@ _WORKFLOW_ID = "d1000000-0000-4000-8000-000000000001"
 _CREDENTIAL_ID = "c1000000-0000-4000-8000-000000000001"
 
 
-def _mock_kubectl(*outputs: str) -> MagicMock:
+def _mock_kubectl(*outputs: str | Exception) -> MagicMock:
     """subprocess.run mock returning each output in order, exit 0.
 
-    Mirrors test_k8s_middlewares._mock_kubectl for consistency.
+    Mirrors test_k8s_middlewares._mock_kubectl for consistency. An entry may be
+    an Exception instance instead of a string — Mock's side_effect raises it
+    instead of returning it, simulating a failed call at that position (mirrors
+    `_run`'s `except subprocess.CalledProcessError`).
     """
-    completed = [MagicMock(stdout=o, stderr="", returncode=0) for o in outputs]
+    completed = [o if isinstance(o, Exception) else MagicMock(stdout=o, stderr="", returncode=0) for o in outputs]
     return MagicMock(side_effect=completed)
+
+
+def _exec_killed() -> subprocess.CalledProcessError:
+    """A liveness-probe restart SIGKILLs an in-flight exec — exit 137 (see #1009)."""
+    return subprocess.CalledProcessError(137, ["kubectl"], stderr="command terminated with exit code 137")
 
 
 def _cm(sops: dict[str, str] | None) -> MagicMock:
@@ -242,3 +251,41 @@ class TestImportN8nWorkflow:
         ok = self._run(fake_project, _SOPS_OK, run, dry_run=True)
         assert ok is True
         assert run.call_count == 0, "dry-run must not exec into the pod"
+
+
+# ── Exec retry (#1009: liveness-probe restart kills an in-flight exec) ───────
+
+
+class TestExecRetry:
+    """A pod restart mid-exec is transient — retry once, waiting for Ready first."""
+
+    def _run(self, fake_project: Path, run_mock, env="staging"):
+        with (
+            patch("toolkit.features.n8n_import.ConfigurationManager", return_value=_cm(_SOPS_OK)),
+            patch("toolkit.features.n8n_import.subprocess.run", run_mock),
+        ):
+            return import_n8n_workflow(env=env, project_root=fake_project, dry_run=False)
+
+    def test_retries_once_after_transient_exec_failure(self, fake_project: Path) -> None:
+        # cred-ok, workflow-exec FAILS, wait-for-ready-ok, workflow-exec retry-ok,
+        # publish-ok, restart-ok, status-ok.
+        run = _mock_kubectl("cred-ok", _exec_killed(), "wait-ok", "wf-ok", "publish-ok", "restarted", "rolled-out")
+        ok = self._run(fake_project, run)
+        assert ok is True, "a transient exec failure must not fail the whole import once the retry succeeds"
+        assert run.call_count == 7, "5 happy-path calls + 1 failed attempt + 1 readiness wait before the retry"
+        wait_call = run.call_args_list[2]
+        assert "rollout" in _argv(wait_call) and "status" in _argv(wait_call), (
+            "must wait for rollout status (Ready), not blindly retry into the same restart"
+        )
+
+    def test_gives_up_after_one_retry_also_fails(self, fake_project: Path) -> None:
+        run = _mock_kubectl("cred-ok", _exec_killed(), "wait-ok", _exec_killed())
+        ok = self._run(fake_project, run)
+        assert ok is False, "a second consecutive failure is a real failure, not retried indefinitely"
+        assert run.call_count == 4, "no publish/restart once the workflow import gives up"
+
+    def test_no_retry_needed_on_first_success(self, fake_project: Path) -> None:
+        run = _mock_kubectl("cred-ok", "wf-ok", "publish-ok", "restarted", "rolled-out")
+        ok = self._run(fake_project, run)
+        assert ok is True
+        assert run.call_count == 5, "the happy path must not pay for a readiness wait it never needed"

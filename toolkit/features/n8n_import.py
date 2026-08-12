@@ -269,7 +269,7 @@ def _exec_stdin_import(env: str, spec: N8nImportSpec, subcommand: str, prefix: s
         "-c",
         script,
     ]
-    return _run(cmd, stdin=payload)
+    return _run_with_retry(cmd, env, spec, stdin=payload)
 
 
 def _exec_publish(env: str, spec: N8nImportSpec, workflow_id: str) -> bool:
@@ -286,7 +286,7 @@ def _exec_publish(env: str, spec: N8nImportSpec, workflow_id: str) -> bool:
         "publish:workflow",
         f"--id={workflow_id}",
     ]
-    return _run(cmd)
+    return _run_with_retry(cmd, env, spec)
 
 
 def _restart_n8n(env: str, spec: N8nImportSpec) -> bool:
@@ -324,3 +324,35 @@ def _run(cmd: list[str], stdin: str | None = None) -> bool:
     except subprocess.CalledProcessError as exc:
         logger.error(f"  {' '.join(cmd[:6])} … failed: {(exc.stderr or str(exc)).strip()}")
         return False
+
+
+def _run_with_retry(cmd: list[str], env: str, spec: N8nImportSpec, stdin: str | None = None) -> bool:
+    """Run a `kubectl exec` command, retrying once if the pod restarts mid-exec.
+
+    A liveness-probe restart (see #1009 — n8n gets CPU-throttled under its 1-core
+    limit, `/healthz` times out, kubelet kills the container) SIGKILLs any exec
+    session in flight, surfaced as exit 137. That is a transient condition, not a
+    real import failure — retrying immediately would race the same restart, so
+    wait for the deployment to report Ready again first.
+    """
+    if _run(cmd, stdin=stdin):
+        return True
+    logger.info(f"  {spec.deployment} exec failed — waiting for it to be ready before retrying...")
+    _wait_rollout_ready(env, spec)
+    return _run(cmd, stdin=stdin)
+
+
+def _wait_rollout_ready(env: str, spec: N8nImportSpec, timeout: str = "60s") -> bool:
+    """Block until `spec.deployment` reports its rollout Ready, or `timeout` elapses."""
+    cmd = [
+        "kubectl",
+        "rollout",
+        "status",
+        spec.deployment,
+        "-n",
+        spec.namespace,
+        "--kubeconfig",
+        _kubeconfig_for(env),
+        f"--timeout={timeout}",
+    ]
+    return _run(cmd)
