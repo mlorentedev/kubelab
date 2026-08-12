@@ -477,7 +477,9 @@ recover-argocd:
 deploy-apps:
 	@echo "=== Deploying Argo CD Applications ==="
 	@kubectl apply -f infra/k8s/argocd/applications/ --kubeconfig $(HUB_KUBECONFIG)
-	@echo "✓ Applications deployed. Check sync status:"
+	@echo "--- Verifying the live objects now match git (#1016) ---"
+	@$(TOOLKIT) infra argo check-drift --kubeconfig $(HUB_KUBECONFIG)
+	@echo "✓ Applications deployed and verified clean. Check sync status:"
 	@echo "  kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd get applications"
 
 # Check Argo CD Application sync status
@@ -493,6 +495,8 @@ check-apps:
 			echo ""; \
 		fi; \
 	done
+	@echo "=== Drift check: live Applications vs git (#1016) ==="
+	@$(TOOLKIT) infra argo check-drift --kubeconfig $(HUB_KUBECONFIG)
 
 # Restart Argo CD (controller + server + redis cache flush)
 .PHONY: restart-argocd
