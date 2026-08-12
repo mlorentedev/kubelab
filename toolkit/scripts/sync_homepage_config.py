@@ -375,8 +375,8 @@ def build_service_tables(
         ),
         _svc(
             "Pi-hole",
-            f"https://pihole.staging.{base}",
-            f"https://pihole.staging.{base}/admin/",
+            f"https://pihole.{base}",
+            f"https://pihole.{base}/admin/",
             "Built-in (v6)",
             "Network",
             "RPi4",
@@ -455,9 +455,10 @@ def build_mermaid_dns(config: dict[str, Any]) -> str:
     return f"""graph TB
   C[Client] -->|*.kubelab.live| CFDNS[Cloudflare]
   CFDNS --> VPS["VPS Traefik {vps.get("public_ip")}"]
+  CFDNS -->|"pihole.kubelab.live<br/>(OPS-022)"| ACE1["ace1 Traefik {n["ace1"]["tailscale_ip"]}"]
   C -->|VPN| HS[Headscale]
   HS -->|"split DNS<br/>*.staging.kubelab.live ONLY"| PH["Pi-hole RPi4"]
-  HS -->|extra_records| ER["pihole/jetson<br/>direct to host"]
+  HS -->|extra_records| ER["jetson<br/>direct to host"]
   PH -->|forward staging| CD["CoreDNS RPi4"]
   CD --> ACE1["ace1 Traefik {n["ace1"]["tailscale_ip"]}"]
   PH -->|non-staging| UP[1.1.1.1 / 8.8.8.8]
@@ -587,7 +588,6 @@ def build_dns_map(config: dict[str, Any]) -> str:
     n = config.get("networking", {}).get("nodes", {})
     vps_pub = vps.get("public_ip", "?")
     ace1_ts = n.get("ace1", {}).get("tailscale_ip", "?")
-    rpi4_lan = n.get("rpi4", {}).get("lan_ip", "?")
 
     rows = [
         f"{'DOMAIN':<36} {'RESOLVES TO'}",
@@ -597,14 +597,14 @@ def build_dns_map(config: dict[str, Any]) -> str:
         f"  {'*.kubelab.live':<34} VPS Traefik ({vps_pub})",
         f"  {'mlorente.dev':<34} VPS Traefik ({vps_pub})",
         f"  {'vpn.kubelab.live':<34} {vps_pub} (public, never Tailscale)",
+        f"  {'pihole.kubelab.live':<34} {ace1_ts} (public record, VPN-reachable only — OPS-022)",
         "",
         "STAGING (VPN-only via split DNS)",
         f"  {'*.staging.kubelab.live':<34} Headscale → Pi-hole → CoreDNS → ace1 ({ace1_ts})",
-        f"  {'pihole.staging.kubelab.live':<34} LAN EndpointSlice → RPi4 ({rpi4_lan})",
-        "",
-        "VPN-ONLY (Headscale extra_records)",
-        f"  {'pihole.kubelab.live':<34} RPi4 ({rpi4_lan})",
     ]
+    # The old pihole.staging.* row (LAN EndpointSlice → RPi4) and the "Headscale extra_records"
+    # section were both removed with OPS-022 — extra_records has never resolved for anything
+    # (see CLAUDE.md gotcha, #964), and pihole no longer uses either path.
     return "\n".join(rows)
 
 

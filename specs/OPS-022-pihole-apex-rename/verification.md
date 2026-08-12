@@ -33,20 +33,17 @@ Commit: implementation on `feat/OPS-022-pihole-apex-rename` (pre-PR at verificat
 - `target` field content resolution lives in Terraform `locals` (`services_resolved`), computed once and shared by both `records_kubelab.tf` and `records_mlorente.tf` — kept symmetric even though only a kubelab-zone record uses it today, so a future mlorente-zone `target` doesn't silently no-op.
 - An unresolvable `target` name is a hard Terraform error (direct map index, not wrapped in `try`), not a silent fallback to `var.vps_ip` — deliberate, matches the repo's "loud failure over silent" convention.
 
-## Decisions made during implementation
+## Independent review (adversarial-review, post-merge)
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
+Requested from an independent session/subagent since self-review is forbidden by the skill's own guardrail (this session implemented the change). **First pass: FAIL.** Real, REAL-reality, UNTESTED Major finding: `toolkit/scripts/sync_homepage_config.py` hardcoded `pihole.staging.{base}` for the Homepage dashboard's Pi-hole tile (`url` + `health`, plus a DNS-map row and a mermaid diagram edge) — never updated by the rename PR. Behaviorally real, not just stale text: `custom.js`'s `checkHealth()` does a live client-side `fetch(url, {mode:"no-cors"})` on every dashboard load, and `no-cors` resolves `.then()` (green) for any reachable response including the staging catch-all's 404 — so the dashboard would have shown a false "up" status and a dead link for exactly the service this spec renamed, the same "SSOT keeps lying, nothing tells us" failure the proposal's own "Why" section names as its motivation, recurring one layer up. Full review: `review.md` in this folder.
 
--
--
+**Fixed, same session:** `sync_homepage_config.py`'s Pi-hole entry aligned with its own `shared`-list siblings (Argo CD, Headscale, Uptime Kuma all use `{base}` with no env prefix — Pi-hole's `staging.` insertion was inconsistent with its own categorization); the DNS-map's stale `pihole.staging.*` row and the always-dead "Headscale extra_records" row (extra_records has never resolved for anything, #964) replaced with an accurate `pihole.kubelab.live → ace1 Tailscale IP` row under "PROD (public DNS via Cloudflare)", matching the existing `vpn.kubelab.live` precedent; the mermaid DNS diagram gained the matching direct Cloudflare→ace1 edge and dropped "pihole" from the extra_records edge label. `CLAUDE.md`'s stale gotcha and `docs/architecture/dash-001-homepage-cockpit.md`'s two historical references fixed too. 4 new named regression tests added to `tests/test_sync_homepage_config.py`, each confirmed to fail against the pre-fix code (reverted the fix, re-ran, restored) before being confirmed green against the fix. `make sync-homepage` regenerated `custom.js`; `kubectl kustomize` on both overlays confirmed zero remaining `pihole.staging` references.
 
 ## Promotion candidates
 
-Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
-
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons.md`? Yes — three: n8n cgroup-throttling diagnosis and Argo CD live-vs-git drift (PR #1026, merged), plus the review's own finding (a domain rename silently staling a generator's hardcoded output, with no test coverage for generated-artifact accuracy).
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No — this is a routing/naming fix within ADR-037's existing promotion strategy, not a new architectural decision.
+- [x] New pattern candidate for `00_meta/patterns/`? No — single-occurrence so far (this repo, this generator); revisit if the same "generator hardcodes a domain instead of deriving it from SSOT" shape recurs elsewhere.
 
 ## Archive checklist
 
