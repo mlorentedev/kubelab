@@ -156,7 +156,9 @@ class DeploymentOrchestrator:
         self._run_ansible_playbook("setup.yml")
 
     def _build_applications(self) -> None:
-        applications = ["api", "web", "blog", "wiki"]
+        # web is a platform app (deployed via promote-prod.yml/web-image-receiver.yml)
+        # but its source lives in mlorentedev/web (ADR-053) — nothing to build locally.
+        applications = ["api"]
         for app in applications:
             try:
                 app_dir = self.settings.project_root / PATH_STRUCTURES.APPS_DIR / app
@@ -180,7 +182,7 @@ class DeploymentOrchestrator:
 
     def _deploy_applications(self) -> None:
         if self.env == "dev":
-            applications = ["api", "web", "blog", "wiki"]
+            applications = ["api"]
             for app in applications:
                 command.run(
                     f"poetry run toolkit apps up {app} --env dev",
@@ -224,14 +226,19 @@ class DeploymentOrchestrator:
             logger.warning(f"Status check failed: {e}")
 
     def _check_prod_status(self) -> None:
+        # blog was killed and wiki was retired into `toolkit docs` (see common.yaml);
+        # web's source lives in mlorentedev/web (ADR-053) but is still deployed here.
         production_services = {
             "api": "https://api.kubelab.live/health",
             "web": "https://mlorente.dev",
-            "blog": "https://blog.mlorente.dev",
-            "wiki": "https://wiki.mlorente.dev",
         }
-        for _service, url in production_services.items():
-            command.run(f"curl -s -o /dev/null {url}", check=False)
+        for service, url in production_services.items():
+            result = command.run(f"curl -s -o /dev/null -w '%{{http_code}}' {url}", check=False)
+            status_code = result.stdout.strip() if result.returncode == 0 else ""
+            if status_code.startswith(("2", "3")):
+                logger.success(f"✓ {service} is reachable ({url}, HTTP {status_code})")
+            else:
+                logger.warning(f"✗ {service} did not respond as expected ({url})")
 
         try:
             self._run_ansible_playbook("main.yml", extra_args=["--tags", "verify", "--check"])
