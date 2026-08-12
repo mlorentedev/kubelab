@@ -852,7 +852,7 @@ logs:
 deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
-	@$(MAKE) import-n8n ENV=$(ENV)
+	@$(MAKE) import-n8n ENV=$(ENV) || echo "⚠️  n8n workflow import failed after a successful K8s deploy — the deploy itself is fine; re-run: make import-n8n ENV=$(ENV)"
 
 # Apply ONLY the cluster-wide bootstrap layer (cluster_bootstrap SSOT, ADR-047/TOOL-009):
 # CRDs/operators/kube-system config outside the Argo CD overlay, without touching workloads.

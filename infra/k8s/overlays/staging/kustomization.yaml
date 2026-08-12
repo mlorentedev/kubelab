@@ -11,4 +11,5 @@ resources:
   - generated/ingress.yaml
   - redirect-kubelab.yaml
   - traefik-dashboard.yaml
+  - pihole.yaml
   # secrets managed via: toolkit infra k8s apply-secrets --env staging (ADR-014)
