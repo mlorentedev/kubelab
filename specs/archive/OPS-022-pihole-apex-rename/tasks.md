@@ -34,13 +34,13 @@ created: "2026-08-11"
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder — prod absence rides the merge via Argo CD auto-sync (`selfHeal: true`, ADR-037), nothing to deploy to prod by hand
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-08-12
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-08-12
+- [x] Type checks pass ✓ 2026-08-12 (`poetry run mypy` on the four touched toolkit modules — clean)
+- [x] Lint passes ✓ 2026-08-12 (`poetry run ruff check` on every touched file — clean; 5 pre-existing errors elsewhere in the repo are unrelated to this spec)
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-12 (confirmed independently in `review.md`'s Scope=A rating)
+- [x] `verification.md` filled in ✓ 2026-08-12
+- [x] PR opened referencing this spec folder — prod absence rides the merge via Argo CD auto-sync (`selfHeal: true`, ADR-037), nothing to deploy to prod by hand ✓ 2026-08-12 (#1017, #1028)
 
 ## Machine-readable features
 

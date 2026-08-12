@@ -1,7 +1,7 @@
 ---
 id: "OPS-022-pihole-apex-rename"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-11"
 issue: "kubelab#969"
 tags: [spec, proposal]
@@ -42,11 +42,11 @@ After this PR, Pi-hole answers on one name, its SSOT name, from anywhere on the 
 
 ## Acceptance criteria
 
-- [ ] Staging e2e asserts Pi-hole instead of skipping it: `make test-e2e ENV=staging` checks `https://pihole.kubelab.live/admin/` and observes 200/302 — the 200 is asserted at verification time, never carried over from the 2026-08-11 measurement (#959's trigger is unreproduced; a reappearing 502 fails this criterion and blocks the spec). `skip_in_envs` shrinks to `("dev", "prod")` — and the prod entry's inline comment changes meaning: no longer "domain doesn't resolve outside VPN" (it does now), but "absence asserted by `tests/test_pihole_overlay_render.py`, not by the e2e HTTP suite" — a stale comment here is exactly the failure mode `uptime_kuma`'s left-over `skip_in_envs` entry already taught this repo to avoid.
-- [ ] The name resolves publicly to the tailnet address: `dig +short pihole.kubelab.live @vita.ns.cloudflare.com` returns the address at `networking.nodes.ace1.tailscale_ip` (100.64.0.11 today). Authoritative NS, not 1.1.1.1 — public resolvers serve stale answers for a full TTL.
-- [ ] Prod emits nothing Pi-hole, asserted with the homelab off, workstation-verified (no CI workflow runs pytest — `make test` or the narrower target, per `test_grafana_alerting_render.py`'s own docstring): `tests/test_pihole_overlay_render.py` renders both overlays via `kubectl kustomize`, finds zero pihole-named objects (Service, EndpointSlice, IngressRoute) in prod's render and the same three present in staging's — the positive control from Risk 2.
-- [ ] The `target` field is backward-inert: `make tf-dns-plan` shows exactly `1 to add, 0 to change, 0 to destroy` — the new record with the node-resolved address, all 11 existing records untouched.
-- [ ] The old name is dark, not aliased: `curl -sk https://pihole.staging.kubelab.live/admin/` from a tailnet client returns the staging catch-all 404 — not 502, not Pi-hole.
+- [x] Staging e2e asserts Pi-hole instead of skipping it: `make test-e2e ENV=staging` checks `https://pihole.kubelab.live/admin/` and observes 200/302 — the 200 is asserted at verification time, never carried over from the 2026-08-11 measurement (#959's trigger is unreproduced; a reappearing 502 fails this criterion and blocks the spec). `skip_in_envs` shrinks to `("dev", "prod")` — and the prod entry's inline comment changes meaning: no longer "domain doesn't resolve outside VPN" (it does now), but "absence asserted by `tests/test_pihole_overlay_render.py`, not by the e2e HTTP suite" — a stale comment here is exactly the failure mode `uptime_kuma`'s left-over `skip_in_envs` entry already taught this repo to avoid. ✓ 2026-08-12
+- [x] The name resolves publicly to the tailnet address: `dig +short pihole.kubelab.live @vita.ns.cloudflare.com` returns the address at `networking.nodes.ace1.tailscale_ip` (100.64.0.11 today). Authoritative NS, not 1.1.1.1 — public resolvers serve stale answers for a full TTL. ✓ 2026-08-12
+- [x] Prod emits nothing Pi-hole, asserted with the homelab off, workstation-verified (no CI workflow runs pytest — `make test` or the narrower target, per `test_grafana_alerting_render.py`'s own docstring): `tests/test_pihole_overlay_render.py` renders both overlays via `kubectl kustomize`, finds zero pihole-named objects (Service, EndpointSlice, IngressRoute) in prod's render and the same three present in staging's — the positive control from Risk 2. ✓ 2026-08-12
+- [x] The `target` field is backward-inert: `make tf-dns-plan` shows exactly `1 to add, 0 to change, 0 to destroy` — the new record with the node-resolved address, all 11 existing records untouched. ✓ 2026-08-12
+- [x] The old name is dark, not aliased: `curl -sk https://pihole.staging.kubelab.live/admin/` from a tailnet client returns the staging catch-all 404 — not 502, not Pi-hole. ✓ 2026-08-12
 
 ## References
 
