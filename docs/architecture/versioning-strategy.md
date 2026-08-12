@@ -4,98 +4,98 @@ type: architecture
 status: active
 tags: [kubelab, ci-cd, versioning]
 created: "2026-02-21"
-updated: "2026-02-28"
+updated: "2026-08-12"
 owner: manu
 ---
 
 # Versioning Strategy
 
-KubeLab uses **two complementary versioning schemes** that follow industry standards for Gitflow monorepos.
+KubeLab versions each deployable component independently via [release-please](https://github.com/googleapis/release-please), driven by [Conventional Commits](https://www.conventionalcommits.org/). There is no global version — see [ADR-059](../adr/adr-059-retire-calver-release-bundle.md) for why a repo-wide CalVer bundle was retired rather than kept alongside it.
 
-## 1. Per-App Semantic Versioning
+## What gets a semver release
 
-Each application (`api`, `blog`, `web`) is versioned independently based on its own commit history. This is the standard approach for monorepos (Google, Uber, Netflix).
+release-please tracks two components in this repo (`release-please-config.json`), matching [ADR-046](../adr/adr-046-gitops-delivery-promotion-strategy.md) D2 (sole semver authority) and the pin-vs-HEAD rule from ADR-059 (a component gets a release only if something references it by a fixed version):
 
-**Tool:** `paulhatch/semantic-version@v5` in `ci-pipeline.yml`
-**Tag prefix:** `{app}-v` (e.g., `api-v1.2.3`)
+| Component | Path | Tag prefix | Consumer that pins to it |
+|---|---|---|---|
+| `api` | `apps/api/` | `api-v` | `infra/k8s/base/kustomization.yaml` image tag |
+| `errors` | `edge/errors/` | `errors-v` | `infra/k8s/base/kustomization.yaml` image tag |
 
-### Version by branch
+`infra/` and `toolkit/` are applied at git `HEAD` (Argo CD sync, `poetry run toolkit`) — nothing pins to a version of either, so they have no release-please package. `web` also carries an independent semver, but its source and release-please config live in its own repo (`mlorentedev/web`, extracted per [ADR-053](../adr/adr-053-platform-product-repos.md)) — only its *deployment* (staging/prod version pins) is tracked here, promoted the same way `api` is (see [gitops-delivery-promotion.md](../runbooks/gitops-delivery-promotion.md)).
 
-| Branch | Docker Tag | Git Tag | Example |
-|--------|-----------|---------|---------|
-| `master` | `{version}` + `:latest` | `{app}-v{version}` | `kubelab-api:1.2.3` |
-| `develop` | `{version}-rc.{increment}` + `:dev` | None | `kubelab-api:1.2.0-rc.5` |
-| `feature/*` | `0.0.0-dev.{sha}` + `:dev` | None | `kubelab-api:0.0.0-dev.a1b2c3d` |
-
-### Version bump rules (Conventional Commits)
+## Version bump rules (Conventional Commits)
 
 | Commit prefix | Bump | Example |
-|--------------|------|---------|
+|---|---|---|
 | `fix:` | Patch (x.y.**Z**) | `fix: resolve auth timeout` |
 | `feat:` | Minor (x.**Y**.0) | `feat: add user profile API` |
-| `feat!:` or `BREAKING CHANGE` | Major (**X**.0.0) | `feat!: change API response format` |
-| `docs:`, `chore:`, `style:`, `ci:` | None | `docs: update README` |
+| `feat!:` or `BREAKING CHANGE` footer | Major (**X**.0.0) | `feat!: change API response format` |
+| `docs:`, `chore:`, `style:`, `refactor:`, `ci:` | None | `docs: update README` |
 
-### Independent versioning
+Only commits touching a component's own path (`apps/api/**`, `edge/errors/**`) count toward its bump — `separate-pull-requests: false` still accumulates both into one combined release-please PR when both have pending changes, but the version math per component stays isolated (a commit under `apps/api/` never bumps `errors`, or vice versa).
 
-Apps version independently based on changes in their own `apps/{app}/` directory:
+## Docker image tag lifecycle
 
-```
-api: feat: new endpoint    → api-v0.2.0
-web: fix: button color     → web-v0.1.1
-blog: (no changes)         → (no build, no version bump)
-```
+There is no RC scheme (`-rc.N` was dropped — see `ci-cleanup.yml`'s comment and the janitor's own retention logic).
 
-### Docker image registry
+| Stage | Tag | Produced by | Mutable? |
+|---|---|---|---|
+| Feature/fix/hotfix/chore branch (pre-merge preview) | `sha-<short>` | `ci-pipeline.yml` → `ci-publish.yml` on the PR | No — one tag per commit |
+| Staging (continuous, every merge to `master`) | `sha-<short>` | `staging-deploy.yml` (`api`) / `web-image-receiver.yml` (`web`, cross-repo dispatch) | No |
+| Prod (`api`) | `X.Y.Z` + `:latest` | `release.yml`'s `publish-api` job — **re-tags** the staging-validated `sha-<short>` digest, never rebuilds ([ADR-056](../adr/adr-056-build-once-monorepo-apps.md), build-once) | No |
+| Prod (`errors`) | `X.Y.Z` | `release.yml`'s `publish-errors` job — rebuilds; `errors` is edge infra, explicitly out of the build-once staging-sha lane | No |
+| Prod (`web`) | `X.Y.Z` | Built in `mlorentedev/web`'s own CI, promoted here via `promote-prod.yml` | No |
 
-```
-{DOCKERHUB_USERNAME}/kubelab-api:{version}
-{DOCKERHUB_USERNAME}/kubelab-blog:{version}
-{DOCKERHUB_USERNAME}/kubelab-web:{version}
-```
+Build-once parity (`api` only) is verified in-job by comparing the staging and prod tag's manifest-list digest — a mismatch fails the release rather than silently shipping unvalidated bytes.
 
-`REGISTRY_PREFIX` defaults to `kubelab` (configurable via GitHub repo variable).
+## How a release actually ships
 
-## 2. No global release bundle
+This is release-please's job (cut the tag + changelog + Docker artifact); **getting that artifact into staging or prod is a separate, deliberate step** — see [gitops-delivery-promotion.md](../runbooks/gitops-delivery-promotion.md) for the full model. Two shapes exist:
+
+- **`api`/`web`**: staging tracks every merge automatically (an auto-opened PR, human merges); prod is promoted manually via the `promote-prod.yml` `workflow_dispatch` (pick app + version, human merges the resulting PR).
+- **`errors`**: `release.yml`'s `promote-errors` job auto-opens a PR pinning the new tag — one version, both environments (`edge.errors.version` is a single env-agnostic SSOT, [DELIVERY-003](https://github.com/mlorentedev/kubelab/issues/776)) — a human still merges it, but there's no separate staging step and no manual dispatch.
+
+None of this auto-commits to `master` directly — `master` is protected; every version change lands as a reviewed PR (ADR-046 D3/D6).
+
+## No global release bundle
 
 `ci-release.yml` (the CalVer `vYYYY.MM.DD` + zip bundle described in earlier versions of
 this doc) was retired — see
 [ADR-059](../adr/adr-059-retire-calver-release-bundle.md). Nothing in the repo pinned to it,
 and its `make deploy` instructions predated the K3s/Argo CD GitOps deploy path. `infra/` and
-`toolkit/` are applied at git `HEAD` (Argo CD sync, Ansible, `poetry run toolkit`) and have no
-release of their own — see ADR-059 for the pin-vs-HEAD rationale and the optional showcase-release
-follow-up.
+`toolkit/` are applied at git `HEAD` and have no release of their own — see ADR-059 for the
+pin-vs-HEAD rationale and the optional showcase-release follow-up.
 
-## GitOps Auto-Update
+## Current baseline
 
-On `master` and `develop`, the CI automatically commits version bumps to config files:
+`api-v*` and `errors-v*` tags exist and are cut by release-please as described above. `web-v*`
+tags remain from before the `web` app was extracted to its own repo (ADR-048) and are not
+produced here anymore.
 
-- `master` → updates `infra/config/values/prod.yaml`
-- `develop` → updates `infra/config/values/staging.yaml`
+## Workflow files (versioning-relevant)
 
-Commit format: `chore(infra): update {app} version to {version} [skip ci]`
+| File | Role |
+|---|---|
+| `ci-pipeline.yml` | Per-PR: builds the `sha-<short>` preview tag for the changed app(s) |
+| `release.yml` | release-please: cuts `api-vX.Y.Z`/`errors-vX.Y.Z`, re-tags (`api`) or rebuilds (`errors`), auto-promotes `errors` |
+| `staging-deploy.yml` / `web-image-receiver.yml` | Continuous staging promotion (`api` / `web`) |
+| `promote-prod.yml` | Manual gated prod promotion (`api`/`web`) |
+| `ci-cleanup.yml` | Weekly janitor — prunes old `sha-*` tags, never touches prod semver |
 
-## Current Baseline
+Full pipeline (validation, security scanning, drift gates, board automation) is in
+[cicd.md](../runbooks/cicd.md).
 
-Stale from the 2026-02-28 pre-restructuring reset (`develop → master`, `blog`, no tags yet
-are no longer real — see DOCS-002 for the full rewrite). Current state: `api-v*` and
-`errors-v*` tags exist and are cut by release-please as described above; `web-v*` tags remain
-from before the `web` app was extracted to its own repo (ADR-048) and are not produced here
-anymore. Nothing resets this baseline going forward — releases accumulate normally.
+## Best practices
 
-## Workflow Files
-
-| File | Purpose |
-|------|---------|
-| `ci.yml` | Orchestrator: validate, detect changes, dispatch per-app pipelines |
-| `ci-pipeline.yml` | Per-app: version calculation, build, test, security scan, Docker push, GitOps update |
-| `ci-publish.yml` | Reusable: Docker build + push + Trivy scan |
-| `release.yml` | release-please: per-component semver; `api` re-tags the staging digest instead of rebuilding (build-once, ADR-056), `errors` still rebuilds |
-
-## Best Practices
-
-1. **Always use conventional commits** — they drive version bumps automatically
-2. **Keep feature branches short-lived** — merge to develop frequently
-3. **Delete branches after merge** — prevents zombie tags
-4. **Never manually create version tags** — let CI handle it
-5. **Monitor Docker tags** — only `kubelab-*` image repos should exist
+1. **Always use Conventional Commits** — they drive every version bump automatically; a commit
+   with the wrong prefix either doesn't bump when it should, or bumps the wrong number.
+2. **Keep feature/fix/hotfix/chore branches short-lived** — `master` is the only permanent
+   branch (trunk-based); there is no `develop` to stage work in.
+3. **Never hand-create a version tag or edit `.release-please-manifest.json`'s tracked
+   versions** — let release-please own both; a manual edit fights the next release PR.
+4. **A merged release-please PR is not a deploy** — the code was already on staging from its
+   original feature-branch merge; release-please just cuts the prod-ready semver. Prod itself
+   always needs the explicit `promote-prod.yml` dispatch (`api`/`web`) or the auto-opened
+   `promote-errors` PR merge (`errors`).
+5. **Monitor Docker tags** — only `kubelab-*` image repos should exist on the registry; the
+   weekly `ci-cleanup.yml` prune keeps `sha-*` tag counts bounded.
