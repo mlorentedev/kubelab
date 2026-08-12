@@ -58,7 +58,7 @@ glances_webui_allowed_hosts:
   - localhost
   - 127.0.0.1
   - "{{ tailscale_ip }}"
-  - "{{ ansible_hostname | default(inventory_hostname, true) }}"
+  - "{{ ansible_facts['hostname'] | default(inventory_hostname, true) }}"
 
 # Health-check retry window after `compose up`.
 #
