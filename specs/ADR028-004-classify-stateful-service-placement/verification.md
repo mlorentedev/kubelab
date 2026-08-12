@@ -98,6 +98,42 @@ Attempting to count workflows via `kubectl exec ... -- n8n list:workflow` (the o
 
 **Mystery resolved, not by this session:** the second pod replacement (new ReplicaSet `n8n-85bcc9fcb4`, only the `kubectl.kubernetes.io/restartedAt` annotation differed) was `make import-n8n ENV=staging` from the `dns-cleanup` lane — that target explicitly restarts the n8n Deployment after importing the workflow. Not an unexplained `kubectl rollout restart`; confirmed directly by that session. This also explains `notify-router`'s very recent `updatedAt`: the peer's `import-n8n` run re-imported it minutes before I copied the DB.
 
+## R4 — Where the classification is asserted from (resolved 2026-08-12)
+
+Confirmed the nine stateful PVCs in `infra/k8s/base/` map to eight distinct services (`crowdsec` owns two PVCs — `crowdsec-db`, `crowdsec-config`): `loki`, `n8n`, `minio`, `crowdsec`, `grafana`, `authelia`, `postgres`, `gitea`.
+
+**Nothing blocks fields under `common.yaml`** — confirmed by checking each service resolves to a config block there. Seven of eight live under `apps.services.<category>.<name>`, a free-form dict already carrying many attributes (`name`, `image`, `domain`, `resources`, ...) — adding `state_promotion`/`location` keys is no different from any other attribute already there.
+
+**The eighth, `postgres`, does not live there — and that's deliberate, not a gap.** It's at `infra.postgres.*`, not `apps.services.data.postgres`. Its own comment names why: "Shared data-service (ADR-051, implements ADR-050 D7)... pgvector/memory (ADR-027/043) is the planned second consumer — hence `infra.*`, not a per-app namespace" — the same `infra.*` pattern ADR-036 established for SMTP, for services with more than one consumer. **Consequence for the static test's design:** it cannot assume a single tree to walk. The correct shape is: enumerate stateful services from the K8s manifests (ground truth — PVC-bearing files in `base/`), then for each, resolve its classification by checking wherever that service's config block actually lives (`apps.services.*` for seven, `infra.postgres` for the eighth) — not by walking `apps.services.*` alone and assuming coverage.
+
+**Test blueprint, mirroring the one existing precedent for this exact shape** (`tests/test_spoke_rbac_covers_manifests.py`, TOOL-029 — chosen deliberately because it already solved "discover shipped resources from manifest files with no cluster, cross-reference against a declared SSOT, fail loudly and specifically, never silently skip"):
+1. `_stateful_services()` — walk `infra/k8s/base/*.yaml` for `kind: PersistentVolumeClaim`, return the owning service name per file.
+2. `_declared_classification()` — load `common.yaml`, resolve each service's block from wherever it lives, return `(state_promotion, location)` or `None` if either is missing.
+3. Fail listing every stateful service missing either field, by name — the same actionable-failure shape TOOL-029's test uses, not a bare assertion count.
+4. A guard test proving the check can go red — mirroring `test_create_exemptions_are_still_needed`: assert the check fails when a service's block genuinely lacks the fields (not "assert True", an actual removed-field fixture), matching R4's own stated bar in `proposal.md` ("a test that cannot be shown to fail is not a gate").
+
+Not built in this session — this is the design the ADR/task-list work will implement, once `tasks.md` unfreezes. R4 asked whether anything *prevents* this; nothing does, and the one wrinkle (`postgres`) is now a known, documented input to that implementation rather than a surprise it would hit.
+
+## R6 — Blast-radius sweep (verified 2026-08-12)
+
+Checked every consumer R6 names, plus the one R3 added (`backup.yaml`), against the actual repo — not re-asserting the list, verifying it.
+
+**Confirmed exact as stated:**
+- `overlays/prod/patches.yaml` — all seven targets present at the claimed identity: `gitea-config`, `gitea`, `n8n-config`, `n8n`, `minio-config`, `minio-api`, `minio-console`.
+- `tests/e2e/expectations.py` — `gitea` (111), `n8n` (114), `minio` (122), all present.
+- `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`) — gitea and minio entries present (`apps.services.core.gitea.*`, `apps.services.data.minio.*`).
+- `overlays/prod/backup.yaml` — R3's finding, mounts `gitea-data`/`n8n-data`.
+
+**Corrected — the pointer was imprecise, the claim behind it was right:** "Homepage `services.yaml`" is not the file to edit. The committed `infra/k8s/base/services/homepage-config/services.yaml` is a static scaffold (placeholder widgets only, no service names). The actual consumer is `toolkit/scripts/sync_homepage_config.py` lines ~209-299, which hardcodes construction of Gitea/n8n/MinIO homepage tiles by reading their `apps.services.*` blocks by name — retiring a service without touching this script leaves a broken tile pointing at a domain that no longer resolves.
+
+**Split into two, only one needs an edit:** "Authelia's staging access rules and OIDC clients" was one bullet for two different mechanisms.
+- **Access rules are auto-derived**, not hardcoded — `toolkit/features/generator_authelia.py` builds `access_control` generically from each component's `enable_auth`/`auth_level`. Retiring a service here is already safe; no manual edit point.
+- **OIDC client registrations are hardcoded** — `apps.services.security.authelia.oidc.clients` in `common.yaml` lists `gitea-oidc` and `minio-oidc` explicitly (n8n has none; it uses built-in auth per `expectations.py`'s own comment). These entries need manual removal on retirement — this is the real edit point the original bullet was gesturing at.
+
+**Confirmed, distinct from Authelia's own list:** `staging.yaml` overrides `apps.services.{core.gitea,automation.n8n,data.minio}.domain` (and MinIO's `console_domain`) to the `*.staging.kubelab.live` forms — the staging-layer half of "the `apps.services.*` tree," separate from Authelia's OIDC list above.
+
+**Net effect on the task list this unblocks:** the retirement task's actual edit set is now precise rather than a prose list to re-derive: `overlays/prod/patches.yaml` (move 7 resources into the overlay), `overlays/prod/backup.yaml` (drop 2 mounts), `tests/e2e/expectations.py` (skip_in_envs), `SECRET_CATALOG` (envs), `sync_homepage_config.py` (remove 3 hardcoded tiles), `apps.services.security.authelia.oidc.clients` (remove 2 entries), `staging.yaml` (remove 3 domain overrides) — 7 files, not a re-swept prose list. AC3 (render + `test-e2e ENV=staging` green) still stays the outcome check, since a static list can still miss something a future service adds.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
