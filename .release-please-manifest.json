@@ -1,4 +1,6 @@
 {
   "apps/api": "1.1.4",
-  "edge/errors": "1.1.5"
+  "edge/errors": "1.1.5",
+  "infra": "0.0.0",
+  "toolkit": "0.0.0"
 }

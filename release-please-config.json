@@ -4,6 +4,7 @@
   "include-component-in-tag": true,
   "include-v-in-tag": true,
   "tag-separator": "-",
+  "bootstrap-sha": "1e6cf424eb8a2e4b149386e5b63e2840aed3bf01",
   "changelog-sections": [
     {"type": "feat", "section": "Features"},
     {"type": "fix", "section": "Bug Fixes"},
@@ -19,6 +20,16 @@
     "edge/errors": {
       "release-type": "simple",
       "component": "errors"
+    },
+    "infra": {
+      "release-type": "simple",
+      "component": "infra",
+      "initial-version": "0.1.0"
+    },
+    "toolkit": {
+      "release-type": "simple",
+      "component": "toolkit",
+      "initial-version": "0.1.0"
     }
   }
 }
