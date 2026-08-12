@@ -66,6 +66,38 @@ Asked directly, since this is a doctrine call that cascades into R1's deployment
 
 **Consequence for R1's task and R3's backup.yaml edit:** both proceed as scoped — Gitea's move task deploys via the `beelink_services`-style Ansible role (Docker Compose), not a Kustomize resource, and the same task drops `gitea-data` from `backup.yaml`. No revision to R1's node choice is needed.
 
+## R5 — Per-instance emptiness proof (staging, 2026-08-12)
+
+**Gitea — confirmed empty.** Unauthenticated `/api/v1/repos/search` structurally cannot see private repos, and private-only is Gitea's settled role — a 0 there can't distinguish "empty" from "invisible." Re-ran authenticated (admin credentials via `toolkit secrets show apps.services.core.gitea.admin_password --env staging`, live username read from the `gitea-secrets` K8s Secret): `X-Total-Count: 0` with `private=true`, 0 repos including private. Clean.
+
+**MinIO — confirmed empty.** `/data` inside the pod contains only `.minio.sys` (MinIO's own internal metadata dir). No buckets.
+
+**n8n — NOT empty, and the proposal's "Why" section overclaims.** `proposal.md`'s Why section states "gitea, n8n and minio... are verified empty and unused" — that was always operator-reported, not verified (R5 exists precisely because the report might be wrong for one of the three). It was wrong for n8n. Copied `database.sqlite` + `-wal` + `-shm` out via `kubectl cp` (bytes-out, zero cgroup cost — no exec inside the pod, unlike the CLI attempt below) and queried locally:
+
+| table | count |
+|---|---|
+| workflow_entity | 1 — `notify-router`, `active=1` |
+| credentials_entity | 1 — `notify-webhook` |
+| execution_entity | 0 |
+
+This is not stray test data — it's the notification-fabric workflow (NOTIFY-001), reconstructable by name from git+SOPS: `toolkit/features/n8n_import.py` targets `infra/n8n/workflows/notify-router.json` + credential `notify-webhook` explicitly. `toolkit infra n8n import` (TOOL-009, #691 closed) exists for exactly this workflow — the proposal's "no export/import route" claim in Out of Scope was always about the *general* case (arbitrary user workflows, the APP-CONFIG-003 gap), not this one bootstrapped workflow, and that reading is already in the proposal's own text.
+
+**Consequence for the spec:** the singleton classification survives and is arguably strengthened — the only state in the staging twin has a git+SOPS reconstruction path, so deleting the PVC loses nothing that `n8n import` can't rebuild. What changes is R5's own bar for n8n specifically: not "prove zero rows" but "prove what's present is reconstructable," which this evidence now does.
+
+**New question this raises, not decided here:** the workflow is `active=1`, and `toolkit/features/notify_smoke.py` (`make notify-smoke ENV=staging`) drives the real `/webhook/notify` endpoint against the domain resolved for that env — confirmed by reading the module, which explicitly handles `n8n.staging.kubelab.live`'s cert quirk. So staging n8n may be the pre-prod validation leg for notification-fabric changes, the same shape ADR-028's observability amendment already established for Grafana/Loki/Vector ("validated in staging before prod"). Retiring staging n8n removes that leg. Whether that's acceptable (rely on the `execution_entity=0` — never fired in 2 months — as evidence the leg isn't actually exercised) or whether it needs a replacement validation path is the user's call, not resolved by this spec.
+
+**0 executions, reported neutrally:** n8n prunes execution history by default, so this cannot distinguish "never fired" from "fired and pruned." Not claimed as evidence the workflow is unused.
+
+## Incident: kubectl exec into the n8n pod, and the confirmed root cause (2026-08-12)
+
+Attempting to count workflows via `kubectl exec ... -- n8n list:workflow` (the official n8n CLI) coincided with the pod failing its liveness probe and restarting. Sequence from `kubectl get events`: the exec'd process exited 137 (SIGKILL) after the command ran past its interactive timeout; the pod's liveness probe then timed out (`context deadline exceeded`) and kubelet killed and restarted the container.
+
+**Root cause, confirmed — not by this session.** The `dns-cleanup` lane (running `make deploy-k8s ENV=staging` + `make import-n8n ENV=staging` against the same pod concurrently, for unrelated OPS-022 work) measured the container's own `cpu.stat` directly: `nr_throttled=211/554` periods, `throttled_usec` (30.9s) exceeding `usage_usec` (27.5s) — the container is **CPU-throttled under its 1-core limit**, and the 5s `healthz` timeout doesn't survive that throttling. Filed with full evidence as **#1009** (open). This pod already carried 4 restarts in 45h before either session touched it today. My `kubectl exec` most likely added contention on top of an already-throttled container rather than causing the instability from scratch — consistent with, not contradicted by, the CPU-cgroup evidence.
+
+**Durable lesson, independent of #1009's specific fix:** `kubectl exec` runs inside the target container's own cgroup (CPU and memory both). Any command whose CLI boots a second copy of the app runtime (n8n CLI here; `gitea admin <cmd>` would hit the same shape against Gitea's 256Mi/0.5-CPU limit) competes with the already-running server process for the same ceiling — and will make a marginal container measurably worse, as it did here. The repo already contains the correct pattern for exactly this: the backup CronJob (`overlays/prod/backup.yaml`) runs its tooling — including `sqlite3` reading the same class of PVC — in a **separate pod with its own resource limits**, never via exec into the live service pod. This is the piece worth a `docs/lessons.md` entry (not yet written, pending the user's call) — it's a methodology point that outlives #1009's specific CPU-limit fix, and applies to any resource-constrained stateful pod, not just this one.
+
+**Mystery resolved, not by this session:** the second pod replacement (new ReplicaSet `n8n-85bcc9fcb4`, only the `kubectl.kubernetes.io/restartedAt` annotation differed) was `make import-n8n ENV=staging` from the `dns-cleanup` lane — that target explicitly restarts the n8n Deployment after importing the workflow. Not an unexplained `kubectl rollout restart`; confirmed directly by that session. This also explains `notify-router`'s very recent `updatedAt`: the peer's `import-n8n` run re-imported it minutes before I copied the DB.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
