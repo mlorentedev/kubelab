@@ -57,6 +57,15 @@ def require_kubeconfig(env: str) -> None:
 EXPECTED_DEFAULT_REQUEST_MEMORY = "128Mi"
 EXPECTED_DEFAULT_LIMIT_MEMORY = "256Mi"
 
+#: OBS-009 kube-system LimitRange defaults. Deliberately smaller-request /
+#: larger-limit than the kubelab tier above: the request only has to clear
+#: lightweight system pods (svclb ~2Mi observed), but the limit has to clear
+#: Traefik's real footprint (149-170Mi observed at rest, 2026-08-13) since a
+#: LimitRange can't be scoped per-workload — Traefik inherits the same
+#: default as everything else in this namespace.
+EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY = "64Mi"
+EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY = "384Mi"
+
 
 class TestK3sCluster:
     """K3s cluster must be healthy with all nodes ready."""
@@ -197,4 +206,47 @@ class TestNamespaceGovernance:
         assert resources.get("limits", {}).get("memory") == EXPECTED_DEFAULT_LIMIT_MEMORY, (
             f"Admitted pod carries limits.memory={resources.get('limits', {}).get('memory')!r}, "
             f"expected the LimitRange to inject {EXPECTED_DEFAULT_LIMIT_MEMORY}"
+        )
+
+
+class TestKubeSystemGovernance:
+    """OBS-009: kube-system bounds every container's memory, same as kubelab.
+
+    Traefik and svclb ship with no declared resources at all, and svclb has
+    no other bounding mechanism (verified against k3s's servicelb.go: the
+    generated DaemonSet carries no Resources field and no annotation covers
+    it). A LimitRange is the only tool that exists for this namespace.
+
+    Applied via the cluster_bootstrap SSOT, not the kubelab-scoped Kustomize
+    overlay — that overlay's `namespace: kubelab` override would silently
+    rewrite this object into a second kubelab LimitRange if it were ever
+    registered there.
+    """
+
+    def test_limitrange_defaults_memory(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """The kube-system namespace has a LimitRange supplying both memory defaults."""
+        result = _kubectl("get limitrange -n kube-system -o json", env)
+        assert result.returncode == 0, f"kubectl get limitrange failed: {result.stderr}"
+
+        items = json.loads(result.stdout).get("items", [])
+        assert items, "No LimitRange in kube-system — Traefik and svclb remain unbounded"
+
+        container_limits = [
+            limit
+            for lr in items
+            for limit in lr.get("spec", {}).get("limits", [])
+            if limit.get("type") == "Container"
+        ]
+        assert container_limits, f"LimitRange(s) present but none of type Container: {[i['metadata']['name'] for i in items]}"
+
+        defaulted_request = {limit.get("defaultRequest", {}).get("memory") for limit in container_limits}
+        defaulted_limit = {limit.get("default", {}).get("memory") for limit in container_limits}
+
+        assert EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY in defaulted_request, (
+            f"kube-system LimitRange defaultRequest.memory is {defaulted_request}, "
+            f"expected {EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY}"
+        )
+        assert EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY in defaulted_limit, (
+            f"kube-system LimitRange default.memory is {defaulted_limit}, "
+            f"expected {EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY}"
         )

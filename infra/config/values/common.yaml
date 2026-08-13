@@ -316,6 +316,11 @@ cluster_bootstrap:
   optional: true                # RPi4 is on-demand — skip pod-hairpin DNS when it is off
   render:
     RESOLVE_RPI4_TAILSCALE_IP: rpi4.kubelab.internal
+- name: kube-system-limitrange
+  namespace: kube-system
+  manifest: infra/k8s/base/governance/kube-system-limitrange.yaml
+  # OBS-009: bounds Traefik/svclb memory — see the manifest header for why this
+  # can't go through the kubelab-scoped Kustomize overlay.
 
 # ===========================================================================
 # ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
