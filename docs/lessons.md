@@ -3776,4 +3776,5 @@ Recovery was cheap only by accident — the edits had been applied by a script r
 - **A step that cannot fail cannot be audited.** `2>/dev/null || true` on a destructive operation removes the only signal that would have distinguished intended cleanup from collateral damage.
 
 **Tags:** `#makefile` `#destructive` `#git` `#ssot` `#drift-check` `#tool-031` `#gotcha`
+
 ---
