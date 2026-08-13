@@ -1,0 +1,40 @@
+---
+# OBS-009 — kube-system resource governance, one namespace over from IDP-031
+# (infra/k8s/base/governance/limitrange.yaml, the kubelab-namespace sibling).
+#
+# Six containers in kube-system ship with no declared memory limit and five
+# with no request at all — including Traefik, the single ingress path for
+# every route in the estate. Unlike kubelab, svclb (the K3s built-in
+# LoadBalancer) has NO other bounding mechanism: verified directly against
+# k3s's pkg/cloudprovider/servicelb.go, the generated DaemonSet's container
+# spec carries no Resources field, and neither of its two supported
+# annotations (priorityclassname, tolerations) covers it. This LimitRange is
+# the only tool that exists to bound it.
+#
+# defaultRequest is deliberately small (svclb-tier: ~2Mi observed real usage)
+# while default (the limit) is deliberately generous — 384Mi clears Traefik's
+# observed 149-170Mi at-rest footprint with real headroom. A LimitRange can't
+# be scoped per-workload, so Traefik inherits the same default as everything
+# else here; undersizing the limit would OOMKill the ingress under exactly
+# the traffic spike this spec exists to guard against. See
+# specs/OBS-009-kube-system-limitrange/proposal.md for the full derivation.
+#
+# CRITICAL: do NOT register this in infra/k8s/base/kustomization.yaml. That
+# Kustomization carries `namespace: kubelab`, which rewrites metadata.namespace
+# on every resource listed in `resources:` — this object would silently
+# become a second kubelab LimitRange and never reach kube-system. Applied
+# instead via the cluster_bootstrap SSOT (infra/config/values/common.yaml +
+# toolkit/features/k8s_render.py), the same mechanism coredns-custom already
+# uses, through `make bootstrap-k8s ENV=<env>`.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: kube-system-defaults
+  namespace: kube-system
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        memory: 64Mi
+      default:
+        memory: 384Mi

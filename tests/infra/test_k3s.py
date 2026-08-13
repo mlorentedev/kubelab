@@ -57,6 +57,15 @@ def require_kubeconfig(env: str) -> None:
 EXPECTED_DEFAULT_REQUEST_MEMORY = "128Mi"
 EXPECTED_DEFAULT_LIMIT_MEMORY = "256Mi"
 
+#: OBS-009 kube-system LimitRange defaults. Deliberately smaller-request /
+#: larger-limit than the kubelab tier above: the request only has to clear
+#: lightweight system pods (svclb ~2Mi observed), but the limit has to clear
+#: Traefik's real footprint (149-170Mi observed at rest, 2026-08-13) since a
+#: LimitRange can't be scoped per-workload — Traefik inherits the same
+#: default as everything else in this namespace.
+EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY = "64Mi"
+EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY = "384Mi"
+
 #: IDP-031 ResourceQuota ceiling, phase 2. Same anti-self-referential
 #: rationale as the LimitRange constants above: literal here, not parsed from
 #: infra/k8s/base/governance/resourcequota.yaml.
@@ -266,3 +275,110 @@ class TestNamespaceGovernance:
         assert "memory" in result.stderr, (
             f"Quota rejection did not name the exceeded resource: {result.stderr.strip()}"
         )
+
+
+class TestKubeSystemGovernance:
+    """OBS-009: kube-system bounds every container's memory, same as kubelab.
+
+    Traefik and svclb ship with no declared resources at all, and svclb has
+    no other bounding mechanism (verified against k3s's servicelb.go: the
+    generated DaemonSet carries no Resources field and no annotation covers
+    it). A LimitRange is the only tool that exists for this namespace.
+
+    Applied via the cluster_bootstrap SSOT, not the kubelab-scoped Kustomize
+    overlay — that overlay's `namespace: kubelab` override would silently
+    rewrite this object into a second kubelab LimitRange if it were ever
+    registered there.
+    """
+
+    def test_limitrange_defaults_memory(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """The kube-system namespace has a LimitRange supplying both memory defaults."""
+        result = _kubectl("get limitrange -n kube-system -o json", env)
+        assert result.returncode == 0, f"kubectl get limitrange failed: {result.stderr}"
+
+        items = json.loads(result.stdout).get("items", [])
+        assert items, "No LimitRange in kube-system — Traefik and svclb remain unbounded"
+
+        container_limits = [
+            limit
+            for lr in items
+            for limit in lr.get("spec", {}).get("limits", [])
+            if limit.get("type") == "Container"
+        ]
+        assert container_limits, f"LimitRange(s) present but none of type Container: {[i['metadata']['name'] for i in items]}"
+
+        defaulted_request = {limit.get("defaultRequest", {}).get("memory") for limit in container_limits}
+        defaulted_limit = {limit.get("default", {}).get("memory") for limit in container_limits}
+
+        assert EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY in defaulted_request, (
+            f"kube-system LimitRange defaultRequest.memory is {defaulted_request}, "
+            f"expected {EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY}"
+        )
+        assert EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY in defaulted_limit, (
+            f"kube-system LimitRange default.memory is {defaulted_limit}, "
+            f"expected {EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY}"
+        )
+
+    def test_unspecified_container_is_defaulted(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """A pod declaring no resources in kube-system is admitted and comes back defaulted.
+
+        Same `--dry-run=server` rationale as the kubelab sibling test: traverses
+        real admission (LimitRanger included) without persisting, so this stays
+        read-only and safe against prod.
+        """
+        manifest = (
+            '{"apiVersion":"v1","kind":"Pod",'
+            '"metadata":{"name":"obs-009-defaulting-probe","namespace":"kube-system"},'
+            '"spec":{"containers":[{"name":"probe","image":"registry.k8s.io/pause:3.9"}]}}'
+        )
+        result = _kubectl(
+            f"create --dry-run=server -o json -f - <<'EOF'\n{manifest}\nEOF",
+            env,
+            timeout=30,
+        )
+        assert result.returncode == 0, (
+            "A pod with no resources block was REJECTED at admission in kube-system — the "
+            f"LimitRange defaults are missing or invalid: {result.stderr.strip()}"
+        )
+
+        resources = json.loads(result.stdout)["spec"]["containers"][0].get("resources", {})
+        assert resources.get("requests", {}).get("memory") == EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY, (
+            f"Admitted pod carries requests.memory={resources.get('requests', {}).get('memory')!r}, "
+            f"expected the LimitRange to inject {EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY}"
+        )
+        assert resources.get("limits", {}).get("memory") == EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY, (
+            f"Admitted pod carries limits.memory={resources.get('limits', {}).get('memory')!r}, "
+            f"expected the LimitRange to inject {EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY}"
+        )
+
+    def test_no_unbounded_containers_after_restart(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """Every Running kube-system container carries a memory limit, and none are BestEffort.
+
+        Only covers currently-`Running` pods: completed `helm-install-*` Job pods
+        predate the LimitRange and are terminal, not steady-state — they are not
+        the failure mode this spec addresses and will not be recreated unless a
+        new Helm install runs. Requires the affected workloads (traefik, svclb,
+        local-path-provisioner, metrics-server) to have been restarted after the
+        LimitRange landed — the LimitRange only defaults NEW admissions, so an
+        already-running pod from before it existed keeps its old, unbounded spec
+        until it restarts. See tasks.md Part 2.
+        """
+        result = _kubectl("get pods -n kube-system -o json", env)
+        assert result.returncode == 0, f"kubectl get pods failed: {result.stderr}"
+
+        pods = json.loads(result.stdout).get("items", [])
+        running = [p for p in pods if p.get("status", {}).get("phase") == "Running"]
+        assert running, "No Running pods in kube-system — cannot assert anything about them"
+
+        unbounded = [
+            f"{p['metadata']['name']}/{c['name']}"
+            for p in running
+            for c in p["spec"].get("containers", [])
+            if "memory" not in c.get("resources", {}).get("limits", {})
+        ]
+        assert not unbounded, f"Running kube-system containers with no memory limit: {unbounded}"
+
+        best_effort = [
+            p["metadata"]["name"] for p in running if p.get("status", {}).get("qosClass") == "BestEffort"
+        ]
+        assert not best_effort, f"Running kube-system pods still BestEffort QoS: {best_effort}"

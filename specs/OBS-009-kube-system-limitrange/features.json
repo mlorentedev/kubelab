@@ -1,0 +1,30 @@
+[
+  {
+    "id": "obs-009-f1-limitrange-defaults",
+    "behavior": "A LimitRange exists in kube-system supplying defaultRequest.memory: 64Mi and default.memory: 384Mi, applied via the cluster_bootstrap SSOT and absent from infra/k8s/base/kustomization.yaml's resources: list.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k 'TestKubeSystemGovernance and test_limitrange_defaults_memory' -m infra --env staging --no-cov --override-ini='addopts=' && ! grep -q kube-system-limitrange infra/k8s/base/kustomization.yaml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "obs-009-f2-unspecified-container-defaulted",
+    "behavior": "A pod submitted to kube-system with no resources block is admitted (--dry-run=server) and comes back carrying the defaulted request and limit.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k 'TestKubeSystemGovernance and test_unspecified_container_is_defaulted' -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "obs-009-f3-no-unbounded-after-restart",
+    "behavior": "After a controlled restart of traefik, svclb, local-path-provisioner, and metrics-server, kubectl get pods -n kube-system -o json shows zero Running containers with no memory limit, and no Running pod reports BestEffort QoS.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k 'TestKubeSystemGovernance and test_no_unbounded_containers_after_restart' -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "obs-009-f4-do-no-harm",
+    "behavior": "The restart completes cleanly and ingress keeps serving throughout.",
+    "verification": "make test-e2e ENV=staging",
+    "state": "pending",
+    "evidence": ""
+  }
+]
