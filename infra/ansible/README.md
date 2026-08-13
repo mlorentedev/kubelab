@@ -1,112 +1,67 @@
  Ansible Infrastructure Automation
 
-The Ansible playbooks automate server provisioning and Docker Compose deployments for both staging (Raspberry Pi) and production (VPS) environments. The focus is on mirroring compose stacks, applying security hardening, and keeping configuration generation deterministic. Legacy ks content is archived under `.archive/infra/ansible`.
+Node provisioning for the KubeLab fleet: one playbook per node
+(`playbooks/provision-<node>.yml`), each composing shared roles
+(`base_system`, `ssh_hardening`, `docker`, `tailscale`, per-service roles).
+Configuration is read directly from the SSOT (`infra/config/values/*.yaml`)
+via `include_vars` at playbook level — nothing is pre-rendered into
+node-specific files.
 
  Overview
 
-- Staging: Raspberry Pi running Docker Compose stacks that mirror production.
-- Production: VPS with Docker Compose, backups, and hardened defaults.
-- Templates: Minimal set of parametrised templates in `templates/` rendered by `generate-ansible-config.sh`.
-- Integration: Plays nicely with `infra/compose` and `edge/dns-gateway` assets.
-- Outputs: Inventory, group vars, and playbooks in `generated/<env>/`.
+- Inventory: generated dynamically from `networking.*` in `common.yaml` by
+  `toolkit infra ansible generate --env <env>`, written to
+  `generated/<env>/hosts.yml`. Never hand-edited.
+- Provisioning: `make provision NODE=<node> ENV=<env>` runs
+  `playbooks/provision-<node>.yml` against the generated inventory.
+- Deploys: per-target playbooks (`deploy-vps.yml`, `deploy-k3s.yml`,
+  `deploy-dns.yml`, `deploy-harden-nodes.yml`) invoked the same way via
+  their own `make deploy-*` targets.
+- Roles: `roles/` holds one directory per capability (system hardening,
+  Docker, Tailscale, and one role per service the fleet runs).
 
  Structure
 
 ```
 infra/ansible/
-├── generate-ansible-config.sh        Render inventory + vars from templates
-├── requirements.txt                  Python dependencies for Ansible
-├── templates/                        Jinja-templated config sources
-│   ├── ansible.cfg.template          Base Ansible configuration
-│   ├── hosts.template.yml            Inventory generator
-│   ├── group_vars/
-│   │   ├── all.template.yml          Shared settings
-│   │   ├── staging.template.yml      Raspberry Pi overrides
-│   │   └── prod.template.yml         VPS overrides
-│   ├── playbooks/
-│   │   ├── main.template.yml         Deploy applications + services
-│   │   ├── setup.template.yml        Host bootstrap (Docker, users, firewall)
-│   │   ├── backup.template.yml       Backup routines
-│   │   └── rollback.template.yml     Controlled rollback procedures
-│   └── tasks/
-│       ├── setup-system.yml          Common package/system setup
-│       ├── setup-docker.yml          Docker Engine installation
-│       ├── deploy-compose.yml        Compose deployment tasks
-│       ├── deploy-traefik.yml        Traefik configuration deploy
-│       └── health-check.yml          Post-deployment verification
+├── playbooks/
+│   ├── provision-<node>.yml          Per-node provisioning (ace1, ace2, aws1,
+│   │                                 bee, jetson, rpi3, rpi4, vps)
+│   ├── deploy-vps.yml, deploy-k3s.yml, deploy-dns.yml, ...
+│   ├── backup.yml / restore.yml      VPS Docker-volume backup/restore
+│   ├── maintain.yml                  node_maintenance role entry point
+│   └── homelab-dns.yml               DNS resilience, all nodes (see below)
+├── roles/                            One role per capability/service
+├── generated/<env>/                  Toolkit output (gitignored) — hosts.yml
+├── inventories/homelab.yml           Static, Tailscale-IP inventory for the
+│                                     homelab-wide playbooks below only
+├── requirements.yml                  Ansible Galaxy collections
 └── README.md                         This file
 ```
 
-> Need the former ks content? It is preserved in `.archive/infra/ansible` alongside rendered examples.
-
  Quick Start
 
-. Install dependencies
-   ```bash
-   pip install -r requirements.txt
-   ansible-galaxy collection install community.docker
-   ```
-
-. Generate configuration
-   ```bash
-   ./generate-ansible-config.sh staging    Raspberry Pi staging inventory
-   ./generate-ansible-config.sh prod       VPS production inventory
-   ```
-
-. Deploy
-   ```bash
-   cd generated/staging
-   ansible-playbook -i hosts.yml playbooks/setup.yml
-   ansible-playbook -i hosts.yml playbooks/main.yml
-   ```
-
-. Verify
-   ```bash
-   ansible-playbook -i hosts.yml playbooks/main.yml --tags verify
-   ```
-
- Environment Highlights
-
- Staging (Raspberry Pi)
-- Compose stacks pulled from `infra/stacks/{apps|services}/*/compose.base.yml` + `compose.staging.yml`.
-- WireGuard and CoreDNS details exposed through `edge/dns-gateway/.env.staging`.
-- Lightweight firewall and failban rules tuned for Pi hardware.
-- Optional rsync backups to MiniPC build host.
-
- Production (VPS)
-- Same compose definitions with production overrides.
-- Automatic firewall hardening and backup rotation.
-- Integration hooks for Terraform-provisioned DNS records.
-
- Workflow with Toolkit
-
-Toolkit commands wrap common Ansible operations:
-
 ```bash
-poetry run toolkit deployment setup --env staging
-poetry run toolkit deployment deploy --env staging
-poetry run toolkit deployment setup --env prod
-poetry run toolkit deployment deploy --env prod
+# Install collections
+ansible-galaxy collection install -r infra/ansible/requirements.yml
+
+# Generate the inventory for an environment (SSOT: common.yaml)
+poetry run toolkit infra ansible generate --env staging
+
+# Provision a node
+make provision NODE=rpi4 ENV=staging
+
+# Deploy a target
+make deploy-vps ENV=prod
 ```
 
-These commands:
-
-. Render templates via `generate-ansible-config.sh`.
-. Execute the relevant playbook from the generated directory.
-. Collect logs and surface failures via Rich output.
-
- Contributing
-
-- Keep templates environment-agnostic; prefer variables in group vars.
-- Document new variables in `infra/config/values/*.yaml` and toolkit settings.
-- Update associated tests under `tests/` when editing generation logic.
-- Drop deprecated artefacts into `.archive/infra/ansible` instead of deleting them outright.
-
-With these playbooks the staging Raspberry Pi and production VPS stay aligned while remaining easy to recover and audit.
+See the root `Makefile` (`make help`) for the full list of `provision`/
+`deploy-*` targets and their flags (`BOOTSTRAP=1`, `TAGS=`, `CHECK=1`,
+`ASK_PASS=1`).
 
 ## Homelab-Wide Playbooks
 
-Separate from the template-generated staging/prod configs, there are playbooks that target **all homelab nodes** directly.
+Separate from the per-node provisioning above, there are playbooks that target **all homelab nodes** directly.
 
 ### DNS Resilience
 

@@ -89,6 +89,24 @@
   loop: "{{ firewall_allowed_ports }}"
   when: firewall_enabled and not (legacy_python | default(false))
 
+# Tailnet-only service ports (Glances, MinIO, etc.) — allowed on the
+# tailscale0 interface only, never fleet-wide like firewall_allowed_ports
+# above. NOTE what this does NOT cover: a Docker-published port bypasses
+# these rules entirely. Docker's DNAT happens in PREROUTING, before ufw's
+# INPUT chain ever sees the packet, and DOCKER-USER is empty fleet-wide
+# (#959) — so for a containerised service, the bind address
+# (`{{ tailscale_ip }}:port:port` in its compose file) is the only real
+# access control, not this list. These rules matter for anything that
+# listens directly on the host instead.
+- name: Allow tailnet-only service ports
+  community.general.ufw:
+    rule: allow
+    interface_in: tailscale0
+    port: "{{ item | string }}"
+    proto: tcp
+  loop: "{{ firewall_tailnet_ports }}"
+  when: firewall_enabled and not (legacy_python | default(false))
+
 - name: Enable UFW
   community.general.ufw:
     state: enabled
