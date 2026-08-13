@@ -29,6 +29,11 @@ firewall_allowed_ports:
   - { port: 443, proto: tcp }
   - { port: 41641, proto: udp }
 
+# Per-node tailnet-only ports (interface_in: tailscale0). Empty by default;
+# declared per node in its provision playbook. See the task comment in
+# tasks/main.yml for what this can and cannot restrict.
+firewall_tailnet_ports: []
+
 deploy_base_dir: "/opt"
 
 # --- Persistent journald + log retention bounds (ANSIBLE-023) ---
