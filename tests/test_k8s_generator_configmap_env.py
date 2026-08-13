@@ -50,3 +50,56 @@ class TestDeployConcernGuard:
         }
         result = K8sGenerator()._extract_app_env_vars(env, "api")
         assert result == env
+
+
+class TestPlacementClassificationGuard:
+    """ADR028-004 placement keys never reach a ConfigMap.
+
+    `state_promotion` and `location` are read by a static gate
+    (`tests/test_stateful_service_classification.py`), never by a running pod.
+    Seven of the eight classified services live under `apps.services.*`, which
+    this method never picks up. The eighth is `postgres` at `infra.postgres`
+    (ADR-051) — so without the guard its two keys would be emitted as
+    `INFRA_POSTGRES_*` into EVERY component's ConfigMap, changing every
+    configMapGenerator hash and rolling every pod on the next deploy.
+    """
+
+    def test_infra_postgres_placement_keys_excluded(self) -> None:
+        env = {
+            "INFRA_POSTGRES_HOST": "postgres",
+            "INFRA_POSTGRES_STATE_PROMOTION": "dual",
+            "INFRA_POSTGRES_LOCATION": "always-on",
+        }
+        result = K8sGenerator()._extract_app_env_vars(env, "api")
+
+        assert "INFRA_POSTGRES_STATE_PROMOTION" not in result
+        assert "INFRA_POSTGRES_LOCATION" not in result
+        assert result["INFRA_POSTGRES_HOST"] == "postgres"
+
+    def test_prefix_stripped_placement_keys_excluded(self) -> None:
+        """The APPS_PLATFORM_* form is guarded too, for any future consumer."""
+        env = {
+            "APPS_PLATFORM_API_STATE_PROMOTION": "dual",
+            "APPS_PLATFORM_API_LOCATION": "always-on",
+            # Not HEALTH_PATH: that is already in _METADATA_SUFFIXES, so it would
+            # be dropped by the older guard and prove nothing about this one.
+            "APPS_PLATFORM_API_LOG_LEVEL": "info",
+        }
+        result = K8sGenerator()._extract_app_env_vars(env, "api")
+
+        assert "STATE_PROMOTION" not in result
+        assert "LOCATION" not in result
+        assert result["LOG_LEVEL"] == "info"
+
+    def test_guard_matches_full_suffix_not_last_token(self) -> None:
+        """A key merely *ending* in PROMOTION is not a placement key.
+
+        `rsplit("_", 1)` would reduce STATE_PROMOTION to PROMOTION and blocklist
+        an unrelated key by accident — which is why the guard matches the whole
+        trailing suffix instead.
+        """
+        env = {"INFRA_CAMPAIGN_PROMOTION": "summer", "INFRA_GEO_ALLOCATION": "eu"}
+        result = K8sGenerator()._extract_app_env_vars(env, "api")
+
+        assert result["INFRA_CAMPAIGN_PROMOTION"] == "summer"
+        assert result["INFRA_GEO_ALLOCATION"] == "eu"

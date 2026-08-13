@@ -40,6 +40,21 @@ class K8sGenerator(BaseGenerator):
     # segment to keep a shared image pin (ADR-051 D4) out of every ConfigMap.
     _DEPLOY_CONCERN_SUFFIXES = frozenset({"IMAGE", "VERSION"})
 
+    # Placement-classification keys (ADR028-004). `state_promotion` and
+    # `location` record where a stateful service's state may live; they are read
+    # by a static gate, never by a running pod. Same category as the deploy
+    # concerns above, but matched on the full trailing suffix rather than the
+    # last token: `rsplit("_", 1)` would reduce STATE_PROMOTION to PROMOTION,
+    # which is too generic a word to blocklist safely.
+    #
+    # Seven of the eight classified services live under `apps.services.*`, which
+    # this method never picks up (it only reads APPS_PLATFORM_* and INFRA_*), so
+    # they need no exclusion. The eighth, `postgres`, is at `infra.postgres` per
+    # ADR-051 — without this guard its two classification keys would be emitted
+    # into EVERY component's ConfigMap as INFRA_POSTGRES_*, changing every
+    # configMapGenerator hash and rolling every pod on the next deploy.
+    _PLACEMENT_SUFFIXES = frozenset({"STATE_PROMOTION", "LOCATION"})
+
     # Template files to render (template_name, output_name)
     # kustomization.yaml is NOT generated — it's manual (ADR-027, NET-002)
     _TEMPLATE_MAP = [
@@ -298,6 +313,10 @@ class K8sGenerator(BaseGenerator):
             # Skip deploy-concern keys (image refs / version pins) in any form,
             # including unstripped INFRA_* (e.g. INFRA_POSTGRES_IMAGE). ADR-051 D4.
             if name.rsplit("_", 1)[-1] in self._DEPLOY_CONCERN_SUFFIXES:
+                continue
+
+            # Skip placement-classification keys in any form (ADR028-004).
+            if any(name == s or name.endswith(f"_{s}") for s in self._PLACEMENT_SUFFIXES):
                 continue
 
             # Skip resource-related keys
