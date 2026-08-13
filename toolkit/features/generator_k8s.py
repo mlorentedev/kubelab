@@ -40,6 +40,20 @@ class K8sGenerator(BaseGenerator):
     # segment to keep a shared image pin (ADR-051 D4) out of every ConfigMap.
     _DEPLOY_CONCERN_SUFFIXES = frozenset({"IMAGE", "VERSION"})
 
+    # Placement-classification keys (ADR-061). `state_promotion` and `location`
+    # record where a stateful service's state may live; they are read by a
+    # static gate, never by a running pod. Same category as the deploy concerns
+    # above, but they cannot use the same mechanism — see `_placement_keys`.
+    #
+    # Seven of the eight classified services live under `apps.services.*`, which
+    # this method never picks up (it only reads APPS_PLATFORM_* and INFRA_*), so
+    # they need no exclusion. The eighth, `postgres`, is at `infra.postgres` per
+    # ADR-051 — without this guard its two classification keys would be emitted
+    # into EVERY component's ConfigMap as INFRA_POSTGRES_*, changing every
+    # configMapGenerator hash and rolling every pod on the next deploy.
+    _PROMOTION_SUFFIX = "STATE_PROMOTION"
+    _LOCATION_SUFFIX = "LOCATION"
+
     # Template files to render (template_name, output_name)
     # kustomization.yaml is NOT generated — it's manual (ADR-027, NET-002)
     _TEMPLATE_MAP = [
@@ -259,6 +273,34 @@ class K8sGenerator(BaseGenerator):
             "cert_resolver": cert_resolver,
         }
 
+    @classmethod
+    def _placement_keys(cls, env_vars: dict[str, str]) -> frozenset[str]:
+        """Exact env-var names carrying ADR-061 placement classification.
+
+        `STATE_PROMOTION` is specific enough to exclude on its own. **`LOCATION`
+        is not** — `INFRA_GEO_LOCATION` would be a perfectly ordinary runtime
+        setting, and a suffix blocklist would silently drop it from every
+        ConfigMap. Matching the full trailing suffix does not help: the false
+        positive ends in `_LOCATION` exactly like the real key does.
+
+        So the pair is resolved from the data instead of guessed from the name.
+        ADR-061 D1 declares the two axes together on every classified service,
+        so a `LOCATION` key is a classification key **iff its `STATE_PROMOTION`
+        sibling travels with it**. That is derivable from the flat env map
+        without knowing which services are classified, so no service list has
+        to be maintained here in parallel with `common.yaml`.
+        """
+        excluded: set[str] = set()
+        for key in env_vars:
+            if key != cls._PROMOTION_SUFFIX and not key.endswith(f"_{cls._PROMOTION_SUFFIX}"):
+                continue
+            excluded.add(key)
+            prefix = key[: -len(cls._PROMOTION_SUFFIX)]
+            sibling = f"{prefix}{cls._LOCATION_SUFFIX}"
+            if sibling in env_vars:
+                excluded.add(sibling)
+        return frozenset(excluded)
+
     def _extract_app_env_vars(self, env_vars: dict[str, str], component: str) -> dict[str, str]:
         """Extract non-secret, non-metadata env vars for a component's ConfigMap.
 
@@ -280,8 +322,15 @@ class K8sGenerator(BaseGenerator):
         component_prefix = f"APPS_PLATFORM_{component_upper}_"
         shared_prefix = "INFRA_"
 
+        placement_keys = self._placement_keys(env_vars)
+
         result: dict[str, str] = {}
         for key, value in env_vars.items():
+            # Placement classification (ADR-061) — resolved on the raw key, so
+            # the stripped and unstripped forms are handled by one rule.
+            if key in placement_keys:
+                continue
+
             if key.startswith(component_prefix):
                 # Component-local: strip the prefix.
                 name = key[len(component_prefix) :]

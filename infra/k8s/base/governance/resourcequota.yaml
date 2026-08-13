@@ -1,0 +1,31 @@
+---
+# IDP-031 — namespace resource governance, phase 2.
+#
+# This is the ceiling the phase 1 LimitRange (limitrange.yaml, same directory)
+# exists to make safe. A ResourceQuota rejects any pod that omits a dimension
+# it constrains, and this namespace ships two initContainers that declare no
+# resources at all (apprise/seed-config, crowdsec/inject-whitelist) — so the
+# LimitRange MUST be admitted before this object, in every cluster, or those
+# two pods stop being schedulable. See proposal.md → Risks for the full
+# argument and specs/IDP-031-namespace-resource-governance/tasks.md for why
+# phase 1 and phase 2 are separate commits instead of one.
+#
+# limits.memory is the load-bearing ceiling: 7Gi against prod's 7.55Gi
+# allocatable (minus ~0.17Gi reserved for kube-system) is the largest value
+# that still guarantees this namespace cannot exhaust the node at full burst.
+# requests.memory carries the comfortable margin (4Gi against ~2.3Gi measured
+# usage) since requests are what the scheduler enforces, not what bounds the
+# node. Values fixed 2026-08-09, re-measured 2026-08-12 — see verification.md.
+#
+# Deliberately NOT constraining requests.cpu or limits.cpu: see proposal.md →
+# Out of scope for why a CPU quota would be binding on day one for no observed
+# failure this spec addresses.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: kubelab-quota
+  namespace: kubelab
+spec:
+  hard:
+    requests.memory: 4Gi
+    limits.memory: 7Gi
