@@ -1,5 +1,6 @@
 [
   {
+    "key": "infra-node-vps-ssh",
     "name": "Infra \u00b7 Node \u00b7 VPS SSH",
     "type": "port",
     "url": "https://",
@@ -27,6 +28,7 @@
     ]
   },
   {
+    "key": "infra-vpn-vps-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 VPS Tailscale",
     "type": "ping",
     "url": "https://",
@@ -55,6 +57,7 @@
     ]
   },
   {
+    "key": "infra-vpn-rpi4-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 RPi4 Tailscale",
     "type": "ping",
     "url": "https://",
@@ -83,6 +86,7 @@
     ]
   },
   {
+    "key": "infra-vpn-ace1-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 Ace1 Tailscale",
     "type": "ping",
     "url": "https://",
@@ -111,6 +115,7 @@
     ]
   },
   {
+    "key": "infra-vpn-ace2-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 Ace2 Tailscale",
     "type": "ping",
     "url": "https://",
@@ -139,6 +144,7 @@
     ]
   },
   {
+    "key": "infra-vpn-beelink-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 Beelink Tailscale",
     "type": "ping",
     "url": "https://",
@@ -167,6 +173,7 @@
     ]
   },
   {
+    "key": "infra-vpn-jetson-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 Jetson Tailscale",
     "type": "ping",
     "url": "https://",
@@ -195,6 +202,7 @@
     ]
   },
   {
+    "key": "infra-vpn-rpi3-self-check",
     "name": "Infra \u00b7 VPN \u00b7 RPi3 Self-Check",
     "type": "ping",
     "url": "https://",
@@ -223,6 +231,7 @@
     ]
   },
   {
+    "key": "infra-vpn-aws1-tailscale",
     "name": "Infra \u00b7 VPN \u00b7 AWS1 Tailscale",
     "type": "ping",
     "url": "https://",
@@ -251,6 +260,7 @@
     ]
   },
   {
+    "key": "infra-vpn-headscale",
     "name": "Infra \u00b7 VPN \u00b7 Headscale",
     "type": "port",
     "url": "https://",
@@ -279,6 +289,7 @@
     ]
   },
   {
+    "key": "prod-web-mlorente-dev",
     "name": "Prod \u00b7 Web \u00b7 mlorente.dev",
     "type": "http",
     "url": "https://mlorente.dev",
@@ -308,6 +319,7 @@
     "expiryNotification": true
   },
   {
+    "key": "prod-api-api-kubelab-live",
     "name": "Prod \u00b7 API \u00b7 api.kubelab.live",
     "type": "http",
     "url": "https://api.kubelab.live/health",
@@ -337,6 +349,7 @@
     "expiryNotification": true
   },
   {
+    "key": "prod-web-kubelab-live",
     "name": "Prod \u00b7 Web \u00b7 kubelab.live",
     "type": "http",
     "url": "https://kubelab.live",
@@ -367,6 +380,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-auth-authelia-prod",
     "name": "Services \u00b7 Auth \u00b7 Authelia Prod",
     "type": "http",
     "url": "https://auth.kubelab.live/api/health",
@@ -398,6 +412,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-auth-argo-cd",
     "name": "Services \u00b7 Auth \u00b7 Argo CD",
     "type": "http",
     "url": "https://argo.kubelab.live",
@@ -428,6 +443,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-data-grafana-prod",
     "name": "Services \u00b7 Data \u00b7 Grafana Prod",
     "type": "http",
     "url": "https://grafana.kubelab.live/api/health",
@@ -458,6 +474,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-data-gitea-prod",
     "name": "Services \u00b7 Data \u00b7 Gitea Prod",
     "type": "http",
     "url": "https://gitea.kubelab.live/api/healthz",
@@ -488,6 +505,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-data-minio-prod",
     "name": "Services \u00b7 Data \u00b7 MinIO Prod",
     "type": "http",
     "url": "https://minio.kubelab.live/minio/health/live",
@@ -518,6 +536,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-data-minio-console-prod",
     "name": "Services \u00b7 Data \u00b7 MinIO Console Prod",
     "type": "http",
     "url": "https://console.minio.kubelab.live",
@@ -548,6 +567,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-data-n8n-prod",
     "name": "Services \u00b7 Data \u00b7 n8n Prod",
     "type": "http",
     "url": "https://n8n.kubelab.live/healthz",
@@ -578,6 +598,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-monitoring-uptime-kuma-prod",
     "name": "Services \u00b7 Monitoring \u00b7 Uptime Kuma Prod",
     "type": "http",
     "url": "https://status.kubelab.live",
@@ -608,6 +629,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-web-staging-mlorente-dev",
     "name": "Staging \u00b7 Web \u00b7 staging.mlorente.dev",
     "type": "http",
     "url": "https://staging.mlorente.dev",
@@ -636,6 +658,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-api-api-staging-kubelab-live",
     "name": "Staging \u00b7 API \u00b7 api.staging.kubelab.live",
     "type": "http",
     "url": "https://api.staging.kubelab.live/health",
@@ -664,6 +687,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-auth-authelia-staging",
     "name": "Services \u00b7 Auth \u00b7 Authelia Staging",
     "type": "http",
     "url": "https://auth.staging.kubelab.live/api/health",
@@ -694,6 +718,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-web-grafana-staging",
     "name": "Staging \u00b7 Web \u00b7 Grafana Staging",
     "type": "http",
     "url": "https://grafana.staging.kubelab.live/api/health",
@@ -723,6 +748,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-web-gitea-staging",
     "name": "Staging \u00b7 Web \u00b7 Gitea Staging",
     "type": "http",
     "url": "https://gitea.staging.kubelab.live/api/healthz",
@@ -752,6 +778,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-web-n8n-staging",
     "name": "Staging \u00b7 Web \u00b7 n8n Staging",
     "type": "http",
     "url": "https://n8n.staging.kubelab.live/healthz",
@@ -781,6 +808,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-web-minio-staging",
     "name": "Staging \u00b7 Web \u00b7 MinIO Staging",
     "type": "http",
     "url": "https://minio.staging.kubelab.live/minio/health/live",
@@ -810,6 +838,7 @@
     "expiryNotification": true
   },
   {
+    "key": "staging-web-homepage-staging",
     "name": "Staging \u00b7 Web \u00b7 Homepage Staging",
     "type": "http",
     "url": "https://home.staging.kubelab.live",
@@ -838,6 +867,7 @@
     "expiryNotification": true
   },
   {
+    "key": "services-monitoring-pi-hole-staging",
     "name": "Services \u00b7 Monitoring \u00b7 Pi-hole Staging",
     "type": "http",
     "url": "https://pihole.staging.kubelab.live/admin/",
@@ -868,6 +898,7 @@
     "expiryNotification": true
   },
   {
+    "key": "home-iot-smart-plug-co",
     "name": "Home \u00b7 IoT \u00b7 Smart Plug CO",
     "type": "ping",
     "url": "https://",

@@ -12,6 +12,14 @@ created: "2026-03-28"
 
 Accepted (2026-03-28). Refines ADR-023 (Hub-and-Spoke), ADR-027 (Intelligence Layer).
 
+## Amendment — 2026-08-12 (state placement is a second axis this ADR does not carry)
+
+This ADR decides **where compute lives** — the always-on / on-demand split and its "would I need this at 3 AM?" test. It says nothing about **state**, and that omission let nine stateful PVCs end up duplicated across staging and prod as a side effect of a packaging choice rather than a decision.
+
+[ADR-061](adr-061-stateful-service-placement.md) adds the missing axis: whether a service's state has a promotion path in git (`dual`) or would fork if a second instance ran live (`singleton`). The two axes are independent, and conflating them is what produced the drift — **"prod" is an environment, not a location**.
+
+**Amended, not superseded**: the always-on / on-demand tiers this ADR establishes are unchanged, and the 3 AM test remains the sole authority on the location axis. ADR-061 cites it rather than restating it. One node assignment follows from the new axis: Gitea is a `singleton` whose role no longer inherits prod's always-on requirement, so it moves to the Beelink platform node this ADR already defines.
+
 ## Amendment — 2026-08-09 (ace2 is a developer node; local inference is deferred)
 
 This ADR assigns ace2 the role of on-demand LLM compute running Ollama. **AI-007 (#905) retired Ollama entirely on 2026-08-09**; ace2 is now the self-hosted developer node / CDE per ADR-058 D1, and hosts no services.

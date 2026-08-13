@@ -16,6 +16,14 @@ related:
 
 Accepted — 2026-05-23
 
+## Amendment — 2026-08-12 (a second instance is not always meaningful)
+
+This ADR answers "how do I validate a change against a non-prod environment before it touches prod?" and, in doing so, assumes a staging twin is always worth having. For services whose state is a projection of something git-canonical that holds. For services whose state is canonical in itself it does not: a second live instance of Gitea is a second set of repositories that no promotion path can merge back, so "validate in staging first" was never available for it — the workflow silently did not apply.
+
+[ADR-061](adr-061-stateful-service-placement.md) makes that distinction explicit (`dual` vs `singleton`) and enforces it, so the promotion strategy below is read as applying to `dual` services.
+
+**Amended, not superseded**: the validation flow this ADR defines — deploy to staging from a worktree, apply secrets, restart, run e2e, only then merge — is unchanged and remains the default. What changes is that `singleton` services are now named as the exception rather than being assumed to fit and quietly not fitting. Their intended test path is an ephemeral restore from a prod backup, which ADR-061 records as **doctrine and not present capability** — verified restore is still open work.
+
 ## Context
 
 The 2026-05-22 AI-001 session captured a lesson worded as "GitOps test-before-merge with Argo CD selfHeal = impossible vía kubectl directo (revierte en segundos); use merge-then-smoke". That was a tactical observation, not a principle. Treating staging as a write-only mirror of prod (because Argo CD selfHeal reverts any direct kubectl apply) defeats the entire purpose of having staging.
