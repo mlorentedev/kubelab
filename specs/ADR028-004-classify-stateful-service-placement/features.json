@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ADR028-004-f1",
+    "behavior": "The ADR emits a row for every one of the eight classified stateful services (nine PVCs; crowdsec owns two), each carrying both axes",
+    "verification": "for s in authelia crowdsec gitea grafana loki minio n8n postgres; do grep -qE \"^\\\\| *\\`?$s\\`? *\\\\| *(dual|singleton) *\\\\| *(always-on|on-demand|undecided) *\\\\|\" docs/adr/adr-061-stateful-service-placement.md || { echo \"missing or unclassified table row: $s\"; exit 1; }; done",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Anchored to the eight service names in table-row position AND to the permitted value vocabulary on both axes. Two weaker versions were rejected on the way here. The draft check in tasks.md counted anonymous 3-column rows against a threshold of 9, which discriminated only by coincidence (8 rows + header) and greps the whole file, so any other 3-column table — this repo's ADRs carry decision matrices — would inflate the count silently. Anchoring to the service names fixed which rows are checked but not whether they say anything: `| gitea | | |` still passed. Only matching the cell values closes it. Same failure mode both times, which is the point R4 makes — a gate is only as strong as the weakest thing it accepts."
+  },
+  {
+    "id": "ADR028-004-f2",
+    "behavior": "A static gate fails when a stateful service in the manifests carries no classification, an out-of-vocabulary value, or an unrecorded deferral — demonstrated red before green",
+    "verification": "poetry run pytest tests/test_stateful_service_classification.py tests/test_k8s_generator_configmap_env.py -v",
+    "state": "pending",
+    "evidence": "",
+    "notes": "Covers AC2's explicit 'demonstrate the failure' requirement via synthetic in-memory fixtures, never by mutating live repo state. Includes the generator guard: postgres lives at infra.postgres (ADR-051), so without _PLACEMENT_SUFFIXES its two keys would be emitted as INFRA_POSTGRES_* into every component's ConfigMap, changing every configMapGenerator hash and rolling every pod."
+  },
+  {
+    "id": "ADR028-004-f3",
+    "behavior": "Both overlays render and staging e2e passes after MinIO's staging twin retires",
+    "verification": "kubectl kustomize infra/k8s/overlays/staging >/dev/null && kubectl kustomize infra/k8s/overlays/prod >/dev/null && make test-e2e ENV=staging",
+    "state": "pending",
+    "evidence": "",
+    "notes": "PR 3. The render half is the safety net for R6's consumer sweep — a Kustomize patch with no target fails the build, which is what catches a consumer the static list missed."
+  },
+  {
+    "id": "ADR028-004-f4",
+    "behavior": "Both overlays render and staging e2e passes after Gitea's staging twin retires and prod moves to Beelink",
+    "verification": "kubectl kustomize infra/k8s/overlays/staging >/dev/null && kubectl kustomize infra/k8s/overlays/prod >/dev/null && make test-e2e ENV=staging",
+    "state": "pending",
+    "evidence": "",
+    "notes": "PR 4. R3's constraint applies: overlays/prod/backup.yaml must drop its gitea-data mount in the SAME commit as the retirement, or the CronJob silently mounts a deleted claim (backup.yaml is prod-only, so staging e2e never exercises it)."
+  },
+  {
+    "id": "ADR028-004-f5",
+    "behavior": "Per-instance emptiness evidence is captured for every instance whose PVC is deleted, before the deletion runs",
+    "verification": "for m in 'AC4-EVIDENCE staging/gitea pre-deletion' 'AC4-EVIDENCE prod/gitea pre-deletion' 'AC4-EVIDENCE staging/minio pre-deletion'; do grep -qF \"$m\" specs/ADR028-004-classify-stateful-service-placement/verification.md || { echo \"missing evidence marker: $m\"; exit 1; }; done",
+    "state": "pending",
+    "evidence": "",
+    "notes": "AC4 requires proof for THREE instances — staging gitea, staging minio, and prod gitea, the last because R1's move deletes that PVC too (the original AC4 only required staging). A substring search for 'gitea' and 'minio' anywhere in the file satisfied none of that: one arbitrary match for each service passed while two of the three instances went unproven, and nothing established the evidence predated the deletion. Hence three literal markers, each naming its instance and carrying 'pre-deletion' — the ordering claim is the whole point of AC4 and has to be asserted, not inferred from where text happens to sit in a file. The markers are a contract on PRs 3 and 4: whoever captures the output writes the marker line above it."
+  }
+]
