@@ -91,15 +91,39 @@ class TestPlacementClassificationGuard:
         assert "LOCATION" not in result
         assert result["LOG_LEVEL"] == "info"
 
-    def test_guard_matches_full_suffix_not_last_token(self) -> None:
-        """A key merely *ending* in PROMOTION is not a placement key.
+    def test_unrelated_location_key_survives_without_its_promotion_sibling(self) -> None:
+        """The regression a suffix blocklist could not have caught.
 
-        `rsplit("_", 1)` would reduce STATE_PROMOTION to PROMOTION and blocklist
-        an unrelated key by accident — which is why the guard matches the whole
-        trailing suffix instead.
+        `INFRA_GEO_LOCATION` is an ordinary runtime setting that ends in
+        `_LOCATION` exactly like the classification key does, so no
+        suffix-matching rule can tell them apart. It is kept because no
+        `INFRA_GEO_STATE_PROMOTION` travels with it, while postgres's pair in
+        the same map is still excluded.
         """
+        env = {
+            "INFRA_GEO_LOCATION": "eu-central",
+            "INFRA_POSTGRES_STATE_PROMOTION": "dual",
+            "INFRA_POSTGRES_LOCATION": "always-on",
+        }
+        result = K8sGenerator()._extract_app_env_vars(env, "api")
+
+        assert result["INFRA_GEO_LOCATION"] == "eu-central"
+        assert "INFRA_POSTGRES_STATE_PROMOTION" not in result
+        assert "INFRA_POSTGRES_LOCATION" not in result
+
+    def test_unrelated_promotion_key_survives(self) -> None:
+        """`*_PROMOTION` alone is not `*_STATE_PROMOTION`."""
         env = {"INFRA_CAMPAIGN_PROMOTION": "summer", "INFRA_GEO_ALLOCATION": "eu"}
         result = K8sGenerator()._extract_app_env_vars(env, "api")
 
         assert result["INFRA_CAMPAIGN_PROMOTION"] == "summer"
         assert result["INFRA_GEO_ALLOCATION"] == "eu"
+
+    def test_orphan_location_without_any_promotion_key_survives(self) -> None:
+        """A classified service that somehow lost its promotion axis is a gate
+        problem, not a generator one — the generator must not silently swallow
+        the key, or the omission becomes invisible."""
+        env = {"INFRA_POSTGRES_LOCATION": "always-on"}
+        result = K8sGenerator()._extract_app_env_vars(env, "api")
+
+        assert result["INFRA_POSTGRES_LOCATION"] == "always-on"

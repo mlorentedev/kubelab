@@ -32,6 +32,7 @@ gitea's and minio's staging twins while their classification stays meaningful.
 from __future__ import annotations
 
 import pathlib
+import re
 from typing import Any
 
 import pytest
@@ -60,6 +61,12 @@ LOCATION_VALUES = frozenset({"always-on", "on-demand", "undecided"})
 #: also carry `location_deferred_to` naming the ticket that owns the decision,
 #: so the sentinel cannot quietly become the dodge for every future service.
 DEFERRAL_KEY = "location_deferred_to"
+
+#: And the deferral must be a *ticket*, not a mood. A truthiness check would
+#: accept `location_deferred_to: later`, which records nothing anyone can chase
+#: — the sentinel would be back to meaning "we didn't decide", which is exactly
+#: what ADR-061 D4 says it must never mean.
+TICKET_REFERENCE = re.compile(r"^#\d+$")
 
 
 def _iter_manifests() -> list[pathlib.Path]:
@@ -149,11 +156,19 @@ def classification_problems(
             problems.append(
                 f"{where}: `location: {location}` is not one of {sorted(LOCATION_VALUES)}"
             )
-        elif location == "undecided" and not block.get(DEFERRAL_KEY):
-            problems.append(
-                f"{where}: `location: undecided` without `{DEFERRAL_KEY}` — a "
-                "deferral must name the ticket that owns the decision"
-            )
+        elif location == "undecided":
+            deferral = block.get(DEFERRAL_KEY)
+            if not deferral:
+                problems.append(
+                    f"{where}: `location: undecided` without `{DEFERRAL_KEY}` — a "
+                    "deferral must name the ticket that owns the decision"
+                )
+            elif not (isinstance(deferral, str) and TICKET_REFERENCE.fullmatch(deferral)):
+                problems.append(
+                    f"{where}: `{DEFERRAL_KEY}: {deferral!r}` is not a ticket "
+                    "reference (expected the form `#972`) — a deferral nobody "
+                    "can chase is not a recorded decision"
+                )
     return problems
 
 
@@ -215,6 +230,14 @@ def test_fixture_baseline_is_compliant() -> None:
         ({"state_promotion": "singelton"}, "is not one of"),
         ({"location": "beelink"}, "is not one of"),
         ({"location": "undecided"}, DEFERRAL_KEY),
+        # A deferral has to be chaseable. These three are the shapes that read
+        # as "recorded" and are not: a mood, a bare number, and a prose excuse.
+        ({"location": "undecided", DEFERRAL_KEY: "later"}, "not a ticket reference"),
+        ({"location": "undecided", DEFERRAL_KEY: "972"}, "not a ticket reference"),
+        (
+            {"location": "undecided", DEFERRAL_KEY: "see the backlog"},
+            "not a ticket reference",
+        ),
     ],
 )
 def test_gate_goes_red_on_each_violation(

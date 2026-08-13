@@ -2,10 +2,10 @@
   {
     "id": "ADR028-004-f1",
     "behavior": "The ADR emits a row for every one of the eight classified stateful services (nine PVCs; crowdsec owns two), each carrying both axes",
-    "verification": "for s in authelia crowdsec gitea grafana loki minio n8n postgres; do grep -qE \"^\\\\| *\\`?$s\\`? *\\\\|\" docs/adr/adr-061-stateful-service-placement.md || { echo \"missing table row: $s\"; exit 1; }; done",
+    "verification": "for s in authelia crowdsec gitea grafana loki minio n8n postgres; do grep -qE \"^\\\\| *\\`?$s\\`? *\\\\| *(dual|singleton) *\\\\| *(always-on|on-demand|undecided) *\\\\|\" docs/adr/adr-061-stateful-service-placement.md || { echo \"missing or unclassified table row: $s\"; exit 1; }; done",
     "state": "pending",
     "evidence": "",
-    "notes": "Anchored to the eight service names in table-row position, NOT a count of anonymous 3-column rows. The draft check in tasks.md was `grep -c '| .* | .* | .* |' ... >= 9`, which discriminated only by coincidence (8 rows + header = 9) and greps the whole file — any other 3-column table in the ADR, and this repo's ADRs carry decision matrices, would inflate the count and make the gate vacuous while still reporting green. That is precisely the failure mode R4 was written to prevent."
+    "notes": "Anchored to the eight service names in table-row position AND to the permitted value vocabulary on both axes. Two weaker versions were rejected on the way here. The draft check in tasks.md counted anonymous 3-column rows against a threshold of 9, which discriminated only by coincidence (8 rows + header) and greps the whole file, so any other 3-column table — this repo's ADRs carry decision matrices — would inflate the count silently. Anchoring to the service names fixed which rows are checked but not whether they say anything: `| gitea | | |` still passed. Only matching the cell values closes it. Same failure mode both times, which is the point R4 makes — a gate is only as strong as the weakest thing it accepts."
   },
   {
     "id": "ADR028-004-f2",
@@ -34,9 +34,9 @@
   {
     "id": "ADR028-004-f5",
     "behavior": "Per-instance emptiness evidence is captured for every instance whose PVC is deleted, before the deletion runs",
-    "verification": "grep -qE 'gitea.*(repo|empty)' specs/ADR028-004-classify-stateful-service-placement/verification.md && grep -qE 'minio.*(bucket|empty)' specs/ADR028-004-classify-stateful-service-placement/verification.md",
+    "verification": "for m in 'AC4-EVIDENCE staging/gitea pre-deletion' 'AC4-EVIDENCE prod/gitea pre-deletion' 'AC4-EVIDENCE staging/minio pre-deletion'; do grep -qF \"$m\" specs/ADR028-004-classify-stateful-service-placement/verification.md || { echo \"missing evidence marker: $m\"; exit 1; }; done",
     "state": "pending",
     "evidence": "",
-    "notes": "AC4. Covers staging gitea + minio AND prod gitea-data, which R1's move also deletes — the original AC4 only required staging proof. n8n drops out: R5 kept it dual and in place, so nothing there is deleted."
+    "notes": "AC4 requires proof for THREE instances — staging gitea, staging minio, and prod gitea, the last because R1's move deletes that PVC too (the original AC4 only required staging). A substring search for 'gitea' and 'minio' anywhere in the file satisfied none of that: one arbitrary match for each service passed while two of the three instances went unproven, and nothing established the evidence predated the deletion. Hence three literal markers, each naming its instance and carrying 'pre-deletion' — the ordering claim is the whole point of AC4 and has to be asserted, not inferred from where text happens to sit in a file. The markers are a contract on PRs 3 and 4: whoever captures the output writes the marker line above it."
   }
 ]
