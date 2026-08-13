@@ -282,3 +282,35 @@ class TestKubeSystemGovernance:
             f"Admitted pod carries limits.memory={resources.get('limits', {}).get('memory')!r}, "
             f"expected the LimitRange to inject {EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY}"
         )
+
+    def test_no_unbounded_containers_after_restart(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """Every Running kube-system container carries a memory limit, and none are BestEffort.
+
+        Only covers currently-`Running` pods: completed `helm-install-*` Job pods
+        predate the LimitRange and are terminal, not steady-state — they are not
+        the failure mode this spec addresses and will not be recreated unless a
+        new Helm install runs. Requires the affected workloads (traefik, svclb,
+        local-path-provisioner, metrics-server) to have been restarted after the
+        LimitRange landed — the LimitRange only defaults NEW admissions, so an
+        already-running pod from before it existed keeps its old, unbounded spec
+        until it restarts. See tasks.md Part 2.
+        """
+        result = _kubectl("get pods -n kube-system -o json", env)
+        assert result.returncode == 0, f"kubectl get pods failed: {result.stderr}"
+
+        pods = json.loads(result.stdout).get("items", [])
+        running = [p for p in pods if p.get("status", {}).get("phase") == "Running"]
+        assert running, "No Running pods in kube-system — cannot assert anything about them"
+
+        unbounded = [
+            f"{p['metadata']['name']}/{c['name']}"
+            for p in running
+            for c in p["spec"].get("containers", [])
+            if "memory" not in c.get("resources", {}).get("limits", {})
+        ]
+        assert not unbounded, f"Running kube-system containers with no memory limit: {unbounded}"
+
+        best_effort = [
+            p["metadata"]["name"] for p in running if p.get("status", {}).get("qosClass") == "BestEffort"
+        ]
+        assert not best_effort, f"Running kube-system pods still BestEffort QoS: {best_effort}"
