@@ -250,3 +250,35 @@ class TestKubeSystemGovernance:
             f"kube-system LimitRange default.memory is {defaulted_limit}, "
             f"expected {EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY}"
         )
+
+    def test_unspecified_container_is_defaulted(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """A pod declaring no resources in kube-system is admitted and comes back defaulted.
+
+        Same `--dry-run=server` rationale as the kubelab sibling test: traverses
+        real admission (LimitRanger included) without persisting, so this stays
+        read-only and safe against prod.
+        """
+        manifest = (
+            '{"apiVersion":"v1","kind":"Pod",'
+            '"metadata":{"name":"obs-009-defaulting-probe","namespace":"kube-system"},'
+            '"spec":{"containers":[{"name":"probe","image":"registry.k8s.io/pause:3.9"}]}}'
+        )
+        result = _kubectl(
+            f"create --dry-run=server -o json -f - <<'EOF'\n{manifest}\nEOF",
+            env,
+            timeout=30,
+        )
+        assert result.returncode == 0, (
+            "A pod with no resources block was REJECTED at admission in kube-system — the "
+            f"LimitRange defaults are missing or invalid: {result.stderr.strip()}"
+        )
+
+        resources = json.loads(result.stdout)["spec"]["containers"][0].get("resources", {})
+        assert resources.get("requests", {}).get("memory") == EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY, (
+            f"Admitted pod carries requests.memory={resources.get('requests', {}).get('memory')!r}, "
+            f"expected the LimitRange to inject {EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY}"
+        )
+        assert resources.get("limits", {}).get("memory") == EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY, (
+            f"Admitted pod carries limits.memory={resources.get('limits', {}).get('memory')!r}, "
+            f"expected the LimitRange to inject {EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY}"
+        )
