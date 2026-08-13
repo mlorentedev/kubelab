@@ -328,56 +328,90 @@ def apply_monitors(project_root: Path) -> None:
         api.disconnect()
 
 
-def bootstrap(project_root: Path) -> None:
-    """Full bootstrap: create admin user (if fresh) + import monitors from seed.
+# A just-opened Kuma v2 socket needs to settle before its first call gets a
+# reply. Measured against a throwaway instance: `need_setup()` and the raw
+# `setup` emit both timed out as the first thing sent on a fresh connection,
+# every time, without this — `login()` elsewhere in this file has never shown
+# the symptom, so the settle is scoped to bootstrap's cold-connection path
+# rather than added everywhere. One constant, so both call sites below agree
+# on the value instead of carrying their own independent guess.
+_SOCKET_SETTLE_SECONDS = 1.0
 
-    Credentials come from SOPS (SSOT). Idempotent — skips setup if user exists,
-    skips monitors that already exist.
+
+def _settle(api: UptimeKumaApi) -> None:
+    """Block briefly so a just-opened socket is ready for its first call."""
+    time.sleep(_SOCKET_SETTLE_SECONDS)
+
+
+def _run_setup(api: UptimeKumaApi, username: str, password: str) -> None:
+    """Create the admin user by emitting `setup` on the raw socket.
+
+    `UptimeKumaApi.setup()` (`api.sio.call("setup", ...)`) times out against
+    Kuma v2 — the installed `uptime-kuma-api` wrapper predates v2's setup
+    handshake. A manually-polled `emit` gets a real `{"ok": True, ...}` ack, the
+    same workaround already proven in `test_monitoring_integration.py`'s fixture.
+
+    Raises on timeout or a negative ack rather than returning silently: the bug
+    this replaces was a bare `except Exception` around `api.setup()` that read a
+    timeout as "admin already exists" and fell through to `login()`, which then
+    failed with the wrong error on a genuinely fresh instance (#962).
+
+    Settles the connection itself (rather than trusting the caller already
+    did) so the function is safe to call directly on a cold connection too —
+    which is exactly how the integration test's fixture uses it.
+    """
+    result: dict[str, Any] = {}
+    _settle(api)
+    api.sio.emit("setup", (username, password), callback=lambda r: result.update(r or {}))
+    deadline = time.monotonic() + api.timeout
+    while not result and time.monotonic() < deadline:
+        time.sleep(0.5)
+    if not result:
+        raise TimeoutError(f"Uptime Kuma setup did not acknowledge within {api.timeout}s")
+    if not result.get("ok", False):
+        raise RuntimeError(f"Uptime Kuma setup failed: {result}")
+
+
+def bootstrap(project_root: Path) -> None:
+    """Full bootstrap: create the admin user (if fresh) + import the seed.
+
+    Credentials come from SOPS (SSOT). Runs unattended on every rpi3 provision
+    (Ansible), not just the first one, so an already-configured instance MUST
+    be left completely untouched — only a genuinely fresh install (no admin,
+    therefore no monitors yet) imports the seed. `apply_monitors` is safe to
+    call for that import specifically because a from-scratch instance has zero
+    live monitors, so its diff can only ever produce creates, never edits or
+    deletes; calling it unconditionally here would give an automated, unattended
+    path the power to delete monitors from a live instance the seed has drifted
+    from — the exact hazard #962/#925 removed from `apply_monitors` itself.
+
+    Does not recreate notifications: `infra/config/uptime-kuma/notifications.json`
+    deliberately omits the Slack webhook's `config` (it is a secret, and this
+    file is committed to git), so a from-scratch instance needs one manual
+    notification setup regardless of this function (see OBS-014).
     """
     creds = _get_kuma_creds(project_root)
     api = UptimeKumaApi(creds["url"], timeout=60)
+    _settle(api)
 
-    # Try setup (first run — no user yet)
-    fresh_install = False
-    try:
-        api.setup(creds["username"], creds["password"])
+    # `need_setup()` decides the branch authoritatively — a read with no v1/v2
+    # handshake mismatch — instead of inferring "already set up" from whichever
+    # exception `setup()` happened to raise, which is what let a timeout pass
+    # for success (#962).
+    fresh_install = api.need_setup()
+    if fresh_install:
+        _run_setup(api, creds["username"], creds["password"])
         logger.success(f"Created admin user '{creds['username']}' from SOPS credentials")
-        fresh_install = True
-    except Exception:
-        # Already set up — login instead
-        logger.info("Admin user already exists, logging in...")
-        api.login(creds["username"], creds["password"])
+    else:
+        logger.info("Admin user already exists — instance already configured, nothing to do")
+    api.disconnect()
 
-    # Only import on fresh install (existing monitors = already configured)
     if not fresh_install:
-        existing = api.get_monitors()
-        if existing:
-            logger.success(f"Instance has {len(existing)} monitors — skipping import")
-            api.disconnect()
-            return
+        return
 
-    # Import monitors + notifications from seed
-    try:
-        export_dir = project_root / EXPORT_DIR
-        monitors_path = export_dir / MONITORS_FILE
-        notifications_path = export_dir / NOTIFICATIONS_FILE
-
-        if not monitors_path.exists():
-            logger.warning(f"No seed file at {monitors_path} — skipping import")
-            return
-
-        monitors_data = json.loads(monitors_path.read_text())
-        notifications_data = json.loads(notifications_path.read_text()) if notifications_path.exists() else []
-
-        backup_data = json.dumps(
-            {
-                "version": "1.23.0",
-                "notificationList": notifications_data,
-                "monitorList": monitors_data,
-                "proxyList": [],
-            }
-        )
-        api.upload_backup(json_data=backup_data, import_handle="skip")
-        logger.success(f"Imported {len(monitors_data)} monitors + {len(notifications_data)} notifications")
-    finally:
-        api.disconnect()
+    # `upload_backup`'s v1 backup envelope times out against Kuma v2 — flagged
+    # as untested in #962 and confirmed broken while verifying this fix live.
+    # `apply_monitors` already owns a working, tested create path (every
+    # monitor on a from-scratch instance goes through it too), so bootstrap
+    # delegates to it instead of carrying a second, broken import mechanism.
+    apply_monitors(project_root)

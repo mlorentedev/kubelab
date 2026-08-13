@@ -29,6 +29,7 @@ depend on each other's ordering — this suite runs under `pytest-randomly`.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -37,13 +38,18 @@ from pathlib import Path
 
 import pytest
 import yaml
+from uptime_kuma_api import UptimeKumaApi
 
 from toolkit.features import monitoring
 from toolkit.features.monitoring_diff import diff_monitors, extract_key
 
 pytestmark = pytest.mark.integration
 
-CONTAINER_NAME = "kubelab-test-kuma"
+# PID-suffixed rather than a fixed name: this repo runs several worktree lanes
+# in parallel (each with its own `make test`), and a shared literal name meant
+# one lane's `docker rm -f` on setup could kill another's live container mid-run
+# — the failure then reads as "socket refused", not as a naming collision.
+CONTAINER_NAME = f"kubelab-test-kuma-{os.getpid()}"
 ADMIN_USER = "admin"
 ADMIN_PASS = "integration-test-pass"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -67,32 +73,89 @@ def _docker_available() -> bool:
     return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
 
 
-def _run_setup(url: str) -> None:
-    """Create the admin user by emitting `setup` on the raw socket.
+def _wait_until_socket_reachable(url: str, timeout: float = 30.0) -> None:
+    """Block until a socket.io handshake actually succeeds, not just Docker's health flag.
 
-    `UptimeKumaApi.setup()` times out against v2 — the wrapper is v1-era. The
-    server answers the raw event with `{"ok": True, "msg": "successAdded"}`.
+    Same family of claim gap as the setup-wizard redirect this file already
+    documents: `Health.Status == healthy` is Docker's opinion, not proof this
+    process's socket.io endpoint will accept a handshake right now. Belt and
+    braces on top of the container-name fix (`CONTAINER_NAME` is PID-suffixed)
+    for the collision this project actually hit — a parallel lane's `docker rm
+    -f` on the same fixed name killed this container mid-run, which surfaced
+    as a bare connection refusal and briefly looked like a health/readiness
+    race. Bounded retry on the exact mechanism callers use, not a raw HTTP ping
+    standing in for it.
     """
-    import socketio
+    deadline = time.monotonic() + timeout
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            probe = UptimeKumaApi(url, timeout=5)
+            probe.disconnect()
+            return
+        except Exception as e:
+            last_error = e
+            time.sleep(1)
+    pytest.fail(f"Uptime Kuma socket never became reachable at {url}: {last_error!r}")
 
-    sio = socketio.Client()
-    result: dict = {}
-    sio.connect(f"{url}/socket.io/", wait_timeout=30, transports=["websocket"])
+
+def _start_kuma_container(name: str) -> str:
+    """Start a throwaway Kuma v2 container and block until it is actually reachable.
+
+    Returns the URL. Caller owns teardown (`docker rm -f name`) — shared by
+    every fixture in this file so the readiness-wait logic has one definition.
+    """
+    port = _free_port()
+    url = f"http://127.0.0.1:{port}"
+    subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            name,
+            "-e",
+            "UPTIME_KUMA_DB_TYPE=sqlite",
+            "-p",
+            f"127.0.0.1:{port}:3001",
+            _pinned_image(),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        probe = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Health.Status}}", name],
+            capture_output=True,
+            text=True,
+        )
+        if probe.stdout.strip() == "healthy":
+            _wait_until_socket_reachable(url)
+            return url
+        time.sleep(3)
+    pytest.fail("Uptime Kuma container never became healthy")
+
+
+def _run_setup(url: str) -> None:
+    """Create the admin user via `monitoring._run_setup` — the real code under test.
+
+    `UptimeKumaApi.setup()` times out against v2 — the wrapper is v1-era.
+    `monitoring._run_setup` is the production workaround (#962); exercising it
+    here rather than a second hand-rolled raw-socket implementation is the point
+    — a fixture reimplementing the fix would stop noticing if the fix broke.
+    """
+    api = UptimeKumaApi(url, timeout=30)
     try:
-        time.sleep(1)
-        sio.emit("setup", (ADMIN_USER, ADMIN_PASS), callback=lambda r: result.update(r or {}))
-        deadline = time.time() + 30
-        while not result and time.time() < deadline:
-            time.sleep(0.5)
+        monitoring._run_setup(api, ADMIN_USER, ADMIN_PASS)
     finally:
-        sio.disconnect()
-    if not result.get("ok"):
-        raise RuntimeError(f"Uptime Kuma setup failed: {result}")
+        api.disconnect()
 
 
 @pytest.fixture(scope="module")
 def kuma_url():
-    """A disposable Uptime Kuma, torn down whatever happens.
+    """A disposable, already-set-up Uptime Kuma, torn down whatever happens.
 
     Yields the URL rather than a client: `apply_monitors` closes the connection
     it is given in its own `finally`, so a shared client would be dead after the
@@ -101,33 +164,8 @@ def kuma_url():
     if not _docker_available():
         pytest.skip("Docker is not available")
 
-    port = _free_port()
-    url = f"http://127.0.0.1:{port}"
-    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
-    subprocess.run(
-        [
-            "docker", "run", "-d", "--name", CONTAINER_NAME,
-            "-e", "UPTIME_KUMA_DB_TYPE=sqlite",
-            "-p", f"127.0.0.1:{port}:3001",
-            _pinned_image(),
-        ],
-        check=True,
-        capture_output=True,
-    )
     try:
-        deadline = time.time() + 180
-        while time.time() < deadline:
-            probe = subprocess.run(
-                ["docker", "inspect", "--format", "{{.State.Health.Status}}", CONTAINER_NAME],
-                capture_output=True,
-                text=True,
-            )
-            if probe.stdout.strip() == "healthy":
-                break
-            time.sleep(3)
-        else:
-            pytest.fail("Uptime Kuma container never became healthy")
-
+        url = _start_kuma_container(CONTAINER_NAME)
         # A fresh v2 reports healthy while still in its setup wizard — the
         # healthcheck accepts the 302 to /setup-database. Health is not readiness.
         _run_setup(url)
@@ -136,9 +174,26 @@ def kuma_url():
         subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
 
 
-def _client(url: str):
-    from uptime_kuma_api import UptimeKumaApi
+@pytest.fixture
+def fresh_kuma_url():
+    """A disposable Uptime Kuma with NO admin user yet — for `bootstrap()` itself.
 
+    Own container (distinct name, function-scoped): the module fixture above is
+    pre-set-up on purpose so `apply_monitors` tests never pay for it twice, but
+    `bootstrap()`'s fresh-install branch (`need_setup() == True`) needs a genuinely
+    unset-up instance to exercise for real.
+    """
+    if not _docker_available():
+        pytest.skip("Docker is not available")
+
+    name = f"{CONTAINER_NAME}-bootstrap"
+    try:
+        yield _start_kuma_container(name)
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+
+def _client(url: str):
     api = UptimeKumaApi(url, timeout=60)
     api.login(ADMIN_USER, ADMIN_PASS)
     return api
@@ -177,19 +232,27 @@ def apply_seed(kuma_url, monkeypatch, tmp_path):
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
         (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
-        monkeypatch.setattr(
-            monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url})
-        )
+        monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
         monitoring.apply_monitors(tmp_path)
 
     return _apply
 
 
 @pytest.fixture(autouse=True)
-def wipe(kuma_url, request):
-    """Start every test from an empty instance — no inter-test ordering."""
+def wipe(request):
+    """Start every test from an empty instance — no inter-test ordering.
+
+    Takes `request` only, not `kuma_url` directly: declaring the fixture as a
+    parameter forces pytest to instantiate it (and its container) before the
+    `in request.fixturenames` guard below ever runs — every test in this file
+    is `autouse`, including the `TestBootstrapAgainstAFreshInstance` ones that
+    use `fresh_kuma_url` instead, so that would spin up both containers for
+    every bootstrap test. `getfixturevalue` defers instantiation until after
+    the guard confirms it is actually needed.
+    """
     if "kuma_url" not in request.fixturenames:
         return
+    kuma_url = request.getfixturevalue("kuma_url")
     api = _client(kuma_url)
     try:
         for m in api.get_monitors():
@@ -260,3 +323,60 @@ class TestApplyAgainstARealInstance:
         assert original_id in {m["id"] for m in live}, "a rename must not recreate the monitor"
         assert next(m["name"] for m in live if m["id"] == original_id) == seed[0]["name"]
         assert len(live) == len(seed), "and must not leave an orphan behind"
+
+
+class TestBootstrapAgainstAFreshInstance:
+    """`bootstrap()` end to end (#962) — the three things unit mocks cannot see:
+
+    `need_setup()`'s own reply on a cold socket, `login()` reusing the same
+    connection `_run_setup()` just used, and `upload_backup`'s v1 envelope
+    against a v2 server (flagged in the ticket as "not yet tested").
+    """
+
+    def _seed(self) -> list[dict]:
+        return [
+            {"type": "http", "name": "bootstrap-test-1", "url": "https://example.com", "active": True},
+            {"type": "http", "name": "bootstrap-test-2", "url": "https://example.org", "active": True},
+        ]
+
+    def test_bootstrap_creates_admin_and_imports_the_seed(self, fresh_kuma_url, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            monitoring,
+            "_get_kuma_creds",
+            lambda _root: {"url": fresh_kuma_url, "host": "127.0.0.1", "username": ADMIN_USER, "password": ADMIN_PASS},
+        )
+        export_dir = tmp_path / monitoring.EXPORT_DIR
+        export_dir.mkdir(parents=True, exist_ok=True)
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()))
+
+        monitoring.bootstrap(tmp_path)
+
+        api = _client(fresh_kuma_url)
+        try:
+            assert api.need_setup() is False, "the admin user must exist after bootstrap"
+            assert len(api.get_monitors()) == len(self._seed()), (
+                "upload_backup's v1 envelope against v2 was untested before this — "
+                "if it silently drops monitors, this is the check that would catch it"
+            )
+        finally:
+            api.disconnect()
+
+    def test_bootstrap_run_twice_is_a_no_op_second_time(self, fresh_kuma_url, monkeypatch, tmp_path):
+        """Idempotency: the second run must skip setup and skip import, not error."""
+        monkeypatch.setattr(
+            monitoring,
+            "_get_kuma_creds",
+            lambda _root: {"url": fresh_kuma_url, "host": "127.0.0.1", "username": ADMIN_USER, "password": ADMIN_PASS},
+        )
+        export_dir = tmp_path / monitoring.EXPORT_DIR
+        export_dir.mkdir(parents=True, exist_ok=True)
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()))
+        monitoring.bootstrap(tmp_path)
+
+        monitoring.bootstrap(tmp_path)  # must not raise, must not duplicate
+
+        api = _client(fresh_kuma_url)
+        try:
+            assert len(api.get_monitors()) == len(self._seed())
+        finally:
+            api.disconnect()
