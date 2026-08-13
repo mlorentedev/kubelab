@@ -59,5 +59,5 @@ Three observable changes:
 - Bitácora board: **kubelab#924** (see the `issue:` frontmatter field)
 - **kubelab#811 (IDP-031)** — the sibling `LimitRange`+`ResourceQuota` pattern in the `kubelab` namespace this spec mirrors, one namespace over. Its ceiling arithmetic is the thing this spec makes honest.
 - `k3s-io/k3s` `pkg/cloudprovider/servicelb.go` — source-verified 2026-08-13: no `Resources` field on the generated `svclb` DaemonSet container spec, no annotation covers it.
-- `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2` — the SSOT home for Traefik's own explicit `resources`, out of scope here, tracked in a follow-up ticket referencing #924.
+- `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2` — the SSOT home for Traefik's own explicit `resources`, out of scope here, tracked as **kubelab#1052 (OBS-011)**.
 - ADR-047 / TOOL-009 — the `cluster_bootstrap` SSOT this spec's manifest is applied through.
