@@ -415,6 +415,14 @@
         config: "{{ common | combine(env_overrides, recursive=True) }}"
       tags: [always]
 
+    # Inline here rather than base_system's firewall_tailnet_ports (OPS-018):
+    # the VPS never runs base_system (it's a prod node provisioned directly
+    # for K3s, and that role's dist-upgrade/package churn isn't something to
+    # add as a drive-by). NOTE what this does NOT cover: a Docker-published
+    # port bypasses this rule entirely — DNAT happens in PREROUTING, before
+    # ufw's INPUT chain, and DOCKER-USER is empty fleet-wide (#959). Glances
+    # is only actually restricted by its compose bind address
+    # (tailscale_ip:port:port in roles/glances), not by this ufw rule.
     - name: Allow Glances port on Tailscale interface
       community.general.ufw:
         rule: allow

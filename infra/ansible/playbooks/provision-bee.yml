@@ -120,17 +120,6 @@
       no_log: true
       tags: [tailscale]
 
-    - name: Allow service ports on Tailscale interface
-      community.general.ufw:
-        rule: allow
-        interface_in: tailscale0
-        port: "{{ item }}"
-        proto: tcp
-      loop:
-        - "{{ config.apps.services.data.minio.default_port_api }}"
-        - "{{ config.apps.services.data.minio.default_port_console }}"
-        - "{{ config.apps.services.observability.glances.default_port }}"
-
   roles:
     - role: ../roles/base_system
       tags: [base]
@@ -139,6 +128,10 @@
         netplan_interface: "{{ config.networking.nodes.beelink.lan_interface }}"
         netplan_address: "{{ config.networking.nodes.beelink.lan_ip }}/24"
         netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
+        firewall_tailnet_ports:
+          - "{{ config.apps.services.data.minio.default_port_api }}"
+          - "{{ config.apps.services.data.minio.default_port_console }}"
+          - "{{ config.apps.services.observability.glances.default_port }}"
 
     - role: ../roles/ssh_hardening
       tags: [ssh]

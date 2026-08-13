@@ -66,6 +66,12 @@ EXPECTED_DEFAULT_LIMIT_MEMORY = "256Mi"
 EXPECTED_KUBE_SYSTEM_DEFAULT_REQUEST_MEMORY = "64Mi"
 EXPECTED_KUBE_SYSTEM_DEFAULT_LIMIT_MEMORY = "384Mi"
 
+#: IDP-031 ResourceQuota ceiling, phase 2. Same anti-self-referential
+#: rationale as the LimitRange constants above: literal here, not parsed from
+#: infra/k8s/base/governance/resourcequota.yaml.
+EXPECTED_QUOTA_REQUESTS_MEMORY = "4Gi"
+EXPECTED_QUOTA_LIMITS_MEMORY = "7Gi"
+
 
 class TestK3sCluster:
     """K3s cluster must be healthy with all nodes ready."""
@@ -206,6 +212,68 @@ class TestNamespaceGovernance:
         assert resources.get("limits", {}).get("memory") == EXPECTED_DEFAULT_LIMIT_MEMORY, (
             f"Admitted pod carries limits.memory={resources.get('limits', {}).get('memory')!r}, "
             f"expected the LimitRange to inject {EXPECTED_DEFAULT_LIMIT_MEMORY}"
+        )
+
+    def test_resourcequota_memory_ceiling(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """The namespace has a ResourceQuota bounding requests.memory and limits.memory.
+
+        Reads `status.hard`/`status.used` from the JSON object rather than
+        `kubectl describe ns` text, so this stays a check on structured data
+        and not on a human-formatted table (the `tls: {}` lesson,
+        docs/lessons.md 2026-08-09 — never trust a rendering, read the
+        underlying object).
+        """
+        result = _kubectl("get resourcequota -n kubelab -o json", env)
+        assert result.returncode == 0, f"kubectl get resourcequota failed: {result.stderr}"
+
+        items = json.loads(result.stdout).get("items", [])
+        assert items, "No ResourceQuota in the kubelab namespace — the namespace has no aggregate ceiling"
+
+        hard = {k: v for item in items for k, v in item.get("status", {}).get("hard", {}).items()}
+        used = {k: v for item in items for k, v in item.get("status", {}).get("used", {}).items()}
+
+        assert hard.get("requests.memory") == EXPECTED_QUOTA_REQUESTS_MEMORY, (
+            f"ResourceQuota hard.requests.memory is {hard.get('requests.memory')!r}, "
+            f"expected {EXPECTED_QUOTA_REQUESTS_MEMORY}"
+        )
+        assert hard.get("limits.memory") == EXPECTED_QUOTA_LIMITS_MEMORY, (
+            f"ResourceQuota hard.limits.memory is {hard.get('limits.memory')!r}, expected {EXPECTED_QUOTA_LIMITS_MEMORY}"
+        )
+        assert "requests.memory" in used and "limits.memory" in used, (
+            f"ResourceQuota status.used is missing a constrained dimension: {used}"
+        )
+
+    def test_pod_exceeding_quota_is_rejected(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+        """A pod whose memory limit exceeds the quota's hard cap is rejected at admission.
+
+        Uses `--dry-run=server` for the same reason as the LimitRange
+        defaulting test: it traverses the real admission chain — including
+        the ResourceQuota plugin — without persisting a usage increment, so
+        this stays read-only and safe against prod. The limit (8Gi) is
+        chosen above the hard cap itself (7Gi), not merely above current
+        usage, so rejection does not depend on how much of the quota is
+        already consumed by other pods at test time.
+        """
+        manifest = (
+            '{"apiVersion":"v1","kind":"Pod",'
+            '"metadata":{"name":"idp-031-quota-probe","namespace":"kubelab"},'
+            '"spec":{"containers":[{"name":"probe","image":"registry.k8s.io/pause:3.9",'
+            '"resources":{"limits":{"memory":"8Gi"}}}]}}'
+        )
+        result = _kubectl(
+            f"create --dry-run=server -o json -f - <<'EOF'\n{manifest}\nEOF",
+            env,
+            timeout=30,
+        )
+        assert result.returncode != 0, (
+            "A pod requesting 8Gi (above the 7Gi quota hard cap) was ADMITTED — "
+            "the ResourceQuota is missing, misconfigured, or not being enforced"
+        )
+        assert "exceeded quota" in result.stderr, (
+            f"Pod creation failed, but not with a quota error — expected 'exceeded quota' in: {result.stderr.strip()}"
+        )
+        assert "memory" in result.stderr, (
+            f"Quota rejection did not name the exceeded resource: {result.stderr.strip()}"
         )
 
 

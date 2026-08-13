@@ -240,9 +240,47 @@ config-generate:
 #     (embeds plaintext basic_auth credentials). Drift-check is no-op.
 #   - infra/config/authelia/generated/<env>/configuration.yml — gitignored
 #     (embeds plaintext jwt_secret + argon2 hashes). Drift-check is no-op.
+#
+# KNOWN VACUOUS PATH: `infra/ansible/generated/<env>/hosts.yml` is listed below
+# and checks nothing. `infra/ansible/.gitignore:6` says "Generated Ansible
+# configurations (NEVER commit these)" and `git log --all` confirms the file was
+# never tracked, so `git diff` cannot see it — CI-GATE-002's Ansible half was
+# born vacuous rather than broken later. Left in place here, annotated rather
+# than silently removed, because deciding how Ansible inventory drift *should*
+# be detected is a separate call. Tracked as #1048.
+
+# Paths the revert at the end of `config-check-drift` may touch: exactly the
+# generator's TRACKED output, nothing else.
+#
+# This used to be `git checkout -- infra edge`, which reverted two whole trees
+# and so discarded any uncommitted hand edit under them — including
+# `infra/config/values/*.yaml`, the repo's declared source of truth. It
+# destroyed real work while printing "✓ No drift" (#1034), and `git checkout --`
+# on unstaged changes is the one git operation with no undo.
+#
+# The generator also writes `edge/traefik/generated/`, `infra/ansible/generated/`
+# and `infra/config/authelia/generated/`. Those are deliberately absent: all
+# three are gitignored with zero tracked files, so `git checkout --` errors on
+# them (which is what the old `2>/dev/null || true` was really swallowing) and
+# their residue is invisible to `git status` anyway.
+#
+# Whole directories, not just the three files diffed below: a run without an age
+# key rewrites the *tracked* `deployments.yaml` with its `secretRef`s omitted,
+# and that file is deliberately excluded from the diff. Only this revert puts it
+# back, so narrowing to the diffed paths would leave a mutilated tracked file
+# behind on every keyless run.
+DRIFT_REVERT_PATHS := infra/k8s/overlays/staging/generated \
+                      infra/k8s/overlays/prod/generated
+
 .PHONY: config-check-drift
 config-check-drift:
 	@test -n "$(ENV)" || (echo "Usage: make config-check-drift ENV=staging|prod" && exit 1)
+	@git diff --quiet -- $(DRIFT_REVERT_PATHS) || { \
+		echo "✗ Refusing to run: uncommitted changes under $(DRIFT_REVERT_PATHS)"; \
+		echo "  This target reverts those paths when it finishes, which would"; \
+		echo "  discard them. Commit or stash first."; \
+		exit 1; \
+	}
 	@echo "→ Regenerating $(ENV) configs and checking for drift..."
 	@$(TOOLKIT) config generate --env $(ENV) --force
 	@_status=0; \
@@ -256,7 +294,7 @@ config-check-drift:
 		git --no-pager diff -- $$_paths; \
 		_status=1; \
 	fi; \
-	git checkout -- infra edge 2>/dev/null || true; \
+	git checkout -- $(DRIFT_REVERT_PATHS); \
 	exit $$_status
 
 .PHONY: build-dev
