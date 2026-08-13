@@ -217,6 +217,18 @@ infra:
     # (RANDOM_TOKEN — our own DB password, not an external credential). `image`
     # feeds `sync_k8s_images` and is kept out of ConfigMaps by the generator's
     # deploy-concern guard (ADR-051 D4).
+    #
+    # Placement classification (ADR028-004) — see the scheme documented on
+    # `apps.services.core.gitea`. This is the one classified stateful service that
+    # does NOT live under `apps.services.*`, so the gate resolves each service's
+    # block from wherever it actually lives rather than walking a single tree.
+    # `dual` per ADR-050 D7: the canonical state is git + a Postgres projection +
+    # an object-store backup, the same shape as Grafana's and Loki's ConfigMaps.
+    # These two keys are excluded from generated ConfigMaps by
+    # `generator_k8s._PLACEMENT_SUFFIXES` — without that, being under `infra.*`
+    # would emit them as INFRA_POSTGRES_* into every component.
+    state_promotion: dual
+    location: always-on
     host: postgres
     port: 5432
     database: kubelab
@@ -530,6 +542,21 @@ apps:
 
       gitea:
         name: gitea
+        # Placement classification (ADR028-004). Two INDEPENDENT axes, declared on
+        # every stateful service in `infra/k8s/base|overlays` and enforced by
+        # tests/test_stateful_service_classification.py:
+        #   state_promotion: dual      — state has a promotion path in git, so a
+        #                                second instance is reconstructable.
+        #                    singleton — no promotion path; a second live instance
+        #                                would fork state that cannot be merged.
+        #   location:        always-on | on-demand — ADR-028's 3 AM test.
+        #                    undecided — deferred by a RECORDED decision only; the
+        #                                gate requires a ticket reference below.
+        # "prod" is an environment, not a location: the axes do not imply each other.
+        # Gitea is a singleton (private repos, no git promotion path) and moves to
+        # the Beelink platform node. The node itself is prose, not an axis value.
+        state_promotion: singleton
+        location: on-demand
         image: gitea/gitea:1.25.5
         domain: gitea.kubelab.live
         app_name: "KubeLab Git"
@@ -557,6 +584,11 @@ apps:
     automation:
       n8n:
         name: n8n
+        # ADR028-004: dual ONLY while git + `toolkit infra n8n import` stays the sole
+        # write path (R5). A UI-authored workflow forks state instantly. Prod is the
+        # live alerting path, so always-on by ADR-028's own test.
+        state_promotion: dual
+        location: always-on
         image: n8nio/n8n:2.12.3
         domain: n8n.kubelab.live
         enable_auth: false
@@ -589,6 +621,13 @@ apps:
     data:
       minio:
         name: minio
+        # ADR028-004: singleton (no git promotion path for object state). Location is a
+        # RECORDED deferral, not an omission — MinIO's destination is out of this
+        # spec's scope and tracked on #972; deciding it here would set the offsite
+        # tier by accident (ADR-049 D3).
+        state_promotion: singleton
+        location: undecided
+        location_deferred_to: "#972"
         image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
         domain: minio.kubelab.live
         console_domain: console.minio.kubelab.live
@@ -607,6 +646,9 @@ apps:
     observability:
       grafana:
         name: grafana
+        # ADR028-004: dashboards promote as ConfigMaps.
+        state_promotion: dual
+        location: always-on
         domain: grafana.kubelab.live
         enable_auth: true
         auth_level: one_factor
@@ -620,6 +662,9 @@ apps:
 
       loki:
         name: loki
+        # ADR028-004: config promotes as ConfigMaps; log data is not promoted state.
+        state_promotion: dual
+        location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
         image: grafana/loki:3.6.4
         vector_image: timberio/vector:0.43.1-alpine
@@ -656,6 +701,9 @@ apps:
     security:
       authelia:
         name: authelia
+        # ADR028-004: config promotes as ConfigMaps; session store is disposable.
+        state_promotion: dual
+        location: always-on
         image: authelia/authelia:4.39.15
         redis_image: redis:7-alpine
         enable_auth: false
@@ -743,6 +791,9 @@ apps:
 
       crowdsec:
         name: crowdsec
+        # ADR028-004: config promotes as ConfigMaps. Owns two PVCs (db + config).
+        state_promotion: dual
+        location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
         image: crowdsecurity/crowdsec:v1.7.6
         bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
