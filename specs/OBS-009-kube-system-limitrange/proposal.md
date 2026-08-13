@@ -1,7 +1,7 @@
 ---
 id: "OBS-009-kube-system-limitrange"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-08-13"
 issue: "kubelab#924"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
