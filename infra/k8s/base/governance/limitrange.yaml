@@ -27,6 +27,16 @@ kind: LimitRange
 metadata:
   name: kubelab-defaults
   namespace: kubelab
+  annotations:
+    # Kustomize emits ResourceQuota before LimitRange by its legacy kind-
+    # ordering, regardless of filename (verified empirically, proposal.md →
+    # Risks). A negative sync-wave forces Argo CD to apply this object in an
+    # earlier wave than resourcequota.yaml's default wave "0", so the GitOps
+    # path preserves the ordering `kubectl apply -k` gets by having this file
+    # land as its own commit first. Without this, a sync could apply the
+    # quota before the defaults exist and reject apprise/crowdsec at
+    # admission — the exact failure this whole spec exists to prevent.
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   limits:
     - type: Container
