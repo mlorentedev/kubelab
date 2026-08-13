@@ -1,7 +1,7 @@
 ---
 id: "ADR028-004-classify-stateful-service-placement"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-08-11"
 issue: "mlorentedev/kubelab#988"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -59,7 +59,7 @@ Observable outcomes. Each must be testable.
 
 Deliberately absent: anything asserting the ephemeral restore-from-prod-backup test path. That is declared doctrine, not present capability (#487 is open), and an acceptance criterion depending on it would make this spec unarchivable.
 
-- [ ] **AC1** — The ADR is merged and emits a value on **both** axes for all nine stateful services, with a location cell filled per singleton (not only for Gitea).
+- [ ] **AC1** — The ADR is merged and emits a value on **both** axes for all **eight** stateful services (nine PVCs — `crowdsec` owns two), with a location cell filled per singleton (not only for Gitea). A recorded deferral naming its ticket counts as filled; a blank cell does not. *(Corrected 2026-08-12, while still `draft`: the original said "nine stateful services", conflating the PVC count with the service count and making the criterion untestable as written — R4 had already established eight services / nine PVCs.)*
 - [ ] **AC2** — The classification is readable from a single SSOT, and a static test fails when a stateful service in `infra/k8s/base/` carries no classification. Verified by **demonstrating the failure**: remove one service's classification, show the test red, restore it, show it green. A passing test alone does not satisfy this criterion.
 - [ ] **AC3** — After the retirement, `kubectl kustomize` renders **both** overlays without error and `make test-e2e ENV=staging` is green. This is the criterion that forces the consumer sweep in R6 rather than an enumeration that can miss a file.
 - [ ] **AC4** — Per-instance emptiness evidence for staging `gitea` and `minio` (n8n stays dual per R5 — nothing is deleted there, so it drops out of this criterion; its evidence stays in `verification.md` as the record of why the classification flipped), **and for any prod instance being moved (e.g. prod `gitea-data`, per R1)** — repo count, bucket listing — is captured as command output in `verification.md` **before** any PVC deletion task runs. Found while resolving R3: R1's move deletes the prod PVC too, and the original AC4 only required proof for staging.
