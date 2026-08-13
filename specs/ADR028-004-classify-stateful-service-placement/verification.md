@@ -144,7 +144,7 @@ Checked every consumer R6 names, plus the one R3 added (`backup.yaml`), against 
 
 **Split into two, only one needs an edit:** "Authelia's staging access rules and OIDC clients" was one bullet for two different mechanisms.
 - **Access rules are auto-derived**, not hardcoded — `toolkit/features/generator_authelia.py` builds `access_control` generically from each component's `enable_auth`/`auth_level`. Retiring a service here is already safe; no manual edit point.
-- **OIDC client registrations are hardcoded** — `apps.services.security.authelia.oidc.clients` in `common.yaml` lists `gitea-oidc` and `minio-oidc` explicitly (n8n has none; it uses built-in auth per `expectations.py`'s own comment). These entries need manual removal on retirement — this is the real edit point the original bullet was gesturing at.
+- **OIDC client registrations are hardcoded** — `apps.services.security.authelia.oidc_clients` in `common.yaml` lists `gitea-oidc` and `minio-oidc` explicitly (n8n has none; it uses built-in auth per `expectations.py`'s own comment). These entries need manual removal on retirement — this is the real edit point the original bullet was gesturing at.
 
 **Confirmed, distinct from Authelia's own list:** `staging.yaml` overrides `apps.services.{core.gitea,automation.n8n,data.minio}.domain` (and MinIO's `console_domain`) to the `*.staging.kubelab.live` forms — the staging-layer half of "the `apps.services.*` tree," separate from Authelia's OIDC list above.
 

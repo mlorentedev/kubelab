@@ -1,0 +1,44 @@
+[
+  {
+    "id": "idp-031-f1-limitrange-defaults",
+    "behavior": "A LimitRange in the kubelab namespace supplies defaultRequest.memory: 128Mi and default.memory: 256Mi, and defaults exist for every dimension the ResourceQuota constrains.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k test_limitrange_defaults_memory -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "idp-031-f2-unspecified-container-defaulted",
+    "behavior": "A pod submitted with no resources block is admitted and comes up carrying the defaulted memory request and limit.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k test_unspecified_container_is_defaulted -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "idp-031-f3-resourcequota-ceiling",
+    "behavior": "A ResourceQuota constrains requests.memory at 4Gi and limits.memory at 7Gi, the same values in both environments, and kubectl describe ns kubelab reports usage against them.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k test_resourcequota_memory_ceiling -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "idp-031-f4-quota-rejection",
+    "behavior": "A workload that would push the namespace past the ceiling is rejected at admission with an explicit quota error, and the rejection names the exceeded resource.",
+    "verification": "poetry run pytest tests/infra/test_k3s.py -k test_pod_exceeding_quota_is_rejected -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "idp-031-f5-surge-case",
+    "behavior": "A full staging deploy followed by a rollout restart of all deployments completes with no pod stuck Pending on quota.",
+    "verification": "kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get deployments -o name | xargs -I{} kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab rollout restart {} && kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab rollout status deployment --timeout=180s && test -z \"$(kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get pods --field-selector=status.phase=Pending -o name)\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "idp-031-f6-ordering-regression-apprise-crowdsec",
+    "behavior": "apprise and crowdsec (the two pods whose initContainers declare no resources) are admitted and reach Running with the quota active, and their initContainers report the defaulted values. This is the regression test for the LimitRange-before-ResourceQuota ordering constraint.",
+    "verification": "kubectl --kubeconfig \"${KUBECONFIG:-$HOME/.kube/kubelab-staging-config}\" -n kubelab get pod -l app.kubernetes.io/name=apprise -o jsonpath='{.items[0].status.phase} {.items[0].spec.initContainers[0].resources.requests.memory} {.items[0].spec.initContainers[0].resources.limits.memory}' | grep -q 'Running 128Mi 256Mi' && kubectl --kubeconfig \"${KUBECONFIG:-$HOME/.kube/kubelab-staging-config}\" -n kubelab get pod -l app.kubernetes.io/name=crowdsec -o jsonpath='{.items[0].status.phase} {.items[0].spec.initContainers[0].resources.requests.memory} {.items[0].spec.initContainers[0].resources.limits.memory}' | grep -q 'Running 128Mi 256Mi'",
+    "state": "pending",
+    "evidence": ""
+  }
+]
