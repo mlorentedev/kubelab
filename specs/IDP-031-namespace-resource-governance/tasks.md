@@ -45,19 +45,19 @@ created: "2026-08-09"
 
 ### Phase 4 — prod
 
-- [ ] [AC6] Merge to master and let Argo CD sync prod (`selfHeal: true` per ADR-037). Confirm the sync applied the `LimitRange` in an earlier wave than the quota, and that `apprise`/`crowdsec` stay `Running` through it — the prod half of the ordering regression, and the one place the mitigation is load-bearing and cannot be re-run by hand.
-- [ ] [AC3] Confirm prod reports usage against the ceiling, and that the prod-only backup CronJob's next 03:00 UTC run is admitted (its 0.5 Gi is inside the window, but it has never run under a quota).
+- [x] [AC6] Merge to master and let Argo CD sync prod (`selfHeal: true` per ADR-037). Confirm the sync applied the `LimitRange` in an earlier wave than the quota, and that `apprise`/`crowdsec` stay `Running` through it — the prod half of the ordering regression, and the one place the mitigation is load-bearing and cannot be re-run by hand. ✓ 2026-08-14 — `LimitRange`/`ResourceQuota` both live via selfHeal, sync-wave `-1` annotation present on the rendered object. **Correction**: `apprise`/`crowdsec` had never actually restarted since the `LimitRange` landed (pods dated 2026-06-17 / 2026-03-26, both pre-dating the object) — their initContainers still reported `{}`. Not caught by re-reading the task, caught by inspecting `spec.initContainers[*].resources` directly instead of trusting QoS class as a proxy (`Burstable` there only proves the *main* container has a request, not the initContainer). Restarted both via `make restart-service`; initContainers now report `128Mi`/`256Mi`, `Burstable`, `Running`.
+- [x] [AC3] Confirm prod reports usage against the ceiling, and that the prod-only backup CronJob's next 03:00 UTC run is admitted (its 0.5 Gi is inside the window, but it has never run under a quota). ✓ 2026-08-14 — quota live (`requests.memory: 2400Mi/4Gi`, `limits.memory: 4992Mi/7Gi`). Rather than wait for 03:00 UTC, triggered the same CronJob pod spec on demand via `make backup-pvc ENV=prod` (ADR-024) — admitted, `Succeeded`, `Burstable`, same admission chain the scheduled run goes through. The literal 03:00 UTC run self-confirms on its own schedule.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] `make test-infra ENV=staging` and `ENV=prod` green
-- [ ] Type checks pass (`make type`)
-- [ ] Lint passes (`make lint`)
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-08-14
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-08-14
+- [x] `make test-infra ENV=staging` and `ENV=prod` green ✓ 2026-08-14 — prod: 27 passed, 6 skipped (pre-existing), 0 failed (single run also covers OBS-009's `TestKubeSystemGovernance`)
+- [x] Type checks pass (`make type`) ✓ 2026-08-14
+- [x] Lint passes (`make lint`) ✓ 2026-08-14
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-14
+- [x] `verification.md` filled in ✓ 2026-08-14
+- [x] PR opened referencing this spec folder ✓ #1037 (merged), this closing pass via a follow-up docs PR
 
 ## Machine-readable features
 
