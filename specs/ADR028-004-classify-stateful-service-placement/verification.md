@@ -70,7 +70,11 @@ Asked directly, since this is a doctrine call that cascades into R1's deployment
 
 ## R5 — Per-instance emptiness proof (staging, 2026-08-12)
 
+`AC4-EVIDENCE staging/gitea pre-deletion`
+
 **Gitea — confirmed empty.** Unauthenticated `/api/v1/repos/search` structurally cannot see private repos, and private-only is Gitea's settled role — a 0 there can't distinguish "empty" from "invisible." Re-ran authenticated (admin credentials via `toolkit secrets show apps.services.core.gitea.admin_password --env staging`, live username read from the `gitea-secrets` K8s Secret): `X-Total-Count: 0` with `private=true`, 0 repos including private. Clean.
+
+Re-verified 2026-08-14 immediately before the move, unconditionally rather than trusting the entry above — see the prod capture below for the shared method and the full transcript of both instances.
 
 **MinIO — confirmed empty.** `/data` inside the pod contains only `.minio.sys` (MinIO's own internal metadata dir). No buckets.
 
@@ -149,6 +153,85 @@ Checked every consumer R6 names, plus the one R3 added (`backup.yaml`), against 
 **Confirmed, distinct from Authelia's own list:** `staging.yaml` overrides `apps.services.{core.gitea,automation.n8n,data.minio}.domain` (and MinIO's `console_domain`) to the `*.staging.kubelab.live` forms — the staging-layer half of "the `apps.services.*` tree," separate from Authelia's OIDC list above.
 
 **Net effect on the task list this unblocks, narrowed after R5 kept n8n dual:** every count above included n8n's entry alongside gitea's and minio's. Once R5 settled n8n as staying dual, in place, its entries in each of these 7 files no longer move: `overlays/prod/patches.yaml` moves 5 resources (not 7 — `n8n-config`/`n8n` stay in `base/`), `overlays/prod/backup.yaml` drops 1 mount (not 2 — `n8n-data` stays), `tests/e2e/expectations.py`'s `n8n` entry is untouched, `sync_homepage_config.py` loses 2 hardcoded tiles (not 3 — n8n's stays), `staging.yaml` loses 2 domain overrides (not 3 — n8n's stays). `SECRET_CATALOG` and the OIDC client list were already gitea+minio only, unchanged. Same 7 files, smaller diff in each. AC3 (render + `test-e2e ENV=staging` green) still stays the outcome check, since a static list can still miss something a future service adds.
+
+## AC4 — Pre-deletion emptiness re-verification, both Gitea instances (2026-08-14)
+
+Captured **before** any deletion and before the operator started using Gitea, which is the only window in which this evidence means anything. R5's staging capture from 2026-08-12 was not reused — `tasks.md` requires the check to run unconditionally, however recent the prior evidence looks.
+
+**Method.** Authenticated `GET /api/v1/repos/search?private=true` plus `GET /api/v1/admin/users`. Authentication is not optional here: an unauthenticated search cannot see private repos by construction, and private-only is Gitea's settled role, so an unauthenticated `0` cannot distinguish *empty* from *invisible*.
+
+The first run returned `HTTP 401` against both instances, authenticating as `apps.auth.admin_username` (`operator`). That is not an incidental scripting slip — Gitea's admin identity is **not** taken from that SSOT. `k8s_secrets.py` maps the `gitea-secrets` key `ADMIN_USER` to `BASIC_AUTH_USER`, which resolves to `manu`, the OS-level user. This is the drift already tracked as **#1013** (AUTH-004), observed here independently; no new ticket, and the rename is deliberately not performed in passing.
+
+```
+Captured: 2026-08-14T00:44:06Z
+
+### AC4-EVIDENCE prod/gitea pre-deletion — https://gitea.kubelab.live
+version:        {"version":"1.25.5"}
+repos (private=true, authenticated as manu):
+  HTTP status:  HTTP/2 200
+  X-Total-Count: 0
+  data[] length: 0
+  users:
+    count: 1
+    user: manu admin= True
+
+### AC4-EVIDENCE staging/gitea pre-deletion — https://gitea.staging.kubelab.live
+version:        {"version":"1.25.5"}
+repos (private=true, authenticated as manu):
+  HTTP status:  HTTP/2 200
+  X-Total-Count: 0
+  data[] length: 0
+  users:
+    count: 1
+    user: manu admin= True
+```
+
+**Both instances are empty**: authenticated `200`, `X-Total-Count: 0`, no repos including private ones, and a single user which is the bootstrap admin itself. The singleton can be stood up on the Beelink without migrating anything.
+
+## AC2 — Classification gate transcript (captured 2026-08-14)
+
+Owed by PR 2, which merged without it. This is an unmet acceptance criterion, not tidying: AC2 requires the gate be *demonstrated* to fail, and a suite that only ever reports green proves nothing about whether it can go red.
+
+**Full suite, green against the real repo:**
+
+```
+$ poetry run pytest tests/test_stateful_service_classification.py -v --no-cov
+test_manifests_actually_yield_stateful_services                              PASSED
+test_every_stateful_service_declares_a_classification                        PASSED
+test_fixture_baseline_is_compliant                                           PASSED
+test_gate_goes_red_on_each_violation[overrides0-missing `state_promotion`]    PASSED
+test_gate_goes_red_on_each_violation[overrides1-missing `location`]           PASSED
+test_gate_goes_red_on_each_violation[overrides2-is not one of]                PASSED
+test_gate_goes_red_on_each_violation[overrides3-is not one of]                PASSED
+test_gate_goes_red_on_each_violation[overrides4-location_deferred_to]         PASSED
+test_gate_goes_red_on_each_violation[overrides5-not a ticket reference]       PASSED
+test_gate_goes_red_on_each_violation[overrides6-not a ticket reference]       PASSED
+test_gate_goes_red_on_each_violation[overrides7-not a ticket reference]       PASSED
+test_gate_goes_red_when_the_service_has_no_config_block                       PASSED
+test_undecided_location_is_accepted_when_its_deferral_is_recorded             PASSED
+============================== 13 passed in 0.70s ==============================
+```
+
+**Red-then-green against the real repo**, not only against the synthetic fixture. The eight `test_gate_goes_red_*` cases above assert failure on in-memory fixtures, which proves the checking *function* rejects bad input but not that the live wiring — PVC discovery, the two config namespaces, the resolution walk — reaches `common.yaml` at all. A gate can pass all of its own negative controls and still be reading nothing. So one real classification field was removed and the main test re-run:
+
+```
+$ # gitea's `state_promotion` line temporarily removed from common.yaml
+$ poetry run pytest ...::test_every_stateful_service_declares_a_classification
+E       AssertionError: Stateful services with an incomplete classification:
+E       assert not ['gitea (PVCs: gitea-data): missing `state_promotion`']
+============================== 1 failed in 0.54s ===============================
+
+$ # file restored from an explicit backup copy
+$ poetry run pytest ...::test_every_stateful_service_declares_a_classification
+============================== 1 passed in 0.52s ===============================
+
+$ git diff --stat -- infra/config/values/common.yaml
+(no output — restored byte-identical)
+```
+
+The failure names the service and the missing field rather than reporting a bare count, which is what `tasks.md` asked for.
+
+Method note: the edit was restored from a copied backup, deliberately **not** with `git checkout -- infra/config/values/common.yaml`. That command is what #1034 was about, and reaching for it during an experiment is how this session destroyed its own uncommitted work once already. `git diff --stat` is included above as the proof of no residue.
 
 ## Test status
 
