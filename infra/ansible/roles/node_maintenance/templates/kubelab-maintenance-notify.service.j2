@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=KubeLab maintenance failure notification (NOTIFY-001)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/kubelab-maintenance-notify.sh
+TimeoutStartSec=30
+StandardOutput=journal
+StandardError=journal

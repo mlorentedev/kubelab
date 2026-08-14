@@ -2,10 +2,26 @@
 maintenance_journal_max_size: "20M"
 maintenance_snap_retain: 2
 maintenance_tmp_max_days: 7
-maintenance_install_timer: false
+# ANSIBLE-035: the timer is now a property of provisioning, not an
+# imperative follow-up (make maintain NODE=x TIMER=1). Default true so
+# every node that includes this role gets it, unless a playbook opts out.
+maintenance_install_timer: true
 maintenance_timer_schedule: "weekly"
 # Override for nodes with K3s but not in k3s_servers group (e.g. aws1 hub)
 maintenance_is_k3s_node: false
+
+# ANSIBLE-035: gates the disk-cleanup tasks (APT/journal/rsyslog/snap/
+# Docker/crictl/temp-file) independently of maintenance_install_timer.
+# Provisioning playbooks set this false: including the role to install the
+# timer must NOT also run a synchronous cleanup pass on every
+# `make provision` -- that would wipe /var/lib/apt/lists right after
+# base_system populates it (the exact empty-cache state that produces a
+# false `vim`-style failure under --check, see OPS-017/#1059) and would
+# evict ace1's staging K3s image cache / beelink's CI build cache on every
+# re-provision via `docker image/builder prune -af`. Cleanup is meant to
+# run on the timer's own weekly schedule, or via `make maintain TIMER=1`'s
+# explicit manual invocation -- both of which inherit this `true` default.
+maintenance_run_cleanup: true
 
 # Rotated rsyslog files (syslog.1, syslog.2.gz, kern.log.1, auth.log.*…) older
 # than N days. logrotate keeps 7 by default; on low-disk nodes the spike from
@@ -17,3 +33,13 @@ maintenance_rotated_log_retention_days: 3
 # if the ACTIVE /var/log/syslog exceeds this size, truncate to 0. Set to 0
 # to disable. RELIAB-009 incident 2026-05-10.
 maintenance_active_log_max_mb: 100
+
+# --- OnFailure notify (ANSIBLE-035, NOTIFY-001) ----------------------------
+# Always prod n8n, regardless of this node's own deploy_env: alerting must
+# not depend on ace1 (staging n8n's host) being powered on. See
+# specs/ANSIBLE-035-maintenance-timer-rollout/proposal.md for the measured
+# reasoning. Not derived from `config.*` on purpose -- 3 of the 7 nodes
+# running this role have deploy_env: staging, so config.apps.services.
+# automation.n8n.domain would resolve to staging's domain on those nodes.
+maintenance_notify_domain: "n8n.kubelab.live"
+maintenance_notify_secret_file: /opt/kubelab-maintenance-notify-secret

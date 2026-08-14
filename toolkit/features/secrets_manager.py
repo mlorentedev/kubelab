@@ -470,6 +470,8 @@ SECRET_CATALOG: list[SecretSpec] = [
     # Lives in the n8n encrypted credential store (Header Auth, ADR-044 webhook-auth);
     # SOPS holds the canonical copy for recovery/rotation. No K8s SECRET_DEFINITIONS
     # mapping — n8n reads it from its own credential, not from an env var.
+    # Staging and prod n8n each hold their OWN separately-configured credential
+    # (different values, one per env file) — this key is env-scoped by design.
     SecretSpec(
         key_path="apps.services.automation.notify.webhook_secret",
         description="Shared secret authenticating POSTs to the n8n /webhook/notify ingress",
@@ -478,6 +480,35 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="opaque bearer token; sources send 'Authorization: Bearer <token>'",
         rotate_note="Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source.",
         envs=("staging", "prod"),
+    ),
+    # ANSIBLE-035: fleet-wide copy of the PROD n8n webhook token specifically,
+    # under a DEDICATED key (not the one above) so the merge can't collide.
+    # All 7 kubelab-maintenance-notify.service nodes POST to prod n8n
+    # regardless of their own deploy_env (see specs/ANSIBLE-035-.../proposal.md
+    # for why: alerting must not depend on ace1/staging-n8n's power state).
+    # If this shared the `webhook_secret` key path above, the 3 nodes with
+    # deploy_env: staging (beelink, ace1, ace2) would resolve STAGING's
+    # distinct value instead — their playbooks merge common.enc.yaml with
+    # staging.enc.yaml, and the env override wins — so those nodes would send
+    # a token prod n8n rejects with 403. common-only storage (no per-env
+    # override exists for this key) sidesteps that: every node decrypts
+    # common.enc.yaml unconditionally, so this always resolves the same way.
+    # Value must stay identical to the PROD entry of webhook_secret above —
+    # it authenticates against the same n8n Header Auth credential.
+    SecretSpec(
+        key_path="apps.services.automation.notify.fleet_webhook_secret",
+        description="Fleet-wide copy of prod n8n's webhook token, for bare-metal OnFailure= notify units",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("n8n",),
+        format_hint="opaque bearer token, identical to the PROD apps.services.automation.notify.webhook_secret value",
+        rotate_note=(
+            "Rotate apps.services.automation.notify.webhook_secret (env=prod) first, then copy "
+            "the new value here with the same command used to create it (see ANSIBLE-035), then "
+            "re-provision the fleet (`make provision NODE=x TAGS=maintenance` per node) — "
+            "kubelab-maintenance-notify.service reads this from a static 0600 file written at "
+            "provision time, not decrypted live on the node."
+        ),
+        envs=("staging", "prod"),  # consumed by nodes provisioned under both envs
     ),
     # =========================================================================
     # Platform API (external — user-provided credentials)

@@ -52,6 +52,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]  # secrets must load for any tag selection (e.g. --tags maintenance)
 
     - name: Decrypt env secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/{{ _rpi4_env }}.enc.yaml
@@ -61,11 +62,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]
 
   roles:
     - role: ../roles/base_system
@@ -133,3 +136,11 @@
         glances_port: "{{ config.apps.services.observability.glances.default_port }}"
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
+
+    # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
+    # runs on the timer's own weekly schedule, not synchronously on every
+    # provisioning run. See roles/node_maintenance/defaults/main.yml.
+    - role: ../roles/node_maintenance
+      tags: [maintenance]
+      vars:
+        maintenance_run_cleanup: false

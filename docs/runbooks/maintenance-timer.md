@@ -1,0 +1,118 @@
+---
+id: maintenance-timer
+type: runbook
+status: active
+created: "2026-08-14"
+---
+
+# Fleet maintenance timer — operational runbook
+
+> `kubelab-maintenance.timer` runs weekly disk hygiene (APT cache, journal
+> vacuum, rotated-log retention, snap/Docker/crictl pruning, temp files) on
+> every Ubuntu/Debian node in the fleet. Property of provisioning since
+> ANSIBLE-035 — a freshly provisioned or freshly replaced node comes up with
+> it already scheduled, rather than needing a manual follow-up step.
+
+## Scope
+
+- **Covered**: vps, aws1, beelink, rpi3, rpi4, ace1, ace2 — every node
+  `provision-<node>.yml` includes `roles/node_maintenance` for.
+- **Not covered**: Jetson (Ubuntu 18.04, `legacy_python`, raw-module-only
+  provisioning — the role's Ansible-module tasks aren't reachable there).
+
+## Checking status
+
+```bash
+# Is the timer active and scheduled?
+ansible <node> -i infra/ansible/generated/<env>/hosts.yml -b -m command \
+  -a "systemctl list-timers kubelab-maintenance.timer"
+
+# Did the last run succeed?
+ansible <node> -i infra/ansible/generated/<env>/hosts.yml -b -m command \
+  -a "systemctl show kubelab-maintenance.service -p Result -p ExecMainStatus"
+
+# What did it actually do?
+ansible <node> -i infra/ansible/generated/<env>/hosts.yml -b -m command \
+  -a "journalctl -u kubelab-maintenance.service -n 50 --no-pager"
+```
+
+`<env>` is that node's own `deploy_env` in its provisioning playbook (prod
+for vps/rpi3/rpi4, staging for beelink/ace1/ace2, hub for aws1) — the
+inventory only exists per-env, not per-node.
+
+## Running it manually
+
+`make maintain NODE=<node> [ENV=staging|prod] [TIMER=1]` — see
+`infra/ansible/playbooks/maintain.yml`. Without `TIMER=1` this runs cleanup
+once, immediately, without touching the timer. This is the only path that
+runs cleanup synchronously — `make provision` never does (see "Why
+provisioning doesn't run cleanup" below).
+
+## Temporarily disabling the timer on a node
+
+```bash
+ansible <node> -i infra/ansible/generated/<env>/hosts.yml -b -m command \
+  -a "systemctl disable --now kubelab-maintenance.timer"
+```
+
+The next `make provision NODE=<node> ...` re-enables it (`maintenance_install_timer`
+defaults `true`) — this is a temporary pause, not a permanent opt-out. For a
+permanent exclusion, add `maintenance_install_timer: false` to that node's
+role invocation in its `provision-<node>.yml`, with a comment explaining why.
+
+## Why provisioning doesn't run cleanup
+
+`node_maintenance`'s cleanup tasks (APT lists wipe, `docker image/builder
+prune -af`, `crictl rmi --prune`, …) are gated behind `maintenance_run_cleanup`
+(default `true`), which every `provision-<node>.yml` sets `false` when
+including the role. Including the role unconditionally would run the full
+cleanup pass on every single `make provision`, not just install the timer —
+wiping `/var/lib/apt/lists` right after `base_system` populates it (a
+`--check` dry-run in that window fails on a completely standard package,
+even though a real run succeeds — see the "check-mode apt cache" note
+below), and evicting build/image caches on every re-provision. Cleanup only
+ever runs on the timer's own weekly schedule, or via `make maintain
+TIMER=1`'s explicit manual invocation.
+
+## What an OnFailure notification means
+
+A failed `kubelab-maintenance.service` run (a hard script abort — most
+individual sub-tasks tolerate failure deliberately via `ignore_errors`, so
+this means something like `apt-get clean` or `journalctl --vacuum-size`
+failing outright, not a single skipped prune) triggers
+`kubelab-maintenance-notify.service`, which POSTs a `log`-severity envelope
+to n8n's public `/webhook/notify` ingress (NOTIFY-001). This lands wherever
+`log`-tier fleet alerts land (Apprise → Telegram at the time of writing).
+
+**Always prod n8n** (`n8n.kubelab.live`), regardless of the node's own
+`deploy_env` — this is deliberate: three of the seven nodes provision under
+`deploy_env: staging`, and routing their alerts through staging n8n would
+make the alert path depend on ace1 (staging n8n's host) being powered on.
+
+**Responding to one**: check the linked node's `kubelab-maintenance.service`
+journal (see "Checking status" above) for the actual failure. A delivery
+failure of the notification itself (wrong token, n8n unreachable) shows up
+as `kubelab-maintenance-notify.service` itself failing — check that unit's
+own journal separately if the alert never arrived but you suspect a run
+failed.
+
+## Known artifact: `--check` dry-runs after a cache-wiping event
+
+Both `kubelab-maintenance.sh.j2` (the timer's actual weekly payload) and the
+`maintenance_run_cleanup` path wipe `/var/lib/apt/lists`. Ansible's `apt`
+module skips the real `apt-get update` under `--check` (it only predicts the
+change) but still reports the cache-update task as `changed` — so a
+`--check` dry-run run in the window between a cache wipe and the next real
+`apt-get update` can fail on a completely standard package (observed with
+`vim` on rpi3 during ANSIBLE-035's own rollout, before `base_system` had
+ever populated its cache). This is a known, understood check-mode artifact,
+not a functional bug: a real (non-`--check`) run genuinely refreshes the
+cache first and succeeds. If a `--check` run fails this way, re-run without
+`--check` — it will resolve on the first real run afterward.
+
+## References
+
+- Role: `infra/ansible/roles/node_maintenance/`
+- Spec: `specs/ANSIBLE-035-maintenance-timer-rollout/` (or
+  `specs/archive/ANSIBLE-035-maintenance-timer-rollout/` once archived)
+- NOTIFY-001 webhook contract: `infra/n8n/workflows/README.md`

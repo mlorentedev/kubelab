@@ -3796,6 +3796,40 @@ Recovery was cheap only by accident — the edits had been applied by a script r
 
 ---
 
+### [2026-08-14] Ansible's `apt` module can report `changed: true` for two unrelated reasons that both look like "nothing really happened"
+
+**Context:** OPS-017 (#960) added `base_system` to rpi3's provisioning playbook — the first time that role had ever run on a Debian-family node (every other fleet node is Ubuntu). Getting it to a clean, idempotent, `--check`-safe state surfaced two distinct bugs in the same two tasks, on the same node, in the same session.
+
+**Bug 1 — `--check` fails on a completely standard package.** A `CHECK=1` dry-run failed with `No package matching 'vim' is available`, even though `vim` is a stock Debian package. Root-caused by reading the vendored module source (`ansible/modules/apt.py`, around line 1415) rather than guessing: `update_cache`'s real work — `cache.update()` — is wrapped in `if not module.check_mode:`, so a `--check` run never actually refreshes the on-disk apt cache, yet the task still unconditionally reports `changed: true` for it. Confirmed independently that this node's cache really was empty (`find /var/lib/apt/lists -name '*Packages*'` → 0 files, since `base_system` — the only place `apt update_cache` is declared — had never run here before). A `--check` run therefore evaluates every subsequent `apt: name: ...` task against a cache that was never populated. Proof the diagnosis was right, not just plausible: the identical `CHECK=1` command, re-run after a real (non-check) pass had genuinely refreshed the cache, passed clean.
+
+**Bug 2 — a real run keeps reporting `changed: true` for a package that's already installed.** After fixing Bug 1, an idempotence re-run still showed `changed: true` on "Install base packages", even though `apt-get`'s own output said `0 upgraded, 0 newly installed`. `dnsutils` is a pure virtual package on Debian trixie — `dpkg -l dnsutils` reports `un` (unknown, no entry at all), only `Provides` from the real package `bind9-dnsutils`. Ansible's `apt` module pre-checks the *literal requested name* against dpkg before invoking `apt-get`, and does not resolve `Provides` the way `apt-get` itself does — so it never finds `dnsutils` "installed" and re-invokes `apt-get install dnsutils` every run, which itself is a real no-op (apt resolves the virtual name correctly) but the module still reports it as `changed`. On Ubuntu 24.04, `dnsutils` happens to be a genuine transitional package with its own dpkg entry (`ii`), which is why this had never surfaced anywhere else in the fleet — rpi3 was the first Debian-family tester. Fixed by naming the real package (`bind9-dnsutils`) instead of the virtual alias — a no-op rename on Ubuntu, a real fix on Debian.
+
+**Rule:**
+- **A module reporting `changed: true` is a claim about what the module *decided to attempt*, not proof that a real state change occurred — verify against the underlying tool's own output (`apt-get`'s "0 upgraded, 0 newly installed") before trusting the module's own changed/unchanged signal**, especially the first time a role runs against a new OS family.
+- **`--check` mode is not "the same logic, minus writes" for every module** — some modules (this `apt` one included) skip specific side-effecting calls under check-mode while still reporting the task as changed, which can make a `--check` run fail on things a real run would have fixed for itself moments earlier. When a `--check` failure looks absurd (a stock package "unavailable"), suspect the dry-run's own state assumptions before the repo's config.
+- **A package's identity in Ansible's `apt` module is the literal string in `dpkg`'s database, not what `apt-get` would resolve it to.** Virtual/transitional packages are exactly where these two views diverge; when adding a fleet role to a new OS family for the first time, check every package name against that OS's `dpkg -l`, not just whether `apt-get install` would succeed.
+
+**Tags:** `#ansible` `#apt` `#debian` `#check-mode` `#idempotence` `#ops-017` `#gotcha`
+
+---
+
+### [2026-08-14] `--tags` silently skips prerequisite `pre_tasks` that were never tagged, and a shared secret key collides across an Ansible env-override merge
+
+**Context:** ANSIBLE-035 (#928) rolled a systemd maintenance timer out to 7 nodes as a property of provisioning, then wired its failure to POST a notification through n8n's webhook. Both bugs below were caught before shipping — one by a live failure, one by simulating the merge before writing any Ansible task — but both were the kind of thing that would otherwise have shipped silently.
+
+**Bug 1 — `--tags` skips config/secrets loading that nothing marks as prerequisite.** Adding a task that referenced `secrets.*` under `--tags maintenance` failed with `'secrets' is undefined` on 4 of the 7 playbooks (vps, aws1, rpi3, rpi4). Their `pre_tasks` that decrypt SOPS and build the `secrets` fact carried no `tags:` at all, so Ansible's normal tag-filtering behavior — a task with no matching tag and no `always` tag is skipped when a `--tags` filter is active — silently dropped them, while the new role task (which *did* inherit a matching tag from its role invocation) still ran and referenced an undefined fact. The other 3 playbooks (beelink, ace1, ace2) already had `tags: [always]` on the equivalent tasks, each with a comment naming this exact scenario — the fix was bringing the 4 stragglers in line with an already-correct, already-documented pattern already living in the same repo, not inventing one.
+
+**Bug 2 — reusing a secret's key path across a merge context it wasn't scoped for.** The plan was for all 7 nodes to authenticate to n8n's webhook using the existing `apps.services.automation.notify.webhook_secret`. Before writing the Ansible task, the exact `combine()` merge every playbook performs (`common.enc.yaml` deep-merged with that node's own `{env}.enc.yaml`) was simulated in a throwaway script for all three node contexts in play (common-only, common+staging, common+prod) — and it showed that 3 of 7 nodes (the ones with `deploy_env: staging`) would resolve *staging's own, different* value for that key, because staging's env-file override wins the merge. Those nodes would have sent prod n8n a token it doesn't recognize, and gotten a silent 403 nobody was watching for. Fixed with a new key, `fleet_webhook_secret`, stored *only* in `common.enc.yaml` — no per-env override exists for it, so there's nothing for any env file to win against.
+
+**Rule:**
+- **A `pre_tasks` block with no tags is invisible to `--tags` filtering, even if a task three roles later assumes its output exists.** Any fact another task might reference under a narrower `--tags` run needs `tags: [always]` on the tasks that build it — grep for the pattern already established elsewhere in the same repo before assuming a new playbook needs to invent one.
+- **Reusing an existing secret's key path for a new consumer is only safe if that consumer resolves config exactly the same way every existing consumer does.** Before wiring a secret into a new set of callers, simulate (or trace by hand) the actual merge/override chain each caller goes through — "it's the same key, so it'll be the same value" is an assumption, not a fact, the moment more than one file can define that key.
+- **Both of these were caught by measuring the actual resolved state (a live error; a simulated merge output) rather than reading the Ansible source and reasoning about what "should" happen.** Neither is discoverable by code review alone — `--tags` skip behavior and merge-precedence collisions both only manifest at the exact invocation that exercises them.
+
+**Tags:** `#ansible` `#tags` `#secrets` `#sops` `#merge-order` `#ansible-035` `#gotcha`
+
+---
+
 ### [2026-08-14] `max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`
 
 **Context:** OBS-010 — two Grafana alert rules (`obs010-quota-requests`/`-limits`) on `kubelab` namespace memory utilization, `for: 5m` so a rules should only fire on a *sustained* breach, not a momentary one during a routine deploy restart.

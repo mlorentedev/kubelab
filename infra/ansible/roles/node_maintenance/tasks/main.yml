@@ -2,6 +2,14 @@
 # =============================================================================
 # Node Maintenance — disk cleanup + optional systemd timer
 # Works on all node types: K3s, Docker, hub, gateway
+#
+# ANSIBLE-035: the cleanup tasks below are gated behind maintenance_run_cleanup
+# (default true), independently of maintenance_install_timer (also default
+# true). Provisioning playbooks include this role to install the timer but
+# pass maintenance_run_cleanup: false, so `make provision` never ALSO runs a
+# synchronous cleanup pass -- cleanup only runs on the timer's own weekly
+# schedule, or via `make maintain TIMER=1`'s explicit manual invocation.
+# See defaults/main.yml for why that matters (apt cache, Docker/K3s caches).
 # =============================================================================
 
 # --- Forensic sanity check (ANSIBLE-023) ---
@@ -13,48 +21,52 @@
     path: /var/log/journal
   register: _journal_dir
   changed_when: false
+  when: maintenance_run_cleanup | bool
 
 - name: Warn if persistent journal directory is missing
   debug:
     msg: >-
       WARNING: /var/log/journal missing — journald is volatile, crash forensics
       will be lost on reboot. Re-run base_system role (ANSIBLE-023).
-  when: not _journal_dir.stat.exists
+  when: maintenance_run_cleanup | bool and not _journal_dir.stat.exists
 
 # --- Pre-cleanup report ---
 - name: Report disk usage (before)
   command: df -h /
   register: _disk_before
   changed_when: false
+  when: maintenance_run_cleanup | bool
 
 - name: Show disk before
   debug:
     msg: "BEFORE: {{ _disk_before.stdout_lines | default([]) | last | default('N/A (check mode)') }}"
+  when: maintenance_run_cleanup | bool
 
 # --- APT cleanup ---
 - name: Clean APT cache
   command: apt-get clean
   changed_when: false
-  when: ansible_facts.pkg_mgr == 'apt'
+  when: maintenance_run_cleanup | bool and ansible_facts.pkg_mgr == 'apt'
 
 - name: Remove APT package lists
   file:
     path: /var/lib/apt/lists
     state: absent
-  when: ansible_facts.pkg_mgr == 'apt'
+  when: maintenance_run_cleanup | bool and ansible_facts.pkg_mgr == 'apt'
 
 - name: Recreate APT lists directory
   file:
     path: /var/lib/apt/lists/partial
     state: directory
     mode: "0700"
-  when: ansible_facts.pkg_mgr == 'apt'
+  when: maintenance_run_cleanup | bool and ansible_facts.pkg_mgr == 'apt'
 
 # --- Journal cleanup ---
 - name: Vacuum journal logs to {{ maintenance_journal_max_size }}
   command: journalctl --vacuum-size={{ maintenance_journal_max_size }}
   register: _journal
   changed_when: "'Deleted' in _journal.stdout"
+  when: maintenance_run_cleanup | bool
 
 # --- Rotated rsyslog cleanup (RELIAB-009 follow-up) ---
 - name: Find rotated rsyslog files older than {{ maintenance_rotated_log_retention_days }} days
@@ -70,6 +82,7 @@
       - 'lastlog.*'
     recurse: false
   register: _rotated_logs
+  when: maintenance_run_cleanup | bool
 
 - name: Delete rotated rsyslog files
   file:
@@ -78,7 +91,7 @@
   loop: "{{ _rotated_logs.files }}"
   loop_control:
     label: "{{ item.path }}"
-  when: _rotated_logs.matched | int > 0
+  when: maintenance_run_cleanup | bool and _rotated_logs.matched | int > 0
 
 - name: Find active /var/log/syslog if larger than {{ maintenance_active_log_max_mb }}MB
   find:
@@ -88,7 +101,7 @@
     size: "{{ maintenance_active_log_max_mb }}m"
     recurse: false
   register: _oversize_syslog
-  when: maintenance_active_log_max_mb | int > 0
+  when: maintenance_run_cleanup | bool and maintenance_active_log_max_mb | int > 0
 
 - name: "Safety: truncate oversize active syslog to 0 bytes"
   copy:
@@ -101,6 +114,7 @@
   loop_control:
     label: "{{ item.path }}"
   when:
+    - maintenance_run_cleanup | bool
     - maintenance_active_log_max_mb | int > 0
     - _oversize_syslog.matched | default(0) | int > 0
 
@@ -110,10 +124,13 @@
   register: _snap_retain_check
   changed_when: false
   ignore_errors: true
+  when: maintenance_run_cleanup | bool
 
 - name: Set snap refresh retention to {{ maintenance_snap_retain }}
   command: snap set system refresh.retain={{ maintenance_snap_retain }}
-  when: _snap_retain_check.stdout | default('') | trim != maintenance_snap_retain | string
+  when: >-
+    maintenance_run_cleanup | bool and
+    _snap_retain_check.stdout | default('') | trim != maintenance_snap_retain | string
   ignore_errors: true
 
 - name: Remove disabled snap revisions
@@ -123,11 +140,12 @@
   register: _snap_clean
   changed_when: _snap_clean.stdout | length > 0
   ignore_errors: true
+  when: maintenance_run_cleanup | bool
 
 # --- Docker cleanup (docker_hosts group) ---
 - name: Prune unused Docker images
   command: docker image prune -af
-  when: "'docker_hosts' in group_names"
+  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
   register: _docker_prune
   changed_when: "'Total reclaimed space' in _docker_prune.stdout"
   ignore_errors: true
@@ -139,7 +157,7 @@
 
 - name: Prune Docker build cache
   command: docker builder prune -af
-  when: "'docker_hosts' in group_names"
+  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
   register: _docker_builder
   changed_when: "'Total reclaimed space' in _docker_builder.stdout"
   ignore_errors: true
@@ -147,7 +165,9 @@
 # --- K3s cleanup (k3s_servers or hub nodes) ---
 - name: Prune unused container images (crictl)
   command: crictl rmi --prune
-  when: "'k3s_servers' in group_names or maintenance_is_k3s_node | bool"
+  when: >-
+    maintenance_run_cleanup | bool and
+    ('k3s_servers' in group_names or maintenance_is_k3s_node | bool)
   register: _crictl
   changed_when: _crictl.stdout_lines | default([]) | length > 0
   ignore_errors: true
@@ -161,6 +181,7 @@
     age_stamp: atime
     excludes: []
   register: _tmp_clean
+  when: maintenance_run_cleanup | bool
 
 - name: Delete old temp files
   file:
@@ -169,19 +190,21 @@
   loop: "{{ _tmp_clean.files }}"
   loop_control:
     label: "{{ item.path }}"
-  when: _tmp_clean.matched | int > 0
+  when: maintenance_run_cleanup | bool and _tmp_clean.matched | int > 0
 
 # --- Post-cleanup report ---
 - name: Report disk usage (after)
   command: df -h /
   register: _disk_after
   changed_when: false
+  when: maintenance_run_cleanup | bool
 
 - name: Show cleanup summary
   debug:
     msg: |
       BEFORE: {{ _disk_before.stdout_lines | default([]) | last | default('N/A') }}
       AFTER:  {{ _disk_after.stdout_lines | default([]) | last | default('N/A') }}
+  when: maintenance_run_cleanup | bool
 
 # --- Systemd timer (optional) ---
 - name: Install maintenance script
@@ -202,6 +225,35 @@
   template:
     src: kubelab-maintenance.timer.j2
     dest: /etc/systemd/system/kubelab-maintenance.timer
+    mode: "0644"
+  when: maintenance_install_timer | bool
+
+# --- OnFailure notify (ANSIBLE-035, NOTIFY-001) ---------------------------
+# Static file, not a live SOPS decrypt: nodes never hold a SOPS decryption
+# key, only the plaintext Ansible already resolved (same pattern as the
+# CrowdSec bouncer key and Headscale pre-auth key). Rotation = re-provision
+# the fleet -- see the rotate_note on this secret in secrets_manager.py.
+- name: Write fleet notify secret
+  copy:
+    content: "{{ secrets.apps.services.automation.notify.fleet_webhook_secret }}"
+    dest: "{{ maintenance_notify_secret_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: maintenance_install_timer | bool
+  no_log: true
+
+- name: Install maintenance notify script
+  template:
+    src: kubelab-maintenance-notify.sh.j2
+    dest: /opt/kubelab-maintenance-notify.sh
+    mode: "0700"
+  when: maintenance_install_timer | bool
+
+- name: Install maintenance notify service unit
+  template:
+    src: kubelab-maintenance-notify.service.j2
+    dest: /etc/systemd/system/kubelab-maintenance-notify.service
     mode: "0644"
   when: maintenance_install_timer | bool
 

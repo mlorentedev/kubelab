@@ -92,15 +92,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]  # prerequisite: config/secrets needed by any tag selection (e.g. --tags maintenance)
 
     - name: Load hub overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (hub overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -110,11 +113,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Expose secrets fact (common only — hub has no env-scoped secrets)
       set_fact:
         secrets: "{{ sops_common.stdout | from_yaml }}"
       no_log: true
+      tags: [always]
 
     - name: "Invariant: cloud-init swap directive applied"
       assert:
@@ -178,3 +183,15 @@
         # MagicDNS in kubeconfig server URL — Spot replacement only requires
         # MagicDNS auto-resolution, no kubeconfig edit (lesson 2026-03-26).
         k3s_api_address: "{{ config.networking.aws.tailscale_dns }}"
+
+    # ANSIBLE-035: this is the ticket's motivating case. aws1 is a Spot
+    # instance already replaced once (2026-05-06) — every replacement before
+    # this wiped the fleet's only maintenance timer with nothing noticing.
+    # Install-only here (maintenance_run_cleanup: false); cleanup runs on the
+    # timer's own weekly schedule. maintenance_is_k3s_node mirrors maintain.yml's
+    # own expression — aws1 is the hub, not in k3s_servers group_names.
+    - role: ../roles/node_maintenance
+      tags: [maintenance]
+      vars:
+        maintenance_run_cleanup: false
+        maintenance_is_k3s_node: "{{ 'k3s_servers' in group_names or 'hub' in group_names }}"

@@ -237,15 +237,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]  # prerequisite: config/secrets needed by any tag selection (e.g. --tags maintenance)
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -255,6 +258,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Decrypt env secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
@@ -264,10 +268,12 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
+      tags: [always]
       no_log: true
 
     # TLS SAN: ansible_host (100.64.0.2) + public_ip (162.55.57.175) from inventory
@@ -297,6 +303,15 @@
         k3s_fetch_kubeconfig: true
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"
+
+    # ANSIBLE-035: install-only. maintenance_run_cleanup: false so this play
+    # doesn't ALSO run a synchronous cleanup pass (apt lists wipe, docker
+    # prune -af) on every provisioning run — cleanup runs on the timer's own
+    # weekly schedule instead. See roles/node_maintenance/defaults/main.yml.
+    - role: ../roles/node_maintenance
+      tags: [maintenance]
+      vars:
+        maintenance_run_cleanup: false
 
 # ---------------------------------------------------------------------------
 # Play 3: Verify K3s installation

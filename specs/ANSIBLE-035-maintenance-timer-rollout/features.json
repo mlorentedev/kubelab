@@ -1,0 +1,51 @@
+[
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f1",
+    "behavior": "maintenance_install_timer defaults true; maintenance_run_cleanup gates cleanup tasks independently",
+    "verification": "grep -A1 'maintenance_install_timer\\|maintenance_run_cleanup' infra/ansible/roles/node_maintenance/defaults/main.yml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f2",
+    "behavior": "node_maintenance role is included in all 7 provisioning playbooks with maintenance_run_cleanup: false",
+    "verification": "grep -l 'role: ../roles/node_maintenance' infra/ansible/playbooks/provision-{vps,aws1,bee,rpi3,rpi4,ace1,ace2}.yml | wc -l | grep -q 7",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f3",
+    "behavior": "maintain.yml's default invocation is unchanged by the new defaults",
+    "verification": "ansible-playbook infra/ansible/playbooks/maintain.yml --list-tasks -i infra/ansible/generated/staging/hosts.yml -l ace1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f4",
+    "behavior": "each of the 7 nodes shows kubelab-maintenance.timer active after a real provisioning run, and a second run converges to changed=0",
+    "verification": "for node in vps aws1 bee rpi3 rpi4 ace1 ace2; do make provision NODE=$node ENV=<env>; done && systemctl list-timers per node",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f5",
+    "behavior": "OnFailure=kubelab-maintenance-notify.service is wired and posts a log-severity envelope to prod n8n's webhook",
+    "verification": "systemctl cat kubelab-maintenance.service | grep OnFailure",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f6",
+    "behavior": "the notify path delivers end-to-end and OnFailure= actually triggers it on a real failure",
+    "verification": "systemctl start kubelab-maintenance-notify.service && journalctl -u kubelab-maintenance-notify.service -n 20",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-035-maintenance-timer-rollout-f7",
+    "behavior": "runbook documents the maintenance timer",
+    "verification": "test -f docs/runbooks/maintenance-timer.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
