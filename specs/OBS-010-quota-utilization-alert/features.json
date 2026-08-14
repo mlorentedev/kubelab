@@ -1,0 +1,30 @@
+[
+  {
+    "id": "obs-010-f1-emitter",
+    "behavior": "The quota-watcher CronJob runs every 5 minutes in kubelab, reads the live ResourceQuota via the in-cluster API (its own ServiceAccount, scoped to get resourcequotas only), and its pods' logs contain one structured JSON line per dimension with correct used/hard/pct values.",
+    "verification": "poetry run pytest tests/infra/test_quota_alerting.py -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "obs-010-f2-alert-rules",
+    "behavior": "Two Grafana alert rules (quota-utilization-requests, quota-utilization-limits) are provisioned from git, route through the existing Apprise contact points, for: 5m, noDataState: Alerting.",
+    "verification": "poetry run pytest tests/infra/test_grafana_alerting.py -k TestQuotaUtilizationRules -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "obs-010-f3-surge-does-not-fire",
+    "behavior": "Reproducing IDP-031's surge drill (full make deploy-k8s ENV=staging + rollout restart of all deployments) in staging does not fire either rule, despite limits.memory crossing 80% during the restart. The live drill itself is recorded in verification.md (2026-08-14) -- this verification command asserts the structural guards that make it true: the query shape that was empirically proven to matter (last_over_time, not max_over_time -- the latter caused a real firing on this exact drill before the fix) and the for: duration the drill relies on.",
+    "verification": "poetry run pytest tests/infra/test_grafana_alerting.py -k 'test_query_uses_last_not_max_over_time or test_rules_persist_through_a_routine_surge' -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "obs-010-f4-noData-alerts",
+    "behavior": "Killing the emitter (suspending the CronJob) causes both rules to move to Alerting within one for: window, proving noDataState: Alerting actually works rather than just being set. The live fault-injection drill is recorded in verification.md (2026-08-14) -- this verification command asserts the structural guard (noDataState/execErrState: Alerting) that makes it true.",
+    "verification": "poetry run pytest tests/infra/test_grafana_alerting.py -k test_rules_treat_no_data_as_a_problem -m infra --env staging --no-cov --override-ini='addopts='",
+    "state": "pending",
+    "evidence": ""
+  }
+]

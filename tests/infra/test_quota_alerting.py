@@ -44,6 +44,16 @@ EXPECTED_DIMENSIONS = {"requests.memory", "limits.memory"}
 #: is the exact, known bound on how much that self-reference can move `used`.
 _SELF_FOOTPRINT_MI = {"requests.memory": 32, "limits.memory": 64}
 
+#: How many quota-watcher pods can plausibly be Running at once. Normally 1 (this
+#: test's own triggered job), but `concurrencyPolicy: Forbid` on the CronJob only
+#: governs jobs the CronJob *controller* schedules — a `kubectl create job
+#: --from=cronjob/...` job, like this test's own, is NOT one of those, so it can
+#: genuinely overlap with a naturally scheduled tick. Measured 2026-08-14: a bare
+#: 1x tolerance flaked for exactly this reason (used_mi exceeded the bound by
+#: precisely one more footprint's worth), retried clean seconds later. 2x covers
+#: the realistic case; a third concurrent run is not worth chasing.
+_MAX_CONCURRENT_RUNS = 2
+
 
 def _kubeconfig(env: str) -> str:
     return os.path.expanduser(_KUBECONFIG_PATTERN.format(env=env))
@@ -171,19 +181,19 @@ class TestQuotaWatcherEmitter:
                 # quota-watcher.yaml) is Running and self-counted at the moment
                 # the emitter queries the quota, but the "before" snapshot above
                 # was taken before that pod existed. So the emitted value must be
-                # AT LEAST the pre-job snapshot, and can exceed it by no more than
-                # the job's own declared footprint — a bound derived from a known
-                # confound, not an arbitrary tolerance. Measured 2026-08-14:
-                # requests.memory was off by exactly 32Mi, matching the emitter's
-                # own request exactly, which is what motivated this fix rather
-                # than loosening the assertion blindly.
-                own_footprint_mi = _SELF_FOOTPRINT_MI[dim]
+                # AT LEAST the pre-job snapshot, bounded above by known,
+                # explained confounds — not an arbitrary tolerance. See
+                # _MAX_CONCURRENT_RUNS for why the bound is 2x this job's own
+                # footprint, not 1x: measured 2026-08-14, a 1x bound flaked when
+                # a naturally scheduled tick overlapped this test's own job.
+                max_extra_mi = _SELF_FOOTPRINT_MI[dim] * _MAX_CONCURRENT_RUNS
                 expected = _to_mi(used[dim])
-                assert expected <= line["used_mi"] <= expected + own_footprint_mi, (
+                assert expected <= line["used_mi"] <= expected + max_extra_mi, (
                     f"quota-watcher reported used_mi={line['used_mi']} for {dim} in {env}, "
-                    f"expected it within [{expected}, {expected + own_footprint_mi}] "
-                    f"(live ResourceQuota's {used[dim]!r} plus this test's own triggered "
-                    f"job's {own_footprint_mi}Mi footprint on that dimension)."
+                    f"expected it within [{expected}, {expected + max_extra_mi}] "
+                    f"(live ResourceQuota's {used[dim]!r} plus up to "
+                    f"{_MAX_CONCURRENT_RUNS} concurrent quota-watcher runs' "
+                    f"{_SELF_FOOTPRINT_MI[dim]}Mi footprint each on that dimension)."
                 )
         finally:
             _kubectl(f"delete job {job_name} -n kubelab --ignore-not-found", env)
