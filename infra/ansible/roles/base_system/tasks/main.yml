@@ -45,12 +45,26 @@
 
 - name: Install base packages
   apt:
-    name: "{{ base_packages }}"
+    name: >-
+      {{ base_packages if ansible_facts['distribution'] == 'Ubuntu'
+         else base_packages | difference(base_packages_ubuntu_only) }}
     state: present
   when: not (legacy_python | default(false))
 
+# legacy_python hosts don't gather_facts (that's the whole reason they're on
+# the raw path), so ansible_facts['distribution'] isn't available here the
+# way it is above -- probe /etc/os-release directly instead, same SSOT list.
+- name: Detect distribution (legacy Python host)
+  raw: grep -oP '(?<=^ID=).*' /etc/os-release | tr -d '"'
+  register: _legacy_distribution
+  changed_when: false
+  when: legacy_python | default(false)
+
 - name: Install base packages (legacy Python host)
-  raw: apt-get update && apt-get install -y {{ base_packages | join(' ') }}
+  raw: >-
+    apt-get update && apt-get install -y
+    {{ (base_packages if (_legacy_distribution.stdout | default('') | trim) == 'ubuntu'
+        else base_packages | difference(base_packages_ubuntu_only)) | join(' ') }}
   when: legacy_python | default(false)
 
 - name: Set timezone
