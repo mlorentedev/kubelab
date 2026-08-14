@@ -1,7 +1,65 @@
 # {{ ansible_managed }}
-# Beelink Platform Services — MinIO + GitHub Actions Runner + Glances (ADR-028)
+# Beelink Platform Services — Gitea + MinIO + GitHub Actions Runner + Glances (ADR-028)
 # This file contains rendered secrets — mode 0600, owned by root.
 services:
+  # Gitea — the platform's git singleton (ADR-061: state_promotion=singleton,
+  # location=on-demand). It runs in Docker Compose rather than K3s for the same
+  # structural reason Headscale does (ADR-015): a component Argo CD would need to
+  # fetch from cannot be reconciled by Argo CD. Argo CD reconciles from GitHub.
+  #
+  # The environment identity is PROD even though this node is provisioned with
+  # deploy_env=staging — ADR-061's axes are independent, and "prod is an
+  # environment, not a location". See provision-bee.yml's gitea_secrets_env.
+  gitea:
+    image: {{ gitea_image }}
+    container_name: gitea
+    restart: {{ restart_policy }}
+    ports:
+      # Bound to the Tailscale IP, never 0.0.0.0. A published port is governed by
+      # its bind address and nothing else: Docker's DNAT is evaluated before ufw's
+      # filter chains and DOCKER-USER is empty on every node in this fleet, so an
+      # interface-scoped ufw rule on a published port is decoration.
+      - "{{ tailscale_ip }}:{{ gitea_http_port }}:3000"
+      - "{{ tailscale_ip }}:{{ gitea_ssh_port }}:{{ gitea_ssh_port }}"
+    environment:
+      GITEA__database__DB_TYPE: "sqlite3"
+      GITEA__server__DOMAIN: "{{ gitea_domain }}"
+      GITEA__server__ROOT_URL: "https://{{ gitea_domain }}/"
+      # HTTP arrives through K3s Traefik at {{ gitea_domain }}; SSH cannot, because
+      # SSH is not HTTP. The advertised clone URL therefore points at the node's
+      # MagicDNS name directly, and is reachable from the tailnet only.
+      GITEA__server__SSH_DOMAIN: "{{ gitea_ssh_host }}"
+      GITEA__server__SSH_PORT: "{{ gitea_ssh_port }}"
+      GITEA__server__SSH_LISTEN_PORT: "{{ gitea_ssh_port }}"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
+      GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
+      GITEA__log__MODE: "console"
+      GITEA__log__LEVEL: "Info"
+      GITEA__security__SECRET_KEY: "{{ gitea_secret_key }}"
+      GITEA__security__INSTALL_LOCK: "true"
+      # Consumed by gitea-bootstrap.sh, not by Gitea itself.
+      GITEA_ADMIN_USER: "{{ gitea_admin_user }}"
+      GITEA_ADMIN_PASSWORD: "{{ gitea_admin_password }}"
+      GITEA_ADMIN_EMAIL: "{{ gitea_admin_email }}"
+      GITEA_OIDC_CLIENT_SECRET: "{{ gitea_oidc_client_secret }}"
+      GITEA_OIDC_DISCOVERY_URL: "{{ gitea_oidc_discovery_url }}"
+    volumes:
+      - {{ beelink_gitea_data_dir }}:/data
+      - {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/v1/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ gitea_cpu_limit }}"
+          memory: "{{ gitea_memory_limit }}"
+    networks:
+      - kubelab
+
   minio:
     image: {{ minio_image }}
     container_name: minio
