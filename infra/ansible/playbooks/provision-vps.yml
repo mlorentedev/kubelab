@@ -298,6 +298,15 @@
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"
 
+    # ANSIBLE-035: install-only. maintenance_run_cleanup: false so this play
+    # doesn't ALSO run a synchronous cleanup pass (apt lists wipe, docker
+    # prune -af) on every provisioning run — cleanup runs on the timer's own
+    # weekly schedule instead. See roles/node_maintenance/defaults/main.yml.
+    - role: ../roles/node_maintenance
+      tags: [maintenance]
+      vars:
+        maintenance_run_cleanup: false
+
 # ---------------------------------------------------------------------------
 # Play 3: Verify K3s installation
 # ---------------------------------------------------------------------------

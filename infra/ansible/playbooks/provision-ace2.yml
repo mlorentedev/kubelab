@@ -169,3 +169,14 @@
         # without the secret gets a provisioned node with no identity, not a
         # failed play or an empty credential handed to `gh`.
         dev_node_github_token: "{{ secrets.apps.services.automation.dev_node.github_token | default('') }}"
+
+    # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
+    # runs on the timer's own weekly schedule, not synchronously on every
+    # provisioning run. See roles/node_maintenance/defaults/main.yml. Adjacent
+    # to but not overlapping with dev_node's own housekeeping timers (git gc,
+    # language caches, agent workspace resets — ANSIBLE-030/#858): this is
+    # node-generic disk hygiene, that is dev-workload hygiene.
+    - role: ../roles/node_maintenance
+      tags: [maintenance]
+      vars:
+        maintenance_run_cleanup: false
