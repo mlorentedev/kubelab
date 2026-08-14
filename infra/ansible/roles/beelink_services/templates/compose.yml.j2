@@ -20,7 +20,12 @@ services:
       # filter chains and DOCKER-USER is empty on every node in this fleet, so an
       # interface-scoped ufw rule on a published port is decoration.
       - "{{ tailscale_ip }}:{{ gitea_http_port }}:3000"
-      - "{{ tailscale_ip }}:{{ gitea_ssh_port }}:{{ gitea_ssh_port }}"
+      # Container port 22, not {{ gitea_ssh_port }}: the official image runs OpenSSH
+      # there, and Gitea's own built-in SSH server is opt-in via START_SSH_SERVER.
+      # The K8s manifest this replaces set SSH_LISTEN_PORT=2222 without enabling
+      # that server, so nothing was listening on the port it published — one of the
+      # reasons its advertised clone URL had never connected.
+      - "{{ tailscale_ip }}:{{ gitea_ssh_port }}:22"
     environment:
       GITEA__database__DB_TYPE: "sqlite3"
       GITEA__server__DOMAIN: "{{ gitea_domain }}"
@@ -29,8 +34,9 @@ services:
       # SSH is not HTTP. The advertised clone URL therefore points at the node's
       # MagicDNS name directly, and is reachable from the tailnet only.
       GITEA__server__SSH_DOMAIN: "{{ gitea_ssh_host }}"
+      # Advertised in clone URLs only — the published host port above. Deliberately
+      # no SSH_LISTEN_PORT: that configures the built-in server, which is off.
       GITEA__server__SSH_PORT: "{{ gitea_ssh_port }}"
-      GITEA__server__SSH_LISTEN_PORT: "{{ gitea_ssh_port }}"
       GITEA__service__DISABLE_REGISTRATION: "true"
       GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
       GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
