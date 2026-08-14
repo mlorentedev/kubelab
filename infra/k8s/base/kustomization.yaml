@@ -22,6 +22,7 @@ resources:
   - services/apprise.yaml
   - services/minio.yaml
   - services/homepage.yaml
+  - services/quota-watcher.yaml
 
 configMapGenerator:
   # Homepage config — hash suffix triggers rolling update on config change (RELIAB-002)
