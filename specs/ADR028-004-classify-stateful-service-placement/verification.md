@@ -303,16 +303,43 @@ The same bind shape exists in `glances` and `rpi3_services`, and MinIO on this n
 
 **A test learned the same lesson.** The new infra check originally mapped any failed connection to "Beelink is powered off" and would have skipped straight past this incident. It now separates the two: timeout or no route means the node is off (skip); `ECONNREFUSED` means the node is up and the service is not (fail).
 
-### Post-merge verification — NOT YET RUN
+### Post-merge verification — DONE (2026-08-14), by manual apply, because the hub was down
 
-Left empty on purpose. Fill it after Argo CD syncs the merge; until then the cutover is prepared, not proven.
+**Argo CD could not perform the sync.** aws1 is a persistent Spot request with `instance_interruption_behavior = "stop"`; AWS interrupted it and the request sits `open` with `Status: capacity-not-available` — "There is no Spot capacity available that matches your request." The instance is `stopped`, not terminated, and AWS restarts it when capacity returns. Consequence: no GitOps reconciliation for *either* environment, not just this change. Both clusters kept serving throughout; a management plane separate from the data plane is what makes a Spot interruption an inconvenience rather than an outage.
 
-1. `make test-e2e ENV=prod` — the first real exercise of the `on_demand_backend` branch against a live route.
-2. Exactly one EndpointSlice for the `gitea` Service, named `gitea-external`. The old Service had a selector, so the endpoints controller was managing a slice of its own; if that one survives with the dead pod's address, Traefik round-robins between the Beelink and a corpse and the symptom is *intermittent* 502s, which is far harder to read than a steady one.
-3. The old `Deployment`, `PersistentVolumeClaim` and ConfigMaps are gone from both clusters — that is prune actually firing, not just being configured.
-4. `kubectl delete secret gitea-secrets -n kubelab` in **both** clusters. Nothing else will: the toolkit no longer manages it and Argo never owned it, so it outlives the retirement holding a credential that is still valid on the Beelink. Recorded on #926 (TOOL-025), which is the same apply-without-delete gap one object type over.
+Applied to prod directly on the operator's decision: `toolkit infra k8s deploy --env prod` (as the Argo CD service account, per TOOL-029). What it applies is exactly what is in git, so `selfHeal` converges to the same state when the hub returns.
 
-Only after 1–4 does the operator get told Gitea is ready on its real domain.
+**A real defect surfaced here, and the first verification missed it.** After the apply, one probe of `gitea.kubelab.live` returned the Beelink's instance, which looked like success. It wasn't:
+
+```
+NAME             ADDRESSES      PORTS
+gitea-external   [100.64.0.3]   3000     # the Beelink, from git
+gitea-qwcfk      [10.42.0.11]   3000     # the old in-cluster pod, still selected
+```
+
+The live Service still carried `selector: {app.kubernetes.io/name: gitea}`. `kubectl apply` does not remove it: the new manifest has no `selector` key, and *omitting* a field is not *deleting* it — the field stayed owned by whichever manager wrote it. So the endpoints controller kept managing its own slice beside the manual one, and Traefik round-robined between **two different Gitea instances on one domain**, each with its own database. The single confirming request had a 50% chance of being right, and was.
+
+The manifest is not wrong; on a fresh cluster it produces the intended object. The defect is in the *conversion* — an object that already had a selector cannot lose it by omission. Written up in `docs/lessons.md`.
+
+Fixed with an explicit `selector: null` patch plus scaling the retired Deployment to 0 so the controller-managed slice drained.
+
+**Then re-verified properly, with a discriminator rather than a status code.** The two instances are distinguishable by their admin account's creation timestamp — the Beelink's was bootstrapped today, the retired K8s one 146 days ago:
+
+```
+=== 12 consecutive requests: is it ALWAYS the Beelink? ===
+   Beelink: 12/12   other: 0/12
+```
+
+| check | result |
+|---|---|
+| `make test-e2e ENV=prod` | 61 passed, 23 skipped — including `TestOnDemandBackend`, running against a live route for the first time |
+| EndpointSlices for `gitea` | `gitea-external` → `100.64.0.3`; the controller slice drained to no addresses |
+| Service selector | empty, matching git |
+| `gitea.kubelab.live` | HTTP 200, Beelink, 12/12 |
+| `gitea.staging.kubelab.live` | HTTP 503 — the retired twin can no longer serve |
+| `gitea-secrets` | deleted in **both** clusters (#926) |
+
+**Left deliberately undone:** the retired `Deployment`, `PersistentVolumeClaim`, `gitea-ssh` Service, ConfigMaps and IngressRoute still exist in both clusters, scaled to zero. Deleting them is prune's job and prune needs the hub. Scaling was chosen over deleting because it is reversible and it is what the operator authorised; the objects are absent from git, so Argo removes them on its first sync.
 
 ## AC2 — Classification gate transcript (captured 2026-08-14)
 
