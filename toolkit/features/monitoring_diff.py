@@ -31,12 +31,17 @@ from typing import Any
 # has to be structural, because maintaining it as two hand-kept lists is how the
 # seed ended up with 31 permanently-dirty monitors.
 #
-# A field absent here is one the apply path never sends, so flagging it as a
-# difference would request an edit that cannot clear the flag. Known members of
-# that set, all observed live: `expiryNotification` (in the seed but in neither
-# `_MONITOR_EXPORT_FIELDS` nor the API payload — 20 monitors), `tags` (applied via
-# add_monitor_tag), `notificationIDList` (ids differ per instance), `active`
-# (paused/resumed at runtime), `id`, and `key` (ours; it travels in `description`).
+# A field absent here is one the apply path never sends via `_params()`, so
+# flagging it as a difference would request an edit that cannot clear the flag.
+# Known members of that set, all observed live: `expiryNotification` (in the
+# seed but in neither `_MONITOR_EXPORT_FIELDS` nor the API payload — 20
+# monitors), `tags` (applied via add_monitor_tag), `active` (paused/resumed at
+# runtime), `id`, and `key` (ours; it travels in `description`).
+#
+# `notificationIDList` is deliberately NOT here despite the apply path writing
+# it on every create/edit (#912): its comparison is boolean presence against
+# `muted_tags`/`has_default_notification`, not the field-equality check this
+# set drives — see `_needs_edit`, `wants_notifications`.
 WRITABLE_FIELDS = frozenset(
     {
         "type",
@@ -115,14 +120,66 @@ def _comparable(monitor: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _needs_edit(seed_entry: dict[str, Any], live_monitor: dict[str, Any]) -> bool:
+def _normalize_notif_ids(value: Any) -> frozenset[str]:
+    """Reduce a notificationIDList to a comparable set of ids, whatever shape it's in.
+
+    Live reads (`get_monitor`, `get_monitors`) return a plain list of ints —
+    verified directly against a v2 instance, and consistent with what the
+    current seed already carries (an artifact of an earlier `monitoring-export`
+    run). The write path takes a `{"1": True}`-shaped dict instead, so a
+    `_params()`-built payload could in principle end up compared too — handle
+    both rather than assume only the read shape ever reaches this function.
+    """
+    if isinstance(value, dict):
+        return frozenset(str(k) for k, v in value.items() if v)
+    if isinstance(value, list):
+        return frozenset(str(v) for v in value)
+    return frozenset()
+
+
+def wants_notifications(seed_entry: dict[str, Any], muted_tags: frozenset[str]) -> bool:
+    """Whether the apply path should attach the default notification(s) to this entry.
+
+    True unless the entry carries a muted tag. Whether there is a default
+    notification to attach *at all* is a separate question — callers gate the
+    whole comparison on `has_default_notification` before consulting this.
+    """
+    tags = set(seed_entry.get("tags") or [])
+    return not (tags & muted_tags)
+
+
+def _needs_edit(
+    seed_entry: dict[str, Any],
+    live_monitor: dict[str, Any],
+    muted_tags: frozenset[str] = frozenset(),
+    has_default_notification: bool = True,
+) -> bool:
     """True when the live monitor does not already match its seed entry.
 
     Only fields the seed actually declares are compared. The live monitor carries
     dozens of Uptime Kuma defaults the seed never mentions, and treating those as
     differences would mark every monitor dirty on every run — the no-op case is
     the one that matters most here.
+
+    Notification presence is compared at the boolean level ("has at least one
+    id" vs. "has none"), not by exact id set — the apply path always attaches
+    every default notification or none, so that is the only distinction that
+    can ever actually be true or false in this seed's model (#912).
+
+    Skipped entirely when `has_default_notification` is False, rather than
+    comparing against "wants none": an instance with no default notification
+    configured (a from-scratch install, OBS-014) has nothing to converge
+    *toward*. Treating "nothing to attach" as "seed wants nothing" would flag
+    every monitor with any live notification as dirty and, on the next apply,
+    write an empty `notificationIDList` — wiping real links on any instance
+    whose default notification happens not to carry `isDefault: true`. Skipping
+    is fail-safe; converging to zero is fail-destructive on an unattended path.
     """
+    if has_default_notification:
+        live_has_notifications = bool(_normalize_notif_ids(live_monitor.get("notificationIDList")))
+        if live_has_notifications != wants_notifications(seed_entry, muted_tags):
+            return True
+
     if seed_entry.get("key") and extract_key(live_monitor.get("description")) is None:
         # Converged in content but unmarked: it still needs one edit to stamp the
         # key, or identity never lands and the next rename falls back to matching
@@ -145,6 +202,9 @@ def _needs_edit(seed_entry: dict[str, Any], live_monitor: dict[str, Any]) -> boo
 def diff_monitors(
     seed: list[dict[str, Any]],
     live: list[dict[str, Any]],
+    *,
+    muted_tags: frozenset[str],
+    has_default_notification: bool,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (to_create, to_edit, to_delete) for a declarative sync.
 
@@ -156,6 +216,11 @@ def diff_monitors(
 
     A live monitor is claimed at most once, so two seed entries sharing a name
     cannot both adopt it — the second is created instead.
+
+    `muted_tags` and `has_default_notification` are required and keyword-only
+    on purpose: both directions of a default would be wrong for some caller
+    (see `_needs_edit`), so there is no safe implicit value — the caller must
+    thread live truth in explicitly instead of inheriting a guess.
     """
     by_key: dict[str, dict[str, Any]] = {}
     by_name: dict[str, list[dict[str, Any]]] = {}
@@ -185,7 +250,7 @@ def diff_monitors(
             continue
 
         claimed.add(match["id"])
-        if _needs_edit(entry, match):
+        if _needs_edit(entry, match, muted_tags, has_default_notification):
             to_edit.append({**match, "_seed": entry})
 
     to_delete = [m for m in live if m["id"] not in claimed]
