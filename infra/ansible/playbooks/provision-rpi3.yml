@@ -81,11 +81,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]  # secrets must load for any tag selection (e.g. --tags maintenance)
 
     - name: Merge secrets
       set_fact:
         secrets: "{{ sops_common.stdout | from_yaml }}"
       no_log: true
+      tags: [always]
 
   roles:
     - role: ../roles/base_system

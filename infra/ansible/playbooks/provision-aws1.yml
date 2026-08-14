@@ -92,15 +92,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]  # prerequisite: config/secrets needed by any tag selection (e.g. --tags maintenance)
 
     - name: Load hub overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (hub overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -110,11 +113,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Expose secrets fact (common only — hub has no env-scoped secrets)
       set_fact:
         secrets: "{{ sops_common.stdout | from_yaml }}"
       no_log: true
+      tags: [always]
 
     - name: "Invariant: cloud-init swap directive applied"
       assert:
