@@ -154,9 +154,20 @@ class TestExternalServiceBackends:
             pytest.skip(f"could not probe from VPS (ssh rc={result.returncode}): {result.stderr.strip()}")
 
         if "UNREACHABLE" in result.stdout:
-            # The homelab being off is the expected steady state, not a failure —
-            # that is what `location: on-demand` means. Distinguish the two by
-            # checking from here, where the tailnet is known good.
+            # A powered-off homelab is the expected steady state, not a failure —
+            # that is what `location: on-demand` means. But "unreachable" covers
+            # two very different states and only one of them is benign:
+            #
+            #   timeout / no route  → nothing is answering at that address at all;
+            #                         the node is off. Skip.
+            #   connection refused  → the node is UP and the kernel actively said
+            #                         no: the port is not bound. That is a live
+            #                         service outage. Fail.
+            #
+            # Conflating them is not hypothetical: on 2026-08-14 the Beelink
+            # rebooted, Docker lost the bind to the Tailscale address, and both
+            # gitea and minio stayed down. An earlier version of this test called
+            # that "powered off" and skipped straight past the real incident.
             try:
                 with socket.create_connection((target_ip, int(port)), timeout=5):
                     pytest.fail(
@@ -164,8 +175,14 @@ class TestExternalServiceBackends:
                         "The backend is up, so the prod IngressRoute would serve a permanent 502 — "
                         "check Headscale ACLs and the Beelink's port bind address."
                     )
+            except ConnectionRefusedError:
+                pytest.fail(
+                    f"{target_ip} is up but nothing is listening on {port}. The node is powered on "
+                    "and the service is not running — check `kubelab-compose.service` on the Beelink, "
+                    "which exists to bring the stack up once the Tailscale address is assigned."
+                )
             except OSError:
-                pytest.skip(f"Beelink is powered off ({target_ip}:{port} unreachable from here too)")
+                pytest.skip(f"Beelink is powered off ({target_ip}:{port} does not answer at all)")
 
         assert "REACHABLE" in result.stdout, (
             f"unexpected probe output from VPS for {target_ip}:{port}: {result.stdout.strip()!r}"

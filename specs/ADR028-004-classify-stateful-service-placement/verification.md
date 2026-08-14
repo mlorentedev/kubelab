@@ -231,6 +231,72 @@ Generalisation worth keeping: once a service stops belonging to its node's envir
 
 The K3s instance passed every e2e check throughout, because the suite asserts `/api/v1/version` over HTTPS and never exercises a git operation. Fixed here by publishing container port 22 on the node's Tailscale address; the advertised `ssh_url` now completes a handshake (`Permission denied (publickey)` from sshd — the key is simply not registered yet) where it previously timed out.
 
+## AC3 (part 2 of 2) — Cutover: the domain now serves the Beelink (2026-08-14)
+
+**Renders.** `kubectl kustomize` clean on both overlays. Prod emits exactly three Gitea objects — `Service`, `EndpointSlice`, `IngressRoute` — and no Deployment, PVC or ConfigMap. Staging's only remaining reference is the shared dashboard tile pointing at the apex name; no workload, no route.
+
+**Gates did the work, not inspection.** Four consequences of the retirement were caught by the repo's own checks after the manifests already looked right:
+
+| check | what it caught |
+|---|---|
+| `make validate-sync` | `sync_k8s_images.py` still regenerating the gitea image pin into `base/kustomization.yaml` |
+| `make validate-sync` | `sync_oidc_hashes.py` aborting on OIDC-SYNC-001, hunting a `gitea` client correctly removed from the base config |
+| `make test-fast` | `test_managed_clients_resolve_in_repo_configs` — same cause, asserted independently |
+| `make test-fast` | `test_includes_errors_alongside_third_party` — used gitea as its representative third-party image, so it went red for a correct reason |
+
+Final: `make lint` clean, `make type` clean (61 files), `make test-fast` 510 passed, `make validate-sync` all in sync.
+
+### The defect the cutover exposed: the stack did not survive a reboot
+
+After 4a's verification passed, the Beelink rebooted and **Gitea and MinIO both stayed down**. Not a crash — they never started:
+
+```
+Error=failed to set up container networking: driver failed programming external
+connectivity on endpoint gitea: failed to bind host port 100.64.0.3:2222/tcp:
+cannot assign requested address
+RestartCount=0   RestartPolicy=unless-stopped
+```
+
+Docker started before `tailscaled` had put `100.64.0.3` on `tailscale0`, so publishing on that address failed. **`restart: unless-stopped` does not cover this**: the policy restarts a process that exited, and this container never started. `RestartCount=0` with the policy set is the measurement, not an inference.
+
+This is not hardening and it is not optional. The Beelink is `location: on-demand`, which means powering it on *is* its normal operation — a stack that only survives uninterrupted uptime is not on-demand in any useful sense. ADR-061's classification is unimplementable without this fix, so it lands here rather than in a ticket.
+
+**Fix:** a `kubelab-compose.service` unit ordered `After=docker.service tailscaled.service`, whose `ExecStartPre` waits for the *address* to appear on the interface — not for the daemon to report active, which is the distinction the measured race turns on.
+
+**Verification, in three parts, because the obvious one is insufficient.** A real reboot:
+
+```
+Active: active (exited) since Fri 2026-08-14 07:15:07 CEST
+Process: ExecStartPre=/opt/kubelab/wait-for-tailscale-addr.sh 100.64.0.3 (code=exited, status=0/SUCCESS)
+wait-for-tailscale-addr.sh[2121]: 100.64.0.3 is up on tailscale0 after 0s
+gitea    Up 52 seconds (healthy)
+minio    Up 52 seconds (healthy)
+{"version":"1.25.5"}    ssh port 2222: OPEN
+```
+
+**Reported honestly: that boot did not reproduce the race** — the containers were already `Running` when the unit executed, so Docker won this time. The reboot therefore proves the unit is installed, enabled, ordered and harmless; it does *not* by itself prove the unit rescues a lost race. The two halves that would be vacuous if untested were falsified separately:
+
+```
+$ wait-for-tailscale-addr.sh 100.64.0.99 tailscale0 2     # address that will never appear
+timed out after 4s waiting for 100.64.0.99 on tailscale0
+exit=1
+$ wait-for-tailscale-addr.sh 100.64.0.3 tailscale0 2
+100.64.0.3 is up on tailscale0 after 0s
+exit=0
+
+$ docker stop gitea minio        # reproduce the post-failed-boot state
+  3000 CLOSED
+$ systemctl restart kubelab-compose.service
+  gitea Up 8 seconds   minio Up 8 seconds
+  3000 OPEN  →  {"version":"1.25.5"}
+```
+
+So: the gate rejects an address that never appears and accepts one that exists, and the unit's `ExecStart` recovers a stack Docker left down. Outcome is deterministic even though the path is not — whoever wins the race, the stack converges to running.
+
+The same bind shape exists in `glances` and `rpi3_services`, and MinIO on this node has been dying on every reboot for as long as it has lived there, unnoticed because "MinIO is not answering" is indistinguishable from "the homelab is off". Filed fleet-wide as **#1061**; only `beelink_services` is fixed here. `glances` survived this reboot, which is scheduling luck rather than immunity, and the ticket says so.
+
+**A test learned the same lesson.** The new infra check originally mapped any failed connection to "Beelink is powered off" and would have skipped straight past this incident. It now separates the two: timeout or no route means the node is off (skip); `ECONNREFUSED` means the node is up and the service is not (fail).
+
 ## AC2 — Classification gate transcript (captured 2026-08-14)
 
 Owed by PR 2, which merged without it. This is an unmet acceptance criterion, not tidying: AC2 requires the gate be *demonstrated* to fail, and a suite that only ever reports green proves nothing about whether it can go red.
