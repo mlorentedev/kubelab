@@ -188,6 +188,49 @@ repos (private=true, authenticated as manu):
 
 **Both instances are empty**: authenticated `200`, `X-Total-Count: 0`, no repos including private ones, and a single user which is the bootstrap admin itself. The singleton can be stood up on the Beelink without migrating anything.
 
+## AC3 (part 1 of 2) — Gitea running on the Beelink (2026-08-14)
+
+Nothing is retired here and no traffic moved: the K3s instances kept serving throughout. This is the "stand it up side by side" half of the Pattern C split recorded in `tasks.md`.
+
+**Deploy.** `make provision NODE=bee ENV=staging TAGS=gitea` — `ok=37 changed=4 failed=0`, ending `Gitea 1.25.5 on 100.64.0.3:3000 (ssh 2222), MinIO on 9000/9001, GH Runner running`.
+
+**The service is not merely up, it round-trips content.** A health probe would not have caught either defect below, so the check is a full create / clone / commit / push / re-clone cycle:
+
+```
+create -> HTTP 201
+ * [new branch]      main -> main
+--- server-side state, 3s after push ---
+branches:   ['main']
+commits:    1 -> ['smoke']
+empty flag: is_empty= False default_branch= main
+file read:  hello
+--- re-clone into a fresh dir (proves it is really on the server) ---
+hello
+cleanup -> HTTP 204
+```
+
+**Identity it advertises**, which is the thing the environment-resolution work was for:
+
+```
+html_url    https://gitea.kubelab.live/manu/kubelab-move-smoke
+clone_url   https://gitea.kubelab.live/manu/kubelab-move-smoke.git
+ssh_url     ssh://git@beelink.kubelab.internal:2222/manu/kubelab-move-smoke.git
+```
+
+### Two defects found by measuring rather than reviewing
+
+**1. The values half of the environment identity was still the node's.** The vault half was handled up front — Gitea keeps prod's domain, so prod Authelia validates its OIDC client against a hash derived from prod's client secret, and staging's would have failed at login. The values half was not, and the first deploy went out advertising `gitea.staging.kubelab.live` as its `ROOT_URL`, because `config` is `common` merged with the *node's* environment and `staging.yaml` overrides `gitea.domain`. The OIDC discovery URL carried the same defect and would have pointed Gitea at staging Authelia while holding prod's secret.
+
+Generalisation worth keeping: once a service stops belonging to its node's environment, *every* per-environment resolution is suspect, not just the vault. The playbook now declares `gitea_identity_env: prod` once and derives both trees from it.
+
+**2. Gitea's SSH has never worked, in either environment, for as long as it has existed here.** Three independent faults stacked, each sufficient alone:
+
+- The advertised port was firewalled. `base_system`'s `firewall_allowed_ports` is 22/80/443/41641 and nothing added the NodePort. Measured before any change: `connect to address 162.55.57.175 port 30222: Connection timed out`, same from the Tailscale address.
+- Nothing was listening behind it anyway. The manifest set `SSH_LISTEN_PORT: 2222`, which configures Gitea's *built-in* SSH server — opt-in via `START_SSH_SERVER`, which was never set. The official image runs OpenSSH on container port 22 instead ([install-with-docker](https://docs.gitea.com/installation/install-with-docker) maps `222:22`).
+- `common.yaml` already declared `apps.services.core.gitea.ssh_port: 2222` and **no consumer read it**, so the SSOT and the manifest disagreed with nothing to detect it.
+
+The K3s instance passed every e2e check throughout, because the suite asserts `/api/v1/version` over HTTPS and never exercises a git operation. Fixed here by publishing container port 22 on the node's Tailscale address; the advertised `ssh_url` now completes a handshake (`Permission denied (publickey)` from sshd — the key is simply not registered yet) where it previously timed out.
+
 ## AC2 — Classification gate transcript (captured 2026-08-14)
 
 Owed by PR 2, which merged without it. This is an unmet acceptance criterion, not tidying: AC2 requires the gate be *demonstrated* to fail, and a suite that only ever reports green proves nothing about whether it can go red.
