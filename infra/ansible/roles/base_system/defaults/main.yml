@@ -18,7 +18,17 @@ base_packages:
   - sysstat
   - ncdu
   - net-tools
-  - dnsutils
+  # Not `dnsutils`: on Debian trixie it's a pure virtual package (Provides
+  # only, no dpkg entry of its own -- `dpkg -l dnsutils` reports `un`), so
+  # Ansible's apt module -- which pre-checks the literal requested name
+  # against dpkg rather than resolving Provides the way apt-get itself does
+  # -- reports `changed: true` on every single run even though apt-get logs
+  # "0 upgraded, 0 newly installed". On Ubuntu 24.04 `dnsutils` happens to be
+  # a real transitional package (dpkg `ii`), so the module gets it right
+  # there -- naming the real provider makes both OSes correct instead of
+  # relying on an Ubuntu-only coincidence. Found via rpi3 (OPS-017), the
+  # first Debian-family node to ever run this role.
+  - bind9-dnsutils
 
 # Entries in base_packages that only exist on Ubuntu, not Debian (OPS-017).
 # software-properties-common ships `add-apt-repository` — PPA tooling for a
