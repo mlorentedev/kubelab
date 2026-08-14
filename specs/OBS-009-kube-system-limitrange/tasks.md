@@ -23,11 +23,11 @@ created: "2026-08-13"
 
 ### Part 1 — the LimitRange, proven in staging
 
-- [ ] [P] [AC1] Add `TestKubeSystemGovernance` to `tests/infra/test_k3s.py` asserting `kube-system` has a `LimitRange` with `defaultRequest.memory: 64Mi` and `default.memory: 384Mi`. Reuses the existing `_kubectl`/`require_kubeconfig`/`env` helpers, targeting `-n kube-system` instead of `-n kubelab`. **Fails now** — no LimitRange exists in `kube-system` in either cluster.
-- [ ] [AC1] Add `infra/k8s/base/governance/kube-system-limitrange.yaml` (namespace `kube-system`, `type: Container`, values from proposal.md → Acceptance criteria). Header comment explains why it must never be added to `infra/k8s/base/kustomization.yaml`'s `resources:`.
-- [ ] [AC1] Register a `cluster_bootstrap` entry in `infra/config/values/common.yaml` (`name: kube-system-limitrange`, `namespace: kube-system`, `manifest: infra/k8s/base/governance/kube-system-limitrange.yaml`, no `version`, no `render`, `optional: false`).
-- [ ] [AC1] Apply to staging via `make bootstrap-k8s ENV=staging` (NOT `deploy-k8s` — this object is cluster-scoped bootstrap, outside the namespaced overlay). Confirm the test from the first task now passes.
-- [ ] [AC2] Extend the test with the generic defaulting case: `--dry-run=server` a throwaway pod in `kube-system` carrying no `resources` block, assert it is admitted and comes back with the defaulted request/limit. Same rationale as IDP-031's own defaulting test — traverses real admission (LimitRanger) without persisting, safe against prod.
+- [x] [P] [AC1] Add `TestKubeSystemGovernance` to `tests/infra/test_k3s.py` asserting `kube-system` has a `LimitRange` with `defaultRequest.memory: 64Mi` and `default.memory: 384Mi`. Reuses the existing `_kubectl`/`require_kubeconfig`/`env` helpers, targeting `-n kube-system` instead of `-n kubelab`. **Fails now** — no LimitRange exists in `kube-system` in either cluster. ✓ 2026-08-13 (commit `7d2e356`)
+- [x] [AC1] Add `infra/k8s/base/governance/kube-system-limitrange.yaml` (namespace `kube-system`, `type: Container`, values from proposal.md → Acceptance criteria). Header comment explains why it must never be added to `infra/k8s/base/kustomization.yaml`'s `resources:`. ✓ 2026-08-13 (commit `d74bb82`)
+- [x] [AC1] Register a `cluster_bootstrap` entry in `infra/config/values/common.yaml` (`name: kube-system-limitrange`, `namespace: kube-system`, `manifest: infra/k8s/base/governance/kube-system-limitrange.yaml`, no `version`, no `render`, `optional: false`). ✓ 2026-08-13 (commit `d74bb82`)
+- [x] [AC1] Apply to staging via `make bootstrap-k8s ENV=staging` (NOT `deploy-k8s` — this object is cluster-scoped bootstrap, outside the namespaced overlay). Confirm the test from the first task now passes. ✓ 2026-08-13
+- [x] [AC2] Extend the test with the generic defaulting case: `--dry-run=server` a throwaway pod in `kube-system` carrying no `resources` block, assert it is admitted and comes back with the defaulted request/limit. Same rationale as IDP-031's own defaulting test — traverses real admission (LimitRanger) without persisting, safe against prod. ✓ 2026-08-13 (commit `7d2e356`)
 
 **Pre-flight, measured 2026-08-13 (see proposal.md → Risks) — do not re-derive, just cite:** `coredns` is fully bounded already (unaffected by defaults). `metrics-server` declares `requests.memory: 70Mi` with no limit — safe under `default.memory: 384Mi` (70Mi < 384Mi, no request-exceeds-limit rejection). Zero containers in the danger category in either cluster.
 
@@ -39,17 +39,17 @@ created: "2026-08-13"
 
 ### Part 3 — prod (imperative path, post-merge)
 
-- [ ] [AC1] [AC3] After merge: `make bootstrap-k8s ENV=prod`, then restart the same four prod workloads (`traefik`, `svclb-traefik-<suffix>`, `local-path-provisioner`, `metrics-server`), then re-run the `TestKubeSystemGovernance` assertions against prod. This is NOT GitOps-synced (proposal.md → Risks) — it will not happen on its own.
+- [x] [AC1] [AC3] After merge: `make bootstrap-k8s ENV=prod`, then restart the same four prod workloads (`traefik`, `svclb-traefik-<suffix>`, `local-path-provisioner`, `metrics-server`), then re-run the `TestKubeSystemGovernance` assertions against prod. This is NOT GitOps-synced (proposal.md → Risks) — it will not happen on its own. ✓ 2026-08-14 — prod's svclb suffix (`416bf32a`) differs from staging's (`ca274381`), confirming the dynamic-name risk was real and not staging-specific. All four rolled out cleanly (`traefik`/`local-path-provisioner`/`metrics-server` via `make restart-service`, the DaemonSet via `kubectl rollout restart` — no toolkit target covers DaemonSets). `TestKubeSystemGovernance` (all 3 tests) passed against prod.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-08-14
+- [x] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command ✓ 2026-08-13
+- [x] Type checks pass ✓ 2026-08-14
+- [x] Lint passes ✓ 2026-08-14
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-14
+- [x] `verification.md` filled in ✓ 2026-08-14
+- [x] PR opened referencing this spec folder ✓ #1051 (merged), this closing pass via a follow-up docs PR
 
 ## Machine-readable features
 
