@@ -45,7 +45,9 @@
 
 - name: Install base packages
   apt:
-    name: "{{ base_packages }}"
+    name: >-
+      {{ base_packages if ansible_facts['distribution'] == 'Ubuntu'
+         else base_packages | difference(base_packages_ubuntu_only) }}
     state: present
   when: not (legacy_python | default(false))
 
