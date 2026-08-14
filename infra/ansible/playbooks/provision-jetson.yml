@@ -54,6 +54,13 @@
       delegate_to: localhost
       become: false
 
+    - name: Set Jetson network facts
+      set_fact:
+        _jetson_tailscale_ip: "{{ common.networking.nodes.jetson.tailscale_ip }}"
+        _jetson_glances_port: "{{ common.apps.services.observability.glances.default_port }}"
+      delegate_to: localhost
+      become: false
+
   tasks:
     # -- DNS resilience (legacy raw) --
     - name: Ensure vpn.kubelab.live in /etc/hosts
@@ -105,27 +112,126 @@
       become: false
 
     # -- Glances agent (consistent with all other nodes) --
-    - name: Check if Glances is running
-      raw: docker ps --filter name=glances --format '{% raw %}{{.Status}}{% endraw %}' 2>/dev/null
+    # `-a`: any state, not just running. A `--restart unless-stopped`
+    # container can still end up STOPPED (host reboot racing dockerd, a
+    # manual stop, OOM) without being removed -- `docker ps` alone would
+    # then miss it, "Start Glances container" would collide on the name,
+    # and a stopped-but-config-unchanged container would never self-heal
+    # back to running. Observed live: a Jetson power cycle left exactly
+    # this state.
+    - name: Check Glances container state
+      raw: docker ps -a --filter name=glances --format '{% raw %}{{.Status}}{% endraw %}' 2>/dev/null
       register: glances_status
       changed_when: false
+
+    - name: Ensure Glances deploy directory exists
+      raw: mkdir -p /opt/glances
+      changed_when: false
+
+    - name: Read current Glances config (if any)
+      raw: cat /opt/glances/glances.conf 2>/dev/null || true
+      register: _glances_conf_current
+      changed_when: false
+
+    # SEC-007: reuses roles/glances/templates/glances.conf.j2 verbatim (SSOT
+    # — see that file for why a two-line [outputs] snippet is not safe here:
+    # Glances' Config.read() replaces, never merges, so anything mounted at
+    # /etc/glances/glances.conf drops every setting the image's own shipped
+    # conf tunes unless we carry them all over, which the shared template
+    # already does). Jetson can't use the `template` module (Ubuntu 18.04 /
+    # Python 3.6, legacy_python) so the render happens controller-side via
+    # `lookup('template', ...)` and ships over as a raw heredoc — become+raw
+    # heredoc redirection verified root-owned on this node before writing
+    # this task.
+    #
+    # webui_allowed_hosts deliberately omits a hostname entry: common.yaml
+    # says hostname: jetson but the node's real tailnet registration is
+    # kubelab-jet1 (#964, open SSOT mismatch) — browsing this node's Glances
+    # by hostname does not work today regardless, so adding either name here
+    # would just be an unused entry masking a real gap. Settle #964 first,
+    # then extend this list.
+    - name: Render desired Glances configuration (Host-header allowlist, GHSA-hhcg-r27j-fhv9)
+      set_fact:
+        _glances_conf_desired: "{{ lookup('template', playbook_dir + '/../roles/glances/templates/glances.conf.j2') }}"
+      vars:
+        glances_port: "{{ _jetson_glances_port }}"
+        glances_webui_allowed_hosts:
+          - localhost
+          - 127.0.0.1
+          - "{{ _jetson_tailscale_ip }}"
+
+    # Comparison normalizes \r\n -> \n on the "current" side only. `raw`
+    # executes over a pty, and the pty's line discipline (ONLCR) translates
+    # outgoing \n to \r\n on the way back over SSH -- confirmed by dumping
+    # both sides byte-for-byte (od -c) during development: the file ON DISK
+    # has plain \n (verified separately), but `_glances_conf_current.stdout`
+    # as captured by this task does not. Without this, the diff never
+    # settles and every run recreates the container.
+    - name: Write Glances configuration
+      raw: |
+        cat > /opt/glances/glances.conf << 'GLANCES_CONF_EOF'
+        {{ _glances_conf_desired }}
+        GLANCES_CONF_EOF
+      when: (_glances_conf_current.stdout | regex_replace('\r\n', '\n') | trim) != (_glances_conf_desired | trim)
+      register: _glances_conf_write
+      changed_when: true
 
     # `--disable-autodiscover` mirrors roles/glances/defaults/main.yml and is
     # load-bearing for the same reason: Glances 4.5.x web mode starts a zeroconf
     # client that dies on `gethostbyname(None)`, crash-looping the container.
     # Jetson cannot use the shared role (Ubuntu 18.04 → `raw` module only), so
     # the flag is duplicated here on purpose. Change both together.
+    #
+    # Bind address is tailscale_ip only (SEC-007), matching every other node's
+    # compose.yml.j2 (DASH-DT-014a) — the previous `-p 61208:61208` published on
+    # ALL interfaces, so Glances was reachable from the LAN, not just the
+    # tailnet. A ufw rule cannot fix a Docker-published port (#959); the bind
+    # address is the only real control.
+    - name: Recreate outdated Glances container (config or bind address changed)
+      raw: docker rm -f glances
+      when: glances_status.stdout | trim != "" and _glances_conf_write.changed
+      changed_when: true
+
     - name: Start Glances container
       raw: >
         docker run -d --name glances --restart unless-stopped
-        -p 61208:61208
+        -p {{ _jetson_tailscale_ip }}:{{ _jetson_glances_port }}:{{ _jetson_glances_port }}
         -e GLANCES_OPT='-w --disable-autodiscover'
         -v /var/run/docker.sock:/var/run/docker.sock:ro
         -v /etc/os-release:/etc/os-release:ro
+        -v /opt/glances/glances.conf:/etc/glances/glances.conf:ro
         --pid host
         nicolargo/glances:4.5.2-full
-      when: glances_status.stdout | trim == ""
+      when: glances_status.stdout | trim == "" or _glances_conf_write.changed
       changed_when: true
+
+    # Container exists (survived the recreate-on-change branch above because
+    # config didn't change) but isn't running -- start it rather than leave
+    # it stopped. `docker ps -a --format '{{.Status}}'` reports "Up ..." only
+    # while running (Exited/Created/Restarting otherwise), so a slice check
+    # is enough and avoids a regex dependency.
+    - name: Start existing but stopped Glances container
+      raw: docker start glances
+      when: >-
+        glances_status.stdout | trim != "" and
+        not _glances_conf_write.changed and
+        (glances_status.stdout | trim)[:2] != "Up"
+      changed_when: true
+
+    - name: Verify Glances Host-header allowlist is enforced
+      uri:
+        url: "http://{{ _jetson_tailscale_ip }}:{{ _jetson_glances_port }}/api/4/quicklook"
+        method: GET
+        headers:
+          Host: "dns-rebind-check.invalid"
+        status_code: 400
+        timeout: 10
+      delegate_to: localhost
+      become: false
+      register: _glances_hostcheck
+      retries: 12
+      delay: 5
+      until: _glances_hostcheck.status | default(0) == 400
 
     # -- System health --
     - name: Check disk usage
