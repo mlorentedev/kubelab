@@ -320,3 +320,80 @@ class TestAcmeAlertRule:
             f"{rule.get('noDataState')!r}, expected 'OK'. Healthy means no matching "
             f"log lines, which Loki returns as no series, not as zero."
         )
+
+
+#: Titles of the two rules OBS-010 provisions. Literal on purpose (docs/lessons.md
+#: 2026-08-09 — a test must not read its expectation from the file it validates).
+EXPECTED_QUOTA_RULE_TITLES = {
+    "requests.memory": "Namespace quota utilization high (requests.memory)",
+    "limits.memory": "Namespace quota utilization high (limits.memory)",
+}
+
+
+class TestQuotaUtilizationRules:
+    """The rules that watch kubelab's ResourceQuota headroom (OBS-010).
+
+    Delivery (contact points, policy routing, tags) is already proven generically
+    by `TestAlertDelivery` above — these tests are specific to what makes this
+    pair of rules different from OBS-007's, not a re-check of the shared fabric.
+    """
+
+    def test_both_rules_are_provisioned(self, grafana_api: ProvisioningGet, env: str) -> None:
+        rules = grafana_api("alert-rules")
+        titles = {r.get("title") for r in rules}
+
+        missing = set(EXPECTED_QUOTA_RULE_TITLES.values()) - titles
+        assert not missing, (
+            f"Grafana in {env} is missing quota utilization rule(s): {missing}. "
+            f"Found: {sorted(t for t in titles if t) or 'no rules at all'}."
+        )
+
+    def test_rules_treat_no_data_as_a_problem(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """`noDataState` must be `Alerting` — the INVERSE of the ACME rule above.
+
+        For quota utilization, silence means the emitter (quota-watcher) stopped
+        producing log lines, not that everything is fine. The quota could be at
+        100% with nobody told. `noDataState: OK` here would silently disarm the
+        alert exactly when a real problem (e.g. the API server under pressure)
+        also breaks the emitter.
+        """
+        rules_by_title = {r.get("title"): r for r in grafana_api("alert-rules")}
+
+        for dimension, title in EXPECTED_QUOTA_RULE_TITLES.items():
+            rule = rules_by_title.get(title)
+            if rule is None:
+                pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
+
+            assert rule.get("noDataState") == "Alerting", (
+                f"{title!r} in {env} has noDataState={rule.get('noDataState')!r}, "
+                f"expected 'Alerting'. Silence from the {dimension} emitter must be "
+                f"treated as a problem, not as health."
+            )
+            assert rule.get("execErrState") == "Alerting", (
+                f"{title!r} in {env} has execErrState={rule.get('execErrState')!r}, "
+                f"expected 'Alerting' — a query error means 'we don't know', same as "
+                f"no data, and 'we don't know' must alert here, not go quiet."
+            )
+
+    def test_rules_persist_through_a_routine_surge(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """`for:` must be long enough that a brief admission surge cannot fire this.
+
+        IDP-031 measured a full staging deploy + rollout restart peaking at 87.5%
+        of the limits.memory ceiling for well under a minute (2026-08-12). Both
+        rules must require the breach to hold for at least 5 minutes — comfortably
+        longer than any surge this estate has ever measured — so a routine deploy
+        does not train people to ignore this alert. See OBS-010's proposal.md
+        Risks section for the full measurement this bound is derived from.
+        """
+        rules_by_title = {r.get("title"): r for r in grafana_api("alert-rules")}
+
+        for title in EXPECTED_QUOTA_RULE_TITLES.values():
+            rule = rules_by_title.get(title)
+            if rule is None:
+                pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
+
+            assert rule.get("for") == "5m", (
+                f"{title!r} in {env} has for={rule.get('for')!r}, expected '5m'. "
+                f"Shorter than this and IDP-031's measured surge (87.5% of "
+                f"limits.memory, sub-minute) would fire this alert on a routine deploy."
+            )
