@@ -708,6 +708,13 @@ apps:
         auth_level: one_factor
         default_port: 3001
         health_path: /
+        # Monitors carrying any of these seed tags stay on the dashboard but
+        # never notify (#912). rpi3 is the always-on prober; staging runs on
+        # on-demand homelab nodes that are correctly DOWN whenever the
+        # homelab is off (ADR-028) — alerting on that trains the operator to
+        # ignore the dashboard.
+        muted_notification_tags:
+          - staging
 
       glances:
         name: glances

@@ -17,7 +17,20 @@ from toolkit.features.monitoring_diff import (
     embed_key,
     extract_key,
     strip_key,
+    wants_notifications,
 )
+
+
+def _diff(seed, live):
+    """`diff_monitors` with notification comparison switched off.
+
+    Every test in this file predates #912 and exercises unrelated behavior —
+    passing `has_default_notification=False` skips the notification check
+    entirely (see `_needs_edit`), reproducing the exact pre-#912 comparison so
+    none of these fixtures need an unrelated `notificationIDList`.
+    `TestNotificationMuting` below calls `diff_monitors` directly instead.
+    """
+    return diff_monitors(seed, live, muted_tags=frozenset(), has_default_notification=False)
 
 
 class TestKeyMarker:
@@ -55,7 +68,7 @@ class TestDiffMatching:
         seed = [{"key": "glances-bee", "name": "Glances Beelink (renamed)"}]
         live = [{"id": 7, "name": "Glances Beelink", "description": embed_key("", "glances-bee")}]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert create == []
         assert delete == []
@@ -65,7 +78,7 @@ class TestDiffMatching:
         seed = [{"key": "glances-bee", "name": "Glances Beelink"}]
         live = [{"id": 7, "name": "Glances Beelink", "description": "Beelink metrics agent."}]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert create == []
         assert delete == [], "the first sync must adopt existing monitors, not wipe them"
@@ -79,7 +92,7 @@ class TestDiffMatching:
             {"id": 2, "name": "Shared Name", "description": ""},
         ]
 
-        _, edit, delete = diff_monitors(seed, live)
+        _, edit, delete = _diff(seed, live)
 
         assert [m["id"] for m in edit] == [1]
         assert [m["id"] for m in delete] == [2]
@@ -89,7 +102,7 @@ class TestDiffMatching:
         seed = []
         live = [{"id": 9, "name": "Retired Service", "description": ""}]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert create == []
         assert edit == []
@@ -98,7 +111,7 @@ class TestDiffMatching:
     def test_a_seed_entry_matching_nothing_is_created(self):
         seed = [{"key": "new-one", "name": "Brand New"}]
 
-        create, edit, delete = diff_monitors(seed, [])
+        create, edit, delete = _diff(seed, [])
 
         assert [m["key"] for m in create] == ["new-one"]
         assert edit == []
@@ -109,7 +122,7 @@ class TestDiffMatching:
         seed = [{"key": "a", "name": "Dup"}, {"key": "b", "name": "Dup"}]
         live = [{"id": 3, "name": "Dup", "description": ""}]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert len(edit) == 1
         assert len(create) == 1
@@ -148,7 +161,7 @@ class TestComparisonUsesOnlyFieldsTheSyncWrites:
             }
         ]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert (create, edit, delete) == ([], [], [])
 
@@ -164,7 +177,7 @@ class TestComparisonUsesOnlyFieldsTheSyncWrites:
             }
         ]
 
-        _, edit, _ = diff_monitors(seed, live)
+        _, edit, _ = _diff(seed, live)
 
         assert edit == []
 
@@ -179,7 +192,7 @@ class TestComparisonUsesOnlyFieldsTheSyncWrites:
             }
         ]
 
-        _, edit, _ = diff_monitors(seed, live)
+        _, edit, _ = _diff(seed, live)
 
         assert [m["id"] for m in edit] == [1]
 
@@ -197,7 +210,7 @@ class TestDiffIsNonDestructiveOnASteadyState:
             {"id": 2, "name": "Two", "interval": 120, "description": embed_key("", "k2")},
         ]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert create == []
         assert delete == []
@@ -213,7 +226,7 @@ class TestDiffIsNonDestructiveOnASteadyState:
             {"id": 2, "name": "Two", "interval": 120, "description": embed_key("", "k2")},
         ]
 
-        _, edit, _ = diff_monitors(seed, live)
+        _, edit, _ = _diff(seed, live)
 
         assert [m["id"] for m in edit] == [2]
 
@@ -225,7 +238,7 @@ class TestDiffIsNonDestructiveOnASteadyState:
         seed = [{"name": "One", "interval": 60}]
         live = [{"id": 1, "name": "One", "interval": 60, "description": ""}]
 
-        create, edit, delete = diff_monitors(seed, live)
+        create, edit, delete = _diff(seed, live)
 
         assert (create, edit, delete) == ([], [], [])
 
@@ -236,7 +249,119 @@ class TestDiffIsNonDestructiveOnASteadyState:
         seed = [{"key": "k1", "name": "One", "interval": 60}]
         live = [{"id": 1, "name": "One", "interval": 60, "description": ""}]
 
-        _, edit, delete = diff_monitors(seed, live)
+        _, edit, delete = _diff(seed, live)
 
         assert delete == []
         assert [m["id"] for m in edit] == [1]
+
+
+class TestWantsNotifications:
+    """The tag-only half of the notification decision (#912)."""
+
+    def test_an_entry_with_no_muted_tag_wants_notifications(self):
+        assert wants_notifications({"tags": ["infra"]}, muted_tags=frozenset({"staging"})) is True
+
+    def test_an_entry_carrying_a_muted_tag_does_not(self):
+        assert wants_notifications({"tags": ["staging", "data"]}, muted_tags=frozenset({"staging"})) is False
+
+    def test_an_entry_with_no_tags_at_all_wants_notifications(self):
+        assert wants_notifications({}, muted_tags=frozenset({"staging"})) is True
+
+
+class TestNotificationMuting:
+    """Boolean-presence comparison against `muted_tags` (#912).
+
+    Calls `diff_monitors` directly rather than through the `_diff` helper
+    above — `has_default_notification=False` is exactly what that helper
+    switches off, and these tests are about what happens when it is on.
+    """
+
+    MUTED = frozenset({"staging"})
+
+    def test_a_muted_monitor_with_live_notifications_is_edited_to_clear_them(self):
+        seed = [{"key": "k1", "name": "One", "tags": ["staging"]}]
+        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": [1]}]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
+
+        assert [m["id"] for m in edit] == [1]
+
+    def test_a_muted_monitor_already_without_notifications_is_a_no_op(self):
+        seed = [{"key": "k1", "name": "One", "tags": ["staging"]}]
+        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": []}]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
+
+        assert edit == []
+
+    def test_an_unmuted_monitor_with_notifications_is_a_no_op(self):
+        seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
+        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": [1]}]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
+
+        assert edit == []
+
+    def test_an_unmuted_monitor_missing_notifications_is_edited_to_attach_them(self):
+        seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
+        live = [{"id": 1, "name": "One", "description": embed_key("", "k1")}]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
+
+        assert [m["id"] for m in edit] == [1]
+
+    def test_the_write_shaped_dict_reads_identically_to_the_list_shape(self):
+        # `_params()` sends `{"1": True}`; live reads return `[1]`. A monitor
+        # already converged under one shape must not look dirty under the other.
+        seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
+        live = [
+            {
+                "id": 1,
+                "name": "One",
+                "description": embed_key("", "k1"),
+                "notificationIDList": {"1": True},
+            }
+        ]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
+
+        assert edit == []
+
+    def test_with_no_default_notification_the_check_is_skipped_not_converged_to_zero(self):
+        # A from-scratch instance (OBS-014) has nothing to attach. Comparing
+        # anyway would flag every notified monitor dirty and, on apply, wipe
+        # whatever links it actually has — fail-safe is skipping, not zeroing.
+        seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
+        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": [1]}]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=False)
+
+        assert edit == []
+
+    def test_the_real_staging_tagged_shape_needs_exactly_one_edit_to_mute(self):
+        # The actual case #912 is about: a staging monitor in today's seed
+        # shape, live with the notification it currently carries.
+        seed = [
+            {
+                "key": "staging-web-grafana-staging",
+                "name": "Staging · Web · Grafana Staging",
+                "type": "http",
+                "url": "https://grafana.staging.kubelab.live",
+                "tags": ["staging", "data"],
+            }
+        ]
+        live = [
+            {
+                "id": 42,
+                "name": "Staging · Web · Grafana Staging",
+                "type": "http",
+                "url": "https://grafana.staging.kubelab.live",
+                "tags": ["staging", "data"],
+                "notificationIDList": [1],
+                "description": embed_key("", "staging-web-grafana-staging"),
+            }
+        ]
+
+        _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
+
+        assert [m["id"] for m in edit] == [42]
