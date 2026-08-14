@@ -1,6 +1,6 @@
 ---
 # PVC Backup CronJob — ADR-024
-# Backs up critical PVCs (gitea, n8n, authelia) to MinIO bucket.
+# Backs up critical PVCs (n8n, authelia) to MinIO bucket.
 # Uses sqlite3 .backup for application-consistent database snapshots.
 # Prod only — staging data is disposable.
 apiVersion: batch/v1
@@ -59,15 +59,12 @@ spec:
 
                   DATE=$(date -u +%Y-%m-%d)
 
-                  # --- Gitea: git repos + SQLite DB ---
-                  echo "Backing up gitea-data..."
-                  sqlite3 /backup-source/gitea/gitea/gitea.db ".backup /tmp/gitea.db"
-                  cp -a /backup-source/gitea /tmp/gitea-snapshot
-                  cp /tmp/gitea.db /tmp/gitea-snapshot/gitea/gitea.db
-                  tar czf /tmp/gitea-${DATE}.tar.gz -C /tmp/gitea-snapshot .
-                  mc cp /tmp/gitea-${DATE}.tar.gz backup/kubelab-backups/gitea/
-                  rm -rf /tmp/gitea-snapshot /tmp/gitea.db /tmp/gitea-${DATE}.tar.gz
-                  echo "  gitea-data OK"
+                  # Gitea is NOT backed up here any more: it left K3s for the
+                  # Beelink (ADR-061), so there is no gitea-data PVC to mount.
+                  # It currently has NO backup at all — tracked as #1056, which
+                  # is blocked on #972 choosing a destination, because the only
+                  # one available today is the in-cluster MinIO whose placement
+                  # #972 exists to decide.
 
                   # --- Authelia: SQLite DB (users, TOTP, sessions) ---
                   echo "Backing up authelia-data..."
@@ -105,9 +102,6 @@ spec:
                       name: minio-secrets
                       key: MINIO_ROOT_PASSWORD
               volumeMounts:
-                - name: gitea-data
-                  mountPath: /backup-source/gitea
-                  readOnly: true
                 - name: authelia-data
                   mountPath: /backup-source/authelia
                   readOnly: true
@@ -124,10 +118,6 @@ spec:
                   memory: 128Mi
                   cpu: "0.1"
           volumes:
-            - name: gitea-data
-              persistentVolumeClaim:
-                claimName: gitea-data
-                readOnly: true
             - name: authelia-data
               persistentVolumeClaim:
                 claimName: authelia-data

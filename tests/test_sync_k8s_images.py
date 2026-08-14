@@ -22,7 +22,12 @@ def _config() -> dict:
         "edge": {"errors": {"image_name": "kubelab-errors", "version": "1.2.3"}},
         "apps": {
             "services": {
-                "core": {"gitea": {"image": "gitea/gitea:1.25.5"}},
+                # A third-party image that is actually on the sync lane. It used
+                # to be gitea, which stopped being one when ADR-061 moved that
+                # workload off K3s to the Beelink — the assertion below then
+                # failed for a correct reason, which is the point of pinning a
+                # real IMAGE_SOURCES entry rather than an arbitrary string.
+                "automation": {"n8n": {"image": "n8nio/n8n:1.100.0"}},
             }
         },
     }
@@ -48,7 +53,7 @@ class TestCollectImages:
     def test_includes_errors_alongside_third_party(self) -> None:
         images = sync_k8s_images.collect_images(_config())
         assert ("docker.io/mlorentedev/kubelab-errors", "1.2.3") in images
-        assert ("gitea/gitea", "1.25.5") in images
+        assert ("n8nio/n8n", "1.100.0") in images
 
     def test_errors_emitted_in_block(self) -> None:
         block = sync_k8s_images.build_images_block(sync_k8s_images.collect_images(_config()))

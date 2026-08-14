@@ -3827,3 +3827,75 @@ Recovery was cheap only by accident — the edits had been applied by a script r
 - **Both of these were caught by measuring the actual resolved state (a live error; a simulated merge output) rather than reading the Ansible source and reasoning about what "should" happen.** Neither is discoverable by code review alone — `--tags` skip behavior and merge-precedence collisions both only manifest at the exact invocation that exercises them.
 
 **Tags:** `#ansible` `#tags` `#secrets` `#sops` `#merge-order` `#ansible-035` `#gotcha`
+
+---
+
+### [2026-08-14] `max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`
+
+**Context:** OBS-010 — two Grafana alert rules (`obs010-quota-requests`/`-limits`) on `kubelab` namespace memory utilization, `for: 5m` so a rules should only fire on a *sustained* breach, not a momentary one during a routine deploy restart.
+
+**Problem:** the surge-drill acceptance criterion — a normal `make deploy-k8s` + rollout restart must NOT fire the alert — failed for real on its first live run. The query was `max_over_time({container="quota-watcher"} | json | unwrap pct [10m]) > 80`. That function returns the *peak* value observed anywhere inside the 10-minute lookback window, not the current value — so a single transient spike (the surge itself, ~88% for well under a minute) stayed visible to every evaluation for up to 10 minutes after the real value had already dropped back under 71%. `for: 5m` requires the query result to stay above threshold across multiple evaluations, but with `max_over_time` the *query result itself* is an artifact of window memory, not of present reality — the sustain check was satisfied by the window, not by anything actually sustained. Caught by watching the rule transition `inactive` → `pending` → **`firing`** live during the drill (a 15-minute background poll of the rules API), then cross-checking the raw Loki log lines directly and finding the real value had already recovered to 70.54% within 5 minutes — the rule was alerting on a ghost.
+
+A second surprise on the same incident: restarting the Grafana pod (to deploy the `last_over_time` fix) did **not** clear the stale `firing` state — Grafana's alert state lives in its own database, not in-memory, so the pod restart was a no-op for the already-firing alert. It needed one more real evaluation cycle after the fix deployed to naturally resolve.
+
+**Solution:** `sed -i 's/max_over_time(/last_over_time(/g'` on both rules — `last_over_time` reflects only the most recent sample in the window, so `for:` genuinely requires the underlying value to stay elevated across real evaluations, not just within one remembered peak. Locked in with a permanent regression test, `test_query_uses_last_not_max_over_time`, asserting the provisioned query string contains `last_over_time` and not `max_over_time`. Re-ran an identical drill afterward: same 88% peak, rule reached `pending` at worst, never `firing`.
+
+**Rule:**
+- **`max_over_time`/`min_over_time` over a window and a `for:` sustain check are two different memories of the same interval, and stacking them double-counts.** `for:` already provides "did this stay true across N evaluations" — feeding it a query that itself remembers the window's peak makes the alert fire on "was this ever true in the window", which is a much weaker, and often wrong, condition. Use `last_over_time` (or no windowing function at all, if the metric is already a point value) whenever `for:` is doing the sustain-detection work.
+- **A passing static review of the LogQL expression would not have caught this** — `max_over_time` reads as the obviously-correct choice for "did utilization get too high," and only diverges from `last_over_time` under exactly the condition a surge drill creates. This is the same "exercised, not assumed" lesson OBS-009/IDP-031 already established for prod ordering claims, now shown to apply to alert *logic*, not just deployment state.
+- **A restart does not clear alert state if that state lives outside the pod.** Don't treat "the fix is deployed" as "the symptom is gone" for anything with its own persisted state machine — wait for a real evaluation cycle and check the actual state transition, not just rollout status.
+
+**Tags:** `#grafana` `#logql` `#alerting` `#obs-010` `#gotcha`
+
+---
+
+### [2026-08-14] K3s's built-in ServiceLB masks every client's real IP — `externalTrafficPolicy: Local` cannot fix it
+
+**Context:** SEC-004 — before adding any rate-limit middleware to K3s Traefik, checking whether a per-client-IP `sourceCriterion` would actually see distinct client IPs.
+
+**Problem:** it does not. A request from a known source IP (verified via `tailscale ip -4`) reached Traefik's access log tagged with an internal pod-CIDR address instead — and a different one on a second, near-simultaneous request. The standard first fix for source-IP mangling behind a Kubernetes `LoadBalancer` Service, `externalTrafficPolicy: Local` (skips kube-proxy's SNAT for cross-node delivery), was tried and changed nothing.
+
+The actual cause sits one layer below kube-proxy entirely: K3s's built-in ServiceLB (`klipper-lb`) is not a real load balancer, it is a per-node `iptables` script. Reading its container logs directly (`kubectl logs <svclb-pod> -c lb-tcp-443`) showed the exact rules it installs for every `LoadBalancer` Service:
+
+```
+iptables -t nat -I PREROUTING -p TCP --dport 443 -j DNAT --to <service-clusterIP>:443
+iptables -t nat -I POSTROUTING -d <service-clusterIP>/32 -p TCP -j MASQUERADE
+```
+
+The `POSTROUTING ... MASQUERADE` rule is unconditional — every packet reaching that Service's ClusterIP gets its source rewritten, regardless of `externalTrafficPolicy`, because the rewrite happens at the klipper-lb hostPort DNAT hop, before the packet is anywhere near the Service or kube-proxy's own forwarding logic. This is klipper-lb's documented design (it avoids asymmetric routing without needing anything smarter than raw NAT), not a misconfiguration — so there is no flag to flip; the fix is a different ServiceLB implementation (e.g. MetalLB) entirely.
+
+**Solution:** not fixed — filed as its own prerequisite issue (kubelab#1067) rather than attempted inline, since the real remediation is an infrastructure-level replacement affecting every `LoadBalancer` Service in the cluster, not a K3s Traefik config change. The ticket this was discovered under (SEC-004, rate-limit middleware) was rescoped to a global, non-per-client limit as a direct, documented consequence rather than shipping a per-IP limiter that silently buckets everyone together.
+
+**Rule:**
+- **Before designing anything keyed on "the client's IP" behind K3s's default `LoadBalancer` implementation, verify empirically what Traefik actually sees — do not assume `externalTrafficPolicy: Local` is sufficient.** It is the correct fix for kube-proxy-level SNAT, and irrelevant to klipper-lb's own masquerade, which happens upstream of that layer. Test with a temporary `--accesslog=true` and a real request from a known source, not by reading Kubernetes docs about `externalTrafficPolicy` in isolation.
+- **"We already have CrowdSec" does not mean client-IP visibility is a solved problem for every future feature.** CrowdSec's bouncer plugin consumes application-level decisions from its own LAPI and doesn't need Traefik's view of source IP the same way a `sourceCriterion`-based rate limiter would — the two security layers have different dependencies on this fact, and assuming one implies the other is how this would have shipped broken.
+- **A finding that changes a ticket's feasible scope belongs in that ticket and a dedicated follow-up issue, not folded silently into "ship what we can."** Global vs. per-client rate limiting are different guarantees; conflating them in the PR description would have overstated what the feature actually protects against.
+
+**Tags:** `#k3s` `#networking` `#servicelb` `#klipper-lb` `#sec-004` `#gotcha`
+
+---
+
+### [2026-08-14] `kubectl apply` cannot convert a Service with a selector into a selector-less one — omitting a field is not deleting it
+
+**Context:** ADR028-004 / #1062 moved Gitea out of K3s onto the Beelink and kept its domain, replacing the in-cluster workload with the repo's external-service pattern — `Service` (no selector) + hand-written `EndpointSlice` → the node's Tailscale IP. The manifest was correct, both overlays rendered clean, `make test-fast`, `make validate-sync` and staging e2e were green, and the first post-apply probe of `gitea.kubelab.live` returned the Beelink's instance. Everything said the cutover had worked.
+
+**The trap:** it hadn't. The live Service still carried `selector: {app.kubernetes.io/name: gitea}` from its previous life. `kubectl apply` did not remove it, because the new manifest does not *set* `selector: null` — it simply has no `selector` key, and the field remained owned by whichever manager wrote it originally. So the endpoints controller went on managing its own slice next to the manual one:
+
+```
+NAME             ADDRESSES      PORTS
+gitea-external   [100.64.0.3]   3000     # the Beelink, from git
+gitea-qwcfk      [10.42.0.11]   3000     # the old in-cluster pod, still selected
+```
+
+Two EndpointSlices behind one Service means Traefik round-robins — so the domain served **two different Gitea instances, alternately**, each with its own database. Not a 502 anyone would notice: a push landing in one and a read served from the other. The single verification request that "confirmed" the cutover had a 50% chance of being right, and was.
+
+The manifest is not wrong, and on a fresh cluster it produces exactly the intended object. The defect only exists in the *conversion*: an object that already had a selector cannot lose it by omission.
+
+**Fix:** `kubectl patch svc gitea --type=merge -p '{"spec":{"selector":null}}'` — an explicit null is the only way to express removal — plus scaling the retired Deployment to 0 so the controller-managed slice emptied. Re-verified with **12 consecutive requests, 12/12 hitting the Beelink**, discriminated by the admin account's creation timestamp rather than by "it responded".
+
+**Rule:**
+- **When a live object is being converted rather than created, ask which fields the old shape had that the new one merely omits.** Strategic-merge apply treats absent and null as different things, and only one of them deletes. This is the same shape as the ADR-037 `certResolver: null` gotcha already in CLAUDE.md — an empty map means "change nothing", not "remove".
+- **Verify a cutover with repeated requests and a discriminator that identifies *which backend answered*, never with one request and a 200.** Round-robin between an old and a new backend is indistinguishable from success in any single sample. Pick a field the two instances cannot both have — here, the admin account's creation date, 146 days apart.
+- **Count EndpointSlices per Service after any switch to the external-service pattern.** `kubectl get endpointslice -l kubernetes.io/service-name=<svc>` must return exactly the hand-written one; a second, controller-managed slice is the tell that the Service still has a selector.
+
+**Tags:** `#kubernetes` `#service` `#endpointslice` `#kubectl-apply` `#cutover` `#adr-061` `#gotcha`

@@ -1,0 +1,91 @@
+---
+# Gitea — external service on the Beelink platform node (ADR-061).
+#
+# Gitea is classified `state_promotion: singleton, location: on-demand`, so the
+# workload left K3s entirely and runs as a Docker Compose service on the Beelink
+# (`roles/beelink_services`). Only its ROUTE lives here: K3s Traefik terminates
+# TLS for gitea.kubelab.live and forwards to the node over Tailscale. Same shape
+# already proven for Uptime Kuma on the RPi3 and Pi-hole on the RPi4.
+#
+# Prod overlay only, deliberately. The staging twin is retired by this change —
+# a singleton with no git promotion path cannot have a second live instance
+# without forking state that cannot be merged back.
+#
+# The backend is on-demand, so a 502 through the error-pages middleware is the
+# CORRECT response when the homelab is powered off, not an incident. That is
+# what `tests/e2e/expectations.py` asserts via `on_demand_backend`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitea
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+  annotations:
+    kubelab.live/host: beelink
+    kubelab.live/description: "Gitea on the Beelink platform node (100.64.0.3), on-demand"
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: gitea-external
+  namespace: kubelab
+  labels:
+    kubernetes.io/service-name: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: kubelab
+addressType: IPv4
+ports:
+  - name: http
+    port: 3000
+    protocol: TCP
+endpoints:
+  # networking.nodes.beelink.tailscale_ip — stable (physical node).
+  # NOT the LAN address: the always-on VPS must reach this over the tailnet.
+  - addresses:
+      - "100.64.0.3"
+    conditions:
+      ready: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gitea
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # apps.services.core.gitea.domain in common.yaml. The domain is unchanged by
+    # the move, which is why the Authelia OIDC client and its registered redirect
+    # URI (https://gitea.kubelab.live/user/oauth2/authelia/callback) stay valid —
+    # only the backend changed.
+    - match: Host(`gitea.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
+      services:
+        - name: gitea
+          port: 3000
+  tls:
+    certResolver: letsencrypt

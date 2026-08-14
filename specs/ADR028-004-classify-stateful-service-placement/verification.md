@@ -231,6 +231,116 @@ Generalisation worth keeping: once a service stops belonging to its node's envir
 
 The K3s instance passed every e2e check throughout, because the suite asserts `/api/v1/version` over HTTPS and never exercises a git operation. Fixed here by publishing container port 22 on the node's Tailscale address; the advertised `ssh_url` now completes a handshake (`Permission denied (publickey)` from sshd — the key is simply not registered yet) where it previously timed out.
 
+## AC3 (part 2 of 2) — Cutover prepared and gated; live verification is post-merge (2026-08-14)
+
+The heading says "prepared", not "done", deliberately. `gitea.kubelab.live` still resolves to the old K3s workload as this is written: prod is GitOps-reconciled, so the route only changes when Argo CD syncs the merge. Nothing below claims otherwise, and the post-merge slot at the end of this section is empty until it is filled with real output.
+
+**Prune is on, so the retirement is not a git-only claim.** Checked rather than assumed — both `infra/k8s/argocd/applications/{staging,prod}.yaml` carry `syncPolicy.automated.prune: true`. Without it the staging twin would keep serving after merge and "retired" would mean nothing outside the repo.
+
+**ADR-037's `make deploy-k8s ENV=staging` step was skipped, deliberately.** Stating it because silence is not a skip: that flow validates *additions*, and an apply cannot exercise a *removal* — nothing in `kubectl apply` deletes a resource that is no longer in the manifest set. Prune is Argo's job, so the removal is only observable after a sync. The render, the gates and staging e2e cover what is coverable pre-merge.
+
+**Renders.** `kubectl kustomize` clean on both overlays. Prod emits exactly three Gitea objects — `Service`, `EndpointSlice`, `IngressRoute` — and no Deployment, PVC or ConfigMap. Staging's only remaining reference is the shared dashboard tile pointing at the apex name; no workload, no route.
+
+**Gates did the work, not inspection.** Four consequences of the retirement were caught by the repo's own checks after the manifests already looked right:
+
+| check | what it caught |
+|---|---|
+| `make validate-sync` | `sync_k8s_images.py` still regenerating the gitea image pin into `base/kustomization.yaml` |
+| `make validate-sync` | `sync_oidc_hashes.py` aborting on OIDC-SYNC-001, hunting a `gitea` client correctly removed from the base config |
+| `make test-fast` | `test_managed_clients_resolve_in_repo_configs` — same cause, asserted independently |
+| `make test-fast` | `test_includes_errors_alongside_third_party` — used gitea as its representative third-party image, so it went red for a correct reason |
+
+Final: `make lint` clean, `make type` clean (61 files), `make test-fast` 510 passed, `make validate-sync` all in sync.
+
+### The defect the cutover exposed: the stack did not survive a reboot
+
+After 4a's verification passed, the Beelink rebooted and **Gitea and MinIO both stayed down**. Not a crash — they never started:
+
+```
+Error=failed to set up container networking: driver failed programming external
+connectivity on endpoint gitea: failed to bind host port 100.64.0.3:2222/tcp:
+cannot assign requested address
+RestartCount=0   RestartPolicy=unless-stopped
+```
+
+Docker started before `tailscaled` had put `100.64.0.3` on `tailscale0`, so publishing on that address failed. **`restart: unless-stopped` does not cover this**: the policy restarts a process that exited, and this container never started. `RestartCount=0` with the policy set is the measurement, not an inference.
+
+This is not hardening and it is not optional. The Beelink is `location: on-demand`, which means powering it on *is* its normal operation — a stack that only survives uninterrupted uptime is not on-demand in any useful sense. ADR-061's classification is unimplementable without this fix, so it lands here rather than in a ticket.
+
+**Fix:** a `kubelab-compose.service` unit ordered `After=docker.service tailscaled.service`, whose `ExecStartPre` waits for the *address* to appear on the interface — not for the daemon to report active, which is the distinction the measured race turns on.
+
+**Verification, in three parts, because the obvious one is insufficient.** A real reboot:
+
+```
+Active: active (exited) since Fri 2026-08-14 07:15:07 CEST
+Process: ExecStartPre=/opt/kubelab/wait-for-tailscale-addr.sh 100.64.0.3 (code=exited, status=0/SUCCESS)
+wait-for-tailscale-addr.sh[2121]: 100.64.0.3 is up on tailscale0 after 0s
+gitea    Up 52 seconds (healthy)
+minio    Up 52 seconds (healthy)
+{"version":"1.25.5"}    ssh port 2222: OPEN
+```
+
+**Reported honestly: that boot did not reproduce the race** — the containers were already `Running` when the unit executed, so Docker won this time. The reboot therefore proves the unit is installed, enabled, ordered and harmless; it does *not* by itself prove the unit rescues a lost race. The two halves that would be vacuous if untested were falsified separately:
+
+```
+$ wait-for-tailscale-addr.sh 100.64.0.99 tailscale0 2     # address that will never appear
+timed out after 4s waiting for 100.64.0.99 on tailscale0
+exit=1
+$ wait-for-tailscale-addr.sh 100.64.0.3 tailscale0 2
+100.64.0.3 is up on tailscale0 after 0s
+exit=0
+
+$ docker stop gitea minio        # reproduce the post-failed-boot state
+  3000 CLOSED
+$ systemctl restart kubelab-compose.service
+  gitea Up 8 seconds   minio Up 8 seconds
+  3000 OPEN  →  {"version":"1.25.5"}
+```
+
+So: the gate rejects an address that never appears and accepts one that exists, and the unit's `ExecStart` recovers a stack Docker left down. Outcome is deterministic even though the path is not — whoever wins the race, the stack converges to running.
+
+The same bind shape exists in `glances` and `rpi3_services`, and MinIO on this node has been dying on every reboot for as long as it has lived there, unnoticed because "MinIO is not answering" is indistinguishable from "the homelab is off". Filed fleet-wide as **#1061**; only `beelink_services` is fixed here. `glances` survived this reboot, which is scheduling luck rather than immunity, and the ticket says so.
+
+**A test learned the same lesson.** The new infra check originally mapped any failed connection to "Beelink is powered off" and would have skipped straight past this incident. It now separates the two: timeout or no route means the node is off (skip); `ECONNREFUSED` means the node is up and the service is not (fail).
+
+### Post-merge verification — DONE (2026-08-14), by manual apply, because the hub was down
+
+**Argo CD could not perform the sync.** aws1 is a persistent Spot request with `instance_interruption_behavior = "stop"`; AWS interrupted it and the request sits `open` with `Status: capacity-not-available` — "There is no Spot capacity available that matches your request." The instance is `stopped`, not terminated, and AWS restarts it when capacity returns. Consequence: no GitOps reconciliation for *either* environment, not just this change. Both clusters kept serving throughout; a management plane separate from the data plane is what makes a Spot interruption an inconvenience rather than an outage.
+
+Applied to prod directly on the operator's decision: `toolkit infra k8s deploy --env prod` (as the Argo CD service account, per TOOL-029). What it applies is exactly what is in git, so `selfHeal` converges to the same state when the hub returns.
+
+**A real defect surfaced here, and the first verification missed it.** After the apply, one probe of `gitea.kubelab.live` returned the Beelink's instance, which looked like success. It wasn't:
+
+```
+NAME             ADDRESSES      PORTS
+gitea-external   [100.64.0.3]   3000     # the Beelink, from git
+gitea-qwcfk      [10.42.0.11]   3000     # the old in-cluster pod, still selected
+```
+
+The live Service still carried `selector: {app.kubernetes.io/name: gitea}`. `kubectl apply` does not remove it: the new manifest has no `selector` key, and *omitting* a field is not *deleting* it — the field stayed owned by whichever manager wrote it. So the endpoints controller kept managing its own slice beside the manual one, and Traefik round-robined between **two different Gitea instances on one domain**, each with its own database. The single confirming request had a 50% chance of being right, and was.
+
+The manifest is not wrong; on a fresh cluster it produces the intended object. The defect is in the *conversion* — an object that already had a selector cannot lose it by omission. Written up in `docs/lessons.md`.
+
+Fixed with an explicit `selector: null` patch plus scaling the retired Deployment to 0 so the controller-managed slice drained.
+
+**Then re-verified properly, with a discriminator rather than a status code.** The two instances are distinguishable by their admin account's creation timestamp — the Beelink's was bootstrapped today, the retired K8s one 146 days ago:
+
+```
+=== 12 consecutive requests: is it ALWAYS the Beelink? ===
+   Beelink: 12/12   other: 0/12
+```
+
+| check | result |
+|---|---|
+| `make test-e2e ENV=prod` | 61 passed, 23 skipped — including `TestOnDemandBackend`, running against a live route for the first time |
+| EndpointSlices for `gitea` | `gitea-external` → `100.64.0.3`; the controller slice drained to no addresses |
+| Service selector | empty, matching git |
+| `gitea.kubelab.live` | HTTP 200, Beelink, 12/12 |
+| `gitea.staging.kubelab.live` | HTTP 503 — the retired twin can no longer serve |
+| `gitea-secrets` | deleted in **both** clusters (#926) |
+
+**Left deliberately undone:** the retired `Deployment`, `PersistentVolumeClaim`, `gitea-ssh` Service, ConfigMaps and IngressRoute still exist in both clusters, scaled to zero. Deleting them is prune's job and prune needs the hub. Scaling was chosen over deleting because it is reversible and it is what the operator authorised; the objects are absent from git, so Argo removes them on its first sync.
+
 ## AC2 — Classification gate transcript (captured 2026-08-14)
 
 Owed by PR 2, which merged without it. This is an unmet acceptance criterion, not tidying: AC2 requires the gate be *demonstrated* to fail, and a suite that only ever reports green proves nothing about whether it can go red.

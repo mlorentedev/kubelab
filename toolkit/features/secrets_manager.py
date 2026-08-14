@@ -211,6 +211,11 @@ SECRET_CATALOG: list[SecretSpec] = [
         derived_from="apps.services.core.gitea.oidc_client_secret",
         format_hint="$argon2id$v=19$...",
         rotate_note="Auto-derived from gitea.oidc_client_secret.",
+        # Tracks its source's envs (see the Gitea block). Letting this keep
+        # `staging` while the source no longer resolves there would walk straight
+        # into #1057: `secrets hash --env staging` treats a missing source as a
+        # cue to MINT a new client secret rather than to stop.
+        envs=("dev", "prod"),
     ),
     # =========================================================================
     # Grafana
@@ -242,8 +247,22 @@ SECRET_CATALOG: list[SecretSpec] = [
         ),
     ),
     # =========================================================================
-    # Gitea
+    # Gitea  (singleton — ADR-061)
     # =========================================================================
+    # `staging` deliberately absent from every spec below. Gitea is classified
+    # `state_promotion: singleton`, so the staging twin is retired and nothing
+    # resolves these keys under that env any more. The Beelink deployment does
+    # NOT change that even though its playbook provisions the node with
+    # `deploy_env: staging`: `provision-bee.yml` declares
+    # `gitea_identity_env: prod` and decrypts prod's vault into its own fact
+    # precisely so this narrowing stays true.
+    #
+    # `dev` is kept — `infra/stacks/services/core/gitea/compose.dev.yml` still
+    # runs Gitea locally. Note this is not a claim that dev is complete: only
+    # `admin_password` is actually present in dev.enc.yaml today, so
+    # `secrets audit dev` already reports the other two. That gap predates this
+    # change and is left visible rather than hidden by narrowing `envs` to match
+    # reality — which is exactly the ANSIBLE-033 failure mode.
     SecretSpec(
         key_path="apps.services.core.gitea.secret_key",
         description="Gitea internal security key",
@@ -251,14 +270,15 @@ SECRET_CATALOG: list[SecretSpec] = [
         length=32,
         services=("gitea",),
         rotate_note="Restart gitea. Existing sessions invalidated.",
-        envs=("dev", "staging", "prod"),
+        envs=("dev", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.core.gitea.admin_password",
-        description="Gitea admin account password",
+        description="Gitea admin account password (break-glass; SSO is the human login path)",
         kind=SecretKind.PASSWORD,
         services=("gitea",),
         rotate_note="Change via Gitea admin UI or CLI.",
+        envs=("dev", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.core.gitea.oidc_client_secret",
@@ -266,6 +286,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("gitea", "authelia"),
         rotate_note="Must also regenerate authelia.oidc_client_secret_gitea_hash.",
+        envs=("dev", "prod"),
     ),
     # =========================================================================
     # N8N

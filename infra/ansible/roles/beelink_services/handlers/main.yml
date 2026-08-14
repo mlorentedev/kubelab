@@ -2,3 +2,7 @@
 - name: Restart beelink services
   command: docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d --force-recreate
   changed_when: true
+
+- name: Reload systemd for kubelab-compose
+  systemd:
+    daemon_reload: true
