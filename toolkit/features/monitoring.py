@@ -18,6 +18,7 @@ from toolkit.features.monitoring_diff import (
     embed_key,
     extract_key,
     strip_key,
+    wants_notifications,
 )
 
 # Fields to export per monitor (skip volatile/internal fields)
@@ -82,6 +83,21 @@ def _get_kuma_creds(project_root: Path) -> dict[str, str]:
         raise SystemExit(1)
 
     return {"url": f"http://{host}:{port}", "host": host, "username": username, "password": password}
+
+
+def _get_muted_notification_tags(project_root: Path) -> frozenset[str]:
+    """Read the tags whose monitors should stay silent, from the config SSOT.
+
+    `apps.services.observability.uptime_kuma.muted_notification_tags` in
+    `common.yaml` — non-secret, so a plain merged-config read, no SOPS. Staging
+    is muted by default (#912): the always-on rpi3 prober watches on-demand
+    homelab targets that are correctly DOWN whenever the homelab is off, and
+    alerting on that trains the operator to ignore the dashboard.
+    """
+    cm = ConfigurationManager("staging", project_root)
+    merged = cm.get_merged_config()
+    svc = merged.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
+    return frozenset(svc.get("muted_notification_tags", []))
 
 
 def _connect(project_root: Path) -> tuple[UptimeKumaApi, dict[str, Any]]:
@@ -218,6 +234,11 @@ def apply_monitors(project_root: Path) -> None:
     `key` carried in `description` (marker-first, name fallback), so a rename is
     an edit rather than a delete + create and uptime history survives a sync.
     Adds monitors one-by-one via API (avoids upload_backup timeout on RPi3).
+
+    Monitors tagged with a `muted_notification_tags` tag (common.yaml SSOT)
+    stay on the dashboard but never get the default notification attached —
+    the always-on rpi3 prober watches several on-demand homelab targets, and
+    those read DOWN correctly whenever the homelab is off (#912).
     """
     api, info = _connect(project_root)
 
@@ -248,10 +269,21 @@ def apply_monitors(project_root: Path) -> None:
                         pass
             logger.success(f"Tags ready: {len(tag_id_map)} ({', '.join(tag_id_map)})")
 
+        # Get default notification ID for linking — read before the diff, since
+        # the diff needs to know whether there is anything to converge toward.
+        default_notif_ids = [n["id"] for n in api.get_notifications() if n.get("isDefault")]
+        has_default_notification = bool(default_notif_ids)
+        muted_tags = _get_muted_notification_tags(project_root)
+
         # Decide before doing. The plan is computed by a pure function so it can
         # be tested without a live instance (tests/test_monitoring_diff.py).
         live = api.get_monitors()
-        to_create, to_edit, to_delete = diff_monitors(seed_monitors, live)
+        to_create, to_edit, to_delete = diff_monitors(
+            seed_monitors,
+            live,
+            muted_tags=muted_tags,
+            has_default_notification=has_default_notification,
+        )
         logger.info(
             f"Sync plan: {len(to_create)} create, {len(to_edit)} edit, "
             f"{len(to_delete)} delete (live={len(live)}, seed={len(seed_monitors)})"
@@ -264,9 +296,6 @@ def apply_monitors(project_root: Path) -> None:
             logger.info(f"Deleting '{m.get('name')}' (id={m['id']}) — not in seed")
             api.delete_monitor(m["id"])
         _assert_deleted(api, [m["id"] for m in to_delete])
-
-        # Get default notification ID for linking
-        default_notif_ids = [n["id"] for n in api.get_notifications() if n.get("isDefault")]
 
         def _params(m: dict[str, Any]) -> dict[str, Any]:
             """Map a seed entry onto the fields the API accepts.
@@ -285,11 +314,30 @@ def apply_monitors(project_root: Path) -> None:
                 params["description"] = embed_key(params.get("description", ""), m["key"])
             return params
 
+        def _notification_id_list(seed_entry: dict[str, Any]) -> dict[str, bool]:
+            """The `{id: True}` map to send, honoring `muted_tags` (#912).
+
+            Only called under `has_default_notification` — there being nothing
+            to attach is handled by the caller, same as the diff side.
+            """
+            if wants_notifications(seed_entry, muted_tags):
+                return {str(nid): True for nid in default_notif_ids}
+            return {}
+
         # Edits keep the monitor id, and with it the uptime history.
         edited = 0
         for m in to_edit:
             try:
-                api.edit_monitor(m["id"], **_params(m["_seed"]))
+                params = _params(m["_seed"])
+                # Sent on every edit, not only ones the notification check
+                # flagged — otherwise "compare exactly what you write" (the
+                # WRITABLE_FIELDS invariant) would not hold for this field.
+                # Omitted when there is no default notification to converge
+                # toward, so an edit triggered by an unrelated field never
+                # touches whatever links the instance already has.
+                if has_default_notification:
+                    params["notificationIDList"] = _notification_id_list(m["_seed"])
+                api.edit_monitor(m["id"], **params)
                 edited += 1
             except Exception as e:
                 logger.warning(f"Failed to edit '{m.get('name')}': {type(e).__name__}: {e!r}")
@@ -301,9 +349,9 @@ def apply_monitors(project_root: Path) -> None:
                 # Use low-level sio.call — lib's _call wrapper has issues with v2 responses
                 monitor_data = api._build_monitor_data(**_params(m))
                 monitor_data["conditions"] = []
-                if default_notif_ids:
+                if has_default_notification:
                     # Uptime Kuma v2 expects {id: true} format, not [id]
-                    monitor_data["notificationIDList"] = {str(nid): True for nid in default_notif_ids}
+                    monitor_data["notificationIDList"] = _notification_id_list(m)
                 r = api.sio.call("add", monitor_data, timeout=api.timeout)
                 if isinstance(r, dict) and not r.get("ok", True):
                     raise RuntimeError(r.get("msg", "Unknown error"))
