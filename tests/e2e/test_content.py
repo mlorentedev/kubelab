@@ -7,7 +7,7 @@ import pytest
 
 from toolkit.features.health_check import ServiceHealthConfig
 
-from .expectations import EXPECTATIONS, ServiceExpectation
+from .expectations import EXPECTATIONS, ServiceExpectation, on_demand_skip_reason
 
 pytestmark = pytest.mark.e2e
 
@@ -26,6 +26,10 @@ def _resolve(
     exp = EXPECTATIONS[svc_name]
     if env in exp.skip_in_envs:
         pytest.skip(f"{svc_name} skipped in {env}")
+
+    reason = on_demand_skip_reason(svc_name, exp)
+    if reason:
+        pytest.skip(reason)
     svc = services_by_name.get(svc_name)
     if not svc:
         pytest.skip(f"{svc_name} not in {env} config")

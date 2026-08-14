@@ -22,7 +22,10 @@ KUSTOMIZATION = PROJECT_ROOT / "infra/k8s/base/kustomization.yaml"
 # Dotted paths into common.yaml that hold "name:tag" image strings.
 # Only third-party services -- custom apps are per-environment (overlays).
 IMAGE_SOURCES = [
-    "apps.services.core.gitea.image",
+    # gitea deliberately absent: it left K3s for the Beelink (ADR-061), so its
+    # image is no longer a Kustomize concern. The pin lives where the workload
+    # does — `roles/beelink_services` reads apps.services.core.gitea.image
+    # straight from this same SSOT, so the value is still single-sourced.
     "apps.services.automation.n8n.image",
     "apps.services.automation.apprise.image",
     "apps.services.observability.loki.image",
