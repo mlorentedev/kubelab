@@ -228,6 +228,35 @@
     mode: "0644"
   when: maintenance_install_timer | bool
 
+# --- OnFailure notify (ANSIBLE-035, NOTIFY-001) ---------------------------
+# Static file, not a live SOPS decrypt: nodes never hold a SOPS decryption
+# key, only the plaintext Ansible already resolved (same pattern as the
+# CrowdSec bouncer key and Headscale pre-auth key). Rotation = re-provision
+# the fleet -- see the rotate_note on this secret in secrets_manager.py.
+- name: Write fleet notify secret
+  copy:
+    content: "{{ secrets.apps.services.automation.notify.fleet_webhook_secret }}"
+    dest: "{{ maintenance_notify_secret_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: maintenance_install_timer | bool
+  no_log: true
+
+- name: Install maintenance notify script
+  template:
+    src: kubelab-maintenance-notify.sh.j2
+    dest: /opt/kubelab-maintenance-notify.sh
+    mode: "0700"
+  when: maintenance_install_timer | bool
+
+- name: Install maintenance notify service unit
+  template:
+    src: kubelab-maintenance-notify.service.j2
+    dest: /etc/systemd/system/kubelab-maintenance-notify.service
+    mode: "0644"
+  when: maintenance_install_timer | bool
+
 - name: Enable and start maintenance timer
   systemd:
     name: kubelab-maintenance.timer

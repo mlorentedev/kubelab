@@ -1,6 +1,10 @@
 # {{ ansible_managed }}
 [Unit]
 Description=KubeLab node maintenance
+# ANSIBLE-035: a failed run (not a skipped ignore_errors sub-task -- most of
+# those are tolerated deliberately -- but a hard script abort, e.g. apt-get
+# clean or journalctl --vacuum-size failing outright) fires the notify unit.
+OnFailure=kubelab-maintenance-notify.service
 
 [Service]
 Type=oneshot

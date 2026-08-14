@@ -1,0 +1,44 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Fires on kubelab-maintenance.service failure (OnFailure=, ANSIBLE-035).
+# Posts a `log`-severity envelope to n8n's public /webhook/notify ingress
+# (NOTIFY-001) -- n8n routes by severity and forwards to Apprise internally.
+#
+# Always prod n8n, regardless of this node's own deploy_env: alerting must
+# not depend on ace1 (staging n8n's host) being powered on. See
+# specs/ANSIBLE-035-maintenance-timer-rollout/proposal.md for the full
+# reasoning. The token is prod n8n's Header Auth credential, resolved from
+# apps.services.automation.notify.fleet_webhook_secret (a dedicated key,
+# immune to the staging-env override that apps.services.automation.notify.
+# webhook_secret carries on this node's own env).
+set -euo pipefail
+
+TOKEN="$(cat {{ maintenance_notify_secret_file }})"
+
+# Trim to keep the envelope body small; n8n/Apprise render it as-is.
+BODY_TAIL="$(journalctl -u kubelab-maintenance.service -n 20 --no-pager 2>/dev/null | tail -c 2000)"
+
+# JSON-encode via python3 (present on every node Ansible manages) rather
+# than shell string interpolation -- journal content can contain quotes,
+# newlines, and other characters that would break a hand-built JSON string.
+PAYLOAD="$(printf '%s' "$BODY_TAIL" | python3 -c "
+import json, sys
+print(json.dumps({
+    'domain': 'fleet',
+    'severity': 'log',
+    'title': 'kubelab-maintenance failed on {{ inventory_hostname }}',
+    'body': sys.stdin.read(),
+    'source': '{{ inventory_hostname }}/kubelab-maintenance-notify',
+}))
+")"
+
+# -f: a 4xx/5xx from n8n makes curl (and this script, under set -e) exit
+# non-zero, so a delivery failure is visible as THIS unit failing --
+# `systemctl status kubelab-maintenance-notify.service` / its journal --
+# rather than silently swallowed. No OnFailure= on this unit itself, so
+# there is no retry loop.
+curl -sS -f -X POST "https://{{ maintenance_notify_domain }}/webhook/notify" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD" \
+  -o /dev/null
