@@ -231,7 +231,13 @@ Generalisation worth keeping: once a service stops belonging to its node's envir
 
 The K3s instance passed every e2e check throughout, because the suite asserts `/api/v1/version` over HTTPS and never exercises a git operation. Fixed here by publishing container port 22 on the node's Tailscale address; the advertised `ssh_url` now completes a handshake (`Permission denied (publickey)` from sshd — the key is simply not registered yet) where it previously timed out.
 
-## AC3 (part 2 of 2) — Cutover: the domain now serves the Beelink (2026-08-14)
+## AC3 (part 2 of 2) — Cutover prepared and gated; live verification is post-merge (2026-08-14)
+
+The heading says "prepared", not "done", deliberately. `gitea.kubelab.live` still resolves to the old K3s workload as this is written: prod is GitOps-reconciled, so the route only changes when Argo CD syncs the merge. Nothing below claims otherwise, and the post-merge slot at the end of this section is empty until it is filled with real output.
+
+**Prune is on, so the retirement is not a git-only claim.** Checked rather than assumed — both `infra/k8s/argocd/applications/{staging,prod}.yaml` carry `syncPolicy.automated.prune: true`. Without it the staging twin would keep serving after merge and "retired" would mean nothing outside the repo.
+
+**ADR-037's `make deploy-k8s ENV=staging` step was skipped, deliberately.** Stating it because silence is not a skip: that flow validates *additions*, and an apply cannot exercise a *removal* — nothing in `kubectl apply` deletes a resource that is no longer in the manifest set. Prune is Argo's job, so the removal is only observable after a sync. The render, the gates and staging e2e cover what is coverable pre-merge.
 
 **Renders.** `kubectl kustomize` clean on both overlays. Prod emits exactly three Gitea objects — `Service`, `EndpointSlice`, `IngressRoute` — and no Deployment, PVC or ConfigMap. Staging's only remaining reference is the shared dashboard tile pointing at the apex name; no workload, no route.
 
@@ -296,6 +302,17 @@ So: the gate rejects an address that never appears and accepts one that exists, 
 The same bind shape exists in `glances` and `rpi3_services`, and MinIO on this node has been dying on every reboot for as long as it has lived there, unnoticed because "MinIO is not answering" is indistinguishable from "the homelab is off". Filed fleet-wide as **#1061**; only `beelink_services` is fixed here. `glances` survived this reboot, which is scheduling luck rather than immunity, and the ticket says so.
 
 **A test learned the same lesson.** The new infra check originally mapped any failed connection to "Beelink is powered off" and would have skipped straight past this incident. It now separates the two: timeout or no route means the node is off (skip); `ECONNREFUSED` means the node is up and the service is not (fail).
+
+### Post-merge verification — NOT YET RUN
+
+Left empty on purpose. Fill it after Argo CD syncs the merge; until then the cutover is prepared, not proven.
+
+1. `make test-e2e ENV=prod` — the first real exercise of the `on_demand_backend` branch against a live route.
+2. Exactly one EndpointSlice for the `gitea` Service, named `gitea-external`. The old Service had a selector, so the endpoints controller was managing a slice of its own; if that one survives with the dead pod's address, Traefik round-robins between the Beelink and a corpse and the symptom is *intermittent* 502s, which is far harder to read than a steady one.
+3. The old `Deployment`, `PersistentVolumeClaim` and ConfigMaps are gone from both clusters — that is prune actually firing, not just being configured.
+4. `kubectl delete secret gitea-secrets -n kubelab` in **both** clusters. Nothing else will: the toolkit no longer manages it and Argo never owned it, so it outlives the retirement holding a credential that is still valid on the Beelink. Recorded on #926 (TOOL-025), which is the same apply-without-delete gap one object type over.
+
+Only after 1–4 does the operator get told Gitea is ready on its real domain.
 
 ## AC2 — Classification gate transcript (captured 2026-08-14)
 

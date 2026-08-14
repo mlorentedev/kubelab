@@ -58,6 +58,14 @@ def backend_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
     Distinguishes "the node is powered off" from "the route is broken" — the
     whole point of the on-demand branch. A probe through the public domain
     could not tell those apart, since both surface as a 502.
+
+    Accepted trade-off: a *refused* connection (node up, nothing listening) is
+    reported here as "not reachable", identical to a timeout, so this suite skips
+    in both cases. That conflation is deliberate rather than overlooked —
+    `tests/infra/test_network.py` owns the distinction and fails loudly on a
+    refusal, which is the failure mode observed on 2026-08-14. Duplicating the
+    judgement in an e2e suite that may run from outside the tailnet would produce
+    false reds without adding coverage.
     """
     try:
         with socket.create_connection((host, port), timeout=timeout):
