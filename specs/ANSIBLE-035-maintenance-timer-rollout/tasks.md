@@ -17,48 +17,48 @@ created: "2026-08-14"
 
 ## Implementation — Part 1: gate-var + fleet rollout (AC1-AC4)
 
-- [ ] [AC1] Add `maintenance_run_cleanup: true` default to `roles/node_maintenance/defaults/main.yml`; flip `maintenance_install_timer` default to `true`.
-- [ ] [AC1] Gate every cleanup task in `roles/node_maintenance/tasks/main.yml` behind `when: maintenance_run_cleanup | bool` (APT/journal/rsyslog/snap/Docker/crictl/temp-file sections); leave the timer-install section's existing `maintenance_install_timer` gate untouched.
-- [ ] [AC3] Confirm `maintain.yml` is unaffected: it doesn't set `maintenance_run_cleanup`, so it inherits the new `true` default and keeps running full cleanup on manual invocation; diff its rendered task list before/after (`--list-tasks`) to prove no change.
-- [ ] [P] [AC2] Add `- role: ../roles/node_maintenance` with `maintenance_run_cleanup: false` to `provision-vps.yml`.
-- [ ] [P] [AC2] Same for `provision-aws1.yml`.
-- [ ] [P] [AC2] Same for `provision-bee.yml`.
-- [ ] [P] [AC2] Same for `provision-rpi3.yml`.
-- [ ] [P] [AC2] Same for `provision-rpi4.yml`.
-- [ ] [P] [AC2] Same for `provision-ace1.yml`.
-- [ ] [P] [AC2] Same for `provision-ace2.yml`.
-- [ ] `ansible-playbook --syntax-check` on all 7 touched playbooks; `make lint` / `make type` / `make test`.
-- [ ] [AC4] Enumerate live reachability for all 7 nodes before any real run (always-on: vps, aws1, rpi3 — expected up; on-demand: beelink, ace1, ace2, rpi4 — ask user to power on what's off, never assume).
-- [ ] [AC4] Real (non-check) provisioning run per node; `systemctl list-timers | grep kubelab-maintenance` confirms active.
-- [ ] [AC4] Second real run per node converges `changed: 0` for all `node_maintenance` tasks (idempotence).
-- [ ] [AC4] aws1 specifically: confirm the pre-existing timer converges (not a fresh install) — this is the ticket's actual motivating case.
+- [x] [AC1] Add `maintenance_run_cleanup: true` default to `roles/node_maintenance/defaults/main.yml`; flip `maintenance_install_timer` default to `true`.
+- [x] [AC1] Gate every cleanup task in `roles/node_maintenance/tasks/main.yml` behind `when: maintenance_run_cleanup | bool` (APT/journal/rsyslog/snap/Docker/crictl/temp-file sections); leave the timer-install section's existing `maintenance_install_timer` gate untouched.
+- [x] [AC3] Confirm `maintain.yml` is unaffected: it doesn't set `maintenance_run_cleanup`, so it inherits the new `true` default and keeps running full cleanup on manual invocation; diff its rendered task list before/after (`--list-tasks`) to prove no change.
+- [x] [P] [AC2] Add `- role: ../roles/node_maintenance` with `maintenance_run_cleanup: false` to `provision-vps.yml`.
+- [x] [P] [AC2] Same for `provision-aws1.yml`.
+- [x] [P] [AC2] Same for `provision-bee.yml`.
+- [x] [P] [AC2] Same for `provision-rpi3.yml`.
+- [x] [P] [AC2] Same for `provision-rpi4.yml`.
+- [x] [P] [AC2] Same for `provision-ace1.yml`.
+- [x] [P] [AC2] Same for `provision-ace2.yml`.
+- [x] `ansible-playbook --syntax-check` on all 7 touched playbooks; `make lint` / `make type` / `make test`.
+- [x] [AC4] Enumerate live reachability for all 7 nodes before any real run — measured: vps/beelink/rpi3/rpi4/ace1/ace2 up, aws1 down (Tailscale "offline, last seen 3h ago" at the time, still down hours later — Spot interruption, not homelab on-demand hardware).
+- [x] [AC4] Real (non-check) provisioning run per node; `systemctl list-timers | grep kubelab-maintenance` confirms active. Done for all 6 reachable nodes.
+- [x] [AC4] Second real run per node converges `changed: 0` for all `node_maintenance` tasks (idempotence). Done for all 6 reachable nodes.
+- [ ] [AC4] aws1 specifically: confirm the pre-existing timer converges (not a fresh install) — this is the ticket's actual motivating case. **Not done — aws1 offline the entire session.** Tracked as a follow-up in verification.md; the role invocation is committed and identical to the other 6, just unexercised against the live node.
 
 ## Implementation — Part 2: OnFailure notify wiring (AC6-AC8)
 
-- [ ] [AC6] Move `apps.services.automation.notify.webhook_secret`'s prod value from `prod.enc.yaml` into `common.enc.yaml` (same key path); remove the now-redundant prod override. Re-run `make secrets-audit` to confirm both envs still resolve correctly (staging keeps its own distinct value, prod now resolves via common).
-- [ ] [AC6] `toolkit infra n8n import --env prod` (or equivalent) still upserts the same Header Auth credential value — confirm no behavior change on the n8n side.
-- [ ] [AC8] Update `rotate_note` on that `SecretSpec` in `secrets_manager.py`: rotating the prod value now requires re-provisioning the fleet.
-- [ ] [AC6] Write `roles/node_maintenance/templates/kubelab-maintenance-notify.sh.j2` — reads the fleet secret file, POSTs `{domain, severity: "log", title, body, source}` to `https://n8n.kubelab.live/webhook/notify` with the Bearer header; body includes the last N lines of `journalctl -u kubelab-maintenance.service`.
-- [ ] [AC6] Write `roles/node_maintenance/templates/kubelab-maintenance-notify.service.j2` (oneshot, `ExecStart=` the script above).
-- [ ] [AC6] Add `OnFailure=kubelab-maintenance-notify.service` to `kubelab-maintenance.service.j2`.
-- [ ] [AC6] Ansible tasks: write the fleet secret to a 0600 file (from the now-common-resolvable secret), template + install both new units, `daemon_reload`. Gated the same way as the rest of the timer install (`maintenance_install_timer`), not `maintenance_run_cleanup`.
-- [ ] [AC7] Live proof (a): `systemctl start kubelab-maintenance-notify.service` on one node, confirm delivery (n8n/Apprise log or Telegram read-back).
-- [ ] [AC7] Live proof (b): temporary failure injection (drop-in override, reverted after) on the same node proves `OnFailure=` actually fires the notify unit — not just that the unit works standalone.
-- [ ] [AC7] Roll the notify unit out to the remaining 6 nodes once the design is proven on one; re-run idempotence check per node.
+- [x] [AC6] Move `apps.services.automation.notify.webhook_secret`'s prod value from `prod.enc.yaml` into `common.enc.yaml` (same key path); remove the now-redundant prod override. **Superseded by a better design found mid-implementation**: reusing this key path collides with staging's own distinct value in the Ansible merge for 3 of 7 nodes (verified by simulation before shipping). Landed instead as a new dedicated `apps.services.automation.notify.fleet_webhook_secret` key, common.enc.yaml only, immune to any env override; `webhook_secret` itself was restored to its original per-env storage, untouched.
+- [x] [AC6] `toolkit infra n8n import` / n8n's own Header Auth credential — no behavior change, since `webhook_secret` itself was left exactly as it was (see above); no re-import needed.
+- [x] [AC8] Update `rotate_note` on both the existing `webhook_secret` SecretSpec (env-scoped, unchanged rotation) and the new `fleet_webhook_secret` SecretSpec (re-provisioning the fleet required).
+- [x] [AC6] Write `roles/node_maintenance/templates/kubelab-maintenance-notify.sh.j2` — reads the fleet secret file, POSTs `{domain, severity: "log", title, body, source}` to `https://n8n.kubelab.live/webhook/notify` with the Bearer header; body includes the last 20 lines of `journalctl -u kubelab-maintenance.service`, JSON-encoded via `python3` to avoid shell-interpolation breakage.
+- [x] [AC6] Write `roles/node_maintenance/templates/kubelab-maintenance-notify.service.j2` (oneshot, `ExecStart=` the script above).
+- [x] [AC6] Add `OnFailure=kubelab-maintenance-notify.service` to `kubelab-maintenance.service.j2`.
+- [x] [AC6] Ansible tasks: write the fleet secret to a 0600 file, template + install both new units, `daemon_reload` (reused the existing "Enable and start maintenance timer" task's `daemon_reload: true` rather than adding a second one). Gated the same way as the rest of the timer install (`maintenance_install_timer`), not `maintenance_run_cleanup`.
+- [x] [AC7] Live proof (a): `systemctl start kubelab-maintenance-notify.service` on rpi3 AND beelink (staging-env, to specifically prove the dedicated-secret fix) — both `Result=success`.
+- [x] [AC7] Live proof (b): temporary `ExecStart=/bin/false` drop-in on rpi3, real failure, journal shows `Triggering OnFailure= dependencies.` immediately followed by the notify unit firing and succeeding. Drop-in reverted, `reset-failed` run, timer confirmed still enabled after.
+- [x] [AC7] Rolled the notify unit out to beelink, rpi4, ace1, ace2, vps (5 of the remaining 6) with idempotence re-checked on each; aws1 pending per AC4's note above.
 
 ## Implementation — Part 3: documentation (AC5)
 
-- [ ] [AC5] Write `docs/runbooks/maintenance-timer.md`: what the timer does, `systemctl status/list-timers` checks, log locations, how to temporarily disable it on a node, and what an OnFailure notification means / how to respond to one.
+- [x] [AC5] Write `docs/runbooks/maintenance-timer.md`: what the timer does, `systemctl status/list-timers` checks, log locations, how to temporarily disable it on a node, what an OnFailure notification means / how to respond to one, plus the check-mode-artifact note carried over from OPS-017.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by the tasks above
-- [ ] `docs/runbooks/` maintenance-timer entry written (AC: runbook)
-- [ ] Type checks pass (`make type`)
-- [ ] Lint passes (`make lint`)
-- [ ] `make test` green
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in with live evidence per node
+- [x] Every acceptance criterion from `proposal.md` is covered by the tasks above
+- [x] `docs/runbooks/` maintenance-timer entry written (AC: runbook)
+- [x] Type checks pass (`make type`)
+- [x] Lint passes (`make lint`)
+- [x] `make test` green (517 passed, 116 deselected)
+- [x] No unrelated changes in the diff (no scope creep) — the untagged-pre_tasks fix on 4 playbooks is in-scope: it's the same class of bug this ticket's own new task surfaced, on the same files, in the same PR
+- [x] `verification.md` filled in with live evidence per node (6/7 — aws1 pending)
 - [ ] PR opened referencing this spec folder
 
 ## Machine-readable features

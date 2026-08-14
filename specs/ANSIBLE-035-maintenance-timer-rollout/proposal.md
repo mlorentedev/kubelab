@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-035-maintenance-timer-rollout"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-08-14"
 issue: "kubelab#928"
 tags: [spec, proposal]
@@ -150,13 +150,13 @@ there the way they are on the other six.
 
 ## Acceptance criteria
 
-- [ ] `maintenance_install_timer` defaults `true` in `roles/node_maintenance/defaults/main.yml`; a new `maintenance_run_cleanup` boolean (default `true`) gates the cleanup tasks so the two concerns can vary independently.
-- [ ] `node_maintenance` is included (role invocation, not just referenced) in the seven provisioning playbooks: `provision-vps.yml`, `provision-aws1.yml`, `provision-bee.yml`, `provision-rpi3.yml`, `provision-rpi4.yml`, `provision-ace1.yml`, `provision-ace2.yml`, each passing `maintenance_run_cleanup: false`.
-- [ ] `maintain.yml`'s existing `make maintain NODE=x TIMER=1` behavior is unchanged (still runs cleanup + optional timer install on demand); a regression check confirms no diff in its default invocation.
-- [ ] Each of the seven nodes shows `kubelab-maintenance.timer` active via `systemctl list-timers` after a real (non-check) provisioning run, and a second real run of the same playbook converges to `changed: 0` for every `node_maintenance` task (idempotence, not just a green exit).
-- [ ] `docs/runbooks/` gains a maintenance-timer entry (per the issue's own Scope section) covering what the timer does, how to check its status/logs, and how to temporarily disable it on a node.
-- [ ] `kubelab-maintenance.service` carries `OnFailure=kubelab-maintenance-notify.service`; the notify unit POSTs a `log`-severity envelope to `https://n8n.kubelab.live/webhook/notify` (all 7 nodes, same target, per the confirmed design) using a fleet-wide secret file resolved from the (relocated) `common.enc.yaml` value.
-- [ ] The notify path is proven two ways without waiting a week for a real failure: (a) `systemctl start kubelab-maintenance-notify.service` directly delivers a message end-to-end; (b) a deliberate, reverted failure injection (e.g. a temporary `ExecStart=/bin/false` drop-in) on one node proves the `OnFailure=` linkage itself fires the notify unit.
+- [x] `maintenance_install_timer` defaults `true` in `roles/node_maintenance/defaults/main.yml`; a new `maintenance_run_cleanup` boolean (default `true`) gates the cleanup tasks so the two concerns can vary independently.
+- [x] `node_maintenance` is included (role invocation, not just referenced) in the seven provisioning playbooks: `provision-vps.yml`, `provision-aws1.yml`, `provision-bee.yml`, `provision-rpi3.yml`, `provision-rpi4.yml`, `provision-ace1.yml`, `provision-ace2.yml`, each passing `maintenance_run_cleanup: false`.
+- [x] `maintain.yml`'s existing `make maintain NODE=x TIMER=1` behavior is unchanged (still runs cleanup + optional timer install on demand); a regression check confirms no diff in its default invocation.
+- [ ] Each of the seven nodes shows `kubelab-maintenance.timer` active via `systemctl list-timers` after a real (non-check) provisioning run, and a second real run of the same playbook converges to `changed: 0` for every `node_maintenance` task (idempotence, not just a green exit). **6/7 done** (vps, beelink, rpi3, rpi4, ace1, ace2) — aws1 was offline (Spot interruption) for this entire session; see verification.md's follow-up note.
+- [x] `docs/runbooks/` gains a maintenance-timer entry (per the issue's own Scope section) covering what the timer does, how to check its status/logs, and how to temporarily disable it on a node.
+- [x] `kubelab-maintenance.service` carries `OnFailure=kubelab-maintenance-notify.service`; the notify unit POSTs a `log`-severity envelope to `https://n8n.kubelab.live/webhook/notify` (all 7 nodes, same target, per the confirmed design) using a fleet-wide secret file resolved from a dedicated `common.enc.yaml` key.
+- [x] The notify path is proven two ways without waiting a week for a real failure: (a) `systemctl start kubelab-maintenance-notify.service` directly delivers a message end-to-end; (b) a deliberate, reverted failure injection (e.g. a temporary `ExecStart=/bin/false` drop-in) on one node proves the `OnFailure=` linkage itself fires the notify unit.
 - [ ] `secrets_manager.py`'s `rotate_note` for `apps.services.automation.notify.webhook_secret` is updated to state that rotating the prod value requires re-provisioning the fleet (static file per node).
 
 ## References
