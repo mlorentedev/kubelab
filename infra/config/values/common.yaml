@@ -568,8 +568,25 @@ apps:
         enable_auth: false
         auth_level: bypass
         default_port: 3000
+        # Published on the Beelink's Tailscale IP, not through Traefik: SSH is not
+        # HTTP, so the external-service route that carries `domain` cannot carry it.
+        # Was declared here but read by nothing while Gitea ran on K3s — the manifest
+        # hardcoded a 30222 NodePort that no firewall ever allowed, so the clone URL
+        # Gitea advertised had never once connected.
         ssh_port: 2222
+        # MagicDNS name of the node hosting the singleton. Not a `networking.nodes`
+        # value: Headscale names nodes by their given-name, which is not guaranteed
+        # to equal the `hostname` field. Verified to resolve to
+        # networking.nodes.beelink.tailscale_ip.
+        ssh_host: beelink.kubelab.internal
         health_path: /api/healthz
+        # Mirrors the limits the K8s Deployment carried, so the move is not also a
+        # silent resource change.
+        resources:
+          cpu_limit: "0.5"
+          memory_limit: "256M"
+          cpu_reservation: "0.1"
+          memory_reservation: "128M"
         # admin_email auto-filled from apps.contact.email by the config loader (SSOT-014c).
 
       headscale:
