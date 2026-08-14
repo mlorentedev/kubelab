@@ -93,51 +93,6 @@ spec:
     # and read the emitted `tls:` block; the comment is not the behaviour.
     certResolver: null
 ---
-# Override base gitea ConfigMap with prod domain
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: gitea-config
-  namespace: kubelab
-data:
-  GITEA__database__DB_TYPE: "sqlite3"
-  GITEA__server__DOMAIN: "gitea.kubelab.live"
-  GITEA__server__ROOT_URL: "https://gitea.kubelab.live/"
-  GITEA__server__SSH_PORT: "30222"
-  GITEA__server__SSH_LISTEN_PORT: "2222"
-  GITEA__server__SSH_DOMAIN: "gitea.kubelab.live"
-  GITEA__service__DISABLE_REGISTRATION: "true"
-  GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
-  GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
-  GITEA__log__MODE: "console"
-  GITEA__log__LEVEL: "Warn"
-  GITEA_OIDC_DISCOVERY_URL: "https://auth.kubelab.live/.well-known/openid-configuration"
----
-# Override base gitea IngressRoute with prod domain
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: gitea
-  namespace: kubelab
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`gitea.kubelab.live`)
-      kind: Rule
-      middlewares:
-        - name: secure-headers
-          namespace: kubelab
-        - name: crowdsec-bouncer
-          namespace: kubelab
-        - name: error-pages
-          namespace: kubelab
-      services:
-        - name: gitea
-          port: 3000
-  tls:
-    certResolver: letsencrypt
----
 # Override base n8n ConfigMap with prod domain
 apiVersion: v1
 kind: ConfigMap

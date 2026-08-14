@@ -43,9 +43,13 @@ OIDC_CLIENTS = {
         "client_id": "grafana",
         "files": ["base", "prod"],
     },
+    # prod only. Gitea is a singleton (ADR-061): the staging twin is retired and
+    # its client registration is gone from the base config, so listing "base"
+    # here would make every run abort on OIDC-SYNC-001 looking for a client that
+    # is correctly absent.
     "apps.services.security.authelia.oidc_client_secret_gitea_hash": {
         "client_id": "gitea",
-        "files": ["base", "prod"],
+        "files": ["prod"],
     },
     "apps.services.security.authelia.oidc_client_secret_argocd_hash": {
         "client_id": "argocd",

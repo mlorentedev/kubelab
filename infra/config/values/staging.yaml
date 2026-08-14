@@ -54,10 +54,6 @@ apps:
   # Third-party services
       version: sha-045c80f
   services:
-    core:
-      gitea:
-        domain: gitea.staging.kubelab.live
-
     automation:
       n8n:
         domain: n8n.staging.kubelab.live

@@ -7,7 +7,7 @@ import pytest
 
 from toolkit.features.health_check import ServiceHealthConfig
 
-from .expectations import EXPECTATIONS
+from .expectations import EXPECTATIONS, on_demand_skip_reason
 
 pytestmark = pytest.mark.e2e
 
@@ -40,6 +40,9 @@ class TestSecurityHeaders:
         env: str,
     ) -> None:
         exp = EXPECTATIONS[svc_name]
+        reason = on_demand_skip_reason(svc_name, exp)
+        if reason:
+            pytest.skip(reason)
         if env in exp.skip_in_envs:
             pytest.skip(f"{svc_name} skipped in {env}")
 
@@ -75,6 +78,9 @@ class TestSecurityHeaders:
             pytest.skip("HSTS not enforced in dev (self-signed certs)")
 
         exp = EXPECTATIONS[svc_name]
+        reason = on_demand_skip_reason(svc_name, exp)
+        if reason:
+            pytest.skip(reason)
         if env in exp.skip_in_envs:
             pytest.skip(f"{svc_name} skipped in {env}")
 

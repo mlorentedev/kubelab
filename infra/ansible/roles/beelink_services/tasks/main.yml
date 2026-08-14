@@ -83,6 +83,33 @@
     mode: "0755"
   tags: [gitea]
 
+# --- Boot ordering: bind address must exist before Docker publishes on it ---
+- name: Install the Tailscale address wait helper
+  copy:
+    src: wait-for-tailscale-addr.sh
+    dest: "{{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [boot]
+
+- name: Install the Compose stack systemd unit
+  template:
+    src: kubelab-compose.service.j2
+    dest: /etc/systemd/system/kubelab-compose.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd for kubelab-compose
+  tags: [boot]
+
+- name: Enable the Compose stack unit at boot
+  systemd:
+    name: kubelab-compose.service
+    enabled: true
+    daemon_reload: true
+  tags: [boot]
+
 # --- Multi-arch build support ---
 - name: Install QEMU user static for multi-arch builds
   apt:

@@ -206,7 +206,6 @@ def build_service_tables(
         authelia = services.get("security", {}).get("authelia", {})
         crowdsec = services.get("security", {}).get("crowdsec", {})
         traefik = services.get("core", {}).get("traefik", {})
-        gitea = services.get("core", {}).get("gitea", {})
         n8n = services.get("automation", {}).get("n8n", {})
         minio = services.get("data", {}).get("minio", {})
         grafana = services.get("observability", {}).get("grafana", {})
@@ -262,16 +261,6 @@ def build_service_tables(
                 nd,
                 "Dashboard",
                 version=config.get("k3s", {}).get("traefik_version", "3.x"),
-            ),
-            _svc(
-                "Gitea",
-                f"https://gitea.{prefix}",
-                f"https://gitea.{prefix}" + gitea.get("health_path", "/api/healthz"),
-                "Built-in (OIDC)",
-                "Core",
-                nd,
-                "Git hosting",
-                version=_ver(gitea.get("image", "")),
             ),
             _svc(
                 "n8n",
@@ -341,8 +330,23 @@ def build_service_tables(
 
     headscale = services.get("core", {}).get("headscale", {})
     uptime_kuma = services.get("observability", {}).get("uptime_kuma", {})
+    gitea = services.get("core", {}).get("gitea", {})
 
     shared = [
+        # Gitea moved out of the per-environment list when ADR-061 classified it
+        # `singleton`: there is exactly one instance, on one apex name, so a
+        # `gitea.staging.*` tile would advertise a host that no longer resolves —
+        # the same failure #1027 fixed for Pi-hole after its apex rename.
+        _svc(
+            "Gitea",
+            f"https://gitea.{base}",
+            f"https://gitea.{base}" + gitea.get("health_path", "/api/healthz"),
+            "Built-in (OIDC)",
+            "Core",
+            "Beelink",
+            "Git hosting · on-demand",
+            version=_ver(gitea.get("image", "")),
+        ),
         _svc(
             "Argo CD",
             f"https://argo.{base}",

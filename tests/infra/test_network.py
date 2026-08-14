@@ -113,3 +113,77 @@ class TestDNSResolution:
                 errors.append(f"{domain}: not resolvable (check /etc/hosts)")
 
         assert not errors, "Local DNS failures:\n" + "\n".join(errors)
+
+
+class TestExternalServiceBackends:
+    """Services fronted by K3s Traefik but running on another host.
+
+    The `kubelab.live/location: external` pattern (Service + EndpointSlice →
+    a node's Tailscale IP) is only sound if the cluster's node can actually open
+    a connection to that address. Nothing in the Kustomize render can show this:
+    an EndpointSlice pointing at an unreachable address renders perfectly and
+    fails at request time as a 502, indistinguishable from the backend being
+    down on purpose.
+
+    It matters most for Gitea (ADR-061), where the fronting cluster is the
+    always-on prod VPS and the backend is the on-demand Beelink — the one pairing
+    in this fleet that crosses the always-on/on-demand boundary, and therefore
+    the one whose reachability is least obvious.
+    """
+
+    def test_vps_reaches_gitea_on_the_beelink(
+        self,
+        vps_node: NodeInfo,
+        inventory: list[NodeInfo],
+    ) -> None:
+        target_ip = _COMMON["networking"]["nodes"]["beelink"]["tailscale_ip"]
+        port = _COMMON["apps"]["services"]["core"]["gitea"]["default_port"]
+
+        # Matched by address, not by name: the inventory prefixes hostnames
+        # (`kubelab-beelink`) while the SSOT key does not, and a name-based lookup
+        # silently skips — which is how a check like this quietly stops running.
+        if not any(n.host == target_ip for n in inventory):
+            pytest.fail(f"no inventory node at {target_ip} — networking.nodes.beelink and the inventory disagree")
+
+        # Probed from the VPS, not from here: the workstation reaching the
+        # Beelink proves nothing about the host that actually has to proxy to it.
+        probe = f"timeout 5 bash -c 'exec 3<>/dev/tcp/{target_ip}/{port}' && echo REACHABLE || echo UNREACHABLE"
+        result = node_ssh_run(vps_node, probe, timeout=20)
+
+        if result.returncode != 0 and "REACHABLE" not in result.stdout:
+            pytest.skip(f"could not probe from VPS (ssh rc={result.returncode}): {result.stderr.strip()}")
+
+        if "UNREACHABLE" in result.stdout:
+            # A powered-off homelab is the expected steady state, not a failure —
+            # that is what `location: on-demand` means. But "unreachable" covers
+            # two very different states and only one of them is benign:
+            #
+            #   timeout / no route  → nothing is answering at that address at all;
+            #                         the node is off. Skip.
+            #   connection refused  → the node is UP and the kernel actively said
+            #                         no: the port is not bound. That is a live
+            #                         service outage. Fail.
+            #
+            # Conflating them is not hypothetical: on 2026-08-14 the Beelink
+            # rebooted, Docker lost the bind to the Tailscale address, and both
+            # gitea and minio stayed down. An earlier version of this test called
+            # that "powered off" and skipped straight past the real incident.
+            try:
+                with socket.create_connection((target_ip, int(port)), timeout=5):
+                    pytest.fail(
+                        f"VPS cannot reach Gitea at {target_ip}:{port}, but this workstation can. "
+                        "The backend is up, so the prod IngressRoute would serve a permanent 502 — "
+                        "check Headscale ACLs and the Beelink's port bind address."
+                    )
+            except ConnectionRefusedError:
+                pytest.fail(
+                    f"{target_ip} is up but nothing is listening on {port}. The node is powered on "
+                    "and the service is not running — check `kubelab-compose.service` on the Beelink, "
+                    "which exists to bring the stack up once the Tailscale address is assigned."
+                )
+            except OSError:
+                pytest.skip(f"Beelink is powered off ({target_ip}:{port} does not answer at all)")
+
+        assert "REACHABLE" in result.stdout, (
+            f"unexpected probe output from VPS for {target_ip}:{port}: {result.stdout.strip()!r}"
+        )
