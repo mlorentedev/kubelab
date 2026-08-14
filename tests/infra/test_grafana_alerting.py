@@ -320,3 +320,109 @@ class TestAcmeAlertRule:
             f"{rule.get('noDataState')!r}, expected 'OK'. Healthy means no matching "
             f"log lines, which Loki returns as no series, not as zero."
         )
+
+
+#: Titles of the two rules OBS-010 provisions. Literal on purpose (docs/lessons.md
+#: 2026-08-09 — a test must not read its expectation from the file it validates).
+EXPECTED_QUOTA_RULE_TITLES = {
+    "requests.memory": "Namespace quota utilization high (requests.memory)",
+    "limits.memory": "Namespace quota utilization high (limits.memory)",
+}
+
+
+class TestQuotaUtilizationRules:
+    """The rules that watch kubelab's ResourceQuota headroom (OBS-010).
+
+    Delivery (contact points, policy routing, tags) is already proven generically
+    by `TestAlertDelivery` above — these tests are specific to what makes this
+    pair of rules different from OBS-007's, not a re-check of the shared fabric.
+    """
+
+    def test_both_rules_are_provisioned(self, grafana_api: ProvisioningGet, env: str) -> None:
+        rules = grafana_api("alert-rules")
+        titles = {r.get("title") for r in rules}
+
+        missing = set(EXPECTED_QUOTA_RULE_TITLES.values()) - titles
+        assert not missing, (
+            f"Grafana in {env} is missing quota utilization rule(s): {missing}. "
+            f"Found: {sorted(t for t in titles if t) or 'no rules at all'}."
+        )
+
+    def test_rules_treat_no_data_as_a_problem(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """`noDataState` must be `Alerting` — the INVERSE of the ACME rule above.
+
+        For quota utilization, silence means the emitter (quota-watcher) stopped
+        producing log lines, not that everything is fine. The quota could be at
+        100% with nobody told. `noDataState: OK` here would silently disarm the
+        alert exactly when a real problem (e.g. the API server under pressure)
+        also breaks the emitter.
+        """
+        rules_by_title = {r.get("title"): r for r in grafana_api("alert-rules")}
+
+        for dimension, title in EXPECTED_QUOTA_RULE_TITLES.items():
+            rule = rules_by_title.get(title)
+            if rule is None:
+                pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
+
+            assert rule.get("noDataState") == "Alerting", (
+                f"{title!r} in {env} has noDataState={rule.get('noDataState')!r}, "
+                f"expected 'Alerting'. Silence from the {dimension} emitter must be "
+                f"treated as a problem, not as health."
+            )
+            assert rule.get("execErrState") == "Alerting", (
+                f"{title!r} in {env} has execErrState={rule.get('execErrState')!r}, "
+                f"expected 'Alerting' — a query error means 'we don't know', same as "
+                f"no data, and 'we don't know' must alert here, not go quiet."
+            )
+
+    def test_rules_persist_through_a_routine_surge(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """`for:` must be long enough that a brief admission surge cannot fire this.
+
+        IDP-031 measured a full staging deploy + rollout restart peaking at 87.5%
+        of the limits.memory ceiling for well under a minute (2026-08-12). Both
+        rules must require the breach to hold for at least 5 minutes — comfortably
+        longer than any surge this estate has ever measured — so a routine deploy
+        does not train people to ignore this alert. See OBS-010's proposal.md
+        Risks section for the full measurement this bound is derived from.
+        """
+        rules_by_title = {r.get("title"): r for r in grafana_api("alert-rules")}
+
+        for title in EXPECTED_QUOTA_RULE_TITLES.values():
+            rule = rules_by_title.get(title)
+            if rule is None:
+                pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
+
+            assert rule.get("for") == "5m", (
+                f"{title!r} in {env} has for={rule.get('for')!r}, expected '5m'. "
+                f"Shorter than this and IDP-031's measured surge (87.5% of "
+                f"limits.memory, sub-minute) would fire this alert on a routine deploy."
+            )
+
+    def test_query_uses_last_not_max_over_time(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """`last_over_time`, never `max_over_time` — a real bug caught empirically 2026-08-14.
+
+        `max_over_time([10m])` lets a single transient spike stay visible to
+        EVERY evaluation for the full 10-minute window, which defeats `for:
+        5m` entirely — reproducing IDP-031's surge drill in staging fired
+        this alert for real with the max variant, confirmed by directly
+        querying Loki and watching the rule transition pending -> firing on
+        a reading that was already back to baseline. `last_over_time`
+        reflects the most recent sample only, so `for:` genuinely requires
+        two real elevated samples five minutes apart, not one spike smeared
+        across a window. See verification.md for the full incident.
+        """
+        rules_by_title = {r.get("title"): r for r in grafana_api("alert-rules")}
+
+        for title in EXPECTED_QUOTA_RULE_TITLES.values():
+            rule = rules_by_title.get(title)
+            if rule is None:
+                pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
+
+            query = next((d.get("model", {}).get("expr", "") for d in rule.get("data", []) if d.get("refId") == "A"), "")
+            assert "last_over_time" in query, (
+                f"{title!r} in {env} query does not use last_over_time: {query!r}"
+            )
+            assert "max_over_time" not in query, (
+                f"{title!r} in {env} query still uses max_over_time — this is the exact "
+                f"regression that made the alert fire on a routine deploy restart (2026-08-14)."
+            )
