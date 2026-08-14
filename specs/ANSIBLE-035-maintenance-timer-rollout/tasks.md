@@ -59,7 +59,7 @@ created: "2026-08-14"
 - [x] `make test` green (517 passed, 116 deselected)
 - [x] No unrelated changes in the diff (no scope creep) — the untagged-pre_tasks fix on 4 playbooks is in-scope: it's the same class of bug this ticket's own new task surfaced, on the same files, in the same PR
 - [x] `verification.md` filled in with live evidence per node (6/7 — aws1 pending)
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder — #1070
 
 ## Machine-readable features
 
