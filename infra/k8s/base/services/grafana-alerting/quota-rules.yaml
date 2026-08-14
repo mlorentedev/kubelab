@@ -63,7 +63,7 @@ groups:
               editorMode: code
               queryType: range
               expr: >-
-                max_over_time(
+                last_over_time(
                   {container="quota-watcher"}
                     | json
                     | dimension=`requests.memory`
@@ -128,7 +128,7 @@ groups:
               editorMode: code
               queryType: range
               expr: >-
-                max_over_time(
+                last_over_time(
                   {container="quota-watcher"}
                     | json
                     | dimension=`limits.memory`

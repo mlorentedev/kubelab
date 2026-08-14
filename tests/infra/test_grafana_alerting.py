@@ -397,3 +397,32 @@ class TestQuotaUtilizationRules:
                 f"Shorter than this and IDP-031's measured surge (87.5% of "
                 f"limits.memory, sub-minute) would fire this alert on a routine deploy."
             )
+
+    def test_query_uses_last_not_max_over_time(self, grafana_api: ProvisioningGet, env: str) -> None:
+        """`last_over_time`, never `max_over_time` — a real bug caught empirically 2026-08-14.
+
+        `max_over_time([10m])` lets a single transient spike stay visible to
+        EVERY evaluation for the full 10-minute window, which defeats `for:
+        5m` entirely — reproducing IDP-031's surge drill in staging fired
+        this alert for real with the max variant, confirmed by directly
+        querying Loki and watching the rule transition pending -> firing on
+        a reading that was already back to baseline. `last_over_time`
+        reflects the most recent sample only, so `for:` genuinely requires
+        two real elevated samples five minutes apart, not one spike smeared
+        across a window. See verification.md for the full incident.
+        """
+        rules_by_title = {r.get("title"): r for r in grafana_api("alert-rules")}
+
+        for title in EXPECTED_QUOTA_RULE_TITLES.values():
+            rule = rules_by_title.get(title)
+            if rule is None:
+                pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
+
+            query = next((d.get("model", {}).get("expr", "") for d in rule.get("data", []) if d.get("refId") == "A"), "")
+            assert "last_over_time" in query, (
+                f"{title!r} in {env} query does not use last_over_time: {query!r}"
+            )
+            assert "max_over_time" not in query, (
+                f"{title!r} in {env} query still uses max_over_time — this is the exact "
+                f"regression that made the alert fire on a routine deploy restart (2026-08-14)."
+            )
