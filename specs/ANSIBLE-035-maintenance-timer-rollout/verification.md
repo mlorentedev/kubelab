@@ -41,7 +41,7 @@ created: "2026-08-14"
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons.md`? **Yes** -- the untagged-pre_tasks-under---tags gap and the secret-key-collision-under-merge gap are both non-obvious, easy to reintroduce in a new playbook, and directly actionable. Not yet written to `docs/lessons.md` -- pending user sign-off on this verification before promoting (per this lane's advisor-first debt policy).
+- [x] Lesson for the repo's `docs/lessons.md`? **Yes, written** -- two entries: the apt check-mode/virtual-package gotchas (OPS-017) and the untagged-pre_tasks + secret-key-collision gotchas (this ticket). Commit `0439a18`.
 - [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No -- these are role/playbook-level design choices (gate variables, secret key naming), not architecture-level.
 - [ ] New pattern candidate for `00_meta/patterns/`? No -- single-project evidence so far (matches the same "single-project, flag for next /crystallize" disposition this lane used on the equivalent OPS-022 question).
 
