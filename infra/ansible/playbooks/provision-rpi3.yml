@@ -2,8 +2,12 @@
 # =============================================================================
 # RPi3 Provisioning — External Monitoring Node
 #
-# Deploys: SSH hardening, Uptime Kuma + Glances via Docker Compose.
+# Deploys: base system hardening (ufw, journald persistence), SSH
+# hardening, Uptime Kuma + Glances via Docker Compose.
 # RPi3 is Debian 13 (trixie), aarch64, Docker + Tailscale already installed.
+# The docker role is deliberately NOT included here — it hardcodes Docker's
+# Ubuntu apt repo and rpi3's existing Docker install is of unknown origin
+# (no docker-ce dpkg entries at all, per #959). See ANSIBLE-036.
 # Primary access via Tailscale (100.64.0.6). LAN fallback via WiFi
 # (10.0.0.157/24, wlan0) — see SSOT-003 + ssh-config Host rpi3-lan.
 # WiFi credentials managed at OS level (NetworkManager / wpa_supplicant);
@@ -83,19 +87,20 @@
         secrets: "{{ sops_common.stdout | from_yaml }}"
       no_log: true
 
-    - name: Allow monitoring ports on Tailscale interface
-      community.general.ufw:
-        rule: allow
-        interface_in: tailscale0
-        port: "{{ item }}"
-        proto: tcp
-      loop:
-        - "{{ config.apps.services.observability.uptime_kuma.default_port }}"
-        - "61208"  # Glances
-      when: ansible_facts.get('pkg_mgr') != 'unknown'
-      ignore_errors: true  # UFW may not be installed on Debian 13
-
   roles:
+    - role: ../roles/base_system
+      tags: [base]
+      vars:
+        system_timezone: "{{ config.global.timezone }}"
+        # No netplan_* vars: rpi3's WiFi (wlan0) is configured out-of-band
+        # (NetworkManager/wpa_supplicant), not by this playbook — see the
+        # header comment above. base_system's netplan task only fires when
+        # netplan_address is defined, so omitting it here is a no-op, not
+        # a gap.
+        firewall_tailnet_ports:
+          - "{{ config.apps.services.observability.uptime_kuma.default_port }}"
+          - "{{ config.apps.services.observability.glances.default_port }}"
+
     - role: ../roles/ssh_hardening
       tags: [ssh]
 

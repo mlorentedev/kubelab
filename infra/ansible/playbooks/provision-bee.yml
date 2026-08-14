@@ -59,6 +59,27 @@
 
   vars:
     deploy_env: staging
+    # Gitea is a singleton whose identity is PROD's, even though this node is
+    # provisioned under staging (ADR-061: the axes are independent — "prod is an
+    # environment, not a location"). It keeps prod's domain, so prod Authelia
+    # validates its OIDC client against a hash derived from *prod's* client
+    # secret; rendering it with staging's would break SSO after deploy, at login,
+    # with nothing in the deploy output pointing at the cause. The two values are
+    # confirmed different, so this is not a distinction without a difference.
+    #
+    # Deliberately NOT solved by moving Gitea's secrets to common.enc.yaml, which
+    # is how the Argo CD hub singleton does it: `secrets hash` resolves only
+    # {env}.enc.yaml and MINTS A NEW CLIENT SECRET when the source is missing.
+    # The hub survives that because its specs are kind=HUB_MANAGED and the hash
+    # loop skips them; Gitea's are ARGON2_HASH and would not be skipped. See #1057.
+    #
+    # This governs BOTH vaults and values. Secrets are the obvious half; the
+    # values half is not, and was caught only by reading a live response: staging.yaml
+    # overrides gitea.domain, so resolving it from `config` handed Gitea
+    # gitea.staging.kubelab.live as its ROOT_URL on the node that is supposed to be
+    # serving the prod name. Once a service stops belonging to its node's
+    # environment, every per-environment resolution is suspect, not just the vault.
+    gitea_identity_env: prod
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -104,6 +125,37 @@
       no_log: true
       tags: [always]   # secrets must load for any tag selection (e.g. --tags runner)
 
+    # Separate vault AND values tree for the one service on this node whose
+    # environment identity is not deploy_env. Built into their own facts rather
+    # than merged over `config`/`secrets`, so they cannot silently change what
+    # MinIO or the runner resolve.
+    - name: Load Gitea's environment overrides (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ gitea_identity_env }}.yaml"
+        name: gitea_env_overrides
+      tags: [always]
+
+    - name: Merge Gitea config (its own env overrides common)
+      set_fact:
+        gitea_config: "{{ common | combine(gitea_env_overrides, recursive=True) }}"
+      tags: [always]
+
+    - name: Decrypt Gitea's environment secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ gitea_identity_env }}.enc.yaml
+      register: sops_gitea_env
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+      tags: [always]
+
+    - name: Merge Gitea secrets (its own env overrides common)
+      set_fact:
+        gitea_secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_gitea_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+      tags: [always]
+
     - name: Generate Headscale pre-auth key (via VPS)
       command: >
         docker exec headscale headscale preauthkeys create
@@ -132,6 +184,8 @@
           - "{{ config.apps.services.data.minio.default_port_api }}"
           - "{{ config.apps.services.data.minio.default_port_console }}"
           - "{{ config.apps.services.observability.glances.default_port }}"
+          - "{{ config.apps.services.core.gitea.default_port }}"
+          - "{{ config.apps.services.core.gitea.ssh_port }}"
 
     - role: ../roles/ssh_hardening
       tags: [ssh]
@@ -147,10 +201,36 @@
         tailscale_auth_key: "{{ _tailscale_auth_key | default('') }}"
 
     - role: ../roles/beelink_services
-      tags: [services, minio, runner]
+      tags: [services, minio, runner, gitea]
       vars:
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_ip: "{{ config.networking.nodes.beelink.tailscale_ip }}"
+        # Gitea (ADR-061 singleton). Every value below resolves through
+        # gitea_config / gitea_secrets, never `config` / `secrets` — see the
+        # gitea_identity_env note above for why the distinction is load-bearing
+        # and not defensive noise.
+        gitea_image: "{{ gitea_config.apps.services.core.gitea.image }}"
+        gitea_domain: "{{ gitea_config.apps.services.core.gitea.domain }}"
+        gitea_http_port: "{{ gitea_config.apps.services.core.gitea.default_port }}"
+        gitea_ssh_port: "{{ gitea_config.apps.services.core.gitea.ssh_port }}"
+        gitea_ssh_host: "{{ gitea_config.apps.services.core.gitea.ssh_host }}"
+        gitea_cpu_limit: "{{ gitea_config.apps.services.core.gitea.resources.cpu_limit }}"
+        gitea_memory_limit: "{{ gitea_config.apps.services.core.gitea.resources.memory_limit }}"
+        # Same alias the K8s Secret used (ADMIN_USER <- BASIC_AUTH_USER). Resolves
+        # to the OS-level user rather than the apps.auth.admin_username SSOT; that
+        # drift is #1013's to fix, and is deliberately not renamed here.
+        gitea_admin_user: "{{ gitea_secrets.basic_auth.user }}"
+        gitea_admin_password: "{{ gitea_secrets.apps.services.core.gitea.admin_password }}"
+        # SSOT-014c: the config loader injects this for K8s, but Ansible reads the
+        # raw values file, where only apps.contact.email exists.
+        gitea_admin_email: "{{ gitea_config.apps.contact.email }}"
+        gitea_secret_key: "{{ gitea_secrets.apps.services.core.gitea.secret_key }}"
+        gitea_oidc_client_secret: "{{ gitea_secrets.apps.services.core.gitea.oidc_client_secret }}"
+        # Must be PROD Authelia: the client secret above is prod's, and the issuer
+        # in an OIDC flow is request-dependent, so pointing discovery at staging
+        # would hand out tokens the prod client registration cannot validate.
+        gitea_oidc_discovery_url: >-
+          https://{{ gitea_config.apps.services.security.authelia.domain }}/.well-known/openid-configuration
         # MinIO
         minio_image: "{{ config.apps.services.data.minio.image }}"
         minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"

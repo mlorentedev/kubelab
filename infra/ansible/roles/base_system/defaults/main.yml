@@ -18,7 +18,28 @@ base_packages:
   - sysstat
   - ncdu
   - net-tools
-  - dnsutils
+  # Not `dnsutils`: on Debian trixie it's a pure virtual package (Provides
+  # only, no dpkg entry of its own -- `dpkg -l dnsutils` reports `un`), so
+  # Ansible's apt module -- which pre-checks the literal requested name
+  # against dpkg rather than resolving Provides the way apt-get itself does
+  # -- reports `changed: true` on every single run even though apt-get logs
+  # "0 upgraded, 0 newly installed". On Ubuntu 24.04 `dnsutils` happens to be
+  # a real transitional package (dpkg `ii`), so the module gets it right
+  # there -- naming the real provider makes both OSes correct instead of
+  # relying on an Ubuntu-only coincidence. Found via rpi3 (OPS-017), the
+  # first Debian-family node to ever run this role.
+  - bind9-dnsutils
+
+# Entries in base_packages that only exist on Ubuntu, not Debian (OPS-017).
+# software-properties-common ships `add-apt-repository` — PPA tooling for a
+# concept Debian doesn't have; nothing in this repo's roles actually needs
+# the package itself. `apt_repository` (used by roles/docker and
+# roles/dev_node) talks to python3-apt directly, not this CLI. Filtered by
+# the real `ansible_facts['distribution']` fact in tasks/main.yml rather than
+# a per-node override — same reasoning ANSIBLE-035 gives for rejecting a
+# per-node key: it invites drift nobody audits.
+base_packages_ubuntu_only:
+  - software-properties-common
 
 system_timezone: "Europe/Madrid"
 
