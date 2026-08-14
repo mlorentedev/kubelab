@@ -2,4 +2,8 @@
 beelink_deploy_dir: /opt/kubelab
 beelink_minio_data_dir: /opt/minio/data
 beelink_runner_work_dir: /opt/runner/_work
+# Gitea's repos + SQLite live here. Not backed up yet — the PVC backup CronJob
+# that covered Gitea on K3s does not follow it here, and its replacement is
+# blocked on #972 choosing a destination. Tracked as #1056.
+beelink_gitea_data_dir: /opt/gitea/data
 glances_port: 61208

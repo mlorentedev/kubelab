@@ -70,7 +70,11 @@ Asked directly, since this is a doctrine call that cascades into R1's deployment
 
 ## R5 — Per-instance emptiness proof (staging, 2026-08-12)
 
+`AC4-EVIDENCE staging/gitea pre-deletion`
+
 **Gitea — confirmed empty.** Unauthenticated `/api/v1/repos/search` structurally cannot see private repos, and private-only is Gitea's settled role — a 0 there can't distinguish "empty" from "invisible." Re-ran authenticated (admin credentials via `toolkit secrets show apps.services.core.gitea.admin_password --env staging`, live username read from the `gitea-secrets` K8s Secret): `X-Total-Count: 0` with `private=true`, 0 repos including private. Clean.
+
+Re-verified 2026-08-14 immediately before the move, unconditionally rather than trusting the entry above — see the prod capture below for the shared method and the full transcript of both instances.
 
 **MinIO — confirmed empty.** `/data` inside the pod contains only `.minio.sys` (MinIO's own internal metadata dir). No buckets.
 
@@ -149,6 +153,211 @@ Checked every consumer R6 names, plus the one R3 added (`backup.yaml`), against 
 **Confirmed, distinct from Authelia's own list:** `staging.yaml` overrides `apps.services.{core.gitea,automation.n8n,data.minio}.domain` (and MinIO's `console_domain`) to the `*.staging.kubelab.live` forms — the staging-layer half of "the `apps.services.*` tree," separate from Authelia's OIDC list above.
 
 **Net effect on the task list this unblocks, narrowed after R5 kept n8n dual:** every count above included n8n's entry alongside gitea's and minio's. Once R5 settled n8n as staying dual, in place, its entries in each of these 7 files no longer move: `overlays/prod/patches.yaml` moves 5 resources (not 7 — `n8n-config`/`n8n` stay in `base/`), `overlays/prod/backup.yaml` drops 1 mount (not 2 — `n8n-data` stays), `tests/e2e/expectations.py`'s `n8n` entry is untouched, `sync_homepage_config.py` loses 2 hardcoded tiles (not 3 — n8n's stays), `staging.yaml` loses 2 domain overrides (not 3 — n8n's stays). `SECRET_CATALOG` and the OIDC client list were already gitea+minio only, unchanged. Same 7 files, smaller diff in each. AC3 (render + `test-e2e ENV=staging` green) still stays the outcome check, since a static list can still miss something a future service adds.
+
+## AC4 — Pre-deletion emptiness re-verification, both Gitea instances (2026-08-14)
+
+Captured **before** any deletion and before the operator started using Gitea, which is the only window in which this evidence means anything. R5's staging capture from 2026-08-12 was not reused — `tasks.md` requires the check to run unconditionally, however recent the prior evidence looks.
+
+**Method.** Authenticated `GET /api/v1/repos/search?private=true` plus `GET /api/v1/admin/users`. Authentication is not optional here: an unauthenticated search cannot see private repos by construction, and private-only is Gitea's settled role, so an unauthenticated `0` cannot distinguish *empty* from *invisible*.
+
+The first run returned `HTTP 401` against both instances, authenticating as `apps.auth.admin_username` (`operator`). That is not an incidental scripting slip — Gitea's admin identity is **not** taken from that SSOT. `k8s_secrets.py` maps the `gitea-secrets` key `ADMIN_USER` to `BASIC_AUTH_USER`, which resolves to `manu`, the OS-level user. This is the drift already tracked as **#1013** (AUTH-004), observed here independently; no new ticket, and the rename is deliberately not performed in passing.
+
+```
+Captured: 2026-08-14T00:44:06Z
+
+### AC4-EVIDENCE prod/gitea pre-deletion — https://gitea.kubelab.live
+version:        {"version":"1.25.5"}
+repos (private=true, authenticated as manu):
+  HTTP status:  HTTP/2 200
+  X-Total-Count: 0
+  data[] length: 0
+  users:
+    count: 1
+    user: manu admin= True
+
+### AC4-EVIDENCE staging/gitea pre-deletion — https://gitea.staging.kubelab.live
+version:        {"version":"1.25.5"}
+repos (private=true, authenticated as manu):
+  HTTP status:  HTTP/2 200
+  X-Total-Count: 0
+  data[] length: 0
+  users:
+    count: 1
+    user: manu admin= True
+```
+
+**Both instances are empty**: authenticated `200`, `X-Total-Count: 0`, no repos including private ones, and a single user which is the bootstrap admin itself. The singleton can be stood up on the Beelink without migrating anything.
+
+## AC3 (part 1 of 2) — Gitea running on the Beelink (2026-08-14)
+
+Nothing is retired here and no traffic moved: the K3s instances kept serving throughout. This is the "stand it up side by side" half of the Pattern C split recorded in `tasks.md`.
+
+**Deploy.** `make provision NODE=bee ENV=staging TAGS=gitea` — `ok=37 changed=4 failed=0`, ending `Gitea 1.25.5 on 100.64.0.3:3000 (ssh 2222), MinIO on 9000/9001, GH Runner running`.
+
+**The service is not merely up, it round-trips content.** A health probe would not have caught either defect below, so the check is a full create / clone / commit / push / re-clone cycle:
+
+```
+create -> HTTP 201
+ * [new branch]      main -> main
+--- server-side state, 3s after push ---
+branches:   ['main']
+commits:    1 -> ['smoke']
+empty flag: is_empty= False default_branch= main
+file read:  hello
+--- re-clone into a fresh dir (proves it is really on the server) ---
+hello
+cleanup -> HTTP 204
+```
+
+**Identity it advertises**, which is the thing the environment-resolution work was for:
+
+```
+html_url    https://gitea.kubelab.live/manu/kubelab-move-smoke
+clone_url   https://gitea.kubelab.live/manu/kubelab-move-smoke.git
+ssh_url     ssh://git@beelink.kubelab.internal:2222/manu/kubelab-move-smoke.git
+```
+
+### Two defects found by measuring rather than reviewing
+
+**1. The values half of the environment identity was still the node's.** The vault half was handled up front — Gitea keeps prod's domain, so prod Authelia validates its OIDC client against a hash derived from prod's client secret, and staging's would have failed at login. The values half was not, and the first deploy went out advertising `gitea.staging.kubelab.live` as its `ROOT_URL`, because `config` is `common` merged with the *node's* environment and `staging.yaml` overrides `gitea.domain`. The OIDC discovery URL carried the same defect and would have pointed Gitea at staging Authelia while holding prod's secret.
+
+Generalisation worth keeping: once a service stops belonging to its node's environment, *every* per-environment resolution is suspect, not just the vault. The playbook now declares `gitea_identity_env: prod` once and derives both trees from it.
+
+**2. Gitea's SSH has never worked, in either environment, for as long as it has existed here.** Three independent faults stacked, each sufficient alone:
+
+- The advertised port was firewalled. `base_system`'s `firewall_allowed_ports` is 22/80/443/41641 and nothing added the NodePort. Measured before any change: `connect to address 162.55.57.175 port 30222: Connection timed out`, same from the Tailscale address.
+- Nothing was listening behind it anyway. The manifest set `SSH_LISTEN_PORT: 2222`, which configures Gitea's *built-in* SSH server — opt-in via `START_SSH_SERVER`, which was never set. The official image runs OpenSSH on container port 22 instead ([install-with-docker](https://docs.gitea.com/installation/install-with-docker) maps `222:22`).
+- `common.yaml` already declared `apps.services.core.gitea.ssh_port: 2222` and **no consumer read it**, so the SSOT and the manifest disagreed with nothing to detect it.
+
+The K3s instance passed every e2e check throughout, because the suite asserts `/api/v1/version` over HTTPS and never exercises a git operation. Fixed here by publishing container port 22 on the node's Tailscale address; the advertised `ssh_url` now completes a handshake (`Permission denied (publickey)` from sshd — the key is simply not registered yet) where it previously timed out.
+
+## AC3 (part 2 of 2) — Cutover prepared and gated; live verification is post-merge (2026-08-14)
+
+The heading says "prepared", not "done", deliberately. `gitea.kubelab.live` still resolves to the old K3s workload as this is written: prod is GitOps-reconciled, so the route only changes when Argo CD syncs the merge. Nothing below claims otherwise, and the post-merge slot at the end of this section is empty until it is filled with real output.
+
+**Prune is on, so the retirement is not a git-only claim.** Checked rather than assumed — both `infra/k8s/argocd/applications/{staging,prod}.yaml` carry `syncPolicy.automated.prune: true`. Without it the staging twin would keep serving after merge and "retired" would mean nothing outside the repo.
+
+**ADR-037's `make deploy-k8s ENV=staging` step was skipped, deliberately.** Stating it because silence is not a skip: that flow validates *additions*, and an apply cannot exercise a *removal* — nothing in `kubectl apply` deletes a resource that is no longer in the manifest set. Prune is Argo's job, so the removal is only observable after a sync. The render, the gates and staging e2e cover what is coverable pre-merge.
+
+**Renders.** `kubectl kustomize` clean on both overlays. Prod emits exactly three Gitea objects — `Service`, `EndpointSlice`, `IngressRoute` — and no Deployment, PVC or ConfigMap. Staging's only remaining reference is the shared dashboard tile pointing at the apex name; no workload, no route.
+
+**Gates did the work, not inspection.** Four consequences of the retirement were caught by the repo's own checks after the manifests already looked right:
+
+| check | what it caught |
+|---|---|
+| `make validate-sync` | `sync_k8s_images.py` still regenerating the gitea image pin into `base/kustomization.yaml` |
+| `make validate-sync` | `sync_oidc_hashes.py` aborting on OIDC-SYNC-001, hunting a `gitea` client correctly removed from the base config |
+| `make test-fast` | `test_managed_clients_resolve_in_repo_configs` — same cause, asserted independently |
+| `make test-fast` | `test_includes_errors_alongside_third_party` — used gitea as its representative third-party image, so it went red for a correct reason |
+
+Final: `make lint` clean, `make type` clean (61 files), `make test-fast` 510 passed, `make validate-sync` all in sync.
+
+### The defect the cutover exposed: the stack did not survive a reboot
+
+After 4a's verification passed, the Beelink rebooted and **Gitea and MinIO both stayed down**. Not a crash — they never started:
+
+```
+Error=failed to set up container networking: driver failed programming external
+connectivity on endpoint gitea: failed to bind host port 100.64.0.3:2222/tcp:
+cannot assign requested address
+RestartCount=0   RestartPolicy=unless-stopped
+```
+
+Docker started before `tailscaled` had put `100.64.0.3` on `tailscale0`, so publishing on that address failed. **`restart: unless-stopped` does not cover this**: the policy restarts a process that exited, and this container never started. `RestartCount=0` with the policy set is the measurement, not an inference.
+
+This is not hardening and it is not optional. The Beelink is `location: on-demand`, which means powering it on *is* its normal operation — a stack that only survives uninterrupted uptime is not on-demand in any useful sense. ADR-061's classification is unimplementable without this fix, so it lands here rather than in a ticket.
+
+**Fix:** a `kubelab-compose.service` unit ordered `After=docker.service tailscaled.service`, whose `ExecStartPre` waits for the *address* to appear on the interface — not for the daemon to report active, which is the distinction the measured race turns on.
+
+**Verification, in three parts, because the obvious one is insufficient.** A real reboot:
+
+```
+Active: active (exited) since Fri 2026-08-14 07:15:07 CEST
+Process: ExecStartPre=/opt/kubelab/wait-for-tailscale-addr.sh 100.64.0.3 (code=exited, status=0/SUCCESS)
+wait-for-tailscale-addr.sh[2121]: 100.64.0.3 is up on tailscale0 after 0s
+gitea    Up 52 seconds (healthy)
+minio    Up 52 seconds (healthy)
+{"version":"1.25.5"}    ssh port 2222: OPEN
+```
+
+**Reported honestly: that boot did not reproduce the race** — the containers were already `Running` when the unit executed, so Docker won this time. The reboot therefore proves the unit is installed, enabled, ordered and harmless; it does *not* by itself prove the unit rescues a lost race. The two halves that would be vacuous if untested were falsified separately:
+
+```
+$ wait-for-tailscale-addr.sh 100.64.0.99 tailscale0 2     # address that will never appear
+timed out after 4s waiting for 100.64.0.99 on tailscale0
+exit=1
+$ wait-for-tailscale-addr.sh 100.64.0.3 tailscale0 2
+100.64.0.3 is up on tailscale0 after 0s
+exit=0
+
+$ docker stop gitea minio        # reproduce the post-failed-boot state
+  3000 CLOSED
+$ systemctl restart kubelab-compose.service
+  gitea Up 8 seconds   minio Up 8 seconds
+  3000 OPEN  →  {"version":"1.25.5"}
+```
+
+So: the gate rejects an address that never appears and accepts one that exists, and the unit's `ExecStart` recovers a stack Docker left down. Outcome is deterministic even though the path is not — whoever wins the race, the stack converges to running.
+
+The same bind shape exists in `glances` and `rpi3_services`, and MinIO on this node has been dying on every reboot for as long as it has lived there, unnoticed because "MinIO is not answering" is indistinguishable from "the homelab is off". Filed fleet-wide as **#1061**; only `beelink_services` is fixed here. `glances` survived this reboot, which is scheduling luck rather than immunity, and the ticket says so.
+
+**A test learned the same lesson.** The new infra check originally mapped any failed connection to "Beelink is powered off" and would have skipped straight past this incident. It now separates the two: timeout or no route means the node is off (skip); `ECONNREFUSED` means the node is up and the service is not (fail).
+
+### Post-merge verification — NOT YET RUN
+
+Left empty on purpose. Fill it after Argo CD syncs the merge; until then the cutover is prepared, not proven.
+
+1. `make test-e2e ENV=prod` — the first real exercise of the `on_demand_backend` branch against a live route.
+2. Exactly one EndpointSlice for the `gitea` Service, named `gitea-external`. The old Service had a selector, so the endpoints controller was managing a slice of its own; if that one survives with the dead pod's address, Traefik round-robins between the Beelink and a corpse and the symptom is *intermittent* 502s, which is far harder to read than a steady one.
+3. The old `Deployment`, `PersistentVolumeClaim` and ConfigMaps are gone from both clusters — that is prune actually firing, not just being configured.
+4. `kubectl delete secret gitea-secrets -n kubelab` in **both** clusters. Nothing else will: the toolkit no longer manages it and Argo never owned it, so it outlives the retirement holding a credential that is still valid on the Beelink. Recorded on #926 (TOOL-025), which is the same apply-without-delete gap one object type over.
+
+Only after 1–4 does the operator get told Gitea is ready on its real domain.
+
+## AC2 — Classification gate transcript (captured 2026-08-14)
+
+Owed by PR 2, which merged without it. This is an unmet acceptance criterion, not tidying: AC2 requires the gate be *demonstrated* to fail, and a suite that only ever reports green proves nothing about whether it can go red.
+
+**Full suite, green against the real repo:**
+
+```
+$ poetry run pytest tests/test_stateful_service_classification.py -v --no-cov
+test_manifests_actually_yield_stateful_services                              PASSED
+test_every_stateful_service_declares_a_classification                        PASSED
+test_fixture_baseline_is_compliant                                           PASSED
+test_gate_goes_red_on_each_violation[overrides0-missing `state_promotion`]    PASSED
+test_gate_goes_red_on_each_violation[overrides1-missing `location`]           PASSED
+test_gate_goes_red_on_each_violation[overrides2-is not one of]                PASSED
+test_gate_goes_red_on_each_violation[overrides3-is not one of]                PASSED
+test_gate_goes_red_on_each_violation[overrides4-location_deferred_to]         PASSED
+test_gate_goes_red_on_each_violation[overrides5-not a ticket reference]       PASSED
+test_gate_goes_red_on_each_violation[overrides6-not a ticket reference]       PASSED
+test_gate_goes_red_on_each_violation[overrides7-not a ticket reference]       PASSED
+test_gate_goes_red_when_the_service_has_no_config_block                       PASSED
+test_undecided_location_is_accepted_when_its_deferral_is_recorded             PASSED
+============================== 13 passed in 0.70s ==============================
+```
+
+**Red-then-green against the real repo**, not only against the synthetic fixture. The eight `test_gate_goes_red_*` cases above assert failure on in-memory fixtures, which proves the checking *function* rejects bad input but not that the live wiring — PVC discovery, the two config namespaces, the resolution walk — reaches `common.yaml` at all. A gate can pass all of its own negative controls and still be reading nothing. So one real classification field was removed and the main test re-run:
+
+```
+$ # gitea's `state_promotion` line temporarily removed from common.yaml
+$ poetry run pytest ...::test_every_stateful_service_declares_a_classification
+E       AssertionError: Stateful services with an incomplete classification:
+E       assert not ['gitea (PVCs: gitea-data): missing `state_promotion`']
+============================== 1 failed in 0.54s ===============================
+
+$ # file restored from an explicit backup copy
+$ poetry run pytest ...::test_every_stateful_service_declares_a_classification
+============================== 1 passed in 0.52s ===============================
+
+$ git diff --stat -- infra/config/values/common.yaml
+(no output — restored byte-identical)
+```
+
+The failure names the service and the missing field rather than reporting a bare count, which is what `tasks.md` asked for.
+
+Method note: the edit was restored from a copied backup, deliberately **not** with `git checkout -- infra/config/values/common.yaml`. That command is what #1034 was about, and reaching for it during an experiment is how this session destroyed its own uncommitted work once already. `git diff --stat` is included above as the proof of no residue.
 
 ## Test status
 

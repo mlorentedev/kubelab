@@ -67,16 +67,12 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         },
         namespace="kube-system",
     ),
-    SecretMapping(
-        name="gitea-secrets",
-        keys={
-            "SECRET_KEY": "APPS_SERVICES_CORE_GITEA_SECRET_KEY",
-            "ADMIN_USER": "BASIC_AUTH_USER",
-            "ADMIN_PASSWORD": "APPS_SERVICES_CORE_GITEA_ADMIN_PASSWORD",
-            "ADMIN_EMAIL": "APPS_SERVICES_CORE_GITEA_ADMIN_EMAIL",
-            "OIDC_CLIENT_SECRET": "APPS_SERVICES_CORE_GITEA_OIDC_CLIENT_SECRET",
-        },
-    ),
+    # gitea-secrets removed: Gitea left K3s for the Beelink (ADR-061), so no
+    # workload in any environment consumes this Secret. Left in place it would
+    # keep pushing a dead Secret to both clusters, and — because gitea's specs
+    # no longer resolve under staging — trip the placeholder guard above on
+    # every `apply-secrets ENV=staging`. Its values are now rendered into the
+    # Compose file by `roles/beelink_services`.
     SecretMapping(
         name="n8n-secrets",
         keys={

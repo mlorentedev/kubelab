@@ -1,0 +1,31 @@
+# {{ ansible_managed }}
+# Brings the Beelink's Compose stack up once the node's Tailscale address exists.
+#
+# The containers already carry `restart: unless-stopped`, which covers a service
+# that crashes while running. It does NOT cover this node's actual failure mode:
+# at boot, Docker races tailscaled, the bind to the Tailscale address fails, and
+# the container never starts at all — a restart policy has nothing to restart.
+#
+# This matters more here than it would anywhere else in the fleet. The Beelink is
+# classified `location: on-demand` (ADR-028 / ADR-061), which means powering it on
+# IS its normal operation, not an exceptional event. A stack that only survives an
+# uninterrupted uptime is not on-demand in any useful sense.
+[Unit]
+Description=KubeLab Compose stack (Gitea, MinIO, GitHub runner)
+Documentation=https://github.com/mlorentedev/kubelab
+Requires=docker.service
+After=docker.service tailscaled.service network-online.target
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Comfortably above the wait script's own bound, so its explicit failure is what
+# surfaces rather than an opaque systemd timeout.
+TimeoutStartSec=180
+ExecStartPre={{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
+ExecStart=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+ExecStop=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml stop
+
+[Install]
+WantedBy=multi-user.target

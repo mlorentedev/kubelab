@@ -126,16 +126,6 @@ var KUBELAB_SERVICES_STAGING = [
     "notes": "Dashboard"
   },
   {
-    "name": "Gitea",
-    "url": "https://gitea.staging.kubelab.live",
-    "health": "https://gitea.staging.kubelab.live/api/healthz",
-    "auth": "Built-in (OIDC)",
-    "category": "Core",
-    "node": "ace1",
-    "version": "1.25.5",
-    "notes": "Git hosting"
-  },
-  {
     "name": "n8n",
     "url": "https://n8n.staging.kubelab.live",
     "health": "https://n8n.staging.kubelab.live/healthz",
@@ -248,16 +238,6 @@ var KUBELAB_SERVICES_PROD = [
     "notes": "Dashboard"
   },
   {
-    "name": "Gitea",
-    "url": "https://gitea.kubelab.live",
-    "health": "https://gitea.kubelab.live/api/healthz",
-    "auth": "Built-in (OIDC)",
-    "category": "Core",
-    "node": "VPS",
-    "version": "1.25.5",
-    "notes": "Git hosting"
-  },
-  {
     "name": "n8n",
     "url": "https://n8n.kubelab.live",
     "health": "https://n8n.kubelab.live/healthz",
@@ -329,6 +309,16 @@ var KUBELAB_SERVICES_PROD = [
   }
 ];
 var KUBELAB_SERVICES_SHARED = [
+  {
+    "name": "Gitea",
+    "url": "https://gitea.kubelab.live",
+    "health": "https://gitea.kubelab.live/api/healthz",
+    "auth": "Built-in (OIDC)",
+    "category": "Core",
+    "node": "Beelink",
+    "version": "1.25.5",
+    "notes": "Git hosting \u00b7 on-demand"
+  },
   {
     "name": "Argo CD",
     "url": "https://argo.kubelab.live",
@@ -731,7 +721,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config 883a3256";
+    footer.textContent = "KubeLab IDP · config 2a88b758";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);
