@@ -131,6 +131,34 @@ rules:
     resources:
       - endpointslices
     verbs: ["create", "update", "patch", "delete"]
+  # Namespaced Role/RoleBinding (OBS-010, quota-watcher's own scoped RBAC).
+  # Same "reads are wildcarded, writes are enumerated" gap IDP-031 already hit
+  # on this file: a manifest introducing rbac.authorization.k8s.io/Role was
+  # invisible to any check until Argo tried to apply it. This is the
+  # NAMESPACED half only — ClusterRole/ClusterRoleBinding stay in
+  # argocd-manager-cluster-write below, a different kind entirely.
+  #
+  # `bind` on `roles` (OBS-010, measured 2026-08-14): creating a RoleBinding
+  # that references a brand-new Role in the SAME apply triggers K8s's
+  # privilege-escalation check, which fetches the referenced Role to compare
+  # granted permissions. Under `--dry-run=server`, that Role was never
+  # persisted (the whole overlay is one dry-run batch, nothing survives it),
+  # so the fetch 404s and the RoleBinding is rejected as NotFound — not
+  # Forbidden, so it does not even look like an RBAC gap at first read. `bind`
+  # authorizes the reference directly and skips the comparison-by-reading
+  # step entirely, sidestepping the chicken-and-egg. Cluster-admin (used by
+  # `make register-spoke` for this very file) never hits this: escalation
+  # checks are skipped outright for identities that already hold every
+  # permission there is.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+    verbs: ["bind"]
 
 ---
 # Bind write access to kubelab namespace only

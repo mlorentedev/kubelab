@@ -1,0 +1,141 @@
+# quota-watcher — OBS-010, the emitter half of the namespace quota alert.
+#
+# Reads the live `kubelab-quota` ResourceQuota (IDP-031/#811) every 5 minutes and
+# emits one structured JSON line per dimension to stdout. Vector already ships
+# every container's stdout to Loki (ADR-028), so this needs no new pipeline —
+# only a source of numbers to ship. Grafana's alert rules (OBS-010,
+# grafana-alerting/quota-rules.yaml) read those lines and threshold on `pct`.
+#
+# Why a CronJob and not a metrics scrape: this repo's observability stack is
+# deliberately Loki-only (ADR-028) — no Prometheus, no kube-state-metrics.
+# Standing one up is a platform decision, not something one alerting ticket
+# should trigger. This emitter reuses the fabric that already exists.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: quota-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: quota-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: quota-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: quota-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+rules:
+  # Deliberately the tightest possible grant: one verb, one resource, one
+  # named object. Not `list`/`watch`, not a wildcard resourceName — a
+  # RoleBinding review should be able to see at a glance that this
+  # ServiceAccount can do exactly one thing.
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
+    resourceNames: ["kubelab-quota"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: quota-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: quota-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+subjects:
+  - kind: ServiceAccount
+    name: quota-watcher
+    namespace: kubelab
+roleRef:
+  kind: Role
+  name: quota-watcher
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: quota-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: quota-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+spec:
+  # Matches the Grafana rules' `interval: 5m` / 10-minute LogQL window exactly
+  # (see quota-rules.yaml) — that pairing is what lets `for: 5m` require two
+  # consecutive real samples rather than one lucky evaluation.
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 60
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: quota-watcher
+            app.kubernetes.io/component: observability
+        spec:
+          serviceAccountName: quota-watcher
+          # CRITICAL: this must stay `true`, against the fleet's own norm
+          # (Authelia/n8n both set it `false` — see CLAUDE.md). The token is
+          # the only way this container authenticates to the API server;
+          # disabling it breaks the emitter silently (no log lines, no
+          # error), which is exactly the failure mode the alert rules'
+          # `noDataState: Alerting` exists to catch. Do not "harden" this
+          # like the other services.
+          automountServiceAccountToken: true
+          restartPolicy: OnFailure
+          containers:
+            - name: quota-watcher
+              image: alpine:3.21
+              command: ["/bin/sh", "-e", "-c"]
+              args:
+                - |
+                  apk add --no-cache curl jq > /dev/null 2>&1
+
+                  TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                  CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                  API="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+
+                  BODY=$(curl -sf --cacert "$CACERT" \
+                    -H "Authorization: Bearer $TOKEN" \
+                    "$API/api/v1/namespaces/kubelab/resourcequotas/kubelab-quota")
+
+                  # Normalizes a Kubernetes memory quantity string ("4Gi",
+                  # "2400Mi") to whole Mi. Getting this wrong produces a
+                  # percentage silently off by a power of 2, not an error —
+                  # verified against real quota values before trusting it.
+                  to_mi() {
+                    case "$1" in
+                      *Gi) echo $(( ${1%Gi} * 1024 )) ;;
+                      *Mi) echo "${1%Mi}" ;;
+                      *Ki) echo $(( ${1%Ki} / 1024 )) ;;
+                      *) echo $(( $1 / 1048576 )) ;;
+                    esac
+                  }
+
+                  for dim in requests.memory limits.memory; do
+                    hard=$(echo "$BODY" | jq -r ".status.hard[\"$dim\"]")
+                    used=$(echo "$BODY" | jq -r ".status.used[\"$dim\"]")
+                    hard_mi=$(to_mi "$hard")
+                    used_mi=$(to_mi "$used")
+                    pct=$(awk -v u="$used_mi" -v h="$hard_mi" 'BEGIN { printf "%.2f", (u/h)*100 }')
+                    line="{\"metric\":\"quota_utilization\",\"namespace\":\"kubelab\",\
+                      \"dimension\":\"$dim\",\"used_mi\":$used_mi,\"hard_mi\":$hard_mi,\"pct\":$pct}"
+                    echo "$line"
+                  done
+              resources:
+                requests:
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
