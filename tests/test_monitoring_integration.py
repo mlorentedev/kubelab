@@ -249,6 +249,13 @@ def wipe(request):
     use `fresh_kuma_url` instead, so that would spin up both containers for
     every bootstrap test. `getfixturevalue` defers instantiation until after
     the guard confirms it is actually needed.
+
+    Also clears notifications, not only monitors: `kuma_url` is module-scoped
+    (one container reused across the whole class), and a notification added by
+    one test — the muting test below needs one with `isDefault: true` — would
+    otherwise leak into every test that runs after it under `pytest-randomly`,
+    silently flipping their `has_default_notification` from the False they
+    assume.
     """
     if "kuma_url" not in request.fixturenames:
         return
@@ -257,6 +264,29 @@ def wipe(request):
     try:
         for m in api.get_monitors():
             api.delete_monitor(m["id"])
+        for n in api.get_notifications():
+            api.delete_notification(n["id"])
+    finally:
+        api.disconnect()
+
+
+def _add_default_notification(kuma_url: str) -> None:
+    """Give the throwaway instance a default notification to converge toward.
+
+    Apprise, because it needs no real delivery target for what this test
+    checks — only whether a monitor ends up carrying the notification's id,
+    never whether it actually fires.
+    """
+    from uptime_kuma_api import NotificationType
+
+    api = _client(kuma_url)
+    try:
+        api.add_notification(
+            name="Test Default",
+            type=NotificationType.APPRISE,
+            isDefault=True,
+            appriseURL="json://127.0.0.1/void",
+        )
     finally:
         api.disconnect()
 
@@ -279,7 +309,12 @@ class TestApplyAgainstARealInstance:
         apply_seed(seed)
         before = {m["name"]: m["id"] for m in live()}
 
-        create, edit, delete = diff_monitors(seed, live())
+        # Mirrors what `apply_monitors` itself just computed: the throwaway
+        # carries no notifications, and `tmp_path` carries no common.yaml, so
+        # `has_default_notification` is False and `muted_tags` is empty.
+        create, edit, delete = diff_monitors(
+            seed, live(), muted_tags=frozenset(), has_default_notification=False
+        )
         assert (len(create), len(edit), len(delete)) == (0, 0, 0), (
             "a converged instance must plan nothing — this is the check that "
             "caught 31 phantom edits the unit fixtures could not"
@@ -290,6 +325,40 @@ class TestApplyAgainstARealInstance:
         assert {m["name"]: m["id"] for m in live()} == before, (
             "ids must survive a sync, because the uptime history hangs off them"
         )
+
+    def test_staging_tagged_monitors_end_without_notifications_the_rest_keep_them(
+        self, live, apply_seed, kuma_url, monkeypatch
+    ):
+        """The actual case #912 is about, exercised against a real instance.
+
+        `_get_muted_notification_tags` is monkeypatched rather than routed
+        through a real `common.yaml` under `tmp_path`: the fixture already
+        replaces `_connect`, so credentials never touch config either — this
+        keeps the test isolated from the repo's actual SSOT while still
+        exercising the real `edit_monitor`/create wire calls end to end.
+        """
+        _add_default_notification(kuma_url)
+        monkeypatch.setattr(monitoring, "_get_muted_notification_tags", lambda _root: frozenset({"staging"}))
+
+        seed = _real_seed()
+        apply_seed(seed)
+
+        by_name = {m["name"]: m for m in live()}
+        for entry in seed:
+            monitor = by_name[entry["name"]]
+            has_notification = bool(monitor.get("notificationIDList"))
+            if "staging" in (entry.get("tags") or []):
+                assert not has_notification, f"'{entry['name']}' is tagged staging and must not notify"
+            else:
+                assert has_notification, f"'{entry['name']}' should carry the default notification"
+
+        # Steady state must be reachable with notifications configured too —
+        # this file's recurring historical failure mode is a comparison that
+        # never converges and rewrites every monitor on every run.
+        create, edit, delete = diff_monitors(
+            seed, live(), muted_tags=frozenset({"staging"}), has_default_notification=True
+        )
+        assert (len(create), len(edit), len(delete)) == (0, 0, 0)
 
     def test_dropping_a_monitor_from_the_seed_deletes_exactly_that_one(self, live, apply_seed):
         """AC3's real exercise: the delete path, which the spec flagged as untested."""
