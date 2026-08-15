@@ -31,7 +31,7 @@ created: "2026-08-14"
 - [x] [AC4] Enumerate live reachability for all 7 nodes before any real run — measured: vps/beelink/rpi3/rpi4/ace1/ace2 up, aws1 down (Tailscale "offline, last seen 3h ago" at the time, still down hours later — Spot interruption, not homelab on-demand hardware).
 - [x] [AC4] Real (non-check) provisioning run per node; `systemctl list-timers | grep kubelab-maintenance` confirms active. Done for all 6 reachable nodes.
 - [x] [AC4] Second real run per node converges `changed: 0` for all `node_maintenance` tasks (idempotence). Done for all 6 reachable nodes.
-- [ ] [AC4] aws1 specifically: confirm the pre-existing timer converges (not a fresh install) — this is the ticket's actual motivating case. **Not done — aws1 offline the entire session.** Tracked as a follow-up in verification.md; the role invocation is committed and identical to the other 6, just unexercised against the live node.
+- [x] [AC4] aws1 specifically: confirm the pre-existing timer converges (not a fresh install) — this is the ticket's actual motivating case. Done 2026-08-14 once the Spot instance recovered: first run `changed=4`, second `changed=0`, timer `enabled`/`active`.
 
 ## Implementation — Part 2: OnFailure notify wiring (AC6-AC8)
 
@@ -44,7 +44,7 @@ created: "2026-08-14"
 - [x] [AC6] Ansible tasks: write the fleet secret to a 0600 file, template + install both new units, `daemon_reload` (reused the existing "Enable and start maintenance timer" task's `daemon_reload: true` rather than adding a second one). Gated the same way as the rest of the timer install (`maintenance_install_timer`), not `maintenance_run_cleanup`.
 - [x] [AC7] Live proof (a): `systemctl start kubelab-maintenance-notify.service` on rpi3 AND beelink (staging-env, to specifically prove the dedicated-secret fix) — both `Result=success`.
 - [x] [AC7] Live proof (b): temporary `ExecStart=/bin/false` drop-in on rpi3, real failure, journal shows `Triggering OnFailure= dependencies.` immediately followed by the notify unit firing and succeeding. Drop-in reverted, `reset-failed` run, timer confirmed still enabled after.
-- [x] [AC7] Rolled the notify unit out to beelink, rpi4, ace1, ace2, vps (5 of the remaining 6) with idempotence re-checked on each; aws1 pending per AC4's note above.
+- [x] [AC7] Rolled the notify unit out to beelink, rpi4, ace1, ace2, vps, and aws1 (all 6 of the remaining 6) with idempotence re-checked on each. aws1's standalone delivery (`systemctl start kubelab-maintenance-notify.service`) confirmed `Result=success` on 2026-08-14.
 
 ## Implementation — Part 3: documentation (AC5)
 
@@ -58,7 +58,7 @@ created: "2026-08-14"
 - [x] Lint passes (`make lint`)
 - [x] `make test` green (517 passed, 116 deselected)
 - [x] No unrelated changes in the diff (no scope creep) — the untagged-pre_tasks fix on 4 playbooks is in-scope: it's the same class of bug this ticket's own new task surfaced, on the same files, in the same PR
-- [x] `verification.md` filled in with live evidence per node (6/7 — aws1 pending)
+- [x] `verification.md` filled in with live evidence per node (7/7)
 - [x] PR opened referencing this spec folder — #1070
 
 ## Machine-readable features
