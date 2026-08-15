@@ -63,7 +63,10 @@ make register-spoke ENV=prod
 
 ## Deploy: ArgoCD (Helm upgrade)
 
-**Always run AFTER `deploy-k8s`** — overwrites EndpointSlice with resolved IP.
+Ordering vs `deploy-k8s` is **independent** — the two touch disjoint resources.
+(An older note here said "always run AFTER `deploy-k8s`"; that was true only while
+`overlays/prod/argocd.yaml` was still listed in the prod overlay, which it stopped
+being in #152. `deploy-k8s` no longer renders or applies it at all.)
 
 ```bash
 make deploy-argocd
@@ -73,8 +76,23 @@ What it does:
 1. Deploys Authelia OIDC config to prod
 2. Scales down ALL ArgoCD pods (OOM mitigation)
 3. Helm upgrade with 10min timeout
-4. Renders + applies the aws1 ArgoCD EndpointSlice (MagicDNS-resolved Tailscale IP)
-   via `toolkit infra k8s render-apply` (ADR-047 / TOOL-009)
+4. Renders + applies `overlays/prod/argocd-endpointslice.yaml` (MagicDNS-resolved
+   aws1 Tailscale IP) via `toolkit infra k8s render-apply` (ADR-047 / TOOL-009 T4)
+
+Step 4 is the only path that applies that EndpointSlice, and a Spot replacement
+is the only event that changes its value — which is why `make aws1-replace` ends
+by telling you to run this target.
+
+The rest of the Argo CD route — the `argocd` Service and the `argo.kubelab.live`
+IngressRoute — is **Kustomize-managed** (`overlays/prod/argocd.yaml`, in the
+overlay's `resources:`), so changes to it ship via GitOps like any other route.
+It was not always: until #970 the whole three-document file sat outside the
+overlay because one document held a placeholder, and SEC-004's `rate-limit`
+middleware consequently stayed in git, applied to nothing, while `kubelab-prod`
+reported `Synced` — a Synced Application says nothing about resources it does not
+manage. `tests/test_orphan_manifests.py` enumerates what is still in that
+category; `tests/infra/test_rate_limit.py` checks the live cluster rather than
+the manifests.
 
 ## Recovery: ArgoCD failed Helm upgrade
 
