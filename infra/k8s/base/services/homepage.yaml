@@ -28,7 +28,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: homepage
-          image: ghcr.io/gethomepage/homepage:latest
+          image: ghcr.io/gethomepage/homepage:v1.13.2
           ports:
             - name: http
               containerPort: 3000
@@ -70,16 +70,24 @@ spec:
               memory: 64Mi
             limits:
               memory: 192Mi
+          # Next.js validates the Host header against HOMEPAGE_ALLOWED_HOSTS; kubelet probes
+          # hit the pod IP directly, which isn't in that list — send a value that is.
           livenessProbe:
             httpGet:
               path: /
               port: http
+              httpHeaders:
+                - name: Host
+                  value: home.staging.kubelab.live
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /
               port: http
+              httpHeaders:
+                - name: Host
+                  value: home.staging.kubelab.live
             initialDelaySeconds: 5
             periodSeconds: 10
       volumes:
