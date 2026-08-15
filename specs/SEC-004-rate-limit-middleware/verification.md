@@ -24,13 +24,13 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
-- **Pre-implementation investigation (2026-08-14) already produced one significant finding, captured here for continuity even though implementation hasn't started**: klipper-lb (K3s's built-in ServiceLB) MASQUERADEs every client's source IP before Traefik sees it, confirmed empirically in staging (temporary accesslog + `externalTrafficPolicy: Local` test, both reverted cleanly). This forced the scope from a per-client to a global rate limit and spawned a separate prerequisite issue (#1067) rather than silently narrowing this ticket. See `proposal.md` Risks section and #970's issue comments for full detail.
+- **Pre-implementation investigation (2026-08-14) already produced one significant finding, captured here for continuity even though implementation hasn't started**: klipper-lb (K3s's built-in ServiceLB) MASQUERADEs every client's source IP before Traefik sees it, confirmed empirically in staging (temporary access log + `externalTrafficPolicy: Local` test, both reverted cleanly). This forced the scope from a per-client to a global rate limit and spawned a separate prerequisite issue (#1067) rather than silently narrowing this ticket. See `proposal.md` Risks section and #970's issue comments for full detail.
 
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what> — likely candidate: "klipper-lb MASQUERADEs client IPs unconditionally; `externalTrafficPolicy: Local` does not help because the masquerade happens upstream of the Service" — genuinely non-obvious, worth capturing regardless of how #1067 resolves.
+- [x] Lesson for the repo's `docs/lessons.md`? Yes — already captured: "K3s's built-in ServiceLB masks every client's real IP — `externalTrafficPolicy: Local` cannot fix it" (`docs/lessons.md`, 2026-08-14, tags `#k3s #networking #servicelb #klipper-lb #sec-004 #gotcha`).
 - [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
 - [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
 

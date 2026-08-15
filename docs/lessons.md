@@ -3832,7 +3832,7 @@ Recovery was cheap only by accident — the edits had been applied by a script r
 
 ### [2026-08-14] `max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`
 
-**Context:** OBS-010 — two Grafana alert rules (`obs010-quota-requests`/`-limits`) on `kubelab` namespace memory utilization, `for: 5m` so a rules should only fire on a *sustained* breach, not a momentary one during a routine deploy restart.
+**Context:** OBS-010 — two Grafana alert rules (`obs010-quota-requests`/`-limits`) on `kubelab` namespace memory utilization, `for: 5m` so the rules should only fire on a *sustained* breach, not a momentary one during a routine deploy restart.
 
 **Problem:** the surge-drill acceptance criterion — a normal `make deploy-k8s` + rollout restart must NOT fire the alert — failed for real on its first live run. The query was `max_over_time({container="quota-watcher"} | json | unwrap pct [10m]) > 80`. That function returns the *peak* value observed anywhere inside the 10-minute lookback window, not the current value — so a single transient spike (the surge itself, ~88% for well under a minute) stayed visible to every evaluation for up to 10 minutes after the real value had already dropped back under 71%. `for: 5m` requires the query result to stay above threshold across multiple evaluations, but with `max_over_time` the *query result itself* is an artifact of window memory, not of present reality — the sustain check was satisfied by the window, not by anything actually sustained. Caught by watching the rule transition `inactive` → `pending` → **`firing`** live during the drill (a 15-minute background poll of the rules API), then cross-checking the raw Loki log lines directly and finding the real value had already recovered to 70.54% within 5 minutes — the rule was alerting on a ghost.
 
@@ -3857,7 +3857,7 @@ A second surprise on the same incident: restarting the Grafana pod (to deploy th
 
 The actual cause sits one layer below kube-proxy entirely: K3s's built-in ServiceLB (`klipper-lb`) is not a real load balancer, it is a per-node `iptables` script. Reading its container logs directly (`kubectl logs <svclb-pod> -c lb-tcp-443`) showed the exact rules it installs for every `LoadBalancer` Service:
 
-```
+```shell
 iptables -t nat -I PREROUTING -p TCP --dport 443 -j DNAT --to <service-clusterIP>:443
 iptables -t nat -I POSTROUTING -d <service-clusterIP>/32 -p TCP -j MASQUERADE
 ```

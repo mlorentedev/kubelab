@@ -10,14 +10,14 @@ created: "2026-08-14"
 > **Inline markers:**
 > - `[P]` — no dependency on another unchecked task, safe to run in parallel.
 > - `[AC<n>]` — helps satisfy acceptance criterion #`<n>` from `proposal.md`.
-
-> **Not yet broken into concrete tasks.** `proposal.md`'s Risks section has one still-open item (blanket vs. selective route scope, tagged `[AGENT-DRAFT]`) that should be resolved with the user before this list is frozen. Next session: resolve that, measure real request rates for the noisiest staging route (Homepage cockpit or an Authelia-gated route) per the "Risks" note on reusing the VPS's `50/s`/`25` unmeasured, then write the task breakdown in the same style as OBS-010's `tasks.md` (this repo, same spec folder pattern) — Middleware manifest -> generator change + regenerated `ingress.yaml` for both envs (paired in one commit per the CI-GATE-002 constraint) -> per-route middleware list updates -> burst-drill test exercised in staging, not assumed.
+>
+> **Not yet broken into concrete tasks.** The blanket-vs-selective route-scope question is resolved (blanket, confirmed by the user 2026-08-14 — see `proposal.md` "What"). One open item remains: measure real request rates for the noisiest staging route per the "Risks" note on reusing the VPS's `50/s`/`25` unmeasured, then write the task breakdown in the same style as OBS-010's `tasks.md` (this repo, same spec folder pattern) — Middleware manifest -> generator change + regenerated `ingress.yaml` for both envs (paired in one commit per the CI-GATE-002 constraint) -> per-route middleware list updates -> burst-drill test exercised in staging, not assumed.
 
 ## Setup
 
 - [x] Branch: work done so far lives on `docs/IDP-031-coderabbit-evidence-fix` (investigation only, no code) — a fresh `feat/SEC-004-rate-limit-middleware` branch off `origin/master` is still needed once implementation starts. ✓ 2026-08-14
-- [ ] `proposal.md` is complete and acceptance criteria are testable — blocked on resolving the one `[AGENT-DRAFT]` tag (blanket vs. selective scope)
-- [ ] No open questions left in `proposal.md` "Risks / open questions" — two remain: the values re-measurement, and the route-scope decision above
+- [x] `proposal.md` is complete and acceptance criteria are testable — the one `[AGENT-DRAFT]` tag (blanket vs. selective scope) is resolved. ✓ 2026-08-14
+- [ ] No open questions left in `proposal.md` "Risks / open questions" — one remains: the values re-measurement
 
 ## Implementation
 
