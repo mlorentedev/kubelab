@@ -34,8 +34,8 @@ Services with native OIDC/OAuth2 support bypass Authelia forward-auth and use Au
 
 **Services**: MinIO, Gitea
 
-- **MinIO**: Configured via environment variables (`MINIO_IDENTITY_OPENID_*`). Native OIDC support maps Authelia groups to MinIO policies.
-- **Gitea**: Configured via post-deploy admin CLI (`gitea admin auth add-oauth`). Supports auto-discovery via `.well-known/openid-configuration`.
+- **MinIO**: Configured via environment variables (`MINIO_IDENTITY_OPENID_*`). Native OIDC support maps Authelia groups to MinIO policies. **Aspirational, not implemented — measured 2026-08-15 (AUTH-004 R6, `specs/AUTH-004-identity-and-machine-access/verification.md`).** The running MinIO container carries no `MINIO_IDENTITY_OPENID_*` variable at all: it authenticates with root credentials only, so no identity provider is wired and no groups claim reaches it. Nothing in this repository configures the mapping either. Treat the sentence above as the intended design, and do not cite it as evidence that a privilege tier is enforced on MinIO — per [ADR-062](adr-062-platform-identity-model.md) D5, an unenforced tier is the failure that model exists to prevent, so it must be recorded as a named gap rather than assumed.
+- **Gitea**: Configured via post-deploy admin CLI (`gitea admin auth add-oauth`). Supports auto-discovery via `.well-known/openid-configuration`. **Implemented and live**, though driven by `roles/beelink_services/files/gitea-bootstrap.sh` since [ADR-061](adr-061-stateful-service-placement.md) moved Gitea off K3s — not by `toolkit/scripts/configure_oidc.py`, which still targets a pod that no longer exists (#355). Gitea 1.25.5 does support declarative privilege mapping (`--group-claim-name`, `--admin-group`, `--restricted-group`), but none of those flags is currently passed: the `groups` scope is requested and the claim ignored (AUTH-004 R5).
 
 ### Tier 2: Forward Auth
 
