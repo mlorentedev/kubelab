@@ -700,6 +700,12 @@ apps:
           cpu_reservation: "0.25"
           memory_reservation: 256M
 
+      homepage:
+        name: homepage
+        # Pinned, not :latest — v2.0.0 (2026-08-14) bumped Next.js to a release
+        # that rejects kubelet's pod-IP-addressed probes as an invalid Host.
+        image: ghcr.io/gethomepage/homepage:v1.13.2
+
       uptime_kuma:
         name: uptime-kuma
         domain: status.kubelab.live
