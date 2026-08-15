@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-035-maintenance-timer-rollout"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-14"
 issue: "kubelab#928"
 tags: [spec, proposal]
