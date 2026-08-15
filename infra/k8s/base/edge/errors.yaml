@@ -107,6 +107,9 @@ spec:
     - match: HostRegexp(`.+\.staging\.kubelab\.live`)
       kind: Rule
       priority: 1
+      middlewares:
+        - name: rate-limit
+          namespace: kubelab
       services:
         - name: errors
           port: 80

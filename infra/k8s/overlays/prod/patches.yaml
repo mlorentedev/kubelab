@@ -27,6 +27,8 @@ spec:
       middlewares:
         - name: secure-headers
           namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: authelia
@@ -52,6 +54,8 @@ spec:
     - match: Host(`auth.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: rate-limit
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
       services:
@@ -76,6 +80,8 @@ spec:
     - match: Host(`loki.internal.kubelab.local`)
       kind: Rule
       middlewares:
+        - name: rate-limit
+          namespace: kubelab
         - name: authelia
           namespace: kubelab
       services:
@@ -130,6 +136,8 @@ spec:
       middlewares:
         - name: secure-headers
           namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
       services:
@@ -139,6 +147,8 @@ spec:
       kind: Rule
       middlewares:
         - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
           namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
@@ -180,6 +190,8 @@ spec:
       middlewares:
         - name: secure-headers
           namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
@@ -204,6 +216,8 @@ spec:
       kind: Rule
       middlewares:
         - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
           namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
@@ -230,6 +244,8 @@ spec:
       middlewares:
         - name: secure-headers
           namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
@@ -253,6 +269,9 @@ spec:
     - match: HostRegexp(`.+\.kubelab\.live`)
       kind: Rule
       priority: 1
+      middlewares:
+        - name: rate-limit
+          namespace: kubelab
       services:
         - name: errors
           port: 80

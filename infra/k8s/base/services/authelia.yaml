@@ -182,6 +182,7 @@ spec:
       kind: Rule
       middlewares:
         - name: secure-headers
+        - name: rate-limit
         - name: error-pages
       services:
         - name: authelia

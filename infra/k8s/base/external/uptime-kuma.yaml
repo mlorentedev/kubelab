@@ -62,6 +62,8 @@ spec:
     - match: Host(`status.staging.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: rate-limit
+          namespace: kubelab
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages

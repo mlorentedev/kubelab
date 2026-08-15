@@ -132,6 +132,8 @@ spec:
       middlewares:
         - name: secure-headers
           namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
         - name: error-pages
           namespace: kubelab
         - name: crowdsec-bouncer
