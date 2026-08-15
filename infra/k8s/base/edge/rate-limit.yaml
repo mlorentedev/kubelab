@@ -26,4 +26,4 @@ spec:
     burst: 150
     period: 1s
     sourceCriterion:
-      requestHost: {}
+      requestHost: true

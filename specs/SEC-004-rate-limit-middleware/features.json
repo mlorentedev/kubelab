@@ -1,0 +1,30 @@
+[
+  {
+    "id": "sec-004-f1-middleware-object",
+    "behavior": "A rate-limit Middleware object exists in infra/k8s/base/edge/rate-limit.yaml, mirroring secure-headers.yaml's static-manifest pattern, with values sourced from edge.traefik.rate_limit_k3s_* in common.yaml (no hardcoded duplicate).",
+    "verification": "poetry run pytest tests/test_rate_limit_middleware.py --no-cov",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "sec-004-f2-blanket-coverage",
+    "behavior": "Every K3s IngressRoute -- generator-produced and hand-written, base and both overlays, public and VPN-only alike -- includes rate-limit in its middlewares list. No per-route opt-out.",
+    "verification": "poetry run pytest tests/test_k8s_generator_middlewares.py tests/test_rate_limit_coverage.py --no-cov",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "sec-004-f3-burst-behavior",
+    "behavior": "A synthetic burst against staging proves the limit fires above threshold (HTTP 429) and passes clean below it, without the clean case inheriting the burst case's token state. The drill also settled that the bucket is per-router, not shared cluster-wide. The live drill itself is recorded in verification.md (2026-08-15, ab -n 300 -c 100 against home.staging.kubelab.live and grafana.staging.kubelab.live) -- this verification command asserts the structural guard the per-router finding depends on: sourceCriterion.requestHost is explicit, not left to Traefik's default client-IP keying (which would only look 'global' by accident of klipper-lb's masquerade, kubelab#1067).",
+    "verification": "poetry run pytest tests/test_rate_limit_middleware.py -k test_source_criterion_is_explicit_not_default --no-cov",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "sec-004-f4-drift-gate",
+    "behavior": "make config-check-drift stays green for both envs after the _build_middlewares() change -- the regenerated generated/ingress.yaml is committed in the same commit as the generator change, per the CI-GATE-002/SEC-K8S-001 precedent.",
+    "verification": "make config-check-drift ENV=staging && make config-check-drift ENV=prod",
+    "state": "pending",
+    "evidence": ""
+  }
+]
