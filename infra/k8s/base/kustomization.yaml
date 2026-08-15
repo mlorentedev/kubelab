@@ -111,6 +111,8 @@ images:
     newTag: 3.6.4
   - name: timberio/vector
     newTag: 0.43.1-alpine
+  - name: ghcr.io/gethomepage/homepage
+    newTag: v1.13.2
   - name: authelia/authelia
     newTag: 4.39.15
   - name: redis
