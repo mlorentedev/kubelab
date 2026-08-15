@@ -76,7 +76,7 @@ Deleting the three completed Jobs released the claim (`get pods` → no pod refe
 Two observations recorded while doing it, neither belonging to this spec:
 
 - `quota-watcher` is running on schedule in prod and succeeding (Jobs at `00:50`, `00:55`, `01:00` all `succeeded=1`) — independent confirmation that Part 4 is live rather than merely applied.
-- Three `pvc-backup` Jobs from June (`29674260`, `29675700`, `29677140`) sit in prod with neither `succeeded` nor `active` set. They did not block the PVC and were left untouched, but a backup Job that never reported success and went unnoticed for two months is exactly the observability gap #1056's AC4 asks for. Ticketed separately rather than absorbed here.
+- Three `pvc-backup` Jobs from June (`29674260`, `29675700`, `29677140`) sit in prod with neither `succeeded` nor `active` set. They did not block the PVC and were left untouched — they are the only surviving evidence of those June failures. A backup Job that never reported success and went unnoticed for two months is exactly the gap #686 (NOTIFY-007) item (b) already describes: "PVC backup CronJob failure currently emits NOTHING". Recorded there with the transcript rather than filed as a duplicate. Recent runs succeed, so this is an observability gap, not a live outage.
 
 - **AUTH-002 (#951) prod-test skip** applies here identically to how it already affects OBS-007's prod tests. Cited per the task, not re-diagnosed.
 
