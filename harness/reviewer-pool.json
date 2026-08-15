@@ -1,0 +1,51 @@
+{
+  "$comment": [
+    "Reviewer pool for /adversarial-review (HARNESS-071, #955).",
+    "",
+    "Ordered allow-list of models permitted to SIGN a review.md. The first entry",
+    "is the launcher's primary; the whole array is the gate's allow-list, which",
+    "dotf spec archive enforces via checkReviewGate.",
+    "",
+    "Standing rule: an adversarial review never runs on an Anthropic model. The",
+    "reviewer must not be the implementer, and Claude implements nearly every",
+    "change in this repo — BUG-074 was reviewed twice by claude-opus-5 before",
+    "anyone noticed, which is the incident this file exists to prevent.",
+    "",
+    "Entries are model IDS, not tool names, and that distinction is load-bearing:",
+    "`agy` also serves claude-opus-4-6-thinking and claude-sonnet-4-6, so pinning",
+    "the tool would guarantee nothing. Pinning the id does.",
+    "",
+    "`id` is the canonical string a reviewer records in review.md and the gate",
+    "matches on. `provider`/`model` are the launcher's flags, kept explicit rather",
+    "than parsed out of `id`: BUG-074 round 3 ran on the right model only because",
+    "~/.pi/agent/settings.json on one machine happened to default to it — pi's own",
+    "default provider is google, and that file is unversioned per-machine state.",
+    "A pin that depends on a default is not a pin.",
+    "",
+    "Reasoning-class only. The latency-optimised daily models (nan/qwen3.6,",
+    "nan/gemma4, the gemini flash tier) are deliberately absent: a reviewer that",
+    "PASSes cheaply is worse than no gate, because it converts the gate into a",
+    "green checkmark. This file is read once per spec, so slow is fine.",
+    "",
+    "This is the load-bearing slice of H-044, not a replacement for it. H-044's",
+    "model-map.json maps a neutral tier (top|mid|low) to a provider per agent — a",
+    "different shape. Kept in a separate file so H-044 need not migrate this one."
+  ],
+  "pool": [
+    {
+      "id": "nan/deepseek-v4-flash",
+      "runner": "pi",
+      "provider": "nan",
+      "model": "deepseek-v4-flash",
+      "role": "primary",
+      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table."
+    },
+    {
+      "id": "agy/gemini-3.1-pro-high",
+      "runner": "agy",
+      "model": "gemini-3.1-pro-high",
+      "role": "fallback",
+      "why": "A second provider family, independent of both NaN and Anthropic — provider diversity rather than merely a different model. Pro tier at high effort; the flash tiers are excluded for the same reason qwen3.6 is. agy has no --provider flag; the model id selects the family."
+    }
+  ]
+}

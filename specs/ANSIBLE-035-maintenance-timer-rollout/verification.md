@@ -29,7 +29,7 @@ created: "2026-08-14"
 
 - `make lint` / `make type` / `make test` (517 passed, 116 deselected): green after every commit in this branch.
 - Manual smoke test: see AC4/AC7 above -- every node re-provisioned twice (idempotence), notify path exercised end-to-end on 2 of 7 nodes, `OnFailure=` linkage exercised via real failure injection on 1 node.
-- No regressions: `secrets audit --env prod` (44/44) and `--env staging` (39/39) both 100% after the secret-catalog change.
+- No regressions: `make secrets-audit` reports prod 44/44 and staging **35/35**, both 100% after the secret-catalog change. Staging's base was 34/34 before this ticket; the new `fleet_webhook_secret` SecretSpec adds exactly 1. (An earlier revision of this line claimed 39/39 for staging -- unreproducible at any commit, corrected 2026-08-15 after the adversarial review reproduced the real counts at both `e63f1e0` and `b91c1f2`.)
 
 ## Decisions made during implementation
 
@@ -38,6 +38,40 @@ created: "2026-08-14"
 - **Secret collision caught before shipping**: reusing the existing `apps.services.automation.notify.webhook_secret` key path for the fleet-wide notify secret would have collided with staging's own distinct value in the Ansible `combine()` merge for the 3 staging-env nodes (env override wins) -- verified by simulating the exact merge for all three node contexts (common-only, common+staging, common+prod) before writing any Ansible task. Fixed with a dedicated `fleet_webhook_secret` key, common.enc.yaml only, immune to any env override. Confirmed functionally correct afterward by running the standalone delivery test specifically from beelink (a staging-env node).
 - **Second bug caught live**: 4 of the 7 playbooks (vps, aws1, rpi3, rpi4) didn't tag their config/secrets pre_tasks as `always`, so `--tags maintenance` silently skipped secret loading -- surfaced as `'secrets' is undefined` on the first attempt to deploy the notify unit. beelink/ace1/ace2 already had this tagged correctly, each with a comment naming this exact failure mode; brought the other 4 in line with that existing pattern rather than inventing a new one.
 - aws1 down for the entire original session (Spot interruption); rollout there deferred, tracked as a follow-up above rather than silently claimed as done, then completed once the node recovered (see AC4/AC7 above).
+
+## Adversarial review disposition (round 1: FAIL, `nan/deepseek-v4-flash`, reviewed_sha `b91c1f2`)
+
+- **F1 (Major, REAL) — staging secret count unreproducible. FIXED.** The reviewer was right: the claim of 39/39 is reproducible at no commit. `make secrets-audit` in this session gives dev 28/32, **staging 35/35**, prod 44/44. The "Test status" line above is corrected and now records the base (34/34) and the +1 the new SecretSpec adds, so the number can be re-derived rather than trusted.
+- **F2 (Major, REAL) — no automated regression tests. FIXED.** `tests/test_node_maintenance_notify.py` added: **15 tests**, rendering the role's templates with `StrictUndefined` and executing the JSON encoder extracted from the rendered script (so the test exercises the shipped code path rather than a copy that can drift from it). It pins the `OnFailure=` linkage — the single line the whole alert path hangs from, whose removal breaks nothing observable: maintenance keeps running, it just stops reporting its own failures — that the `OnFailure=` target names a unit the role actually installs, that the notify unit's `ExecStart` matches what `tasks/main.yml` deploys, that `maintenance_notify_domain` stays a literal rather than a per-env derivation, and that the journal body survives JSON encoding across six inputs including a deliberately truncated multi-byte sequence. **Suite after this change: 532 passed, 129 deselected, 0 failures** (`poetry run pytest tests/ -m "not e2e and not infra"`, 149s) — 517 before, +15.
+- **Minor #1 (curl has no timeout) — CONFIRMED, FIXED.** `--connect-timeout 10 --max-time 15` added. Without them an unreachable n8n stalls the unit until systemd's `TimeoutStartSec=30` kills it: bounded, but a 30s delay on the one path whose job is to report promptly.
+- **Minor #2 (UTF-8 truncation crashes the encoder) — CONFIRMED, FIXED.** Reproduced before fixing rather than accepted from the report: `printf 'caf\xc3' | python3 -c "...sys.stdin.read()..."` → `UnicodeDecodeError: can't decode byte 0xc3 in position 3: unexpected end of data`. `tail -c 2000` cuts on a byte boundary, so a multi-byte character straddling it loses the notification at the exact moment it matters. Fixed with `sys.stdin.buffer.read().decode('utf-8', 'replace')`; `split-utf8-sequence` is kept as a parametrized regression case.
+- **Minor #3 (token interpolated into a shell string) — REFUTED, withdrawn.** Not a shell-injection sink. Expanding a variable inside double quotes does not re-parse its value; a secret file containing `$(touch ...)` and backticks was passed to curl as a literal argv element and neither ran (verified by injecting both forms and confirming zero side effects). The finding reasons by analogy with `eval`, which this path does not use. Notably its proposed remediation — `curl --config <file>` — would have written the bearer token to disk to defend against an attack that does not exist, so applying it unexamined would have been a net regression. `test_token_value_is_not_shell_interpreted` now pins the property, failing if anyone later "hardens" it into an `eval` or an unquoted expansion. Recorded on #1088.
+- **Consequence accepted:** fixing #1 and #2 changes the deployed script, so AC7's original live evidence was re-established rather than inherited. See "Re-verification after ANSIBLE-038 fixes" below.
+- **New in this pass:** `make maintain-notify-test NODE=x` (playbook `infra/ansible/playbooks/maintenance-notify-test.yml`) codifies the live delivery check that was previously an operator's one-off `systemctl start` over SSH. Written because F1 failed this spec for an unreproducible claim, and re-establishing AC7 with another uncodified one-off would have repeated that defect in a different shape.
+
+## Re-verification after ANSIBLE-038 fixes
+
+The two confirmed Minor fixes change `kubelab-maintenance-notify.sh.j2`, so AC7's original evidence describes a script that is no longer deployed. It was re-established, not inherited.
+
+**Re-provision** (`make provision NODE=<x> [ENV=…] TAGS=maintenance`) — every reachable node reported `changed=1, failed=0`, the single change being `Install maintenance notify script`:
+
+| Node | ENV | Result |
+|---|---|---|
+| rpi3 | staging | `ok=16 changed=1 failed=0` |
+| rpi4 | staging | `ok=14 changed=1 failed=0` |
+| ace1 | staging | `ok=22 changed=1 failed=0` |
+| ace2 | staging | `ok=21 changed=1 failed=0` |
+| vps | prod | `ok=19 changed=1 failed=0` |
+| aws1 | hub | `ok=17 changed=1 failed=0` |
+| beelink | staging | **DEFERRED — unreachable** (`tailscale ping` fails; on-demand node, powered off) |
+
+**Live delivery** (`make maintain-notify-test NODE=<x> [ENV=…]`) — all six reachable nodes returned `Result=success, ExecMainStatus=0`. Since the unit's curl uses `-f`, that is a real 2xx from prod n8n, not merely a script that ran:
+
+`rpi3`, `rpi4`, `ace1`, `ace2`, `kubelab-vps`, `aws1` — six for six.
+
+This is **stronger** than round 1's evidence, not merely equal to it: the original AC7 exercised delivery on 2 of 7 nodes and reasoned the rest by symmetry. This pass exercised 6 of 7, including the prod ingress node and the hub, each from its own env context.
+
+**beelink remainder.** Deferred exactly as aws1 was in round 1 — recorded rather than silently claimed. It still runs the previous, verified script; the fix is an improvement to an already-working path, not a repair of a broken one, so the node is not degraded while it waits. Tracked on #1088, which stays open for this remainder. Re-provision and re-test it with the two commands above when the homelab is next powered on.
 
 ## Promotion candidates
 

@@ -688,6 +688,20 @@ maintain:
 		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS); \
 	fi
 
+# Live delivery test of the maintenance failure-notify path (ANSIBLE-035 AC7).
+# Really posts to prod n8n and really notifies — a delivery test that suppresses
+# delivery proves nothing. Re-run this after any change to the notify script or
+# its unit; ANSIBLE-038's fix requires it.
+.PHONY: maintain-notify-test
+maintain-notify-test:
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	@if [ "$(NODE)" = "all" ]; then \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV); \
+	else \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE); \
+	fi
+
 .PHONY: deploy
 deploy:
 	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
