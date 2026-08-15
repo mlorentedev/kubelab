@@ -4015,3 +4015,77 @@ Be precise about which step is the dangerous one. Deleting the Jobs is **not** d
 - **Out-of-band manifests are legitimate; silent ones are not.** Where a resource genuinely cannot be committed, make it name the command that applies it, and assert that command still exists — otherwise the note outlives the target it describes.
 
 **Tags:** `#kubernetes` `#argocd` `#gitops` `#kustomize` `#traefik` `#sec-004` `#adr-047` `#gotcha`
+### [2026-08-15] A security finding's proposed fix can be worse than the bug it invents — reproduce before remediating
+
+**Context:** ANSIBLE-035's adversarial review returned three Minor findings against the maintenance notify script. One was filed under **Security**: `TOKEN="$(cat /opt/...-secret)"` followed by `curl -H "Authorization: Bearer ${TOKEN}"`, flagged as a shell-injection surface — "if the secret file were tampered with to contain `$(...)`, backticks, or shell metacharacters, injection is possible". Recommended fix: read the token via `curl --config <file>` instead.
+
+**The trap:** the finding is wrong, and applying its fix would have made the system less safe. Bash does not re-parse the *value* of a variable expanded inside double quotes — no command substitution, no word splitting, no globbing. Measured directly:
+
+```
+$ cat /tmp/tok-test
+$(touch /tmp/PWNED-should-not-exist)`touch /tmp/PWNED2-should-not-exist`
+$ TOKEN="$(cat /tmp/tok-test)"; set -- -H "Authorization: Bearer ${TOKEN}"
+  [Authorization: Bearer $(touch /tmp/PWNED-should-not-exist)`touch ...`]
+PWNED files created? -> 0
+```
+
+Passed through as a literal; nothing ran. The finding reasons by analogy with `eval`, which this path does not use. Meanwhile its remedy — `curl --config <file>` — would have written a live fleet-wide bearer token to a file on disk, to defend against an attack that does not exist.
+
+The **Security** label is what makes this dangerous. A Minor labelled *reliability* invites a cost/benefit argument; a Minor labelled *security* invites compliance, and "it's cheap, just apply it" is the path of least resistance for both a human and an agent.
+
+**Fix:** reproduce the exploit before writing the patch. Two of the three findings reproduced (a real `UnicodeDecodeError` from a byte-truncated UTF-8 sequence, and curl's missing timeouts) and were fixed; this one did not, and was refuted in writing on the ticket with the transcript above. A regression test now pins the property from the other direction — `test_token_value_is_not_shell_interpreted` fails if anyone later "hardens" the line into an `eval` or an unquoted expansion, which is where the risk actually lies.
+
+**Rule:**
+- **Reproduce a vulnerability before remediating it.** A finding is a hypothesis. If you cannot make the exploit fire in a scratch shell, you do not yet know what you are fixing — and you cannot judge whether the proposed remedy is proportionate.
+- **Read the proposed fix as adversarially as the finding.** Ask what the remedy itself costs. Moving a secret from a process argument to a file on disk is not obviously an improvement; here it was a regression.
+- **When you decline a finding, leave the evidence where the finding lives** — on the ticket, and as a test. "We looked at it and it's fine" is indistinguishable from "we never looked", three months later.
+
+**Tags:** `#security` `#code-review` `#adversarial-review` `#bash` `#false-positive` `#ansible-035`
+
+### [2026-08-15] Refuting a finding does not vaccinate the line it was about
+
+**Context:** immediately after the refutation above, round 2 of the same review examined the same two lines and found something else: the bearer token *is* exposed, just not the way round 1 claimed. `-H "Authorization: Bearer ${TOKEN}"` becomes an argv element of `curl`, so it is readable in `/proc/<pid>/cmdline` and `ps` output for roughly a second per invocation.
+
+**The trap:** having just proved — correctly, with a transcript — that the token is not shell-injectable, the natural reading of any further concern about that line is "we already settled this". The two findings share a file, a line, and a credential. They do not share a mechanism: one is about whether the shell *re-parses the value*, the other about *where the value ends up* once it is an argument. The first question being answered says nothing about the second.
+
+The refutation was not wrong. Its scope was narrower than it felt.
+
+**Fix:** treat a refutation as closing exactly one attack path, never the line. Recorded on #1088 with the distinction spelled out, and fixable without reintroducing the on-disk problem the round-1 remedy would have caused:
+
+```sh
+printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl --config - ...
+```
+
+Fed from a pipe, the token appears in neither argv nor any file — which is the fix round 1 was reaching for and got wrong by choosing a file.
+
+**Rule:**
+- **State what a refutation covers, in mechanism terms, not in location terms.** "Not shell-injectable" is a claim about parsing. "This line is fine" is a claim about everything, and you did not test everything.
+- **Expect the second finding on code you just defended.** Successfully arguing against a reviewer is precisely the state in which the next concern about that code gets waved through.
+- **A correct fix for a wrong finding can still be the right fix later.** Round 1's `curl --config` was disproportionate to a nonexistent bug, and its piped form is proportionate to a real one. Reject the reasoning without discarding the technique.
+
+**Tags:** `#security` `#code-review` `#adversarial-review` `#reasoning` `#ansible-035`
+
+### [2026-08-15] The adversarial-review gate writes a ~90MB artifact into the spec folder, untracked and unignored
+
+**Context:** `dotf spec review` (CLI-034's archive gate) writes two files beside the spec: `review.md`, the verdict, and `review-transcript.jsonl`, the reviewer's full tool-call log. The pool's own documentation argues the transcript is essential — "the verdict records what a reviewer concluded and the transcript is the only record of how".
+
+**The trap:** for one spec, that transcript was **91 MB**, because it embeds the content of every file the reviewer read. It lands inside `specs/<id>/`, is not gitignored, and no archived spec in `specs/archive/` contains one — so the house convention of not committing them existed only as an accident of nobody having tried. A routine `git add -A` before the archive commit stages it silently; GitHub warns above 50 MB and rejects above 100 MB, so the failure surfaces at `git push`, after the commit, in whatever session is trying to close the spec.
+
+Caught here only because the commit's file list was read before pushing.
+
+**Fix:** ignore it explicitly, with the reasoning attached so the next reader does not "fix" the ignore by removing it:
+
+```gitignore
+# Adversarial-review transcripts (`dotf spec review`). The verdict in review.md
+# IS committed; the transcript is the reviewer's full tool-call log and runs to
+# ~90MB for one spec [...] Kept local as the record of HOW a verdict was
+# reached; re-derivable by re-running the review.
+specs/**/review-transcript.jsonl
+```
+
+**Rule:**
+- **Any repo adopting the review gate needs this ignore before its first review, not after.** The artifact is produced by a tool the repo does not own, into a directory the repo does commit.
+- **Read the file list of a commit that includes tool-generated artifacts.** `git add -A` after running an unfamiliar tool is where oversized and secret-bearing files enter history; the staged list is the last cheap checkpoint.
+- **"No prior example has it" is not evidence of a convention** — it can equally mean the situation never arose. Here both readings looked identical until the file size was checked.
+
+**Tags:** `#git` `#spec-driven-development` `#adversarial-review` `#gitignore` `#cli-034` `#gotcha`

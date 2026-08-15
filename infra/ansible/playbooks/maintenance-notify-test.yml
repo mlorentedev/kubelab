@@ -1,0 +1,65 @@
+---
+# =============================================================================
+# Maintenance notify path — live delivery test (ANSIBLE-035 AC7, ANSIBLE-038)
+#
+# Starts kubelab-maintenance-notify.service and asserts it completed cleanly.
+# The unit's curl uses -f, so a 2xx from n8n is the only way it exits 0: this
+# is a real end-to-end delivery check, not a "did the file get written" check.
+#
+# Why this is a playbook and not an ssh one-liner: ANSIBLE-035's adversarial
+# review FAILED the spec for an unreproducible number in verification.md. Live
+# evidence that only exists in one operator's scrollback is the same defect in
+# a different shape. Anyone can now re-run this and get the same answer.
+#
+# Usage:
+#   make maintain-notify-test NODE=rpi3
+#   make maintain-notify-test NODE=all
+#
+# Direct:
+#   toolkit infra ansible run -p maintenance-notify-test -e staging -l rpi3
+#
+# NOTE: this really does post to prod n8n, which really does notify. Expect the
+# message to arrive. Deliberate — a delivery test that suppresses delivery
+# proves nothing.
+# =============================================================================
+
+- name: Maintenance notify path — live delivery test
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Reset any prior failed state on the notify unit
+      # A unit left `failed` by an earlier run starts fine, but the status read
+      # below would report the stale result rather than this run's.
+      ansible.builtin.systemd:
+        name: kubelab-maintenance-notify.service
+        state: stopped
+      failed_when: false
+
+    - name: Trigger the notify unit
+      ansible.builtin.systemd:
+        name: kubelab-maintenance-notify.service
+        state: started
+      # Type=oneshot: `started` blocks until the unit finishes, so the status
+      # read below is not a race.
+
+    - name: Read the unit's result
+      ansible.builtin.command:
+        cmd: systemctl show kubelab-maintenance-notify.service
+             --property=Result --property=ExecMainStatus
+      register: notify_result
+      changed_when: false
+
+    - name: Assert delivery succeeded
+      ansible.builtin.assert:
+        that:
+          - "'Result=success' in notify_result.stdout"
+          - "'ExecMainStatus=0' in notify_result.stdout"
+        success_msg: >-
+          {{ inventory_hostname }}: notify delivered
+          ({{ notify_result.stdout_lines | join(', ') }})
+        fail_msg: >-
+          {{ inventory_hostname }}: notify FAILED
+          ({{ notify_result.stdout_lines | join(', ') }}) —
+          `journalctl -u kubelab-maintenance-notify.service -n 30` on the node

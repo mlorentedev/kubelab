@@ -21,13 +21,21 @@ BODY_TAIL="$(journalctl -u kubelab-maintenance.service -n 20 --no-pager 2>/dev/n
 # JSON-encode via python3 (present on every node Ansible manages) rather
 # than shell string interpolation -- journal content can contain quotes,
 # newlines, and other characters that would break a hand-built JSON string.
+#
+# ANSIBLE-038: read stdin as BYTES and decode with errors='replace' rather
+# than sys.stdin.read(). `tail -c 2000` above cuts on a byte boundary, so a
+# multi-byte UTF-8 character straddling it reaches python as a truncated
+# sequence and sys.stdin.read() raises UnicodeDecodeError -- which fails this
+# unit and loses the very notification it exists to deliver. Measured:
+# `printf 'caf\xc3' | python3 -c "...sys.stdin.read()..."` ->
+# "can't decode byte 0xc3 in position 3: unexpected end of data".
 PAYLOAD="$(printf '%s' "$BODY_TAIL" | python3 -c "
 import json, sys
 print(json.dumps({
     'domain': 'fleet',
     'severity': 'log',
     'title': 'kubelab-maintenance failed on {{ inventory_hostname }}',
-    'body': sys.stdin.read(),
+    'body': sys.stdin.buffer.read().decode('utf-8', 'replace'),
     'source': '{{ inventory_hostname }}/kubelab-maintenance-notify',
 }))
 ")"
@@ -37,7 +45,18 @@ print(json.dumps({
 # `systemctl status kubelab-maintenance-notify.service` / its journal --
 # rather than silently swallowed. No OnFailure= on this unit itself, so
 # there is no retry loop.
-curl -sS -f -X POST "https://{{ maintenance_notify_domain }}/webhook/notify" \
+#
+# ANSIBLE-038: bounded timeouts. Without them curl uses its defaults and an
+# unreachable n8n stalls this unit until systemd's TimeoutStartSec=30 kills
+# it -- a 30s delay on the one path whose job is to report promptly.
+#
+# The token is expanded inside double quotes, which does NOT re-parse its
+# value: a secret file containing $(...) or backticks is passed through to
+# curl as a literal argv element, never executed. Verified by injecting both
+# forms into the secret file and confirming neither ran. Recorded because
+# this line reads like a shell-injection sink and is not one.
+curl -sS -f --connect-timeout 10 --max-time 15 \
+  -X POST "https://{{ maintenance_notify_domain }}/webhook/notify" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \

@@ -138,3 +138,11 @@ infra/k8s/overlays/*/middlewares/.rendered/
 
 # Git worktrees (parallel workspaces)
 .worktrees/
+
+# Adversarial-review transcripts (`dotf spec review`). The verdict in review.md
+# IS committed; the transcript is the reviewer's full tool-call log and runs to
+# ~90MB for one spec, because it embeds every file the reviewer read. Committing
+# one would push the repo past GitHub's 50MB warning on a single file, and no
+# archived spec in specs/archive/ carries one. Kept local as the record of HOW a
+# verdict was reached; re-derivable by re-running the review.
+specs/**/review-transcript.jsonl
