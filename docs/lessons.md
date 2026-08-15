@@ -3941,3 +3941,48 @@ ADR-037 sets staging's Argo CD Application to `syncPolicy.automated.selfHeal: fa
 - **`kubectl get <resource> --show-managed-fields` is the fastest way to ask "did something else touch this after me, and when."** Faster than diffing YAML by hand, and it names the actor — here, the difference between "my apply didn't work" and "something reverted it 25 seconds later" was one flag away.
 
 **Tags:** `#kubernetes` `#argocd` `#adr-037` `#staging` `#sync-policy` `#sec-004` `#gotcha`
+
+---
+
+### [2026-08-15] A local `kubectl diff` against an Argo CD-managed cluster describes a merge that will never happen
+
+**Context:** prod was reporting OutOfSync and the question was narrow — does this need `make deploy-k8s ENV=prod`, or is Argo CD going to reconcile it on its own? The instinct was to look at the diff: `kubectl kustomize infra/k8s/overlays/prod | kubectl diff -f -`.
+
+**Problem:** the diff came back enormous — every one of ~90 resources showed its `argocd.argoproj.io/tracking-id` annotation being removed. Read literally, prod had drifted wholesale and needed an urgent apply. That conclusion was wrong, and it was acted on before it was checked.
+
+`kubectl diff` without `--server-side` simulates a **client-side** apply, whose three-way merge is computed against the `last-applied-configuration` annotation. Fields owned by a *different* field manager are absent from that baseline, so the simulation shows them being deleted. The tracking annotation is written by `argocd-controller`, never by the local tooling — hence it "disappears" on every single resource. Nothing had drifted; the diff was reporting the difference between two apply strategies.
+
+The repo's real deploy path never takes that strategy: `toolkit/cli/infra.py:784` sets `--server-side --force-conflicts --field-manager=kubelab-toolkit`, so the actual apply negotiates ownership field by field and leaves another manager's fields alone. The diff was answering a question about a code path that is never executed.
+
+Real drift, once measured properly, was **one** resource out of 91.
+
+**Solution:** ask the component that owns the comparison. `kubectl get application kubelab-prod -n argocd -o json` and read `status.resources[]` — Argo CD's own per-resource desired-vs-live verdict, computed by the controller doing the syncing. It named the single offending object immediately, and it is available without touching the spoke at all.
+
+**Rule:**
+- **On a cluster reconciled by Argo CD, the authority on "is this in sync" is the Application's `status.resources[]` on the hub — not a local diff.** A client-side diff has no way to know what another controller owns, so it cannot distinguish drift from co-ownership.
+- **If you do run `kubectl diff` against server-side-applied resources, pass the flags the real apply uses** (`--server-side --field-manager=...`). Otherwise the output is a faithful description of an apply nobody will ever perform.
+- **An annotation or label showing up as a deletion on *every* resource is the signature of this error, not of drift.** Genuine drift is lumpy — a handful of objects, usually related. Uniformity across the whole overlay means the comparison itself is misconfigured.
+
+**Tags:** `#kubernetes` `#argocd` `#server-side-apply` `#field-manager` `#kubectl-diff` `#gotcha`
+
+---
+
+### [2026-08-15] A retired PVC stays pinned by *completed* Job pods — and the CronJob's retention setting is what pins it
+
+**Context:** ADR-061 moved Gitea off K3s and onto the Beelink, and the `gitea-data` PVC was duly removed from the manifests. Prod then sat permanently OutOfSync on exactly that one resource, for days, with Argo CD retrying the prune and never completing it.
+
+**Problem:** the manifest was already correct — nothing in git referenced the PVC, and the desired state was unambiguous. The object was in `Terminating` with a `deletionTimestamp` set and simply would not go.
+
+The blocker was the `kubernetes.io/pvc-protection` finalizer, which Kubernetes holds on a PVC while **any pod** still references it in its spec. "Any pod" includes pods in a terminal phase: three `pvc-backup-*` pods in `Succeeded`, from Jobs that predated the cutover, still carried the claim. They were not leftovers from a crash — `infra/k8s/overlays/prod/backup.yaml:27` sets `successfulJobsHistoryLimit: 3`, so the CronJob is *configured* to keep exactly three completed Jobs around for inspection. The retention knob that exists for debuggability and the thing holding the volume hostage are the same fact viewed from two sides. There is no `ttlSecondsAfterFinished` on that CronJob, so nothing ages them out either.
+
+The second-order cost is the one that earned a ticket. An environment pinned at "1 of 91 OutOfSync, permanently" retrains you to read OutOfSync as background noise — so the next *genuine* drift arrives invisible. The drift detector was effectively down while looking green enough to ignore (kubelab#1072).
+
+**Solution:** delete the three completed Jobs (which removes their pods); the finalizer clears itself and Argo CD immediately completed the prune it had been retrying. Prod went to 90/90 Synced. Note this destroys the volume's data — here, the pre-cutover Gitea state — so it ran on the operator's explicit authorization, not as routine cleanup.
+
+**Rule:**
+- **A PVC stuck in `Terminating` is almost never about the PVC.** Find what still references it, and search pods in *every* phase — `Succeeded` and `Failed` pods hold the finalizer exactly as firmly as `Running` ones.
+- **Retiring a stateful service is not finished when its manifest is deleted.** Whatever referenced its volume outlives the service — backup Jobs above all, since their entire purpose is to touch the storage.
+- **A retained Job is a live reference, not a record.** If Jobs mount PVCs, `successfulJobsHistoryLimit` is a storage-lifecycle setting, not just a debugging convenience; pair it with `ttlSecondsAfterFinished` so retention has a bound.
+- **Treat a permanently OutOfSync environment as an outage of the drift detector**, not as a cosmetic annoyance to be filtered out mentally. One stuck resource is enough to hide every one that follows.
+
+**Tags:** `#kubernetes` `#pvc` `#finalizer` `#argocd` `#cronjob` `#adr-061` `#gitea` `#gotcha`
