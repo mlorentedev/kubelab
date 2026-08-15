@@ -46,7 +46,11 @@ created: "2026-08-14"
 
 ### Part 5 — prod (post-merge)
 
-- [ ] [AC1] [AC2] After merge: `make deploy-k8s ENV=prod`, confirm `rate-limit` Middleware exists and every prod IngressRoute references it (same coverage test from Part 3, run against the prod overlay).
+- [x] [AC1] [AC2] After merge: confirm `rate-limit` Middleware exists and every prod IngressRoute references it. ✓ 2026-08-15 — `make test-infra ENV=prod`: **40 passed, 10 skipped, 0 failures**, including all 5 of `tests/infra/test_rate_limit.py` (Middleware present, live values match `common.yaml`'s SSOT, `sourceCriterion.requestHost: true`, every live route covered). `make check-apps`: prod Synced/Healthy.
+
+> **This task's own instruction was wrong, and could not have been known to be wrong when written.** It said `make deploy-k8s ENV=prod`. That target would not have closed prod: 17 of prod's 18 routes were already carrying the middleware — Argo CD reconciled them on its own when #1084 merged — and the 18th, `argo.kubelab.live`, was in a manifest `deploy-k8s` never touches. `overlays/prod/argocd.yaml` was excluded from the prod overlay in its entirety because *one* of its three documents holds a `RESOLVE_AWS1_TAILSCALE_IP` placeholder, so Argo CD did not manage it and `make deploy-argocd` — a hub-lifecycle operation — was its only apply path. It ran with `middlewares=['crowdsec-bouncer', 'secure-headers']` while `kubelab-prod` reported `Synced` at the exact merge revision the whole time.
+>
+> Found by reading the live cluster rather than trusting the static coverage test, which passed throughout because the *file* was correct. Fixed in **#1089** by splitting the manifest so only the EndpointSlice stays out-of-band; the route then reached prod through GitOps on the next sync, with no manual deploy at all. That PR also added two guards on the two axes this spec had left open: `tests/test_orphan_manifests.py` (a manifest applied by nothing) and `tests/infra/test_rate_limit.py` (git says yes, the cluster says no). Residual — the EndpointSlice is inherently unreconcilable, since its value is not in git — recorded on #680.
 
 ## Closing
 
