@@ -396,7 +396,10 @@ class K8sGenerator(BaseGenerator):
         Returns:
             List of middleware references
         """
-        middlewares = ["secure-headers", "error-pages"]
+        # rate-limit sits between secure-headers and error-pages, matching the
+        # VPS's own [secure-headers@file, rate-limit@file, error-pages] chain
+        # (SEC-004 / kubelab#970). Blanket -- no enable_auth-style opt-out.
+        middlewares = ["secure-headers", "rate-limit", "error-pages"]
         if enable_auth:
             authelia_name = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia")
             middlewares.append(f"{authelia_name}-auth@kubernetescrd")

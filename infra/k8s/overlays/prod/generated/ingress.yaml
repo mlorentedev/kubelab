@@ -19,6 +19,7 @@ spec:
           port: 8080
       middlewares:
         - name: secure-headers
+        - name: rate-limit
         - name: error-pages
   tls:
     certResolver: letsencrypt
@@ -43,6 +44,7 @@ spec:
           port: 8080
       middlewares:
         - name: secure-headers
+        - name: rate-limit
         - name: error-pages
   tls:
     certResolver: letsencrypt
