@@ -56,7 +56,7 @@ created: "2026-08-14"
 - [x] Lint passes ✓ 2026-08-15 — yamllint, markdownlint, pre-commit all clean
 - [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-15
 - [x] `verification.md` filled in ✓ 2026-08-15
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder ✓ 2026-08-15 — kubelab#1084
 
 ## Machine-readable features
 
