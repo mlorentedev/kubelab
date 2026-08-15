@@ -424,10 +424,17 @@ edge:
     tls_cipher_suite_4: TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
     tls_cipher_suite_5: TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
     tls_cipher_suite_6: TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
-    # Rate limiting
+    # Rate limiting — VPS (Docker Compose Traefik, Ansible-rendered)
     rate_limit_average: 50
     rate_limit_burst: 25
     rate_limit_period: 1s
+    # Rate limiting — K3s (separate SSOT, deliberately not shared with the VPS
+    # keys above: measured against different traffic, and this lane can't
+    # touch infra/ansible/ to restructure the VPS's consumer safely. See
+    # specs/SEC-004-rate-limit-middleware/proposal.md Risks.)
+    rate_limit_k3s_average: 30
+    rate_limit_k3s_burst: 150
+    rate_limit_k3s_period: 1s
     # ACME
     acme_server: "https://acme-v02.api.letsencrypt.org/directory"
     acme_domains:

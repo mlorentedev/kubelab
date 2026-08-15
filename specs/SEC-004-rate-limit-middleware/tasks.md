@@ -13,7 +13,7 @@ created: "2026-08-14"
 >
 ## Setup
 
-- [ ] Branch: fresh `feat/SEC-004-rate-limit-middleware` off `origin/master` (this spec's own docs work landed via a separate `docs/*` PR; implementation starts clean).
+- [x] Branch: fresh `feat/SEC-004-rate-limit-middleware` off `origin/master` (this spec's own docs work landed via a separate `docs/*` PR; implementation starts clean). ✓ 2026-08-15
 - [x] `proposal.md` is complete and acceptance criteria are testable — the one `[AGENT-DRAFT]` tag (blanket vs. selective scope) is resolved. ✓ 2026-08-14
 - [x] No open questions left in `proposal.md` "Risks / open questions" ✓ 2026-08-14 — values measured against real staging traffic, the AC1 key-naming conflict with the VPS's own keys resolved by the user, `sourceCriterion` and shared-vs-per-router bucket semantics pinned as explicit implementation tasks below rather than left implicit.
 
@@ -21,26 +21,28 @@ created: "2026-08-14"
 
 ### Part 1 — the Middleware object and its SSOT keys, proven to exist and match
 
-- [ ] [P] [AC1] Add `edge.traefik.rate_limit_k3s_{average,burst,period}` to `common.yaml` (siblings of the existing VPS-only `edge.traefik.rate_limit_*` keys — see `proposal.md` Risks for why they can't be shared). Starting values from the 2026-08-14 measurement: `average: 30`, `burst: 150`, `period: 1s` — subject to revision if Part 4's burst drill says otherwise.
-- [ ] [AC1] Add `infra/k8s/base/edge/rate-limit.yaml` — a `Middleware` object named `rate-limit`, mirroring `secure-headers.yaml`'s static-manifest pattern (values hand-set to match the new common.yaml keys, not templated — there is no generator precedent for Middleware *values* in this codebase, only for the per-route *list* via `_build_middlewares()`). Explicit `sourceCriterion: { requestHost: {} }` — do not rely on Traefik's default client-IP keying, which would happen to look "global" only because of klipper-lb's masquerade (#1067); see Risks. Register in `base/kustomization.yaml`'s `resources:`.
-- [ ] [P] [AC1] Add a static test (e.g. `tests/infra/test_rate_limit_middleware.py`) asserting `rate-limit.yaml`'s `average`/`burst`/`period` match `common.yaml`'s `edge.traefik.rate_limit_k3s_*` — the "no hardcoded duplicate" guarantee for a manifest that (like `secure-headers.yaml`) isn't generator-templated. **Fails now** (file doesn't exist).
-- [ ] [AC1] Deploy to staging (`make deploy-k8s ENV=staging`), confirm the Middleware object exists (`kubectl get middleware rate-limit -n kubelab`) and the new test passes.
+- [x] [P] [AC1] Add `edge.traefik.rate_limit_k3s_{average,burst,period}` to `common.yaml` (siblings of the existing VPS-only `edge.traefik.rate_limit_*` keys — see `proposal.md` Risks for why they can't be shared). Starting values from the 2026-08-14 measurement: `average: 30`, `burst: 150`, `period: 1s`. ✓ 2026-08-15 — confirmed by Part 4's burst drill, no revision needed.
+- [x] [AC1] Add `infra/k8s/base/edge/rate-limit.yaml` — a `Middleware` object named `rate-limit`, mirroring `secure-headers.yaml`'s static-manifest pattern. Register in `base/kustomization.yaml`'s `resources:`. ✓ 2026-08-15 — **`sourceCriterion.requestHost: {}` from the proposal was wrong**: a dry-run apply rejected it (`expected boolean, got &{map[]}`); Traefik's CRD wants `requestHost: true`. Caught before any real cluster mutation, not after. `tests/test_rate_limit_middleware.py` (not `tests/infra/`, following this repo's actual `tests/test_k8s_generator_*.py` naming convention rather than the draft path above).
+- [x] [P] [AC1] Static test asserting `rate-limit.yaml`'s values match `common.yaml`'s `edge.traefik.rate_limit_k3s_*` (mirrors `tests/test_spoke_rbac_covers_manifests.py`'s no-kubectl pattern). ✓ 2026-08-15
+- [x] [AC1] Deploy to staging, confirm the Middleware object exists and values are live. ✓ 2026-08-15
 
 ### Part 2 — generator change, paired with the regenerated file (CI-GATE-002)
 
-- [ ] [P] [AC2] Add a test asserting `_build_middlewares()` includes `"rate-limit"` in every returned list (extend whatever existing test already covers that function, e.g. alongside its `secure-headers`/`error-pages` assertions). **Fails now.**
-- [ ] [AC2] [AC4] Add `"rate-limit"` to the `middlewares` list in `_build_middlewares()` (`toolkit/features/generator_k8s.py:399`). Same commit: regenerate `infra/k8s/overlays/{staging,prod}/generated/ingress.yaml` (`make deploy-k8s` or whatever target triggers generation — confirm via `make config-check-drift`, which must stay green in the same commit per CI-GATE-002/SEC-K8S-001).
+- [x] [P] [AC2] Add a test asserting `_build_middlewares()` includes `"rate-limit"` in every returned list. ✓ 2026-08-15 — `tests/test_k8s_generator_middlewares.py` (no prior test existed for this function at all).
+- [x] [AC2] [AC4] Add `"rate-limit"` to the `middlewares` list in `_build_middlewares()` (`toolkit/features/generator_k8s.py:399`, positioned between `secure-headers` and `error-pages`, matching the VPS's own ordering). Same commit: regenerated `infra/k8s/overlays/{staging,prod}/generated/ingress.yaml` via `make config-generate ENV=<env>`. ✓ 2026-08-15 — `make config-check-drift ENV=staging` and `ENV=prod` both green after commit.
 
 ### Part 3 — hand-written IngressRoutes, blanket
 
-- [ ] [AC2] Add `rate-limit` to the `middlewares:` list of every hand-written `IngressRoute` not covered by Part 2's generator (17 files as of 2026-08-14 — re-grep `kind: IngressRoute` across `infra/k8s/base/` and `infra/k8s/overlays/` before starting, this list rots): `base/edge/errors.yaml`, `base/external/uptime-kuma.yaml`, `base/services/{homepage,minio,loki,grafana,authelia,n8n}.yaml`, `overlays/prod/{patches,gitea,traefik-dashboard,headscale,redirect-kubelab,argocd}.yaml`, `overlays/staging/{traefik-dashboard,pihole,redirect-kubelab}.yaml`. Position consistently with each route's existing `secure-headers`/`error-pages`/optional-auth chain per the ordering note in `proposal.md` Risks — do not use this task to reorder anything else.
-- [ ] [P] [AC2] Add or extend a static test asserting every `IngressRoute` across base + both overlays' rendered output includes `rate-limit` in its middlewares (a `kubectl kustomize`-based coverage test, same spirit as `tests/test_spoke_rbac_covers_manifests.py`'s static-coverage pattern — catches the next new route that forgets it, not just today's 17). **Fails now.**
+- [x] [AC2] Add `rate-limit` to the `middlewares:` list of every hand-written `IngressRoute` (re-grepped fresh 2026-08-15, list matched the 2026-08-14 draft exactly — 17 files, 18 route entries). ✓ 2026-08-15 — `overlays/prod/patches.yaml` alone carried 9 of the 18 (its strategic-merge routes fully replace the base's middlewares list). Two routes (base + prod `catch-all`) had no middlewares list at all before this.
+- [x] [P] [AC2] Static coverage test, `tests/test_rate_limit_coverage.py` — reads manifest files directly (no `kubectl kustomize`, mirroring `tests/test_spoke_rbac_covers_manifests.py`'s CI-runner-friendly pattern rather than the kustomize-based approach originally drafted here). ✓ 2026-08-15 — cross-checked against the actual `kubectl kustomize` output for both envs too (14 staging + 16 prod rendered routes, zero missing), not just the source files.
 
 ### Part 4 — the burst drill, exercised rather than assumed
 
-- [ ] [AC3] In staging, exhaust the Homepage route's bucket with a burst above the configured threshold and confirm HTTP 429 (`curl`-loop or equivalent — bounded, staging-only). Then, **without waiting for refill**, immediately probe a *different* route (e.g. `grafana.staging.kubelab.live`) — a 429 there proves the bucket is shared across routers, a clean 200 proves per-router. Record which in `verification.md`; this determines what "blanket application" actually guarantees and may need a `proposal.md` correction if it contradicts the assumed design.
-- [ ] [AC3] Wait for the bucket to refill per the configured `average`/`period` (or restart the drill against a route not yet exhausted), then confirm a clean request passes under threshold — per the CodeRabbit-flagged isolation requirement in `proposal.md`'s AC3, this must not inherit token state from the first half of the drill.
-- [ ] [AC3] If Part 4's results contradict the draft `average: 30 / burst: 150` values from Part 1 (e.g., real concurrent-session traffic proves them too tight or needlessly loose), revise the common.yaml keys and redeploy before closing — the values are a draft until this drill confirms them, not before.
+- [x] [AC3] In staging, exhausted the Homepage route's bucket (`ab -n 300 -c 100` against `home.staging.kubelab.live`) — 88/300 got HTTP 429, 212/300 got 200 (expected ≈223 admits at burst=150 + ~2.45s refill at average=30/s; 212 observed, consistent). Immediately probed `grafana.staging.kubelab.live` (different route): 5/5 clean 302 (its normal unauthenticated redirect, not 429). Then burst-tested grafana directly to rule out "exempt route" as the explanation: 104/300 got 429 under its own load. **Confirmed: per-router, independent buckets, not shared.** ✓ 2026-08-15 — full numbers and the rationale for why per-router is the better outcome in `proposal.md` Risks.
+- [x] [AC3] Confirmed a clean request passes below threshold, **discriminated against a genuinely-attached limiter** (not just "some time passed") — chained deploy → read live middlewares list → single probe in one command, avoiding the race in the note below. 200 OK. ✓ 2026-08-15
+- [x] [AC3] Draft values confirmed by the drill, no revision needed: `average: 30`, `burst: 150`, `period: 1s`. ✓ 2026-08-15
+
+> **Unplanned finding, filed as #1083**: the first two drill attempts silently lost their applied Middleware mid-test — staging's Argo CD Application (`selfHeal: false` per ADR-037) still auto-syncs on *any new git revision*, and master moved (merges from parallel worktree lanes) during this session. `kubectl get application kubelab-staging -o json --show-managed-fields` on the affected `IngressRoute` showed `argocd-controller Update` ~25-30s after the manual apply, reverting it to master's state. This is not `selfHeal: false` malfunctioning — the flag only suppresses *drift* reconciliation, not *new-revision* sync — but it is an unstated gap in ADR-037's "staging deploys persist" premise on multi-lane days. Root-caused with a read-only `kubectl get application ... status.history` check (not fixed here — separate ticket, separate scope). Also retroactively explains two earlier zero-429 `ab` runs during this same session: the middleware had already been reverted minutes before those requests were sent, so they are not evidence against the limiter.
 
 ### Part 5 — prod (post-merge)
 
@@ -48,13 +50,13 @@ created: "2026-08-14"
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-08-15
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-08-15 — all 4 commands run and pass
+- [x] Type checks pass ✓ 2026-08-15 (no new typed code — YAML + generator list literal only)
+- [x] Lint passes ✓ 2026-08-15 — yamllint, markdownlint, pre-commit all clean
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-08-15
+- [x] `verification.md` filled in ✓ 2026-08-15
+- [x] PR opened referencing this spec folder ✓ 2026-08-15 — kubelab#1084
 
 ## Machine-readable features
 

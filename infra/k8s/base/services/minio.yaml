@@ -162,6 +162,7 @@ spec:
       kind: Rule
       middlewares:
         - name: secure-headers
+        - name: rate-limit
         - name: error-pages
         - name: crowdsec-bouncer
       services:
@@ -188,6 +189,7 @@ spec:
       kind: Rule
       middlewares:
         - name: secure-headers
+        - name: rate-limit
         - name: error-pages
         - name: crowdsec-bouncer
       services:
