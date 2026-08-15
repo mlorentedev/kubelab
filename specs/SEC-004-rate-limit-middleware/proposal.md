@@ -20,13 +20,12 @@ Every existing IngressRoute on K3s Traefik (base and both overlays, static and g
 
 ## What
 
-A shared `rate-limit` Traefik Middleware, sourced from the existing `edge.traefik.rate_limit_{average,burst,period}` SSOT in `common.yaml`, applied to every public-facing K3s IngressRoute alongside `secure-headers`/`crowdsec-bouncer`/`error-pages`. **Scoped to a single global bucket, not per-client**, per the investigation below — this is a volumetric backstop protecting origin capacity, not a per-abuser throttle.
+A shared `rate-limit` Traefik Middleware, sourced from the existing `edge.traefik.rate_limit_{average,burst,period}` SSOT in `common.yaml`, applied **blanket — every K3s IngressRoute, VPN-only routes included** (Loki, pihole, argocd, headscale, n8n) — alongside `secure-headers`/`crowdsec-bouncer`/`error-pages`. **Scoped to a single global bucket, not per-client**, per the investigation below — this is a volumetric backstop protecting origin capacity, not a per-abuser throttle. Blanket vs. selective (public-only) was an open question in this proposal; confirmed blanket by the user on 2026-08-14 — simpler, consistent with staging-mirrors-prod, and the shared bucket is harmless-if-sized-right on VPN-only routes rather than adding a per-route decision that rots.
 
 ## Out of scope
 
 - Per-client / per-IP rate limiting — blocked on #1067 (klipper-lb MASQUERADEs every client's source IP to an internal pod-CIDR address before Traefik ever sees it; a per-IP bucket today would either share one bucket across all real clients, or bucket by the wrong, unstable internal IP). Revisit once #1067 lands a real client-IP signal (most likely a MetalLB migration).
 - Any change to the VPS Docker Compose Traefik's existing `rate-limit@file` middleware — that one already works correctly and is untouched.
-- Rate-limiting VPN-only / Tailscale-only routes (Loki, pihole, argocd, headscale, n8n if VPN-gated) — exposure there is the tailnet, not the internet; applying the same global bucket to them is harmless but adds no protection. `[AGENT-DRAFT — review before archive]` recommend blanket application (simpler, consistent with staging-mirrors-prod, and the shared bucket is harmless-if-sized-right) over selective (public routes only, tighter but adds a per-route decision that rots) — needs explicit user confirmation before `tasks.md` is frozen, not a silent default.
 
 ## Risks / open questions
 
@@ -38,7 +37,7 @@ A shared `rate-limit` Traefik Middleware, sourced from the existing `edge.traefi
 ## Acceptance criteria
 
 - [ ] A `rate-limit` Middleware object exists (mirrors `secure-headers.yaml`'s pattern), values sourced from `edge.traefik.rate_limit_*` in `common.yaml`, no hardcoded duplicate.
-- [ ] Every public-facing K3s IngressRoute (base + generated `ingress.yaml` for both envs) includes `rate-limit` in its middlewares list, positioned consistently with the existing `secure-headers`/`error-pages`/optional-auth chain.
+- [ ] Every K3s IngressRoute, blanket — public and VPN-only alike (base + generated `ingress.yaml` for both envs) — includes `rate-limit` in its middlewares list, positioned consistently with the existing `secure-headers`/`error-pages`/optional-auth chain.
 - [ ] A synthetic burst test (staging) proves the limit fires above threshold (HTTP 429) and passes clean below it — exercised, not assumed, matching this session's established verification discipline (OBS-010's `max_over_time`→`last_over_time` catch was found exactly this way). The clean-below-threshold case must not inherit token-bucket state consumed by the burst case: either wait for the bucket to refill (per the configured `average`/`period`) between the two runs, or exercise them against an isolated limiter fixture, so a false 429 from bucket exhaustion can't be mistaken for a real failure.
 - [ ] `make config-check-drift` stays green after the `_build_middlewares()` change — regenerated `ingress.yaml` for both envs is part of the same commit as the generator change.
 
