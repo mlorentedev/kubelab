@@ -1,0 +1,29 @@
+---
+# Traefik Middleware: volumetric rate limit applied to every K3s IngressRoute.
+# Source of truth for values: edge.traefik.rate_limit_k3s_* in common.yaml
+# (deliberately separate from the VPS's own edge.traefik.rate_limit_* — see
+# specs/SEC-004-rate-limit-middleware/proposal.md Risks).
+#
+# Global by design, not per-client (SEC-004 / kubelab#970): klipper-lb
+# MASQUERADEs every client's source IP to an internal pod-CIDR address before
+# Traefik sees it (kubelab#1067), so a per-client sourceCriterion would either
+# collapse everyone into one bucket or key on an unstable internal address.
+# sourceCriterion.requestHost makes the "global" behavior a deliberate choice
+# rather than an accident of that bug — it must not silently change once
+# #1067 is fixed and real client IPs reappear.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  rateLimit:
+    average: 30
+    burst: 150
+    period: 1s
+    sourceCriterion:
+      requestHost: {}
