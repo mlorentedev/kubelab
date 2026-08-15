@@ -3832,7 +3832,7 @@ Recovery was cheap only by accident — the edits had been applied by a script r
 
 ### [2026-08-14] `max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`
 
-**Context:** OBS-010 — two Grafana alert rules (`obs010-quota-requests`/`-limits`) on `kubelab` namespace memory utilization, `for: 5m` so a rules should only fire on a *sustained* breach, not a momentary one during a routine deploy restart.
+**Context:** OBS-010 — two Grafana alert rules (`obs010-quota-requests`/`-limits`) on `kubelab` namespace memory utilization, `for: 5m` so the rules should only fire on a *sustained* breach, not a momentary one during a routine deploy restart.
 
 **Problem:** the surge-drill acceptance criterion — a normal `make deploy-k8s` + rollout restart must NOT fire the alert — failed for real on its first live run. The query was `max_over_time({container="quota-watcher"} | json | unwrap pct [10m]) > 80`. That function returns the *peak* value observed anywhere inside the 10-minute lookback window, not the current value — so a single transient spike (the surge itself, ~88% for well under a minute) stayed visible to every evaluation for up to 10 minutes after the real value had already dropped back under 71%. `for: 5m` requires the query result to stay above threshold across multiple evaluations, but with `max_over_time` the *query result itself* is an artifact of window memory, not of present reality — the sustain check was satisfied by the window, not by anything actually sustained. Caught by watching the rule transition `inactive` → `pending` → **`firing`** live during the drill (a 15-minute background poll of the rules API), then cross-checking the raw Loki log lines directly and finding the real value had already recovered to 70.54% within 5 minutes — the rule was alerting on a ghost.
 
@@ -3857,7 +3857,7 @@ A second surprise on the same incident: restarting the Grafana pod (to deploy th
 
 The actual cause sits one layer below kube-proxy entirely: K3s's built-in ServiceLB (`klipper-lb`) is not a real load balancer, it is a per-node `iptables` script. Reading its container logs directly (`kubectl logs <svclb-pod> -c lb-tcp-443`) showed the exact rules it installs for every `LoadBalancer` Service:
 
-```
+```shell
 iptables -t nat -I PREROUTING -p TCP --dport 443 -j DNAT --to <service-clusterIP>:443
 iptables -t nat -I POSTROUTING -d <service-clusterIP>/32 -p TCP -j MASQUERADE
 ```
@@ -3899,3 +3899,26 @@ The manifest is not wrong, and on a fresh cluster it produces exactly the intend
 - **Count EndpointSlices per Service after any switch to the external-service pattern.** `kubectl get endpointslice -l kubernetes.io/service-name=<svc>` must return exactly the hand-written one; a second, controller-managed slice is the tell that the Service still has a selector.
 
 **Tags:** `#kubernetes` `#service` `#endpointslice` `#kubectl-apply` `#cutover` `#adr-061` `#gotcha`
+
+---
+
+### [2026-08-14] An unpinned `:latest` image took down the dashboard the same day upstream shipped a major version
+
+**Context:** SEC-004's rate-limit values need a real request-rate measurement, so before writing any Middleware, the plan was to reload the Homepage cockpit in staging and read the burst off Traefik's access log — the same diagnostic pattern already used earlier in this session. The page came back `503` instead.
+
+**Problem:** both Homepage pods were crash-looping. `kubectl describe` showed `Readiness probe failed: HTTP probe failed with statuscode: 400`; the pod's own logs explained why: `Host validation failed for: 10.42.0.99:3000. Hint: Set the HOMEPAGE_ALLOWED_HOSTS environment variable to allow requests from this host / port.` kubelet's `httpGet` probes hit the pod's own IP directly — `10.42.0.99:3000` — but Homepage (a Next.js app) validates the incoming `Host` header against `HOMEPAGE_ALLOWED_HOSTS`, which only ever listed the two public domains. A probe request's `Host` header is whatever the destination IP:port is, so it was never going to match, and every probe got HTTP 400 → CrashLoopBackOff → the whole dashboard down.
+
+The manifest pins nothing: `image: ghcr.io/gethomepage/homepage:latest`. Checking prod's *running* pod against upstream's release list explained the timing precisely — prod's pod was 18h old (started well before today), and `gethomepage/homepage` shipped `v2.0.0` (a new Next.js major, plus a new built-in auth gate) hours before staging's pod restarted and pulled it fresh. Every other third-party image in this repo (n8n, authelia, loki, minio, crowdsec, redis...) is pinned through the `apps.services.*.image` SSOT in `common.yaml` and synced into `kustomization.yaml`'s `images:` transformer by `sync_k8s_images.py` — Homepage was the one service that had never been brought into that pattern, left on a floating tag directly in the base manifest.
+
+**Solution:** two independent fixes, both required:
+1. Both probes now send an explicit `Host` header that's already in `HOMEPAGE_ALLOWED_HOSTS` (`httpHeaders: [{name: Host, value: home.staging.kubelab.live}]`) — makes the probe's request match the allowlist regardless of which pod IP it landed on.
+2. Brought Homepage's image into the existing pinning SSOT: `apps.services.observability.homepage.image: ghcr.io/gethomepage/homepage:v1.13.2` in `common.yaml` (the last release before the `v2.0.0` jump — matches prod's empirically-known-good state, and avoids adopting the new unconfigured auth gate mid-incident), added to `sync_k8s_images.py`'s `IMAGE_SOURCES`, regenerated `kustomization.yaml` via `make sync-k8s-images`.
+
+Fix 1 alone would have restored the dashboard on `v2.0.0` — but that version's behavior (new auth gate, whatever else the major bump changed) was never evaluated, so shipping it by accident on the next pod restart was still live risk. Fix 2 makes the whole incident non-recurring until a version bump is deliberate.
+
+**Rule:**
+- **`:latest` is not a version, it's a promise that the next pod restart might run different code than the last one** — a node drain, an OOM kill, or a routine rollout can all trigger a fresh pull. If every other image in the repo is pinned through one SSOT and one is not, that's the one that will break first and hardest, because nothing will have exercised the new version before it lands.
+- **A Kubernetes `httpGet` probe sends whatever Host the destination IP:port implies — never the app's real hostname.** Any app that validates the `Host` header (Next.js's `allowedHosts`, and increasingly common elsewhere as a DNS-rebinding defense) will reject kubelet's own health checks unless the probe explicitly overrides it with `httpHeaders: [{name: Host, value: ...}]`. Look for this class of failure whenever a probe starts failing right after an app's base image moves, with no change to the app's own manifest.
+- **When a live pod is healthy and a sibling pod of the same Deployment is crash-looping, diff what's actually different, not just what changed in git** — here, nothing in the repo changed; the two pods differed only in which real-world instant they last pulled `:latest`.
+
+**Tags:** `#kubernetes` `#homepage` `#image-pinning` `#liveness-probe` `#next.js` `#sec-004` `#gotcha`
