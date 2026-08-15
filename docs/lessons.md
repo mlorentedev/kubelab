@@ -3941,3 +3941,151 @@ ADR-037 sets staging's Argo CD Application to `syncPolicy.automated.selfHeal: fa
 - **`kubectl get <resource> --show-managed-fields` is the fastest way to ask "did something else touch this after me, and when."** Faster than diffing YAML by hand, and it names the actor — here, the difference between "my apply didn't work" and "something reverted it 25 seconds later" was one flag away.
 
 **Tags:** `#kubernetes` `#argocd` `#adr-037` `#staging` `#sync-policy` `#sec-004` `#gotcha`
+
+---
+
+### [2026-08-15] A local `kubectl diff` against an Argo CD-managed cluster describes a merge that will never happen
+
+**Context:** prod was reporting OutOfSync and the question was narrow — does this need `make deploy-k8s ENV=prod`, or is Argo CD going to reconcile it on its own? The instinct was to look at the diff: `kubectl kustomize infra/k8s/overlays/prod | kubectl diff -f -`.
+
+**Problem:** the diff came back enormous — every one of ~90 resources showed its `argocd.argoproj.io/tracking-id` annotation being removed. Read literally, prod had drifted wholesale and needed an urgent apply. That conclusion was wrong, and it was acted on before it was checked.
+
+`kubectl diff` without `--server-side` simulates a **client-side** apply, whose three-way merge is computed against the live object's `kubectl.kubernetes.io/last-applied-configuration` annotation — not against `managedFields`. The rule it follows: a field present in that annotation but absent from the local manifest is proposed for deletion, while a field absent from *both* is left alone. Argo CD's applies write a last-applied configuration that includes `argocd.argoproj.io/tracking-id`; the manifest rendered locally from the overlay does not carry that annotation. So on every resource it lands in exactly the "present there, absent here" case. Nothing had drifted; the diff was reporting the difference between two apply strategies.
+
+The repo's real deploy path never takes that strategy: `toolkit/cli/infra.py:784` sets `--server-side --force-conflicts --field-manager=kubelab-toolkit`. Server-side apply reasons over `managedFields` instead, and leaves fields the manifest does not submit untouched. `--force-conflicts` is not a free pass — it takes ownership of any field the manifest *does* submit and another manager owns, resolving the conflict by winning it. That is safe here only because the tracking annotation is never submitted in the first place. The diff was answering a question about a code path that is never executed.
+
+Real drift, once measured properly, was **one** resource out of 91.
+
+**Solution:** ask the component that owns the comparison. `kubectl get application kubelab-prod -n argocd -o json` — **pinned to the hub** with an explicit `--kubeconfig` or `--context`, since the Application object lives there and a current context aimed at a spoke returns the wrong answer or nothing at all — and read `status.resources[]`. That is Argo CD's own per-resource desired-vs-live verdict, computed by the controller doing the syncing. It named the single offending object immediately, without touching the spoke.
+
+**Rule:**
+- **On a cluster reconciled by Argo CD, the authority on "is this in sync" is the Application's `status.resources[]` on the hub — not a local diff.** Pin the query to the hub explicitly; the object does not exist on the spoke you are asking about.
+- **If you do run `kubectl diff` against server-side-applied resources, pass the flags the real apply uses** (`--server-side --force-conflicts --field-manager=...`). Otherwise the output is a faithful description of an apply nobody will ever perform.
+- **An annotation or label showing up as a deletion on *every* resource is a cue that the comparison is misconfigured — not proof of it.** A shared manifest or a cluster-wide policy change can legitimately touch everything, so uniformity is ambiguous on its own; genuine drift is merely *usually* lumpy. Treat it as the signal to go confirm against `status.resources[]`, never as the conclusion.
+
+**Tags:** `#kubernetes` `#argocd` `#server-side-apply` `#field-manager` `#kubectl-diff` `#gotcha`
+
+---
+
+### [2026-08-15] A retired PVC stays pinned by *completed* Job pods — and the CronJob's retention setting is what pins it
+
+**Context:** ADR-061 moved Gitea off K3s and onto the Beelink, and the `gitea-data` PVC was duly removed from the manifests. Prod then sat permanently OutOfSync on exactly that one resource, for days, with Argo CD retrying the prune and never completing it.
+
+**Problem:** the manifest was already correct — nothing in git referenced the PVC, and the desired state was unambiguous. The object was in `Terminating` with a `deletionTimestamp` set and simply would not go.
+
+The blocker was the `kubernetes.io/pvc-protection` finalizer, which Kubernetes holds on a PVC while **any pod** still references it in its spec. "Any pod" includes pods in a terminal phase: three `pvc-backup-*` pods in `Succeeded`, from Jobs that predated the cutover, still carried the claim. They were not leftovers from a crash — `infra/k8s/overlays/prod/backup.yaml:27` sets `successfulJobsHistoryLimit: 3`, so the CronJob retains *up to* three successful Jobs, and their pods with them, for inspection. The retention knob that exists for debuggability and the thing holding the volume hostage are the same fact viewed from two sides. Nor does anything age them out: a per-Job TTL would have to be declared at `spec.jobTemplate.spec.ttlSecondsAfterFinished`, and that manifest does not configure one.
+
+The second-order cost is the one that earned a ticket. An environment pinned at "1 of 91 OutOfSync, permanently" retrains you to read OutOfSync as background noise — so the next *genuine* drift arrives invisible. The drift detector was effectively down while looking green enough to ignore (kubelab#1072).
+
+**Solution:** delete the three completed Jobs, which removes their pods. That drops the last references, the finalizer clears itself, and Argo CD completed the prune it had been retrying — prod went to 90/90 Synced.
+
+Be precise about which step is the dangerous one. Deleting the Jobs is **not** destructive: it touches neither the PVC nor its contents. What it does is unblock the PVC deletion that was already pending, and whether the backing storage goes with it depends on the PV's reclaim policy. *That* is the step that warrants verifying a backup first and getting explicit authorization — here it destroyed the pre-cutover Gitea state, on the operator's explicit call.
+
+**Rule:**
+- **A PVC stuck in `Terminating` is almost never about the PVC.** Find what still references it, and search pods in *every* phase — `Succeeded` and `Failed` pods hold the finalizer exactly as firmly as `Running` ones.
+- **Retiring a stateful service is not finished when its manifest is deleted.** Whatever referenced its volume outlives the service — backup Jobs above all, since their entire purpose is to touch the storage.
+- **A retained Job is a live reference, not a record.** If Jobs mount PVCs, `successfulJobsHistoryLimit` is a storage-lifecycle setting, not just a debugging convenience; pair it with `spec.jobTemplate.spec.ttlSecondsAfterFinished` so retention is bounded by time as well as by count.
+- **Treat a permanently OutOfSync environment as an outage of the drift detector**, not as a cosmetic annoyance to be filtered out mentally. One stuck resource is enough to hide every one that follows.
+
+**Tags:** `#kubernetes` `#pvc` `#finalizer` `#argocd` `#cronjob` `#adr-061` `#gitea` `#gotcha`
+
+### [2026-08-15] One placeholder document exiled a whole manifest from GitOps, and `Synced` said nothing
+
+**Context.** SEC-004 (#970) applied a `rate-limit` middleware to every K3s IngressRoute. PR #1084 merged, `kubelab-prod` reported `Synced`/`Healthy` at exactly that revision, the static coverage test (`tests/test_rate_limit_coverage.py`) passed, and CI was green. Part 5 of the spec — "confirm every prod route carries it" — looked like a formality.
+
+**Problem.** Prod's `argo.kubelab.live` route was running with `middlewares=['crowdsec-bouncer', 'secure-headers']`. No rate limit. It had been that way since the merge.
+
+`infra/k8s/overlays/prod/argocd.yaml` held three documents — a Service, an EndpointSlice, and the IngressRoute. Only the **EndpointSlice** was unpublishable: it carries `RESOLVE_AWS1_TAILSCALE_IP`, because aws1 is a Spot instance whose Tailscale IP rotates on replacement. But the *whole file* had been excluded from the prod overlay (#152) as a blunt instrument for that one field. So Argo CD never managed any of it, its only apply path was `make deploy-argocd` (a hub-lifecycle operation nobody had reason to run for a middleware change), and the edit sat in git, applied to nothing.
+
+**Why nothing reported it.** Three separate signals were all technically correct and all silent:
+
+- **`Synced` speaks only for managed resources.** An Argo CD Application compares live against desired for what is in its source. A resource outside the overlay is not "drifted" — it is not in the comparison at all. `Synced` is not a statement about the cluster; it is a statement about a subset of it.
+- **A static test that reads manifests tests git, not the cluster.** The file was correct. Every assertion about it passed, and would have kept passing forever.
+- **The live object's own `last-applied-configuration`** still showed the pre-SEC-004 middleware list, and it had no `argocd.argoproj.io/tracking-id` — the two facts that identify this state — but nothing was looking at them.
+
+**A wrong turn worth recording.** The first diagnosis was "implementation drift from ADR-047 D3", whose text says all three inline render sites migrate onto the `cluster_bootstrap` layer. The proposed fix was to add per-environment scoping (`envs:`) to that schema. Then `specs/TOOL-009-cluster-operator-bootstrap/tasks.md` T4 turned up: *"coredns is applied via the `cluster_bootstrap` loop; rpi3/aws1 EndpointSlices via a small toolkit command each"* — the split was a recorded decision, not drift, and the proposed fix would have contradicted it. **An ADR's prose can be narrower than it reads; the spec that implemented it is where the disambiguation lives.**
+
+**Fix (#1089).** Split the file so only the EndpointSlice stays out-of-band. The Service and IngressRoute joined the prod overlay — which is what `overlays/prod/headscale.yaml` (same Service + EndpointSlice + IngressRoute shape) already did, because the VPS IP is stable enough to commit. The route then reached prod through GitOps on the next sync, with no manual deploy and no new Makefile target.
+
+**Rules.**
+
+- **A file is not the unit of GitOps exclusion — a document is.** Before exiling a multi-document manifest, check which documents actually cannot be committed. Usually it is one.
+- **`Synced` is not "the cluster matches git."** It is "the resources this Application manages match git." Whenever the answer to "did the change arrive?" matters, ask what is *not* in the source before trusting the status.
+- **A guard that reads manifests cannot fail on this class of defect** — the manifest is the thing that is right. Pair it with one that reads the cluster (`tests/infra/test_rate_limit.py`) and one that fails when a manifest is applied by nothing at all (`tests/test_orphan_manifests.py`).
+- **Out-of-band manifests are legitimate; silent ones are not.** Where a resource genuinely cannot be committed, make it name the command that applies it, and assert that command still exists — otherwise the note outlives the target it describes.
+
+**Tags:** `#kubernetes` `#argocd` `#gitops` `#kustomize` `#traefik` `#sec-004` `#adr-047` `#gotcha`
+### [2026-08-15] A security finding's proposed fix can be worse than the bug it invents — reproduce before remediating
+
+**Context:** ANSIBLE-035's adversarial review returned three Minor findings against the maintenance notify script. One was filed under **Security**: `TOKEN="$(cat /opt/...-secret)"` followed by `curl -H "Authorization: Bearer ${TOKEN}"`, flagged as a shell-injection surface — "if the secret file were tampered with to contain `$(...)`, backticks, or shell metacharacters, injection is possible". Recommended fix: read the token via `curl --config <file>` instead.
+
+**The trap:** the finding is wrong, and applying its fix would have made the system less safe. Bash does not re-parse the *value* of a variable expanded inside double quotes — no command substitution, no word splitting, no globbing. Measured directly:
+
+```
+$ cat /tmp/tok-test
+$(touch /tmp/PWNED-should-not-exist)`touch /tmp/PWNED2-should-not-exist`
+$ TOKEN="$(cat /tmp/tok-test)"; set -- -H "Authorization: Bearer ${TOKEN}"
+  [Authorization: Bearer $(touch /tmp/PWNED-should-not-exist)`touch ...`]
+PWNED files created? -> 0
+```
+
+Passed through as a literal; nothing ran. The finding reasons by analogy with `eval`, which this path does not use. Meanwhile its remedy — `curl --config <file>` — would have written a live fleet-wide bearer token to a file on disk, to defend against an attack that does not exist.
+
+The **Security** label is what makes this dangerous. A Minor labelled *reliability* invites a cost/benefit argument; a Minor labelled *security* invites compliance, and "it's cheap, just apply it" is the path of least resistance for both a human and an agent.
+
+**Fix:** reproduce the exploit before writing the patch. Two of the three findings reproduced (a real `UnicodeDecodeError` from a byte-truncated UTF-8 sequence, and curl's missing timeouts) and were fixed; this one did not, and was refuted in writing on the ticket with the transcript above. A regression test now pins the property from the other direction — `test_token_value_is_not_shell_interpreted` fails if anyone later "hardens" the line into an `eval` or an unquoted expansion, which is where the risk actually lies.
+
+**Rule:**
+- **Reproduce a vulnerability before remediating it.** A finding is a hypothesis. If you cannot make the exploit fire in a scratch shell, you do not yet know what you are fixing — and you cannot judge whether the proposed remedy is proportionate.
+- **Read the proposed fix as adversarially as the finding.** Ask what the remedy itself costs. Moving a secret from a process argument to a file on disk is not obviously an improvement; here it was a regression.
+- **When you decline a finding, leave the evidence where the finding lives** — on the ticket, and as a test. "We looked at it and it's fine" is indistinguishable from "we never looked", three months later.
+
+**Tags:** `#security` `#code-review` `#adversarial-review` `#bash` `#false-positive` `#ansible-035`
+
+### [2026-08-15] Refuting a finding does not vaccinate the line it was about
+
+**Context:** immediately after the refutation above, round 2 of the same review examined the same two lines and found something else: the bearer token *is* exposed, just not the way round 1 claimed. `-H "Authorization: Bearer ${TOKEN}"` becomes an argv element of `curl`, so it is readable in `/proc/<pid>/cmdline` and `ps` output for roughly a second per invocation.
+
+**The trap:** having just proved — correctly, with a transcript — that the token is not shell-injectable, the natural reading of any further concern about that line is "we already settled this". The two findings share a file, a line, and a credential. They do not share a mechanism: one is about whether the shell *re-parses the value*, the other about *where the value ends up* once it is an argument. The first question being answered says nothing about the second.
+
+The refutation was not wrong. Its scope was narrower than it felt.
+
+**Fix:** treat a refutation as closing exactly one attack path, never the line. Recorded on #1088 with the distinction spelled out, and fixable without reintroducing the on-disk problem the round-1 remedy would have caused:
+
+```sh
+printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl --config - ...
+```
+
+Fed from a pipe, the token appears in neither argv nor any file — which is the fix round 1 was reaching for and got wrong by choosing a file.
+
+**Rule:**
+- **State what a refutation covers, in mechanism terms, not in location terms.** "Not shell-injectable" is a claim about parsing. "This line is fine" is a claim about everything, and you did not test everything.
+- **Expect the second finding on code you just defended.** Successfully arguing against a reviewer is precisely the state in which the next concern about that code gets waved through.
+- **A correct fix for a wrong finding can still be the right fix later.** Round 1's `curl --config` was disproportionate to a nonexistent bug, and its piped form is proportionate to a real one. Reject the reasoning without discarding the technique.
+
+**Tags:** `#security` `#code-review` `#adversarial-review` `#reasoning` `#ansible-035`
+
+### [2026-08-15] The adversarial-review gate writes a ~90MB artifact into the spec folder, untracked and unignored
+
+**Context:** `dotf spec review` (CLI-034's archive gate) writes two files beside the spec: `review.md`, the verdict, and `review-transcript.jsonl`, the reviewer's full tool-call log. The pool's own documentation argues the transcript is essential — "the verdict records what a reviewer concluded and the transcript is the only record of how".
+
+**The trap:** for one spec, that transcript was **91 MB**, because it embeds the content of every file the reviewer read. It lands inside `specs/<id>/`, is not gitignored, and no archived spec in `specs/archive/` contains one — so the house convention of not committing them existed only as an accident of nobody having tried. A routine `git add -A` before the archive commit stages it silently; GitHub warns above 50 MB and rejects above 100 MB, so the failure surfaces at `git push`, after the commit, in whatever session is trying to close the spec.
+
+Caught here only because the commit's file list was read before pushing.
+
+**Fix:** ignore it explicitly, with the reasoning attached so the next reader does not "fix" the ignore by removing it:
+
+```gitignore
+# Adversarial-review transcripts (`dotf spec review`). The verdict in review.md
+# IS committed; the transcript is the reviewer's full tool-call log and runs to
+# ~90MB for one spec [...] Kept local as the record of HOW a verdict was
+# reached; re-derivable by re-running the review.
+specs/**/review-transcript.jsonl
+```
+
+**Rule:**
+- **Any repo adopting the review gate needs this ignore before its first review, not after.** The artifact is produced by a tool the repo does not own, into a directory the repo does commit.
+- **Read the file list of a commit that includes tool-generated artifacts.** `git add -A` after running an unfamiliar tool is where oversized and secret-bearing files enter history; the staged list is the last cheap checkpoint.
+- **"No prior example has it" is not evidence of a convention** — it can equally mean the situation never arose. Here both readings looked identical until the file size was checked.
+
+**Tags:** `#git` `#spec-driven-development` `#adversarial-review` `#gitignore` `#cli-034` `#gotcha`

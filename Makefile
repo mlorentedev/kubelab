@@ -469,7 +469,7 @@ _deploy-argocd-helm:
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
 	@echo "--- Updating ArgoCD EndpointSlice on prod (MagicDNS-resolved aws1 Tailscale IP) ---"
 	@$(TOOLKIT) infra k8s render-apply --env prod --optional \
-		--manifest infra/k8s/overlays/prod/argocd.yaml \
+		--manifest infra/k8s/overlays/prod/argocd-endpointslice.yaml \
 		--render RESOLVE_AWS1_TAILSCALE_IP=aws1.kubelab.internal
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
@@ -686,6 +686,20 @@ maintain:
 		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER) $(_TAGS); \
 	else \
 		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS); \
+	fi
+
+# Live delivery test of the maintenance failure-notify path (ANSIBLE-035 AC7).
+# Really posts to prod n8n and really notifies — a delivery test that suppresses
+# delivery proves nothing. Re-run this after any change to the notify script or
+# its unit; ANSIBLE-038's fix requires it.
+.PHONY: maintain-notify-test
+maintain-notify-test:
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	@if [ "$(NODE)" = "all" ]; then \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV); \
+	else \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE); \
 	fi
 
 .PHONY: deploy

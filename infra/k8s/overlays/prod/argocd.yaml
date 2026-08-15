@@ -2,8 +2,15 @@
 # Argo CD — external service on AWS hub (aws1.kubelab.internal)
 # Prod Traefik proxies argo.kubelab.live to aws1 argocd-server via Tailscale VPN.
 # Same EndpointSlice pattern as Headscale (ADR-023 Phase 3).
-# NOTE: EndpointSlice requires an IP (can't use DNS). IP may change on Spot
-# replacement — Phase 2 (ASG) cloud-init will update this automatically.
+#
+# The backing EndpointSlice lives in `argocd-endpointslice.yaml`, NOT here: it
+# carries a RESOLVE_* placeholder and is therefore the only part of this service
+# that cannot go through Kustomize/Argo CD. Splitting it out keeps the Service
+# and the route under GitOps like every other external service in this overlay
+# (cf. `headscale.yaml`, whose EndpointSlice IS committed because the VPS IP is
+# stable). Before that split the whole file sat outside the overlay, so SEC-004's
+# rate-limit middleware reached git but never the cluster — see kubelab#970 and
+# `tests/test_orphan_manifests.py`.
 apiVersion: v1
 kind: Service
 metadata:
@@ -23,27 +30,6 @@ spec:
       port: 30080
       targetPort: 30080
       protocol: TCP
----
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: argocd-external
-  namespace: kubelab
-  labels:
-    kubernetes.io/service-name: argocd
-    app.kubernetes.io/name: argocd
-    app.kubernetes.io/component: gitops
-    app.kubernetes.io/part-of: kubelab
-addressType: IPv4
-ports:
-  - name: http
-    port: 30080
-    protocol: TCP
-endpoints:
-  - addresses:
-      - "RESOLVE_AWS1_TAILSCALE_IP"  # resolved at deploy time via: dig aws1.kubelab.internal
-    conditions:
-      ready: true
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
