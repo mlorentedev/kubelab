@@ -10,7 +10,7 @@ created: "2026-08-14"
 > **Inline markers:**
 > - `[P]` — no dependency on another unchecked task, safe to run in parallel.
 > - `[AC<n>]` — helps satisfy acceptance criterion #`<n>` from `proposal.md`.
-
+>
 > **Not yet broken into concrete tasks.** `proposal.md`'s Risks section has one still-open item (blanket vs. selective route scope, tagged `[AGENT-DRAFT]`) that should be resolved with the user before this list is frozen. Next session: resolve that, measure real request rates for the noisiest staging route (Homepage cockpit or an Authelia-gated route) per the "Risks" note on reusing the VPS's `50/s`/`25` unmeasured, then write the task breakdown in the same style as OBS-010's `tasks.md` (this repo, same spec folder pattern) — Middleware manifest -> generator change + regenerated `ingress.yaml` for both envs (paired in one commit per the CI-GATE-002 constraint) -> per-route middleware list updates -> burst-drill test exercised in staging, not assumed.
 
 ## Setup
