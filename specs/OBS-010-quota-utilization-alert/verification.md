@@ -13,7 +13,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] Criterion 2 (two Grafana rules, provisioned, correct config) -> commits `1b53373`/`e09d530` / test `TestQuotaUtilizationRules` (`tests/infra/test_grafana_alerting.py`) — staging, 3/3 passing (8/8 whole file, zero regression on OBS-007's own tests)
 - [x] Criterion 3 (routine surge does not fire) -> first pass FAILED for real (caught a genuine bug, fixed in commit `6cef9a4`); re-verified clean post-fix 2026-08-14, staging (see Test status below)
 - [x] Criterion 4 (killing the emitter fires the alert, noDataState proven live) -> exercised 2026-08-14, staging (see Test status below)
-- [x] Part 4 — prod (spoke RBAC registered, quota-watcher and its RBAC live) -> 2026-08-14, once aws1 returned (see Test status below)
+- [x] Part 4 — prod (spoke RBAC registered; quota-watcher and its RBAC live; the alert rules traced to the running Grafana pod, with the API confirmation itself blocked by #951) -> 2026-08-14, once aws1 returned (see § *Part 4 — prod* below)
 
 ## Test status
 
@@ -30,7 +30,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 **Before.** aws1 returned (`make check-spokes` → both spokes `OK (registered + reachable)`), and prod's Application immediately surfaced the gap this task predicted. `make check-apps`:
 
-```
+```text
 kubelab-prod      OutOfSync     Progressing
 --- kubelab-prod conditions ---
 Failed last sync attempt: error running rbacReconcile: error running kubectl auth reconcile:
@@ -43,7 +43,7 @@ This is the live confirmation of the preflight recorded in `tasks.md` (all three
 
 **Action.** `make register-spoke ENV=prod`. The applied delta was exactly the one grant this spec added, and nothing else:
 
-```
+```text
 clusterrole.rbac.authorization.k8s.io/argocd-manager-write configured
 serviceaccount/argocd-manager unchanged
 clusterrole.rbac.authorization.k8s.io/argocd-manager-readonly unchanged
@@ -53,9 +53,9 @@ clusterrole.rbac.authorization.k8s.io/argocd-manager-cluster-write unchanged
 ✓ Spoke prod registered in Argo CD hub
 ```
 
-**After.** `make sync-app APP=kubelab-prod`, then the Application's per-resource status on the hub. The failure condition is gone and every resource this spec ships is `Synced` in prod:
+**After.** The sync that applied these manifests was Argo CD's own automated one — prod runs `syncPolicy.automated` with `prune: true, selfHeal: true` (ADR-037), so once the grant existed the reconciler picked it up without being asked. `make sync-app APP=kubelab-prod` was then run only to collapse the wait for the next polling interval; it re-triggers the same automated path rather than applying anything itself, and nothing here depended on it. The Application's per-resource status on the hub afterwards — failure condition gone, every resource this spec ships `Synced` in prod:
 
-```
+```text
 ResourceQuota    kubelab-quota            sync=Synced
 ServiceAccount   quota-watcher            sync=Synced
 CronJob          quota-watcher            sync=Synced
@@ -64,6 +64,16 @@ RoleBinding      quota-watcher            sync=Synced
 ```
 
 `Role` and `RoleBinding` are the two kinds that were `forbidden` above, so this is end-to-end proof rather than a config assertion.
+
+**AC2 in prod — the Grafana rules, and the one link this chain cannot close.** The resource list above proves the emitter and its RBAC; it says nothing about the two alert rules, which ship as a file inside the `grafana-alerting` ConfigMap rather than as resources of their own. Traced separately, against the live prod cluster:
+
+1. The ConfigMap generation carrying the rules exists in prod: `grafana-alerting-btgbf998t2`, created `2026-08-14T15:28:16Z`, and it is the only one of the two present generations whose data contains `quota-rules.yaml` (5982 bytes).
+2. The Grafana Deployment references that exact hashed name — so the `configMapGenerator` hash-suffix roll happened rather than the pod being left on the older `grafana-alerting-d9b2569g6f` (created `2026-08-10`, no `quota-rules.yaml`).
+3. The running pod started at `2026-08-14T15:28:20Z`, four seconds after the ConfigMap was created — i.e. it is the pod that rolled *for* this change, not one that predates it.
+4. The file is present in that running pod: `/etc/grafana/provisioning/alerting/quota-rules.yaml`, declaring group `quota` with both titles (`Namespace quota utilization high (requests.memory)` and `(limits.memory)`).
+5. `logger=provisioning.alerting` ran at startup and logged no error against it. Its only warnings are the benign `..data` / `..2026_08_14_15_28_19` symlink entries every ConfigMap volume mount produces.
+
+**What is missing, stated plainly: no direct read of the provisioning API in prod.** `/api/v1/provisioning/alert-rules` returns `401` with the credentials in the `grafana-admin` Secret — which is **#951 (AUTH-002)** exactly: "its local admin username drifts from the Secret". The task text anticipated that this skip would apply here as it already does to OBS-007's prod tests, and it does; it is cited, not re-diagnosed. So prod's AC2 rests on the chain above (the rules are on disk in the running pod and were read without error by the provisioner) rather than on the API confirmation staging has. That is weaker, and it is recorded as weaker. It closes when #951 does, and #1013 (AUTH-004) is the change that fixes the underlying drift.
 
 **Deviation from the task text, stated rather than glossed.** The task prescribed `make register-spoke ENV=prod` *then* `make deploy-k8s ENV=prod`. Only the first ran. `deploy-k8s` carries an interactive production confirmation (`toolkit/features/validation.py:62`) with no bypass flag — correct by design — and it proved unnecessary: with the grant in place, Argo CD's own automated sync applied the manifests. That is the stronger evidence of the two, since it exercises the GitOps path this spec actually depends on rather than a workstation apply.
 
