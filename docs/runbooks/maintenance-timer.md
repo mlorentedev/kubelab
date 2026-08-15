@@ -96,6 +96,23 @@ as `kubelab-maintenance-notify.service` itself failing — check that unit's
 own journal separately if the alert never arrived but you suspect a run
 failed.
 
+**Testing the path without waiting for a failure**:
+
+```bash
+make maintain-notify-test NODE=rpi3        # one node
+make maintain-notify-test NODE=all         # the whole fleet
+```
+
+This starts the notify unit directly and asserts `Result=success` and
+`ExecMainStatus=0`. Because the unit's `curl` uses `-f`, exit 0 means n8n
+really answered 2xx — it is an end-to-end delivery check, not a "the file is
+installed" check. **It really notifies**: expect the message to arrive, and
+ignore it. A delivery test that suppressed delivery would prove nothing.
+
+Run it after any change to the notify script or its unit — ANSIBLE-038's
+fixes require it. Node ENVs are the same as `make provision`: `vps` is
+`ENV=prod`, `aws1` is `ENV=hub`, the homelab nodes default to staging.
+
 ## Known artifact: `--check` dry-runs after a cache-wiping event
 
 Both `kubelab-maintenance.sh.j2` (the timer's actual weekly payload) and the
