@@ -67,7 +67,16 @@ RoleBinding      quota-watcher            sync=Synced
 
 **Deviation from the task text, stated rather than glossed.** The task prescribed `make register-spoke ENV=prod` *then* `make deploy-k8s ENV=prod`. Only the first ran. `deploy-k8s` carries an interactive production confirmation (`toolkit/features/validation.py:62`) with no bypass flag — correct by design — and it proved unnecessary: with the grant in place, Argo CD's own automated sync applied the manifests. That is the stronger evidence of the two, since it exercises the GitOps path this spec actually depends on rather than a workstation apply.
 
-**Prod remains `OutOfSync` for an unrelated reason, deliberately not resolved here.** Exactly one of prod's 91 resources is out of sync: `PersistentVolumeClaim gitea-data`, a leftover of the ADR-061 Gitea cutover which Argo wants to prune. It cannot be pruned: three `Succeeded` backup Job pods created *before* the cutover (`2026-08-13T03:00`, `2026-08-14T00:22`, `2026-08-14T03:00`) still reference the claim, and the `kubernetes.io/pvc-protection` finalizer blocks deletion while any pod does. The current `overlays/prod/backup.yaml` is already correct — it no longer mounts `gitea-data` (see its own comment) — so this is historical pod residue, not manifest drift. Pruning the PVC destroys the pre-cutover Gitea data, which is a decision for #1056, not a side effect of this spec's verification.
+**One unrelated resource kept prod `OutOfSync` afterwards; resolved on the operator's explicit call.** Exactly one of prod's 91 resources was out of sync: `PersistentVolumeClaim gitea-data`, a leftover of the ADR-061 Gitea cutover which Argo wanted to prune and could not. Three `Succeeded` backup Job pods created *before* the cutover (`2026-08-13T03:00`, `2026-08-14T00:22`, `2026-08-14T03:00`) still referenced the claim, and the `kubernetes.io/pvc-protection` finalizer blocks deletion while any pod does. `overlays/prod/backup.yaml` was already correct — it no longer mounts `gitea-data` (see its own comment) — so this was historical pod residue, not manifest drift.
+
+Why it was not left alone: a permanently `OutOfSync` prod is an uninformative one. Any future real drift would have hidden behind this single stale row, which is the same signal-degradation problem filed as #1072 (TOOL-034).
+
+Deleting the three completed Jobs released the claim (`get pods` → no pod references `gitea-data`), and Argo pruned the PVC on the next sync (`persistentvolumeclaims "gitea-data" not found`). **Prod is now `Synced`, 90/90 resources, 0 out of sync, 0 non-Healthy.** The prune destroyed the pre-cutover Gitea data — irreversible, done on the operator's explicit instruction after the trade-off was stated, not as a side effect of this verification.
+
+Two observations recorded while doing it, neither belonging to this spec:
+
+- `quota-watcher` is running on schedule in prod and succeeding (Jobs at `00:50`, `00:55`, `01:00` all `succeeded=1`) — independent confirmation that Part 4 is live rather than merely applied.
+- Three `pvc-backup` Jobs from June (`29674260`, `29675700`, `29677140`) sit in prod with neither `succeeded` nor `active` set. They did not block the PVC and were left untouched, but a backup Job that never reported success and went unnoticed for two months is exactly the observability gap #1056's AC4 asks for. Ticketed separately rather than absorbed here.
 
 - **AUTH-002 (#951) prod-test skip** applies here identically to how it already affects OBS-007's prod tests. Cited per the task, not re-diagnosed.
 
