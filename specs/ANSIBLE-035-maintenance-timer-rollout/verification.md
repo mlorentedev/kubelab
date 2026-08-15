@@ -49,6 +49,17 @@ created: "2026-08-14"
 - **Consequence accepted:** fixing #1 and #2 changes the deployed script, so AC7's original live evidence was re-established rather than inherited. See "Re-verification after ANSIBLE-038 fixes" below.
 - **New in this pass:** `make maintain-notify-test NODE=x` (playbook `infra/ansible/playbooks/maintenance-notify-test.yml`) codifies the live delivery check that was previously an operator's one-off `systemctl start` over SSH. Written because F1 failed this spec for an unreproducible claim, and re-establishing AC7 with another uncodified one-off would have repeated that defect in a different shape.
 
+## Adversarial review disposition (round 2: PASS, `nan/deepseek-v4-flash`, reviewed_sha `4619a57`)
+
+Both round-1 Majors confirmed closed by the reviewer, which reproduced the claims rather than reading them: `make test` (532/129), `secrets audit` (staging 35/35, prod 44/44), and syntax checks across the 8 playbooks. Verification graded A, up from C. Four new Minor findings, none blocking:
+
+- **Stale acceptance checkboxes in `proposal.md` (Minor, REAL) — FIXED.** AC4 still read "6/7 done … aws1 was offline" and AC8 was unticked, both contradicted by evidence already in this file. Ticked and reconciled. Worth naming the pattern rather than just the instance: this is the same defect as F1 — a spec artifact asserting something the evidence disproves — and it survived a round precisely because a checkbox looks like bookkeeping rather than a claim.
+- **Bearer token visible in `ps` (Minor, THEORETICAL) — TICKETED, #1088.** A different mechanism from round 1's refuted shell-injection finding, and this one holds: the header becomes an argv element of `curl`, so it is readable in `/proc/<pid>/cmdline` for about a second. The round-1 refutation showed the value is not re-parsed by the shell; it said nothing about where the value ends up once it is a curl argument. Fixable without putting the token on disk (`curl --config -` fed from a pipe).
+- **Notify unit has no `Restart=` (Minor, THEORETICAL) — TICKETED, #1088.** One attempt, no retry, on the path whose job is to report. The script comment documents the absence of an `OnFailure=` *cascade*, which is not the same thing as documenting the absence of a *retry*.
+- **`no_log: true` hides idempotency on the secret-write task (Minor) — ACCEPTED AS-IS,** per the reviewer's own recommendation: `copy:` is checksum-idempotent, and suppressing the output is deliberate so the secret never reaches Ansible's log.
+
+Both ticketed findings require a fleet re-provision, so they are bundled on #1088 with the beelink remainder — one re-provision closes all three.
+
 ## Re-verification after ANSIBLE-038 fixes
 
 The two confirmed Minor fixes change `kubelab-maintenance-notify.sh.j2`, so AC7's original evidence describes a script that is no longer deployed. It was re-established, not inherited.

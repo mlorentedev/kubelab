@@ -1,74 +1,64 @@
 ---
 spec: "ANSIBLE-035-maintenance-timer-rollout"
-verdict: "FAIL"
-reviewed_sha: "b91c1f20d50077ab53532d52943317b18646a260"
+verdict: "PASS"
+reviewed_sha: "4619a5701429cf3ff1c0d1399fb9f8816f1658e1"
 reviewer: "nan/deepseek-v4-flash"
-date: "2026-08-16"
+date: "2026-08-18"
 ---
 
 ## Adversarial review
 
-**Scope**: ANSIBLE-035-maintenance-timer-rollout (PR #1070 - merge e63f1e0)
-**Sources**: specs/ANSIBLE-035-maintenance-timer-rollout/{proposal,tasks,verification,features}.md, git diff e63f1e0^..b91c1f2, live commands run against the merged code
+**Scope**: ANSIBLE-035-maintenance-timer-rollout (current branch: `chore/ansible-035-aws1-verification` @ 4619a57)
+**Sources**: specs/ANSIBLE-035-maintenance-timer-rollout/{proposal,tasks,verification,features}.md, git diff b91c1f2..HEAD, live commands run against the merged code
 
 ### Spec and task alignment
 
-The proposal, tasks, and code are well-aligned. All 7 provisioning playbooks receive the role with `maintenance_run_cleanup: false`. The `maintain.yml` playbook is confirmed unaffected (it never sets `maintenance_run_cleanup`, inheriting the `true` default — confirmed by reading the playbook before/after, noting no diff). The `OnFailure=` wiring is in the unit template, the notify script delivers the envelope, and the secret path is a dedicated key in `common.enc.yaml` immune to env-override collisions.
+This is a **round-2 review**. Round 1 (reviewed_sha b91c1f2, same reviewer) issued FAIL with two Major findings and three Minors:
 
-One verified spec-to-code divergence: the verification artifact claims a staging secret count of 39/39, but the actual audit yields 35/35. See Finding F1 below.
+| Round-1 finding | Status as of this review | Verdict |
+|---|---|---|
+| F1 (Major, REAL): staging secret count 39/39 unreproducible (actual 35/35) | FIXED. verification.md corrected to 35/35 with a note that the base was 34/34 before the +1 from `fleet_webhook_secret`. Reproduced by running `poetry run toolkit secrets audit --env staging` → 35/35. | ✅ |
+| F2 (Major, REAL): no automated regression tests for notify script / OnFailure= wiring | FIXED. `tests/test_node_maintenance_notify.py` added (15 tests). All 15 pass (`532 passed, 129 deselected` confirmed by running `make test`). Tests cover: OnFailure= linkage, target-verifies unit exists, ExecStart matches tasks, domain literal not derived, curl timeouts, UTF-8 truncation, shell-injection refutation, JSON encoding. | ✅ |
+| Minor #1: no curl timeout | FIXED. `--connect-timeout 10 --max-time 15` added to the notify script. | ✅ |
+| Minor #2: UTF-8 truncation crashes encoder | FIXED. `sys.stdin.buffer.read().decode('utf-8', 'replace')` replaces the raw `sys.stdin.read()`. Reproduced before fix: `printf 'caf\xc3'` → `UnicodeDecodeError`. After fix: passes. `split-utf8-sequence` is a regression case in the test suite. | ✅ |
+| Minor #3: token interpolated in shell string | REFUTED, withdrawn. A test `test_token_value_is_not_shell_interpreted` now pins that double-quoted expansion does not re-parse the value. | ✅ |
 
-Four side changes are documented (untagged pre_tasks fix on provision-vps/aws1/rpi3/rpi4.yml) with an explicit "in-scope" claim. The claim is defensible: these are the same file set and the same bug class surfaced by the ticket's own new task.
+Round 1's F2 mitigation also created a **new artifact**: `infra/ansible/playbooks/maintenance-notify-test.yml` and the `make maintain-notify-test NODE=x` target, codifying what was previously an operator's one-off `systemctl start` over SSH.
+
+All 8 playbooks (7 provision + 1 notify test) pass `ansible-playbook --syntax-check`. Lint (`make lint`) and type (`make type`) pass.
 
 ### Findings
 
+New findings in this round — none are Blockers or Majors:
+
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location |
 |----------|---------|------|---------|----------|---------------------------|-------------|
-| Major | REAL | Verification evidence | Staging secret count claimed as 39/39 but actual audit yields 35/35 at both the merge commit (e63f1e0) and HEAD (b91c1f2) | `poetry run toolkit secrets audit --env staging` at d23dd24 (parent): 34/34; at e63f1e0 (merge): 35/35 (+1 from fleet_webhook_secret); the verification.md claim of 39/39 is unreproducible | UNTESTED (the count itself is an assertion, not a testable path) | spec artifacts (verification.md: correct the claimed staging count) |
-| Major | REAL | Test coverage | No automated regression tests exist for the notify script, the OnFailure= wiring, or the JSON encoding of journal output | Manual inspection of `tests/` directory confirms zero test files target the `node_maintenance` role's templates or the notify delivery. The verification relied entirely on one-off live commands (standalone delivery on 2 nodes, deliberate failure injection on 1). Per skill rule: lack of negative tests is a Major finding by default. | UNTESTED | tests (add pytest or bats test for notify script behavior, curl delivery, and failure handling) |
-| Minor | THEORETICAL | Security (shell injection) | Notify script reads token via `TOKEN="$(cat ...)"` and embeds `${TOKEN}` in curl header. If the secret file were tampered with to contain `$(...)`, backticks, or shell metacharacters, injection is possible | Code read of `kubelab-maintenance-notify.sh.j2`: line 20 `TOKEN="$(cat ...)"`, line 40 `-H "Authorization: Bearer ${TOKEN}"`. The file is 0600 root-owned and SOPS-resolved (not user-writable), but the script has no sanitization layer | UNTESTED | code (token read via a safer mechanism — e.g. `sed` substitution into a Python arg, or curl's `--config` with a one-line config file that already contains the token) |
-| Minor | THEORETICAL | Reliability (UTF-8 truncation) | `tail -c 2000` in the notify script can split a multi-byte UTF-8 character mid-sequence, causing `python3 -c 'import json; print(json.dumps({"body": sys.stdin.read()}))'` to raise UnicodeDecodeError on stdin read | Code read: the piped chain `printf ... | tail -c 2000 | python3 -c ...` may pass invalid UTF-8 to Python's stdin decoder if the 2000-byte boundary falls inside a multi-byte character. Journal output is mostly ASCII, making this unlikely but the path exists | UNTESTED | code (read via `python3 -c "sys.stdout.buffer.read(2000).decode('utf-8', 'replace')"` or add `errors='replace'` to the stdin handling) |
-| Minor | THEORETICAL | Reliability (no curl timeout) | `curl -sS -f` has no `--connect-timeout` or `--max-time`. If n8n is unreachable, the default curl timeout (~120s connect, no total max) can hold the notify unit past a user's expectations | Code read: no timeout on `curl ... --connect-timeout 10` in the script. Systemd's `TimeoutStartSec=30` in `kubelab-maintenance-notify.service.j2` will eventually kill it, but a 30s hang is still a delay | UNTESTED | code (add `--connect-timeout 10 --max-time 15` to the curl invocation in the notify script) |
-| Minor | REAL | Documentation accuracy | `maintain.yml`'s doc comment says `maintenance_install_timer` default is `false` ("TIMER=1" toggles it), but the role default is now `true`. This is correct behavior (maintain.yml explicitly overrides with its own var), so not a code bug — but a future reader could be confused | Code read: maintain.yml passes `maintenance_install_timer: "{{ install_timer \| default(false) \| bool }}"` so it explicitly sets the value; the role default change to `true` doesn't affect it. But maintain.yml's doc header says "install weekly timer" for `TIMER=1` and doesn't mention that the role default flipped | N/A | spec artifacts (optional: note in maintain.yml header that the explicit override protects this from the role-default change) |
+| Minor | REAL | Spec artifacts (proposal.md) | AC4 checkbox says "6/7 done" but verification.md confirms 7/7 (aws1 was completed 2026-08-14). AC8 checkbox is still `[ ]` but the rotate_note for `apps.services.automation.notify.webhook_secret` was updated (confirmed by reading secrets_manager.py: `"Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source."`). The checkboxes in proposal.md don't reflect the current state. | `grep '\[ \]\|6/7' specs/ANSIBLE-035-maintenance-timer-rollout/proposal.md` shows the stale checkboxes; code reading of `secrets_manager.py` confirms AC8 is done; `make secrets-audit --env staging` confirms 35/35 | UNTESTED (doc-only) | spec artifacts (proposal.md — tick the boxes) |
+| Minor | THEORETICAL | Reliability (notify unit) | `kubelab-maintenance-notify.service` has no `Restart=` directive. If the curl POST to prod n8n fails (network blip, n8n temporarily unavailable), the notification is lost with exactly one attempt — the unit exits non-zero and has no retry or its own `OnFailure=` chain. Proposal says nothing about retry, but a failure notification that fails silently is a blind spot on the path whose job is to report promptly. | Code read of `kubelab-maintenance-notify.service.j2`: no `Restart=`, no `RestartSec=`, no `OnFailure=` on the notify unit itself. `TimeOutStartSec=30` bounds the stall but the result is the same — the notification is dropped. | `test_onfailure_target_names_a_unit_the_role_actually_installs` indirectly verifies the main unit's OnFailure target exists, but no test asserts retry on the notify unit itself | code (add `Restart=on-failure` with `RestartSec=10` to the notify service unit, or document the one-shot-only design as a deliberate choice in the comments) |
+| Minor | THEORETICAL | Security (information disclosure) | `TOKEN="$(cat ...)"` in the notify script exposes the fleet-wide bearer token via process listing (`/proc/PID/cmdline`, `ps`) for the ~1s duration of the curl call. For a `log`-severity (non-paging) notification path on a root-owned service, the practical risk is low — an attacker with `ps` access likely has elevated privileges. However, the token is a long-lived fleet credential stored in `common.enc.yaml` and rotated only by re-provisioning, so disclosure has a wider blast radius than an env-scoped secret. | Code read: `kubelab-maintenance-notify.sh.j2` line 17 `TOKEN="$(cat ...)"` then line 48 `-H "Authorization: Bearer ${TOKEN}"`. The test `test_token_value_is_not_shell_interpreted` pins the injection property but does not test for process-listening exposure. | `test_notify_script_reads_the_token_from_the_declared_secret_file` (tests the file path, not the read mechanism) | code (read via curl `--config` with a one-line config file, or via a heredoc that doesn't place the token in any `ps`-visible argument) |
+| Minor | THEORETICAL | Observability (secret write task) | The `Write fleet notify secret` Ansible task uses `no_log: true`, which prevents the operator from confirming idempotency at a glance — `changed` vs `ok` is suppressed in the playbook output. Ansible's `copy:` module IS idempotent by checksum comparison, so the behavior is correct; the gap is purely in runtime observability. | Code read of `tasks/main.yml` at the `Write fleet notify secret` task: `no_log: true`, `copy:` with `content: "{{ secrets... }}"`. | UNTESTED (operational, not testable) | code (accept as-is — `no_log` is intentional to avoid leaking the secret in Ansible output; surface in runbook as an operational note) |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness | B | All acceptance criteria met functionally; cleanup gating, timer install, and notify wiring all work. Minor edge cases untested but no observed defects. |
-| Verification | C | Per-node deployment evidence is detailed and credible, but the staging secret count (claimed 39/39, actual 35/35) is an unreproducible claim that undermines trust in the verification artifact. |
-| Scope | A | Diff matches proposal exactly; the untagged pre_tasks fix is the same files, same bug class, explicitly documented. |
-| Reliability | B | Error paths handled via `maintenance_run_cleanup` gate, `OnFailure=` cascade, `set -euo pipefail`, `curl -sf`. Missing: curl timeout, UTF-8 truncation guard, retry on notify failure. |
-| Maintainability | A | Abundant in-line WHY comments, clear gate-variable design, gotchas captured in lessons.md. Excellent documentation. |
-| Handoff-readiness | A | Spec complete, lessons captured (two ANSIBLE-035 entries in docs/lessons.md), runbook written, known artifact documented. |
+| Correctness | B | All acceptance criteria met functionally; cleanup gating, timer install on 7/7 nodes, OnFailure wiring proven via live failure injection and standalone delivery. Minor documentation stale-checkbox gap. |
+| Verification | A | Per-node evidence with `changed=` counts and env context. Re-verification after ANSIBLE-038 fixes documented. Claims reproduced: `make test` (532/129), `secrets audit` (staging 35/35, prod 44/44), syntax checks (8 playbooks pass). Verdict from round 1's FAIL to this round's PASS backed by concrete code changes. |
+| Scope | A | Diff matches proposal exactly. The untagged-pre_tasks fix on 4 playbooks is the same files and same bug class, explicitly documented. The maintenance-notify-test playbook is a new artifact demanded by the round-1 review. |
+| Reliability | B | Error paths handled via gate variables, `OnFailure=` cascade, `set -euo pipefail`, `curl -sf`, bounded timeouts, UTF-8 truncation safe. No retry on notify failure (accepted design gap), secret token exposed in `ps` (low-risk). |
+| Maintainability | A | Abundant WHY comments, clear gate-variable names, design decisions documented in comments rather than remaining implicit. Test suite uses `StrictUndefined` Jinja rendering (load-bearing), tests extract the real encoder body from the template to test the shipped code path. Runbook written, lessons captured. |
+| Handoff-readiness | A | Spec updated with re-verification evidence, lessons captured (two ANSIBLE-035 entries in docs/lessons.md), runbook written, beelink remainder tracked on #1088. |
 
 ### Verdict
 
-FAIL
-
-Two Major findings block PASS:
-
-1. **F1 (Verification evidence not reproducible)**: The staging secret count in `verification.md` (39/39) cannot be reproduced. The actual count before ANSIBLE-035 was 34/34; the change adds exactly 1, yielding 35/35. The audit passes at 100% — the code is correct — but the verification artifact is inaccurate.
-
-2. **F2 (No automated regression tests)**: The notify script and `OnFailure=` wiring have zero automated tests. The skill mandates: "Lack of negative tests is a Major finding by default." Manual live verification on rpi3/beelink is thorough but not repeatable in CI.
-
-The rubric independently yields PASS WITH GAPS (one C in Verification), but the Major findings escalate the verdict to FAIL.
+**PASS**
 
 ### Recommended next steps (before archive)
 
-1. **Fix F1 — correct verification.md**: Change the staging count from "39/39" to "35/35" and add a note that the base was 34/34 before the +1 from the new `fleet_webhook_secret` spec. This restores the verification artifact's reproducibility.
+1. **Tick the stale checkboxes in proposal.md** — AC4 (aws1 done → 7/7) and AC8 (rotate_note updated → ticked). These are documentation artifacts only, not functional gaps, but `proposal.md` is the spec's front door and its unchecked boxes mislead future readers.
 
-2. **Fix F2 — add automated tests**: At minimum:
-   - A bats test that confirms notify script template renders without Jinja errors (`ansible-playbook --check` or `ansible all -m template -a ...` with a mock inventory)
-   - A pytest test asserting that `OnFailure=kubelab-maintenance-notify.service` appears in the rendered service unit (use the ansible template module to render and grep the output)
-   - Optionally: a bats test that validates the journal-to-JSON encoding handles truncated multi-byte input (`printf '\xe2\x86' | ./script` should not crash)
-   - Optionally: a bats test asserting that `curl -f` without a timeout gets `--connect-timeout` (parses the rendered notify script)
+2. **Consider adding `Restart=on-failure` to the notify service unit** — or document the one-shot design explicitly in `kubelab-maintenance-notify.service.j2` as a deliberate choice (e.g. "# No retry — a single delivery attempt; the timer will fire again on the next run."). Either route closes the observability gap. Not a blocker for archive.
 
-**After F1 and F2 are resolved, the verdict flips to PASS WITH GAPS** (rubric: C in Verification → B after F1 fix; Correctness stays B due to unresolved minor findings; the remaining Minor findings in security/reliability are documented but not blockers for archive).
+3. **Consider the `ps`-visible token concern** — triage on #1088 alongside the beelink remainder. The practical risk is low, but worth noting on the ticket that tracks this spec's post-archive loose ends.
 
-`dotf spec archive` is **not advisable** in the current state — it will refuse because of the FAIL verdict. Apply the two fixes above first, then re-evaluate.
-
-### Additional notes
-
-- The `features.json` state is correct: all features are `pending` with empty `evidence` (the harness writes `passing`). No violations.
-- No `[AGENT-DRAFT]` or `[AGENT-SUGGESTION]` tags found in any spec file.
-- The three Minor findings (shell injection surface, UTF-8 truncation, missing curl timeout) are documented as THEORETICAL or low-risk concerns. They do not block the archive by themselves but should be triaged before or after archiving.
+4. **Archive is advisable.** `dotf spec archive` should pass: the frontmatter spec name matches the folder, `reviewed_sha` points to the current HEAD, `proposal.md`/`tasks.md`/`features.json` are unchanged since round 1's review (verified: `git diff b91c1f2 -- specs/ANSIBLE-035-maintenance-timer-rollout/{proposal,tasks,features}.json` is empty — the spec contract files are stable). The one unchecked item — beelink deferral on AC7 (tracked on #1088) — does not block the archive; it is recorded rather than silently claimed.
