@@ -14,8 +14,12 @@ resources:
   - traefik-dashboard.yaml
   - headscale.yaml
   - gitea.yaml
-  # argocd.yaml excluded — has RESOLVE_AWS1_TAILSCALE_IP placeholder,
-  # applied by `make deploy-argocd` with dynamic IP resolution (MagicDNS)
+  - argocd.yaml
+  # argocd-endpointslice.yaml excluded — has the RESOLVE_AWS1_TAILSCALE_IP
+  # placeholder (aws1's Spot IP rotates), applied by `make deploy-argocd` with
+  # dynamic IP resolution (MagicDNS). Only that ONE document is excluded: the
+  # Service and IngressRoute in argocd.yaml carry no placeholder and belong
+  # under GitOps like every other external service here (kubelab#970).
   # secrets managed via: toolkit infra k8s apply-secrets --env prod (ADR-014)
 
 # Override base authelia-config with prod-specific domains, policies, OIDC clients.
