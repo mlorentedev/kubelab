@@ -379,7 +379,23 @@ spec's node-level shape coherent. Either is defensible, neither can be skipped �
 `tasks.md` written against the current table would build something that fails its
 own AC1 review.
 
-### R6 — not yet settled
+### R6 — where to exercise the restore: SETTLED
+
+**Adopted: an ephemeral instance, as the 2026-08-10 Gitea research proposes.** The
+restore target is never the live data directory.
+
+The reasoning is short enough to state fully: restoring over `/opt/gitea/data` to
+prove the backup works risks the thing being protected, and if the snapshot turns
+out to be the wrong one the evidence is already destroyed. Restoring into a
+scratch location costs nothing and keeps both the backup and the original.
+
+It doubles as the #492 DR drill, which is worth reusing but not worth expanding
+this spec to close. Recorded in `docs/runbooks/offsite-backup-restore.md` as the
+standing procedure, including the `PRAGMA integrity_check` step for SQLite
+consumers — a restore that produces a file is not the same as a restore that
+produces a *readable* database.
+
+### Superseded — the earlier open list
 
 - **R1** — escrow settled above; the repository password itself remains.
   not yet presented. Blocked on analysis of whether #479 already rejected an
