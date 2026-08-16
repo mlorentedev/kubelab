@@ -1,7 +1,7 @@
 ---
 id: "SEC-004-rate-limit-middleware"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-14"
 issue: "kubelab#970"
 tags: [spec, proposal]
