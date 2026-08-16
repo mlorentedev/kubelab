@@ -53,7 +53,7 @@ help:
 	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
-	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2]"
+	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
 	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
@@ -657,23 +657,28 @@ rotate-spoke-token:
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
 	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
 	$(eval _CHECK := $(if $(CHECK),--check,))
+	# EXTRA passes Ansible extra-vars through for role switches that must be
+	# opted into per run rather than defaulted on -- e.g. a role that reboots
+	# the host. Without it the only way to set one is a raw ansible-playbook
+	# invocation, which is exactly what these targets exist to prevent.
+	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Generating inventory ($(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),)) ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT); \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 	fi
 
 .PHONY: maintain
