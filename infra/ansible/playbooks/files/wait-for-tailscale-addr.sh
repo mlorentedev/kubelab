@@ -8,11 +8,27 @@
 # interface-scoped firewall rule on a published port is decoration.
 #
 # The cost of that correct choice is a boot ordering race. Docker starts before
-# tailscaled has finished assigning the address, the bind fails with
-# `cannot assign requested address`, and the container exits. Docker's restart
-# policy does NOT retry it, because the failure is in container *start*, not a
-# process that exited — measured on 2026-08-14: RestartCount=0 with
-# `restart: unless-stopped` set.
+# tailscaled has finished assigning the address, and the bind fails.
+#
+# That race has TWO outcomes, and the second is the dangerous one:
+#
+#   1. The container exits. Docker's restart policy does NOT retry it, because
+#      the failure is in container *start*, not a process that exited — measured
+#      2026-08-14: RestartCount=0 with `restart: unless-stopped` set.
+#   2. The container starts WITHOUT the port published, and keeps running.
+#      Measured 2026-08-15 on beelink and ace1: HostConfig.PortBindings asks for
+#      100.64.0.3:61208 while NetworkSettings.Ports is `{}`. `docker ps` reports
+#      it Up with no ports, nothing listens, and `docker compose up -d` will
+#      never fix it because the compose spec hash is unchanged.
+#
+# The second is worse precisely because it looks healthy. A crashed container is
+# visible; one that has been Up for days serving nothing is not. It left five of
+# seven Glances endpoints silently unreachable from the dashboard that scrapes
+# them.
+#
+# Shared between roles deliberately: this lives in playbooks/files/ rather than
+# in one role, because every role that publishes on a Tailscale address needs it
+# and a second copy would drift.
 #
 # Waiting on tailscaled.service is not enough: the unit being active does not
 # mean the address is on the interface yet. This waits for the address itself.
