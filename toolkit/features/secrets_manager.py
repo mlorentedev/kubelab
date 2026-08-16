@@ -406,6 +406,67 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("traefik", "terraform"),
         rotate_note="Re-provision K3s nodes (Ansible) + re-run terraform apply. Both read from SOPS.",
     ),
+    # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
+    # common.enc.yaml because the pipeline spans prod (VPS) and homelab nodes, but
+    # registered under `envs=("prod",)` — `envs` is the AUDIT dimension, not the
+    # storage location, and there is no `common` pseudo-env: a tuple matching no
+    # real env makes the secret vanish from every audit silently (ANSIBLE-033).
+    # Prod is the right audit target because the critical subset exists to protect
+    # prod-serving state: Headscale, Authelia, Postgres, and the Uptime Kuma
+    # instance that is the monitoring of record for prod. Same pattern as the
+    # Argo CD hub keys.
+    #
+    # A backup credential missing from the audit is the worst thing to have
+    # silently absent — the failure is invisible until a restore is attempted.
+    SecretSpec(
+        key_path="backup.r2.access_key_id",
+        description="Cloudflare R2 S3 access key id — offsite restic destination",
+        kind=SecretKind.EXTERNAL,
+        services=("backup",),
+        format_hint="R2 API token id (not the token value)",
+        rotate_note=(
+            "Create a new R2 API token scoped to the kubelab-backups bucket, set both "
+            "halves, then re-provision the four backup nodes. The old token must stay "
+            "valid until every node has the new one, or a node silently stops backing up."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="backup.r2.secret_access_key",
+        description="Cloudflare R2 S3 secret access key — offsite restic destination",
+        kind=SecretKind.EXTERNAL,
+        services=("backup",),
+        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+        rotate_note="Rotated together with backup.r2.access_key_id — they are one credential.",
+        envs=("prod",),
+    ),
+    # The restic repository password. restic encrypts client-side, so R2 never
+    # holds plaintext and Cloudflare cannot help recover anything — this value is
+    # the only key that exists. Losing it makes every backup permanently
+    # unreadable while looking perfectly healthy in the bucket.
+    #
+    # It therefore has a SECOND home outside this repo, in a Bitwarden item, and
+    # that is deliberate rather than sloppy: SOPS is decrypted by an age key that
+    # a disaster destroys, so a password stored only here is unreachable in
+    # exactly the scenario the backups exist for (BACKUP-044 R1, #479).
+    #
+    # Rotation is unusually cheap for a repository password: restic derives the
+    # key that unlocks an internal master key, so `restic key add` introduces a
+    # second password without re-encrypting any data.
+    SecretSpec(
+        key_path="backup.restic_password",
+        description="restic repository password — the only key to every offsite backup",
+        kind=SecretKind.RANDOM_TOKEN,
+        length=48,
+        services=("backup",),
+        format_hint="URL-safe random token",
+        rotate_note=(
+            "Use `restic key add` on every repository BEFORE changing this value — a "
+            "rotation that replaces it first locks you out of existing snapshots. Update "
+            "the Bitwarden escrow copy in the same pass, or recovery silently regresses."
+        ),
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.services.automation.github_runner.token",
         description="GitHub PAT for self-hosted Actions runner registration",

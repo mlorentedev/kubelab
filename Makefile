@@ -868,6 +868,36 @@ notify-smoke:
 	@test -n "$(ENV)" || (echo "Usage: make notify-smoke ENV=staging" && exit 1)
 	@$(TOOLKIT) infra n8n smoke --env $(ENV)
 
+# Prove the offsite backup destination (Cloudflare R2) is usable: that the token
+# is scoped to its own bucket, that the bucket is reachable, and that a
+# write/read/DELETE round-trip succeeds. Writes 1 KB under `_smoketest/` and
+# removes it, so it is safe against the live destination.
+#
+# The delete probe is the one that pays for itself: a token without delete lets
+# backups report healthy for weeks, and only fails when `restic forget` first
+# tries to reclaim space — with a full bucket and a retention policy that has
+# never actually retained anything (BACKUP-044).
+.PHONY: backup-verify-destination
+backup-verify-destination:
+	@$(TOOLKIT) backup verify-destination --env $(or $(ENV),prod)
+
+# One level above backup-verify-destination: that one proves the BUCKET works,
+# this one proves RESTIC works in it. Runs the full lifecycle (init, backup,
+# snapshots, check) against a throwaway repository and removes it. They are
+# different claims and only the second is what backups depend on.
+.PHONY: backup-verify-restic
+backup-verify-restic:
+	@$(TOOLKIT) backup verify-restic --env $(or $(ENV),prod)
+
+# Generate the restic repository password into SOPS. The value is never printed;
+# read it once with `make secrets-show KEY=backup.restic_password
+# SECRETS_ENV=common` to place the offsite escrow copy. Refuses to overwrite an
+# existing password: replacing it without `restic key add` first locks you out of
+# every existing snapshot.
+.PHONY: backup-generate-password
+backup-generate-password:
+	@$(TOOLKIT) backup generate-password --env $(or $(SECRETS_ENV),common)
+
 # End-to-end smoke of the certificate ALERTING path (OBS-007), one layer above
 # notify-smoke: that one proves the fabric can deliver, this one proves the alert
 # rule notices a real failure and recovers from it. Induces a genuine ACME
