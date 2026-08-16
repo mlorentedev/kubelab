@@ -251,6 +251,79 @@ timer catches up*, not *what it runs before*. The ordering must be an explicit
 `Before=`/`After=` relationship. Confirming it across a real power cycle belongs
 to AC5 in implementation, not to Part 0.
 
+### R3 — restic's memory on the RPi3: SETTLED, and it fits
+
+Measured on a local MinIO rig rather than against R2, so the measurement cost no
+Class A operations and the repository could be grown freely. Peak RSS via
+`/usr/bin/time`:
+
+| Operation | Fresh repository | Grown repository (42 snapshots) |
+|---|---|---|
+| `backup` (first, 18 MB) | **158.1 MB** | — |
+| `backup` (incremental) | 59.0 MB | **58.3 MB** |
+| `snapshots` | 57.1 MB | 57.7 MB |
+| `check` | 58.0 MB | **58.8 MB** |
+| `forget --prune` | — | 64.4 MB |
+
+**The premise the risk was written on does not hold at this scale.** `proposal.md`
+warned that restic's index is held in memory and scales with repository size, so
+a naive first-snapshot trial would mislead. The rig was built specifically to
+catch that — and memory stayed flat from 1 to 42 snapshots: `check` moved 58.0 →
+58.8 MB. The steady-state working set is ~60 MB against the RPi3's **428 MB
+available**, roughly a 7x margin.
+
+The one number that stands out is the *first* backup at 158 MB, chunking 18 MB of
+incompressible random data. That is a one-off and still fits, but it is the run
+to watch on the first deployment, not the recurring ones.
+
+**Honest limit of this measurement:** 42 snapshots over ~20 MB is not a year of
+hourly backups over several GB. Index memory tracks blob and pack count, and this
+rig did not reach production scale. What it establishes is the *shape* — flat, not
+climbing — which is the claim the risk actually needed. Re-measure on the device
+after the repository has real history; do not treat 60 MB as a permanent ceiling.
+
+### AC7 — the Class A operations question: MEASURED, and the concern was overstated
+
+Per-operation cost, counted server-side from MinIO's `minio_api_requests_total`
+(PutObject, ListObjectsV2, DeleteObject and the multipart verbs — R2's Class A
+set):
+
+| Operation | Class A ops |
+|---|---|
+| `backup` (incremental) | 110 |
+| `snapshots` | 60 |
+| `check` | 80 |
+
+Projected against R2's 1,000,000 free Class A operations per month, over four
+nodes (two always-on hourly, two on-demand in bursts — 1,640 runs/month):
+
+| Schedule | Class A / month | Free tier used |
+|---|---|---|
+| `check` on every run (AC7 as written) | 311,600 | **31.2%** |
+| `check` weekly | 181,680 | 18.2% |
+| Backup every 4h + `check` weekly | 62,880 | **6.3%** |
+
+**Correcting an earlier claim made in this spec's own discussion:** per-run
+`check` was described as scraping the million. Measured, it is 31% of it. AC7 as
+written is affordable and does not need to change on cost grounds alone.
+
+**The larger lever is the schedule, not the check.** Dropping `check` to weekly
+saves 130k operations; dropping the always-on nodes from hourly to every four
+hours saves 119k more — and costs nothing against the requirement, because #452
+ratifies Tier 1 at **RPO < 6h** and hourly was already over-delivering against it.
+Both together land at 6.3% of the free tier, leaving room for the repository to
+grow the per-operation cost several times over before the tier is at risk.
+
+That growth is the reason to take the headroom rather than bank the 31%: both
+`check` and `backup` list pack files, so their cost rises with repository size,
+and this rig measured a small repository. A design sitting at a third of the
+budget on day one has nowhere to go.
+
+**Recommendation for `tasks.md`:** backup every 4h on always-on nodes (still
+inside the ratified RPO), uptime-bounded hourly on on-demand nodes as the
+proposal specifies, and `check` weekly rather than per-run. Operator decision,
+recorded here with the arithmetic behind it.
+
 ### R6 — not yet settled
 
 - **R1** — escrow settled above; the repository password itself remains.
