@@ -59,6 +59,21 @@ COMMON_YAML = Path(__file__).parent.parent / "infra" / "config" / "values" / "co
 # the wrong trigger model is exactly what an enum exists to prevent.
 VALID_LOCATIONS = {"always-on", "on-demand"}
 
+# ADR-028's own topology block, as data. `rpi3` is the entry that breaks
+# inference: homelab hardware, always-on duty as prod's monitoring of record.
+# A test below asserts this covers the registry exactly, so a host added without
+# a classification here goes red instead of passing unverified.
+ADR_028_TIERS = {
+    "vps": "always-on",
+    "aws": "always-on",
+    "rpi3": "always-on",
+    "ace1": "on-demand",
+    "ace2": "on-demand",
+    "rpi4": "on-demand",
+    "beelink": "on-demand",
+    "jetson": "on-demand",
+}
+
 
 @pytest.fixture(scope="module")
 def common() -> dict[str, Any]:
@@ -98,21 +113,23 @@ class TestLocationAxis:
         bad = {n: c["location"] for n, c in hosts.items() if c.get("location") not in VALID_LOCATIONS}
         assert not bad, f"invalid `location` values (expected one of {sorted(VALID_LOCATIONS)}): {bad}"
 
-    @pytest.mark.parametrize(
-        ("host", "expected"),
-        [
-            # ADR-028's own topology block. rpi3 is the one that breaks inference:
-            # homelab hardware, always-on duty as prod's monitoring of record.
-            ("vps", "always-on"),
-            ("aws", "always-on"),
-            ("rpi3", "always-on"),
-            ("beelink", "on-demand"),
-            ("rpi4", "on-demand"),
-            ("ace1", "on-demand"),
-            ("ace2", "on-demand"),
-            ("jetson", "on-demand"),
-        ],
-    )
+    def test_the_expected_list_covers_every_host(self, hosts: dict[str, dict[str, Any]]) -> None:
+        """The parametrised list below must not silently stop covering the fleet.
+
+        Without this, a host added to the registry with a valid `location` passes
+        every other test in this file while its classification goes unverified —
+        the same absence-is-not-reported failure this file exists to prevent, left
+        in the file's own scaffolding. Raised by review on #1107.
+        """
+        registry, expected = set(hosts), set(ADR_028_TIERS)
+        assert registry == expected, (
+            f"hosts in the registry but not classified below: {sorted(registry - expected)}; "
+            f"classified below but absent from the registry: {sorted(expected - registry)}. "
+            "Adding a host means classifying it here too, so its tier is asserted against "
+            "ADR-028 rather than merely being a syntactically valid string."
+        )
+
+    @pytest.mark.parametrize(("host", "expected"), sorted(ADR_028_TIERS.items()))
     def test_location_matches_adr_028(self, hosts: dict[str, dict[str, Any]], host: str, expected: str) -> None:
         assert hosts[host].get("location") == expected, (
             f"{host} is classified {hosts[host].get('location')!r} but ADR-028 says {expected!r}. "
