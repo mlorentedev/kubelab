@@ -40,24 +40,53 @@ print(json.dumps({
 }))
 ")"
 
-# -f: a 4xx/5xx from n8n makes curl (and this script, under set -e) exit
-# non-zero, so a delivery failure is visible as THIS unit failing --
+# ANSIBLE-038 f4: the token goes to curl through a config on STDIN, never as
+# an argv element. As `-H "Authorization: Bearer ${TOKEN}"` it was readable in
+# `ps` / /proc/<pid>/cmdline for the ~1s of the call. Low practical risk (root
+# oneshot, short window) but fleet_webhook_secret is fleet-wide and rotates
+# only by re-provisioning every node, so its blast radius is wide.
+#
+# Note this is a DIFFERENT mechanism from the shell-injection finding that was
+# refuted in #1088: expanding a variable inside double quotes does not
+# re-parse its value, and that still holds. Whether the value is re-parsed and
+# where the value ends up are separate questions; only the second one bites.
+#
+# The escaping below is load-bearing, not defensive dressing. curl's config
+# parser processes \ and " inside a quoted value, so an unescaped token is
+# silently CORRUPTED rather than rejected -- measured against a local listener:
+# a token containing `"` arrived as `Bearer tok`, and the unquoted config form
+# dropped the header entirely. Either way n8n answers 403 and the failure
+# notification is lost, which is strictly worse than the exposure being fixed.
+TOKEN_ESC=${TOKEN//\\/\\\\}
+TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
+
+# -f: a 4xx/5xx from n8n makes curl (and this script, under set -o pipefail)
+# exit non-zero, so a delivery failure is visible as THIS unit failing --
 # `systemctl status kubelab-maintenance-notify.service` / its journal --
-# rather than silently swallowed. No OnFailure= on this unit itself, so
-# there is no retry loop.
+# rather than silently swallowed.
 #
-# ANSIBLE-038: bounded timeouts. Without them curl uses its defaults and an
-# unreachable n8n stalls this unit until systemd's TimeoutStartSec=30 kills
-# it -- a 30s delay on the one path whose job is to report promptly.
+# ANSIBLE-038 f1: bounded timeouts. Without them curl uses its defaults and an
+# unreachable n8n stalls this unit until systemd kills it.
 #
-# The token is expanded inside double quotes, which does NOT re-parse its
-# value: a secret file containing $(...) or backticks is passed through to
-# curl as a literal argv element, never executed. Verified by injecting both
-# forms into the secret file and confirming neither ran. Recorded because
-# this line reads like a shell-injection sink and is not one.
-curl -sS -f --connect-timeout 10 --max-time 15 \
+# ANSIBLE-038 f5: the retry lives HERE rather than as Restart= on the unit.
+# systemd would re-run the whole script (re-reading the journal, re-encoding)
+# and its start-limit interacts badly with RestartSec; curl retries the request
+# alone. --retry covers exactly the transient cases that motivated the finding:
+# connection refused (--retry-connrefused), timeouts, and 5xx -- verified
+# against a listener returning 503 twice, which curl rode out and delivered.
+#
+# The budget is chosen so the worst case fits inside TimeoutStartSec. Measured
+# against a blackholed address (RFC 5737 TEST-NET-3, packets dropped rather
+# than refused, which is the slow case): without --retry-max-time the same
+# retry count took 35.0s and systemd's 30s timeout would have killed the unit
+# mid-flight -- i.e. adding a retry naively would have turned a clean failure
+# into a truncated one. --retry-max-time 20 stops curl starting a NEW attempt
+# after 20s, so worst case is 20s + one final --max-time 10 attempt = 30s,
+# under the unit's TimeoutStartSec=45.
+printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl -sS -f --config - \
+  --connect-timeout 5 --max-time 10 \
+  --retry 3 --retry-delay 5 --retry-connrefused --retry-max-time 20 \
   -X POST "https://{{ maintenance_notify_domain }}/webhook/notify" \
-  -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
   -o /dev/null

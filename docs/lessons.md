@@ -4050,20 +4050,31 @@ The **Security** label is what makes this dangerous. A Minor labelled *reliabili
 
 The refutation was not wrong. Its scope was narrower than it felt.
 
-**Fix:** treat a refutation as closing exactly one attack path, never the line. Recorded on #1088 with the distinction spelled out, and fixable without reintroducing the on-disk problem the round-1 remedy would have caused:
+**Fix:** treat a refutation as closing exactly one attack path, never the line. Recorded on #1088 with the distinction spelled out, and fixable without reintroducing the on-disk problem the round-1 remedy would have caused — fed from a pipe, the token appears in neither argv nor any file, which is what round 1 was reaching for and got wrong by choosing a file.
+
+**Correction, when the fix was actually implemented (same day).** This entry originally published the one-liner below as the fix. **Do not use it as written** — it silently corrupts the credential:
 
 ```sh
+# WRONG — loses everything from the first `"` in the token
 printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl --config - ...
 ```
 
-Fed from a pipe, the token appears in neither argv nor any file — which is the fix round 1 was reaching for and got wrong by choosing a file.
+curl's config parser processes `\` and `"` *inside* a quoted value. Measured against a local listener, a token containing `"` arrived as `Authorization: Bearer tok`; dropping the quotes instead made curl send no `Authorization` header at all. Both outcomes are a 403 from the far end, i.e. the notification is lost — strictly worse than the ~1s of `ps` exposure being fixed. The shipped form escapes first:
+
+```sh
+TOKEN_ESC=${TOKEN//\\/\\\\}
+TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
+printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl --config - ...
+```
 
 **Rule:**
 - **State what a refutation covers, in mechanism terms, not in location terms.** "Not shell-injectable" is a claim about parsing. "This line is fine" is a claim about everything, and you did not test everything.
 - **Expect the second finding on code you just defended.** Successfully arguing against a reviewer is precisely the state in which the next concern about that code gets waved through.
 - **A correct fix for a wrong finding can still be the right fix later.** Round 1's `curl --config` was disproportionate to a nonexistent bug, and its piped form is proportionate to a real one. Reject the reasoning without discarding the technique.
+- **Moving a secret between transports moves its escaping problem too, and the new parser is rarely the one you were thinking about.** argv needed shell quoting; a curl config needs curl's own quoting. This lesson published an unescaped form as settled *because the security question it was reasoning about had been settled* — the transport question underneath it had not been asked.
+- **A remediation deserves the same reproduction as the finding.** Both findings here were reproduced before being accepted or refuted; the *fix* was not, until it was implemented. That asymmetry is where this entry went wrong.
 
-**Tags:** `#security` `#code-review` `#adversarial-review` `#reasoning` `#ansible-035`
+**Tags:** `#security` `#code-review` `#adversarial-review` `#reasoning` `#ansible-035` `#ansible-038`
 
 ### [2026-08-15] The adversarial-review gate writes a ~90MB artifact into the spec folder, untracked and unignored
 
@@ -4089,3 +4100,54 @@ specs/**/review-transcript.jsonl
 - **"No prior example has it" is not evidence of a convention** — it can equally mean the situation never arose. Here both readings looked identical until the file size was checked.
 
 **Tags:** `#git` `#spec-driven-development` `#adversarial-review` `#gitignore` `#cli-034` `#gotcha`
+
+### [2026-08-15] Adding a role to a playbook does not install it on any path that never runs the playbook
+
+**Context:** ANSIBLE-035 was created because a rebuild of aws1 "wiped the fleet's only maintenance timer with nothing noticing". The fix was to add the `node_maintenance` role to `provision-aws1.yml`, and the spec's verification then concluded that *"a future Spot replacement now reinstalls the timer (with notify wiring) automatically via provisioning, not by hand."*
+
+**The trap:** that conclusion was never traced end to end, and it is false. The replacement path is:
+
+```
+make aws1-replace  →  terraform -replace  →  cloud-init  →  "then run: make deploy-argocd"
+                                                 │                      │
+                                      tailscale + k3s + ns        helm + kubectl only
+                                                 └── provision-aws1.yml: never invoked
+```
+
+`node_maintenance` lives in `provision-aws1.yml`. Nothing in the chain calls it, so a replaced aws1 comes up with no timer and no notify units — the exact original incident, through a different door. Adding the role was **necessary and not sufficient**, and the gap is invisible in the direction it fails: no timer means no maintenance failures to report, so the missing alert path never announces its own absence either.
+
+Found only because a claim written into a PR body was checked before merging, rather than after.
+
+**Fix:** filed as #1102. The durable shape is Standing Order #1 — the replace target should *run* the provisioning step, not print it as a manual instruction which is also incomplete.
+
+**Rule:**
+- **"The role is in the playbook" answers a different question than "the node gets the role".** The second requires naming every path that brings that node up, and cattle nodes usually have a bring-up path — a `-replace` target, cloud-init, an autoscaler — that deliberately bypasses configuration management.
+- **A fix that closes an incident deserves a trace of the incident's own path, not of the path you were editing.** ANSIBLE-035 traced the playbook; the incident came through Terraform.
+- **Suspect any capability whose failure removes its own alarm.** A missing maintenance timer produces no maintenance failures, so the missing notifier is never exercised. These read as healthy and are indistinguishable from working, which is why they need an external check (#1021) rather than a self-report.
+
+**Tags:** `#ansible` `#terraform` `#cattle` `#observability` `#ansible-035` `#ansible-041` `#gotcha`
+
+### [2026-08-15] `gh pr edit` aborts on this repo with an error about a board, and leaves the body unchanged
+
+**Context:** editing a PR description here with `gh pr edit <n> --body-file f` exits non-zero with:
+
+```
+GraphQL: Projects (classic) is being deprecated in favor of the new Projects
+experience [...] (repository.pullRequest.projectCards)
+```
+
+**The trap:** the error names *Projects*, so it reads as a board-metadata problem, incidental to the edit. It is not — the body silently does not update. Confirmed by grepping the fetched body for the new text: 0 matches before the workaround, 1 after. An agent that reads the error, concludes "that's just the deprecated board", and moves on has left the PR description stale while believing it published.
+
+**Fix:** the REST endpoint has no such coupling.
+
+```bash
+gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@body.md
+```
+
+The same `-F body=@file` form repairs an issue or comment body (`.../issues/<n>`), which is also the remedy when zsh has eaten backticks out of a `--body` string.
+
+**Rule:**
+- **Verify a write landed by reading it back, not by reading the exit path.** This one failed loudly *and* partially: an error was printed, and it pointed at the wrong subsystem.
+- **Prefer `gh api` over the porcelain for body writes.** `gh pr edit` bundles unrelated GraphQL calls; the REST endpoint does exactly one thing.
+
+**Tags:** `#github` `#gh-cli` `#tooling` `#gotcha`
