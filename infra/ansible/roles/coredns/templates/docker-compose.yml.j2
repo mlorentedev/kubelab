@@ -28,15 +28,25 @@ services:
     ports:
       - "{{ coredns_port }}:53/udp"
       - "{{ coredns_port }}:53/tcp"
+      # Health endpoint from the `health` plugin. Bound to the Tailscale address,
+      # never published bare: Docker's DNAT is evaluated before ufw's filter
+      # chains and DOCKER-USER is empty fleet-wide, so a published port is
+      # governed by its bind address and nothing else (#959).
+      - "{{ node_ips.rpi4 }}:{{ coredns_health_port }}:8080/tcp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
     command: ["-conf", "/etc/coredns/Corefile"]
-    healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "-p", "53", "{{ service_domains.vpn | default(base_domain) }}", "+short"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
+    # NO healthcheck: block. This is deliberate, and removing a check is the fix.
+    #
+    # coredns/coredns is distroless — entrypoint /coredns, no /bin/sh, no dig.
+    # The previous check was ["CMD", "dig", ...], which cannot run in this image
+    # under any circumstances. It had failed 996 consecutive times, and that is
+    # worse than having no check at all: a probe that has never passed is
+    # indistinguishable from a service that has never worked, so the one real
+    # CoreDNS outage this was meant to catch would arrive at an indicator that
+    # was already red. Docker healthchecks run *inside* the container, so no
+    # in-container probe is possible here; the signal moves out instead, to the
+    # `health`/`ready` endpoints published above.
 
 volumes:
   pihole_data:
