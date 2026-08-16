@@ -1,7 +1,7 @@
 """BACKUP-044 offsite-destination verification.
 
 Proves the R2 bucket is usable *before* a backup pipeline depends on it, and
-keeps proving it afterwards. Every value comes from SSOT — `infra.backup_r2` in
+keeps proving it afterwards. Every value comes from SSOT — `backup.r2` in
 `common.yaml` for the non-secrets, SOPS for the credentials — so this never
 becomes a second place where the account id or bucket name is written down.
 
@@ -40,7 +40,7 @@ from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 
 # SSOT paths. Changing a bucket or account means editing common.yaml, not this file.
-_CFG_ROOT = ("infra", "backup_r2")
+_CFG_ROOT = ("backup", "r2")
 _ACCESS_KEY_SECRET = "backup.r2.access_key_id"
 _SECRET_KEY_SECRET = "backup.r2.secret_access_key"
 
@@ -75,7 +75,7 @@ def _default_run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
 
 
 def load_destination(cm: ConfigurationManager) -> DestinationConfig:
-    """Resolve `infra.backup_r2` from the merged config, or explain what is missing."""
+    """Resolve `backup.r2` from the merged config, or explain what is missing."""
     node = cm.get_merged_config()
     for key in _CFG_ROOT:
         if not isinstance(node, dict) or key not in node:

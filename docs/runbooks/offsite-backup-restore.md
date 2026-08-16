@@ -19,7 +19,7 @@ owner: manu
 | Piece | Where |
 |---|---|
 | Destination | Cloudflare R2, bucket `kubelab-backups` |
-| Non-secret config | `infra.backup_r2` in `infra/config/values/common.yaml` |
+| Non-secret config | `backup.r2` in `infra/config/values/common.yaml` |
 | S3 credentials | SOPS `backup.r2.access_key_id` / `backup.r2.secret_access_key` |
 | Repository password | SOPS `backup.restic_password` |
 | **Offsite escrow** | **A Bitwarden Secure Note holding all of the above** |
@@ -55,7 +55,7 @@ export AWS_SECRET_ACCESS_KEY=$(make -s secrets-show KEY=backup.r2.secret_access_
 export RESTIC_PASSWORD=$(make -s secrets-show KEY=backup.restic_password SECRETS_ENV=common)
 export AWS_DEFAULT_REGION=auto
 
-# 2. Point at the node's repository (endpoint from infra.backup_r2).
+# 2. Point at the node's repository (endpoint from backup.r2).
 REPO="s3:https://<account_id>.r2.cloudflarestorage.com/kubelab-backups/<node>"
 
 # 3. See what you have BEFORE restoring anything.

@@ -40,7 +40,7 @@ class FakeConfig:
         )
 
     def get_merged_config(self):
-        return {"infra": {"backup_r2": self._dest}} if self._dest is not None else {"infra": {}}
+        return {"backup": {"r2": self._dest}} if self._dest is not None else {"backup": {}}
 
     def get_secret_by_path(self, path):
         return self._secrets.get(path)
@@ -86,7 +86,7 @@ def test_destination_resolves_from_the_config_ssot():
 
 
 def test_missing_config_section_explains_itself():
-    with pytest.raises(DestinationError, match="infra.backup_r2"):
+    with pytest.raises(DestinationError, match="backup.r2"):
         load_destination(FakeConfig(dest=None))
 
 
@@ -108,13 +108,13 @@ def test_credentials_carry_the_r2_compatibility_env():
 
 
 def test_real_common_yaml_declares_the_destination():
-    """The committed SSOT must actually carry infra.backup_r2 — guards a rename."""
+    """The committed SSOT must actually carry backup.r2 — guards a rename."""
     import yaml
 
     cfg = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
-    node = cfg["infra"]["backup_r2"]
+    node = cfg["backup"]["r2"]
     for field in ("account_id", "bucket", "endpoint", "repo_prefix"):
-        assert node.get(field), f"infra.backup_r2.{field} must be set in common.yaml"
+        assert node.get(field), f"backup.r2.{field} must be set in common.yaml"
     assert node["repo_prefix"].startswith("s3:"), "restic addresses R2 through its S3 backend"
 
 
