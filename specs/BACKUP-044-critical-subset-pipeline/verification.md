@@ -121,15 +121,120 @@ before `tasks.md` is drafted:
   role cannot assume a distribution default that happened to work on a
   development machine.
 
-### R1, R2, R4, R6 — not yet settled
+### R2 — the R2 destination: SETTLED, and smoke-tested before any pipeline exists
 
-- **R1** (restic repository password circularity) — operator decision, options
+Bucket `kubelab-backups` created, Account API token issued (not a User API
+token: a user token goes inactive if its user leaves the account, which for a
+backup credential is a silent-failure vector). Credentials in SOPS at
+`backup.r2.access_key_id` / `backup.r2.secret_access_key`; non-secret values as
+SSOT at `infra.backup_r2` in `common.yaml`.
+
+Smoke-tested from the workstation against the live bucket, before a line of the
+pipeline was written. Credential values were read from SOPS into the environment
+and never printed:
+
+```
+=== 1. authenticate + what can this token see? ===
+  list-buckets refused (expected for a bucket-scoped token):
+    An error occurred (AccessDenied) when calling the ListBuckets operation: Access Denied
+
+=== 2. can it see the target bucket? ===
+  PASS: kubelab-backups is reachable
+
+=== 3. write / read / delete round-trip (1 KB throwaway) ===
+  write:  PASS
+  read:   PASS
+  integrity: PASS (sha256 match)
+  delete: PASS
+  cleanup verified: PASS (object gone)
+```
+
+Three things this establishes that a configuration review could not:
+
+1. **The token is genuinely bucket-scoped.** `ListBuckets` is refused while the
+   target bucket is reachable — so a compromise of this credential cannot reach
+   any other bucket in the account. Scoping that is claimed but never exercised
+   is an assumption.
+2. **Delete works.** This is the one that would have failed late and quietly: a
+   read-write token without delete lets backups run green for weeks and only
+   fails when `restic forget`/`prune` first tries to reclaim space, with a full
+   bucket and a retention policy that has never actually retained anything.
+3. **The credential shape matches the documented derivation** — 32-char key id,
+   64-char secret, consistent with the secret being the hex SHA-256 of the token
+   value. That matters for recovery: the secret can be re-derived from the token
+   value, so the escrow copy of the token value is itself a recovery path.
+
+Ordering note, recorded because the instinct runs the other way: the first object
+written to a new backup destination should be the *least* sensitive thing
+available, not the most. Testing with real state — or worse, a password-manager
+export — puts the most valuable data in a bucket whose permissions, retention and
+delete path are all still unproven.
+
+**Not yet codified.** The smoke test ran from a scratchpad script with the
+account id and bucket inlined. Before it is reused it must read them from
+`infra.backup_r2` in `common.yaml`, or it becomes a second source of truth for
+values that already have one.
+
+### R1 — partially settled: the escrow decision
+
+The circularity is real and is now broken on one side. SOPS is decrypted by an
+age key that a disaster destroys, so credentials stored *only* in SOPS make the
+backups unreachable in exactly the scenario they exist for — intact and
+unopenable.
+
+**Decided: a manual Bitwarden item as an independent trust root** (operator
+created it 2026-08-16), holding the account id, bucket, both S3 credentials, and
+the R2 token value. Bitwarden recovers from a master password on any machine,
+depending on no physical artefact.
+
+Deliberately **not** registered in the `dotf secrets` registry. An escrow whose
+read path requires a dotfiles checkout, a running `bw serve` daemon and a working
+`dotf secrets run` — which fails roughly one attempt in three today
+(dotfiles#988) — has added three dependencies to the one path that must work when
+everything else has failed. Nothing automated needs this copy; that is the point.
+
+Prior art: #479 already proposed exactly this shape, naming Vaultwarden. That
+target does not exist — Vaultwarden survives only as toolkit functions whose
+restore is literally `"Vaultwarden restore not yet implemented"` — and
+self-hosting the escrow would reintroduce the circularity on different
+infrastructure. Cloud Bitwarden does not.
+
+**Still open on R1:** the restic *repository password* itself has not been
+generated or registered. It needs the same dual placement — SOPS for operation,
+Bitwarden for recovery — and `backup.restic_password` stays unregistered in
+`SECRET_CATALOG` until it is.
+
+### R4 — boot ordering: the answer differs per node, and the spec assumed one
+
+`proposal.md` treats "backup on power-on, before the service accepts its first
+write" as a single design question. It is two, because the two on-demand nodes
+start their containers by different mechanisms:
+
+| Node | How containers start | Orderable against |
+|---|---|---|
+| Beelink | `kubelab-compose.service` (systemd oneshot, `docker compose up -d`) | **the unit itself** — `Before=kubelab-compose.service` |
+| RPi4 | Docker restart policy only; the `coredns` role ships no systemd unit | **only `docker.service`** |
+
+So the Beelink has a genuine ordering relationship available and the RPi4 does
+not. On the RPi4 the only orderable target is `docker.service` itself, which
+means the snapshot runs before Docker starts at all — the database is guaranteed
+quiescent, which is *better* for consistency, but it is a different design that
+cannot use a running container.
+
+Either way `Persistent=true` is the wrong instrument: it controls *when a missed
+timer catches up*, not *what it runs before*. The ordering must be an explicit
+`Before=`/`After=` relationship. Confirming it across a real power cycle belongs
+to AC5 in implementation, not to Part 0.
+
+### R6 — not yet settled
+
+- **R1** — escrow settled above; the repository password itself remains.
   not yet presented. Blocked on analysis of whether #479 already rejected an
   R2-side escrow.
-- **R2** (Cloudflare R2 bucket and credentials) — operator action; the bucket
+- **R2** — settled above.
   does not exist. `SECRET_CATALOG` registration prepared separately, with the
   ANSIBLE-033 `envs` failure mode checked.
-- **R4** (`Persistent=true` does not order the boot snapshot before the first
+- **R4** — settled above.
   write) — design read outstanding. Full proof needs a power cycle, which belongs
   to AC5 in implementation rather than to Part 0.
 - **R6** (restore target) — the 2026-08-10 Gitea research proposes an ephemeral
