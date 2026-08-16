@@ -86,14 +86,49 @@
   register: _pull
   changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
 
-# `--force-recreate` only when glances.conf actually changed. Plain `up -d`
-# compares the compose spec, not the contents of a bind-mounted file, so it is
-# a no-op after a config-only edit — the container would keep serving the old
-# allowlist while this task reported success.
+# A container's resource limits are fixed at CREATE time, so a limit declared
+# while the kernel could not enforce it stays discarded through every restart —
+# including a reboot — until something recreates the container. Plain `up -d`
+# will not: the compose spec is unchanged, so Compose sees nothing to do.
+#
+# That is not hypothetical. On the RPi3 the memory cgroup controller was absent,
+# so Docker silently dropped `memory` while applying `cpus` from the same block,
+# and `common.yaml` spent months declaring a 256M limit the kernel discarded
+# (ANSIBLE-040). Comparing what was declared against what the kernel actually
+# granted is what turns that silent discard into a self-healing condition — and
+# it is the check that would have caught the bug in the first place.
+- name: Read the memory limit currently applied to the container
+  command: docker inspect glances --format '{% raw %}{{.HostConfig.Memory}}{% endraw %}'
+  register: _glances_applied_memory
+  changed_when: false
+  failed_when: false
+
+- name: Detect drift between the declared and the applied memory limit
+  set_fact:
+    _glances_memory_drift: >-
+      {{ _glances_applied_memory.rc == 0
+         and (_glances_applied_memory.stdout | trim | int)
+             != (glances_memory_limit | human_to_bytes) }}
+
+- name: Report a discarded memory limit
+  debug:
+    msg: >-
+      Declared memory limit {{ glances_memory_limit }}
+      ({{ glances_memory_limit | human_to_bytes }} bytes) is not the one in force
+      ({{ _glances_applied_memory.stdout | trim }}) — recreating the container.
+      If this repeats on every run, the kernel is not enforcing memory limits at
+      all: check that `memory` appears in /sys/fs/cgroup/cgroup.controllers.
+  when: _glances_memory_drift | bool
+
+# `--force-recreate` when glances.conf actually changed, or when the limit in
+# force does not match the declared one. Plain `up -d` compares the compose
+# spec, not the contents of a bind-mounted file nor the live container's
+# HostConfig, so it is a no-op in both cases — the container would keep serving
+# the old allowlist, or running unbounded, while this task reported success.
 - name: Start Glances container
   command: >-
     docker compose -f {{ glances_deploy_dir }}/compose.yml up -d
-    {{ '--force-recreate' if _glances_conf.changed else '' }}
+    {{ '--force-recreate' if (_glances_conf.changed or _glances_memory_drift | bool) else '' }}
   register: _compose_up
   changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 

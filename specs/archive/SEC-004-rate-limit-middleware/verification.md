@@ -16,7 +16,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 ## Test status
 
-- Test suite: `make test-fast` -> 519 passed, 136 deselected (zero regressions; +9 from this spec's new tests: 4 + 3 + 2)
+- Test suite: `make test-fast` @ `565aa54` (2026-08-14) -> 519 passed, 136 deselected (zero regressions; +9 from this spec's new tests: 4 + 3 + 2)
+- Independent review's own run: `make test` @ `38056dc` (2026-08-15) -> 539 passed, 141 deselected — the reviewer re-ran the suite rather than trusting the line above
+- At archive: `make test` @ `4f069c5` (2026-08-15) -> 546 passed, 134 deselected. Same 680 total as the reviewer's run; the split moved because marker-based deselection depends on kubectl availability, not because tests were added
 - Manual smoke test (staging, 2026-08-15):
   - Burst drill on `home.staging.kubelab.live`: `ab -n 300 -c 100` -> 88/300 HTTP 429, 212/300 HTTP 200 (expected ≈223 admits at burst=150 + ~2.45s refill at average=30/s — 212 observed, consistent with configured values)
   - Cross-route probe (bucket-sharing test): immediately after exhausting Homepage's bucket, 5/5 requests to `grafana.staging.kubelab.live` returned clean 302 (not 429) — no shared state
@@ -51,7 +53,16 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-08-15 — rewritten by `dotf spec archive`
+- [x] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/` ✓ 2026-08-15
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018) ✓ 2026-08-15 — #970 was already closed at 08:25:08 by #1093's `Closes` line, ahead of this archive rather than by it; board Status verified `Done` via the Projects v2 GraphQL query, and the archive PR link is recorded as a comment on the issue
+- [x] Promotions above executed (if any) ✓ 2026-08-15 — all three lessons are in `docs/lessons.md` on master (klipper-lb source-IP masking, staging Argo CD auto-sync, and the orphaned-manifest/`Synced` finding, the last enforced by `tests/test_orphan_manifests.py`). No ADR and no pattern, as reasoned above.
+
+### Post-review dispositions
+
+Recorded here rather than in `review.md`: that file is the reviewer's signed verdict and is left exactly as it was signed.
+
+- Finding 1 (`sourceCriterion` asserted presence, not value) — fixed in `4f069c5`; the reviewer's own mutation now fails the test.
+- Finding 2 (headscale's middleware order) — filed as #1097. The deviation predates this spec and the fix belongs with a convention-enforcing test.
+- Finding 3 (no permanent burst-drill test) — declined; it restates the deliberate trade-off already recorded at Criterion 3 above.
+- Finding 4 (coverage test excludes `generated/`) — observation only; the drift gate and `tests/test_k8s_generator_middlewares.py` cover it.

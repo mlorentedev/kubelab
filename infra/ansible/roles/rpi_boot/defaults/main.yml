@@ -1,0 +1,44 @@
+---
+# Kernel command line owned by this role.
+#
+# Raspberry Pi OS moved this file from /boot to /boot/firmware in bookworm.
+# Both are probed at runtime (tasks/main.yml) rather than assumed, so the role
+# works on either layout; this default is only the preferred path.
+rpi_boot_cmdline_path: /boot/firmware/cmdline.txt
+rpi_boot_cmdline_path_legacy: /boot/cmdline.txt
+
+# Kernel parameters this role guarantees are present.
+#
+# WHY THESE TWO
+# -------------
+# The Raspberry Pi Foundation kernel ships the memory cgroup controller
+# DISABLED (it costs ~1% of RAM), so `memory` never appears in
+# /sys/fs/cgroup/cgroup.controllers and every memory limit is silently
+# discarded -- Docker drops `mem_limit` with only a `docker info` warning,
+# while applying the CPU limit from the same compose block. That asymmetry is
+# why it goes unnoticed. See ANSIBLE-040.
+#
+# `cgroup_memory=1` is the older toggle and `cgroup_enable=memory` the current
+# one; both are passed because which one a given kernel honours has changed
+# across releases, and passing an unrecognised parameter is inert.
+#
+# Nodes running Ubuntu Server for Pi (rpi4) already have the controller and
+# never reach the edit -- the role is guarded on the controller being absent,
+# not on the distribution.
+rpi_boot_required_params:
+  - cgroup_enable=memory
+  - cgroup_memory=1
+
+# A cmdline change only takes effect at boot, so this role is inert without a
+# reboot. Rebooting is NEVER ambient: it is opt-in per run.
+#
+# The RPi3 is the monitoring of record for prod (ADR-028); a provisioning run
+# that quietly reboots it would blind prod monitoring as a side effect of an
+# unrelated `make provision`. Callers opt in explicitly:
+#
+#   make provision NODE=rpi3 ENV=prod TAGS=boot EXTRA="-e rpi_boot_allow_reboot=true"
+#
+# When the edit lands but a reboot is not allowed, the role ends by reporting
+# loudly that the change is pending rather than reporting success.
+rpi_boot_allow_reboot: false
+rpi_boot_reboot_timeout: 300

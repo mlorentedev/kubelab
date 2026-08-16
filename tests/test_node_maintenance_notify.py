@@ -27,8 +27,10 @@ from __future__ import annotations
 
 import json
 import re
+import socket
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -194,6 +196,171 @@ def test_curl_call_is_time_bounded():
     script = _render("kubelab-maintenance-notify.sh.j2")
     assert "--connect-timeout" in script
     assert "--max-time" in script
+
+
+# --- ANSIBLE-038 f4: the token must not reach curl's argv ------------------
+
+
+def _serve_one_request(captured: list[bytes]) -> int:
+    """Start a one-shot HTTP listener on a free port; return the port.
+
+    Raw socket rather than ``http.server``: the assertion is about the exact
+    header bytes curl put on the wire, and a framework that normalises headers
+    would hide precisely the corruption this test exists to catch.
+    """
+    srv = socket.socket()
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+
+    def serve() -> None:
+        conn, _ = srv.accept()
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+        captured.append(data)
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        conn.close()
+        srv.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    return srv.getsockname()[1]
+
+
+def _executable_lines(script: str) -> str:
+    """The script with comment lines removed.
+
+    Needed for any assertion phrased as "this text must NOT appear": the
+    comments here quote the pre-fix form to explain why it changed, so a raw
+    text match would fail on the explanation and pass on the bug. The same
+    trap is called out in test_notify_domain_is_a_literal below — a test that
+    breaks when you document a decision teaches you not to document it.
+    """
+    return "\n".join(
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def test_token_is_not_a_curl_argv_element():
+    """The finding itself: ``-H "Authorization: Bearer ..."`` is visible in ps.
+
+    Asserted on the rendered text because argv is what ``/proc/<pid>/cmdline``
+    exposes, and a process-inspection race would make this flaky for no gain.
+    """
+    code = _executable_lines(_render("kubelab-maintenance-notify.sh.j2"))
+    assert not re.search(r"-H\s+[\"']Authorization:", code), (
+        "the bearer token is back in curl's argv, where ps can read it"
+    )
+    assert "--config -" in code, "token must reach curl through a config on stdin"
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        pytest.param("plain-base64_token==", id="ordinary"),
+        # Each of these is silently CORRUPTED, not rejected, if the escaping
+        # regresses: a bare `"` truncates the value at that byte and n8n then
+        # answers 403 -- losing the notification the unit exists to deliver.
+        pytest.param('quote"inside', id="double-quote"),
+        pytest.param("back\\slash", id="backslash"),
+        pytest.param('mixed"and\\both #hash', id="every-metacharacter"),
+    ],
+)
+def test_config_stdin_delivers_the_token_byte_exact(token: str):
+    """Run the SHIPPED curl invocation and read the header off the wire.
+
+    The escaping is the risk the fix introduces: moving the token out of argv
+    moves it into curl's config parser, which processes ``\\`` and ``"`` inside
+    a quoted value. Rendering-and-asserting would not catch a bad escape --
+    only sending it does.
+
+    The URL is the one substitution: the template hardcodes https, and standing
+    up TLS here would test openssl rather than the escaping.
+    """
+    script = _render("kubelab-maintenance-notify.sh.j2")
+    block = script[script.index("TOKEN_ESC=") :]
+
+    captured: list[bytes] = []
+    port = _serve_one_request(captured)
+    block = block.replace(
+        f"https://{_defaults()['maintenance_notify_domain']}", f"http://127.0.0.1:{port}"
+    )
+
+    proc = subprocess.run(
+        ["bash", "-c", f'TOKEN="$1"\nPAYLOAD=\'{{"probe":1}}\'\n{block}', "bash", token],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, f"curl failed: {proc.stderr}"
+    assert captured, "listener received no request"
+
+    sent = [
+        line
+        for line in captured[0].decode("utf-8", "replace").split("\r\n")
+        if line.lower().startswith("authorization:")
+    ]
+    assert sent == [f"Authorization: Bearer {token}"], (
+        f"token corrupted in transit: {sent!r}"
+    )
+
+
+# --- ANSIBLE-038 f5: retry budget vs the unit's own timeout -----------------
+
+
+def _flag(script: str, name: str) -> int:
+    """Read a numeric curl flag from the code, never from the prose.
+
+    The comments quote these same flags with their current values, so reading
+    the whole file would keep passing after someone edited the explanation and
+    forgot the command -- the one divergence this test needs to catch.
+    """
+    match = re.search(rf"{re.escape(name)}\s+(\d+)", _executable_lines(script))
+    assert match, f"{name} missing from the notify script"
+    return int(match.group(1))
+
+
+def test_notify_unit_timeout_exceeds_the_script_retry_budget():
+    """A retry longer than TimeoutStartSec is worse than no retry at all.
+
+    systemd would kill the unit mid-attempt, so a delivery still in progress is
+    reported as a timeout. Measured against a blackholed host, the pre-fix
+    combination of retries with the old 30s timeout took 35.0s -- i.e. adding a
+    retry without moving the timeout would have manufactured this failure.
+
+    Worst case is ``--retry-max-time`` (after which curl starts no NEW attempt)
+    plus one final attempt bounded by ``--max-time``.
+    """
+    script = _render("kubelab-maintenance-notify.sh.j2")
+    worst_case = _flag(script, "--retry-max-time") + _flag(script, "--max-time")
+
+    unit = _render("kubelab-maintenance-notify.service.j2")
+    timeout = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
+    assert timeout, "notify unit has no TimeoutStartSec"
+
+    assert int(timeout.group(1)) > worst_case, (
+        f"TimeoutStartSec={timeout.group(1)}s cannot contain a {worst_case}s retry budget"
+    )
+
+
+def test_retry_is_in_curl_not_in_the_unit():
+    """Pins the choice between the two places a retry could live.
+
+    Not a law of nature -- a deliberate decision, recorded so that re-adding
+    Restart= means confronting it rather than ending up with both. Both at once
+    is the bad outcome: systemd re-running a script that is already retrying.
+    """
+    script = _render("kubelab-maintenance-notify.sh.j2")
+    assert "--retry" in script
+
+    unit = _render("kubelab-maintenance-notify.service.j2")
+    directives = re.findall(r"^(Restart)=", unit, re.MULTILINE)
+    assert not directives, (
+        "Restart= on the unit duplicates the retry curl already performs"
+    )
 
 
 def test_token_value_is_not_shell_interpreted():

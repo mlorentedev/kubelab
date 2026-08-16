@@ -90,6 +90,18 @@
       tags: [always]
 
   roles:
+    # FIRST, deliberately. A container's memory limit is fixed at create time,
+    # so if the kernel gains the memory cgroup controller only after the service
+    # roles below have run, every limit they declared was already discarded and
+    # stays discarded until something recreates the container. Ordering this
+    # first makes a from-scratch provision correct in one pass.
+    #
+    # No-op on a node that already exposes the controller, and inert without
+    # -e rpi_boot_allow_reboot=true (this node is prod's monitoring of record;
+    # nothing reboots it as a side effect). See ANSIBLE-040.
+    - role: ../roles/rpi_boot
+      tags: [boot]
+
     - role: ../roles/base_system
       tags: [base]
       vars:
