@@ -1,0 +1,44 @@
+# {{ ansible_managed }}
+# Brings the node's Glances container up once its Tailscale address exists.
+#
+# WHY THIS UNIT EXISTS
+# --------------------
+# Glances publishes on {{ tailscale_ip }}:{{ glances_port }} rather than 0.0.0.0,
+# because a published port is governed by its bind address and nothing else —
+# Docker's DNAT runs before ufw's filter chains, so an interface-scoped firewall
+# rule on a published port is decoration (#959).
+#
+# The cost of that correct choice is a boot race. Docker starts before tailscaled
+# has put the address on the interface, docker-proxy cannot bind, and the
+# container comes up WITHOUT its port published — measured 2026-08-15 on beelink
+# and ace1, where HostConfig.PortBindings asked for the Tailscale address while
+# NetworkSettings.Ports was empty. Nothing reports it: `docker ps` shows the
+# container Up, and `docker compose up -d` sees an unchanged spec hash and does
+# nothing. Five of seven Glances endpoints were unreachable from the dashboard
+# that scrapes them, silently, since the previous boot.
+#
+# `restart: unless-stopped` on the container cannot fix this. The port binding is
+# fixed at container *create* time, so a restart re-runs the same unbound
+# container; only a recreate re-publishes. Ordering the create after the address
+# exists is what removes the race rather than papering over it.
+[Unit]
+Description=KubeLab Glances (published on the node's Tailscale address)
+Documentation=https://github.com/mlorentedev/kubelab
+Requires=docker.service
+After=docker.service tailscaled.service network-online.target
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Comfortably above the wait helper's own bound, so its explicit failure is what
+# surfaces rather than an opaque systemd timeout.
+TimeoutStartSec=180
+ExecStartPre={{ glances_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
+# --force-recreate, not a plain `up -d`: if a previous boot left an unbound
+# container behind, the spec hash still matches and compose would leave it alone.
+ExecStart=/usr/bin/docker compose -f {{ glances_deploy_dir }}/compose.yml up -d --force-recreate
+ExecStop=/usr/bin/docker compose -f {{ glances_deploy_dir }}/compose.yml stop
+
+[Install]
+WantedBy=multi-user.target
