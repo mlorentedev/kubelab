@@ -124,9 +124,10 @@ service. The real steady-state workload is a 22MB payload in a ~6MB repository. 
 not in doubt, and the fallback the proposal held in reserve (stream the snapshot to a node that
 can run restic) is **not needed** — that risk is closed.
 
-**The deployable cap: blocked, root cause verified.** Two attempts to obtain a number failed
-before the reason became clear, and the failures are recorded because the second one nearly
-shipped a false result:
+**The deployable cap: was blocked, root cause verified, then unblocked the same session.** Two
+attempts to obtain a number failed before the reason became clear, and the failures are recorded
+because the second one nearly shipped a false result. The resulting number is in
+"The cap, measured" below:
 
 1. `/usr/bin/time -v` is not installed on the RPi3 — no output, no numbers.
 2. Reading `memory.peak` from the scope's own cgroup returned nothing.
@@ -183,6 +184,42 @@ too, the node has ~900MB of swap and was observed using it (128MB -> 218MB acros
 an unbounded restic on the monitoring of record for prod is exactly what the cap exists to
 prevent. The cap becomes an ordered prerequisite: enable the controller -> re-measure with a
 real oracle -> deploy with a cap chosen from that measurement.
+
+#### The cap, measured (2026-08-15, after the prerequisite landed)
+
+The prerequisite was fixed the same session — `ANSIBLE-040` (#1101, PR #1103) gave the node the
+memory cgroup controller, and the control experiment inverted: 300MB under `MemoryMax=64M` now
+dies with exit 137, while 32MB under the same cap survives. Two-sided, so the oracle discriminates
+rather than merely killing everything.
+
+The descent sweep was then re-run unchanged, against the real workload (back up the live Uptime
+Kuma volume, then `restic check`):
+
+| cap | backup | check | verdict |
+|---|---|---|---|
+| 192M | ok | ok | survives |
+| 128M | ok | ok | survives |
+| 96M | ok | ok | survives |
+| 64M | ok | ok | survives |
+| 48M | ok | ok | survives |
+| 32M | ok | ok | survives |
+| 24M | ok | ok | survives |
+| **16M** | **FAIL(137)** | **FAIL(137)** | **breaks here** |
+
+The floor is between 16M and 24M for a 7.9M repository. Compare the same sweep before the
+controller existed, which reported survival at every level including 16M — the difference between
+a test and a test that checks something.
+
+**Recommended deployable cap: `MemoryMax=128M`, with `MemorySwapMax=0`.** That is >5x the measured
+floor and ~14% of the node's RAM, so it absorbs index growth as the repository accumulates
+snapshots while still bounding a runaway well below the point where Uptime Kuma is at risk. The
+measurement is a floor, not a ceiling: restic's index scales with repository size, so this should
+be re-checked if the RPi3's repo ever grows far beyond the ~8M seen here.
+
+One incidental observation worth carrying into AC2: the payload measured 21.642 MiB before the
+reboot and 17.591 MiB after it, because the restart checkpointed SQLite's WAL. The size of what
+is on disk depends on WAL state, which is a concrete argument for `sqlite3 .backup` rather than a
+file copy — the proposal asserted this; the reboot demonstrated it by accident.
 
 **This is not a latent gap — a declared control is already being discarded.** An earlier draft
 of this section claimed nothing on the RPi3 relies on a limit that silently fails. That was
