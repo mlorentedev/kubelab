@@ -886,3 +886,72 @@ apps:
     # The category is kept because ADR-029 still plans local inference once a
     # GPU node exists; until then the interim path is a hosted API.
     ai: {}
+
+# =============================================================================
+# Backup sources — the SSOT allow-list (BACKUP-044, #1092 AC3)
+# =============================================================================
+# An ALLOW-list, not an exclude-list. The previous model (roles/backup)
+# enumerated every Docker volume and subtracted known-dead ones, which fails in
+# the wrong direction: a new dead volume is backed up until someone notices, and
+# a new LIVE one is only covered if someone remembers. Measured on 2026-08-15,
+# that model would archive buildx caches on the Beelink and miss Gitea entirely,
+# because Gitea is a bind mount and not a volume at all.
+#
+# THE RULE FOR EVERY ENTRY: declare the name we control, resolve the path at
+# run time. Three source types, discriminated by which key is present:
+#
+#   path:    a filesystem path WE own (a bind mount). Stable, so it is literal.
+#   volume:  a Docker volume NAME. Docker owns its mountpoint (`data-root` is
+#            configurable), so the path is resolved with `docker volume inspect`.
+#   pvc:     a Kubernetes claim. K3s owns the on-disk path and embeds the PVC's
+#            UUID in it, so a recreated claim silently invalidates any literal
+#            path. Resolved from namespace + claim at run time.
+#
+# `sqlite:` names a live SQLite database RELATIVE to the resolved root. It is not
+# decoration: every one of these was measured with a WAL larger and fresher than
+# the database file itself — headscale's WAL was 1.35MB against a 118KB db, eight
+# hours newer. Copying the file alone would capture under 8% of the state and
+# look like a valid backup. These need `sqlite3 .backup`, never `cp`.
+#
+# The trigger model is NOT declared here — it derives from each node's
+# `location` in networking.* (ADR-028). One fact, one place.
+backup:
+  sources:
+    beelink:
+      gitea:
+        # Bind mount, NOT a Docker volume: `docker volume ls` on this node
+        # returns only buildx state and the runner toolcache.
+        path: /opt/gitea/data
+        sqlite: gitea/gitea.db
+
+    rpi3:
+      uptime_kuma:
+        # The LIVE volume. `uptime-kuma_uptime_kuma_data` is an orphan: larger
+        # (26M vs 22M), more canonical-looking, and frozen since 2026-03-28
+        # (#1092 instance 1). Confirmed live by mtime, and by `docker inspect
+        # uptime-kuma` reporting `volume uptime_kuma_data -> /app/data`.
+        volume: uptime_kuma_data
+        sqlite: kuma.db
+
+    rpi4:
+      pihole:
+        # Query history only. `gravity.db` lives in the same volume and is
+        # ratified Tier 3 — regenerated in full by `pihole -g`, so it is
+        # deliberately not called out for consistency handling.
+        volume: coredns_pihole_data
+        sqlite: pihole-FTL.db
+
+    vps:
+      headscale:
+        # The most valuable single source in the fleet. Besides the database it
+        # holds `noise_private.key` and `derp_server_private.key` — losing those
+        # is not losing data, it is losing the VPN control plane's identity.
+        volume: headscale_headscale_data
+        sqlite: db.sqlite
+      # DEFERRED, deliberately, not forgotten: authelia and postgres on this node
+      # are K3s PVCs (`kubelab/authelia-data`, `kubelab/postgres-data`). They need
+      # the `pvc` source type, whose RESTORE differs in kind — the claim has to
+      # exist before anything can be written into it — so that design belongs
+      # with the restore work rather than with this declaration. Both currently
+      # have a copy via the PVC CronJob; it is in-cluster, so it is not offsite,
+      # which is the gap this spec exists to close for them next.
