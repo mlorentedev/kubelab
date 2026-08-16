@@ -774,11 +774,31 @@ _aws1-cancel-spot-request:
 
 aws1-destroy: _aws1-cancel-spot-request tf-aws-destroy
 
+# ANSIBLE-041 (#1102): this target used to stop after terraform and print
+# "Wait ~5 min for cloud-init, then run: make deploy-argocd". That instruction
+# was both manual and incomplete — it never named `provision-aws1`, which is
+# where the node_maintenance role lives, so every replacement silently produced
+# a hub with no maintenance timer and no failure-notify path. The absence was
+# invisible in the direction it failed: no timer means no maintenance failures,
+# so the missing notifier was never exercised either.
 aws1-replace: _aws1-cancel-spot-request
 	@$(POETRY) run toolkit infra terraform aws-tfvars
 	@cd infra/terraform/aws && terraform apply -auto-approve -var-file=aws.tfvars -replace=aws_instance.argo_hub
 	@rm -f infra/terraform/aws/aws.tfvars
-	@echo "✓ aws1 replaced. Wait ~5 min for cloud-init, then run: make deploy-argocd"
+	@$(MAKE) --no-print-directory wait-node-ready NODE=aws1 ENV=hub
+	@$(MAKE) --no-print-directory provision NODE=aws1 ENV=hub
+	@$(MAKE) --no-print-directory deploy-argocd
+	@echo "✓ aws1 replaced, provisioned and reconciling."
+
+# Block until a node can actually be provisioned: sshd answering AND cloud-init
+# finished. Two conditions, not one — sshd comes up long before cloud-init has
+# installed K3s and registered Tailscale. The logic lives in the playbook, not
+# here, so the Makefile keeps no inline shell.
+.PHONY: wait-node-ready
+wait-node-ready:
+	@test -n "$(NODE)" || (echo "Usage: make wait-node-ready NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4 [ENV=staging|prod|hub]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	@$(TOOLKIT) infra ansible run -p wait-node-ready -e $(_ENV) -l $(NODE)
 
 # Terraform DNS (Cloudflare) — SOPS-injected token
 .PHONY: tf-dns-plan tf-dns-apply
