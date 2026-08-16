@@ -30,12 +30,25 @@ So this is not "add a backup for Gitea". It is the first real implementation of 
 
 An offsite backup pipeline for the ratified critical subset (#452, 2026-08-15): **restic to Cloudflare R2**, driven from Ansible, covering four nodes with two trigger models.
 
-| Node | Consumers | Trigger model |
-|---|---|---|
-| Beelink (on-demand) | Gitea repos + SQLite | uptime-bounded |
-| VPS (always-on) | Headscale SQLite, Authelia, Postgres | wall-clock |
-| RPi3 (always-on) | Uptime Kuma SQLite | wall-clock |
-| RPi4 (on-demand) | Pi-hole `pihole-FTL.db` | uptime-bounded |
+This spec covers the **node-path consumer class** — state that lives as a
+filesystem path or Docker volume on a node, and whose consistent snapshot must be
+taken *on that node*. State that lives as a Kubernetes PVC is a different
+mechanism and a separate ticket (see Out of scope).
+
+| Node | Consumers | State | Measured | Trigger model |
+|---|---|---|---|---|
+| Beelink (on-demand) | Gitea | `/opt/gitea` | 2.3 MB | uptime-bounded |
+| VPS (always-on) | Headscale | `/opt/headscale` | 24 KB | wall-clock |
+| RPi3 (always-on) | Uptime Kuma | volume `uptime_kuma_data` | 19 MB | wall-clock |
+| RPi4 (on-demand) | Pi-hole FTL | volume `coredns_pihole_data` | 10.5 MB of a 21 MB volume | uptime-bounded |
+
+Sizes measured against the live fleet 2026-08-16. Two details that a path written
+from memory would get wrong: Pi-hole's state is inside the **`coredns_pihole_data`**
+Docker volume rather than under `/etc/pihole`, and its `gravity.db` (4.5 MB) is
+Tier 3 — regenerated in full by `pihole -g`, so it is excluded rather than backed
+up. `pihole-FTL.db` carried a **3 MB `-wal`** at the moment of measurement, which
+is the concrete case for AC2: a file copy of that database would have silently
+omitted three megabytes of committed-but-unmerged writes.
 
 Observable changes:
 
@@ -49,7 +62,10 @@ Observable changes:
 ## Out of scope
 
 - **The bulk tier.** ADR-049 D3's other leg is Hetzner Storage Box + Borg (#471, #473). It has its own provisioning, and the Storage Box does not appear to exist yet. R2 needs no provisioning of its own, which is part of why the critical subset goes first.
-- **Migrating the prod PVC CronJob off in-cluster MinIO.** It keeps working. Moving its remaining consumers is what eventually releases #972, and it is a later phase of #1090 — this spec must simply not add a *new* consumer of `minio:9000`.
+- **The PVC consumer class — BACKUP-046.** Authelia (256Mi), Postgres (2Gi), Grafana (1Gi), n8n (1Gi) and the CrowdSec database (256Mi) are Kubernetes PVCs, not node paths, so none of this spec's mechanisms reach them: `sqlite3 .backup` does not apply to Postgres at all, which needs `pg_dump`. Measured 2026-08-16: only `authelia-data` and `n8n-data` have any backup today, via the prod CronJob, and that targets in-cluster MinIO. **Postgres, Grafana and CrowdSec have none.** Splitting by mechanism rather than by tier is what makes both halves coherent — the tier axis cannot do it, because Authelia and Postgres are Tier 1 *and* PVCs.
+- **Migrating the prod PVC CronJob off in-cluster MinIO.** It keeps working. Moving its remaining consumers is what eventually releases #972, and it is BACKUP-046's work — this spec must simply not add a *new* consumer of `minio:9000`.
+
+- **Pulling backups from a central node.** Considered and rejected. A central puller needs privileged access to every node, which concentrates the whole fleet behind one host — the failure mode ransomware playbooks target. It also cannot take a consistent snapshot, because `sqlite3 .backup` and `pg_dump` must run beside the live database, and it cannot reach an on-demand node that is powered off. What *is* centralised is the control plane: one destination bucket, policy declared once in `common.yaml`, deployment from one Ansible run, and the coverage view in the acceptance criteria above.
 - **Tier 3 items** (Loki, CrowdSec config, `gravity.db`, MinIO, the rebuildable caches). Ratified as not needing backup; `gravity.db` is regenerated in full by `pihole -g`.
 - **Velero.** ADR-024's Phase 5 names it, and the 2026-07-02 platform audit calls the 17-ticket Borg/StorageBox plan heavier than external consensus. This spec builds the doctrine that exists.
 - **Cleaning up the orphans in #1092.** A prerequisite, not this spec's work — but see the risks: the RPi3 instance has to be resolved or explicitly disambiguated before its backup is written.
@@ -67,7 +83,8 @@ Observable changes:
 
 ## Acceptance criteria
 
-- [ ] Every ratified Tier 1 and Tier 2 item is present in its node's R2 restic repository, verified by listing snapshots from a machine that is not the source node — not by reading the playbook.
+- [ ] Every **node-path** consumer in the table above is present in its node's R2 restic repository, verified by listing snapshots from a machine that is not the source node — not by reading the playbook. (Re-scoped during Part 0: the original wording said "every ratified Tier 1 and Tier 2 item", which reaches into the PVC class this spec has no mechanism for and which #1090's step [3] never scoped in. The PVC class is BACKUP-046.)
+- [ ] **A run that never happened is reported.** One central place answers "when did each node last back up successfully?", and a node that has missed its expected window by an agreed margin raises an alert without anyone looking. AC4 covers a run that fails; this covers a run that never started — a silently absent backup is the failure mode that survives every check asserting only that recent snapshots look healthy. Demonstrated by stopping a node's timer and observing the alert, not by reading the query.
 - [ ] Each of the four live SQLite databases is snapshotted with `sqlite3 .backup`, demonstrated by restoring one and passing an integrity check on the restored copy.
 - [ ] A restore is exercised end-to-end for Gitea and for at least one always-on consumer, into a scratch location, with the transcript captured in `verification.md`. Content is verified, not just exit codes.
 - [ ] A failed backup raises an alert on the #686 path — demonstrated by injecting a failure, not by configuration review. A window missed because an on-demand node was powered off produces **no** alert, demonstrated across a real power cycle.
