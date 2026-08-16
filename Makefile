@@ -877,6 +877,23 @@ notify-smoke:
 backup-verify-destination:
 	@$(TOOLKIT) backup verify-destination --env $(or $(ENV),prod)
 
+# One level above backup-verify-destination: that one proves the BUCKET works,
+# this one proves RESTIC works in it. Runs the full lifecycle (init, backup,
+# snapshots, check) against a throwaway repository and removes it. They are
+# different claims and only the second one is the thing backups depend on.
+.PHONY: backup-verify-restic
+backup-verify-restic:
+	@$(TOOLKIT) backup verify-restic --env $(or $(ENV),prod)
+
+# Generate the restic repository password into SOPS. The value is never printed;
+# read it once with `make secrets-show KEY=backup.restic_password
+# SECRETS_ENV=common` to place the offsite escrow copy. Refuses to overwrite an
+# existing password: replacing it without `restic key add` first locks you out of
+# every existing snapshot.
+.PHONY: backup-generate-password
+backup-generate-password:
+	@$(TOOLKIT) backup generate-password --env $(or $(SECRETS_ENV),common)
+
 # End-to-end smoke of the certificate ALERTING path (OBS-007), one layer above
 # notify-smoke: that one proves the fabric can deliver, this one proves the alert
 # rule notices a real failure and recovers from it. Induces a genuine ACME

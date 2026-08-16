@@ -440,6 +440,33 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Rotated together with backup.r2.access_key_id — they are one credential.",
         envs=("prod",),
     ),
+    # The restic repository password. restic encrypts client-side, so R2 never
+    # holds plaintext and Cloudflare cannot help recover anything — this value is
+    # the only key that exists. Losing it makes every backup permanently
+    # unreadable while looking perfectly healthy in the bucket.
+    #
+    # It therefore has a SECOND home outside this repo, in a Bitwarden item, and
+    # that is deliberate rather than sloppy: SOPS is decrypted by an age key that
+    # a disaster destroys, so a password stored only here is unreachable in
+    # exactly the scenario the backups exist for (BACKUP-044 R1, #479).
+    #
+    # Rotation is unusually cheap for a repository password: restic derives the
+    # key that unlocks an internal master key, so `restic key add` introduces a
+    # second password without re-encrypting any data.
+    SecretSpec(
+        key_path="backup.restic_password",
+        description="restic repository password — the only key to every offsite backup",
+        kind=SecretKind.RANDOM_TOKEN,
+        length=48,
+        services=("backup",),
+        format_hint="URL-safe random token",
+        rotate_note=(
+            "Use `restic key add` on every repository BEFORE changing this value — a "
+            "rotation that replaces it first locks you out of existing snapshots. Update "
+            "the Bitwarden escrow copy in the same pass, or recovery silently regresses."
+        ),
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.services.automation.github_runner.token",
         description="GitHub PAT for self-hosted Actions runner registration",

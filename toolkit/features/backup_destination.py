@@ -44,6 +44,8 @@ _CFG_ROOT = ("infra", "backup_r2")
 _ACCESS_KEY_SECRET = "backup.r2.access_key_id"
 _SECRET_KEY_SECRET = "backup.r2.secret_access_key"
 
+_RESTIC_PASSWORD_SECRET = "backup.restic_password"
+
 _SMOKE_PREFIX = "_smoketest"
 _PROBE_BYTES = 1024
 _TIMEOUT = 60
@@ -200,5 +202,113 @@ def verify_destination(
             )
             return False
         logger.success("delete")
+
+    return ok
+
+
+def repo_url(dest: DestinationConfig, node: str) -> str:
+    """restic repository URL for one node.
+
+    One repository per node, so a compromised node cannot rewrite another's
+    history — and so a restore only needs the credentials for the node being
+    restored.
+    """
+    return f"s3:{dest.endpoint}/{dest.bucket}/{node}"
+
+
+def verify_restic(
+    node: str = f"{_SMOKE_PREFIX}-probe",
+    env: str = "prod",
+    project_root: Optional[Path] = None,
+    cm: Optional[ConfigurationManager] = None,
+    run: Optional[RunFn] = None,
+    keep: bool = False,
+) -> bool:
+    """Prove restic can create, use and verify a repository in R2.
+
+    Runs the full lifecycle against a throwaway repository: init, backup a small
+    file, list snapshots, `restic check`, then remove the repository unless
+    `keep`. This is the step that turns "the bucket accepts objects" into "restic
+    works here" — they are different claims, and only the second one matters.
+    """
+    logger.section("backup destination — restic lifecycle")
+
+    cm = cm or ConfigurationManager(env, project_root)
+    run = run or _default_run
+
+    try:
+        dest = load_destination(cm)
+        credentials = load_credentials(cm)
+    except DestinationError as exc:
+        logger.error(str(exc))
+        return False
+
+    password = cm.get_secret_by_path(_RESTIC_PASSWORD_SECRET)
+    if not password:
+        logger.error(
+            f"Missing SOPS value at '{_RESTIC_PASSWORD_SECRET}' — generate it with `make backup-generate-password`."
+        )
+        return False
+
+    # RESTIC_PASSWORD is read from the environment, never passed as an argument,
+    # so it stays out of the process list.
+    renv = {**credentials, "RESTIC_PASSWORD": str(password).strip()}
+    repo = repo_url(dest, node)
+    logger.info(f"Repository: {repo}")
+
+    rc, _, err = run(["restic", "version"], {})
+    if rc != 0:
+        logger.error(f"restic is required and was not runnable: {err.strip()}")
+        return False
+
+    base = ["restic", "-r", repo]
+
+    rc, _, err = run([*base, "init"], renv)
+    if rc != 0 and "already initialized" not in (err or "").lower():
+        logger.error(f"init FAILED: {err.strip()}")
+        return False
+    logger.success("init")
+
+    import tempfile
+
+    ok = True
+    with tempfile.TemporaryDirectory() as tmp:
+        sample = Path(tmp) / "probe.txt"
+        sample.write_text("BACKUP-044 restic lifecycle probe\n", encoding="utf-8")
+
+        rc, _, err = run([*base, "backup", str(sample)], renv)
+        if rc != 0:
+            logger.error(f"backup FAILED: {err.strip()}")
+            ok = False
+        else:
+            logger.success("backup")
+
+        rc, out, err = run([*base, "snapshots", "--json"], renv)
+        if rc != 0 or not out.strip():
+            logger.error(f"snapshots FAILED: {err.strip()}")
+            ok = False
+        else:
+            logger.success("snapshots listed")
+
+        # The claim AC7 rests on: the repository is internally consistent.
+        rc, _, err = run([*base, "check"], renv)
+        if rc != 0:
+            logger.error(f"check FAILED: {err.strip()}")
+            ok = False
+        else:
+            logger.success("check")
+
+    if keep:
+        logger.info("Repository kept (--keep)")
+        return ok
+
+    rc, _, err = run(
+        ["aws", "--endpoint-url", dest.endpoint, "s3", "rm", f"s3://{dest.bucket}/{node}", "--recursive"],
+        credentials,
+    )
+    if rc != 0:
+        logger.warning(f"Could not remove the probe repository at {node}/ — remove it by hand")
+    else:
+        logger.success("probe repository removed")
 
     return ok
