@@ -96,6 +96,19 @@ as `kubelab-maintenance-notify.service` itself failing — check that unit's
 own journal separately if the alert never arrived but you suspect a run
 failed.
 
+**A failed delivery has already been retried** (ANSIBLE-038). `curl` retries
+transient failures — connection refused, timeouts, and 5xx — up to 3 times
+with a 5s delay, so the unit failing means roughly 4 attempts over ~30s all
+failed, not one unlucky packet. Two consequences when reading its journal:
+
+- The unit legitimately takes tens of seconds against an unreachable n8n. It
+  is not hung; `TimeoutStartSec=45` is the real ceiling.
+- The retry lives in `curl`, **not** as `Restart=` on the unit. If you add
+  `Restart=` you get both, and systemd will re-run the whole script — journal
+  read and payload encode included — to retry one HTTP request. The rationale
+  is in the unit template, and `tests/test_node_maintenance_notify.py` fails
+  if the two ever drift apart or the retry budget outgrows the timeout.
+
 **Testing the path without waiting for a failure**:
 
 ```bash
