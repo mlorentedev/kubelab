@@ -47,6 +47,9 @@ networking:
     cloud: "deployer"
 
   vps:
+    # ADR-028 tier. Machine-readable projection of the topology the ADR
+    # narrates; consumed by the backup trigger model (BACKUP-044).
+    location: "always-on"
     hostname: "kubelab-vps"
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
@@ -70,6 +73,9 @@ networking:
       - "jekyll-staging-site-data"
   # AWS management plane (ADR-023 Phase 3)
   aws:
+    # ADR-028 tier. Machine-readable projection of the topology the ADR
+    # narrates; consumed by the backup trigger model (BACKUP-044).
+    location: "always-on"
     region: "eu-central-1"
     profile: "kubelab"
     instance_type: "t4g.small"
@@ -98,6 +104,9 @@ networking:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
     # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed
     ace1:
+      # ADR-028 tier. Machine-readable projection of the topology the ADR
+      # narrates; consumed by the backup trigger model (BACKUP-044).
+      location: "on-demand"
       hostname: "ace1"
       tailscale_ip: "100.64.0.11"
       lan_ip: "172.16.1.2"
@@ -109,6 +118,9 @@ networking:
         description: "Staging · 12GB"
         widget: glances
     ace2:
+      # ADR-028 tier. Machine-readable projection of the topology the ADR
+      # narrates; consumed by the backup trigger model (BACKUP-044).
+      location: "on-demand"
       hostname: "ace2"
       tailscale_ip: "100.64.0.5"
       lan_ip: "172.16.1.5"
@@ -120,6 +132,9 @@ networking:
         description: "Dev node · 12GB"
         widget: glances
     rpi4:
+      # ADR-028 tier. Machine-readable projection of the topology the ADR
+      # narrates; consumed by the backup trigger model (BACKUP-044).
+      location: "on-demand"
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
       # Dual-segment gateway: inner LAN (172.16.1.0/24, eth0) advertised to
@@ -138,6 +153,9 @@ networking:
         description: "DNS · 8GB"
         widget: glances
     rpi3:
+      # ADR-028 tier. Machine-readable projection of the topology the ADR
+      # narrates; consumed by the backup trigger model (BACKUP-044).
+      location: "always-on"
       hostname: "rpi3"
       tailscale_ip: "100.64.0.6"
       # WiFi outer segment (10.0.0.0/24), reachable via rpi3-lan SSH alias.
@@ -154,6 +172,9 @@ networking:
         description: "Monitor · 1GB"
         widget: glances
     beelink:
+      # ADR-028 tier. Machine-readable projection of the topology the ADR
+      # narrates; consumed by the backup trigger model (BACKUP-044).
+      location: "on-demand"
       hostname: "beelink"
       tailscale_ip: "100.64.0.3"
       lan_ip: "172.16.1.3"
@@ -166,6 +187,9 @@ networking:
         description: "Platform · N95 · 8GB"
         widget: glances
     jetson:
+      # ADR-028 tier. Machine-readable projection of the topology the ADR
+      # narrates; consumed by the backup trigger model (BACKUP-044).
+      location: "on-demand"
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
       lan_ip: "172.16.1.4"

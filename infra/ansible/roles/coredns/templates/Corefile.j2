@@ -74,4 +74,10 @@
     cache 30
     log
     errors
+    # Liveness/readiness over HTTP, because this image cannot be probed any other
+    # way: coredns/coredns is distroless (entrypoint /coredns, no shell, no dig),
+    # so every `exec`-based Docker healthcheck fails on a missing binary rather
+    # than on CoreDNS being unwell. See the compose template.
+    health :8080
+    ready :8181
 }

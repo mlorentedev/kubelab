@@ -3,6 +3,9 @@ coredns_image: "coredns/coredns:1.12.1"
 pihole_image: "pihole/pihole:latest"
 coredns_remote_dir: "~/coredns"
 coredns_port: 5353
+# CoreDNS `health` plugin, published for external probing because the image is
+# distroless and cannot be probed from inside. `ready` (:8181) stays unpublished.
+coredns_health_port: 8080
 pihole_port: 53
 pihole_web_port: 80
 pihole_timezone: "America/Denver"
