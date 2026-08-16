@@ -234,6 +234,33 @@ infra:
     database: kubelab
     username: kubelab
     image: postgres:16-alpine
+  backup_r2:
+    # Cloudflare R2 — the offsite destination for the critical-subset backup
+    # pipeline (BACKUP-044 / #1056), per ADR-049 D3. Under `infra.*` because more
+    # than one component consumes it: the Ansible backup role on four nodes
+    # (Beelink, VPS, RPi3, RPi4), and eventually the restore runbook.
+    #
+    # NOT a consumer of the in-cluster MinIO. ADR-061:96 records that
+    # `overlays/prod/backup.yaml` targeting `minio:9000` is what currently coerces
+    # MinIO to always-on; this pipeline must not add a second such dependency
+    # (BACKUP-044 AC8).
+    #
+    # These three are NOT secrets — the account id appears in every R2 URL and the
+    # bucket name is not a credential. The S3 credentials live in SOPS at
+    # `backup.r2.access_key_id` / `backup.r2.secret_access_key`, and the restic
+    # repository password at `backup.restic_password`.
+    #
+    # Storage class must stay Standard: R2's free tier (10 GB-month, 1M Class A,
+    # 10M Class B) does not apply to Infrequent Access, so the cheaper-looking
+    # class is the more expensive one at this volume. Overage is billed, not
+    # blocked — there is no hard stop.
+    account_id: "76967f5ede1ce50efce34d90b7e94958"
+    bucket: kubelab-backups
+    endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
+    # restic addresses R2 through its S3 backend; this is the repository prefix,
+    # with the per-node repository name appended (one repository per node, so a
+    # compromised node cannot rewrite another's history).
+    repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
 
 resources:
   default_memory_limit: 512m

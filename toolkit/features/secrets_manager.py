@@ -406,6 +406,40 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("traefik", "terraform"),
         rotate_note="Re-provision K3s nodes (Ansible) + re-run terraform apply. Both read from SOPS.",
     ),
+    # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
+    # common.enc.yaml because the pipeline spans prod (VPS) and homelab nodes, but
+    # registered under `envs=("prod",)` — `envs` is the AUDIT dimension, not the
+    # storage location, and there is no `common` pseudo-env: a tuple matching no
+    # real env makes the secret vanish from every audit silently (ANSIBLE-033).
+    # Prod is the right audit target because the critical subset exists to protect
+    # prod-serving state: Headscale, Authelia, Postgres, and the Uptime Kuma
+    # instance that is the monitoring of record for prod. Same pattern as the
+    # Argo CD hub keys.
+    #
+    # A backup credential missing from the audit is the worst thing to have
+    # silently absent — the failure is invisible until a restore is attempted.
+    SecretSpec(
+        key_path="backup.r2.access_key_id",
+        description="Cloudflare R2 S3 access key id — offsite restic destination",
+        kind=SecretKind.EXTERNAL,
+        services=("backup",),
+        format_hint="R2 API token id (not the token value)",
+        rotate_note=(
+            "Create a new R2 API token scoped to the kubelab-backups bucket, set both "
+            "halves, then re-provision the four backup nodes. The old token must stay "
+            "valid until every node has the new one, or a node silently stops backing up."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="backup.r2.secret_access_key",
+        description="Cloudflare R2 S3 secret access key — offsite restic destination",
+        kind=SecretKind.EXTERNAL,
+        services=("backup",),
+        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+        rotate_note="Rotated together with backup.r2.access_key_id — they are one credential.",
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.services.automation.github_runner.token",
         description="GitHub PAT for self-hosted Actions runner registration",
