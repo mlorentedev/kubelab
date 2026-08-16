@@ -324,6 +324,61 @@ inside the ratified RPO), uptime-bounded hourly on on-demand nodes as the
 proposal specifies, and `check` weekly rather than per-run. Operator decision,
 recorded here with the arithmetic behind it.
 
+### New finding — the proposal cannot satisfy its own AC1
+
+Surfaced by the operator asking what, concretely, is being backed up.
+
+AC1 requires "every ratified Tier 1 **and Tier 2** item present in its node's R2
+repository". #1090 records the ratified tiers as:
+
+- **T1:** Headscale, Authelia, Gitea, Uptime Kuma, Postgres
+- **T2:** Grafana, n8n, CrowdSec db, Pi-hole FTL
+
+The proposal's consumer table covers four nodes: VPS (Headscale, Authelia,
+Postgres), Beelink (Gitea), RPi3 (Uptime Kuma), RPi4 (Pi-hole FTL).
+
+**Three ratified Tier 2 items appear nowhere in it: Grafana, n8n and the CrowdSec
+database.** As written, the spec builds a pipeline that cannot meet its own
+acceptance criterion.
+
+The reason they were missed is structural rather than careless, and it matters
+for how they get added. Those three do not live in a node's filesystem — they are
+**Kubernetes PVCs**, and the existing prod CronJob already backs two of them up:
+
+```
+$ grep claimName infra/k8s/overlays/prod/backup.yaml
+                claimName: authelia-data
+                claimName: n8n-data
+
+$ grep minio infra/k8s/overlays/prod/backup.yaml
+  mc alias set backup http://minio:9000 ...
+```
+
+So there is a **fifth consumer class the proposal has no row for**: the K3s
+cluster itself, whose state is PVCs rather than paths, and whose backup currently
+targets in-cluster MinIO — the destination ADR-061:96 identifies as the thing
+coercing MinIO to always-on, and which was never an offsite copy.
+
+**Authelia is in both places and the proposal has it in the wrong one.** It is
+listed under "VPS" as though it were a node-level directory, but it is
+`authelia-data`, a PVC. The mechanism for backing it up is not the one the
+proposal describes for that node.
+
+This does not change the destination, the credentials, the retention model or any
+Part 0 answer. It changes the *consumer inventory*, and `tasks.md` must not be
+drafted against the current table. Two options for the operator:
+
+1. **Extend this spec** with a PVC consumer class, bringing Grafana, n8n and
+   CrowdSec into the R2 pipeline and retiring the MinIO CronJob's remaining
+   consumers — which is also what eventually releases #972.
+2. **Narrow AC1** to Tier 1 plus Pi-hole FTL, and file the PVC class as the next
+   ticket in #1090's sequence.
+
+Option 1 satisfies the criterion as ratified; option 2 ships sooner and keeps the
+spec's node-level shape coherent. Either is defensible, neither can be skipped —
+`tasks.md` written against the current table would build something that fails its
+own AC1 review.
+
 ### R6 — not yet settled
 
 - **R1** — escrow settled above; the repository password itself remains.
