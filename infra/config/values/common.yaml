@@ -258,7 +258,6 @@ infra:
     database: kubelab
     username: kubelab
     image: postgres:16-alpine
-
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
@@ -916,6 +915,37 @@ apps:
 # The trigger model is NOT declared here — it derives from each node's
 # `location` in networking.* (ADR-028). One fact, one place.
 backup:
+  r2:
+    # Cloudflare R2 — the offsite destination for the critical-subset backup
+    # pipeline (BACKUP-044 / #1056), per ADR-049 D3. Deliberately NOT under
+    # `infra.*`: that namespace is emitted as INFRA_* into EVERY component's
+    # ConfigMap (ADR-036), and no K8s component consumes R2 config — its
+    # consumers are the Ansible backup role on four nodes and the restore
+    # runbook. Sitting here also matches the SOPS paths (`backup.r2.*`,
+    # `backup.restic_password`) and the allow-list under `backup.sources`.
+    #
+    # NOT a consumer of the in-cluster MinIO. ADR-061:96 records that
+    # `overlays/prod/backup.yaml` targeting `minio:9000` is what currently coerces
+    # MinIO to always-on; this pipeline must not add a second such dependency
+    # (BACKUP-044 AC8).
+    #
+    # These are NOT secrets — the account id appears in every R2 URL and the
+    # bucket name is not a credential. The S3 credentials live in SOPS at
+    # `backup.r2.access_key_id` / `backup.r2.secret_access_key`, and the restic
+    # repository password at `backup.restic_password`.
+    #
+    # Storage class must stay Standard: R2's free tier (10 GB-month, 1M Class A,
+    # 10M Class B) does not apply to Infrequent Access, so the cheaper-looking
+    # class is the more expensive one at this volume. Overage is billed, not
+    # blocked — there is no hard stop, and the pricing page promises no
+    # notification, so configure one in Cloudflare Notifications.
+    account_id: "76967f5ede1ce50efce34d90b7e94958"
+    bucket: kubelab-backups
+    endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
+    # restic addresses R2 through its S3 backend; this is the repository prefix,
+    # with the per-node repository name appended (one repository per node, so a
+    # compromised node cannot rewrite another's history).
+    repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
   sources:
     beelink:
       gitea:
