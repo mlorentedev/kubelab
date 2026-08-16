@@ -1,0 +1,91 @@
+---
+# =============================================================================
+# Wait until a node is ready to be provisioned — ANSIBLE-041 (#1102)
+#
+# "Ready" is two conditions, not one, and they must be checked in this order:
+#
+#   1. sshd answers            — wait_for_connection
+#   2. cloud-init has finished — cloud-init status --wait
+#
+# Both are needed because sshd comes up well BEFORE cloud-init has installed
+# K3s and registered the node with Headscale. Provisioning against a node that
+# passes (1) but not (2) fails confusingly rather than dangerously, which is
+# the worst kind of failure to leave in a path that runs unattended.
+#
+# This is a playbook and not shell inside the Makefile because the Makefile
+# carries no inline scripts; it is a SEPARATE playbook rather than pre_tasks on
+# provision-aws1.yml because bare-metal nodes have no cloud-init and the same
+# wait is wanted for any future cloud node.
+#
+# Usage: make wait-node-ready NODE=aws1 ENV=hub
+# =============================================================================
+
+- name: Wait for a node to become provisionable
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    # Generous by design: cloud-init on a t4g.small installs K3s from the
+    # network. Failing early here means provisioning a half-built node.
+    wait_connection_timeout: 600
+    wait_cloud_init_timeout: 900
+
+  tasks:
+    # --- Name resolution, checked first for its error message alone --------
+    #
+    # ANSIBLE-041: aws1's ansible_host is a MagicDNS name (aws1.kubelab.internal,
+    # ADR-025), and MagicDNS resolves a Headscale node's GIVEN-NAME, which is
+    # not guaranteed to equal its hostname (common.yaml:585). A replacement that
+    # re-registers without stale-node cleanup lands as `aws1-<random>`, and the
+    # name then resolves to nothing. Without this task that presents as a bare
+    # connection timeout 10 minutes later, pointing at the network rather than
+    # at the registry.
+    - name: Resolve the node's address
+      ansible.builtin.command: getent ahostsv4 {{ ansible_host }}
+      delegate_to: localhost
+      register: _resolved
+      changed_when: false
+      failed_when: false
+
+    - name: "Fail with the reason when the node's name does not resolve"
+      ansible.builtin.fail:
+        msg: >-
+          {{ ansible_host }} does not resolve. If this is a MagicDNS name
+          (*.kubelab.internal) the likely cause is not the network: Headscale
+          resolves a node by its GIVEN-NAME, and a re-registered instance whose
+          stale record was not cleaned up is registered as
+          '{{ ansible_host.split('.')[0] }}-<random>' instead. Check
+          `headscale nodes list` and rename if needed (see common.yaml:585,
+          ADR-025). Otherwise: is Tailscale up on this workstation?
+      when: _resolved.rc != 0
+
+    # --- 1. sshd answers ---------------------------------------------------
+    - name: Wait for SSH to accept connections
+      ansible.builtin.wait_for_connection:
+        timeout: "{{ wait_connection_timeout }}"
+        sleep: 5
+
+    # --- 2. cloud-init has finished ---------------------------------------
+    - name: Check whether this node is cloud-init managed
+      ansible.builtin.stat:
+        path: /usr/bin/cloud-init
+      register: _cloud_init
+
+    # `cloud-init status --wait` blocks until done and exits non-zero if the
+    # run errored, so a failed bootstrap fails HERE rather than surfacing as a
+    # puzzling provisioning error further down the chain.
+    - name: Wait for cloud-init to finish
+      ansible.builtin.command: cloud-init status --wait
+      register: _cloud_init_status
+      changed_when: false
+      become: true
+      when: _cloud_init.stat.exists
+      timeout: "{{ wait_cloud_init_timeout }}"
+
+    - name: Report readiness
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} ready —
+          ssh: up,
+          cloud-init: {{ (_cloud_init_status.stdout | default('n/a (not cloud-init managed)')) | trim }}
