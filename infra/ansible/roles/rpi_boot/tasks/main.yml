@@ -124,6 +124,19 @@
     # character in a vfat filename -- so `backup: true` fails the very task whose
     # safety it was meant to provide. Keeping the copy on ext4 also means it
     # survives a damaged boot partition, which is the scenario it exists for.
+    # `copy` does not create missing parent directories. /var/backups happens to
+    # exist on Debian and Raspberry Pi OS (dpkg uses it) and was confirmed present
+    # on both Pis, but relying on a distro convention silently is how a safety net
+    # fails on the one node that does not follow it.
+    - name: Ensure the backup directory exists
+      ansible.builtin.file:
+        path: /var/backups
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: _rpi_boot_missing_params | length > 0
+
     - name: Back up the current kernel command line to the root filesystem
       ansible.builtin.copy:
         src: "{{ _rpi_boot_cmdline }}"
