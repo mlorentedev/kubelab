@@ -65,7 +65,10 @@ class TestRateLimitMiddlewareMatchesSSOT:
             "client-IP keying is an accident of klipper-lb's masquerade bug, not "
             "a deliberate design"
         )
-        assert "requestHost" in rate_limit["sourceCriterion"]
+        assert rate_limit["sourceCriterion"].get("requestHost") is True, (
+            "sourceCriterion.requestHost must be true, not merely present — "
+            "requestHost: false silently restores default client-IP keying"
+        )
 
     def test_registered_in_base_kustomization(self) -> None:
         kustomization = REPO_ROOT / "infra/k8s/base/kustomization.yaml"
