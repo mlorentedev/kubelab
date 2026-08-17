@@ -272,9 +272,24 @@ config-generate:
 DRIFT_REVERT_PATHS := infra/k8s/overlays/staging/generated \
                       infra/k8s/overlays/prod/generated
 
+# The env must come from the CALLER, not from the `ENV ?= dev` default further
+# down this file. A `?=` assignment is global regardless of position, so the
+# `test -n "$(ENV)"` this replaced always saw `dev` and could never fail: a bare
+# `make config-check-drift` silently checked the dev overlay and printed
+# "✓ No drift" while staging and prod both drifted. That is exactly how #1116
+# reached CI with a `common.yaml` key that changed every component's ConfigMap.
+# `$(origin ENV)` is the only way to ask "did the caller say so?" — it reports
+# `command line` for `ENV=prod`, `file` for the default. `ENV=dev` typed
+# explicitly still works.
 .PHONY: config-check-drift
 config-check-drift:
-	@test -n "$(ENV)" || (echo "Usage: make config-check-drift ENV=staging|prod" && exit 1)
+	@test "$(origin ENV)" = "command line" || { \
+		echo "Usage: make config-check-drift ENV=staging|prod"; \
+		echo "  ENV must be passed explicitly — the repo-wide 'ENV ?= dev'"; \
+		echo "  default would otherwise check dev and report green while the"; \
+		echo "  environments you deploy drift unnoticed."; \
+		exit 1; \
+	}
 	@git diff --quiet -- $(DRIFT_REVERT_PATHS) || { \
 		echo "✗ Refusing to run: uncommitted changes under $(DRIFT_REVERT_PATHS)"; \
 		echo "  This target reverts those paths when it finishes, which would"; \
