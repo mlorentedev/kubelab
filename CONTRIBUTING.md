@@ -195,7 +195,9 @@ Before submitting a PR, ensure:
 - [ ] All tests pass (`poetry run pytest`)
 - [ ] Type checking passes (`make type`)
 - [ ] Config values updated in `infra/config/values/` (if adding new variables) and
-      drift gate green (`make config-check-drift`)
+      drift gate green for both deployed environments
+      (`make config-check-drift ENV=staging` and `ENV=prod` — the target refuses to
+      run without an explicit `ENV`, because dev is not what CI checks)
 - [ ] Documentation updated (if changing functionality)
 - [ ] Commit messages follow Conventional Commits format
 - [ ] No secrets committed (pre-commit hooks verify this)
@@ -211,8 +213,11 @@ Configuration is SSOT-driven — never edit `.env` files or generated output dir
 1. Non-secret values go in `infra/config/values/{common,dev,staging,prod}.yaml`.
 2. Secrets go through the toolkit (SOPS/age): `poetry run toolkit secrets edit --env <env>`;
    the authoritative registry is `SECRET_CATALOG` in `toolkit/features/secrets_manager.py`.
-3. Regenerate derived configs with `make config-generate`; CI enforces the drift gate
-   (`make config-check-drift`).
+3. Regenerate derived configs with `make config-generate ENV=<env>`; CI enforces the
+   drift gate by running `make config-check-drift ENV=<env>` once per deployed
+   environment (`staging` and `prod`). Run both locally before pushing — a value
+   placed under `infra.*` in `common.yaml` is emitted as an `INFRA_*` key into
+   *every* component's ConfigMap (ADR-036), so it drifts both overlays at once.
 
 ## Docker Guidelines
 
