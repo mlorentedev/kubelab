@@ -1,0 +1,79 @@
+---
+name: Spec Gate
+
+# CI-GATE-009 (#1096). `CLAUDE.md` stated, as an assumption several workflows
+# lean on, that "the spec gate declines to merge a PR closing a spec's issue
+# without archiving it". Nothing implemented it. The only refusal that existed
+# lived in `dotf spec archive`, which fires *after* someone chooses to archive —
+# so skipping the choice skipped the enforcement.
+#
+# Four specs reached master closed-but-unarchived before anyone noticed: #970
+# (via #1093), TOOL-016, TOOL-020, and IDP-031. None was reported by anything;
+# each was found by reading the tree.
+#
+# The check judges the PR's MERGE RESULT, not its diff: if `specs/<id>/` is
+# still present for an issue the PR closes, the archive is not in this PR,
+# however the branch was assembled. Logic and its tests live in
+# `toolkit/features/spec_gate.py` and `tests/test_spec_gate.py`, so the negative
+# case runs on every commit rather than needing a live PR to exercise.
+
+on:
+  pull_request:
+    branches: [master]
+    # `edited` matters as much as `synchronize`: the closing keyword lives in
+    # the PR body, so a body edit can turn a passing PR into a closing one
+    # without touching a single file.
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: spec-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  spec-gate:
+    name: Spec archive gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry --version
+
+      - name: Install project deps
+        # See check-config-drift.yml: do NOT add `--no-root`, the package must
+        # be installed for importlib.metadata.version("toolkit") to resolve.
+        run: poetry install --only main
+
+      - name: Write the PR body to a file
+        # The body goes through an env var and is written by a tool that does no
+        # expansion. It must never reach a `run:` script as `${{ ... }}`: that is
+        # both a script-injection vector on a public repo and the backticks
+        # trap — a body containing `identifiers` becomes command substitution and
+        # is silently emptied. Both have been observed here.
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python -c 'import os,pathlib; pathlib.Path("pr-body.txt").write_text(os.environ.get("PR_BODY") or "")'
+
+      - name: Check the PR does not close a spec it leaves active
+        run: poetry run toolkit tools spec-gate --body-file pr-body.txt
+
+      - name: Hint on failure
+        if: failure()
+        run: |
+          echo "::error::This PR closes a spec's issue without archiving the spec."
+          echo "::error::Archive it in this PR: dotf spec archive <feature-id>"
+          echo "::error::That needs a passing pooled review first: dotf spec review <feature-id>"
+          echo "::error::Or declare an exception in the PR body:"
+          echo "::error::  Spec-archive-exception: <why>"

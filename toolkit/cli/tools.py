@@ -259,3 +259,46 @@ def certs_status(
         logger.info(f"mkcert CA root: {result.stdout.strip()}")
     else:
         logger.warning("mkcert not installed")
+
+
+# =============================================================================
+# SPEC GATE (CI-GATE-009)
+# =============================================================================
+
+
+@app.command("spec-gate")
+def spec_gate(
+    body_file: Annotated[
+        Path,
+        typer.Option(
+            "--body-file",
+            help="File holding the PR body. A file rather than a string: a body "
+            "passed on the command line is re-scanned by the shell, which has "
+            "already corrupted one durable artefact in this repo.",
+        ),
+    ],
+    specs_root: Annotated[Path, typer.Option("--specs-root", help="Root of the specs tree")] = Path("specs"),
+    repo: Annotated[
+        str, typer.Option("--repo", help="owner/name of the repo owning the issues")
+    ] = "mlorentedev/kubelab",
+) -> None:
+    """Refuse a PR that closes a spec's issue without archiving the spec.
+
+    Reads the tree as checked out, so in CI it judges the merge result rather
+    than the diff — a rebase or squash cannot route around it.
+    """
+    from toolkit.features import spec_gate as gate
+
+    pr_body = body_file.read_text(encoding="utf-8")
+    violations = gate.check(pr_body, specs_root, repo=repo)
+    message, code = gate.report(
+        violations,
+        gate.declared_exception(pr_body),
+        gate.undeclared_specs(specs_root),
+    )
+
+    if code == 0:
+        logger.success(message) if not violations else logger.warning(message)
+    else:
+        logger.error(message)
+    raise typer.Exit(code)
