@@ -145,4 +145,6 @@ infra/k8s/overlays/*/middlewares/.rendered/
 # one would push the repo past GitHub's 50MB warning on a single file, and no
 # archived spec in specs/archive/ carries one. Kept local as the record of HOW a
 # verdict was reached; re-derivable by re-running the review.
-specs/**/review-transcript.jsonl
+# A failed run also writes a `.stderr` sibling, so the pattern is a prefix match
+# rather than the exact filename.
+specs/**/review-transcript.jsonl*
