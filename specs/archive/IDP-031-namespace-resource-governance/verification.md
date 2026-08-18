@@ -39,13 +39,13 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons.md`? **yes** — `Burstable` QoS was mistaken for proof that the *initContainers* were defaulted; it was true because the *main* containers carried pre-existing requests. Written 2026-08-17.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? **no** — the placement reasoning is ADR-028's; this spec chose values, not architecture.
+- [x] New pattern candidate for `00_meta/patterns/`? **no** — kubelab-only. The generalisation already has a home: the instance was added to the existing `pattern-verification-fails-toward-unproven`, which is where a proxy signal standing in for the property it summarises belongs.
 
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
