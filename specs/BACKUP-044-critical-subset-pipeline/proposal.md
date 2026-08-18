@@ -30,12 +30,25 @@ So this is not "add a backup for Gitea". It is the first real implementation of 
 
 An offsite backup pipeline for the ratified critical subset (#452, 2026-08-15): **restic to Cloudflare R2**, driven from Ansible, covering four nodes with two trigger models.
 
-| Node | Consumers | Trigger model |
-|---|---|---|
-| Beelink (on-demand) | Gitea repos + SQLite | uptime-bounded |
-| VPS (always-on) | Headscale SQLite, Authelia, Postgres | wall-clock |
-| RPi3 (always-on) | Uptime Kuma SQLite | wall-clock |
-| RPi4 (on-demand) | Pi-hole `pihole-FTL.db` | uptime-bounded |
+This spec covers the **node-path consumer class** — state that lives as a
+filesystem path or Docker volume on a node, and whose consistent snapshot must be
+taken *on that node*. State that lives as a Kubernetes PVC is a different
+mechanism and a separate ticket (see Out of scope).
+
+| Node | Consumers | State | Measured | Trigger model |
+|---|---|---|---|---|
+| Beelink (on-demand) | Gitea | `/opt/gitea` | 2.3 MB | uptime-bounded |
+| VPS (always-on) | Headscale | `/opt/headscale` | 24 KB | wall-clock |
+| RPi3 (always-on) | Uptime Kuma | volume `uptime_kuma_data` | 19 MB | wall-clock |
+| RPi4 (on-demand) | Pi-hole FTL | volume `coredns_pihole_data` | 10.5 MB of a 21 MB volume | uptime-bounded |
+
+Sizes measured against the live fleet 2026-08-16. Two details that a path written
+from memory would get wrong: Pi-hole's state is inside the **`coredns_pihole_data`**
+Docker volume rather than under `/etc/pihole`, and its `gravity.db` (4.5 MB) is
+Tier 3 — regenerated in full by `pihole -g`, so it is excluded rather than backed
+up. `pihole-FTL.db` carried a **3 MB `-wal`** at the moment of measurement, which
+is the concrete case for AC2: a file copy of that database would have silently
+omitted three megabytes of committed-but-unmerged writes.
 
 Observable changes:
 
