@@ -700,9 +700,14 @@ provision:
 	# the host. Without it the only way to set one is a raw ansible-playbook
 	# invocation, which is exactly what these targets exist to prevent.
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
+	# The generate below is joined to the run with `&&`, not `;`: a failed
+	# generate must not let the playbook proceed against whatever inventory is
+	# left on disk. It also makes _exit capture generate's failure, because $$?
+	# of `a && b` is a's status when a fails. The restore line stays `;` — it
+	# has to run either way. See TOOL-036.
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Generating inventory ($(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),)) ==="; \
-		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT); \
+		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT) && \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
