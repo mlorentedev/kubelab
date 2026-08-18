@@ -54,6 +54,12 @@ spec:
     - match: Host(`auth.kubelab.live`)
       kind: Rule
       middlewares:
+        # A strategic-merge patch REPLACES this list rather than merging into
+        # it, so every middleware the route needs must be restated here. This
+        # patch exists to override the domain; `secure-headers` was lost in the
+        # restatement and prod served without it until SEC-008 (#1097).
+        - name: secure-headers
+          namespace: kubelab
         - name: rate-limit
           namespace: kubelab
         - name: crowdsec-bouncer
@@ -80,6 +86,12 @@ spec:
     - match: Host(`loki.internal.kubelab.local`)
       kind: Rule
       middlewares:
+        # A strategic-merge patch REPLACES this list rather than merging into
+        # it, so every middleware the route needs must be restated here. This
+        # patch exists to override the domain; `secure-headers` was lost in the
+        # restatement and prod served without it until SEC-008 (#1097).
+        - name: secure-headers
+          namespace: kubelab
         - name: rate-limit
           namespace: kubelab
         - name: authelia
