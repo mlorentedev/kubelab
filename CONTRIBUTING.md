@@ -195,9 +195,14 @@ Before submitting a PR, ensure:
 - [ ] All tests pass (`poetry run pytest`)
 - [ ] Type checking passes (`make type`)
 - [ ] Config values updated in `infra/config/values/` (if adding new variables) and
-      drift gate green for both deployed environments
-      (`make config-check-drift ENV=staging` and `ENV=prod` — the target refuses to
-      run without an explicit `ENV`, because dev is not what CI checks)
+      drift gate green for both deployed environments — run both commands:
+      ```bash
+      make config-check-drift ENV=staging
+      make config-check-drift ENV=prod
+      ```
+      The target accepts only `staging` and `prod`; every other value, including the
+      repo-wide `ENV ?= dev` default, is rejected, because only those two have a
+      committed K8s overlay for the check to diff against.
 - [ ] Documentation updated (if changing functionality)
 - [ ] Commit messages follow Conventional Commits format
 - [ ] No secrets committed (pre-commit hooks verify this)
