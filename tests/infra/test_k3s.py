@@ -73,6 +73,17 @@ EXPECTED_QUOTA_REQUESTS_MEMORY = "4Gi"
 EXPECTED_QUOTA_LIMITS_MEMORY = "7Gi"
 
 
+def _one_gib_above(quantity: str) -> str:
+    """Return a memory quantity one GiB above `quantity`, e.g. "7Gi" -> "8Gi".
+
+    Used to build a probe that is guaranteed to exceed the quota's hard cap.
+    Deliberately derived rather than written as a literal: the two numbers must
+    move together, and only one of them was a named constant before IDP-035.
+    """
+    assert quantity.endswith("Gi"), f"expected a Gi quantity, got {quantity!r}"
+    return f"{int(quantity[:-2]) + 1}Gi"
+
+
 class TestK3sCluster:
     """K3s cluster must be healthy with all nodes ready."""
 
@@ -88,8 +99,7 @@ class TestK3sCluster:
             node["metadata"]["name"]
             for node in nodes
             if not any(
-                c["type"] == "Ready" and c["status"] == "True"
-                for c in node.get("status", {}).get("conditions", [])
+                c["type"] == "Ready" and c["status"] == "True" for c in node.get("status", {}).get("conditions", [])
             )
         ]
         assert not not_ready, f"K3s nodes not Ready: {not_ready}"
@@ -160,12 +170,11 @@ class TestNamespaceGovernance:
         assert items, "No LimitRange in the kubelab namespace — nothing bounds an unspecified container"
 
         container_limits = [
-            limit
-            for lr in items
-            for limit in lr.get("spec", {}).get("limits", [])
-            if limit.get("type") == "Container"
+            limit for lr in items for limit in lr.get("spec", {}).get("limits", []) if limit.get("type") == "Container"
         ]
-        assert container_limits, f"LimitRange(s) present but none of type Container: {[i['metadata']['name'] for i in items]}"
+        assert container_limits, (
+            f"LimitRange(s) present but none of type Container: {[i['metadata']['name'] for i in items]}"
+        )
 
         defaulted_request = {limit.get("defaultRequest", {}).get("memory") for limit in container_limits}
         defaulted_limit = {limit.get("default", {}).get("memory") for limit in container_limits}
@@ -249,16 +258,23 @@ class TestNamespaceGovernance:
         Uses `--dry-run=server` for the same reason as the LimitRange
         defaulting test: it traverses the real admission chain — including
         the ResourceQuota plugin — without persisting a usage increment, so
-        this stays read-only and safe against prod. The limit (8Gi) is
-        chosen above the hard cap itself (7Gi), not merely above current
-        usage, so rejection does not depend on how much of the quota is
-        already consumed by other pods at test time.
+        this stays read-only and safe against prod. The probe is derived
+        from the hard cap rather than hardcoded, so it tracks a future
+        ceiling raise (MET-001). A literal 8Gi silently stopped testing
+        rejection the moment the cap went above it, failing later with a
+        confusing "was ADMITTED" instead of an obvious staleness error
+        (IDP-035).
+
+        Chosen above the cap itself rather than merely above current usage,
+        so rejection does not depend on how much of the quota other pods
+        happen to be consuming at test time.
         """
+        probe_memory = _one_gib_above(EXPECTED_QUOTA_LIMITS_MEMORY)
         manifest = (
             '{"apiVersion":"v1","kind":"Pod",'
             '"metadata":{"name":"idp-031-quota-probe","namespace":"kubelab"},'
             '"spec":{"containers":[{"name":"probe","image":"registry.k8s.io/pause:3.9",'
-            '"resources":{"limits":{"memory":"8Gi"}}}]}}'
+            f'"resources":{{"limits":{{"memory":"{probe_memory}"}}}}}}]}}}}'
         )
         result = _kubectl(
             f"create --dry-run=server -o json -f - <<'EOF'\n{manifest}\nEOF",
@@ -266,15 +282,14 @@ class TestNamespaceGovernance:
             timeout=30,
         )
         assert result.returncode != 0, (
-            "A pod requesting 8Gi (above the 7Gi quota hard cap) was ADMITTED — "
+            f"A pod requesting {probe_memory} (above the "
+            f"{EXPECTED_QUOTA_LIMITS_MEMORY} quota hard cap) was ADMITTED — "
             "the ResourceQuota is missing, misconfigured, or not being enforced"
         )
         assert "exceeded quota" in result.stderr, (
             f"Pod creation failed, but not with a quota error — expected 'exceeded quota' in: {result.stderr.strip()}"
         )
-        assert "memory" in result.stderr, (
-            f"Quota rejection did not name the exceeded resource: {result.stderr.strip()}"
-        )
+        assert "memory" in result.stderr, f"Quota rejection did not name the exceeded resource: {result.stderr.strip()}"
 
 
 class TestKubeSystemGovernance:
@@ -300,12 +315,11 @@ class TestKubeSystemGovernance:
         assert items, "No LimitRange in kube-system — Traefik and svclb remain unbounded"
 
         container_limits = [
-            limit
-            for lr in items
-            for limit in lr.get("spec", {}).get("limits", [])
-            if limit.get("type") == "Container"
+            limit for lr in items for limit in lr.get("spec", {}).get("limits", []) if limit.get("type") == "Container"
         ]
-        assert container_limits, f"LimitRange(s) present but none of type Container: {[i['metadata']['name'] for i in items]}"
+        assert container_limits, (
+            f"LimitRange(s) present but none of type Container: {[i['metadata']['name'] for i in items]}"
+        )
 
         defaulted_request = {limit.get("defaultRequest", {}).get("memory") for limit in container_limits}
         defaulted_limit = {limit.get("default", {}).get("memory") for limit in container_limits}
@@ -378,7 +392,5 @@ class TestKubeSystemGovernance:
         ]
         assert not unbounded, f"Running kube-system containers with no memory limit: {unbounded}"
 
-        best_effort = [
-            p["metadata"]["name"] for p in running if p.get("status", {}).get("qosClass") == "BestEffort"
-        ]
+        best_effort = [p["metadata"]["name"] for p in running if p.get("status", {}).get("qosClass") == "BestEffort"]
         assert not best_effort, f"Running kube-system pods still BestEffort QoS: {best_effort}"
