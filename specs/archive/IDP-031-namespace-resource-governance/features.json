@@ -29,7 +29,7 @@
   },
   {
     "id": "idp-031-f5-surge-case",
-    "behavior": "A full staging deploy followed by a rollout restart of all deployments completes with no pod stuck Pending on quota.",
+    "behavior": "A rollout restart of every deployment completes with no pod stuck Pending on quota. NOTE (IDP-035): AC5 is 'a full deploy FOLLOWED BY a rollout restart'; this check covers the restart half only. The deploy half mutates the cluster, so it is not expressible as a repeatable read-only verification \u2014 AC5 was proven by the one-time staging measurement recorded in verification.md (0 Pending, peak 6272Mi/7168Mi, an exact match to the predicted arithmetic). Relabelled rather than widened, so the machine-readable contract states what it actually exercises.",
     "verification": "kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get deployments -o name | xargs -I{} kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab rollout restart {} && kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab rollout status deployment --timeout=180s && test -z \"$(kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get pods --field-selector=status.phase=Pending -o name)\"",
     "state": "pending",
     "evidence": ""

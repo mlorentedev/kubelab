@@ -12,6 +12,13 @@ from toolkit.features import filesystem
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
 
+# The SSH transports the inventory generator understands (TOOL-016/#818).
+# Declared here rather than in the CLI because this module is what gives them
+# meaning: `bastion` is the value `_build_inventory` compares against when
+# deciding whether to emit a ProxyCommand. The CLI imports this list so a
+# rejected value is rejected identically at both layers (#1135).
+VALID_TRANSPORTS = ("mesh", "bastion")
+
 
 class AnsibleGenerator(BaseGenerator):
     """Generates Ansible inventory from common.yaml (SSOT).
@@ -104,6 +111,25 @@ class AnsibleGenerator(BaseGenerator):
         See `generate()` for `bootstrap` / `transport` semantics. `transport="bastion"`
         fails closed here (before any inventory is emitted) if no public jump exists.
         """
+        # Validate here, not only in the CLI: this is where `transport` stops being
+        # a string and becomes a branch. Any value that is not "bastion" used to fall
+        # through to mesh silently, so a typo or a programmatic caller passing 'lan'
+        # got a ProxyCommand-free inventory indistinguishable from a correct mesh run.
+        if transport not in VALID_TRANSPORTS:
+            raise ValueError(f"unknown transport {transport!r} (expected one of: {', '.join(VALID_TRANSPORTS)})")
+
+        # bootstrap targets homelab nodes by lan_ip; bastion proxies every node
+        # without a public_ip through the VPS. Together they emit 172.16.1.x hosts
+        # reached via a jump that has no route to that LAN — and since bootstrap
+        # only affects homelab nodes, the combination cannot be useful for anything
+        # else either. Refuse rather than emit an inventory that cannot connect.
+        if bootstrap and transport == "bastion":
+            raise ValueError(
+                "bootstrap=True with transport='bastion' is contradictory: bootstrap "
+                "addresses homelab nodes by LAN IP, which the VPS jump cannot route to. "
+                "Use bootstrap from a controller on the lab LAN, or bastion without it."
+            )
+
         vps = networking.get("vps", {})
         nodes = networking.get("nodes", {})
         ssh_key = networking.get("ssh_key", "~/.ssh/id_ed25519")

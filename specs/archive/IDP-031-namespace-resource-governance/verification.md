@@ -49,3 +49,25 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 - [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [x] Promotions above executed (if any)
+
+## IDP-035 — the review's findings, dispositioned (2026-08-17)
+
+The adversarial review (`review.md`, PASS, five Minor) was archived with its
+findings open, because two of them touch `tasks.md` and `features.json` — the
+files the archive gate hashes — and editing them in the archive PR would have
+meant the merged state was never the reviewed state. They were filed as #1130
+and are now applied:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | The pre-flight's "mirror case" reasoning is factually wrong | **Fixed** in `tasks.md`, with the real risk named. Re-verified independently against both live clusters before rewriting, not taken on the reviewer's word |
+| 2 | `features.json` f5 is narrower than AC5 | **Relabelled**, not widened — the deploy half mutates the cluster and cannot be a repeatable read-only check |
+| 3 | The 8Gi quota probe is a magic number | **Fixed** — derived from `EXPECTED_QUOTA_LIMITS_MEMORY` so it tracks a MET-001 ceiling raise |
+| 4 | AC3's wording and its test have drifted | **Wording corrected.** The test is stronger; the criterion moved to it, not the reverse |
+| 5 | Nothing warns if the `LimitRange` silently disappears | **Declined here, tracked by #918.** Per the review's own rule a SPECULATIVE finding does not move a verdict and should not drive work alone. The gap is detection *latency*, not silence: `test_unspecified_container_is_defaulted` fails on the next run, and ongoing quota alerting is OBS-010's scope. Building a second alarm here would duplicate it |
+
+The reviewer was right about finding 1 and it is the one worth remembering: a
+container declaring a limit and no request is given `request = limit` by the API
+server before LimitRanger runs, so `defaultRequest` never applies to it. Measured
+here on both clusters — `limits.memory: 64Mi` is admitted with
+`requests.memory: 64Mi`, not rejected as the spec claimed.
