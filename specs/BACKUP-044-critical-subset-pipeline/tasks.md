@@ -80,8 +80,29 @@ The substrate. #1092's AC3 changes the model from "enumerate volumes minus an ex
 - [ ] [AC1] Verify every ratified Tier 1 and Tier 2 item is present, by listing snapshots **from a machine that is not the source node**. Reading the playbook is not verification.
 - [ ] [AC8] Confirm this spec introduced no new consumer of `minio:9000`, the guarantee #1056's original AC2 was reaching for. Note that closing this does **not** release #972 on its own — other PVCs still target MinIO, and #1056's "blocked by #972" was backwards.
 
+## Approved operating parameters
+
+Decided by the operator 2026-08-16 on the measured arithmetic. Bake these in; do
+not re-open them during implementation.
+
+| Parameter | Value | Why |
+|---|---|---|
+| Always-on schedule | every **4h** (wall-clock) | #452 ratifies Tier 1 at RPO < 6h; hourly over-delivered and cost 119k operations a month to do it |
+| On-demand schedule | hourly **while up**, plus boot and graceful shutdown | a 6h threshold never fires in a 3-4h session (#1090) |
+| `restic check` | **weekly**, not per-run | the remaining operations lever; leaves 16x headroom for repository growth |
+| Retention | `--keep-daily 7 --keep-weekly 4 --keep-monthly 6` | ~a year of restore points; dedup makes the history nearly free (42 snapshots cost 2.6 MB in the rig) |
+| Storage class | **Standard** | the free tier does not apply to Infrequent Access — the cheaper-looking class is the more expensive one here |
+
+Projected: ~63,000 Class A operations a month against 1,000,000 free, and ~32 MB
+of source against 10 GB.
+
 ## Follow-ups, not this spec
 
 - [ ] Unblock #1076 (repos into Gitea) once AC3 is green — #1090's step [4] gates it on an exercised restore, and populating the forge first makes the first repository the first thing with no recovery path.
 - [ ] #1092's orphan cleanup stays separate; this spec only has to name the live source unambiguously.
 - [ ] The bulk tier (Hetzner Storage Box + Borg, #471/#473) is a different pipeline with its own provisioning.
+- [ ] The **PVC consumer class** is BACKUP-046 (#1111) — Authelia, Postgres, Grafana,
+  n8n, CrowdSec db. Three of those five have no backup at all today, and Postgres has
+  no mechanism in any spec: it needs `pg_dump`, not `sqlite3 .backup`. Do not let it
+  creep in here. **The split is by mechanism, and the tier axis cannot make it**,
+  because Authelia and Postgres are Tier 1 *and* PVCs.

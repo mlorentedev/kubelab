@@ -34,6 +34,16 @@ at the end of each run (`restic absent from PATH: yes`).
 
 ### R-C — can a boot snapshot be ordered before Gitea's first write?
 
+> **Supersedes R4 of the parallel lane's Part 0** (`origin/docs/backup-044-part0`,
+> ported here by BACKUP-047/#1123). That lane answered the same question with
+> `Before=kubelab-compose.service` and a per-node caveat. It is wrong: this section's
+> measurement shows `unless-stopped` resurrects containers at the `docker.service`
+> mark on an unclean shutdown, 23 s earlier than the compose unit, so ordering against
+> the compose unit does not hold. `Before=docker.service` is the answer, and it also
+> yields a quiescent database. Recorded rather than silently dropped, because the two
+> lanes reached opposite conclusions from the same starting point and only one ran the
+> unclean-shutdown case.
+
 **Settled 2026-08-15. Yes, but the ordering target in the proposal would not have worked.**
 The correct constraint is `Before=docker.service`, not `Before=kubelab-compose.service`.
 
@@ -280,6 +290,94 @@ Implementation notes for `tasks.md`:
 
 ---
 
+### R2 — the destination exists and was proven before anything depended on it
+
+**Settled 2026-08-16, shipped in #1116.** Bucket `kubelab-backups`, non-secret values as
+SSOT at `backup.r2` in `common.yaml`, credentials in SOPS at `backup.r2.access_key_id` /
+`backup.r2.secret_access_key`.
+
+Two details worth keeping out of the transcript and in prose, because they are decisions
+rather than outputs:
+
+- The credential is an **Account** API token, not a User API token. A user token goes
+  inactive if its user leaves the account — for a backup credential that is a silent-failure
+  vector, and the failure would surface at restore time.
+- `backup.r2`, not `infra.backup_r2`. `infra.*` is an injection point, not a namespace:
+  the K8s generator flattens everything under it into `INFRA_*` keys in *every* component's
+  ConfigMap (ADR-036). The first attempt used it and drifted both overlays
+  (`docs/lessons/ci-automation/lesson-004-*`).
+
+The proof is a command rather than a pasted run, so it re-executes in the reader's present
+instead of expiring: `make backup-verify-destination` probes scope, reach, and a
+write/read/sha256/delete round-trip with a throwaway object; `make backup-verify-restic`
+runs an init/backup/snapshots/check lifecycle and removes the probe repository. Credential
+values are passed through the environment and never appear in argv. Procedure and the
+disaster case are in `docs/runbooks/offsite-backup-restore.md`.
+
+---
+
+### R6 — where to exercise the restore: SETTLED
+
+**Adopted: an ephemeral instance, as the 2026-08-10 Gitea research proposes.** The
+restore target is never the live data directory.
+
+The reasoning is short enough to state fully: restoring over `/opt/gitea/data` to
+prove the backup works risks the thing being protected, and if the snapshot turns
+out to be the wrong one the evidence is already destroyed. Restoring into a
+scratch location costs nothing and keeps both the backup and the original.
+
+It doubles as the #492 DR drill, which is worth reusing but not worth expanding
+this spec to close. Recorded in `docs/runbooks/offsite-backup-restore.md` as the
+standing procedure, including the `PRAGMA integrity_check` step for SQLite
+consumers — a restore that produces a file is not the same as a restore that
+produces a *readable* database.
+
+---
+
+### AC7 — the Class A operations question: MEASURED, and the concern was overstated
+
+Per-operation cost, counted server-side from MinIO's `minio_api_requests_total`
+(PutObject, ListObjectsV2, DeleteObject and the multipart verbs — R2's Class A
+set):
+
+| Operation | Class A ops |
+|---|---|
+| `backup` (incremental) | 110 |
+| `snapshots` | 60 |
+| `check` | 80 |
+
+Projected against R2's 1,000,000 free Class A operations per month, over four
+nodes (two always-on hourly, two on-demand in bursts — 1,640 runs/month):
+
+| Schedule | Class A / month | Free tier used |
+|---|---|---|
+| `check` on every run (AC7 as written) | 311,600 | **31.2%** |
+| `check` weekly | 181,680 | 18.2% |
+| Backup every 4h + `check` weekly | 62,880 | **6.3%** |
+
+**Correcting an earlier claim made in this spec's own discussion:** per-run
+`check` was described as scraping the million. Measured, it is 31% of it. AC7 as
+written is affordable and does not need to change on cost grounds alone.
+
+**The larger lever is the schedule, not the check.** Dropping `check` to weekly
+saves 130k operations; dropping the always-on nodes from hourly to every four
+hours saves 119k more — and costs nothing against the requirement, because #452
+ratifies Tier 1 at **RPO < 6h** and hourly was already over-delivering against it.
+Both together land at 6.3% of the free tier, leaving room for the repository to
+grow the per-operation cost several times over before the tier is at risk.
+
+That growth is the reason to take the headroom rather than bank the 31%: both
+`check` and `backup` list pack files, so their cost rises with repository size,
+and this rig measured a small repository. A design sitting at a third of the
+budget on day one has nowhere to go.
+
+**Recommendation for `tasks.md`:** backup every 4h on always-on nodes (still
+inside the ratified RPO), uptime-bounded hourly on on-demand nodes as the
+proposal specifies, and `check` weekly rather than per-run. Operator decision,
+recorded here with the arithmetic behind it.
+
+---
+
 ## Collateral findings
 
 Three things turned up while settling the above that change the design's substrate.
@@ -324,3 +422,84 @@ a non-empty backup exists.
 `proposal.md` states the Uptime Kuma payload is 18M. Measured 2026-08-15 it is **22M**
 (`21.642 MiB` as restic accounts it). Not material to any decision; recorded so the number is
 not re-derived from the stale one.
+
+### New finding — none of the pipeline's prerequisites exist on any node
+
+Not a risk `proposal.md` raised, and it changes the shape of the implementation.
+
+| Node | `sqlite3` | `restic` | Memory available |
+|---|---|---|---|
+| RPi3 | MISSING | MISSING | 428 MB of 905 MB |
+| Beelink | MISSING | MISSING | 6720 MB of 7716 MB |
+| ace1 | MISSING | MISSING | 9224 MB of 11741 MB |
+| VPS | MISSING | MISSING | 4884 MB of 7729 MB |
+
+Every node is `aarch64`. The VPS is reached as `deployer`
+(`networking.ssh_users.cloud`), the homelab nodes as `manu`.
+
+`sqlite3` is the mechanism behind AC2 — "each of the four live SQLite databases
+is snapshotted with `sqlite3 .backup`" — and it is present on none of the four
+nodes that must run it. `restic` likewise. The Ansible role therefore owns
+installing both, which is ordinary work, with two consequences worth naming
+before `tasks.md` is drafted:
+
+- The install itself has a cost on the RPi3, and it lands on the node with the
+  least headroom.
+- Package availability is a Debian 13 / `aarch64` question on every node, so the
+  role cannot assume a distribution default that happened to work on a
+  development machine.
+
+### New finding — the proposal cannot satisfy its own AC1
+
+Surfaced by the operator asking what, concretely, is being backed up.
+
+AC1 requires "every ratified Tier 1 **and Tier 2** item present in its node's R2
+repository". #1090 records the ratified tiers as:
+
+- **T1:** Headscale, Authelia, Gitea, Uptime Kuma, Postgres
+- **T2:** Grafana, n8n, CrowdSec db, Pi-hole FTL
+
+The proposal's consumer table covers four nodes: VPS (Headscale, Authelia,
+Postgres), Beelink (Gitea), RPi3 (Uptime Kuma), RPi4 (Pi-hole FTL).
+
+**Three ratified Tier 2 items appear nowhere in it: Grafana, n8n and the CrowdSec
+database.** As written, the spec builds a pipeline that cannot meet its own
+acceptance criterion.
+
+The reason they were missed is structural rather than careless, and it matters
+for how they get added. Those three do not live in a node's filesystem — they are
+**Kubernetes PVCs**, and the existing prod CronJob already backs two of them up:
+
+```
+$ grep claimName infra/k8s/overlays/prod/backup.yaml
+                claimName: authelia-data
+                claimName: n8n-data
+
+$ grep minio infra/k8s/overlays/prod/backup.yaml
+  mc alias set backup http://minio:9000 ...
+```
+
+So there is a **fifth consumer class the proposal has no row for**: the K3s
+cluster itself, whose state is PVCs rather than paths, and whose backup currently
+targets in-cluster MinIO — the destination ADR-061:96 identifies as the thing
+coercing MinIO to always-on, and which was never an offsite copy.
+
+**Authelia is in both places and the proposal has it in the wrong one.** It is
+listed under "VPS" as though it were a node-level directory, but it is
+`authelia-data`, a PVC. The mechanism for backing it up is not the one the
+proposal describes for that node.
+
+This does not change the destination, the credentials, the retention model or any
+Part 0 answer. It changes the *consumer inventory*, and `tasks.md` must not be
+drafted against the current table. Two options for the operator:
+
+1. **Extend this spec** with a PVC consumer class, bringing Grafana, n8n and
+   CrowdSec into the R2 pipeline and retiring the MinIO CronJob's remaining
+   consumers — which is also what eventually releases #972.
+2. **Narrow AC1** to Tier 1 plus Pi-hole FTL, and file the PVC class as the next
+   ticket in #1090's sequence.
+
+Option 1 satisfies the criterion as ratified; option 2 ships sooner and keeps the
+spec's node-level shape coherent. Either is defensible, neither can be skipped —
+`tasks.md` written against the current table would build something that fails its
+own AC1 review.
