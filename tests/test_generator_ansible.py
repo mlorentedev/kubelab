@@ -92,6 +92,11 @@ class TestTransportValidation:
 
     @pytest.mark.parametrize("bogus", ["lan", "bastio", "BASTION", "", "mesh "])
     def test_unknown_transport_raises(self, bogus: str) -> None:
+        """Case, whitespace and near-misses are all rejected, not normalised.
+
+        `'BASTION'` and `'mesh '` are the interesting rows: silently accepting
+        either would reintroduce the fallback through a different door.
+        """
         with pytest.raises(ValueError, match="unknown transport"):
             AnsibleGenerator()._build_inventory(_networking(), transport=bogus)
 
@@ -119,6 +124,7 @@ class TestBootstrapBastionCombination:
     """
 
     def test_bootstrap_with_bastion_raises(self) -> None:
+        """The pair must be refused before any inventory is emitted."""
         with pytest.raises(ValueError, match="contradictory"):
             AnsibleGenerator()._build_inventory(_networking(), bootstrap=True, transport="bastion")
 
