@@ -201,7 +201,9 @@ docs/architecture/infra/      — infrastructure docs (DNS, networking)
 docs/architecture/hardware/   — hardware allocation and topology
 docs/runbooks/                — operational runbooks
 docs/troubleshooting/         — troubleshooting guides
-docs/lessons.md               — patterns learned, gotchas, post-mortems
+docs/lessons/                 — patterns learned, gotchas, post-mortems (one
+                                file per lesson; start at docs/lessons/_index.md,
+                                format in docs/lessons/_format.md)
 CHANGELOG.md                  — project changelog
 ```
 

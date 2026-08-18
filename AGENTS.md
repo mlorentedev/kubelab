@@ -68,7 +68,9 @@ streams A, B, C3, D, E, G in the vault roadmap.
 Build/operate docs live in [`docs/`](docs/) (docs-as-code): ADRs in
 [`docs/adr/`](docs/adr/), architecture in `docs/architecture/`, runbooks in
 `docs/runbooks/`, troubleshooting in `docs/troubleshooting/`, and project lessons
-in [`docs/lessons.md`](docs/lessons.md). Cross-project patterns and session memory
+in [`docs/lessons/`](docs/lessons/_index.md) — one file per lesson under a category
+directory, never appended to the old `docs/lessons.md`, which is now a pointer.
+Cross-project patterns and session memory
 live in the maintainer's vault, **not here**. Task/backlog state lives in the
 **bitácora** GitHub Project (issues), per ADR-018 — not in git history or the
 vault. Lessons that mature into critical gotchas graduate to CLAUDE.md.
