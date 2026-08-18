@@ -98,8 +98,7 @@ obvious cause, doc-only changes. When in doubt, ask.
 ## Workflow Rules (read before first tool call)
 
 This repo opts in to the global behaviour rules in `$DOTFILES/AGENTS.md`
-(resolved via machine.json per ADR-025; fallback
-`~/Projects/Workspace/dotfiles/AGENTS.md`) — the canonical cross-agent SSOT:
+(the dotfiles repo root, resolved per-machine via the path cascade: explicit env → `~/.config/dotfiles/machine.json` → `env-contract.json` default) — the canonical cross-agent SSOT:
 **Standing Orders** (automate-don't-instruct, SSOT, knowledge hygiene, clean-as-
 you-go, consult patterns, enterprise-grade, noted=recorded, bitácora status,
 worktrees-outside-repo), **Decision Hierarchy**, **Model Selection**, **Security
