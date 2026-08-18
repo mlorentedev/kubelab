@@ -1068,8 +1068,10 @@ def ansible_generate(
     mesh (non-admin box / bare WSL): mesh-only nodes are reached via a ProxyCommand
     through the VPS public bastion (ADR-052 sibling for SSH).
     """
-    if transport not in {"mesh", "bastion"}:
-        logger.error(f"Invalid --transport '{transport}' (expected: mesh | bastion)")
+    from toolkit.features.generator_ansible import VALID_TRANSPORTS
+
+    if transport not in VALID_TRANSPORTS:
+        logger.error(f"Invalid --transport '{transport}' (expected: {' | '.join(VALID_TRANSPORTS)})")
         raise typer.Exit(1) from None
 
     _suffix = (" (bootstrap)" if bootstrap else "") + (f" [{transport}]" if transport != "mesh" else "")
