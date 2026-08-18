@@ -272,22 +272,38 @@ config-generate:
 DRIFT_REVERT_PATHS := infra/k8s/overlays/staging/generated \
                       infra/k8s/overlays/prod/generated
 
-# The env must come from the CALLER, not from the `ENV ?= dev` default further
-# down this file. A `?=` assignment is global regardless of position, so the
-# `test -n "$(ENV)"` this replaced always saw `dev` and could never fail: a bare
-# `make config-check-drift` silently checked the dev overlay and printed
-# "✓ No drift" while staging and prod both drifted. That is exactly how #1116
-# reached CI with a `common.yaml` key that changed every component's ConfigMap.
-# `$(origin ENV)` is the only way to ask "did the caller say so?" — it reports
-# `command line` for `ENV=prod`, `file` for the default. `ENV=dev` typed
-# explicitly still works.
+# The environments this gate can actually check — not "every environment".
+# Only these have an `infra/k8s/overlays/<env>/generated/` tree, so only for
+# these does the diff below have anything to compare. `dev` generates Docker
+# Compose configs instead, so pointing the gate at it makes `git diff` run over
+# pathspecs that match nothing, which exits 0 and prints "✓ No drift" no matter
+# what the generator did.
+DRIFT_ENVS := staging prod
+
+# Validate the ENV *value* against DRIFT_ENVS, not merely its provenance.
+#
+# Two weaker guards shipped here before, and both were reachable no-ops.
+# `test -n "$(ENV)"` never failed, because `ENV ?= dev` — 700 lines further down,
+# but global regardless of position — made `$(ENV)` expand to `dev`; a bare
+# `make config-check-drift` checked the dev overlay and reported green while
+# staging and prod both drifted, which is how #1116 reached CI with a
+# `common.yaml` key that rewrote every component's ConfigMap (#1118). Replacing
+# it with `test "$(origin ENV)" = "command line"` only moved the hole: `ENV=`
+# also has command-line origin, and `ENV=dev` passed by design straight into
+# the vacuous-pathspec case above.
+#
+# `$(words)` rejects both the empty value and a multi-word one like
+# `ENV="staging prod"`, which `$(filter)` alone would accept and then splice
+# unquoted into the generator's argv.
 .PHONY: config-check-drift
 config-check-drift:
-	@test "$(origin ENV)" = "command line" || { \
-		echo "Usage: make config-check-drift ENV=staging|prod"; \
-		echo "  ENV must be passed explicitly — the repo-wide 'ENV ?= dev'"; \
-		echo "  default would otherwise check dev and report green while the"; \
-		echo "  environments you deploy drift unnoticed."; \
+	@{ test "$(words $(ENV))" = 1 \
+	   && test -n "$(filter $(ENV),$(DRIFT_ENVS))"; } || { \
+		echo "Usage: make config-check-drift ENV=<one of: $(DRIFT_ENVS)>"; \
+		echo "  Got ENV='$(ENV)'. Only these environments have a committed"; \
+		echo "  K8s overlay for the check to diff against, so any other value"; \
+		echo "  — including the repo-wide 'ENV ?= dev' default — would diff an"; \
+		echo "  empty pathspec and report green whatever the generator did."; \
 		exit 1; \
 	}
 	@git diff --quiet -- $(DRIFT_REVERT_PATHS) || { \
