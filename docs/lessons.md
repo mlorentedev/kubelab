@@ -39,11 +39,13 @@ owner: manu
 
 2. **`make config-check-drift` with no `ENV` checked `dev` and reported green.** The target opened with `@test -n "$(ENV)" || (echo "Usage: ..." && exit 1)`, which reads as a guard. It is not one: `ENV ?= dev` lives ~700 lines further down the same Makefile, and a `?=` assignment is global regardless of position, so `$(ENV)` expanded to `dev` and `test -n "dev"` always passed. The usage message had never been printed. Verified after the fact: `make -n config-check-drift` emits `test -n "dev"`. Dev generates Docker Compose configs — it does not produce the K8s overlays CI diffs — so a dev-only run is structurally incapable of seeing the failure, and prints the same `✓` as a real one. `CONTRIBUTING.md` cited the bare form twice.
 
-**Solution**: #1119. `@test "$(origin ENV)" = "command line"` — the only make construct that distinguishes "the caller passed this" from "it has a value". `ENV=dev` typed explicitly still runs; a bare invocation now fails with a message naming why dev is the wrong answer. CI already passed `ENV` per matrix env, so it was unaffected. `CONTRIBUTING.md` now names both environments and the `INFRA_*` fan-out.
+**Solution**: two attempts, and the first is the more instructive. #1118 replaced the guard with `@test "$(origin ENV)" = "command line"` — the only make construct that distinguishes "the caller passed this" from "it has a value" — and deliberately kept `ENV=dev` working. That moved the hole rather than closing it: `ENV=` also has command-line origin, and `ENV=dev` still routed straight into the vacuous case, because `git diff --quiet` over a pathspec that matches nothing exits 0. Provenance was never the property that mattered. 1122 validates the *value* instead, against a declared `DRIFT_ENVS := staging prod`, with `$(words)` rejecting the empty and multi-word forms that `$(filter)` alone would wave through. A static test asserts the recipe still guards through that variable, so the allow-list cannot be quietly widened back. CI already passed `ENV` per matrix env, so it was unaffected throughout. `CONTRIBUTING.md` now spells out both commands and the `INFRA_*` fan-out.
 
-**Rule**: A guard on a variable that has a repo-wide default is not a guard — test `$(origin VAR)`, not `$(VAR)`. More generally: **when a gate can run against a target that cannot exhibit the failure, its green is not evidence.** Ask what the check ran *against*, not whether it passed; `✓ No drift` is a claim about one environment and the default environment is the one that ships nowhere. And before putting a value under `infra.*`, check ADR-036's actual contract — that prefix has a consumer (every ConfigMap), not just a meaning.
+The same shape has a third instance in this very target, found while fixing the second and already filed as #1048: one of the three paths it diffs, `infra/ansible/generated/<env>/hosts.yml`, is gitignored and has never been tracked, so `git diff` cannot see it and CI-GATE-002's Ansible half was born vacuous. It stays in place, annotated rather than silently removed, because how inventory drift *should* be detected is a separate decision.
 
-**Tags**: `#makefile` `#drift-gate` `#adr-036` `#ssot` `#false-green` `#ci-gate-002` `#backup-044` `#pr-1119`
+**Rule**: A guard on a variable that has a repo-wide default is not a guard, and tightening it to *where the value came from* is not enough either — validate the value against the set the gate can actually check, and declare that set as a variable a test can assert on. More generally: **when a gate can run against a target that cannot exhibit the failure, its green is not evidence.** Ask what the check ran *against*, not whether it passed; `✓ No drift` is a claim about one environment, and the default environment is the one that ships nowhere. In a `git diff`-based gate the specific trap is that a pathspec matching nothing — a wrong env, an untracked file — exits 0, which is indistinguishable from agreement. And before putting a value under `infra.*`, check ADR-036's actual contract: that prefix has a consumer (every ConfigMap), not just a meaning.
+
+**Tags**: `#makefile` `#drift-gate` `#adr-036` `#ssot` `#false-green` `#ci-gate-002` `#backup-044` `#pr-1118` `#pr-1122`
 
 ### [2026-08-10] "No matching data" is not zero — it is NoData, and the default acts on it
 
@@ -4211,3 +4213,56 @@ For ports the same idea reads `{{len .HostConfig.PortBindings}}:{{len .NetworkSe
 - **A probe that has never passed is worse than no probe.** It is indistinguishable from a service that has never worked, so the one real outage it exists to catch arrives at an indicator that was already red.
 
 **Tags:** `#docker` `#ansible` `#cgroups` `#healthcheck` `#verification` `#gotcha`
+
+### [2026-08-16] `tailscale status` says `active` about a machine that is powered off
+
+**Context:** aws1 was interrupted by a Spot reclaim. Checking whether it had come back, `tailscale status` showed:
+
+```
+100.64.0.7   aws1   kubelab   linux   active; relay "fra"; offline, tx 103116 rx 0
+```
+
+Read left to right, `active` is the first word and it reads as "the node is up". It is not about the node at all — it describes *this workstation's* connection attempt: a session is open via the Frankfurt DERP relay. The two tokens that carry the answer come after it: `offline`, and `tx 103116 rx 0` — 103 KB sent, **zero bytes back**.
+
+EC2 said `stopped` the whole time, with the persistent Spot request still `open / capacity-not-available`.
+
+**The trap:** the existing entry above (2026-03-28) already records the inverse pair — *"tailscale showing offline while EC2 still reports running / impaired"* — as diagnostic of a wedged Spot. That framing makes Tailscale look like one of two equal witnesses. It is not: **a VPN peer's state is never authoritative about whether the machine exists**, in either direction. Tailscale reports transport, EC2 reports the host.
+
+**Fix:** answer the two questions from their own sources.
+
+```bash
+# "Is it powered on?" -> EC2, always
+aws ec2 describe-instances --profile kubelab --region eu-central-1 \
+  --filters "Name=tag:Project,Values=kubelab" \
+  --query 'Reservations[].Instances[].State.Name' --output text
+
+# "Is it reachable?" -> rx, not the status word
+tailscale status | grep aws1
+```
+
+**Rule:**
+- **`rx 0` beats every adjective on the line.** Bytes received is the only field on a `tailscale status` row that cannot be true of a dead peer.
+- **Never let a transport report stand in for a liveness report**, especially when the cheap check is one CLI call away and the expensive mistake is a destructive recovery command. This was one step away from `make aws1-replace` against a stopped-but-recoverable instance — see `runbooks/aws1-destroy-replace.md`.
+
+**Tags:** `#tailscale` `#aws` `#spot` `#diagnostics` `#gotcha`
+
+### [2026-08-16] Rebasing onto a squash-merged branch conflicts against your own merged work
+
+**Context:** an implementation branch was cut from a spec branch. The spec PR merged, and `git rebase origin/master` on the implementation branch immediately conflicted — on the spec files, against content that was already upstream.
+
+**The trap:** this repo squash-merges, so master received the spec as **one** commit whose content matches the *end state* of the branch's three. Rebase replays those three originals on top of that end state, and each one conflicts with the result it helped produce. The conflict markers look like a genuine disagreement between two authors; they are the branch arguing with its own merged output, and "resolving" them by hand reintroduces intermediate states that were deliberately squashed away.
+
+**Fix:** drop the already-merged commits instead of replaying them. Cut a fresh branch from master and cherry-pick only what is *not* upstream.
+
+```bash
+git rebase --abort
+git checkout -B <branch> origin/master
+git cherry-pick <impl-commit>     # only the commits master does not have
+```
+
+**Rule:**
+- **After a squash-merge, the parent branch's commits no longer exist upstream in any form git can match.** `git rebase` has nothing to deduplicate against — unlike a merge-commit workflow, where it would drop them silently.
+- **Stacked branches and squash-merge do not compose.** Either rebase the child *before* the parent merges, or plan to cherry-pick after. Deciding this at conflict time is how intermediate states leak back into history.
+- **A conflict in files your branch did not modify in this commit is the signal.** It means the commit is already applied, not that someone else edited it.
+
+**Tags:** `#git` `#squash-merge` `#rebase` `#worktrees` `#gotcha`
