@@ -120,7 +120,7 @@ def _declared_drift_envs() -> list[str]:
     if match is None:
         pytest.fail(
             f"{ENV_VARIABLE} not found in Makefile. The drift gate's env guard was "
-            "inlined or removed — see #1118/#PR_PLACEHOLDER."
+            "inlined or removed — see #1118/#1122."
         )
     return match.group(1).split()
 
