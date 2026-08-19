@@ -67,38 +67,65 @@ primitive rather than a better inspection of Job status.
 
 ## Risks / open questions
 
-- **The demonstration is the hard part, and the obvious method is forbidden.**
-  AC9's standard is "stop the thing and observe the alert, not read the query".
-  The obvious stop is `kubectl patch cronjob pvc-backup -p '{"spec":{"suspend":true}}'`
-  — a manual write to `spec.suspend`, a field no manifest declares, on the exact
-  object that was the poster child of the ownership incident. Under SSA that
-  annexes the field to a foreign manager permanently, re-creating the defect
-  measured in lesson 351 on the object cleaned five days earlier, and prod's
-  `selfHeal: true` races any out-of-band toggle besides. **The stop mechanism must
-  be chosen and justified before implementation.** Compounding it: at a ~26h
-  interval, "stop and wait" is a multi-day demo unless it is staged.
-- **What a failed heartbeat should do to a successful backup.** Failing the job on
-  a delivery error makes Uptime Kuma an availability dependency of the backup and
-  re-runs a backup that already completed. Not failing it is defensible precisely
-  because an absent heartbeat *is* the alert — the control catches its own
-  delivery failure one window later. Either is defensible; silence is not.
-- **`alpine:3.21` has no `curl`.** The hardening being reused is curl-specific
-  (`--config -` to keep the token out of `argv`, `--retry-max-time` budgets).
-  Adding `curl` to the existing `apk add` line extends the runtime-install
-  pattern the incident criticised, on the same line that already installs
-  `sqlite`. Busybox `wget` avoids the install and cannot read a config from
-  stdin, so the token would sit in `argv`. Trade-off, to be stated not dodged.
 - **Which endpoint the pod posts to** is not settled by reading manifests. The
   in-cluster `uptime-kuma` Service (kubelab namespace, EndpointSlice to
   `100.64.0.6:3001`) avoids a public round trip and the CrowdSec and rate-limit
   middlewares; the public host is the fallback. Decide by measuring from inside
-  the cluster.
+  the cluster — this is the one question implementation must answer by probing.
 - **`muted_notification_tags` could silence this monitor.** That set exists so
   on-demand homelab targets do not alert when the homelab is off (#912). A
   heartbeat monitor that inherits a muted tag is a control that cannot fire — the
-  exact failure class this spec exists to remove, reintroduced by a tag.
-- **The monitor's `key` is load-bearing, not cosmetic**: it is also the SOPS
-  sub-key that resolves the token.
+  exact failure class this spec exists to remove, reintroduced by a tag. AC6
+  asserts against the live notification links rather than the seed for that
+  reason.
+- **The scratch monitor of AC3 must be removed afterwards.** The sync is
+  declarative and deletes what the seed does not declare, so an unremoved scratch
+  entry is either deleted on the next apply (fine) or, if someone adds it to the
+  seed to stop that, becomes a permanent monitor nobody watches.
+
+## Decisions
+
+Taken 2026-08-19, with the reasoning, so the archived record says why and not
+only what.
+
+- **The demonstration is staged, and prod's CronJob is never stopped.** AC9's
+  standard is "stop the thing and observe the alert". The obvious stop —
+  `kubectl patch cronjob pvc-backup -p '{"spec":{"suspend":true}}'` — is a manual
+  write to `spec.suspend`, a field no manifest declares, on the exact object
+  whose ownership incident produced this spec. Under SSA that annexes the field
+  to a foreign manager, re-creating the defect measured in lesson 351 on the
+  object cleaned five days earlier, and prod runs `selfHeal: true` besides. At a
+  ~26h interval it would also be a multi-day demo.
+  So the proof is composed of two halves that each run in minutes: a **scratch
+  push monitor** at a 60s interval, carrying the real notification links, is
+  stopped by simply not posting to it — proving Kuma-to-operator end to end
+  through the real channel; and the **first real heartbeat** from a live backup
+  run proves CronJob-to-Kuma. Neither half touches prod's CronJob.
+  Accepted cost, stated plainly: no single execution traverses the whole chain.
+  The seam is the notification config, and AC6 pins that the real monitor carries
+  the same links the scratch one proved.
+- **A heartbeat that cannot be delivered does not fail the backup.** The backup
+  has already completed by then; failing the job would trip `backoffLimit` and
+  re-run a finished backup, and would make Uptime Kuma an availability dependency
+  of the backup itself. Nothing is lost by not failing: an undelivered heartbeat
+  is an *absent* heartbeat, so Kuma alerts one window later regardless. **The
+  control detects its own delivery failure** — which is the property that makes
+  this the safe direction rather than the lazy one.
+- **`curl` joins the existing `apk add` line.** This does extend the
+  runtime-install pattern the incident criticised, and that is accepted rather
+  than hidden: it is the same line that already installs `sqlite`, so it adds no
+  new failure class, and it buys the hardening proven in
+  `roles/node_maintenance/templates/kubelab-maintenance-notify.sh.j2` — the token
+  passed via `--config -` instead of `argv`, bounded timeouts, and a `--retry`
+  budget that fits inside `activeDeadlineSeconds`. Busybox `wget` would avoid the
+  install but cannot read a config from stdin, and the token is *in the URL* for
+  a push endpoint, so it would sit in `argv` and be readable from the node's
+  `/proc`.
+- **The monitor's key is `prod-backup-pvc-heartbeat`**, SOPS sub-key
+  `push_tokens.prod_backup_pvc_heartbeat`. `prod` is an existing domain prefix in
+  the seed (`prod-api-api-kubelab-live`, `prod-web-kubelab-live`); `ops` is not,
+  in the 31 keys or in `tags.json`. The `_` spelling in SOPS is required so the
+  path survives `_flatten_dict` into an env var name — see #1169.
 
 ### Settled by measurement
 
@@ -119,18 +146,22 @@ primitive rather than a better inspection of Job status.
       demonstrated by a real run rather than by reading the script.
 - [ ] A backup that fails at any step posts **no** heartbeat, demonstrated by
       injecting a failure — not by arguing from `set -e`.
-- [ ] A backup that never starts raises an alert that reaches the operator's real
-      notification channel, without anyone looking. Demonstrated by stopping the
-      job and observing the alert (BACKUP-044 AC9's standard).
-- [ ] The stop used above leaves **no new field manager** on the CronJob,
+- [ ] The **absence** of heartbeats raises an alert that reaches the operator's
+      real notification channel, without anyone looking. Demonstrated on a
+      scratch push monitor at a short interval, carrying the same notification
+      links as the real one and stopped by not posting to it — observed
+      arriving, not inferred from configuration (BACKUP-044 AC9's standard).
+- [ ] **No step of the demonstration adds a field manager to the prod CronJob**,
       verified with `--show-managed-fields` before and after. A demo that
-      re-creates the ownership defect is not a passing demo.
+      re-creates the ownership defect this spec descends from is not a passing
+      demo.
 - [ ] The push token is absent from every committed file, and the seed survives
       an `export` -> `apply` round trip with the live token unchanged.
 - [ ] The heartbeat monitor is not silenced by `muted_notification_tags`, asserted
       against the live monitor's notification links rather than against the seed.
-- [ ] A heartbeat that cannot be delivered has a stated, tested effect on the
-      backup's own exit status.
+- [ ] A heartbeat that cannot be delivered leaves the backup's exit status
+      **unchanged**, tested by pointing the sender at an unreachable endpoint
+      rather than by reading the `|| true`.
 - [ ] The token is registered in `SECRET_CATALOG` and appears in
       `make secrets-audit --env prod`. Checked against the ANSIBLE-033 failure
       mode: an `envs` tuple matching no real env removes a secret from every
