@@ -26,6 +26,8 @@ Two changes, in order, because the second is unsafe without the first.
 
 Observable after both: a PR that nobody reviewed cannot be green, and the ordinary reason a PR went unreviewed — the quota — stops occurring.
 
+**Sequencing note, load-bearing.** This spec declares `issue: mlorentedev/kubelab#1140`, so the spec archive gate will refuse any PR that *closes* #1140 while TOOL-021 is still active — and Part 1 is the fix for #1140. **#1140 closes when this spec archives, after Part 2.** Part 1's PR references it without a closing keyword (`for #1140`, never `closes #1140`). Not a workaround: the gate is correct, the spec is genuinely unfinished at that point, and reaching for `Spec-archive-exception:` there would record an exception where none applies.
+
 ## Out of scope
 
 - **Retiring CodeRabbit.** Deliberately deferred to a decision with data from the parallel window. Recorded here so the window has a declared end rather than becoming permanent by omission.
@@ -57,6 +59,7 @@ Observable after both: a PR that nobody reviewed cannot be green, and the ordina
 - [ ] No file under `infra/config/secrets/` or matching `**/*.pem` is ever sent to the inference endpoint, demonstrated by a PR touching one and the path filter excluding it.
 - [ ] A release PR is neither reviewed by PR-Agent nor left permanently `pending` by the gate — both halves of the exemption are exercised on one real release PR.
 - [ ] The reviewer's own failure (unreachable endpoint, bad credential) produces a **red** PR, not a green one, demonstrated by injecting the failure.
+- [ ] The gate is in master's **required-checks list**, so an unreviewed PR reports `mergeStateStatus: BLOCKED` and not merely a failing check. Branch protection is a setting, not code — no test in this repo can see it drift — so this is demonstrated against a real PR after the protection edit. A correct check that nothing requires is the same defect this spec exists to end, one layer out.
 - [ ] Nothing in the change enables auto-merge, asserted by a test rather than by inspection.
 
 ## References
