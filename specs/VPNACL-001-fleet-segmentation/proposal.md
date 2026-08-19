@@ -3,6 +3,7 @@ id: "VPNACL-001-fleet-segmentation"
 type: spec
 status: draft # draft | implementing | verifying | archived
 created: "2026-05-31"
+issue: "kubelab#1154"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
 template_version: "1.0"
 ---
