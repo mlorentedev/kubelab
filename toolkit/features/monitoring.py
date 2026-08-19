@@ -12,16 +12,33 @@ from uptime_kuma_api import UptimeKumaApi
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.monitoring_diff import (
+    PUSH_MONITOR_TYPE,
     SEED_TO_API_FIELD,
     WRITABLE_FIELDS,
     diff_monitors,
     embed_key,
     extract_key,
+    hydrate_push_tokens,
     strip_key,
     wants_notifications,
 )
 
 # Fields to export per monitor (skip volatile/internal fields)
+#
+# `pushToken` is ABSENT ON PURPOSE, and it is the one omission here that is a
+# decision rather than an oversight — so do not "complete" this list with it.
+#
+# `_clean_monitor` feeds `infra/config/uptime-kuma/monitors.json`, which is
+# committed to a PUBLIC repository, and the push endpoint is publicly routed at
+# `status.kubelab.live/api/push/<pushToken>`. Exporting the token would put a
+# live credential in git whose only power is to post "still alive" — at the
+# exact monitors whose job is to notice silence. A leaked token does not degrade
+# a dead-man's-switch, it inverts it.
+#
+# So SOPS owns this field and the seed never carries it:
+# `apps.services.observability.uptime_kuma.push_tokens.<monitor key>`, married
+# to the seed in memory at apply time by `hydrate_push_tokens`. Export dropping
+# it is therefore lossless — the JSON was never where the value lived (TOOL-038).
 _MONITOR_EXPORT_FIELDS = [
     "name",
     "type",
@@ -83,6 +100,38 @@ def _get_kuma_creds(project_root: Path) -> dict[str, str]:
         raise SystemExit(1)
 
     return {"url": f"http://{host}:{port}", "host": host, "username": username, "password": password}
+
+
+def _get_push_tokens(project_root: Path) -> dict[str, str]:
+    """Read every push monitor's token from SOPS, keyed by the monitor's seed `key`.
+
+    Lives in `common.enc.yaml` rather than a per-env file for the same reason the
+    admin credentials above do: Uptime Kuma is a singleton on the RPi3, one
+    instance serving every environment (#968). The `SECRET_CATALOG` entry still
+    declares `envs=("prod",)` — that is the AUDIT dimension, "which environment
+    must have this secret", not the file it lives in (ANSIBLE-033).
+
+    Returns `{}` when the key is absent, rather than raising. Nothing is wrong
+    with an instance that has no push monitors; the failure belongs to
+    `hydrate_push_tokens`, which raises only for a push entry the seed actually
+    declares.
+
+    **Sub-keys are normalised `_` -> `-` so SOPS may hold either spelling.** The
+    seed's monitor keys are kebab-case throughout (`infra-node-vps-ssh`), but a
+    SOPS path also has to survive `ConfigurationManager._flatten_dict`, which
+    joins with `_` and uppercases WITHOUT touching hyphens — so a kebab sub-key
+    flattens to an env var name containing hyphens, which `SECRET_DEFINITIONS`
+    cannot consume. That matters because the token has a second consumer: the
+    K8s Secret that hands it to the workload posting the heartbeat.
+
+    Normalising here lets SOPS store the flatten-safe `ops_backup_pvc_prod`
+    while the seed keeps its `ops-backup-pvc-prod`, with neither side bending to
+    the other and no lookup table in between.
+    """
+    cm = ConfigurationManager("staging", project_root)
+    secrets = cm._decrypt_sops(cm.secrets_path / "common.enc.yaml") or {}
+    uk_secrets = secrets.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
+    return {str(k).replace("_", "-"): str(v) for k, v in (uk_secrets.get("push_tokens") or {}).items() if v}
 
 
 def _get_muted_notification_tags(project_root: Path) -> frozenset[str]:
@@ -252,6 +301,20 @@ def apply_monitors(project_root: Path) -> None:
 
         seed_monitors = json.loads(monitors_path.read_text())
 
+        # Marry the push tokens to the seed before anything reads it, so the
+        # diff and the write path both see the same monitor. Raises rather than
+        # proceeding if a declared push monitor has no token — see
+        # `hydrate_push_tokens` for why a silent fallback is the worse outcome.
+        #
+        # SOPS is decrypted only when the seed actually declares a push monitor.
+        # `_decrypt_sops` shells out to `sops -d` (and warns when sops is absent),
+        # so an unconditional read would put a subprocess and a spurious warning
+        # on every sync of a seed that has none — which is every sync today.
+        # `hydrate_push_tokens` still runs regardless: an empty token map is what
+        # makes an inline token in the seed a refusal rather than a silent leak.
+        declares_push = any(m.get("type") == PUSH_MONITOR_TYPE for m in seed_monitors)
+        seed_monitors = hydrate_push_tokens(seed_monitors, _get_push_tokens(project_root) if declares_push else {})
+
         # Ensure tags exist (from SSOT tags.json)
         tags_path = export_dir / TAGS_FILE
         tag_id_map: dict[str, int] = {}
@@ -347,8 +410,23 @@ def apply_monitors(project_root: Path) -> None:
             try:
                 # Uptime Kuma v2.x requires conditions (NOT NULL in DB)
                 # Use low-level sio.call — lib's _call wrapper has issues with v2 responses
-                monitor_data = api._build_monitor_data(**_params(m))
+                params = _params(m)
+                # `_build_monitor_data` declares its parameters one by one and
+                # has NO `pushToken` among them, so passing it through raises
+                # TypeError. Set on the built dict instead, exactly as
+                # `conditions` and `notificationIDList` are below.
+                #
+                # It has to be set explicitly, too: the library mints a token for
+                # a tokenless push monitor inside `_convert_monitor_input`, which
+                # `add_monitor()` calls and this raw-socket path does not. So
+                # without this line a push monitor is created with no token at
+                # all — an endpoint nothing can post to, reported as a
+                # successful create (TOOL-038).
+                push_token = params.pop("pushToken", None)
+                monitor_data = api._build_monitor_data(**params)
                 monitor_data["conditions"] = []
+                if push_token:
+                    monitor_data["pushToken"] = push_token
                 if has_default_notification:
                     # Uptime Kuma v2 expects {id: true} format, not [id]
                     monitor_data["notificationIDList"] = _notification_id_list(m)
