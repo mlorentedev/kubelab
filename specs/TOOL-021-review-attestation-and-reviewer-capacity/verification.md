@@ -39,6 +39,26 @@ The six refusals are correct rather than gaps: five are `apps/web/*` releases an
 
 **The backtest corrected the registry.** The `errors only` signature carried a comment calling it unobserved and declared "by construction" — written from a four-PR sample. History shows it four times. Wrong in the safe direction, but wrong, and a reader would have taken it as grounds to delete the entry.
 
+## Live behaviour, 2026-08-19 — both directions, on real PRs
+
+Not fixtures. The gate went live with #1162 and was exercised the same hour by two unrelated PRs.
+
+**#1165 — the flip.** Opened, and the attestation status went **red**: Codex had posted its quota notice, which is a notice that no review ran, and CodeRabbit had not spoken. CodeRabbit then filed a real review with six findings; `pull_request_review: [submitted]` fired, the job re-ran, and the status became:
+
+    review-attestation: success — a review happened
+
+That is AC2's positive half and the re-evaluation path, demonstrated end to end without anyone touching the gate. It also confirms a design assumption rather than leaving it inferred: this reviewer files through the **reviews API**, which is why its registry entry carries an empty `review_markers` — the backtest predicted it and production agreed.
+
+**#1166 — the refusal.** Both reviewers declined on the same PR, minutes apart:
+
+    coderabbitai:              "Review limit reached … next review available in 52 minutes"
+    chatgpt-codex-connector:   "You have reached your Codex usage limits for code reviews"
+    review-attestation: failure — not reviewed, and not declared as such
+
+Two independent account-wide quotas exhausted simultaneously, which is the correlation this spec was written about. Before the gate, that PR would have shown `CodeRabbit  pass`. AC1, with production data.
+
+**The escape has deliberately not been used yet.** #1166 is genuinely unreviewed, so it is genuinely red; declaring it would be the first use of `merged-unreviewed`, and that path should first be exercised on a merge that truly proceeds without review rather than on one that is simply waiting for a quota to reset.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
