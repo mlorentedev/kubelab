@@ -163,8 +163,24 @@ rpi4      0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
 ```
 
 `0 newly installed` on every reachable covered host: a re-run changes nothing.
-AC2 moves from *accepted* to *evidenced*. (ace1's "44 not upgraded" is unrelated
-pending updates on other packages, not this one.)
+(ace1's "44 not upgraded" is unrelated pending updates on other packages, not
+this one.)
+
+**Corrected 2026-08-19, and the correction is the more useful record.** This
+paragraph first concluded "AC2 moves from *accepted* to *evidenced*", which
+contradicted the `[~]` entry above it and overstated what was measured. AC2 says
+*provisioning* is idempotent — a property of the whole `base_system` run. What
+`apt-get -s` proves is that the **apt task** would no-op, which is necessary and
+not sufficient: the role also templates, sets sysctl and configures a firewall,
+and none of that was re-run. AC2 therefore stays **accepted, now with
+package-level supporting evidence**, and the `[~]` entry above stands unchanged.
+
+Raised by CodeRabbit on #1156 — *"do not promote package-manager simulation to
+full provisioning evidence without changing the criterion"* — and it is right.
+The overclaim substituted a narrower measurement for a broader claim, in the same
+document that promotes "presence is not coverage" as a lesson. The uncorrectable
+residue: the original wording is also in #1156's body, which the squash made
+master's commit message permanently. It is corrected here and on that PR.
 
 **2. Naming inconsistency, `beelink` vs `provision-bee.yml` — TICKETED as #1158,**
 and it is wider than the review found. `make provision` resolves the playbook by
