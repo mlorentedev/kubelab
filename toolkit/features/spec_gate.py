@@ -26,10 +26,20 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-#: GitHub's own closing keywords. Matched case-insensitively, in the PR body,
-#: exactly as GitHub matches them — a keyword this list misses is a spec that
-#: closes silently, so the list is copied from GitHub's documentation rather
-#: than trimmed to the ones this repo happens to use.
+#: GitHub's closing keywords, copied from its documentation rather than trimmed
+#: to the ones this repo happens to use — a keyword this list misses is a spec
+#: that closes silently.
+#:
+#: The LIST is faithful. The MATCHING is not equivalence with GitHub's parser,
+#: which we neither control nor can exercise from here; it is only what has been
+#: measured against `closingIssuesReferences` on live PRs:
+#:   2026-08-19  prose              agrees      (kubelab#1153, before/after)
+#:   2026-08-19  code spans/fences  did NOT     (kubelab#1155 -> CI-GATE-013)
+#:   2026-08-19  HTML entities      GitHub matches; escaping in source does not help
+#:   2026-08-19  `auto-closed #N`   agrees      (probe on kubelab#1159; `-` IS a boundary)
+#:   2026-08-19  `closes \`x\` #N`   GitHub does NOT link across a span
+#:   2026-08-19  `> fixes #N`       GitHub DOES link inside a blockquote
+#: Anything not listed above is untested, not equivalent.
 _CLOSING_KEYWORDS = (
     "close",
     "closes",
@@ -59,6 +69,40 @@ _CLOSES_RE = re.compile(
 #: than from the branch name is deliberate (#1096 AC2) — branch names are not
 #: required to carry the feature id, and #1093's only did by convention.
 _ISSUE_FIELD_RE = re.compile(r"^issue:\s*[\"']?(?P<repo>[\w.-]+(?:/[\w.-]+)?)?#(?P<num>\d+)", re.MULTILINE)
+
+#: Fenced code blocks, including the unterminated case: CommonMark runs an
+#: unclosed fence to the end of the document, and a pasted log with a forgotten
+#: closer is realistic input for a PR body.
+_FENCE_RE = re.compile(
+    r"^(?P<f>```+|~~~+)[^\n]*$.*?(?:^(?P=f)[^\n]*$|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+
+#: Inline code spans. CommonMark closes a run of N backticks with a run of
+#: exactly N; this accepts a closer that is a prefix of a longer run, which is a
+#: known and deliberate divergence — the cases it gets wrong are ones GitHub
+#: also treats as code, so it errs toward stripping text rather than toward
+#: reading a directive out of it.
+_SPAN_RE = re.compile(r"(?P<t>`+)[\s\S]*?(?P=t)")
+
+#: Replaces stripped code rather than deleting it. Deleting would join the text
+#: on either side: ``closes `x` #999`` would collapse to ``closes  #999`` and the
+#: gate would invent a link GitHub does not make — measured, that body produces
+#: no reference at all. NUL cannot appear in a keyword, a number or whitespace,
+#: so it breaks every adjacency the patterns below require.
+_CODE_PLACEHOLDER = "\x00"
+
+
+def _strip_code(body: str) -> str:
+    """The body with fenced blocks and inline spans replaced by a placeholder.
+
+    Applied before *every* pattern in this module, not just the closing one.
+    Both directives this gate reads — a closing keyword and the waiver line —
+    are ordinary text that a document *about the gate* has to quote, and the
+    gate's own failure hint prints the waiver line for the reader to copy.
+    """
+    return _SPAN_RE.sub(_CODE_PLACEHOLDER, _FENCE_RE.sub(_CODE_PLACEHOLDER, body or ""))
+
 
 #: An escape hatch that leaves a record (#1096 AC4). A silent skip would rebuild
 #: the hole this gate exists to close, so the reason is required and is echoed
@@ -92,7 +136,7 @@ def closed_issues(pr_body: str, repo: str) -> set[int]:
     `mlorentedev/knowledge#NNN`.
     """
     found: set[int] = set()
-    for m in _CLOSES_RE.finditer(pr_body or ""):
+    for m in _CLOSES_RE.finditer(_strip_code(pr_body)):
         if m.group("url_num"):
             if m.group("url_repo") == repo:
                 found.add(int(m.group("url_num")))
@@ -119,8 +163,15 @@ def spec_issue(proposal: Path, repo: str) -> int | None:
 
 
 def declared_exception(pr_body: str) -> str | None:
-    """The reason given for skipping the gate, if the PR declares one."""
-    m = _EXCEPTION_RE.search(pr_body or "")
+    """The reason given for skipping the gate, if the PR declares one.
+
+    Code is stripped first, and this is the direction that fails OPEN: before
+    CI-GATE-013 a body *quoting* the waiver syntax — in a runbook, a lesson, or
+    by pasting the gate's own failure output — was read as a real declaration,
+    and the gate reported WAIVED and exited 0 with an exception in the merge
+    record that nobody had declared.
+    """
+    m = _EXCEPTION_RE.search(_strip_code(pr_body))
     return m.group("reason") if m else None
 
 
