@@ -12,10 +12,14 @@ marker-first with a name fallback, so the first sync against an unmarked
 instance adopts the existing monitors by name instead of deleting them.
 """
 
+import pytest
+
 from toolkit.features.monitoring_diff import (
+    PushTokenError,
     diff_monitors,
     embed_key,
     extract_key,
+    hydrate_push_tokens,
     strip_key,
     wants_notifications,
 )
@@ -365,3 +369,130 @@ class TestNotificationMuting:
         _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
 
         assert [m["id"] for m in edit] == [42]
+
+
+class TestPushTokenHydration:
+    """The token lives in SOPS and is married to the seed in memory (TOOL-038).
+
+    `monitors.json` is committed to a public repository and the push endpoint is
+    publicly routed, so a token in the seed is a live credential whose only power
+    is to post "still alive" at the monitor that exists to notice silence. These
+    tests pin both directions of the invariant: the value arrives from the secret
+    store, and it is refused if it ever arrives from the file.
+    """
+
+    def test_a_push_monitor_receives_its_token_from_the_secret_store(self):
+        seed = [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}]
+        [entry] = hydrate_push_tokens(seed, {"ops-heartbeat": "s3cr3t"})
+        assert entry["pushToken"] == "s3cr3t"
+
+    def test_non_push_monitors_pass_through_untouched(self):
+        seed = [{"key": "vps-ssh", "name": "VPS SSH", "type": "port", "port": 22}]
+        assert hydrate_push_tokens(seed, {}) == seed
+
+    def test_it_does_not_mutate_the_seed_it_was_given(self):
+        """The caller re-reads the seed for the diff; a mutated input would leak
+        the token back into anything that later writes the file."""
+        seed = [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}]
+        hydrate_push_tokens(seed, {"ops-heartbeat": "s3cr3t"})
+        assert "pushToken" not in seed[0]
+
+    def test_a_missing_token_refuses_rather_than_letting_kuma_mint_one(self):
+        """The silent fallback is worse than the error: `uptime_kuma_api` invents
+        a token for a tokenless push monitor, which yields a monitor at an
+        address no sender knows — a watchdog that alerts forever."""
+        seed = [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}]
+        with pytest.raises(PushTokenError) as exc:
+            hydrate_push_tokens(seed, {})
+        assert "ops-heartbeat" in str(exc.value)
+
+    def test_the_refusal_names_the_command_that_fixes_it(self):
+        seed = [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}]
+        with pytest.raises(PushTokenError) as exc:
+            hydrate_push_tokens(seed, {})
+        assert "toolkit secrets set" in str(exc.value)
+        assert "push_tokens" in str(exc.value)
+
+    def test_an_empty_string_token_counts_as_missing(self):
+        """A blank SOPS value would otherwise hydrate a monitor with no token
+        and pass every later check."""
+        seed = [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}]
+        with pytest.raises(PushTokenError):
+            hydrate_push_tokens(seed, {"ops-heartbeat": ""})
+
+    def test_a_push_monitor_with_no_key_is_refused(self):
+        """Identity is how the token is looked up, so a keyless push entry has no
+        resolvable token — and adopting one by name would bind a credential to a
+        mutable field."""
+        seed = [{"name": "Backup heartbeat", "type": "push"}]
+        with pytest.raises(PushTokenError):
+            hydrate_push_tokens(seed, {"ops-heartbeat": "s3cr3t"})
+
+    def test_an_inline_token_in_the_seed_is_refused(self):
+        """The leak this design exists to prevent. It can only arrive by someone
+        hand-editing the file, so it is named rather than quietly honoured."""
+        seed = [
+            {
+                "key": "ops-heartbeat",
+                "name": "Backup heartbeat",
+                "type": "push",
+                "pushToken": "leaked-into-git",
+            }
+        ]
+        with pytest.raises(PushTokenError) as exc:
+            hydrate_push_tokens(seed, {"ops-heartbeat": "s3cr3t"})
+        assert "inline" in str(exc.value)
+
+    def test_every_offender_is_named_at_once(self):
+        """A sync refusing one monitor per run makes fixing three of them three
+        edit-and-rerun cycles."""
+        seed = [
+            {"key": "a", "name": "A", "type": "push"},
+            {"key": "b", "name": "B", "type": "push"},
+        ]
+        with pytest.raises(PushTokenError) as exc:
+            hydrate_push_tokens(seed, {})
+        assert "'a'" in str(exc.value) and "'b'" in str(exc.value)
+
+
+class TestPushTokenDrift:
+    """A token rotated outside the pipeline must read as drift, not as converged.
+
+    This is why `pushToken` is in `WRITABLE_FIELDS`. Without it a monitor whose
+    live token no longer matches the sender's reports UP forever while receiving
+    nothing — the failure mode a dead-man's-switch cannot afford.
+    """
+
+    def test_a_rotated_live_token_is_flagged_for_edit(self):
+        seed = hydrate_push_tokens(
+            [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}],
+            {"ops-heartbeat": "the-real-one"},
+        )
+        live = [
+            {
+                "id": 7,
+                "name": "Backup heartbeat",
+                "type": "push",
+                "pushToken": "rotated-in-the-ui",
+                "description": embed_key("", "ops-heartbeat"),
+            }
+        ]
+        _, to_edit, _ = _diff(seed, live)
+        assert [m["id"] for m in to_edit] == [7]
+
+    def test_a_matching_token_is_a_no_op(self):
+        seed = hydrate_push_tokens(
+            [{"key": "ops-heartbeat", "name": "Backup heartbeat", "type": "push"}],
+            {"ops-heartbeat": "the-real-one"},
+        )
+        live = [
+            {
+                "id": 7,
+                "name": "Backup heartbeat",
+                "type": "push",
+                "pushToken": "the-real-one",
+                "description": embed_key("", "ops-heartbeat"),
+            }
+        ]
+        to_create, to_edit, to_delete = _diff(seed, live)
+        assert (to_create, to_edit, to_delete) == ([], [], [])
