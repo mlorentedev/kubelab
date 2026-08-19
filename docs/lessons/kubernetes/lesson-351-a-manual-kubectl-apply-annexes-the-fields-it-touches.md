@@ -27,18 +27,21 @@ it, on the exact day of the last successful run.
 **The manifest was fixed in that same PR. The cluster never got it.**
 
 ```
-$ kubectl kustomize infra/k8s/overlays/prod | ... CronJob/pvc-backup
-rendered volumes: ['authelia-data', 'n8n-data', 'tmp']
+$ kubectl kustomize infra/k8s/overlays/prod | yq -r 'select(.kind=="CronJob" and .metadata.name=="pvc-backup") | .spec.jobTemplate.spec.template.spec.volumes[].name'
+authelia-data
+n8n-data
+tmp
 
-$ kubectl get cronjob pvc-backup -n kubelab -o jsonpath='...volumes[*].name'
+$ kubectl get cronjob pvc-backup -n kubelab -o jsonpath='{.spec.jobTemplate.spec.template.spec.volumes[*].name}'
 gitea-data authelia-data n8n-data tmp
 ```
 
 And Argo CD — `selfHeal: true`, tracking this object, no `ignoreDifferences`, no
-`resource.exclusions` — reported `Synced`. The field managers say why:
+`resource.exclusions` — reported `Synced`. The field managers say why, one row
+per manager summarised out of that JSON:
 
 ```
-$ kubectl get cronjob pvc-backup -o json --show-managed-fields
+$ kubectl get cronjob pvc-backup -n kubelab -o json --show-managed-fields
 kubelab-toolkit             op=Apply    2026-08-16   owns gitea-data: False
 kubectl-client-side-apply   op=Update   2026-05-26   owns gitea-data: TRUE
 argocd-controller           op=Update   2026-08-16   owns gitea-data: False
@@ -56,20 +59,23 @@ does not cover this.** `toolkit/cli/infra.py` applies with `--server-side
 --force-conflicts --field-manager=kubelab-toolkit`, and its comment anticipates
 pre-SSA history conflicting "by design". That reasoning is right about the case
 it names. `--force-conflicts` takes ownership of fields you **declare**; a field
-you do not declare raises no conflict to force, so it is left untouched forever.
-Migrating to SSA did not close this — it inherited it.
+you do not declare raises no conflict to force, so it survives every apply
+until someone removes that ownership deliberately. Migrating to SSA did not
+close this — it inherited it.
 
 **Solution**: Delete the object and let the declarative pipeline own it fresh.
 `selfHeal` recreated the CronJob in 5 seconds with a single field manager
 (`argocd-controller`), the volumes matching the render, and the backup green on
-the next run. Safe here because a CronJob holds no state; **not** safe for a
-Service with an allocated `clusterIP`, a PVC, or a Secret.
+the next run. Safe *here* because no Job was running and the retained history is
+disposable — deletion cascades to a CronJob's Jobs and their Pods, so the same
+move mid-backup would have killed the run it was trying to rescue. **Not** safe
+for a Service with an allocated `clusterIP`, a PVC, or a Secret.
 
 Then the sweep, because one object is never the answer to this question:
 
 ```
 namespace kubelab: 104 objects scanned
-  carrying kubectl-client-side-apply:  81  (77%)
+  carrying kubectl-client-side-apply:  81  (78%)
 ```
 
 Oldest writes from 2026-03-24. The 23 clean ones name the cure without meaning
@@ -77,13 +83,14 @@ to: hash-suffixed ConfigMaps that get a new name every deploy, workloads created
 after the SSA migration, and the CronJob that had just been recreated. **This is
 historical residue, not carelessness** — nobody has run a manual apply since May.
 
-**Rule**: One `kubectl apply` from a laptop permanently annexes every field it
-writes, and the cost is deferred until some later change tries to *remove* one of
-them. Until then nothing drifts, nothing alerts, and every pipeline reports
-success. So:
+**Rule**: One `kubectl apply` from a laptop annexes every field it writes, and
+holds them until someone takes that ownership back by hand. The cost is deferred
+until some later change tries to *remove* one of them. Until then nothing
+drifts, nothing alerts, and every pipeline reports success. So:
 
-- The risk concentrates wherever a manifest **shrinks**. Adding fields is safe;
-  removing one from an object with foreign managers is the operation that fails
+- The risk concentrates wherever a manifest **shrinks**. Adding a field can
+  still collide with a foreign manager, but it collides *loudly* — a conflict
+  `--force-conflicts` then resolves. Removing one is the operation that fails
   silently.
 - `--force-conflicts` is not a cure for pre-SSA history. It resolves conflicts on
   declared fields and is blind to undeclared ones.
