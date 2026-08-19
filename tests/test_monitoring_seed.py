@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from toolkit.features.monitoring import _clean_monitor
+from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.monitoring import _clean_monitor, _get_push_tokens
 from toolkit.features.monitoring_diff import embed_key, extract_key
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -106,3 +107,43 @@ class TestSeedCarriesNoPushToken:
         assert clean["key"] == "ops-heartbeat"
         assert clean["type"] == "push"
         assert clean["interval"] == 90000
+
+
+class TestPushTokenLookupKeys:
+    """SOPS may spell a sub-key with `_`; the seed always uses `-` (TOOL-038).
+
+    Not cosmetic. `ConfigurationManager._flatten_dict` joins SOPS paths with `_`
+    and uppercases them without touching hyphens, so a kebab-case sub-key becomes
+    an env var name containing hyphens — which `SECRET_DEFINITIONS` cannot
+    consume, and the token's second consumer is exactly that path.
+    """
+
+    def test_an_underscore_sops_key_resolves_a_kebab_monitor_key(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            ConfigurationManager,
+            "_decrypt_sops",
+            lambda _self, _path: {
+                "apps": {
+                    "services": {
+                        "observability": {"uptime_kuma": {"push_tokens": {"ops_backup_pvc_prod": "tok"}}}
+                    }
+                }
+            },
+        )
+        assert _get_push_tokens(REPO_ROOT) == {"ops-backup-pvc-prod": "tok"}
+
+    def test_a_blank_token_is_dropped_rather_than_returned_empty(self, monkeypatch) -> None:
+        """An empty SOPS value must reach `hydrate_push_tokens` as absent, or it
+        hydrates a monitor with no token and passes every later check."""
+        monkeypatch.setattr(
+            ConfigurationManager,
+            "_decrypt_sops",
+            lambda _self, _path: {
+                "apps": {"services": {"observability": {"uptime_kuma": {"push_tokens": {"a": ""}}}}}
+            },
+        )
+        assert _get_push_tokens(REPO_ROOT) == {}
+
+    def test_no_push_tokens_configured_is_an_empty_map_not_an_error(self, monkeypatch) -> None:
+        monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda _self, _path: {})
+        assert _get_push_tokens(REPO_ROOT) == {}

@@ -115,11 +115,23 @@ def _get_push_tokens(project_root: Path) -> dict[str, str]:
     with an instance that has no push monitors; the failure belongs to
     `hydrate_push_tokens`, which raises only for a push entry the seed actually
     declares.
+
+    **Sub-keys are normalised `_` -> `-` so SOPS may hold either spelling.** The
+    seed's monitor keys are kebab-case throughout (`infra-node-vps-ssh`), but a
+    SOPS path also has to survive `ConfigurationManager._flatten_dict`, which
+    joins with `_` and uppercases WITHOUT touching hyphens — so a kebab sub-key
+    flattens to an env var name containing hyphens, which `SECRET_DEFINITIONS`
+    cannot consume. That matters because the token has a second consumer: the
+    K8s Secret that hands it to the workload posting the heartbeat.
+
+    Normalising here lets SOPS store the flatten-safe `ops_backup_pvc_prod`
+    while the seed keeps its `ops-backup-pvc-prod`, with neither side bending to
+    the other and no lookup table in between.
     """
     cm = ConfigurationManager("staging", project_root)
     secrets = cm._decrypt_sops(cm.secrets_path / "common.enc.yaml") or {}
     uk_secrets = secrets.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
-    return {str(k): str(v) for k, v in (uk_secrets.get("push_tokens") or {}).items() if v}
+    return {str(k).replace("_", "-"): str(v) for k, v in (uk_secrets.get("push_tokens") or {}).items() if v}
 
 
 def _get_muted_notification_tags(project_root: Path) -> frozenset[str]:
