@@ -1,8 +1,9 @@
 ---
 id: "ANSIBLE-021-tmux"
 type: spec
-status: draft
+status: archived # draft | implementing | verifying | archived
 created: "2026-05-13"
+issue: "kubelab#420"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, ansible, base-system]
 template_version: "1.0"
 ---
@@ -23,6 +24,10 @@ Add `tmux` to the `base_system` Ansible role's package list. Under the per-node 
 - Cloud: aws1
 
 **vps and rpi3 are NOT covered by this change**: their bespoke playbooks (`provision-vps.yml`, `provision-rpi3.yml`) deliberately omit `base_system`. They receive tmux as part of the minimal-baseline fix in **ANSIBLE-029 (#817)** — not bolted onto the prod K3s playbook here.
+
+> **Both halves of that paragraph have since stopped being true, and neither changed for the reason it predicted (measured 2026-08-18, before archiving).**
+> **rpi3 now runs `base_system`** — `provision-rpi3.yml:105` — and therefore gets tmux (3.5a, measured). It did not arrive via #817, which is still OPEN: it came in with `3c9629b`, *fix(ansible): give rpi3 a host firewall via base_system (#1059)*, on 2026-08-13. A scope boundary this spec drew moved because an unrelated fix adopted the role for a different reason.
+> **The VPS has tmux 3.4 and is covered by nothing.** `provision-vps.yml` still omits `base_system` — deliberately, and its inline comment now explains why in more detail than this spec did — and neither it nor any other playbook installs tmux. So the package is present and unmanaged: a rebuild from scratch would not reinstall it. That is #817's subject, not this spec's, and it is recorded there.
 
 Jetson is deliberately excluded — Ubuntu 18.04, raw-only via ANSIBLE-014, not an interactive-session target (its `provision-jetson.yml` also omits `base_system`).
 
@@ -54,3 +59,5 @@ No open questions.
 - Host context: ADR-058 (ace2 dev-node)
 - Dotfiles: `~/Projects/dotfiles/.zsh/functions.zsh` — `sshmux` function
 - Role: `infra/ansible/roles/base_system/`
+
+<!-- archived 2026-08-19 — PR: https://github.com/mlorentedev/kubelab/pull/1156 -->

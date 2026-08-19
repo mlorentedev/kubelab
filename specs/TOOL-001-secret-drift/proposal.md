@@ -3,6 +3,7 @@ id: "TOOL-001-secret-drift"
 type: spec
 status: draft
 created: "2026-05-13"
+issue: "kubelab#520"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, toolkit, secrets, sops]
 template_version: "1.0"
 ---

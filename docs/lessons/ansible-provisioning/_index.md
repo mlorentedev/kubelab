@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-42 lessons, newest first. Back to [all categories](../_index.md).
+43 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 349 | [Presence is not coverage — a package can be installed on a host nothing manages](lesson-349-presence-is-not-coverage-a-package-can-be-installed-and-unmanaged.md) | 2026-08-18 |
 | 337 | [Adding a role to a playbook does not install it on any path that never runs the playbook](lesson-337-adding-a-role-to-a-playbook-does-not-install-.md) | 2026-08-15 |
 | 325 | [`--tags` silently skips prerequisite `pre_tasks` that were never tagged, and a shared secret key collides across an Ansible env-override merge](lesson-325-tags-silently-skips-prerequisite-pre-tasks-th.md) | 2026-08-14 |
 | 324 | [Ansible's `apt` module can report `changed: true` for two unrelated reasons that both look like "nothing really happened"](lesson-324-ansible-s-apt-module-can-report-changed-true-.md) | 2026-08-14 |

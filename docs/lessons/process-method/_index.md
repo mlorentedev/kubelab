@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-39 lessons, newest first. Back to [all categories](../_index.md).
+40 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 350 | [A spec's scope boundary is a claim about a date, not a durable guarantee](lesson-350-a-spec-s-scope-boundary-is-a-claim-about-a-date.md) | 2026-08-18 |
 | 334 | [A security finding's proposed fix can be worse than the bug it invents — reproduce before remediating](lesson-334-a-security-finding-s-proposed-fix-can-be-wors.md) | 2026-08-15 |
 | 336 | [The adversarial-review gate writes a ~90MB artifact into the spec folder, untracked and unignored](lesson-336-the-adversarial-review-gate-writes-a-90mb-art.md) | 2026-08-15 |
 | 315 | ["The app was extracted" and "the app is dead here" are different claims](lesson-315-the-app-was-extracted-and-the-app-is-dead-her.md) | 2026-08-12 |
