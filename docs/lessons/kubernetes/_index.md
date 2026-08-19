@@ -1,9 +1,10 @@
 # Cluster, workloads and manifests
 
-49 lessons, newest first. Back to [all categories](../_index.md).
+50 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 351 | [A manual `kubectl apply` annexes the fields it touches, and the bill arrives months later](lesson-351-a-manual-kubectl-apply-annexes-the-fields-it-touches.md) | 2026-08-19 |
 | 003 | [`Burstable` QoS proved the wrong container had a request (IDP-031)](lesson-003-burstable-qos-proved-the-wrong-container-had-.md) | 2026-08-17 |
 | 328 | [`kubectl apply` cannot convert a Service with a selector into a selector-less one — omitting a field is not deleting it](lesson-328-kubectl-apply-cannot-convert-a-service-with-a.md) | 2026-08-14 |
 | 327 | [K3s's built-in ServiceLB masks every client's real IP — `externalTrafficPolicy: Local` cannot fix it](lesson-327-k3s-s-built-in-servicelb-masks-every-client-s.md) | 2026-08-14 |
