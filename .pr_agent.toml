@@ -1,0 +1,131 @@
+# PR-Agent (The-PR-Agent/pr-agent, MIT) on NaN cluster inference — TOOL-021 Part 2
+# (#1140, spec #1160).
+#
+# Why it exists here: this repo's two autonomous reviewers both fail open on an
+# ACCOUNT-WIDE quota, and on #1155 they were exhausted simultaneously — CodeRabbit
+# "Review limit reached", Codex "You have reached your Codex usage limits" — with
+# neither notice blocking the merge. Eleven PRs across 2026-08-17/19 carried a
+# green reviewer check and no review; seven merged.
+#
+# This is not a third equal reviewer. It is the FLOOR: a reviewer whose capacity
+# is ours rather than a vendor's, so a spent quota elsewhere stops meaning "no
+# review". CodeRabbit and Codex remain, opportunistic, for a bounded window.
+# Part 1's attestation gate is what makes the floor checkable rather than hoped —
+# if this reviewer fails, the PR goes red instead of quietly green.
+#
+# Ported from mlorentedev/dotfiles at 2bac1c5. Verified unchanged in upstream
+# `main` before porting; values below that differ are measured against this repo.
+
+[config]
+# `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's,
+# set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
+model = "openai/deepseek-v4-flash"
+
+# NO cheap fallback, and this is the load-bearing line.
+#
+# If the reviewer fails, Part 1's gate reports `declined` and the PR goes red — a
+# LOUD absence. A latency-optimised fallback would trade that for a quiet rubber
+# stamp, and `harness/reviewer-pool.json` already holds the opposite policy for
+# the spec-level review: it rejects the flash tiers on quality grounds. Two files
+# in one repo holding opposing views on who may review is its own defect.
+fallback_models = []
+
+# `model_weak` is deliberately ABSENT. Upstream sets it to a flash-tier model for
+# descriptions and commit summaries. Two reasons not to carry it: `auto_describe`
+# is off below, so it would have nothing to do; and the model upstream names is
+# the one `harness/reviewer-pool.json` rejects by name here. Importing a
+# documented tension for zero behaviour is the worst of both.
+
+# NaN models are absent from LiteLLM's registry, so the budget must be stated or
+# LiteLLM assumes a small default and silently truncates the diff. deepseek-v4-flash
+# advertises 1M context; 200k is a deliberate floor well inside it.
+custom_model_max_tokens = 200000
+max_model_tokens = 200000
+
+response_language = "en-US"
+
+# The two files that ARE this repo's doctrine. Not `.claude/CLAUDE.md`, which does
+# not exist here — an instruction naming a source the reviewer cannot read is the
+# same shape as a guard citing a check it cannot run: it reads as rigour and
+# asserts nothing.
+repo_context_files = ["AGENTS.md", "CLAUDE.md"]
+
+[pr_reviewer]
+require_score_review = false
+require_tests_review = true
+require_security_review = true
+persistent_comment = true
+final_update_message = false
+
+# NOTE the absent block. Upstream carries a "HARNESS COMPLIANCE" preamble asking
+# for a per-rule PASS/FAIL sweep. It is NOT ported: measured upstream as asked for
+# on every review and delivered 1 time in 16 (dotfiles #1072, whose own
+# recommendation is deletion). An instruction ignored 94% of the time is a comment
+# that looks like a control — the exact thing this repo keeps finding.
+extra_instructions = """
+This repository already runs ruff, mypy, pytest, yamllint, markdownlint,
+hadolint and gitleaks in CI, plus a spec-archive gate and a review-attestation
+gate. Do not restate what a linter reports; that is covered, and repeating it is
+noise that trains the reader to skim.
+
+Spend the budget on what static analysis cannot see:
+
+- a guard that cannot fail the way its comment claims, or that perturbs the
+  system it measures;
+- a test that passes vacuously — asserting a condition the code cannot violate,
+  or agreeing only with its own fixtures rather than with the committed tree;
+- a check whose only reachable branch is the no-op one;
+- cross-file consequences a single-hunk reader would miss, especially between
+  `infra/config/values/common.yaml` and anything generated from it.
+
+Repo-specific things worth checking, because they have each shipped as bugs here:
+
+- **SSOT**: no hardcoded IPs, CIDRs or hostnames in manifests, tests or toolkit
+  code — they belong in `networking.*` in `infra/config/values/common.yaml`. A
+  manifest mirroring a value must name the key it mirrors.
+- **Secrets**: nothing SOPS-sourced in a ConfigMap; K8s secrets carry
+  placeholders in git, never real values.
+- **Kustomize**: a strategic-merge patch REPLACES a list rather than appending to
+  it, and an empty map means "change nothing" — both have silently dropped
+  middleware in prod.
+- **Operations go through the Makefile or the toolkit**, not raw kubectl, sops,
+  openssl or ansible.
+
+Classify each finding as REAL, THEORETICAL or SPECULATIVE and say which. A REAL
+finding must name a concrete execution trace, failing input, or demonstrable
+defect — not a stylistic preference. A finding without that gradation cannot be
+actioned.
+
+Do not flag an import or package as missing when CI compiles and tests pass;
+trust the manifests. Write every finding in English.
+"""
+
+[pr_code_suggestions]
+# This section is what makes inline comments happen, and omitting it is how
+# upstream shipped the tool with its stated purpose unconfigured: the default is
+# -1, which DISABLES inline publishing, and they measured 2 bot comments and
+# **0 inline** across three PRs before noticing.
+#
+# 7 is upstream's own "medium" scoring boundary — above it a suggestion is more
+# than stylistic.
+dual_publishing_score_threshold = 7
+
+# Scale is 0-10, default 0 publishes everything, and upstream warns against going
+# above 8 because it clips relevant suggestions. 5 is the midpoint: below it is
+# style, which the linters above already own, and restating them is the noise
+# `extra_instructions` forbids.
+suggestions_score_threshold = 5
+
+# Default true posts "No code suggestions found for the PR" as a second comment
+# carrying no information. Suppressed for noise only.
+publish_output_no_suggestions = false
+
+[ignore]
+# Path exclusions, applied BEFORE the model call. kubelab is public, so the source
+# is not the concern — credential material is. Encrypted or not, SOPS ciphertext
+# and private keys are not sent to an inference endpoint to be reviewed.
+glob = [
+  "infra/config/secrets/**",
+  "**/*.pem",
+  "specs/**/review-transcript.jsonl*",
+]

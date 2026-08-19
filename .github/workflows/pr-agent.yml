@@ -1,0 +1,102 @@
+---
+# TOOL-021 Part 2 (#1140, spec #1160). The reviewer whose capacity is ours.
+#
+# The name `pr-agent` is a TWO-FILE AGREEMENT: `review-attestation.yml` declares
+# `workflow_run: workflows: [pr-agent]` so the gate re-reads the verdict after
+# this runs. Rename either side and re-evaluation stops firing SILENTLY — the
+# reviewer would review, the gate would never look again, and every PR it
+# reviewed would read unreviewed. Asserted by `tests/test_pr_agent_workflow.py`
+# rather than left as a convention.
+name: pr-agent
+
+on:
+  pull_request:
+    # `synchronize` is here so a push is reviewed, and it is deliberately NOT in
+    # `pr_actions` below — upstream routes it down a separate path
+    # (`handle_push_trigger`), so listing it there is a setting that looks right
+    # and asserts nothing.
+    types: [opened, synchronize, reopened, ready_for_review]
+  # Slash commands (/review, /improve) on an existing PR.
+  issue_comment:
+    types: [created]
+
+concurrency:
+  # The event name is part of the key and it is LOAD-BEARING. A PR comment is an
+  # `issue_comment` whose `issue.number` IS the PR number, so without it a
+  # comment-triggered run shares this group with the in-flight `pull_request` run
+  # and `cancel-in-progress` kills the review. PR-Agent is a Docker action that
+  # spends its first ~20s building, and a reviewer's auto-summary comment lands
+  # reliably inside that window. Measured upstream on two PRs: both cancelled
+  # mid-build, both workflows green, zero reviews produced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write   # the review comments are the product
+  issues: write          # slash-command replies land as issue comments
+
+jobs:
+  review:
+    # Three conditions, each for its own reason:
+    #
+    # - `issue_comment` fires on issues too, and an issue has no diff to review.
+    # - A draft PR is by definition not asking to be read yet.
+    # - Release PRs are skipped. Upstream's config-level
+    #   `ignore_pr_source_branches` was measured INERT on the Action path — loaded
+    #   and never consulted, so release PRs were reviewed anyway (dotfiles #1073,
+    #   recommendation: delete it). This is the replacement, at the only layer
+    #   that actually runs. Without it PR-Agent's ticket-compliance pass reads the
+    #   CHANGELOG's issue references, looks for their code in the diff, and
+    #   reports "none of the above requirements are fulfilled" on EVERY release,
+    #   structurally — noise guaranteed to recur, and noise from a reviewer is how
+    #   a reviewer stops being read.
+    #
+    #   Branch-name matching was rejected for the attestation GATE because gaming
+    #   the name would bypass review. Here it fails the other way: a branch named
+    #   to match forfeits its review, and the gate then reports the PR unreviewed
+    #   and goes red. Gaming it costs the gamer.
+    #
+    #   `head_ref` is empty on `issue_comment`, so a human typing `/review` on a
+    #   release PR still gets one. A human asking is not structural noise.
+    if: >
+      (github.event_name == 'pull_request'
+        && github.event.pull_request.draft == false
+        && !startsWith(github.head_ref, 'release-please--'))
+      || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR-Agent
+        # Pinned by tag. A Docker action, so the tag must exist AND carry an
+        # `action.yaml` — upstream's first draft pinned a tag that did not exist
+        # at all.
+        uses: The-PR-Agent/pr-agent@v0.42.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NaN is OpenAI-compatible, so LiteLLM reaches it through the OpenAI
+          # transport with the base URL swapped. The `openai/` prefix on the model
+          # id in `.pr_agent.toml` is for the same reason; nothing talks to OpenAI.
+          OPENAI__KEY: ${{ secrets.NAN_API_KEY }}
+          OPENAI__API_BASE: https://api.nan.builders/v1
+          CONFIG__PUBLISH_OUTPUT_PROGRESS: false
+          # Stated rather than defaulted, so the event lists are visible instead
+          # of implied. `synchronize` is NOT here on purpose — see the trigger
+          # comment above.
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
+          # The push path, which is what actually reviews a new commit.
+          github_action_config.handle_push_trigger: "true"
+          # `/review` ONLY, and the omission is the point: upstream's default is
+          # ['/describe', '/review'], so enabling the push trigger without saying
+          # this would silently reinstate `describe` on every push and undo the
+          # decision below.
+          github_action_config.push_commands: '["/review"]'
+          github_action_config.push_trigger_ignore_bot_commits: "true"
+          github_action_config.push_trigger_ignore_merge_commits: "true"
+          # `describe` REWRITES the PR body. The bodies in this repo carry
+          # hand-written measurement tables, merge orders and before/after
+          # evidence — the part worth reading — and a model rewriting them
+          # destroys exactly that. It also removes one inference call per PR.
+          # Off as a decision, not by accident.
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_review: "true"
+          github_action_config.auto_improve: "true"
