@@ -91,6 +91,26 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "poetry>=1.8,<2.0"
 
+      # This job is the most frequently run workflow in the repo by a wide
+      # margin: it fires on six pull_request types, on comments, on reviews and
+      # on workflow_run, because each of those can change the verdict. Measured
+      # 2026-08-19, it was 17 of the 40 runs started in a 15-minute window.
+      #
+      # Without the cache each of those pays a full dependency resolve to answer
+      # a question that takes about a second. Keyed on the lock file, so a
+      # dependency change invalidates it and nothing else does.
+      #
+      # First cache in this repo's workflows. `spec-gate.yml` has the same shape
+      # and would benefit, but it runs a fraction as often — not changed here, to
+      # keep this diff about the workflow that actually pays the cost.
+      - name: Cache Poetry's package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-py3.12-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-py3.12-
+
       - name: Install project deps
         # See check-config-drift.yml: do NOT add `--no-root`, the package must be
         # installed for importlib.metadata.version("toolkit") to resolve.
