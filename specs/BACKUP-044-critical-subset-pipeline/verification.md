@@ -10,7 +10,7 @@ created: "2026-08-15"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test
 name, or observed behavior).
 
-- [ ] AC1 (every Tier 1/2 item present in its node's R2 repo, listed from a non-source machine) -> not started
+- [ ] AC1 (every node-path consumer present in its node's R2 repo, listed from a non-source machine) -> re-scoped below, not started
 - [ ] AC2 (all four SQLite DBs snapshotted with `sqlite3 .backup`, proven by restoring one) -> not started
 - [ ] AC3 (restore exercised end-to-end for Gitea + one always-on consumer) -> not started
 - [ ] AC4 (failed backup alerts on the #686 path; a missed window on a powered-off node does not) -> not started
@@ -18,6 +18,7 @@ name, or observed behavior).
 - [ ] AC6 (sources enumerated from an SSOT allow-list) -> substrate finding below, not built
 - [ ] AC7 (`restic check` passes on every repository as part of the run) -> feasibility settled below (R-B), not built
 - [ ] AC8 (no new consumer of `minio:9000`) -> not started
+- [ ] AC9 (a node past its backup window alerts unprompted) -> not started
 
 ## Open questions, settled
 
@@ -503,3 +504,21 @@ Option 1 satisfies the criterion as ratified; option 2 ships sooner and keeps th
 spec's node-level shape coherent. Either is defensible, neither can be skipped —
 `tasks.md` written against the current table would build something that fails its
 own AC1 review.
+
+**Resolved 2026-08-15: option 2.** The decision was written on the Part 0 branch and
+reached master in pieces, with the criterion itself left behind — so the finding above
+sat next to an AC that still asked for what it had just proved impossible. Three
+independent places in this tree already act on option 2: **BACKUP-046 (#1111)** exists
+and is scoped to the PVC consumer class; `tasks.md`'s "Follow-ups, not this spec" names
+it as the next ticket in #1090's sequence; and the out-of-scope note states the split is
+**by mechanism**, because the tier axis cannot make it — Authelia and Postgres are Tier 1
+*and* PVCs. AC1 is narrowed to the node-path class here, in `tasks.md` Part 6, and in the
+evidence checklist above. Reverting is a one-line edit in each of the three, and the
+finding above is deliberately left intact so the reasoning survives the decision.
+
+**AC9 arrives with it.** The same Part 0 pass added a ninth criterion — a run that
+*never happened* is reported — which never reached master either. It is not a
+restatement of AC4: AC4 covers a run that fails and therefore emits something, while a
+node whose timer stopped emits nothing at all, and every check that asserts only "recent
+snapshots look healthy" agrees with it. That is the same shape as the gates this repo
+spent 2026-08-17 fixing — a control that cannot exhibit the failure it guards.

@@ -82,7 +82,7 @@ Observable changes:
 
 ## Acceptance criteria
 
-- [ ] Every ratified Tier 1 and Tier 2 item is present in its node's R2 restic repository, verified by listing snapshots from a machine that is not the source node — not by reading the playbook.
+- [ ] Every **node-path** consumer in the table above is present in its node's R2 restic repository, verified by listing snapshots from a machine that is not the source node — not by reading the playbook. (Re-scoped during Part 0: the original wording said "every ratified Tier 1 and Tier 2 item", which reaches into the PVC class this spec has no mechanism for and which #1090's step [3] never scoped in. The PVC class is BACKUP-046 (#1111); see the AC1 finding in `verification.md`.)
 - [ ] Each of the four live SQLite databases is snapshotted with `sqlite3 .backup`, demonstrated by restoring one and passing an integrity check on the restored copy.
 - [ ] A restore is exercised end-to-end for Gitea and for at least one always-on consumer, into a scratch location, with the transcript captured in `verification.md`. Content is verified, not just exit codes.
 - [ ] A failed backup raises an alert on the #686 path — demonstrated by injecting a failure, not by configuration review. A window missed because an on-demand node was powered off produces **no** alert, demonstrated across a real power cycle.
@@ -90,6 +90,11 @@ Observable changes:
 - [ ] Backup sources are enumerated from an SSOT allow-list: adding a new stateful path requires editing `common.yaml` and nothing else, and a path present on disk but absent from the SSOT is reported rather than silently included or silently skipped.
 - [ ] `restic check` passes on every repository as part of the scheduled run.
 - [ ] This spec introduces no new consumer of the in-cluster MinIO (`minio:9000`) — the guarantee #1056's original AC2 was reaching for.
+- [ ] **A run that never happened is reported.** One central place answers "when did each node last back up successfully?", and a node that has missed its expected window by an agreed margin raises an alert without anyone looking. AC4 covers a run that *fails*; this covers a run that *never started* — a silently absent backup is the failure mode that survives every check asserting only that the snapshots which do exist look healthy. Demonstrated by stopping a node's timer and observing the alert, not by reading the query.
+
+> The order of this list is load-bearing: `tasks.md` and `verification.md` refer to
+> these criteria positionally, as `[AC1]`..`[AC9]`. Append new criteria. Inserting
+> one renumbers every marker below it, silently and everywhere.
 
 ## References
 
