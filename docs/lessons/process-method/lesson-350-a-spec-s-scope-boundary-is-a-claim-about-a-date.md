@@ -17,7 +17,7 @@ part of the minimal-baseline fix in **ANSIBLE-029 (#817)**".
 
 **Problem**: Both halves had stopped being true by archive time, and **neither
 changed for the reason the spec predicted**. rpi3 now runs `base_system` — via
-#1059, a firewall fix that wanted `firewall_tailnet_ports` and took the whole
+`#1059`, a firewall fix that wanted `firewall_tailnet_ports` and took the whole
 role with it — while #817 is still open. The VPS has `tmux` from an unmanaged
 source. The spec was wrong for seven weeks and nothing reported it, because
 nothing *could*: no test asserts a scope boundary, and the changes that
@@ -34,7 +34,7 @@ quietly deleting the stale paragraph. The archived spec now records both what it
 claimed and what became true.
 
 **Rule**: Treat "not covered by this" as a measurement, not a guarantee. It was
-true when written, it is unowned by anything afterwards, and the cheapest control
+true when written, it is unowned by anything afterward, and the cheapest control
 is a re-measurement in the archive pass — not an assertion that pins another
 team's file. Corollary for reviews: "no test asserts this" is a real finding and
 still not always an argument for adding one.
