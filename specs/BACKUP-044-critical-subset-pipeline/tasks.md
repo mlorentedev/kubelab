@@ -70,6 +70,7 @@ The substrate. #1092's AC3 changes the model from "enumerate volumes minus an ex
 - [ ] [AC4] Post a failure envelope to the **NOTIFY-001 fabric** — `POST https://<n8n>/webhook/notify`, the same envelope `roles/node_maintenance` already posts from bare metal — at severity **`log`** (decided 2026-08-15). **Correction carried from Part 0:** `proposal.md` originally said "the #686 path". No such path exists; `overlays/prod/backup.yaml` has no failure notification at all, only `failedJobsHistoryLimit: 3`, and #686 is the still-open ticket to create routing for minor sources. #686 is related, not blocking.
 - [ ] [AC4] A window missed because an on-demand node was powered off must produce **no** alert. Alerting on the homelab being off trains the operator to ignore the channel, which is the same reasoning `common.yaml` already applies to staging probes.
 - [ ] [AC4] Demonstrate both halves by **injecting a failure** (bad credential, unreachable bucket) and by a **real power cycle** — not by configuration review.
+- [ ] [AC9] **A run that never happened is reported.** One place answers "when did each node last succeed", and a node past its window alerts unprompted. This is the coverage view, and it is the failure that survives every check asserting only that the snapshots which do exist look healthy. Demonstrate it by stopping a timer, not by reading the query.
 - [ ] Reuse `node_maintenance`'s hardening rather than re-deriving it: bounded curl timeouts, UTF-8-safe truncation, and the token passed so it is not visible in `ps` (ANSIBLE-038, #1088).
 
 ### Part 6 — a backup that has never been restored is a hypothesis
@@ -77,7 +78,7 @@ The substrate. #1092's AC3 changes the model from "enumerate volumes minus an ex
 - [ ] [AC3] Restore Gitea end-to-end into an **ephemeral instance**, never over the live `/opt/gitea/data`. Restoring over the thing being protected to prove the backup works risks exactly what the backup exists for. Doubles as the #492 DR drill; do not expand scope to close #492.
 - [ ] [AC2] Restore one SQLite database and run an integrity check **on the restored copy** — content verified, not exit codes.
 - [ ] [AC3] Restore at least one always-on consumer into a scratch location, with the transcript in `verification.md`.
-- [ ] [AC1] Verify every ratified Tier 1 and Tier 2 item is present, by listing snapshots **from a machine that is not the source node**. Reading the playbook is not verification.
+- [ ] [AC1] Verify every **node-path** consumer in the proposal's table is present, by listing snapshots **from a machine that is not the source node**. Reading the playbook is not verification. The PVC class is out of scope by mechanism — BACKUP-046 (#1111), not a gap in this criterion.
 - [ ] [AC8] Confirm this spec introduced no new consumer of `minio:9000`, the guarantee #1056's original AC2 was reaching for. Note that closing this does **not** release #972 on its own — other PVCs still target MinIO, and #1056's "blocked by #972" was backwards.
 
 ## Approved operating parameters
