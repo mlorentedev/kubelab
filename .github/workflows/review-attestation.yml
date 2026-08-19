@@ -1,0 +1,212 @@
+---
+name: review-attestation
+
+# TOOL-021 (#1140). A PR here can be green with no review behind it: a reviewer
+# reports its own status, and a skipped review is not a failed one. Eleven PRs
+# across 2026-08-17/19 carried a green reviewer check and no review; seven
+# merged. TWO reviewers run on this repo and both fail open, independently — so
+# the defect is not one vendor's status lying.
+#
+# This job answers one question — did a review happen — and publishes it as a
+# commit status. Logic and its tests live in `toolkit/features/review_attestation.py`
+# and `tests/test_review_attestation.py`, matching `spec-gate.yml`: the negative
+# case then runs on every commit instead of needing a live PR to exercise.
+
+on:
+  pull_request:
+    branches: [master]
+    # `labeled`/`unlabeled` and `edited` are load-bearing, not completeness: the
+    # escape is a label AND a body section, so either one can flip the verdict
+    # without a single file changing.
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  # Re-evaluate after our own reviewer runs. Comments authored with
+  # GITHUB_TOKEN emit NO events at all, so `issue_comment` never fires for a
+  # reviewer we run ourselves and the verdict would be computed seconds after
+  # the PR opens and never revised.
+  #
+  # NOTE: `pr-agent` does not exist yet — it arrives with TOOL-021 Part 2. Until
+  # then this trigger is inert, and it is declared now rather than later only
+  # because the two must land close together; a reviewer whose output the gate
+  # never re-reads would be called unreviewed on every PR it reviewed. If Part 2
+  # is abandoned, delete this trigger rather than leaving it to look active.
+  workflow_run:
+    workflows: [pr-agent]
+    types: [completed]
+
+concurrency:
+  group: review-attestation-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write   # the commit status is the product
+
+jobs:
+  attestation:
+    # `issue_comment` fires on issues too, and only a pull request has a review
+    # state to attest to.
+    if: >
+      github.event_name == 'pull_request'
+      || github.event_name == 'pull_request_review'
+      || github.event.issue.pull_request
+      || github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to the BASE branch, never the PR's head.
+      #
+      # This is the whole security of the gate. The classifier and the reviewer
+      # registry are files in this tree, so checking out the PR would let a PR
+      # edit `toolkit/features/review_attestation.py` to pass unconditionally, or
+      # add its own login to `harness/review-attestation.json`, and attest
+      # itself — the gate disableable by the thing it judges. Found upstream in
+      # GUARD-002 before it shipped.
+      #
+      # `pull_request_target` would also fix it and is the usual advice, but it
+      # is the bigger hammer: a writable token in the base repo's context, the
+      # standard privilege-escalation footgun. Not needed, because this job
+      # reads the PR only through the API and never builds, executes or reads
+      # the PR's tree.
+      #
+      # The ref is the repository's OWN default branch, never
+      # `github.event.pull_request.base.ref`. The base is attacker-influenced —
+      # the PR author picks the target — and `branches: [master]` already
+      # restricts this workflow to PRs against it, so reading it back from the
+      # event buys nothing and puts a chosen value into a checkout ref.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+
+      - name: Install project deps
+        # See check-config-drift.yml: do NOT add `--no-root`, the package must be
+        # installed for importlib.metadata.version("toolkit") to resolve.
+        run: poetry install --only main
+
+      - name: Resolve the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number || github.event.issue.number }}
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+          RUN_HEAD: ${{ github.event.workflow_run.head_sha }}
+        # A `workflow_run` payload does not always carry its pull requests, so
+        # fall back to resolving by head SHA. If neither yields a PR the job
+        # SKIPS rather than passing: a run with nothing to judge must not publish
+        # a green status for a PR it never looked at.
+        run: |
+          set -euo pipefail
+          number=""
+          if [ "$EVENT" = "workflow_run" ]; then
+            number="$(printf '%s' "$RUN_PRS" \
+              | python -c 'import json,sys; d=json.load(sys.stdin) or []; print(d[0]["number"] if d else "")')"
+            if [ -z "$number" ] && [ -n "$RUN_HEAD" ]; then
+              number="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD}/pulls" --jq '.[0].number // ""')"
+            fi
+          else
+            number="$PR_FROM_EVENT"
+          fi
+          if [ -z "$number" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No pull request resolved for this event; nothing to attest."
+            exit 0
+          fi
+          # Digits only, before it reaches GITHUB_OUTPUT. Every path above
+          # yields an integer today, so this asserts rather than sanitises —
+          # but an output is a file written line by line, and a value carrying
+          # a newline writes a second variable. Fails closed.
+          case "$number" in
+            ''|*[!0-9]*)
+              echo "::error::resolved PR reference is not a number: $number"
+              exit 1 ;;
+          esac
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq '.head.sha' \
+            | { read -r sha; echo "sha=$sha" >> "$GITHUB_OUTPUT"; }
+
+      - name: Fetch the PR payload
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+        # Written to a file by `gh` itself. The body must never reach a `run:`
+        # script as `${{ ... }}`: that is a script-injection vector on a public
+        # repo, and a body containing backticks becomes command substitution and
+        # is silently emptied. Both have been observed in this repo.
+        run: |
+          set -euo pipefail
+          gh pr view "$NUMBER" \
+            --json number,state,labels,body,comments,reviews,author,files \
+            > pr-payload.json
+
+      - name: Classify
+        id: attest
+        if: steps.pr.outputs.skip != 'true'
+        run: |
+          set +e
+          out="$(poetry run toolkit tools review-attestation --payload-file pr-payload.json 2>&1)"
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          # A random delimiter, not a literal `EOF`. The classifier's output
+          # quotes values taken from the PR, so a fixed delimiter is a line an
+          # input could contain — and a heredoc that terminates early writes
+          # whatever follows as further outputs.
+          delim="summary_$(openssl rand -hex 8)"
+          {
+            echo "code=$code"
+            echo "summary<<$delim"
+            printf '%s\n' "$out" | tail -n 5
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish the commit status
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          CODE: ${{ steps.attest.outputs.code }}
+        # A commit STATUS, never a check-run. A check-run belongs to the run that
+        # created it and can never be revised, so a later attestation — the
+        # reviewer finally speaking — could not clear an earlier red.
+        run: |
+          set -euo pipefail
+          if [ "$CODE" = "0" ]; then state="success"; description="a review happened"
+          elif [ "$CODE" = "1" ]; then state="failure"; description="not reviewed, and not declared as such"
+          else state="error"; description="could not determine whether this PR was reviewed"
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state="$state" \
+            -f context="review-attestation" \
+            -f description="$description" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+
+      - name: Fail the run when the PR is not attested
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          CODE: ${{ steps.attest.outputs.code }}
+          SUMMARY: ${{ steps.attest.outputs.summary }}
+        # The verdict is repeated here rather than left in the step that computed
+        # it: a bare `exit "$CODE"` makes the RED step say nothing, so anyone
+        # opening the failure sees an exit code and has to hunt for the reason in
+        # an earlier green step.
+        run: |
+          set -euo pipefail
+          [ "$CODE" = "0" ] && exit 0
+          printf '%s\n' "$SUMMARY" >&2
+          exit "$CODE"

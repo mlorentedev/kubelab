@@ -1,0 +1,98 @@
+{
+  "$comment": [
+    "Reviewer registry for the review-attestation gate (TOOL-021, #1140).",
+    "",
+    "The gate asks ONE question: did a review actually happen? It never asks who",
+    "performed it or how good it was. A human review attests exactly as well as a",
+    "bot's.",
+    "",
+    "This file exists so that answering that question does not require a code",
+    "change when the reviewer changes. Ported from mlorentedev/dotfiles",
+    "harness/review-attestation.json at 2bac1c5 (GUARD-002, #906), with the",
+    "values below measured against this repository rather than copied.",
+    "",
+    "`declined_markers` are the strings identifying a reviewer's 'I could not",
+    "review' notice. Prefer an HTML comment marker over prose: prose is",
+    "translated, reworded and A/B tested, while the marker is machine output. If",
+    "a vendor changes it, the affected PR reads `pending` instead of `declined` —",
+    "still red, so marker drift degrades the MESSAGE and never the verdict.",
+    "",
+    "`review_markers` identify a reviewer's comment-shaped review output, for a",
+    "reviewer that does not use the reviews API. Empty for a reviewer that files",
+    "proper reviews: an auto-summary comment is not a review and must not attest.",
+    "",
+    "Logins are matched with a trailing `[bot]` stripped and case folded, because",
+    "the two GitHub APIs disagree: GraphQL returns `github-actions`, REST returns",
+    "`github-actions[bot]`. Matching the raw string would make the gate depend on",
+    "which API produced the payload.",
+    "",
+    "Note what is NOT here: any notion of which models may review. That policy",
+    "lives in harness/reviewer-pool.json and governs the SPEC-level adversarial",
+    "review — a different gate with a different purpose, deliberately not merged",
+    "with this one."
+  ],
+  "reviewers": [
+    {
+      "login": "coderabbitai",
+      "declined_markers": [
+        "rate limited by coderabbit.ai"
+      ],
+      "review_markers": [],
+      "why": "Per-account PR review limit, reached routinely because parallel sessions drain it. NOT a free-tier problem, and an earlier framing of #1140 said it was: the account is Pro Plus and CodeRabbit's own footer reads 'It's free for OSS'. Measured on #1155, where the notice rendered while `gh pr checks` reported `CodeRabbit  pass`. The marker is the HTML comment CodeRabbit emits around the notice, not its prose."
+    },
+    {
+      "login": "chatgpt-codex-connector",
+      "declined_markers": [
+        "You have reached your Codex usage limits for code reviews"
+      ],
+      "review_markers": [],
+      "why": "The second autonomous reviewer on this repository, present on #1153, #1155 and #1156. On #1155 it and CodeRabbit were exhausted SIMULTANEOUSLY — two independent account-wide quotas, correlated because parallel sessions drain both, and neither notice blocked the merge. This entry is the reason #1140's framing had to widen: the defect is not one vendor's status lying, it is that every reviewer configured here fails open. Measured 2026-08-19: Codex emits NO HTML comment marker, so this one is prose against the registry's own preference. Accepted with the consequence stated — if the wording drifts the PR reads `pending` rather than `declined`, which is still red."
+    },
+    {
+      "login": "github-actions",
+      "declined_markers": [],
+      "review_markers": [
+        "## PR Reviewer Guide"
+      ],
+      "why": "PR-Agent (TOOL-021 Part 2) posts as github-actions via GITHUB_TOKEN and publishes through the comments API, not the reviews API — so reviews[] is empty on a PR it genuinely reviewed. Declared ahead of Part 2 landing: the gate must not call this repository's own reviewer unreviewed the day it starts running. The marker is the `review` command's own heading; `## PR Code Suggestions` (the `improve` command) is deliberately NOT here — suggestions are not a review."
+    }
+  ],
+  "escape": {
+    "label": "merged-unreviewed",
+    "section": "## Unreviewed merge rationale",
+    "why": "Both are required, never one. Same shape as the spec gate's skip-sdd escape, chosen because it is already understood here and because it forces the disclosure into the durable record instead of a chat message. Proceeding on an unreviewed PR is allowed; proceeding SILENTLY is not."
+  },
+  "exempt": {
+    "signatures": [
+      {
+        "name": "release-please (api + errors)",
+        "files": [
+          ".release-please-manifest.json",
+          "apps/api/CHANGELOG.md",
+          "apps/api/version.txt",
+          "edge/errors/CHANGELOG.md",
+          "edge/errors/version.txt"
+        ],
+        "why": "A release PR restates commits already on master, each reviewed when it merged. Measured on #767, #806 and #842: exactly these five paths. Verified NOT author-matchable — the author reads `mlorentedev`, a human, because release-please runs under a PAT."
+      },
+      {
+        "name": "release-please (api only)",
+        "files": [
+          ".release-please-manifest.json",
+          "apps/api/CHANGELOG.md",
+          "apps/api/version.txt"
+        ],
+        "why": "release-please opens PER-APP releases, so the file set VARIES and one signature is not enough. Measured on #804, which carried exactly these three. This is where the port had to diverge from upstream: matching is exact set equality in both directions, and upstream's own comment understates that as 'every changed file must appear in the declared set'. Under exact equality a single superset signature exempts #842 and REFUSES #804 — verified before writing this file. Enumerating each real shape keeps the strict semantics rather than relaxing them, and the strictness is the safe direction: adding a third app produces a red PR asking for a new signature, never a silent exemption."
+      },
+      {
+        "name": "release-please (errors only)",
+        "files": [
+          ".release-please-manifest.json",
+          "edge/errors/CHANGELOG.md",
+          "edge/errors/version.txt"
+        ],
+        "why": "The third shape release-please can produce with the current two apps. Declared by construction rather than by measurement — unlike the other two it has not been observed, because errors has not yet released alone. Recorded as unobserved so nobody later reads it as evidence."
+      }
+    ]
+  }
+}
