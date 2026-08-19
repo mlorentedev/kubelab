@@ -127,7 +127,13 @@ and it is reported there rather than fixed here.
       a reason
 - [x] Stale scope claims corrected against measurement, with dates
 - [x] Findings routed: the VPS gap reported on #817, which is open and is about
-      exactly that
+      exactly that; the review's naming finding filed as #1158
+- [x] Independent adversarial review: `review.md`, PASS WITH GAPS, signed
+      `nan/deepseek-v4-flash` — not the model that reconciled this spec
+- [x] Promotion candidates executed, not left as intentions:
+      `docs/lessons/ansible-provisioning/lesson-349-*` (presence is not coverage)
+      and `docs/lessons/process-method/lesson-350-*` (a scope boundary is a claim
+      about a date)
 
 ## Adversarial review — findings and their disposition
 
