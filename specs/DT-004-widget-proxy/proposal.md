@@ -3,6 +3,11 @@ id: "DT-004-widget-proxy"
 type: spec
 status: draft # draft | implementing | verifying | archived
 created: "2026-05-20"
+issue: "kubelab#465"   # repo#NNN — GitHub issue / Project item that tracks this spec
+# NOTE: #465 is titled DASH-DT-004, not DT-004. The ids differ and both are
+# correct in their own lineage — the ticket predates this folder. The gate
+# resolves specs by issue NUMBER, never by id, so the mismatch is cosmetic and
+# is recorded here rather than fixed by renaming a public artefact.
 tags: [spec, proposal]
 template_version: "1.0"
 ---

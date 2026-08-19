@@ -261,32 +261,34 @@ def test_no_closing_reference_short_circuits(specs: Path) -> None:
 
 
 def test_the_real_specs_tree_is_fully_visible_to_the_gate() -> None:
-    """A ratchet, not a pass/fail on today's state.
+    """Every active spec declares an `issue:`, so the gate can resolve all of them.
 
-    Four active specs declare no `issue:` field, so this gate cannot resolve
-    them and a PR closing their issue would pass silently — the can't-fail
-    shape, one level up. They are grandfathered here and tracked separately;
-    what this asserts is that the set does not GROW, since `spec init` is
-    gated on an open issue and any new one means the gate was bypassed.
+    This began as a ratchet over four grandfathered specs (#1144). The ratchet
+    reached zero on 2026-08-18 and the exemption list is gone, which turns this
+    from "the set does not grow" into the flat invariant: a spec the gate cannot
+    see is a spec whose issue can be closed out silently, and there are none.
 
-    Each was checked individually rather than backfilled by guesswork:
-    ANSIBLE-021 has two issues (#814, #420) and both are CLOSED while its spec
-    is still active; VPNACL-001 has no issue at all; DT-004's ticket is filed
-    as DASH-DT-004 (#465), so the ids disagree; TOOL-001 maps cleanly to #520.
-    Three of the four need a decision, not an edit.
+    Resolving the four was not the bookkeeping it looked like. TOOL-001 mapped
+    cleanly to #520 and DT-004 to #465 — whose title says DASH-DT-004, so the
+    ids disagree and the mismatch is annotated rather than renamed, because the
+    gate resolves by issue NUMBER. The other two were not pending work at all:
+    ANSIBLE-021 shipped in #815 and sat complete for seven weeks, and VPNACL-001
+    has been deployed and live on the VPS since 2026-06-01. Both were invisible
+    here, and the audit that should have caught ANSIBLE-021 — "no active spec
+    has a closed issue" — passed green precisely because it declared no issue to
+    check. Half of what the blind set hid was finished work nobody archived.
+
+    Keep this list empty. Adding a name back is allowed only with the issue that
+    tracks the exemption, because `spec init` is gated on an open issue: a new
+    blind spec means the gate was bypassed, not that the rule needs relaxing.
     """
     root = Path(__file__).resolve().parents[1] / "specs"
-    known_blind = {
-        "ANSIBLE-021-tmux",
-        "DT-004-widget-proxy",
-        "TOOL-001-secret-drift",
-        "VPNACL-001-fleet-segmentation",
-    }
+    known_blind: set[str] = set()
 
     blind = set(spec_gate.undeclared_specs(root))
 
     assert not (blind - known_blind), (
-        f"new spec(s) with no `issue:` field: {sorted(blind - known_blind)} — "
+        f"spec(s) with no `issue:` field: {sorted(blind - known_blind)} — "
         "`spec init` is gated on an open issue, so this means the gate was bypassed"
     )
     if known_blind - blind:
@@ -328,21 +330,36 @@ def test_both_issue_field_forms_resolve(specs: Path, declared: str) -> None:
 
 
 def test_the_real_specs_tree_resolves_end_to_end() -> None:
-    """Every active spec must be visible to the gate, against the real tree.
+    """Every active spec resolves to a number for THIS repo, or tracks another one.
 
-    The fixture suite cannot catch a format the fixtures do not use, so this
-    asserts against what is actually committed.
+    Sibling to the visibility test above, and deliberately a different question.
+    That one asks whether a spec declares an issue at all; this one asks whether
+    the declaration resolves *for this repo* — because `spec_issue` returns None
+    for a cross-repo reference just as it does for a missing field, and the gate
+    is equally unable to act on either.
+
+    Two specs legitimately track `mlorentedev/knowledge`, and they are named
+    rather than counted: a third appearing means someone pointed a kubelab spec
+    at the wrong tracker, which reads as "declared" everywhere else and is
+    invisible to the gate here. The fixture suite cannot catch this — it is a
+    property of what is committed, not of the parser.
     """
     root = Path(__file__).resolve().parents[1] / "specs"
-    blind = set(spec_gate.undeclared_specs(root))
-    known_blind = {
-        "ANSIBLE-021-tmux",
-        "DT-004-widget-proxy",
-        "TOOL-001-secret-drift",
-        "VPNACL-001-fleet-segmentation",
+    folders = sorted(p for p in root.iterdir() if p.is_dir() and p.name != "archive")
+
+    assert not spec_gate.undeclared_specs(root), (
+        "specs invisible to the gate: "
+        f"{sorted(spec_gate.undeclared_specs(root))!r} — see the ratchet above"
+    )
+
+    cross_repo = {
+        f.name
+        for f in folders
+        if (f / "proposal.md").is_file()
+        and spec_gate.spec_issue(f / "proposal.md", REPO) is None
     }
-    assert blind == known_blind, (
-        f"the set of specs invisible to the gate changed: {sorted(blind)!r}. "
-        "New entries mean a spec was created without an issue, or a declaration "
-        "format the gate does not parse."
+    assert cross_repo == {"NOTIFY-001", "TOOL-009-cluster-operator-bootstrap"}, (
+        f"the set of specs tracked outside {REPO} changed: {sorted(cross_repo)!r}. "
+        "A kubelab spec pointed at another repo's tracker looks declared to every "
+        "other check and cannot be resolved by this gate."
     )
