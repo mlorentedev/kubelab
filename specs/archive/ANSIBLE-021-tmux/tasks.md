@@ -21,7 +21,7 @@ created: "2026-05-13"
 
 ## Closing
 
-- [x] All hosts return `tmux 3.x` ✓ 2026-08-18 — 4 of 5 return `tmux 3.4`; **ace2 is powered off**, not failing (on-demand node, `offline, last seen 2d ago`). Deferred under the low-risk clause below, bounded by ace2 having identical role membership to four hosts that passed.
+- [x] All **reachable** hosts return `tmux 3.x` ✓ 2026-08-18 — 4 of 5 return `tmux 3.4`; **ace2 is powered off**, not failing (on-demand node, `offline, last seen 2d ago`). Deferred under the low-risk clause below, bounded by ace2 having identical role membership to four hosts that passed.
 - [x] Jetson explicitly excluded — confirmed ✓ 2026-08-18 by smoke (`NOT INSTALLED`), the stronger of the two forms AC4 allows
 - [x] Role diff is a single line in `base_packages` ✓ 2026-08-18 — `46b9103`, 1 file changed, 1 insertion
 - [x] `verification.md` filled in ✓ 2026-08-18 — with the measurements, not marked deferred
@@ -30,5 +30,5 @@ created: "2026-05-13"
 ## Archive
 
 - [x] `issue:` declared in `proposal.md` frontmatter ✓ 2026-08-18 — `kubelab#420`. Its absence is why this spec was invisible to the gate for seven weeks (#1144).
-- [ ] Independent adversarial review (`dotf spec review`) — PASS before archive
-- [ ] `dotf spec archive ANSIBLE-021-tmux`
+- [x] Independent adversarial review (`dotf spec review`) ✓ 2026-08-18 — **PASS WITH GAPS**, `nan/deepseek-v4-flash`, five Minor and no Blocker; see `review.md` and the dispositions in `verification.md`
+- [x] `dotf spec archive ANSIBLE-021-tmux` ✓ 2026-08-18
