@@ -41,7 +41,7 @@ import yaml
 from uptime_kuma_api import UptimeKumaApi
 
 from toolkit.features import monitoring
-from toolkit.features.monitoring_diff import diff_monitors, extract_key
+from toolkit.features.monitoring_diff import PushTokenError, diff_monitors, extract_key
 
 pytestmark = pytest.mark.integration
 
@@ -449,3 +449,106 @@ class TestBootstrapAgainstAFreshInstance:
             assert len(api.get_monitors()) == len(self._seed())
         finally:
             api.disconnect()
+
+
+class TestPushMonitorRoundTrip:
+    """TOOL-038 — SOPS owns the push token and the seed never carries it.
+
+    Driven end to end because the interesting part is exactly the seam a unit
+    test cannot see: `_build_monitor_data` has no `pushToken` parameter, and the
+    library's own token generator sits in `_convert_monitor_input`, which this
+    raw-socket create path bypasses. Both facts are invisible from a fixture and
+    produce a monitor Kuma accepts and no sender can reach.
+
+    Deliberately proven through export -> **apply**, not export -> import:
+    `import_monitors` sends Kuma v1's backup envelope, confirmed to time out
+    against v2 (#1042), so a round-trip routed that way would be exercising a
+    known-broken path and proving nothing about this one.
+    """
+
+    KEY = "ops-backup-pvc-prod"
+    TOKEN = "IntegrationPushTok"
+
+    def _seed(self) -> list[dict]:
+        return [
+            {
+                "key": self.KEY,
+                "name": "Ops - Backup - Prod PVC heartbeat",
+                "type": "push",
+                "interval": 60,
+                "maxretries": 1,
+                "description": "Heartbeat posted by the prod PVC backup CronJob.",
+            }
+        ]
+
+    @pytest.fixture(autouse=True)
+    def _tokens_from_sops(self, monkeypatch):
+        """Stand in for SOPS. `tmp_path` has no vault, and the point under test is
+        that the token reaches Kuma from the secret store rather than the seed."""
+        monkeypatch.setattr(monitoring, "_get_push_tokens", lambda _root: {self.KEY: self.TOKEN})
+
+    def test_apply_creates_the_monitor_carrying_the_token_from_the_secret_store(self, live, apply_seed):
+        apply_seed(self._seed())
+
+        [monitor] = live()
+        assert monitor["type"] == "push"
+        assert monitor["pushToken"] == self.TOKEN, (
+            "the create path must set the token explicitly — `_build_monitor_data` "
+            "takes no `pushToken`, and the library's generator is bypassed here, so "
+            "the failure mode is a push monitor at an address no sender knows"
+        )
+
+    def test_export_writes_the_entry_back_without_its_token(self, apply_seed, kuma_url, monkeypatch, tmp_path):
+        apply_seed(self._seed())
+
+        monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
+        exported = json.loads(monitoring.export_monitors(tmp_path).read_text())
+
+        [entry] = exported
+        assert "pushToken" not in entry, "export would have committed a live credential to a public repo"
+        assert entry["key"] == self.KEY, "the entry itself must survive, or apply reads it as deleted"
+        assert entry["type"] == "push"
+
+    def test_reapplying_the_exported_seed_changes_nothing_and_the_token_survives(
+        self, live, apply_seed, kuma_url, monkeypatch, tmp_path
+    ):
+        """The assertion the whole design exists for.
+
+        A token-free seed must not be a token-free instance. If the second apply
+        rotated or cleared the token, every heartbeat already in flight would be
+        posting to a dead address while the monitor sat green until its interval
+        elapsed — the dead-man's-switch failing in the one direction that is
+        indistinguishable from health.
+        """
+        apply_seed(self._seed())
+        before = {m["name"]: (m["id"], m["pushToken"]) for m in live()}
+
+        monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
+        exported = json.loads(monitoring.export_monitors(tmp_path).read_text())
+        assert all("pushToken" not in e for e in exported)
+
+        create, edit, delete = diff_monitors(
+            monitoring.hydrate_push_tokens(exported, {self.KEY: self.TOKEN}),
+            live(),
+            muted_tags=frozenset(),
+            has_default_notification=False,
+        )
+        assert (len(create), len(edit), len(delete)) == (0, 0, 0), (
+            "the exported seed must be converged against the instance it came from"
+        )
+
+        apply_seed(exported)
+
+        assert {m["name"]: (m["id"], m["pushToken"]) for m in live()} == before
+
+    def test_a_declared_push_monitor_with_no_token_refuses_the_whole_sync(
+        self, live, apply_seed, monkeypatch
+    ):
+        """Fails closed, and takes nothing with it: Kuma would otherwise mint a
+        random token and report a successful create."""
+        monkeypatch.setattr(monitoring, "_get_push_tokens", lambda _root: {})
+
+        with pytest.raises(PushTokenError):
+            apply_seed(self._seed())
+
+        assert live() == []
