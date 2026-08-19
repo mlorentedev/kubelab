@@ -128,3 +128,68 @@ and it is reported there rather than fixed here.
 - [x] Stale scope claims corrected against measurement, with dates
 - [x] Findings routed: the VPS gap reported on #817, which is open and is about
       exactly that
+
+## Adversarial review — findings and their disposition
+
+`review.md`, `nan/deepseek-v4-flash`, 2026-08-18, verdict **PASS WITH GAPS**: five
+Minor findings, no Blocker and no Major, reviewer's own recommendation "running
+`dotf spec archive` is advisable with the current review". Each finding is
+dispositioned below rather than inherited by the archive.
+
+`verification.md` is deliberately the only file changed after the review. The
+staleness gate's contract is `proposal.md`, `tasks.md` and `features.json`
+(`cli/internal/spec/review.go:24`), so recording dispositions here does not
+invalidate the verdict — and nothing below alters what the reviewer judged.
+
+**1. AC2 idempotency was not evidenced — APPLIED, by a different method.**
+The reviewer proposed `apt-get install -y tmux; echo $?`. That closes the gap by
+*performing an install* on four live hosts, one of them prod, to prove an install
+would do nothing. The simulation flag answers the same question and mutates
+nothing:
+
+```
+$ for h in ace1 aws1 beelink rpi4; do printf "%-9s " "$h"; \
+    ssh "$h" 'apt-get -s install tmux 2>/dev/null | grep -E "^[0-9]+ upgraded"'; done
+ace1      0 upgraded, 0 newly installed, 0 to remove and 44 not upgraded.
+aws1      0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+beelink   0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+rpi4      0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+```
+
+`0 newly installed` on every reachable covered host: a re-run changes nothing.
+AC2 moves from *accepted* to *evidenced*. (ace1's "44 not upgraded" is unrelated
+pending updates on other packages, not this one.)
+
+**2. Naming inconsistency, `beelink` vs `provision-bee.yml` — TICKETED as #1158,**
+and it is wider than the review found. `make provision` resolves the playbook by
+interpolation (`-p provision-$(NODE)`), so `NODE=beelink` fails while the node's
+real hostname *is* `beelink`. Beyond that, three hand-maintained node lists in the
+Makefile disagree, and the one printed on a wrong invocation — `Makefile:691` —
+omits `bee`, `rpi3` and `jetson` entirely. The error path teaches a smaller fleet
+than the one that exists, to the reader least able to know better. Out of scope
+here: this spec's diff is one line of a package list, and renaming a playbook is
+not a drive-by.
+
+**3. Scope boundary invalidated by an unrelated change — DECLINED as work,
+recorded as a lesson.** Already corrected in `proposal.md`, and the reviewer's
+real observation is the one under it: "UNTESTED — no test asserts any scope
+boundary". True, and a test would not have helped. The boundary was prose about
+the world on a date, and #1059 changed the world without reading it. What catches
+this class is re-measuring at archive time, which is what caught it. Kept as a
+promotion candidate above rather than converted into an assertion that would pin
+`provision-rpi3.yml` for the wrong reason.
+
+**4. ace2 unverified — DECLINED, bounded.** It is powered off, not failing, and it
+is an on-demand node: nothing can measure it until it is next booted. The AC says
+"every covered host", and this is a deferral against that, stated rather than
+quietly satisfied by rewording the criterion. The bound is that ace2's role
+membership is identical to four hosts that passed, so the only unobserved step is
+an apt transaction whose no-op behaviour is now evidenced on all four.
+
+**5. No test pins `tmux` in `base_packages` — DECLINED, reasoning unchanged.**
+The reviewer grades this defensible and it is the position already argued in "Test
+status" above: an assertion over one line of a package list is a change-detector,
+and the static test this repo does carry (`test_spoke_rbac_covers_manifests.py`)
+earned its place through a real prod refusal. A future deletion of the `tmux` line
+would indeed go unnoticed by CI — and would surface as `sshmux` falling back to
+plain SSH, which is the symptom the spec exists to fix and is self-announcing.
