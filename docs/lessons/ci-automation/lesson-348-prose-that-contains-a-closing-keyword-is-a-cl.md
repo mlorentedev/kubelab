@@ -45,6 +45,16 @@ Note `gh pr edit` cannot apply this in kubelab — it aborts on a Projects-class
 - **An HTML entity does not defeat the parser.** The body quoted the offending sentence as `clos&#101;d #1056`, expecting the entity to break the keyword. `closingIssuesReferences` returned #1056 anyway — GitHub decodes entities before matching. Replacing the entity with zero-width separators (U+2060 inside the word, U+200B before the `#`) *did* empty the reference. **The general rule, which matters more than either technique: an escape that exists only in the source text is defeated by anything that normalises before matching.** Zero-width separators work because they survive rendering — they are still there when the parser looks. Reach for the gerund first anyway; an invisible character in prose is a landmine for whoever edits the line next.
 - **In this repo, a closing keyword in a commit message is inert — the PR body is the only text that reaches master.** The commit for this lesson still contains `closed #1056` verbatim, and after the body was corrected the query came back empty. `gh api repos/<owner>/<repo>` reports `allow_merge_commit: false`, `allow_rebase_merge: false`, `squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`. Individual commit messages are discarded by the squash, so they never land on the default branch. **This makes the PR body doubly load-bearing**: it decides what the merge closes *and* it becomes the master commit message. A repo that allowed merge commits would have the opposite exposure, so check the setting before carrying this conclusion elsewhere.
 
+- **GitHub ignores closing keywords inside code spans and fenced blocks. A raw regex does not.** Documenting the bug put `` `closed #1056` `` in backticks in this PR's body. GitHub read it correctly as sample text — `closingIssuesReferences` stayed empty — while kubelab's own `Spec archive gate` failed the PR, because `spec_gate.py`'s `_CLOSES_RE` runs over the unparsed body. Minimal case, run against the shipped function:
+
+  ```
+  plain prose        -> gate: {999}   GitHub: closes
+  inside backticks   -> gate: {999}   GitHub: does not
+  fenced code block  -> gate: {999}   GitHub: does not
+  ```
+
+  The regex carries the comment *"exactly as GitHub matches them"*, and that is now measurably false in one direction: the gate over-reports. It fails safe (a false positive is a red PR, not a silent closure), but it makes writing about closing keywords impossible without tripping it, which is how a gate trains people to route around it. Filed as CI-GATE-013 (#1157).
+
 **Rule:**
 
 - **Never write an issue number after a closing keyword unless you mean it.** To *discuss* one, use a non-keyword form (`closing #N`, `a PR that closes it`) or drop the number. Prose about a closing reference is indistinguishable from one.
