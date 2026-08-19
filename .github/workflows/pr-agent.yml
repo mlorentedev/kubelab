@@ -60,12 +60,18 @@ jobs:
     #   `head_ref` is empty on `issue_comment`, so a human typing `/review` on a
     #   release PR still gets one. A human asking is not structural noise.
     #
-    # - The slash-command path is restricted to OWNER/MEMBER/COLLABORATOR. THIS
-    #   REPO IS PUBLIC and upstream's is not, so the port inherited a condition
-    #   that was safe there and is not here: any GitHub account can comment on a
-    #   public PR, `issue_comment` runs in base-repo context with `NAN_API_KEY`,
-    #   and the unrestricted form would let a stranger spend our inference budget
-    #   and exercise `pull-requests: write` on demand. The association set is
+    # - The slash-command path is restricted to OWNER/MEMBER/COLLABORATOR. Any
+    #   GitHub account can comment on a PR in a public repository,
+    #   `issue_comment` runs in base-repo context with `NAN_API_KEY`, and the
+    #   unrestricted form would let a stranger spend our inference budget and
+    #   exercise `pull-requests: write` on demand.
+    #
+    #   An earlier version of this comment explained the upstream's unrestricted
+    #   form away as "their repo is private". Measured 2026-08-19: it is PUBLIC.
+    #   So that was a live exposure there rather than a difference in context,
+    #   and reporting it produced a fix on their side. The lesson belongs to this
+    #   port, not to them — the reason a condition is safe is itself a claim, and
+    #   it has to be checked like any other. The association set is
     #   deliberately the same one `_MEMBER_ASSOCIATIONS` uses in
     #   `toolkit/features/review_attestation.py` — one definition of "belongs to
     #   this repository", used by both the gate and the reviewer.
