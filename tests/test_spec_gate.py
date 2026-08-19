@@ -363,3 +363,90 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
         "A kubelab spec pointed at another repo's tracker looks declared to every "
         "other check and cannot be resolved by this gate."
     )
+
+
+# ---------------------------------------------------------------------------
+# CI-GATE-013 (#1157): the body is Markdown, and code in it is not a directive
+# ---------------------------------------------------------------------------
+#
+# Every expectation below about GitHub's own behaviour was measured, not
+# reasoned: a temporary PR body on kubelab#1159, read back through
+# `closingIssuesReferences`, restored immediately, targeting already-closed
+# issues so a merge in the window would have been a no-op. The three results are
+# recorded as dated rows beside `_CLOSES_RE` in the module.
+#
+# The reason this matters is narrower than "the gate should be correct". The
+# gate's own failure hint prints the waiver line to copy, so the documents most
+# likely to quote closing keywords and `Spec-archive-exception:` are the ones
+# written *about this gate* — which is exactly how #1155 tripped it while
+# documenting it.
+
+FENCE_CASES = [
+    pytest.param("the string `closes #999` appears in a log", set(), id="inline-span"),
+    pytest.param("```\ncloses #999\n```", set(), id="bare-fence"),
+    pytest.param("```python\n# closes #999\n```", set(), id="fence-with-info-string"),
+    pytest.param("~~~\ncloses #999\n~~~", set(), id="tilde-fence"),
+    pytest.param("intro\n```\ncloses #999\nno terminator follows", set(), id="unclosed-fence"),
+    pytest.param("`closes #111` and `closes #222`", set(), id="two-spans"),
+    pytest.param("quoted `closes #111` and real closes #222", {222}, id="quoted-and-real"),
+    pytest.param("this closes #999 for real", {999}, id="plain-prose-still-matches"),
+    pytest.param("> fixes #999", {999}, id="blockquote-still-matches"),
+    pytest.param("closes `x` #999", set(), id="span-breaks-adjacency"),
+]
+
+
+@pytest.mark.parametrize(("body", "expected"), FENCE_CASES)
+def test_code_is_not_a_closing_directive(body: str, expected: set[int]) -> None:
+    """Keywords inside code spans and fences are text; GitHub agrees, so must the gate.
+
+    `blockquote-still-matches` and `plain-prose-still-matches` are the guard on
+    the fix rather than on the bug: stripping too eagerly turns an over-report
+    into an under-report, and that direction fails OPEN. Both were measured to
+    link on GitHub, so both must keep matching here.
+
+    `span-breaks-adjacency` pins the placeholder. Deleting a span outright would
+    collapse ``closes `x` #999`` to ``closes  #999`` and invent a link GitHub
+    does not make — measured: that body produced no reference.
+    """
+    assert spec_gate.closed_issues(body, REPO) == expected
+
+
+def test_a_quoted_waiver_is_not_a_declared_waiver() -> None:
+    """The fails-OPEN twin, and the worse of the two.
+
+    `_EXCEPTION_RE` also ran over the unparsed body, so a PR *quoting* the waiver
+    syntax — in a runbook, a lesson, or by pasting the gate's own failure output,
+    which prints the line to copy — was read as a real declaration. The gate then
+    reported WAIVED and exited 0, leaving a declared exception in the merge
+    record that nobody declared. A silent bypass, not a red build.
+    """
+    quoted = "Example of the escape hatch:\n\n```\nSpec-archive-exception: <why>\n```\n"
+    assert spec_gate.declared_exception(quoted) is None
+    assert spec_gate.declared_exception("Spec-archive-exception: genuinely not this PR") == (
+        "genuinely not this PR"
+    )
+
+
+def test_pr_1155_shape_passes() -> None:
+    """The shape that surfaced CI-GATE-013: a document *about* closing keywords.
+
+    #1155 documents that GitHub parses closing keywords out of prose, so its body
+    necessarily quotes one. GitHub linked nothing; the gate failed the PR. Both
+    parsers read the same body and disagreed, and the gate was the wrong one.
+
+    This is the shape rather than that PR's literal text — its body has since
+    been reworded around the bug, so quoting it today would reproduce the
+    workaround instead of the defect.
+    """
+    body = (
+        "## What\n\n"
+        "GitHub's parser is not context-aware. A sentence asserting there is no\n"
+        "closing reference can itself be one:\n\n"
+        "```\n"
+        "...would rightly refuse a PR that closed #1056 without archiving it\n"
+        "```\n\n"
+        "The fix is the gerund, since `closes #1056` and `closed #1056` both link\n"
+        "and `closing #1056` does not.\n"
+    )
+    assert spec_gate.closed_issues(body, REPO) == set()
+    assert spec_gate.declared_exception(body) is None
