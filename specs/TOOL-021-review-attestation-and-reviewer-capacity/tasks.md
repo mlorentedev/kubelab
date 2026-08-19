@@ -56,7 +56,7 @@ created: "2026-08-19"
 - [ ] [AC6] `auto_describe: false` — `describe` rewrites the PR body, and the bodies here carry hand-written measurement tables that are the part worth reading.
 - [ ] [AC6] Enable the push path explicitly (`handle_push_trigger`, `push_commands: ["/review"]`). `synchronize` in `pr_actions` asserts nothing — upstream routes it separately — and omitting `push_commands` silently reinstates `describe` on every push.
 - [ ] [AC9] **Demonstrate the reviewer's own failure produces a red PR** — bad credential or unreachable endpoint — not a green one.
-- [ ] [AC10] **Only now**, promote the attestation status to required in branch protection, and show an unreviewed PR reporting `mergeStateStatus: BLOCKED` rather than merely a failing check. Branch protection is a setting no test in this repo can see.
+- [ ] [AC10] **Only now**, promote the **commit status `review-attestation`** — never the check-run `attestation` — to required in branch protection. Naming the job would block every PR where a second event arrives mid-run, which is now the common case because a reviewer speaking is itself a trigger; those runs are cancelled by design and a cancelled run can never be made to conclude green. Verified on #1165: `conclusion=cancelled` on the job, `success` on the status, same SHA, and show an unreviewed PR reporting `mergeStateStatus: BLOCKED` rather than merely a failing check. Branch protection is a setting no test in this repo can see.
 - [ ] [AC11] Assert in a test that nothing in the change enables auto-merge.
 
 ## Closing

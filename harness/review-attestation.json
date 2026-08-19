@@ -91,7 +91,7 @@
           "edge/errors/CHANGELOG.md",
           "edge/errors/version.txt"
         ],
-        "why": "The third shape release-please can produce with the current two apps. Declared by construction rather than by measurement — unlike the other two it has not been observed, because errors has not yet released alone. Recorded as unobserved so nobody later reads it as evidence."
+        "why": "Observed 4 times across the full release history, replayed 2026-08-19. An earlier draft of this entry called it unobserved and declared 'by construction' — that was written from a 4-PR sample and the backtest refuted it. Two shapes are deliberately NOT declared: 5 releases of apps/web/* (web moved to its own repo, ADR-053, so the shape is dead) and one 2-file errors release predating version.txt. Both correctly refuse rather than exempt; adding signatures for shapes that can no longer occur would widen the exemption for nothing."
       }
     ]
   }
