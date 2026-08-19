@@ -21,6 +21,7 @@ them all and starting over.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 # The fields the sync actually writes, named as they appear in the seed.
@@ -68,11 +69,109 @@ WRITABLE_FIELDS = frozenset(
         "basic_auth_pass",
         "proxyId",
         "timeout",
+        # A push monitor's token is writable state like any other field, and it
+        # is here for the failure it prevents rather than for completeness: a
+        # token rotated in the Kuma UI leaves a monitor whose endpoint no longer
+        # matches the one its sender posts to. Absent from this set that reads
+        # as converged, and a dead-man's-switch that is silently deaf is worse
+        # than none — it reports UP forever, having stopped listening.
+        #
+        # The VALUE never travels in the seed; `hydrate_push_tokens` injects it
+        # from the secret store just before the diff. See its docstring.
+        "pushToken",
     }
 )
 
 # Seed field names that the API expects under a different name.
 SEED_TO_API_FIELD = {"retry_interval": "retryInterval"}
+
+#: Uptime Kuma's `push` monitor type. Its endpoint is `/api/push/<pushToken>`,
+#: so the token is not a setting on the monitor — it IS the monitor's address
+#: and its only authentication. Named here rather than spelled inline because
+#: three call sites branch on it.
+PUSH_MONITOR_TYPE = "push"
+
+
+class PushTokenError(Exception):
+    """A push monitor's token is missing from the secret store, or inline in the seed."""
+
+
+def hydrate_push_tokens(seed: list[dict[str, Any]], tokens: Mapping[str, str]) -> list[dict[str, Any]]:
+    """Return `seed` with each push monitor's `pushToken` injected from the secret store.
+
+    **The seed file is not the source of truth for this one field, and must never
+    become it.** `monitors.json` is committed to a public repository, and the
+    push endpoint is publicly routed — a token in that file is a live credential
+    that lets anyone post "still alive" to the very monitor whose purpose is to
+    notice silence. So the token lives in SOPS, keyed by the monitor's immutable
+    `key`, and is married to the seed here, in memory, at apply time.
+
+    That is also why `pushToken` is deliberately absent from
+    `monitoring._MONITOR_EXPORT_FIELDS`: export strips it, which looks like a
+    round-trip losing data and is in fact the invariant holding. Nothing is lost,
+    because the JSON was never where the value lived.
+
+    Fails closed, in both directions and loudly:
+
+    - A push entry whose token is missing raises rather than proceeding. The
+      alternative is worse than an error — `uptime_kuma_api` mints a random
+      token for a tokenless push monitor, so a silent fallback would create a
+      working-looking monitor at an address no sender knows, i.e. a watchdog
+      that alerts forever and a heartbeat that arrives nowhere.
+    - A push entry that carries an inline `pushToken` raises too. That is the
+      leak this design exists to prevent, and it can only arrive by someone
+      hand-editing the seed, so it is a mistake worth naming rather than
+      quietly honouring.
+
+    Pure, and takes the resolved tokens rather than reading SOPS itself, so the
+    decision half stays testable without secrets — the same split the rest of
+    this module is built on.
+    """
+    hydrated: list[dict[str, Any]] = []
+    inline: list[str] = []
+    unresolved: list[str] = []
+
+    for entry in seed:
+        if entry.get("type") != PUSH_MONITOR_TYPE:
+            hydrated.append(entry)
+            continue
+
+        key = entry.get("key")
+        label = f"{entry.get('name') or '<unnamed>'} (key={key!r})"
+
+        if entry.get("pushToken"):
+            inline.append(label)
+            continue
+
+        token = tokens.get(key) if key else None
+        if not token:
+            unresolved.append(label)
+            continue
+
+        hydrated.append({**entry, "pushToken": token})
+
+    if inline:
+        raise PushTokenError(
+            "push monitor(s) carry an inline pushToken in the seed: "
+            + ", ".join(inline)
+            + ". The seed is committed to a public repository and the push endpoint is "
+            "publicly routed, so the token belongs in SOPS under "
+            "apps.services.observability.uptime_kuma.push_tokens.<key>, never here. "
+            "Remove the field from monitors.json and store the value with: "
+            "toolkit secrets set apps.services.observability.uptime_kuma.push_tokens.<key> "
+            "<token> --env common"
+        )
+    if unresolved:
+        raise PushTokenError(
+            "no push token in SOPS for: "
+            + ", ".join(unresolved)
+            + ". Refusing to sync — Uptime Kuma would mint a random token, producing a "
+            "monitor whose endpoint no sender knows. Store one with: "
+            "toolkit secrets set apps.services.observability.uptime_kuma.push_tokens.<key> "
+            "<token> --env common"
+        )
+    return hydrated
+
 
 _MARKER_TEMPLATE = "[kuma-key:{key}]"
 _MARKER_RE = re.compile(r"\n?\[kuma-key:(?P<key>[A-Za-z0-9._-]+)\]")

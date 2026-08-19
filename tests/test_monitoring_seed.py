@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from toolkit.features.monitoring import _clean_monitor
 from toolkit.features.monitoring_diff import embed_key, extract_key
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -50,3 +51,58 @@ class TestSeedKeys:
         seed = _seed()
         for m in seed:
             assert next(iter(m)) == "key", f"'{m.get('name')}' does not have key as its first field"
+
+
+class TestSeedCarriesNoPushToken:
+    """The seed is public; a push token in it is a live credential (TOOL-038).
+
+    `status.kubelab.live/api/push/<pushToken>` is publicly routed, so anyone
+    holding a token can post "still alive" to the monitor whose entire job is to
+    notice its absence. A leaked token does not weaken a dead-man's-switch, it
+    inverts it. SOPS owns the value
+    (`apps.services.observability.uptime_kuma.push_tokens.<key>`) and
+    `hydrate_push_tokens` marries it to the seed in memory at apply time.
+    """
+
+    def test_no_entry_in_the_committed_seed_carries_a_token(self) -> None:
+        offenders = [m.get("name") for m in _seed() if m.get("pushToken")]
+        assert not offenders, (
+            f"push token committed to a public repo in: {offenders}. "
+            "Move it to SOPS under apps.services.observability.uptime_kuma.push_tokens"
+        )
+
+    def test_export_strips_the_token_it_reads_off_a_live_monitor(self) -> None:
+        """The behavioural half of the guard.
+
+        Asserting `pushToken not in _MONITOR_EXPORT_FIELDS` would pin the list;
+        this pins what `monitoring-export` actually writes, which is the thing
+        that would leak. `_clean_monitor` is given a live-shaped monitor —
+        `get_monitors()` does return `pushToken` — and must drop it.
+        """
+        live = {
+            "id": 7,
+            "key": "ops-heartbeat",
+            "name": "Backup heartbeat",
+            "type": "push",
+            "pushToken": "would-be-leaked",
+            "description": "Prod PVC backup heartbeat.",
+            "interval": 90000,
+            "active": True,
+        }
+        assert "pushToken" not in _clean_monitor(live)
+
+    def test_export_keeps_the_rest_of_a_push_monitor(self) -> None:
+        """Stripping the token must not strip the monitor: the entry still has to
+        round-trip, or `apply` would read it as deleted from the seed."""
+        live = {
+            "id": 7,
+            "name": "Backup heartbeat",
+            "type": "push",
+            "pushToken": "would-be-leaked",
+            "description": embed_key("Prod PVC backup heartbeat.", "ops-heartbeat"),
+            "interval": 90000,
+        }
+        clean = _clean_monitor(live)
+        assert clean["key"] == "ops-heartbeat"
+        assert clean["type"] == "push"
+        assert clean["interval"] == 90000
