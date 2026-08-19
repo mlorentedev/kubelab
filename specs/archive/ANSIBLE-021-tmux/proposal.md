@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-021-tmux"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-05-13"
 issue: "kubelab#420"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, ansible, base-system]
@@ -59,3 +59,5 @@ No open questions.
 - Host context: ADR-058 (ace2 dev-node)
 - Dotfiles: `~/Projects/dotfiles/.zsh/functions.zsh` — `sshmux` function
 - Role: `infra/ansible/roles/base_system/`
+
+<!-- archived 2026-08-19 — PR: https://github.com/mlorentedev/kubelab/pull/1156 -->
