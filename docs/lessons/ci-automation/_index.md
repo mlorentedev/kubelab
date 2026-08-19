@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-17 lessons, newest first. Back to [all categories](../_index.md).
+18 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 348 | [Prose that contains a closing keyword is a closing keyword](lesson-348-prose-that-contains-a-closing-keyword-is-a-cl.md) | 2026-08-18 |
 | 002 | [`gh pr edit` fails on a Projects-classic field, applies nothing, and blames Projects](lesson-002-gh-pr-edit-fails-on-a-projects-classic-field-.md) | 2026-08-17 |
 | 004 | [The drift gate's own usage guard was unreachable, so it checked the one environment nobody deploys](lesson-004-the-drift-gate-s-own-usage-guard-was-unreacha.md) | 2026-08-16 |
 | 341 | [Rebasing onto a squash-merged branch conflicts against your own merged work](lesson-341-rebasing-onto-a-squash-merged-branch-conflict.md) | 2026-08-16 |
