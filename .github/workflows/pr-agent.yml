@@ -85,10 +85,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: PR-Agent
-        # Pinned by tag. A Docker action, so the tag must exist AND carry an
-        # `action.yaml` — upstream's first draft pinned a tag that did not exist
-        # at all.
-        uses: The-PR-Agent/pr-agent@v0.42.0
+        # Pinned by COMMIT SHA, not by tag, and this deliberately exceeds the
+        # upstream it ports from. A tag is mutable: whoever can move `v0.42.0`
+        # can change what runs in a job that holds `NAN_API_KEY` on a public
+        # repository. The SHA cannot be moved.
+        #
+        # Resolved 2026-08-19 from `repos/The-PR-Agent/pr-agent/git/ref/tags/v0.42.0`.
+        # Bump it deliberately, by re-resolving the tag you intend — never by
+        # editing the comment.
+        uses: The-PR-Agent/pr-agent@f6af7d77554ff8d26adffded077e6461329e92fa  # v0.42.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # NaN is OpenAI-compatible, so LiteLLM reaches it through the OpenAI

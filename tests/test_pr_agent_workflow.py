@@ -82,3 +82,20 @@ def test_credential_material_is_excluded_from_the_model_call() -> None:
     globs = config.get("ignore", {}).get("glob", [])
     for required in ("infra/config/secrets/**", "**/*.pem"):
         assert required in globs, f"{required} is not excluded; SOPS ciphertext and private keys would be sent for review"
+
+
+def test_the_action_is_pinned_by_sha_not_by_tag() -> None:
+    """A tag is mutable; this job holds NAN_API_KEY on a public repository.
+
+    Whoever can move the tag can change what runs with that credential. Upstream
+    pins by tag — this is a place the port should exceed its source, and a test
+    is what stops a later "bump" quietly reverting to one.
+    """
+    step = next(
+        s for s in _load(REVIEWER)["jobs"]["review"]["steps"] if "uses" in s
+    )
+    ref = step["uses"].split("@", 1)[1]
+    assert len(ref) == 40 and all(c in "0123456789abcdef" for c in ref), (
+        f"the action is pinned to {ref!r}, which is not a commit SHA. A mutable "
+        "tag decides what runs with NAN_API_KEY on a public repo."
+    )
