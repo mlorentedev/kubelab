@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-25 lessons, newest first. Back to [all categories](../_index.md).
+26 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 352 | [A gap in an allow-list has no self-evident meaning — the same absence was the control in one list and the bug in the next](lesson-352-a-gap-in-an-allow-list-has-no-self-evident-meaning.md) | 2026-08-19 |
 | 320 | [A domain rename is invisible to `grep` when the reference lives in a template string inside a Python generator](lesson-320-a-domain-rename-is-invisible-to-grep-when-the.md) | 2026-08-12 |
 | 322 | [A cleanup step that reverts more than the step wrote is a destructive op wearing a check's clothing](lesson-322-a-cleanup-step-that-reverts-more-than-the-ste.md) | 2026-08-12 |
 | 312 | [`.yamllint`'s own header claimed CI coverage it doesn't have](lesson-312-yamllint-s-own-header-claimed-ci-coverage-it-.md) | 2026-08-11 |
