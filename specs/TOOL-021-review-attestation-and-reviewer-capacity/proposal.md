@@ -16,6 +16,8 @@ template_version: "1.0"
 
 A PR in this repo can be merged with a green `CodeRabbit` check and no review behind it. CodeRabbit's free tier allows roughly one review at a time account-wide; when the quota is spent it posts *"Review limit reached — you've reached your PR review limit, so we couldn't start this review"* and **the commit status still reports SUCCESS**. Nothing in the repo distinguishes "reviewed" from "not reviewed", so the two cases are indistinguishable on the PR page. Measured on every PR opened 2026-08-17/18 — 8 of 8 unreviewed, 7 already merged (#1140) — and again on 2026-08-18 with #1153, #1155 and #1156, taking it to 11 of 11. This is not a vendor complaint: `pr-stewardship` already binds every agent here to disposition reviewer output, and that obligation is unsatisfiable when "no review ran" renders as a green tick.
 
+**Corrected 2026-08-19, and it widens the problem.** An earlier draft of this section named CodeRabbit alone. This repo already runs **two** autonomous reviewers — `coderabbitai` and `chatgpt-codex-connector`, the latter present on #1153, #1155 and #1156 — and on #1155 **both were exhausted at the same time**: CodeRabbit posted "Review rate limited" and Codex posted "You have reached your Codex usage limits for code reviews". Two independent quotas, correlated because they are both account-wide and this repo is worked by parallel sessions. Neither notice blocked the merge. So the gap is not one vendor's tier; it is that **every reviewer here fails open**, and adding a third that also fails open would not change the outcome. Part 1 is what makes any of them fail closed.
+
 ## What
 
 Two changes, in order, because the second is unsafe without the first.
@@ -30,7 +32,7 @@ Observable after both: a PR that nobody reviewed cannot be green, and the ordina
 
 ## Out of scope
 
-- **Retiring CodeRabbit.** Deliberately deferred to a decision with data from the parallel window. Recorded here so the window has a declared end rather than becoming permanent by omission.
+- **Retiring CodeRabbit or Codex.** Deliberately deferred to a decision with data from the parallel window. Recorded here so the window has a declared end rather than becoming permanent by omission. **Open decision, surfaced not settled:** the operator chose "alongside, bounded window" while the count was believed to be one existing reviewer. It is two, so Part 2 would make three. dotfiles cites a standing rule capping autonomous reviewers at two — in a runbook, a proposal and a workflow comment — but the rule itself could not be located in `AGENTS.md` or the harness, which is the same shape as a guard citing a check it cannot run. Whether the cap binds kubelab, and if so which reviewer PR-Agent displaces, is the operator's call before Part 2 starts.
 - **Judging review quality.** The gate asks whether a review happened, never whether it was good. Any attempt to score a reviewer turns the gate into an opinion and gives it a way to be wrong.
 - **The spec-level adversarial review** (`dotf spec review`, reviewer pool, `review.md`). A different gate with a different purpose, already working. The two must not be merged, and the model-eligibility policy that governs the spec reviewer must not leak into this one.
 - **Fixing CI-GATE-013 (#1157).** The spec gate reads closing keywords inside code blocks where GitHub does not. Adjacent, separately ticketed, and not a dependency.
