@@ -1,0 +1,58 @@
+[
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f1",
+    "behavior": "A successful backup posts exactly one heartbeat and the monitor reads UP.",
+    "verification": "make backup-pvc ENV=prod && toolkit monitoring status --monitor prod-backup-pvc-heartbeat --expect up",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f2",
+    "behavior": "A backup that fails at any step posts no heartbeat.",
+    "verification": "tests/backup/assert_no_heartbeat_on_failure.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f3",
+    "behavior": "The absence of heartbeats raises an alert that reaches the operator's real notification channel.",
+    "verification": "tests/backup/assert_absence_alerts.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f4",
+    "behavior": "No step of the demonstration adds a field manager to the prod CronJob.",
+    "verification": "kubectl get cronjob pvc-backup -n kubelab -o json --show-managed-fields | jq -e '[.metadata.managedFields[].manager] | sort == [\"argocd-controller\", \"k3s\", \"kubelab-toolkit\"]'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f5",
+    "behavior": "The push token is absent from every committed file and survives an export/apply round trip unchanged.",
+    "verification": "poetry run pytest tests/test_monitoring_seed.py tests/test_monitoring_integration.py -k 'push' -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f6",
+    "behavior": "The heartbeat monitor is not silenced by muted_notification_tags, asserted against the live monitor.",
+    "verification": "tests/backup/assert_heartbeat_monitor_notifies.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f7",
+    "behavior": "A heartbeat that cannot be delivered leaves the backup's exit status unchanged.",
+    "verification": "tests/backup/assert_unreachable_kuma_does_not_fail_backup.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-049-pvc-backup-heartbeat-f8",
+    "behavior": "The token is registered in SECRET_CATALOG and appears in the prod secrets audit.",
+    "verification": "make secrets-audit ENV=prod | grep -q 'push_tokens.prod_backup_pvc_heartbeat'",
+    "state": "pending",
+    "evidence": ""
+  }
+]
