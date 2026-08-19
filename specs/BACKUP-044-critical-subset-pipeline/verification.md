@@ -513,7 +513,14 @@ and is scoped to the PVC consumer class; `tasks.md`'s "Follow-ups, not this spec
 it as the next ticket in #1090's sequence; and the out-of-scope note states the split is
 **by mechanism**, because the tier axis cannot make it — Authelia and Postgres are Tier 1
 *and* PVCs. AC1 is narrowed to the node-path class here, in `tasks.md` Part 6, and in the
-evidence checklist above. Reverting is a one-line edit in each of the three, and the
+evidence checklist above. Two things the label hides. First, option 2's own wording
+overreaches: "narrow AC1 to Tier 1 plus Pi-hole FTL" still contains Authelia and
+Postgres, the two members it was trying to exclude — the applied narrowing is
+option 2's *intent*, stated by mechanism instead of by tier. Second, the consumer
+table this finding criticises has since been corrected: it now lists four
+node-path consumers and no PVCs, and the section above it names the class
+explicitly, so the narrowed AC1's referent is coherent. The finding's own
+description of that table is therefore historical, and is left as written. Reverting is a one-line edit in each of the three, and the
 finding above is deliberately left intact so the reasoning survives the decision.
 
 **AC9 arrives with it.** The same Part 0 pass added a ninth criterion — a run that
