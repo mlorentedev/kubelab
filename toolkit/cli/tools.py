@@ -1,5 +1,6 @@
 """Development tools and utilities commands."""
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -302,3 +303,51 @@ def spec_gate(
     else:
         logger.error(message)
     raise typer.Exit(code)
+
+
+@app.command("review-attestation")
+def review_attestation(
+    payload_file: Annotated[
+        Path,
+        typer.Option(
+            "--payload-file",
+            help="File holding a `gh pr view --json ...` payload. A file rather "
+            "than a string, for the same reason spec-gate takes one: a PR body "
+            "re-scanned by the shell has already corrupted a durable artefact here.",
+        ),
+    ],
+    registry: Annotated[Path, typer.Option("--registry", help="Reviewer registry (JSON)")] = Path(
+        "harness/review-attestation.json"
+    ),
+) -> None:
+    """Report whether a PR was actually reviewed, and refuse it if not.
+
+    Exits 0 for attested / exempt / disclosed, 1 for declined / pending, and 2
+    when the state could not be determined. Two is never collapsed into zero:
+    for a gate, "I could not tell" delivered as "fine" is the defect this exists
+    to end.
+    """
+    from toolkit.features import review_attestation as att
+
+    try:
+        reg = att.load_registry(registry)
+        payload = json.loads(payload_file.read_text(encoding="utf-8"))
+        verdict = att.classify(payload, reg)
+    except (att.RegistryError, att.PayloadError, OSError, json.JSONDecodeError) as exc:
+        logger.error(f"review attestation: {exc}")
+        logger.error("Cannot determine whether this PR was reviewed, so it is NOT treated as reviewed.")
+        raise typer.Exit(2) from exc
+
+    if verdict.ok:
+        logger.success(f"{verdict.state} — {verdict.detail}")
+        raise typer.Exit(0)
+
+    escape = reg["escape"]
+    logger.error(f"{verdict.state} — {verdict.detail}")
+    logger.error(
+        "Options: (a) get it reviewed, then re-run — this gate re-runs on new "
+        f'reviewer output; (b) declare the unreviewed merge with the "{escape["label"]}" '
+        f'label AND a non-empty "{escape["section"]}" section in the PR body. '
+        "Proceeding on an unreviewed PR is allowed. Proceeding silently is not."
+    )
+    raise typer.Exit(1)
