@@ -162,6 +162,9 @@ make deploy-apps              # apply Application manifests
 ```bash
 make monitoring-apply         # push monitor config (TLS expiry, health checks)
 make monitoring-export        # export current config to repo
+                              # NOTE: export never writes a push monitor's
+                              # pushToken. SOPS owns it; the seed is public.
+                              # See rpi3-disaster-recovery.md before restoring.
 make monitoring-status        # check Uptime Kuma status
 ```
 
