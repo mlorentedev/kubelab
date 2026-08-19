@@ -23,8 +23,11 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- **Part 1 in the toolkit, not as a shell script.** Upstream is 396 lines of bash. This repo's other gate lives in `toolkit/features/` with its tests beside it, for a stated reason — the negative case then runs on every commit instead of needing a live PR. Porting the shell would have introduced a second pattern for the same job.
+- **Each release shape declared, rather than relaxing the match.** Exemption is exact set equality in both directions and release tooling opens per-app releases, so one superset signature exempts three observed PRs and refuses a fourth. Loosening to a subset would have exempted a PR touching only the manifest; enumerating shapes keeps the strictness, and an undeclared shape fails red.
+- **`model_weak` dropped, not ported.** `auto_describe` is off so it has nothing to do, and the model upstream names is one this repo's reviewer pool rejects on quality grounds.
+- **The inert upstream setting was replaced, not reimplemented.** `ignore_pr_source_branches` is loaded and never consulted on the Action path; the job-level `if:` is the same intent at the layer that runs. A test asserts the setting is not re-added, so the `if:` does not later read as redundant.
+- **Public-repo hardening with no upstream counterpart.** The slash-command path is restricted by author association. Upstream did not need it — its repo is private — and the port would have inherited a condition that is safe there and not here.
 
 ## Promotion candidates
 

@@ -63,9 +63,10 @@ final_update_message = false
 # recommendation is deletion). An instruction ignored 94% of the time is a comment
 # that looks like a control — the exact thing this repo keeps finding.
 extra_instructions = """
-This repository already runs ruff, mypy, pytest, yamllint, markdownlint,
-hadolint and gitleaks in CI, plus a spec-archive gate and a review-attestation
-gate. Do not restate what a linter reports; that is covered, and repeating it is
+This repository already runs ruff, mypy, yamllint, markdownlint, hadolint and
+gitleaks through pre-commit, pytest and a spec-archive gate and a
+review-attestation gate in CI, and GitGuardian secret scanning as a GitHub App.
+Do not restate what a linter reports; that is covered, and repeating it is
 noise that trains the reader to skim.
 
 Spend the budget on what static analysis cannot see:

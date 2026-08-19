@@ -59,11 +59,29 @@ jobs:
     #
     #   `head_ref` is empty on `issue_comment`, so a human typing `/review` on a
     #   release PR still gets one. A human asking is not structural noise.
+    #
+    # - The slash-command path is restricted to OWNER/MEMBER/COLLABORATOR. THIS
+    #   REPO IS PUBLIC and upstream's is not, so the port inherited a condition
+    #   that was safe there and is not here: any GitHub account can comment on a
+    #   public PR, `issue_comment` runs in base-repo context with `NAN_API_KEY`,
+    #   and the unrestricted form would let a stranger spend our inference budget
+    #   and exercise `pull-requests: write` on demand. The association set is
+    #   deliberately the same one `_MEMBER_ASSOCIATIONS` uses in
+    #   `toolkit/features/review_attestation.py` — one definition of "belongs to
+    #   this repository", used by both the gate and the reviewer.
+    #
+    #   Related, acknowledged rather than engineered for: a PR from a FORK gets no
+    #   secrets on `pull_request`, so this job fails there and the attestation gate
+    #   then reports the PR unreviewed. Correct behaviour, and currently
+    #   hypothetical — the last 20 merged PRs have a single author.
     if: >
       (github.event_name == 'pull_request'
         && github.event.pull_request.draft == false
         && !startsWith(github.head_ref, 'release-please--'))
-      || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+      || (github.event_name == 'issue_comment'
+            && github.event.issue.pull_request
+            && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                        github.event.comment.author_association))
     runs-on: ubuntu-latest
     steps:
       - name: PR-Agent
