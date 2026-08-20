@@ -1,0 +1,160 @@
+#cloud-config
+# NOTE: `# yamllint disable-file` does NOT work in a cloud-config file and is
+# deliberately absent. yamllint honours that directive only on the FIRST line,
+# and the first line must be `#cloud-config` for cloud-init to recognise the
+# file at all -- the two requirements are mutually exclusive. So the `missing
+# starting space in comment` warning on line 1 is permanent and harmless (a
+# warning, not an error), and every real yamllint ERROR in this file must be
+# fixed rather than suppressed. infra/terraform/aws/cloud-init.yml carries the
+# directive and it has never done anything there either.
+# KubeLab Argo CD hub bootstrap — Headscale mesh + K3s on a GCP Spot VM (ADR-063).
+#
+# THIS RUNS ON EVERY INSTANCE THE MIG CREATES, NOT ONLY THE FIRST.
+# A managed instance group *recreates* rather than restarts, so each preemption
+# is a from-scratch build with a fresh boot disk, executed unattended and
+# possibly months after this template was written. Every step below therefore
+# has to be safe to run cold, with no operator present and no state carried over.
+#
+# Scope boundary, stated rather than left to inference: this file takes the node
+# to "K3s ready and on the mesh" — the same place the AWS hub's cloud-init
+# reaches. Installing Argo CD itself is GCP-001 finding F1 and lands with the
+# SOPS -> Secret Manager sync it depends on. Until then a recreated hub needs
+# `make deploy-argocd`, exactly as the AWS hub does today.
+#
+# What is already fixed here is finding F2. aws1 baked a long-lived Headscale
+# pre-auth key into user_data, survivable only because user_data was rendered
+# fresh at each deliberate replacement. Under a MIG that key would sit in the
+# template until it expired, after which a recreated VM would silently never
+# join the mesh. So this file stores no pre-auth key: it reads the API key from
+# Secret Manager and MINTS ITS OWN, single-use and short-lived — the same
+# just-in-time pattern every other node in the fleet already uses.
+
+hostname: ${hostname}
+timezone: ${timezone}
+manage_etc_hosts: true
+
+users:
+  - name: ${deploy_user}
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+packages:
+  - curl
+  - jq
+  - ca-certificates
+
+# 2 GB swap, cloud-init-managed so it survives every recreate. Lesson 2026-03-22
+# on the AWS hub: 2 GB of RAM alone OOM-kills sshd under K3s + Argo CD, and swap
+# configured by hand does not survive a replacement.
+swap:
+  filename: /swapfile
+  size: 2147483648
+  maxsize: 2147483648
+
+write_files:
+  # Kept as a file rather than inlined into runcmd so a failed boot can be
+  # re-run by hand: `bash /opt/kubelab/bootstrap.sh` after SSHing in. An
+  # unattended failure is otherwise only readable through serial console output.
+  - path: /opt/kubelab/bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      LOG=/var/log/kubelab-bootstrap.log
+      exec > >(tee -a "$LOG") 2>&1
+      echo "=== kubelab bootstrap $(date -Is) ==="
+
+      # --- Secret Manager, via the instance's own service account -------------
+      # No credential is stored on the instance or in the template's metadata:
+      # the metadata server mints a short-lived token, and the service account
+      # holds secretAccessor on this ONE secret.
+      meta="http://metadata.google.internal/computeMetadata/v1"
+      token=$(curl -sf -H "Metadata-Flavor: Google" \
+        "$meta/instance/service-accounts/default/token" | jq -r .access_token)
+      sm="https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets"
+      api_key=$(curl -sf -H "Authorization: Bearer $token" \
+        "$sm/${headscale_api_key_secret}/versions/latest:access" \
+        | jq -r .payload.data | base64 -d)
+      if [ -z "$api_key" ] || [ "$api_key" = "null" ]; then
+        echo "FATAL: could not read ${headscale_api_key_secret} from Secret Manager" >&2
+        exit 1
+      fi
+      hs_auth=(-H "Authorization: Bearer $api_key")
+
+      # --- Recycle the stale Headscale node ----------------------------------
+      # Headscale names nodes by GIVEN-NAME, and a re-registration while the old
+      # record still exists lands as `${hostname}-<random>`. That breaks the
+      # Ansible inventory, the kubeconfig server URL and the prod Argo CD
+      # EndpointSlice at once — silently, because the old records keep resolving
+      # until they do not. Under a MIG this path runs on every preemption, so it
+      # is load-bearing rather than incidental.
+      node_id=$(curl -sf "$${hs_auth[@]}" "${headscale_url}/api/v1/node" \
+        | jq -r --arg n "${hostname}" '.nodes[] | select(.givenName==$n and .online==false) | .id' | head -1)
+      if [ -n "$node_id" ]; then
+        curl -sf -X DELETE "$${hs_auth[@]}" "${headscale_url}/api/v1/node/$node_id"
+        echo "deleted stale Headscale node $node_id (${hostname})"
+      else
+        echo "no stale Headscale node to recycle"
+      fi
+
+      # --- Mint a single-use pre-auth key (finding F2) ------------------------
+      # Short-lived and non-reusable: it is consumed seconds from now, so its
+      # whole lifetime is this script. Nothing durable holds a mesh credential.
+      expiry=$(date -u -d '+15 minutes' +%Y-%m-%dT%H:%M:%SZ)
+      authkey=$(curl -sf -X POST "$${hs_auth[@]}" -H 'Content-Type: application/json' \
+        -d "{\"user\":\"2\",\"reusable\":false,\"ephemeral\":false,\"expiration\":\"$expiry\"}" \
+        "${headscale_url}/api/v1/preauthkey" | jq -r .preAuthKey.key)
+      if [ -z "$authkey" ] || [ "$authkey" = "null" ]; then
+        echo "FATAL: Headscale refused to mint a pre-auth key" >&2
+        exit 1
+      fi
+
+      # --- Join the mesh ------------------------------------------------------
+      # accept-routes stays TRUE: the hub is remote and reaches the homelab LAN
+      # through rpi4's advertised route. (LAN-resident nodes must set it false —
+      # see CLAUDE.md — but that hazard does not apply here.)
+      curl -fsSL https://tailscale.com/install.sh | sh
+      tailscale up \
+        --login-server=${headscale_url} \
+        --authkey="$authkey" \
+        --hostname=${hostname} \
+        --accept-routes=true \
+        --timeout=60s
+      ts_ip=$(tailscale ip -4)
+      echo "joined mesh as ${hostname} ($ts_ip)"
+
+      # --- K3s ----------------------------------------------------------------
+      # No Traefik and no servicelb: the hub serves no ingress, Argo CD's UI is
+      # exposed through the prod VPS. resolv-conf points at systemd-resolved's
+      # real file because /etc/resolv.conf is the 127.0.0.53 stub, which pods
+      # cannot reach.
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
+        --disable=traefik --disable=servicelb \
+        --write-kubeconfig-mode=644 \
+        --resolv-conf=/run/systemd/resolve/resolv.conf \
+        --tls-san=${hostname}.kubelab.internal \
+        --tls-san="$ts_ip"
+
+      for _ in $(seq 1 60); do
+        kubectl get nodes >/dev/null 2>&1 && break
+        sleep 5
+      done
+      kubectl get nodes >/dev/null 2>&1 || { echo "FATAL: K3s did not become ready" >&2; exit 1; }
+      kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+
+      echo "=== bootstrap complete $(date -Is) ==="
+
+runcmd:
+  # SSH hardening before anything reaches the network. UseDNS off in particular:
+  # a stale PTR record makes sshd hang on connect, which presents as an
+  # unreachable host long before Ansible can say anything useful.
+  - sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - echo 'UseDNS no' >> /etc/ssh/sshd_config
+  - systemctl restart ssh
+  - /opt/kubelab/bootstrap.sh
