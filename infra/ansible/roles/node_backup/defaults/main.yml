@@ -1,0 +1,88 @@
+---
+# node_backup — BACKUP-044 Part 3. Captures node-path state (SQLite databases
+# and their surrounding directory) and ships it to Cloudflare R2 via restic.
+# Sources and R2 config are SSOT in common.yaml (backup.sources, backup.r2.*);
+# this role never hardcodes a path, volume name or credential of its own.
+
+# Where the capture step stages a snapshot before restic ships it. Local disk
+# only, never the destination — a staging dir is not a backup.
+node_backup_staging_dir: /opt/node-backup/staging
+
+# Success sentinel: capture writes this as its LAST action, ship refuses to
+# run without it. A non-empty staging dir proves capture STARTED, not that it
+# finished — a run that dies halfway through the third of four sources leaves
+# a directory that looks perfectly healthy, and shipping it stores a partial
+# backup indistinguishable from a whole one.
+#
+# Deliberately NOT solved with `Requires=` on the ship unit: capture and ship
+# are oneshots without RemainAfterExit, so a hard requirement re-runs capture
+# on every ship start. That would pre-commit Part 4's trigger topology (one
+# timer or two) from here. A sentinel is scheduling-agnostic, and it also
+# covers a script invoked by hand, which no unit dependency ever would. The
+# Requires=/Wants= question stays open for Part 4, where the timers land.
+node_backup_capture_sentinel: "{{ node_backup_staging_dir }}/.capture-complete"
+
+# Per-host source map, passed by the playbook as
+# config.backup.sources[inventory_hostname]. Each entry is keyed by service
+# name and carries EITHER `path` (a bind mount) OR `volume` (a Docker volume,
+# resolved to a host path via `docker volume inspect` at capture time) plus a
+# `sqlite` key naming the live database to snapshot with `sqlite3 .backup`
+# rather than copied as a plain file.
+node_backup_sources: {}
+
+# restic install (BACKUP-044 Part 2 decision): pinned static binary, checksum
+# verified against upstream's own SHA256SUMS, arch resolved per node at
+# Ansible run time — never hardcoded per node. Version is SSOT in
+# common.yaml (backup.r2.restic_version), passed in by the playbook.
+node_backup_restic_version: ""
+node_backup_restic_install_path: /usr/local/bin/restic
+
+# R2 destination (SSOT in common.yaml backup.r2.*, passed in by the
+# playbook). One restic repository per node under the shared bucket prefix,
+# so a compromised node cannot rewrite another's history.
+node_backup_r2_repo_prefix: ""
+node_backup_r2_repository: "{{ node_backup_r2_repo_prefix }}/{{ inventory_hostname }}"
+
+# Credentials, delivered as root-only (0600) files rather than argv or a
+# rendered literal — the kubelab-maintenance-notify.sh precedent (ANSIBLE-038):
+# argv is readable via `ps` for the life of the call, a file is not. Content
+# comes from SOPS (backup.r2.access_key_id/secret_access_key,
+# backup.restic_password) via the playbook's normal decrypt step, never
+# written to this role's own files.
+node_backup_restic_password_file: /opt/node-backup-restic-password
+node_backup_r2_access_key_file: /opt/node-backup-r2-access-key
+node_backup_r2_secret_key_file: /opt/node-backup-r2-secret-key
+
+# The decrypted secret VALUES themselves — no default, the playbook must
+# supply them from SOPS. Left undefined rather than empty-string so a
+# missing wiring fails loudly (StrictUndefined at apply time) instead of
+# writing an empty credential file that looks provisioned and is not.
+
+# Installed script and unit paths/names — shared between tasks/main.yml
+# (which writes them) and the .service.j2 templates (which reference them),
+# so the two can never drift apart silently.
+node_backup_capture_script_path: /opt/node-backup-capture.sh
+node_backup_ship_script_path: /opt/node-backup-ship.sh
+node_backup_capture_service_name: node-backup-capture.service
+node_backup_ship_service_name: node-backup-ship.service
+
+# Retention approved by the operator 2026-08-16 on measured arithmetic
+# (tasks.md "Approved operating parameters") — ~a year of restore points,
+# dedup makes the history nearly free. Frozen here rather than re-derived at
+# call time, so a script invocation always carries the ratified policy.
+node_backup_retention_flags: "--keep-daily 7 --keep-weekly 4 --keep-monthly 6"
+
+# `restic check` runs weekly, not per invocation (16x headroom on repository
+# growth, per the same approved-parameters table) — Part 4's weekly timer
+# instance passes --check; the frequent (hourly/4h) instance does not. The
+# ship script supports both modes now so Part 4 only has to wire the
+# schedule, not change the script.
+
+# RPi3 memory ceiling (Part 0 / R-B: measured floor 16-24M, this is >5x
+# headroom and ~14% of the node's RAM). MemorySwapMax=0 is deliberate, not
+# decoration -- the node has ~900MB swap and a restic that swaps thrashes
+# the monitoring of record instead of failing cleanly. Enforceable only
+# because ANSIBLE-040 (#1101) put the memory cgroup controller on the RPi3;
+# nodes that never needed the fix simply do not set this default.
+node_backup_memory_max: ""
+node_backup_memory_swap_max: "0"

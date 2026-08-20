@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+[Unit]
+Description=BACKUP-044 node-backup ship to R2 ({{ inventory_hostname }})
+# Ship reads what capture staged; running it first would ship stale or
+# missing data. Part 4's timers trigger capture then ship in sequence --
+# this ordering constraint is declared here so it holds regardless of how
+# a future trigger invokes either unit.
+After={{ node_backup_capture_service_name }}
+
+[Service]
+Type=oneshot
+ExecStart={{ node_backup_ship_script_path }}
+{% if node_backup_memory_max %}
+MemoryMax={{ node_backup_memory_max }}
+MemorySwapMax={{ node_backup_memory_swap_max }}
+{% endif %}
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal

@@ -1,12 +1,42 @@
 ---
-- name: Backup VPS Docker volumes and configs
-  hosts: vps
+# BACKUP-044 Part 3. Node-path critical-subset backup: captures the live
+# SQLite databases and surrounding state declared in common.yaml's
+# backup.sources, ships them to Cloudflare R2 via restic. Replaces the old
+# roles/backup (VPS-only, no offsite destination) entirely — see Part 3's
+# task list, which deletes that role in this same change.
+#
+# Usage:
+#   make backup-pvc-node ENV=prod      (placeholder — wired once Part 4 lands
+#                                        a scheduled trigger; today this runs
+#                                        the untimed units directly)
+#   toolkit infra ansible run -p backup
+#
+# TWO plays, split on availability class rather than on function. They are
+# otherwise identical — the vars, pre_tasks and roles below are shared by YAML
+# anchor so the two cannot drift — and the ONLY difference is whether an
+# unreachable host fails the run. That difference is the whole reason for the
+# split, so it is spelled out on each play rather than templated.
+
+- name: Deploy node-path backup to the always-on nodes (BACKUP-044 Part 3)
+  hosts: kubelab-vps,kubelab-rpi3
+  become: true
   gather_facts: true
-
-  vars:
+  # NO ignore_unreachable here, deliberately. These two are always-on
+  # (ADR-028): the VPS carries Headscale and the prod cluster, the RPi3 is the
+  # monitoring of record. If either is unreachable that is a real fault, and a
+  # run that reports success while silently installing nothing on them is the
+  # exact failure this pipeline exists to prevent, arriving through the
+  # deploy path instead of the backup path.
+  vars: &backup_vars
     deploy_env: prod
+    # backup.sources / backup.r2.* are keyed by the SHORT node name
+    # (networking.nodes.<name>), while this inventory's hostnames carry a
+    # "kubelab-" prefix (kubelab-beelink, kubelab-vps, ...) — no existing
+    # convention maps one to the other, so it is derived once here rather
+    # than assumed to match.
+    node_short_name: "{{ inventory_hostname | regex_replace('^kubelab-', '') }}"
 
-  pre_tasks:
+  pre_tasks: &backup_pre_tasks
     - name: Load base config (SSOT)
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
@@ -21,11 +51,51 @@
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
 
-  roles:
-    - role: ../roles/backup
-      tags: [backup]
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Parse decrypted secrets
+      set_fact:
+        secrets: "{{ sops_common.stdout | from_yaml }}"
+      no_log: true
+
+  roles: &backup_roles
+    - role: ../roles/node_backup
+      tags: [backup, node-backup]
       vars:
-        backup_root: "{{ config.networking.vps.backup.root }}"
-        backup_retention: "{{ config.networking.vps.backup.retention }}"
-        backup_filesystem_paths: "{{ config.networking.vps.backup.filesystem_paths }}"
-        backup_exclude_volumes: "{{ config.networking.vps.backup.exclude_volumes }}"
+        node_backup_sources: "{{ config.backup.sources[node_short_name] | default({}) }}"
+        node_backup_restic_version: "{{ config.backup.r2.restic_version }}"
+        node_backup_r2_repo_prefix: "{{ config.backup.r2.repo_prefix }}"
+        node_backup_restic_password: "{{ secrets.backup.restic_password }}"
+        node_backup_r2_access_key: "{{ secrets.backup.r2.access_key_id }}"
+        node_backup_r2_secret_key: "{{ secrets.backup.r2.secret_access_key }}"
+        # RPi3 only (Part 0 / R-B): the sole node whose memory cgroup was
+        # measured against the restic workload. Applying this fleet-wide
+        # would cap nodes never subjected to that measurement.
+        node_backup_memory_max: "{{ '128M' if node_short_name == 'rpi3' else '' }}"
+        node_backup_memory_swap_max: "0"
+
+- name: Deploy node-path backup to the on-demand nodes (BACKUP-044 Part 3)
+  hosts: kubelab-beelink,kubelab-rpi4
+  become: true
+  gather_facts: true
+  # Beelink and RPi4 are on-demand homelab nodes (ADR-028) and are routinely
+  # powered off. Here a dark node is the expected state, not the exceptional
+  # one, so it must not fail the run — `make backup` and its callers would
+  # otherwise treat "the homelab is off" as an error and go red every time
+  # nobody is working.
+  #
+  # This is scoped to these two hosts on purpose: as a play-level keyword it
+  # cannot be made conditional per host, and applied to the always-on play it
+  # would silently swallow a genuinely unreachable VPS.
+  ignore_unreachable: true
+
+  vars: *backup_vars
+  pre_tasks: *backup_pre_tasks
+  roles: *backup_roles

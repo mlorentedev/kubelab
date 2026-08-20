@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=BACKUP-044 node-backup capture ({{ inventory_hostname }})
+
+[Service]
+Type=oneshot
+ExecStart={{ node_backup_capture_script_path }}
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,71 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# BACKUP-044 Part 3 -- ships {{ inventory_hostname }}'s staged capture to R2
+# via restic, one repository per node. Reads FROM the capture unit's staging
+# dir; never touches the live source paths itself.
+#
+# `restic check` is expensive relative to backup/forget (Part 0's approved
+# operating parameters: weekly, not per-run, for 16x headroom on repository
+# growth as it grows). Part 4's weekly timer instance invokes this script
+# with --check; its frequent (hourly/4h) instance does not -- the capability
+# lives here so Part 4 only has to wire the schedule.
+set -euo pipefail
+
+RUN_CHECK=0
+[ "${1:-}" = "--check" ] && RUN_CHECK=1
+
+STAGING="{{ node_backup_staging_dir }}"
+if [ ! -d "$STAGING" ] || [ -z "$(ls -A "$STAGING" 2>/dev/null)" ]; then
+    echo "node-backup-ship: staging dir empty or missing ($STAGING) -- capture did not run first" >&2
+    exit 1
+fi
+
+# A populated staging dir proves capture STARTED. It does not prove capture
+# FINISHED -- a run that dies on the third of four sources leaves a directory
+# that looks entirely healthy, and shipping it stores a partial backup that is
+# indistinguishable from a whole one at restore time. That is the worst
+# failure mode this pipeline has: not an absent backup, which is loud, but a
+# present one that is short.
+#
+# The unit's `After=` only ORDERS the two; it does not require capture to have
+# succeeded. Checked here rather than as `Requires=` on the unit, because a
+# hard unit requirement would re-run capture on every ship start (both are
+# oneshots) and so decide Part 4's timer topology from Part 3. It also catches
+# a hand-invoked script, which no unit dependency would.
+SENTINEL="{{ node_backup_capture_sentinel }}"
+if [ ! -f "$SENTINEL" ]; then
+    echo "node-backup-ship: no capture sentinel ($SENTINEL) -- capture did not COMPLETE; refusing to ship a partial backup" >&2
+    exit 1
+fi
+
+# Credentials from root-owned files, never argv or a literal in this script:
+# ANSIBLE-038's pattern (also used by kubelab-maintenance-notify.sh) -- argv
+# is readable via `ps` / /proc/<pid>/cmdline for the life of the call. restic
+# and the AWS SDK it embeds both read these as plain environment variables,
+# which /proc/<pid>/environ restricts to the owning user (root, here) --
+# consistent with the risk this node already accepts for a root oneshot.
+export RESTIC_PASSWORD="$(cat {{ node_backup_restic_password_file }})"
+export AWS_ACCESS_KEY_ID="$(cat {{ node_backup_r2_access_key_file }})"
+export AWS_SECRET_ACCESS_KEY="$(cat {{ node_backup_r2_secret_key_file }})"
+
+REPO="{{ node_backup_r2_repository }}"
+RESTIC="{{ node_backup_restic_install_path }} --repo $REPO"
+
+# Idempotent bootstrap: `restic init` fails loudly on an already-initialized
+# repository, so probe first rather than treating that failure as success.
+if ! $RESTIC snapshots -q >/dev/null 2>&1; then
+    $RESTIC init
+fi
+
+$RESTIC backup "$STAGING" --tag "{{ inventory_hostname }}"
+
+# Retention approved by the operator 2026-08-16 (tasks.md "Approved operating
+# parameters"): ~a year of restore points, baked in rather than passed at
+# call time so a scheduled run always carries the ratified policy.
+$RESTIC forget {{ node_backup_retention_flags }} --prune
+
+if [ "$RUN_CHECK" -eq 1 ]; then
+    $RESTIC check
+fi
+
+echo "ship complete: $REPO"

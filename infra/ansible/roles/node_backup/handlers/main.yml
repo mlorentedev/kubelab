@@ -1,0 +1,4 @@
+---
+- name: Reload systemd (node_backup)
+  systemd:
+    daemon_reload: true
