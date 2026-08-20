@@ -124,7 +124,11 @@ resource "google_compute_instance_template" "hub" {
     # machine for orphaning reserved addresses. The hub needs no stable public
     # address; every operational path is Tailscale. This is the likeliest single
     # route to the $15 budget cap, designed out rather than merely alerted on.
-    access_config {}
+    access_config {
+      # Explicit, never inherited -- see variables.tf for the reasoning and for
+      # the figure that still needs console confirmation.
+      network_tier = var.network_tier
+    }
   }
 
   service_account {

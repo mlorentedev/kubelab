@@ -80,6 +80,41 @@ variable "k3s_version" {
   default     = "v1.34.4+k3s1"
 }
 
+variable "network_tier" {
+  description = <<-EOT
+    Network Service Tier for the instance's external address. Set EXPLICITLY
+    rather than inherited: the API default is PREMIUM, and a cost-relevant
+    default nobody chose is the defect this variable exists to remove.
+
+    Why STANDARD for this node. The hub's egress is Argo CD polling and syncing
+    two spokes -- the Hetzner VPS and the homelab -- continuously and forever.
+    That is internet egress out of GCP. Reported allowances differ by roughly two
+    orders of magnitude between the tiers (PREMIUM: ~1 GiB free per destination,
+    then ~$0.12/GiB to Europe; STANDARD: a much larger monthly allowance across
+    all regions, then a lower per-GiB rate), which against $0.43/mo of headroom
+    is the difference between free and not.
+
+    What STANDARD gives up is irrelevant here: global load balancing (unused,
+    single region) and Google's backbone in favour of the public internet
+    (Tailscale encrypts the traffic either way, and a 3-minute Argo CD reconcile
+    does not notice the latency difference).
+
+    UNVERIFIED AT TIME OF WRITING: the exact allowances above come from a
+    research pass that could not be confirmed first-hand -- Google's network
+    pricing page renders per-region figures via XHR and truncates for a plain
+    fetch. `docs/runbooks/gcp-hub-bootstrap.md` §6 already requires confirming
+    rates in the console at plan review; this is one of them. If STANDARD turns
+    out not to help, change the value here and the reasoning stays correct.
+  EOT
+  type        = string
+  default     = "STANDARD"
+
+  validation {
+    condition     = contains(["STANDARD", "PREMIUM"], var.network_tier)
+    error_message = "network_tier must be STANDARD or PREMIUM."
+  }
+}
+
 variable "headscale_url" {
   description = "Headscale login server. Public hostname, never the Tailscale address: bootstrap cannot depend on the VPN being up."
   type        = string

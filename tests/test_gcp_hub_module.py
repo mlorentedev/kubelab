@@ -143,6 +143,24 @@ class TestSpotAndPreemption:
             )
 
 
+class TestNetworkTierIsChosenNotInherited:
+    """A cost-relevant default nobody decided is the defect, whichever value wins."""
+
+    def test_network_tier_is_set_explicitly(self, tf: str) -> None:
+        assert re.search(r"network_tier\s*=", tf), (
+            "network_tier must be set on access_config, not left to the PREMIUM "
+            "API default. The hub's egress is Argo CD polling two spokes forever, "
+            "and the reported free allowances differ by roughly two orders of "
+            "magnitude between the tiers -- against $0.43/mo of headroom that is "
+            "the difference between free and not."
+        )
+
+    def test_network_tier_default_is_a_valid_tier(self, tf: str) -> None:
+        assert _var_default(tf, "network_tier") in {"STANDARD", "PREMIUM"}, (
+            "network_tier must default to STANDARD or PREMIUM"
+        )
+
+
 class TestNoReservedAddress:
     """A reserved-but-unattached IP costs 4x the attached Spot rate."""
 
