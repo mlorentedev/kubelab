@@ -66,6 +66,7 @@ VALID_LOCATIONS = {"always-on", "on-demand"}
 ADR_028_TIERS = {
     "vps": "always-on",
     "aws": "always-on",
+    "gcp": "always-on",
     "rpi3": "always-on",
     "ace1": "on-demand",
     "ace2": "on-demand",
@@ -84,14 +85,18 @@ def common() -> dict[str, Any]:
 def hosts(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Every host in the registry, flattened.
 
-    `vps` and `aws` are siblings of `nodes` rather than members of it, which is
-    the same shape SSOT-014a's SSH-user inference keys off. Flattening here means
-    a new cloud host cannot escape the completeness assertion by virtue of living
-    outside `networking.nodes`.
+    `vps`, `aws` and `gcp` are siblings of `nodes` rather than members of it,
+    which is the same shape SSOT-014a's SSH-user inference keys off.
+
+    The tuple below is the escape this docstring used to claim did not exist: a
+    new cloud host does not live under `networking.nodes`, so it is covered only
+    if someone remembers to name it HERE. Adding `gcp` for GCP-001 is that
+    remembering, performed by hand for the third time -- which is the concrete
+    cost SSOT-015 (#1182) exists to remove.
     """
     net = common["networking"]
     flat: dict[str, dict[str, Any]] = dict(net["nodes"])
-    for key in ("vps", "aws"):
+    for key in ("vps", "aws", "gcp"):
         if key in net:
             flat[key] = net[key]
     return flat

@@ -43,7 +43,9 @@ def common() -> dict[str, Any]:
 def hosts(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
     net = common["networking"]
     flat: dict[str, dict[str, Any]] = dict(net["nodes"])
-    for key in ("vps", "aws"):
+    # See tests/test_node_location_axis.py for why this tuple is hand-maintained
+    # and why that is the defect SSOT-015 (#1182) tracks.
+    for key in ("vps", "aws", "gcp"):
         if key in net:
             flat[key] = net[key]
     return flat
