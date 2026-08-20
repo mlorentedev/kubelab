@@ -51,4 +51,16 @@ sqlite3 "$SRC_DIR_{{ service }}/{{ src.sqlite }}" ".backup '$STAGING/{{ service 
     -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
 {% endfor %}
 
+# Success sentinel, written LAST and reached only if every source above
+# completed: `set -e` aborts this script before this line on any failure, so
+# the file's presence is the only in-band evidence that the capture is whole
+# rather than partial. Ship refuses without it.
+#
+# A stale sentinel cannot survive a failed re-run -- this script `rm -rf`s the
+# staging dir at the top, so a capture that dies halfway leaves a populated
+# directory with NO sentinel, which is exactly the state ship must reject.
+# It ships inside the snapshot too, which is a small bonus: a restored
+# snapshot carries its own proof that the capture behind it finished.
+touch "{{ node_backup_capture_sentinel }}"
+
 echo "capture complete: $(du -sh "$STAGING" | cut -f1)"

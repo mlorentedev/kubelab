@@ -20,6 +20,24 @@ if [ ! -d "$STAGING" ] || [ -z "$(ls -A "$STAGING" 2>/dev/null)" ]; then
     exit 1
 fi
 
+# A populated staging dir proves capture STARTED. It does not prove capture
+# FINISHED -- a run that dies on the third of four sources leaves a directory
+# that looks entirely healthy, and shipping it stores a partial backup that is
+# indistinguishable from a whole one at restore time. That is the worst
+# failure mode this pipeline has: not an absent backup, which is loud, but a
+# present one that is short.
+#
+# The unit's `After=` only ORDERS the two; it does not require capture to have
+# succeeded. Checked here rather than as `Requires=` on the unit, because a
+# hard unit requirement would re-run capture on every ship start (both are
+# oneshots) and so decide Part 4's timer topology from Part 3. It also catches
+# a hand-invoked script, which no unit dependency would.
+SENTINEL="{{ node_backup_capture_sentinel }}"
+if [ ! -f "$SENTINEL" ]; then
+    echo "node-backup-ship: no capture sentinel ($SENTINEL) -- capture did not COMPLETE; refusing to ship a partial backup" >&2
+    exit 1
+fi
+
 # Credentials from root-owned files, never argv or a literal in this script:
 # ANSIBLE-038's pattern (also used by kubelab-maintenance-notify.sh) -- argv
 # is readable via `ps` / /proc/<pid>/cmdline for the life of the call. restic

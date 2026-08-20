@@ -8,6 +8,20 @@
 # only, never the destination — a staging dir is not a backup.
 node_backup_staging_dir: /opt/node-backup/staging
 
+# Success sentinel: capture writes this as its LAST action, ship refuses to
+# run without it. A non-empty staging dir proves capture STARTED, not that it
+# finished — a run that dies halfway through the third of four sources leaves
+# a directory that looks perfectly healthy, and shipping it stores a partial
+# backup indistinguishable from a whole one.
+#
+# Deliberately NOT solved with `Requires=` on the ship unit: capture and ship
+# are oneshots without RemainAfterExit, so a hard requirement re-runs capture
+# on every ship start. That would pre-commit Part 4's trigger topology (one
+# timer or two) from here. A sentinel is scheduling-agnostic, and it also
+# covers a script invoked by hand, which no unit dependency ever would. The
+# Requires=/Wants= question stays open for Part 4, where the timers land.
+node_backup_capture_sentinel: "{{ node_backup_staging_dir }}/.capture-complete"
+
 # Per-host source map, passed by the playbook as
 # config.backup.sources[inventory_hostname]. Each entry is keyed by service
 # name and carries EITHER `path` (a bind mount) OR `volume` (a Docker volume,

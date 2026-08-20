@@ -220,3 +220,100 @@ def test_memory_cap_applies_with_swap_disabled_when_set():
 def test_no_timer_unit_exists_yet():
     """Part 3 scope guard: Part 4 owns scheduling, not this part."""
     assert not any(TEMPLATES.glob("*.timer.j2"))
+
+
+# --- the partial-backup guard ----------------------------------------------
+#
+# A populated staging dir proves capture STARTED, not that it FINISHED. The
+# unit's `After=` orders the two and requires nothing, so without a sentinel a
+# capture that dies on its third of four sources ships a short backup that
+# reads as a whole one at restore time. Reported by review on #1179.
+
+
+def test_capture_writes_the_success_sentinel_last():
+    """Written after every source, so `set -e` guarantees its absence on failure."""
+    script = _render(
+        "node-backup-capture.sh.j2",
+        node_backup_sources={**VPS_SOURCES, **RPI3_SOURCES},
+    )
+    sentinel = _defaults()["node_backup_capture_sentinel"]
+    # The default is itself a Jinja expression over the staging dir; compare on
+    # the rendered basename so this test does not re-implement the template.
+    assert ".capture-complete" in str(sentinel)
+    touch_at = script.index("touch ")
+    # Must come after the LAST piece of capture work, not merely appear.
+    assert touch_at > script.rindex("sqlite3 ")
+    assert touch_at > script.rindex("cp -a --parents")
+
+
+def test_ship_refuses_to_run_without_the_capture_sentinel():
+    script = _render("node-backup-ship.sh.j2")
+    assert "refusing to ship a partial backup" in script
+    m = re.search(r'if \[ ! -f "\$SENTINEL" \]; then\n(.*?)\nfi', script, re.DOTALL)
+    assert m and "exit 1" in m.group(1)
+
+
+def test_sentinel_path_is_the_same_variable_on_both_sides():
+    """Same drift guard as the credential files: the writer (capture) and the
+    reader (ship) must reference one variable, not a duplicated literal."""
+    ref = "{{ node_backup_capture_sentinel }}"
+    assert ref in (TEMPLATES / "node-backup-capture.sh.j2").read_text()
+    assert ref in (TEMPLATES / "node-backup-ship.sh.j2").read_text()
+
+
+def test_ship_unit_does_not_hard_require_capture():
+    """`Requires=` would re-run capture on every ship start — both are oneshots
+    without RemainAfterExit — which decides Part 4's timer topology from here.
+    The sentinel covers the failure instead; this asserts the deferral holds."""
+    unit = _render("node-backup-ship.service.j2")
+    assert "Requires=" not in unit
+    assert "BindsTo=" not in unit
+
+
+# --- the playbook's availability split --------------------------------------
+
+
+def _plays() -> list[dict]:
+    return yaml.safe_load((REPO / "infra/ansible/playbooks/backup.yml").read_text())
+
+
+def test_always_on_nodes_do_not_ignore_unreachable():
+    """VPS and RPi3 are always-on (ADR-028). An unreachable one is a real
+    fault, and a run that reports success having installed nothing on them is
+    this pipeline's own failure mode arriving via the deploy path."""
+    always_on = [p for p in _plays() if "kubelab-vps" in p["hosts"]]
+    assert len(always_on) == 1
+    assert always_on[0].get("ignore_unreachable") is not True
+    assert "kubelab-rpi3" in always_on[0]["hosts"]
+
+
+def test_on_demand_nodes_ignore_unreachable():
+    """Beelink and RPi4 are powered off routinely; dark is the expected state."""
+    on_demand = [p for p in _plays() if "kubelab-beelink" in p["hosts"]]
+    assert len(on_demand) == 1
+    assert on_demand[0]["ignore_unreachable"] is True
+    assert "kubelab-rpi4" in on_demand[0]["hosts"]
+
+
+def test_both_plays_share_one_role_invocation():
+    """The split is about reachability ONLY. If the two plays ever carry
+    different role vars, a node's backup silently depends on which availability
+    class it landed in — the YAML anchors exist to make that impossible."""
+    plays = _plays()
+    assert len(plays) == 2
+    assert plays[0]["roles"] == plays[1]["roles"]
+    assert plays[0]["vars"] == plays[1]["vars"]
+    assert plays[0]["pre_tasks"] == plays[1]["pre_tasks"]
+
+
+def test_every_node_with_declared_sources_is_covered_by_a_play():
+    """The split must not drop a node. Reads common.yaml, so adding a source
+    without adding its host fails here rather than in six months of silence."""
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    declared = set(common.get("backup", {}).get("sources", {}))
+    targeted = {
+        host.replace("kubelab-", "")
+        for play in _plays()
+        for host in play["hosts"].split(",")
+    }
+    assert declared <= targeted, f"no play targets: {declared - targeted}"
