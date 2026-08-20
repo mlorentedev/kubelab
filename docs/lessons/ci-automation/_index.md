@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-19 lessons, newest first. Back to [all categories](../_index.md).
+20 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 359 | [A red check can be history rather than judgement — re-trigger before investigating](lesson-359-a-red-check-can-be-history-rather-than-jud.md) | 2026-08-20 |
 | 353 | [A reviewer reports its own status, and a skipped review is not a failed one](lesson-353-a-reviewer-reports-its-own-status-and-a-skip.md) | 2026-08-19 |
 | 348 | [Prose that contains a closing keyword is a closing keyword](lesson-348-prose-that-contains-a-closing-keyword-is-a-cl.md) | 2026-08-18 |
 | 002 | [`gh pr edit` fails on a Projects-classic field, applies nothing, and blames Projects](lesson-002-gh-pr-edit-fails-on-a-projects-classic-field-.md) | 2026-08-17 |
