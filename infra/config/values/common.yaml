@@ -946,6 +946,18 @@ backup:
     # with the per-node repository name appended (one repository per node, so a
     # compromised node cannot rewrite another's history).
     repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
+    # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
+    # get_url + a checksum verified against upstream's own SHA256SUMS, not a
+    # floating "latest" download. Arch is resolved per node at Ansible run
+    # time via ansible_facts.architecture (the docker/dev_node role idiom),
+    # not hardcoded per node — a Pi reimaged to a different bitness must not
+    # silently pull the wrong binary. No distro package: absent from the
+    # RPi3's apt candidates, and a package loses the same version-pin control
+    # every other image in this file has. No container: nothing here runs on
+    # Kubernetes and none of the four backup targets are containerized
+    # workloads a Helm chart could reach — restic is node state, same layer
+    # as the systemd timer that invokes it.
+    restic_version: "0.19.1"  # tag is v0.19.1; release asset names drop the "v"
   sources:
     beelink:
       gitea:
