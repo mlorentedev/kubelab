@@ -116,7 +116,14 @@ The selection bar was **equal-or-better than `t4g.small` on every axis**, not
 | RAM | 2 GB | 2 GB | equal |
 | Disk IOPS @ 12 GB | 3,000 (gp3 flat baseline) | 3,072 (`pd-balanced` 3,000 floor + 6/GB) | equal |
 | External IPv4 | $0.005/hr | $0.0025/hr (Spot rate) | better |
-| Cost | $12.75/mo | $9.57/mo | better |
+| Cost | $12.75/mo | $9.57/mo + egress | better |
+
+Egress is listed rather than folded into the total because it is the one line
+that is not yet measured — see D8. The $9.57 covers compute ($6.42), external
+IPv4 at the Spot rate ($1.83) and the boot disk ($1.32). Every other GCP service
+the design consumes — Secret Manager, Pub/Sub, the kill-switch function — sits
+inside an Always Free allowance and is recorded at $0 with its allowance named,
+per D8's second rule.
 
 Rejected alternatives are recorded below. The two that matter: `e2-medium`
 (4 GB) was rejected as scope creep, not as a bad option — it is the natural
@@ -294,6 +301,46 @@ data-plane project.
 Budget data is not real-time; Pub/Sub budget notifications arrive on the order of
 tens of minutes, and cost data itself lags. The cap is a backstop measured in
 hours, not a rate limiter.
+
+### D8 — Every GCP line, including the free ones, is named — and egress was not
+
+**Correction to this ADR, recorded rather than silently patched.** D4 requires
+cost to be stated as a derivation with every line item named, so that an input
+which moves is visible instead of silent. This ADR's own derivation named three
+lines — compute, external IPv4, boot disk — and **omitted network egress
+entirely**. That is precisely the failure mode D4 exists to prevent, committed by
+the document stating it.
+
+The omission is not cosmetic. The hub's traffic *is* egress: Argo CD polls and
+syncs two spokes — the Hetzner VPS and the homelab — continuously, and that
+leaves GCP. The two Network Service Tiers differ by roughly **two orders of
+magnitude** in free allowance (Premium: ~1 GiB per destination, then ~$0.12/GiB
+to Europe; Standard: a 200 GiB monthly allowance across all regions), against
+**$0.43/mo of headroom**.
+
+Two rules follow, and the second is the general one:
+
+1. **The network tier is chosen, never inherited.** The module sets
+   `network_tier` explicitly, with a test asserting it is set rather than left to
+   the `PREMIUM` API default. The point holds whichever tier wins: a
+   cost-relevant value taken from a vendor default is invisible until the bill
+   arrives. The allowance figures are flagged UNVERIFIED at the variable itself
+   and must be confirmed in the console at plan review — Google's network pricing
+   page renders per-region values via XHR and truncates for a plain fetch.
+
+2. **A line item at $0 is still a line item.** When a service is free, its row
+   says `$0` **and names the allowance it sits inside**, so that exhausting the
+   allowance shows up as a row that stopped matching reality. An absent row is
+   how egress went missing here.
+
+The full map of which GCP services are free, which are traps, and under what
+conditions, is
+[`docs/architecture/infra/gcp-cost-envelope.md`](../architecture/infra/gcp-cost-envelope.md).
+Its short form: **the Always Free tier is generous in the control plane and
+hostile in the data plane**, which matches this architecture — data lives on
+Hetzner and R2 (ADR-049), and GCP hosts only the hub, which is control plane in
+its entirety. A GCP proposal that moves data is fighting the grain and must say
+so.
 
 ## Consequences
 
