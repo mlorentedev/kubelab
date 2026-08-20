@@ -74,4 +74,4 @@ transformation of the value under test. A test that derives the expected value
 from the actual value passes by construction, and reports coverage it does not
 have.
 
-**Tags**: `#ansible` `#backup` `#silent-failure` `#pr-1179` `#pr-1185`
+**Tags**: `#ansible` `#backup` `#silent-failure` `#pr-1179` `#pr-1186`
