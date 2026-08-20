@@ -284,15 +284,15 @@ def test_always_on_nodes_do_not_ignore_unreachable():
     always_on = [p for p in _plays() if "kubelab-vps" in p["hosts"]]
     assert len(always_on) == 1
     assert always_on[0].get("ignore_unreachable") is not True
-    assert "kubelab-rpi3" in always_on[0]["hosts"]
+    assert "rpi3" in always_on[0]["hosts"]
 
 
 def test_on_demand_nodes_ignore_unreachable():
     """Beelink and RPi4 are powered off routinely; dark is the expected state."""
-    on_demand = [p for p in _plays() if "kubelab-beelink" in p["hosts"]]
+    on_demand = [p for p in _plays() if "beelink" in p["hosts"]]
     assert len(on_demand) == 1
     assert on_demand[0]["ignore_unreachable"] is True
-    assert "kubelab-rpi4" in on_demand[0]["hosts"]
+    assert "rpi4" in on_demand[0]["hosts"]
 
 
 def test_both_plays_share_one_role_invocation():
@@ -306,14 +306,67 @@ def test_both_plays_share_one_role_invocation():
     assert plays[0]["pre_tasks"] == plays[1]["pre_tasks"]
 
 
-def test_every_node_with_declared_sources_is_covered_by_a_play():
-    """The split must not drop a node. Reads common.yaml, so adding a source
-    without adding its host fails here rather than in six months of silence."""
+def _inventory_hostnames() -> set[str]:
+    """The names the generated inventory will actually carry.
+
+    Mirrors `generator_ansible.py`: each node's inventory name is
+    `networking.nodes.<key>.hostname`, defaulting to the key, and the VPS
+    defaults to `kubelab-vps`. It is a MIRROR, so the test below also asserts
+    the generator still derives names that way — a silent change there would
+    otherwise leave this passing against a rule nobody follows any more.
+    """
     common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    net = common["networking"]
+    names = {key: node.get("hostname", key) for key, node in net.get("nodes", {}).items()}
+    if "vps" in net:
+        names["vps"] = net["vps"].get("hostname", "kubelab-vps")
+    return set(names.values())
+
+
+def test_the_mirror_of_the_generator_is_still_accurate():
+    source = (REPO / "toolkit/features/generator_ansible.py").read_text()
+    assert 'node.get("hostname", _node_key)' in source
+    assert 'vps.get("hostname", "kubelab-vps")' in source
+
+
+def test_every_play_targets_hosts_that_exist_in_the_inventory():
+    """The defect this replaces a test for, rather than the test it replaces.
+
+    The previous version stripped `kubelab-` from the play patterns and
+    compared the result to `backup.sources`. That compares the file to its own
+    derivation and can only pass: `kubelab-beelink` stripped to `beelink`,
+    which is declared, so it went green while `beelink` was the name the
+    inventory actually used and the pattern matched NOTHING. Three of four
+    nodes were silently skipped and the run reported success.
+
+    So this asserts against the inventory's namespace instead — the artifact
+    Ansible resolves against — not against a transformation of the patterns.
+    """
+    inventory = _inventory_hostnames()
+    for play in _plays():
+        for pattern in play["hosts"].split(","):
+            assert pattern in inventory, (
+                f"play {play['name']!r} targets {pattern!r}, which is not an "
+                f"inventory hostname. Known: {sorted(inventory)}"
+            )
+
+
+def test_every_node_with_declared_sources_is_covered_by_a_play():
+    """The split must not drop a node that has state to back up.
+
+    Now goes the other way round from the patterns: `backup.sources` keys are
+    short node names, and the play patterns are inventory hostnames, so this
+    maps sources -> hostname through the generator's own rule rather than
+    guessing a string transformation.
+    """
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    net = common["networking"]
     declared = set(common.get("backup", {}).get("sources", {}))
-    targeted = {
-        host.replace("kubelab-", "")
-        for play in _plays()
-        for host in play["hosts"].split(",")
-    }
-    assert declared <= targeted, f"no play targets: {declared - targeted}"
+    targeted = {p for play in _plays() for p in play["hosts"].split(",")}
+    for short in declared:
+        node = net.get("nodes", {}).get(short) or (net.get("vps") if short == "vps" else None)
+        assert node is not None, f"backup.sources declares {short!r}, absent from networking.*"
+        hostname = node.get("hostname", "kubelab-vps" if short == "vps" else short)
+        assert hostname in targeted, (
+            f"{short!r} declares backup sources but no play targets {hostname!r}"
+        )

@@ -18,7 +18,7 @@
 # split, so it is spelled out on each play rather than templated.
 
 - name: Deploy node-path backup to the always-on nodes (BACKUP-044 Part 3)
-  hosts: kubelab-vps,kubelab-rpi3
+  hosts: kubelab-vps,rpi3
   become: true
   gather_facts: true
   # NO ignore_unreachable here, deliberately. These two are always-on
@@ -30,10 +30,20 @@
   vars: &backup_vars
     deploy_env: prod
     # backup.sources / backup.r2.* are keyed by the SHORT node name
-    # (networking.nodes.<name>), while this inventory's hostnames carry a
-    # "kubelab-" prefix (kubelab-beelink, kubelab-vps, ...) — no existing
-    # convention maps one to the other, so it is derived once here rather
-    # than assumed to match.
+    # (networking.nodes.<name>). The inventory is NOT uniformly prefixed:
+    # `kubelab-vps` carries one and `beelink`, `rpi3`, `rpi4` do not.
+    #
+    # An earlier version of this comment claimed the opposite — that every
+    # inventory hostname carries the prefix — and the `hosts:` patterns below
+    # were written from that claim. Three of the four then matched nothing, so
+    # the on-demand play ran against ZERO hosts and the run still reported
+    # success. Gitea, the consumer this spec exists for, was not backed up.
+    # A false assumption written down as documentation is what made it survive
+    # review.
+    #
+    # The derivation itself was always right and is unchanged: the regex is a
+    # no-op on an unprefixed name, so it yields the correct short name for
+    # both shapes.
     node_short_name: "{{ inventory_hostname | regex_replace('^kubelab-', '') }}"
 
   pre_tasks: &backup_pre_tasks
@@ -82,7 +92,7 @@
         node_backup_memory_swap_max: "0"
 
 - name: Deploy node-path backup to the on-demand nodes (BACKUP-044 Part 3)
-  hosts: kubelab-beelink,kubelab-rpi4
+  hosts: beelink,rpi4
   become: true
   gather_facts: true
   # Beelink and RPi4 are on-demand homelab nodes (ADR-028) and are routinely
