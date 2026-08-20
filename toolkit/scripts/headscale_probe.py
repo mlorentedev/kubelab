@@ -64,11 +64,28 @@ def preserved_flows(net: dict[str, Any]) -> list[Flow]:
 
 
 def _ssh_target(net: dict[str, Any], node: str) -> str:
-    """user@tailscale_ip for a node, using the SSOT ssh_users (cloud vs homelab)."""
+    """user@address for a node, using the SSOT ssh_users (cloud vs homelab).
+
+    Cloud nodes prefer ``tailscale_dns`` over ``tailscale_ip``, mirroring
+    ``generator_ansible.py`` — a cloud node's Tailscale address is a cache, not an
+    identity. ``common.yaml`` says so where the value lives: "Tailscale IP rotates on
+    every Spot replacement. MagicDNS (ADR-025) is the stable identity." aws1 moved
+    100.64.0.4 -> 100.64.0.7 on the 2026-05-06 replacement.
+
+    Reading the literal made a rotation look like an outage: the probe SSHes to an
+    address the hub no longer holds and reports ``hub->spoke :6443 (prod)`` — a
+    *required* flow — as failing. Rare enough to absorb while replacements were manual;
+    routine once the hub sits behind a managed instance group that self-heals by
+    recreating the VM (GCP-001).
+
+    SSH resolves the name itself, so this needs no ``dig`` and adds no dependency.
+    Homelab nodes keep the literal: their MagicDNS given-names diverge from their
+    ``hostname`` field in this fleet (CLAUDE.md), so a name is not a safe substitute there.
+    """
     users = net["ssh_users"]
     if node in ("vps", "aws1", "aws"):
-        ip = net["vps"]["tailscale_ip"] if node == "vps" else net["aws"]["tailscale_ip"]
-        return f"{users['cloud']}@{ip}"
+        cloud = net["vps"] if node == "vps" else net["aws"]
+        return f"{users['cloud']}@{cloud.get('tailscale_dns') or cloud['tailscale_ip']}"
     return f"{users['homelab']}@{net['nodes'][node]['tailscale_ip']}"
 
 

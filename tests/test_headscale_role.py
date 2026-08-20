@@ -24,7 +24,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 # Render helpers are imported from the single-source renderer (also used by the
 # CI gate `make check-headscale-policy`) so tests and CI never drift.
-from toolkit.scripts.headscale_probe import run_probe
+from toolkit.scripts.headscale_probe import _ssh_target, run_probe
 from toolkit.scripts.render_headscale_policy import build_hosts as _hosts_from_ssot
 from toolkit.scripts.render_headscale_policy import render_policy as _render_policy
 
@@ -222,8 +222,10 @@ class TestHeadscaleProbe:
         assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({ace1}))) == 0
 
     def test_required_source_down_fails(self) -> None:
-        # aws1 is the source of a REQUIRED flow (hub->spoke :6443 prod) → cannot be skipped
-        aws1 = _net()["aws"]["tailscale_ip"]
+        # aws1 is the source of a REQUIRED flow (hub->spoke :6443 prod) → cannot be skipped.
+        # Addressed by MagicDNS name, not by IP: the hub's Tailscale address rotates on
+        # every re-registration (common.yaml networking.aws), so the literal is a cache.
+        aws1 = _net()["aws"]["tailscale_dns"]
         assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({aws1}))) == 1
 
     def test_optional_broken_flow_is_logged_not_fatal(self) -> None:
@@ -236,6 +238,40 @@ class TestHeadscaleProbe:
         # a required flow failing (hub->spoke prod, vps:6443) IS fatal
         vps = _net()["vps"]["tailscale_ip"]
         assert run_probe(_net(), runner=_fake_runner(blocked=frozenset({f"{vps}:6443"}))) == 1
+
+
+class TestProbeAddressesCloudNodesByName:
+    """A cloud node's Tailscale IP is a cache, not an identity — address it by MagicDNS.
+
+    `common.yaml` says so at the source (``networking.aws``): "Tailscale IP rotates on
+    every Spot replacement. MagicDNS (ADR-025) is the stable identity — prefer
+    tailscale_dns over tailscale_ip in IaC." It has already happened: aws1 moved
+    100.64.0.4 -> 100.64.0.7 on the 2026-05-06 replacement.
+
+    The probe read the literal anyway, so a rotation made it SSH to an address the hub
+    no longer holds and report `hub->spoke :6443 (prod)` — a required flow — as failing
+    when it was not. GCP-001 puts the hub behind a managed instance group where every
+    preemption self-heals by recreating the VM, so re-registration stops being a rare
+    supervised event; a stale literal would turn into routine false alarms on the one
+    flow the probe exists to guarantee.
+    """
+
+    def test_cloud_node_is_addressed_by_magicdns_name(self) -> None:
+        net = _net()
+        assert _ssh_target(net, "aws1") == f"{net['ssh_users']['cloud']}@{net['aws']['tailscale_dns']}"
+
+    def test_no_cloud_node_declaring_a_name_is_addressed_by_ip_literal(self) -> None:
+        # Regression guard: the literal must not quietly come back for any cloud node
+        # that declares a name. Asserting the absence of the pattern, not one call site.
+        net = _net()
+        for key, alias in (("vps", "vps"), ("aws", "aws1")):
+            if not net[key].get("tailscale_dns"):
+                continue  # no name declared (vps today) — the literal is all there is
+            target = _ssh_target(net, alias)
+            assert not re.fullmatch(r".*@\d{1,3}(\.\d{1,3}){3}", target), (
+                f"_ssh_target({alias!r}) returned an IP literal ({target}) while "
+                f"networking.{key}.tailscale_dns exists — the IP rotates, the name does not"
+            )
 
 
 class TestAutoRevert:

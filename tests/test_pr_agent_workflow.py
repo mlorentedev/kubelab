@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import yaml
 
@@ -173,3 +174,46 @@ def test_the_gate_does_not_cancel_on_events_that_add_evidence() -> None:
         assert action in cancel, f"{action} would still cancel an in-flight run"
     # A push must still cancel: it replaces the commit being judged.
     assert "synchronize" not in cancel
+
+
+def test_an_unreviewed_pr_does_not_fail_the_gate_job() -> None:
+    """The verdict belongs in the commit status, which branch protection reads
+    and which already blocks the merge. Failing the job too republished it into
+    the checks list, where red means "something is broken" — so the normal
+    state of a healthy, not-yet-reviewed PR was a red job.
+
+    That is how a red signal stops being read. This gate exists because a green
+    check nobody questioned let 35 of 40 PRs merge unreviewed; buying that back
+    with indifference toward red is not a trade worth making.
+    """
+    steps = _load(GATE)["jobs"]["attestation"]["steps"]
+    final = next(s for s in steps if "could not answer" in s.get("name", ""))
+    run = final["run"]
+    # The exit-0 condition is pinned EXACTLY, not matched as a substring.
+    #
+    # Substring assertions were the first version here and review caught them:
+    # widening the guard to `... || [ "$CODE" = "2" ]` keeps every substring
+    # present, so the tests stay green while `::error::` becomes unreachable
+    # and the "could not determine" case goes quietly green — the one thing
+    # this change says must stay loud. `assert 'exit 0' in run` was worse than
+    # weak, it was vacuous: the pre-fix shape `[ "$CODE" = "0" ] && exit 0`
+    # contained it too, so it could not detect the regression its own comment
+    # named.
+    condition = re.search(r"if (.+); then\n\s*exit 0", run)
+    assert condition, "no exit-0 guard found at all"
+    assert condition.group(1) == '[ "$CODE" = "0" ] || [ "$CODE" = "1" ]', (
+        "codes 0 and 1 are verdicts and must not fail the job; anything else "
+        f"must. Found: {condition.group(1)}"
+    )
+
+
+def test_a_gate_that_cannot_answer_still_fails_the_job() -> None:
+    """Code 2 is different in kind from code 1: the classifier could not
+    determine the state at all. That is the gate malfunctioning rather than
+    reporting, and it is the one case the status alone does not surface — 'I
+    could not tell' delivered as silence is the defect this mechanism exists
+    to end."""
+    steps = _load(GATE)["jobs"]["attestation"]["steps"]
+    final = next(s for s in steps if "could not answer" in s.get("name", ""))
+    assert 'exit "$CODE"' in final["run"], "a non-verdict exit code must still fail"
+    assert "::error::" in final["run"], "and must say so in the log"

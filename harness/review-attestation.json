@@ -37,8 +37,10 @@
       "declined_markers": [
         "rate limited by coderabbit.ai"
       ],
-      "review_markers": [],
-      "why": "Per-account PR review limit, reached routinely because parallel sessions drain it. NOT a free-tier problem, and an earlier framing of #1140 said it was: the account is Pro Plus and CodeRabbit's own footer reads 'It's free for OSS'. Measured on #1155, where the notice rendered while `gh pr checks` reported `CodeRabbit  pass`. The marker is the HTML comment CodeRabbit emits around the notice, not its prose."
+      "review_markers": [
+        "No actionable comments were generated in the recent review"
+      ],
+      "why": "Per-account PR review limit, reached routinely because parallel sessions drain it. NOT a free-tier problem, and an earlier framing of #1140 said it was: the account is Pro Plus and CodeRabbit's own footer reads 'It's free for OSS'. Measured on #1155, where the notice rendered while `gh pr checks` reported `CodeRabbit  pass`. The marker is the HTML comment CodeRabbit emits around the notice, not its prose. REVIEW MARKER ADDED 2026-08-20 (#1187): CodeRabbit opens a formal review only when it has something to say, so a PR it reviewed and found CLEAN produced no reviews[] entry and read as unreviewed — the gate could attest from CodeRabbit only when CodeRabbit had complaints, which blocks the clean PRs and passes the ones with findings. The marker is its clean-review verdict and NOT its walkthrough: the walkthrough is posted whether or not a review ran, while this string asserts the review happened ('in the recent review'). The original 'CodeRabbit's auto-summary comment is not a review' reasoning stands for the walkthrough and was over-generalised to every comment."
     },
     {
       "login": "chatgpt-codex-connector",
