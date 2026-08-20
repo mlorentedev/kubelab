@@ -10,7 +10,7 @@ created: "2026-08-20"
 >
 > **Two PRs.** PR 1 is substrate that stands on its own merits and does not
 > mention GCP; PR 2 is the migration. Split per AGENTS.md's ~300-line cap and
-> because F3 is a live defect that should not wait on a migration to land.
+> because F3's probe defect is live today and should not wait on a migration.
 
 ## Design decisions this breakdown resolves
 
@@ -30,11 +30,14 @@ template was written. Every failure inside it is a silent hub outage. It is
 therefore tested (static assertions in PR 2, live in Phase 4) before the MIG is
 trusted, not after.
 
-**4. F3 is in scope here despite belonging to #1182.** Routing the Headscale ACL
-render through `resolve_magicdns` is load-bearing for AC4: after the first
-IP-rotating preemption the ACL still names the old address and hub→spoke `:6443`
-is blocked. The rest of #1182's generic-lookup refactor stays out — see
-`proposal.md`'s note on keeping the column-3 measurement readable.
+**4. F3's ACL scope was retracted after checking the policy template.** An earlier
+draft put "route the Headscale ACL render through `resolve_magicdns`" in PR 1,
+justified as load-bearing for AC4. **The template falsified it**: no ACL rule
+references the `aws1` alias, and hub→spoke rides rule 1, which is user-based and
+IP-independent. PR 1 therefore shrinks to the one consumer that genuinely breaks
+— the reachability probe — plus a dated warning on VPN-ACL-004 (#586), which is
+the change that would *make* the alias load-bearing. `deploy-vps.yml:63` and
+`render_headscale_policy.py:38` keep writing the SSOT literal, which is correct.
 
 ---
 
@@ -42,21 +45,26 @@ is blocked. The rest of #1182's generic-lookup refactor stays out — see
 
 Merges and is valuable even if the migration is never done.
 
-- [ ] Branch: `fix/GCP-001-magicdns-and-secret-delivery`
-- [ ] [P] [AC4] Failing test: the Headscale ACL render resolves the hub address
-      through `resolve_magicdns` rather than reading a static `tailscale_ip`.
-      Evidence for the bug is in-repo: `aws1` moved `100.64.0.4` → `100.64.0.7`
-      on the 2026-05-06 replacement while `common.yaml:90` already said to prefer
-      the DNS name.
-- [ ] [AC4] Fix `toolkit/scripts/render_headscale_policy.py:38` and
-      `infra/ansible/playbooks/deploy-vps.yml:63` to use the resolver, with a
-      documented fallback when `dig` is unavailable (the helper returns `None`;
-      a `None` must fail loudly, not render an empty ACL entry).
-- [ ] [P] Same treatment for `toolkit/scripts/headscale_probe.py:70`. Lower
-      stakes — a probe reporting a false negative is noisy, not dangerous — so
-      keep it a separate commit that can be dropped if the PR runs long.
-- [ ] `make check-headscale-policy` green; diff the rendered policy before/after
-      and confirm only the address source changed, not the policy semantics.
+- [ ] Branch: `fix/GCP-001-probe-hub-address`
+- [ ] [P] Failing test: `_ssh_target` addresses a cloud node by its
+      `tailscale_dns` name, not its `tailscale_ip` literal. Evidence for the bug
+      is in-repo — `aws1` moved `100.64.0.4` → `100.64.0.7` on the 2026-05-06
+      replacement while `common.yaml:90` already said to prefer the DNS name.
+- [ ] Fix `toolkit/scripts/headscale_probe.py`'s `_ssh_target` to prefer
+      `tailscale_dns`, mirroring `generator_ansible.py:162` exactly. SSH resolves
+      the name itself, so this needs no `dig` and adds no new dependency.
+- [ ] Update `test_required_source_down_fails`, which asserts against the literal
+      IP and must now assert against the name — the test changing is the
+      behaviour change being visible.
+- [ ] [P] Regression guard: a test asserting `_ssh_target` never returns a bare
+      IPv4 for a node that declares a `tailscale_dns`, so the literal cannot
+      quietly come back.
+- [ ] Comment on **#586 (VPN-ACL-004)**: when rule 1 is tightened from user-based
+      to host-based, the hub alias must be tag-or-resolved and never the
+      `common.yaml` literal, because the IP rotates on every preemption after
+      GCP-001. Dated, with the reason.
+- [ ] `make check-headscale-policy` green — it must be *unaffected*, which is the
+      point: the ACL render is deliberately not touched.
 - [ ] `make test` green; `make secrets-audit` clean.
 
 > **Secret-delivery groundwork deliberately excluded from PR 1.** An earlier
@@ -170,8 +178,9 @@ Merges and is valuable even if the migration is never done.
       silently.
 - [ ] [AC4] Confirm **zero** human steps between delete and Synced. If any were
       needed, the MIG has not replaced the AWS persistent Spot request and AC4 fails.
-- [ ] [AC4] Repeat once. F3's IP rotation may only appear on a second
-      re-registration; a single pass does not exercise it.
+- [ ] [AC4] Repeat once. IP rotation may only appear on a second re-registration;
+      a single pass does not exercise it. Record whether the address actually
+      changed — that observation is what tells #586 how urgent its own fix is.
 
 ## Phase 5 — cutover and decommission (strictly ordered)
 

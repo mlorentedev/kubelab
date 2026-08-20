@@ -198,20 +198,37 @@ Cloud-init **already holds the Headscale API key** for stale-node cleanup, so it
 can mint its own fresh key at boot and the stored preauth key disappears
 entirely — one long-lived credential instead of two.
 
-**F3 — the Tailscale IP rotates on re-registration, and this repo has already
-observed it. (MAJOR)** `aws1` moved `100.64.0.4` → `100.64.0.7` on the
-2026-05-06 Spot replacement. `common.yaml:90` says to prefer `tailscale_dns`,
-and yet three consumers read the static IP: `render_headscale_policy.py:38`,
-`headscale_probe.py:70`, `deploy-vps.yml:63`. The helper that would fix them,
-`resolve_magicdns` (`k8s_render.py:72`), already exists and is used **only** by
-the render path.
+**F3 — the Tailscale IP rotates on re-registration, and one consumer turns that
+into a false alarm. (MINOR — downgraded 2026-08-20, see below.)** `aws1` moved
+`100.64.0.4` → `100.64.0.7` on the 2026-05-06 replacement while `common.yaml:90`
+already said to prefer `tailscale_dns`. Three consumers read the static IP:
+`render_headscale_policy.py:38`, `deploy-vps.yml:63` and `headscale_probe.py:70`.
 
-Under a MIG every self-heal is a re-registration, so a latent bug becomes a
-frequent one: after the first IP-rotating preemption the Headscale ACL still
-names the old address and hub→spoke `:6443` is blocked until a human edits
-`common.yaml` and redeploys the VPS. **This makes the ACL render load-bearing for
-AC4 and therefore in scope here**, not deferrable to #1182 — it is recorded in
-column 3 as *"renamed + behavioural fix"*, with the reason.
+**Correction — this was first written as "the ACL blocks hub→spoke `:6443`", and
+that is false.** The claim was checked against
+`roles/headscale/templates/policy.hujson.j2` and **no ACL rule references the
+`aws1` alias**: the only aliases any rule consumes are `vps` and `beelink`
+(rule 2, `tag:hermes`). Hub→spoke rides **rule 1** —
+`{"src": ["kubelab@", "manu@", "work@"], "dst": ["*:*"]}` — which is *user*-based
+and therefore IP-independent. **AC4 does not depend on any ACL change.**
+
+What actually survives, correctly sized:
+
+- **Live, and the only thing PR 1 fixes:** `headscale_probe.py:70` builds
+  `deployer@<static-ip>`, so after the first rotation the probe reports
+  `hub->spoke :6443 (prod)` — a `required=True` flow — as failing when it is not.
+  A hard false positive on precisely the path this migration makes rotate often.
+- **A landmine, not a live defect:** the stale `hosts` alias becomes load-bearing
+  the moment **VPN-ACL-004 ([#586](https://github.com/mlorentedev/kubelab/issues/586))**
+  tightens rule 1 from user-based to host-based. Recorded on that ticket rather
+  than fixed here.
+- **`deploy-vps.yml:63` and `render_headscale_policy.py:38` are left alone.**
+  Writing the SSOT literal into an alias is *correct* SSOT behaviour, and
+  `render_policy` feeds a CI gate that runs on hosted runners with no tailnet, so
+  resolving there would fail every time.
+
+The frequency argument is untouched — a MIG makes rotation routine. What changed
+is which consumer breaks and how loudly.
 
 **F4 — a default budget measures spend NET of credits. (MAJOR)**
 `credit_types_treatment` defaults to `INCLUDE_ALL_CREDITS`, so a $10 budget fires
