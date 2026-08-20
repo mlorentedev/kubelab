@@ -1,0 +1,6 @@
+# Rendered from SOPS by `toolkit infra terraform gcp-tfvars` and deleted after
+# every use — it must never be committed.
+gcp.tfvars
+.terraform/
+*.tfstate
+*.tfstate.backup
