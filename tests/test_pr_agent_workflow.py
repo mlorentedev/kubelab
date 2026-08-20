@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import yaml
 
@@ -188,11 +189,22 @@ def test_an_unreviewed_pr_does_not_fail_the_gate_job() -> None:
     steps = _load(GATE)["jobs"]["attestation"]["steps"]
     final = next(s for s in steps if "could not answer" in s.get("name", ""))
     run = final["run"]
-    assert '[ "$CODE" = "0" ] || [ "$CODE" = "1" ]' in run, (
-        "exit code 1 is the 'not reviewed' VERDICT and must not fail the job"
+    # The exit-0 condition is pinned EXACTLY, not matched as a substring.
+    #
+    # Substring assertions were the first version here and review caught them:
+    # widening the guard to `... || [ "$CODE" = "2" ]` keeps every substring
+    # present, so the tests stay green while `::error::` becomes unreachable
+    # and the "could not determine" case goes quietly green — the one thing
+    # this change says must stay loud. `assert 'exit 0' in run` was worse than
+    # weak, it was vacuous: the pre-fix shape `[ "$CODE" = "0" ] && exit 0`
+    # contained it too, so it could not detect the regression its own comment
+    # named.
+    condition = re.search(r"if (.+); then\n\s*exit 0", run)
+    assert condition, "no exit-0 guard found at all"
+    assert condition.group(1) == '[ "$CODE" = "0" ] || [ "$CODE" = "1" ]', (
+        "codes 0 and 1 are verdicts and must not fail the job; anything else "
+        f"must. Found: {condition.group(1)}"
     )
-    # A bare `exit "$CODE"` is the shape this replaced; it must not come back.
-    assert 'exit 0' in run
 
 
 def test_a_gate_that_cannot_answer_still_fails_the_job() -> None:
