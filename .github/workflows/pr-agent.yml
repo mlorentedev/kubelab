@@ -89,6 +89,23 @@ jobs:
             && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
                         github.event.comment.author_association))
     runs-on: ubuntu-latest
+    # A run that hangs holds an inference slot for the full 6h default. Ported
+    # from the upstream this reviewer came from, where the bound is what turns a
+    # stuck run into a failed one somebody can see.
+    timeout-minutes: 15
+    # A SECOND concurrency group, deliberately, and not a replacement for the
+    # workflow-level one above. That one keys on the PR and cancels — it stops a
+    # PR racing itself. This one is global and QUEUES (`cancel-in-progress:
+    # false`): the NaN cluster allows 5 simultaneous requests, shared with other
+    # consumers, and exhausting them is the diagnosed cause of PR-Agent
+    # reporting success while publishing nothing (upstream #1107).
+    #
+    # Known limit, stated rather than solved: concurrency groups are per
+    # repository, so this serialises kubelab's own runs and not the other
+    # repository's against the same cluster. Two serialised lanes, not one.
+    concurrency:
+      group: pr-agent-nan-inference
+      cancel-in-progress: false
     steps:
       - name: PR-Agent
         # Pinned by COMMIT SHA, not by tag, and this deliberately exceeds the
@@ -128,4 +145,61 @@ jobs:
           # Off as a decision, not by accident.
           github_action_config.auto_describe: "false"
           github_action_config.auto_review: "true"
-          github_action_config.auto_improve: "true"
+          # OFF, on local evidence rather than on the upstream's say-so. #1179
+          # produced "Failed to generate code suggestions for PR", and on #1180
+          # PR-Agent published `## PR Code Suggestions` and NO review at all
+          # while reporting success — the improve call consumed the inference
+          # slot the review needed. The review is the output this repository's
+          # attestation gate depends on; suggestions are optional and remain
+          # available on demand with an explicit `/improve`.
+          github_action_config.auto_improve: "false"
+
+      # PR-Agent reports SUCCESS when it starts and finishes, not when it
+      # publishes. Observed on #1180: job green, `## PR Code Suggestions`
+      # posted, zero comments carrying the review marker, and the attestation
+      # gate correctly red — leaving a green reviewer job sitting beside a red
+      # gate with nothing explaining the contradiction.
+      #
+      # The gate already protects the MERGE, so this step is not a second lock.
+      # It converts a silent nothing into a red job that names its own cause,
+      # which is the difference between "the gate is broken" and "the reviewer
+      # produced nothing, here is why".
+      #
+      # The marker is read from the SAME registry the gate classifies with, so
+      # the reviewer and its judge cannot disagree about what a review looks
+      # like. A hardcoded string here would be a second source of truth.
+      - name: Fail if no review was published
+        if: >
+          always() && (github.event_name == 'pull_request'
+            || (github.event_name == 'issue_comment'
+                && contains(github.event.comment.body, '/review')))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # The repository's OWN default branch, never
+          # `github.event.pull_request.base.ref`. The base is attacker-influenced
+          # — a PR author picks the target branch — and this reads a file from
+          # that ref to decide what counts as a review. The upstream this ports
+          # from uses `base.ref`; review-attestation.yml already rejected that
+          # exact input for the same reason, so the port takes the hardened form
+          # rather than reintroducing a decision this repository already made.
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          marker=$(gh api "repos/${GITHUB_REPOSITORY}/contents/harness/review-attestation.json?ref=${BASE_REF}" \
+            --jq '.content' | base64 -d \
+            | jq -r '.reviewers[] | select(.login == "github-actions") | .review_markers[0]')
+          if [ -z "$marker" ] || [ "$marker" = "null" ]; then
+            echo "::error::no review marker declared for github-actions in harness/review-attestation.json"
+            exit 1
+          fi
+          found=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --paginate --jq "[.[] | select(.body | contains(\"${marker}\"))] | length")
+          if [ "$found" -gt 0 ]; then
+            echo "review published (marker: ${marker})"
+            exit 0
+          fi
+          echo "::error::PR-Agent reported success but published no review (no comment carries \"${marker}\")."
+          echo "::error::Most likely cause: inference concurrency exhaustion — the NaN cluster allows 5"
+          echo "::error::simultaneous requests and is shared with other consumers."
+          exit 1
