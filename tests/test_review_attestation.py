@@ -157,7 +157,12 @@ class TestAttested:
         Matching raw would make the verdict depend on which API produced the
         payload — a fixture written from one would prove nothing about the other.
         """
-        declared = next(r for r in registry["reviewers"] if r["review_markers"])
+        # Pinned to the reviewer this test is ABOUT, not to "the first entry
+        # with markers". That shortcut held only while exactly one reviewer had
+        # any, and it silently retargeted the moment a second one did (#1187) —
+        # the test then sent github-actions' spellings carrying CodeRabbit's
+        # marker, and failed for a reason that had nothing to do with spelling.
+        declared = next(r for r in registry["reviewers"] if r["login"] == "github-actions")
         marker = declared["review_markers"][0]
         assert classify(pr(comments=[comment(spelling, marker)]), registry).state == "attested"
 
@@ -328,3 +333,40 @@ def test_the_committed_registry_is_the_shape_the_gate_requires() -> None:
     assert len(reg["reviewers"]) >= 2, "this repo runs more than one reviewer; both must be declared"
     assert all(r.get("why") for r in reg["reviewers"]), "every entry carries its reason"
     assert all(s.get("why") for s in reg["exempt"]["signatures"]), "every exemption carries its reason"
+
+
+def test_a_clean_coderabbit_review_attests(registry: dict) -> None:
+    """CodeRabbit opens a formal review only when it has something to say.
+
+    On #1187 it reviewed, found nothing, and posted its verdict as a comment —
+    `reviews[]` stayed empty and the PR read as unreviewed. The gate could
+    therefore attest from CodeRabbit only when CodeRabbit had complaints, which
+    blocks the clean PRs and passes the ones with findings. A clean bill of
+    health was indistinguishable from silence.
+    """
+    payload = pr(
+        comments=[
+            comment("coderabbitai", "No actionable comments were generated in the recent review. 🎉")
+        ]
+    )
+    assert classify(payload, registry).state == "attested"
+
+
+def test_the_walkthrough_alone_still_does_not_attest(registry: dict) -> None:
+    """The distinction the marker rests on, and the reason it is safe.
+
+    CodeRabbit posts a walkthrough whether or not a review ran, so counting it
+    would attest a PR nobody read — the original registry reasoning, which
+    stands. The clean verdict is different in kind: it asserts the review
+    happened ("in the recent review"). Only the second is a marker.
+    """
+    payload = pr(comments=[comment("coderabbitai", "## Walkthrough\n\nThis PR changes ...")])
+    assert classify(payload, registry).state != "attested"
+
+
+def test_the_clean_verdict_marker_is_declared_not_hardcoded(registry: dict) -> None:
+    """It lives in the registry, so the next reviewer-behaviour change is a
+    config edit — the property `test_no_reviewer_is_named_in_the_module`
+    protects, applied to what counts as a review rather than to who reviews."""
+    entry = next(r for r in registry["reviewers"] if r["login"] == "coderabbitai")
+    assert "No actionable comments were generated in the recent review" in entry["review_markers"]
