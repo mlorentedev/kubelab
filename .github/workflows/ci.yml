@@ -111,6 +111,35 @@ jobs:
       - name: Types
         run: make type
 
+      # Nothing validated Ansible in this repo before this: `make lint` is ruff
+      # over toolkit/, and pre-commit's yamllint only proves a file is YAML. A
+      # playbook can be valid YAML and still be rejected by Ansible — an unknown
+      # module, a missing role, a malformed `hosts:` — and until now the first
+      # thing to notice was a deploy against real infrastructure.
+      #
+      # ansible-core, not the full `ansible` package: requirements.yml names the
+      # collections this repo actually uses, and pulling the batteries-included
+      # distribution to get three of them costs an order of magnitude more.
+      - name: Install Ansible
+        run: pip install --quiet ansible-core
+
+      # syntax-check LOADS the roles a playbook includes, so a role using
+      # community.docker fails to parse when the collection is absent — measured
+      # against ANSIBLE_COLLECTIONS_PATH=/nonexistent, not assumed. Cached on
+      # requirements.yml so the ~30s install happens only when it changes;
+      # same shape as review-attestation.yml's Poetry cache.
+      - name: Cache Ansible collections
+        uses: actions/cache@v4
+        with:
+          path: ~/.ansible/collections
+          key: ansible-collections-${{ runner.os }}-${{ hashFiles('infra/ansible/requirements.yml') }}
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r infra/ansible/requirements.yml
+
+      - name: Ansible
+        run: make lint-ansible
+
       # Report, do not gate. `kubectl kustomize` renders the overlays for the
       # OBS-007 tier assertions; if the runner image ever drops kubectl those
       # tests skip with CANNOT CHECK rather than passing vacuously, and this step
