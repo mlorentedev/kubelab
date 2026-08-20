@@ -1,5 +1,5 @@
 ---
-id: lesson-354-unmatched-host-pattern-is-a-warning
+id: lesson-356-unmatched-host-pattern-is-a-warning
 type: lesson
 status: active
 created: "2026-08-20"

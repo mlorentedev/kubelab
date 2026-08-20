@@ -4,7 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
-| 354 | [An Ansible play whose `hosts:` pattern matches nothing succeeds](lesson-354-unmatched-host-pattern-is-a-warning.md) | 2026-08-20 |
+| 356 | [An Ansible play whose `hosts:` pattern matches nothing succeeds](lesson-356-unmatched-host-pattern-is-a-warning.md) | 2026-08-20 |
 | 349 | [Presence is not coverage — a package can be installed on a host nothing manages](lesson-349-presence-is-not-coverage-a-package-can-be-installed-and-unmanaged.md) | 2026-08-18 |
 | 337 | [Adding a role to a playbook does not install it on any path that never runs the playbook](lesson-337-adding-a-role-to-a-playbook-does-not-install-.md) | 2026-08-15 |
 | 325 | [`--tags` silently skips prerequisite `pre_tasks` that were never tagged, and a shared secret key collides across an Ansible env-override merge](lesson-325-tags-silently-skips-prerequisite-pre-tasks-th.md) | 2026-08-14 |
