@@ -247,17 +247,49 @@ jobs:
             -f description="$description" \
             -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
 
-      - name: Fail the run when the PR is not attested
+      # Fails the JOB only when the gate could not do its work — never when it
+      # did its work and the answer was "no".
+      #
+      # "Not reviewed" is a VERDICT, and the commit status is where a verdict
+      # belongs: it is what branch protection reads and it already blocks the
+      # merge by itself. Failing the job as well republished that verdict into
+      # the checks list, where a red entry means "something is broken". Since
+      # every PR is unreviewed for a while, the normal state of a perfectly
+      # healthy PR was a red job, sitting next to the cancelled runs above.
+      #
+      # That is how a red signal stops being read. This gate exists because a
+      # green check nobody questioned let 35 of 40 PRs merge unreviewed; fixing
+      # that by training the same indifference toward red would be a poor
+      # trade. One verdict, one channel.
+      #
+      # The upstream reached the same conclusion first and drew the line finer:
+      # it exempts `pending` on the pull_request path but still fails on
+      # `declined`, on the grounds that a reviewer saying it could not review is
+      # actionable the moment it is said. That is the better rule THERE and the
+      # wrong one here, on kubelab's own evidence: two of this repo's three
+      # reviewers are quota-exhausted, so a `declined` notice arrives on
+      # essentially every PR within seconds of opening. Under that rule the job
+      # would be red on every correct PR until PR-Agent finishes — which is
+      # exactly the state both rules exist to prevent. The distinction is worth
+      # revisiting if a quota reviewer ever comes back.
+      #
+      # Exit code 2 is different in kind and still fails the job: it means the
+      # classifier could not determine the state at all. That is the gate
+      # malfunctioning rather than reporting, it is not visible in the status
+      # beyond an `error` nobody is required to read, and "I could not tell"
+      # delivered as silence is the defect this whole mechanism exists to end.
+      - name: Fail the run only when the gate itself could not answer
         if: steps.pr.outputs.skip != 'true'
         env:
           CODE: ${{ steps.attest.outputs.code }}
           SUMMARY: ${{ steps.attest.outputs.summary }}
-        # The verdict is repeated here rather than left in the step that computed
-        # it: a bare `exit "$CODE"` makes the RED step say nothing, so anyone
-        # opening the failure sees an exit code and has to hunt for the reason in
-        # an earlier green step.
+        # The verdict is printed here rather than left in the step that computed
+        # it, so the reason is in the last step somebody opens either way.
         run: |
           set -euo pipefail
-          [ "$CODE" = "0" ] && exit 0
-          printf '%s\n' "$SUMMARY" >&2
+          printf '%s\n' "$SUMMARY"
+          if [ "$CODE" = "0" ] || [ "$CODE" = "1" ]; then
+            exit 0
+          fi
+          echo "::error::the attestation gate could not determine this PR's review state" >&2
           exit "$CODE"
