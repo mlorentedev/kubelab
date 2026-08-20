@@ -1162,9 +1162,16 @@ def ansible_syntax_check(
     place that surfaced was a deploy against real infrastructure.
 
     Uses the committed static inventory rather than the generated one, so this
-    runs in CI with no `ansible generate` step and no SSOT decrypt. Host
-    patterns still resolve against it, which means a playbook targeting a host
-    that does not exist is caught here too.
+    runs in CI with no `ansible generate` step and no SSOT decrypt.
+
+    What it does NOT catch, stated because an earlier version of this docstring
+    claimed the opposite: an unresolvable `hosts:` pattern. `--syntax-check`
+    parses structure and loads roles, but pattern matching happens at execution
+    time — `hosts: typo_host` emits a WARNING and exits 0 (measured, #1180
+    review). Making that fatal is not available here either: 11 of the 20
+    playbooks already emit it against the static inventory, because the real
+    host set lives in the per-environment GENERATED inventory. Catching a
+    typo'd host needs a different mechanism than this gate.
 
     Requires the Galaxy collections from requirements.yml: syntax-check loads
     the roles a playbook includes, and a role using `community.docker` fails to

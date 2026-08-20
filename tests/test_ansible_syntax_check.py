@@ -73,15 +73,32 @@ def test_the_collections_the_gate_installs_are_the_ones_the_repo_declares():
 def test_include_files_are_not_mistaken_for_playbooks():
     """playbooks/_includes/ holds task files included INTO a play. They are not
     playbooks, and passing one to ansible-playbook fails on a structure that is
-    entirely correct — so the gate's glob is deliberately non-recursive. If this
-    directory ever disappears the exclusion can go too; until then it is load
-    bearing, and a `**/*.yml` glob would turn a correct tree red."""
+    entirely correct — so the gate's glob is deliberately non-recursive.
+
+    This inspects the GATE's glob, in its own source. The first version of this
+    test asserted `not any(p.parent.name == "_includes" for p in
+    PLAYBOOKS.glob("*.yml"))`, which can never fail: a non-recursive glob's
+    results all have the playbooks directory as their parent, so the condition
+    was true by construction and stayed true no matter what the gate did. A
+    guard that cannot fail is worse than none — it reports coverage it does not
+    have. Caught in review of #1180.
+    """
     includes = PLAYBOOKS / "_includes"
     if not includes.exists():
         return
     assert list(includes.glob("*.yml")), "empty _includes: drop the exclusion instead"
-    # The non-recursive glob the gate uses must not reach them.
-    assert not any(p.parent.name == "_includes" for p in PLAYBOOKS.glob("*.yml"))
+
+    source = (REPO / "toolkit/cli/infra.py").read_text()
+    body = source[source.index("def ansible_syntax_check") :]
+    body = body[: body.index("\n@ansible_app.command")]
+    assert 'playbook_dir.glob("*.yml")' in body, (
+        "the gate no longer uses a non-recursive glob over playbooks/"
+    )
+    for recursive in ("rglob", "**/*.yml"):
+        assert recursive not in body, (
+            f"the gate uses {recursive!r}, which reaches _includes/ and would feed "
+            "task files to ansible-playbook"
+        )
 
 
 def test_every_top_level_playbook_is_a_playbook():
