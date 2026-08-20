@@ -1146,6 +1146,83 @@ def ansible_run(
         raise typer.Exit(1) from None
 
 
+@ansible_app.command("syntax-check")
+def ansible_syntax_check(
+    playbook: Annotated[
+        str | None,
+        typer.Option("--playbook", "-p", help="Check one playbook (without .yml) instead of all"),
+    ] = None,
+) -> None:
+    """Parse every playbook without running it — the Ansible half of `make lint`.
+
+    Nothing validated Ansible in this repo until now: `make lint` is ruff over
+    `toolkit/`, and pre-commit's yamllint only proves a file is YAML. A playbook
+    can be perfectly valid YAML and still be rejected by Ansible — an unknown
+    module, a role that does not exist, a malformed `hosts:` — and the first
+    place that surfaced was a deploy against real infrastructure.
+
+    Uses the committed static inventory rather than the generated one, so this
+    runs in CI with no `ansible generate` step and no SSOT decrypt.
+
+    What it does NOT catch, stated because an earlier version of this docstring
+    claimed the opposite: an unresolvable `hosts:` pattern. `--syntax-check`
+    parses structure and loads roles, but pattern matching happens at execution
+    time — `hosts: typo_host` emits a WARNING and exits 0 (measured, #1180
+    review). Making that fatal is not available here either: 11 of the 20
+    playbooks already emit it against the static inventory, because the real
+    host set lives in the per-environment GENERATED inventory. Catching a
+    typo'd host needs a different mechanism than this gate.
+
+    Requires the Galaxy collections from requirements.yml: syntax-check loads
+    the roles a playbook includes, and a role using `community.docker` fails to
+    parse without it (measured, not assumed).
+    """
+    logger.section("Ansible Syntax Check")
+
+    ansible_dir = settings.ansible_dir
+    inventory = ansible_dir / "inventories" / "homelab.yml"
+    playbook_dir = ansible_dir / "playbooks"
+
+    if playbook:
+        playbooks = [playbook_dir / f"{playbook}.yml"]
+        if not playbooks[0].exists():
+            logger.error(f"Playbook not found: {playbooks[0]}")
+            raise typer.Exit(1) from None
+    else:
+        # Top level only: playbooks/_includes/ holds task files that are
+        # included INTO a play and are not playbooks themselves — passing one
+        # to ansible-playbook fails on a structure that is entirely correct.
+        playbooks = sorted(playbook_dir.glob("*.yml"))
+
+    if not playbooks:
+        logger.error(f"No playbooks found in {playbook_dir}")
+        raise typer.Exit(1) from None
+
+    failed: list[str] = []
+    for path in playbooks:
+        result = command.run(
+            f"ansible-playbook --syntax-check {path} -i {inventory}",
+            cwd=ansible_dir,
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            logger.success(f"{path.name}")
+        else:
+            failed.append(path.name)
+            logger.error(f"{path.name}")
+            # stderr carries the parse error and the line it points at; without
+            # it the failure name alone sends you back to reproduce locally.
+            for line in (result.stderr or result.stdout or "").strip().splitlines():
+                logger.info(f"    {line}")
+
+    if failed:
+        logger.error(f"{len(failed)} of {len(playbooks)} playbooks failed: {', '.join(failed)}")
+        raise typer.Exit(1) from None
+
+    logger.success(f"All {len(playbooks)} playbooks parse")
+
+
 @ansible_app.command("deploy")
 def ansible_deploy(
     env: Annotated[

@@ -91,6 +91,7 @@ help:
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
 	@echo "  make lint               Ruff linting (check only)"
+	@echo "  make lint-ansible       Parse every Ansible playbook without running it"
 	@echo "  make format             Ruff formatting (auto-fix)"
 	@echo "  make type               Mypy type checking"
 	@echo "  make test               Run pytest suite (unit/integration only)"
@@ -1050,6 +1051,10 @@ format:
 lint:
 	@$(POETRY) run ruff check toolkit
 	@$(POETRY) run ruff format --check toolkit
+
+.PHONY: lint-ansible
+lint-ansible: ## Parse every Ansible playbook without running it (needs Galaxy collections)
+	@$(TOOLKIT) infra ansible syntax-check
 
 .PHONY: type
 type:
