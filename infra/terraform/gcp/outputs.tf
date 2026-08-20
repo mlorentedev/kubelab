@@ -19,8 +19,12 @@ output "magicdns_name" {
 }
 
 output "next_steps" {
-  description = "Post-apply sequence (docs/runbooks/gcp-hub-bootstrap.md §6)."
+  description = "Post-apply sequence. NOT YET RUNNABLE -- see the note in the value."
   value       = <<-EOT
+    The `make tf-gcp-*` and `make gcp1-*` targets do not exist yet; they land
+    with the gcp-tfvars renderer in a follow-up, so this module is not expected
+    to be applied before then. When it is:
+
     1. make wait-node-ready NODE=${var.hostname} ENV=hub   # sshd AND cloud-init
     2. dig +short ${var.hostname}.kubelab.internal          # assert the given-name resolved
     3. make provision NODE=${var.hostname} ENV=hub          # twice; second must be changed=0

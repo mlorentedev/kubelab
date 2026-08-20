@@ -68,15 +68,28 @@ write_files:
       exec > >(tee -a "$LOG") 2>&1
       echo "=== kubelab bootstrap $(date -Is) ==="
 
+      # Every network call is BOUNDED. An unbounded curl that stalls leaves
+      # cloud-init running forever, and the MIG counts the VM as healthy the
+      # whole time -- a hub that never finishes booting and never reports that
+      # it did not. Bounded failure is recoverable (the MIG recreates); an
+      # indefinite hang is not.
+      #
+      # `retry` applies ONLY to idempotent reads and downloads. It is
+      # deliberately absent from the pre-auth POST below: a request that times
+      # out may still have created the key server-side, so retrying would mint
+      # keys nobody consumes.
+      curl_opts=(-sf --connect-timeout 10 --max-time 30)
+      curl_retry=(--retry 5 --retry-delay 3 --retry-connrefused)
+
       # --- Secret Manager, via the instance's own service account -------------
       # No credential is stored on the instance or in the template's metadata:
       # the metadata server mints a short-lived token, and the service account
       # holds secretAccessor on this ONE secret.
       meta="http://metadata.google.internal/computeMetadata/v1"
-      token=$(curl -sf -H "Metadata-Flavor: Google" \
+      token=$(curl "$${curl_opts[@]}" "$${curl_retry[@]}" -H "Metadata-Flavor: Google" \
         "$meta/instance/service-accounts/default/token" | jq -r .access_token)
       sm="https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets"
-      api_key=$(curl -sf -H "Authorization: Bearer $token" \
+      api_key=$(curl "$${curl_opts[@]}" "$${curl_retry[@]}" -H "Authorization: Bearer $token" \
         "$sm/${headscale_api_key_secret}/versions/latest:access" \
         | jq -r .payload.data | base64 -d)
       if [ -z "$api_key" ] || [ "$api_key" = "null" ]; then
@@ -92,10 +105,10 @@ write_files:
       # EndpointSlice at once — silently, because the old records keep resolving
       # until they do not. Under a MIG this path runs on every preemption, so it
       # is load-bearing rather than incidental.
-      node_id=$(curl -sf "$${hs_auth[@]}" "${headscale_url}/api/v1/node" \
+      node_id=$(curl "$${curl_opts[@]}" "$${curl_retry[@]}" "$${hs_auth[@]}" "${headscale_url}/api/v1/node" \
         | jq -r --arg n "${hostname}" '.nodes[] | select(.givenName==$n and .online==false) | .id' | head -1)
       if [ -n "$node_id" ]; then
-        curl -sf -X DELETE "$${hs_auth[@]}" "${headscale_url}/api/v1/node/$node_id"
+        curl "$${curl_opts[@]}" -X DELETE "$${hs_auth[@]}" "${headscale_url}/api/v1/node/$node_id"
         echo "deleted stale Headscale node $node_id (${hostname})"
       else
         echo "no stale Headscale node to recycle"
@@ -105,7 +118,8 @@ write_files:
       # Short-lived and non-reusable: it is consumed seconds from now, so its
       # whole lifetime is this script. Nothing durable holds a mesh credential.
       expiry=$(date -u -d '+15 minutes' +%Y-%m-%dT%H:%M:%SZ)
-      authkey=$(curl -sf -X POST "$${hs_auth[@]}" -H 'Content-Type: application/json' \
+      # No --retry here, on purpose: see the note by curl_opts.
+      authkey=$(curl "$${curl_opts[@]}" -X POST "$${hs_auth[@]}" -H 'Content-Type: application/json' \
         -d "{\"user\":\"2\",\"reusable\":false,\"ephemeral\":false,\"expiration\":\"$expiry\"}" \
         "${headscale_url}/api/v1/preauthkey" | jq -r .preAuthKey.key)
       if [ -z "$authkey" ] || [ "$authkey" = "null" ]; then
@@ -117,7 +131,7 @@ write_files:
       # accept-routes stays TRUE: the hub is remote and reaches the homelab LAN
       # through rpi4's advertised route. (LAN-resident nodes must set it false —
       # see CLAUDE.md — but that hazard does not apply here.)
-      curl -fsSL https://tailscale.com/install.sh | sh
+      curl "$${curl_opts[@]}" "$${curl_retry[@]}" --max-time 120 -L https://tailscale.com/install.sh | sh
       tailscale up \
         --login-server=${headscale_url} \
         --authkey="$authkey" \
@@ -132,7 +146,7 @@ write_files:
       # exposed through the prod VPS. resolv-conf points at systemd-resolved's
       # real file because /etc/resolv.conf is the 127.0.0.53 stub, which pods
       # cannot reach.
-      curl -sfL https://get.k3s.io | \
+      curl "$${curl_opts[@]}" "$${curl_retry[@]}" --max-time 120 -L https://get.k3s.io | \
         INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
         --disable=traefik --disable=servicelb \
         --write-kubeconfig-mode=644 \

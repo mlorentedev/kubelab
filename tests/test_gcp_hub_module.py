@@ -155,9 +155,24 @@ class TestNetworkTierIsChosenNotInherited:
             "the difference between free and not."
         )
 
-    def test_network_tier_default_is_a_valid_tier(self, tf: str) -> None:
-        assert _var_default(tf, "network_tier") in {"STANDARD", "PREMIUM"}, (
-            "network_tier must default to STANDARD or PREMIUM"
+    def test_network_tier_is_declared_in_the_ssot(self, tf: str) -> None:
+        tier = _networking()["gcp"].get("network_tier")
+        assert tier in {"STANDARD", "PREMIUM"}, (
+            "networking.gcp.network_tier must be declared in common.yaml and be "
+            "STANDARD or PREMIUM -- it is deployment policy with a cost "
+            "consequence, so the SSOT owns it, not a Terraform default"
+        )
+
+
+class TestSSHExposure:
+    """TCP/22 is open to the world for first-boot bootstrap, so narrow what it grants."""
+
+    def test_project_ssh_keys_are_blocked(self, tf: str) -> None:
+        assert re.search(r'block-project-ssh-keys\s*=\s*"TRUE"', tf), (
+            "with TCP/22 open to 0.0.0.0/0 for bootstrap, project-level metadata "
+            "SSH keys would grant a login on every instance the MIG ever creates "
+            "-- an access path that widens silently as the project grows and that "
+            "nothing in this module would reflect"
         )
 
 
@@ -173,23 +188,49 @@ class TestNoReservedAddress:
         )
 
 
-class TestBootDiskMatchesTheSSOT:
-    """Disk type and size are decisions, and the size lives in common.yaml."""
+class TestModuleDefaultsMatchTheSSOT:
+    """Terraform defaults duplicate `networking.gcp`, so they can drift from it.
+
+    Until `gcp-tfvars` renders these inputs from `common.yaml` (deferred to the
+    follow-up that adds the Makefile targets), both places hold the same values
+    and nothing but this test stops them diverging. `common.yaml` is the SSOT --
+    a Terraform default that disagrees with it is the defect, in that direction.
+
+    Deployment POLICY lives here too, not only sizing: `network_tier` has a cost
+    consequence measured against $0.43/mo of headroom, and a policy value
+    declared in one place and read from the other is exactly how the AWS hub's
+    cost drifted unnoticed for two years (ADR-063 D4).
+    """
+
+    # common.yaml key under networking.gcp  ->  Terraform variable name
+    MIRRORED = {
+        "region": "region",
+        "machine_type": "machine_type",
+        "image_family": "image_family",
+        "image_project": "image_project",
+        "disk_size_gb": "disk_size_gb",
+        "disk_type": "disk_type",
+        "network_tier": "network_tier",
+        "hostname": "hostname",
+        "k3s_version": "k3s_version",
+    }
+
+    @pytest.mark.parametrize("ssot_key,var_name", sorted(MIRRORED.items()))
+    def test_default_matches_common_yaml(self, tf: str, ssot_key: str, var_name: str) -> None:
+        gcp = _networking()["gcp"]
+        assert ssot_key in gcp, f"networking.gcp is missing {ssot_key!r} -- the SSOT must carry it"
+        default = _var_default(tf, var_name)
+        assert default is not None, f'no variable "{var_name}" in the module'
+        assert str(default) == str(gcp[ssot_key]), (
+            f'variable "{var_name}" defaults to {default!r} but '
+            f"networking.gcp.{ssot_key} is {gcp[ssot_key]!r}; common.yaml is the SSOT"
+        )
 
     def test_boot_disk_is_pd_balanced(self, tf: str) -> None:
         assert _var_default(tf, "disk_type") == "pd-balanced", (
             "pd-balanced carries a 3,000 IOPS per-instance floor independent of "
             "size, which is what makes a 12 GB disk match gp3's flat 3,000 rather "
             "than regress on it"
-        )
-
-    def test_boot_disk_size_comes_from_the_ssot(self, tf: str) -> None:
-        declared = _networking()["gcp"]["disk_size_gb"]
-        default = _var_default(tf, "disk_size_gb")
-        assert default is not None, "no disk_size_gb variable -- it must mirror networking.gcp.disk_size_gb"
-        assert int(default) == int(declared), (
-            f"the module defaults disk_size_gb to {default} but "
-            f"networking.gcp.disk_size_gb is {declared}; common.yaml is the SSOT"
         )
 
 

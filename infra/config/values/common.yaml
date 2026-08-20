@@ -124,6 +124,16 @@ networking:
     # pd-balanced carries a 3,000 IOPS per-instance floor independent of size, so
     # 12 GB yields 3,072 — matching gp3's flat 3,000 rather than regressing.
     disk_type: "pd-balanced"
+    # Network Service Tier for the instance's external address. In the SSOT
+    # rather than only in Terraform because it is deployment POLICY with a cost
+    # consequence, and a policy value that lives in one place cannot drift from
+    # the other. Premium (the API default) gives ~1 GiB free egress per
+    # destination then ~$0.12/GiB to Europe; Standard reports a far larger
+    # monthly allowance across all regions. The hub's egress is Argo CD polling
+    # two spokes forever, against $0.43/mo of headroom.
+    # UNVERIFIED: confirm both allowances in the console at plan review — see
+    # docs/architecture/infra/gcp-cost-envelope.md.
+    network_tier: "STANDARD"
     hostname: "gcp1"
     # No tailscale_ip on purpose. The address rotates on every re-registration —
     # and under a MIG every preemption self-heals by recreating the VM, so it

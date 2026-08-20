@@ -4,10 +4,10 @@
 # of size 1. VPN-only access via Headscale; the external IP is ephemeral and
 # exists solely so the instance has egress for its own bootstrap.
 #
-# Usage:
-#   make tf-gcp-plan / make tf-gcp-apply
-# After apply, `make wait-node-ready NODE=gcp1 ENV=hub` blocks until sshd answers
-# AND cloud-init has finished — see docs/runbooks/gcp-hub-bootstrap.md §6.
+# NOT YET RUNNABLE. `make tf-gcp-*` and `make gcp1-*` do not exist: they land with
+# the `gcp-tfvars` renderer in a follow-up, and this module is not expected to be
+# applied before then. The end-state procedure is
+# docs/runbooks/gcp-hub-bootstrap.md §6 — do not follow it yet.
 
 terraform {
   required_version = ">= 1.5"
@@ -137,6 +137,12 @@ resource "google_compute_instance_template" "hub" {
   }
 
   metadata = {
+    # TCP/22 is open to 0.0.0.0/0 for first-boot bootstrap, so project-level
+    # metadata SSH keys would otherwise grant a login on every instance the MIG
+    # ever creates -- an access path that widens silently as the project grows
+    # and that nothing in this module would reflect. Only the key below is honoured.
+    block-project-ssh-keys = "TRUE"
+
     # cloud-init runs on EVERY instance the MIG creates, not only the first: a
     # MIG recreates rather than restarts, so each preemption is a from-scratch
     # build. It therefore has to complete the WHOLE bring-up, Argo CD included
@@ -144,7 +150,7 @@ resource "google_compute_instance_template" "hub" {
     user-data = templatefile("${path.module}/cloud-init.yml", {
       hostname                 = var.hostname
       deploy_user              = var.deploy_user
-      ssh_public_key           = file(var.ssh_public_key_path)
+      ssh_public_key           = file(pathexpand(var.ssh_public_key_path))
       timezone                 = var.timezone
       k3s_version              = var.k3s_version
       headscale_url            = var.headscale_url
@@ -185,11 +191,28 @@ resource "google_compute_region_instance_group_manager" "hub" {
     instance_template = google_compute_instance_template.hub.id
   }
 
+  # No surge, and RECREATE rather than SUBSTITUTE. Both matter for a singleton
+  # whose identity IS its name.
+  #
+  # With target_size = 1, any surge boots additional instances that all come up
+  # as `gcp1`: several nodes racing to register the same Headscale given-name,
+  # and several K3s control planes, simultaneously. That is exactly the
+  # given-name collision this module's own cloud-init treats as its critical
+  # hazard -- a registration landing as `gcp1-<random>` breaks the Ansible
+  # inventory, the kubeconfig server URL and the prod EndpointSlice at once.
+  #
+  # So a replacement takes the node down and brings it back rather than
+  # overlapping. For a management plane that is the right trade: the spokes keep
+  # running without the hub (ADR-023's Autonomous Spoke property), whereas two
+  # hubs sharing one identity is a state nothing recovers from cleanly.
+  # RECREATE preserves the instance name across a replacement; SUBSTITUTE mints
+  # a new one and reintroduces the same naming problem.
   update_policy {
     type                         = "PROACTIVE"
     minimal_action               = "REPLACE"
+    replacement_method           = "RECREATE"
     instance_redistribution_type = "NONE"
-    max_surge_fixed              = 3
-    max_unavailable_fixed        = 0
+    max_surge_fixed              = 0
+    max_unavailable_fixed        = 1
   }
 }
