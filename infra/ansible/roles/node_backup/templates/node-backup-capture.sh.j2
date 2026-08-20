@@ -1,0 +1,54 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# BACKUP-044 Part 3 -- captures {{ inventory_hostname }}'s declared sources
+# (common.yaml backup.sources.{{ inventory_hostname }}) into a staging
+# directory. Ship (a separate unit/script) reads FROM this staging dir; this
+# script never talks to R2.
+#
+# Every source below was rendered from the SSOT at Ansible-apply time -- this
+# script has no YAML parsing and no per-run discovery, so a source added to
+# common.yaml takes effect on the next `make deploy` / `make apply-secrets`
+# cycle, not by editing this file.
+set -euo pipefail
+
+STAGING="{{ node_backup_staging_dir }}"
+rm -rf "$STAGING"
+mkdir -p "$STAGING"
+
+{% for service, src in node_backup_sources.items() %}
+# --- {{ service }} {{ '(bind mount)' if src.path is defined else '(Docker volume: ' ~ src.volume ~ ')' }} ---
+mkdir -p "$STAGING/{{ service }}"
+{% if src.path is defined %}
+SRC_DIR_{{ service }}="{{ src.path }}"
+{% else %}
+SRC_DIR_{{ service }}="$(docker volume inspect {{ src.volume }} --format '{{ '{{' }}.Mountpoint{{ '}}' }}')"
+{% endif %}
+
+# Live SQLite snapshot: `.backup` is WAL-aware and produces a single
+# consistent file, unlike a raw copy of a database mid-write (Part 0
+# measured this by accident -- a payload that shrank across a reboot because
+# the restart checkpointed the WAL). Staged at the SAME relative path it has
+# in the source (not just the basename), so a restore is a plain reverse
+# copy with no per-service path table to keep in sync.
+mkdir -p "$(dirname "$STAGING/{{ service }}/{{ src.sqlite }}")"
+sqlite3 "$SRC_DIR_{{ service }}/{{ src.sqlite }}" ".backup '$STAGING/{{ service }}/{{ src.sqlite }}'"
+
+# Everything else in the source directory, verbatim -- e.g. Headscale's
+# noise_private.key and derp_server_private.key, which are not databases but
+# are exactly as unrecoverable as one. Excludes the live db and its WAL/SHM
+# siblings: the db is already captured consistently above, and a raw copy of
+# its WAL segments belongs to a snapshot the copy cannot produce.
+#
+# `cd` first and match relative (./...) paths: `cp --parents` on an absolute
+# source path recreates the ENTIRE path under the destination
+# ($STAGING/{{ service }}/opt/gitea/data/...), not the source's own tree --
+# verified against a scratch fixture. Relative paths preserve just the
+# source's internal structure, which is what a restore needs to reproduce.
+( cd "$SRC_DIR_{{ service }}" && find . -mindepth 1 \
+    ! -path "./{{ src.sqlite }}" \
+    ! -path "./{{ src.sqlite }}-wal" \
+    ! -path "./{{ src.sqlite }}-shm" \
+    -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
+{% endfor %}
+
+echo "capture complete: $(du -sh "$STAGING" | cut -f1)"

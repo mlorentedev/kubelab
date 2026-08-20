@@ -1,0 +1,104 @@
+---
+# node_backup — BACKUP-044 Part 3. Installs restic + sqlite3, renders the
+# capture/ship scripts from the SSOT, and installs their systemd units
+# (unscheduled — Part 4 owns the timers).
+
+- name: Install sqlite3 (host package, unpinned like every other supporting
+    tool in this fleet — only the payload restic gets an explicit version pin)
+  apt:
+    name: sqlite3
+    state: present
+
+- name: Detect system architecture
+  set_fact:
+    node_backup_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+
+- name: Check installed restic version
+  command: "{{ node_backup_restic_install_path }} version"
+  register: node_backup_restic_installed
+  failed_when: false
+  changed_when: false
+
+- name: Resolve the restic release URL prefix (one place, so the asset URL
+    and its checksum URL cannot drift onto different releases)
+  set_fact:
+    node_backup_restic_release: "https://github.com/restic/restic/releases/download/v{{ node_backup_restic_version }}"
+
+- name: Download restic (checksum verified against upstream's own SHA256SUMS —
+    never a floating "latest")
+  get_url:
+    url: "{{ node_backup_restic_release }}/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2"
+    dest: "/tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2"
+    checksum: "sha256:{{ node_backup_restic_release }}/SHA256SUMS"
+    mode: "0644"
+  when: node_backup_restic_version not in node_backup_restic_installed.stdout
+
+- name: Install restic (decompress the pinned binary into place)
+  shell: >
+    bunzip2 -c /tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2
+    > {{ node_backup_restic_install_path }}
+  when: node_backup_restic_version not in node_backup_restic_installed.stdout
+  changed_when: true
+
+- name: Make restic executable
+  file:
+    path: "{{ node_backup_restic_install_path }}"
+    mode: "0755"
+
+- name: Ensure staging directory exists
+  file:
+    path: "{{ node_backup_staging_dir }}"
+    state: directory
+    mode: "0700"
+
+# --- Credentials: root-only files, never a rendered literal in the scripts
+# themselves (ANSIBLE-038 pattern). Values arrive already decrypted in
+# `config.*` via the playbook's standard SOPS step — this role never reads
+# SOPS directly.
+
+- name: Write restic repository password (root-only)
+  copy:
+    content: "{{ node_backup_restic_password }}"
+    dest: "{{ node_backup_restic_password_file }}"
+    mode: "0600"
+  no_log: true
+
+- name: Write R2 access key (root-only)
+  copy:
+    content: "{{ node_backup_r2_access_key }}"
+    dest: "{{ node_backup_r2_access_key_file }}"
+    mode: "0600"
+  no_log: true
+
+- name: Write R2 secret key (root-only)
+  copy:
+    content: "{{ node_backup_r2_secret_key }}"
+    dest: "{{ node_backup_r2_secret_key_file }}"
+    mode: "0600"
+  no_log: true
+
+- name: Render capture script
+  template:
+    src: node-backup-capture.sh.j2
+    dest: "{{ node_backup_capture_script_path }}"
+    mode: "0700"
+
+- name: Render ship script
+  template:
+    src: node-backup-ship.sh.j2
+    dest: "{{ node_backup_ship_script_path }}"
+    mode: "0700"
+
+- name: Install capture systemd unit
+  template:
+    src: node-backup-capture.service.j2
+    dest: "/etc/systemd/system/{{ node_backup_capture_service_name }}"
+    mode: "0644"
+  notify: Reload systemd (node_backup)
+
+- name: Install ship systemd unit
+  template:
+    src: node-backup-ship.service.j2
+    dest: "/etc/systemd/system/{{ node_backup_ship_service_name }}"
+    mode: "0644"
+  notify: Reload systemd (node_backup)
