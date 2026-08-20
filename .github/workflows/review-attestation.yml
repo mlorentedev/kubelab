@@ -38,8 +38,35 @@ on:
     types: [completed]
 
 concurrency:
-  group: review-attestation-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
-  cancel-in-progress: true
+  # `github.run_id` was the workflow_run fallback, which gives every
+  # workflow_run its own group and so never collapses two. Keyed on the head
+  # SHA instead, they group with the rest of the work on that commit.
+  group: >-
+    review-attestation-${{ github.event.pull_request.number
+    || github.event.issue.number || github.event.workflow_run.head_sha }}
+  # Cancel only on events that REPLACE the state being judged; never on events
+  # that ADD to it. A push supersedes the commit under review, so cancelling is
+  # right. A comment, a label or a body edit is new evidence about the SAME
+  # commit, and cancelling there is what made `gh pr checks` show `cancelled`
+  # in its fail column on a perfectly healthy gate — repeatedly, because a
+  # reviewer speaking is itself a trigger here.
+  #
+  # Walked through this workflow's own actions, since it carries a
+  # `pull_request_review` trigger the upstream does not have:
+  #   created/edited/labeled/unlabeled -> no cancel (evidence added)
+  #   synchronize/opened/reopened      -> cancel (new commit to judge)
+  #   submitted/dismissed              -> cancel (the verdict itself changed)
+  #   completed (workflow_run)         -> cancel (re-read after the reviewer ran)
+  #
+  # The race this accepts, stated rather than hidden: an older run may now
+  # finish after a newer one. It is not a stale-verdict risk, because the job
+  # resolves the PR through the API at its own execution time rather than from
+  # the event payload — a late-finishing older run reads the same current state
+  # the newer one did. The window where it could read pre-comment state and
+  # publish after is seconds wide, and the next event re-evaluates regardless.
+  cancel-in-progress: >-
+    ${{ !contains(fromJSON('["labeled", "unlabeled", "edited", "created"]'),
+    github.event.action) }}
 
 permissions:
   contents: read
@@ -56,6 +83,10 @@ jobs:
       || github.event.issue.pull_request
       || github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
+    # This gate answers a one-second question and is the most frequently run
+    # workflow here. A hung run would otherwise hold a runner for the 6h
+    # default while the status it owes stays unpublished.
+    timeout-minutes: 15
     steps:
       # Pinned to the BASE branch, never the PR's head.
       #
