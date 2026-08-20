@@ -173,3 +173,35 @@ def test_the_gate_does_not_cancel_on_events_that_add_evidence() -> None:
         assert action in cancel, f"{action} would still cancel an in-flight run"
     # A push must still cancel: it replaces the commit being judged.
     assert "synchronize" not in cancel
+
+
+def test_an_unreviewed_pr_does_not_fail_the_gate_job() -> None:
+    """The verdict belongs in the commit status, which branch protection reads
+    and which already blocks the merge. Failing the job too republished it into
+    the checks list, where red means "something is broken" — so the normal
+    state of a healthy, not-yet-reviewed PR was a red job.
+
+    That is how a red signal stops being read. This gate exists because a green
+    check nobody questioned let 35 of 40 PRs merge unreviewed; buying that back
+    with indifference toward red is not a trade worth making.
+    """
+    steps = _load(GATE)["jobs"]["attestation"]["steps"]
+    final = next(s for s in steps if "could not answer" in s.get("name", ""))
+    run = final["run"]
+    assert '[ "$CODE" = "0" ] || [ "$CODE" = "1" ]' in run, (
+        "exit code 1 is the 'not reviewed' VERDICT and must not fail the job"
+    )
+    # A bare `exit "$CODE"` is the shape this replaced; it must not come back.
+    assert 'exit 0' in run
+
+
+def test_a_gate_that_cannot_answer_still_fails_the_job() -> None:
+    """Code 2 is different in kind from code 1: the classifier could not
+    determine the state at all. That is the gate malfunctioning rather than
+    reporting, and it is the one case the status alone does not surface — 'I
+    could not tell' delivered as silence is the defect this mechanism exists
+    to end."""
+    steps = _load(GATE)["jobs"]["attestation"]["steps"]
+    final = next(s for s in steps if "could not answer" in s.get("name", ""))
+    assert 'exit "$CODE"' in final["run"], "a non-verdict exit code must still fail"
+    assert "::error::" in final["run"], "and must say so in the log"
