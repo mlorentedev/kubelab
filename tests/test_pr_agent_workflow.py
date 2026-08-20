@@ -14,6 +14,7 @@ cataloguing, so it is asserted rather than left as a convention.
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import yaml
@@ -99,3 +100,76 @@ def test_the_action_is_pinned_by_sha_not_by_tag() -> None:
         f"the action is pinned to {ref!r}, which is not a commit SHA. A mutable "
         "tag decides what runs with NAN_API_KEY on a public repo."
     )
+
+
+def test_the_reviewer_verifies_it_actually_published() -> None:
+    """PR-Agent reports SUCCESS for starting and finishing, not for publishing.
+
+    Observed on #1180: green job, `## PR Code Suggestions` posted, zero comments
+    carrying the review marker, and the attestation gate correctly red — a green
+    reviewer sitting beside a red gate with nothing to explain the contradiction.
+    The gate protects the merge; this step exists so the reviewer's own job goes
+    red and names the cause.
+    """
+    steps = _load(REVIEWER)["jobs"]["review"]["steps"]
+    verifier = next((s for s in steps if "no review was published" in s.get("name", "")), None)
+    assert verifier is not None, "nothing checks that PR-Agent published anything"
+    assert "always()" in verifier["if"], "must run even when the reviewer step failed"
+
+
+def test_the_publish_check_reads_the_marker_from_the_shared_registry() -> None:
+    """The reviewer and its judge must not disagree about what a review is.
+
+    A hardcoded marker string here would be a second source of truth, and the
+    failure it produces is invisible: the reviewer would pass its own check
+    while the gate reads the PR unreviewed.
+    """
+    steps = _load(REVIEWER)["jobs"]["review"]["steps"]
+    verifier = next(s for s in steps if "no review was published" in s.get("name", ""))
+    assert "harness/review-attestation.json" in verifier["run"]
+    assert "review_markers" in verifier["run"]
+    # The marker itself must NOT appear as a literal in the workflow.
+    registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text())
+    marker = next(
+        r["review_markers"][0]
+        for r in registry["reviewers"]
+        if r["login"] == "github-actions" and r.get("review_markers")
+    )
+    assert marker not in verifier["run"], (
+        f"the marker {marker!r} is hardcoded in the workflow; the registry is the SSOT"
+    )
+
+
+def test_the_publish_check_does_not_read_an_attacker_influenced_ref() -> None:
+    """It reads a file that decides what counts as a review, so the ref it reads
+    from must not be one a PR author picks. `base.ref` is exactly that — the
+    upstream uses it, review-attestation.yml already rejected it, and the port
+    takes the hardened form."""
+    steps = _load(REVIEWER)["jobs"]["review"]["steps"]
+    verifier = next(s for s in steps if "no review was published" in s.get("name", ""))
+    assert "base.ref" not in str(verifier.get("env", {}))
+    assert "default_branch" in str(verifier["env"]["BASE_REF"])
+
+
+def test_inference_runs_are_queued_not_run_in_parallel() -> None:
+    """The NaN cluster allows 5 simultaneous requests and is shared. Exhausting
+    them is the diagnosed cause of the publish-nothing failure above, so the
+    reviewer job queues globally instead of racing itself across PRs."""
+    job = _load(REVIEWER)["jobs"]["review"]
+    assert job["concurrency"]["group"] == "pr-agent-nan-inference", (
+        "the group must NOT be keyed per PR — that is the workflow-level group's "
+        "job, and it is the cross-PR pile-up that exhausts the cluster"
+    )
+    assert job["concurrency"]["cancel-in-progress"] is False, "queue, never cancel"
+
+
+def test_the_gate_does_not_cancel_on_events_that_add_evidence() -> None:
+    """A comment, a label or an edit is new evidence about the SAME commit.
+    Cancelling there is what put `cancelled` in `gh pr checks`' fail column on a
+    healthy gate — repeatedly, because a reviewer speaking is itself a trigger.
+    """
+    cancel = str(_load(GATE)["concurrency"]["cancel-in-progress"])
+    for action in ("labeled", "unlabeled", "edited", "created"):
+        assert action in cancel, f"{action} would still cancel an in-flight run"
+    # A push must still cancel: it replaces the commit being judged.
+    assert "synchronize" not in cancel
