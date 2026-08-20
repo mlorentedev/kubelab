@@ -100,6 +100,45 @@ networking:
       description: "Hub · t4g.small · 2vCPU · 2GB"
       widget: ping
       ping_url: "https://argo.kubelab.live"
+  # GCP management plane (ADR-063 — supersedes ADR-023 §3.1's choice of AWS).
+  # Coexists with `aws` until the cutover; `aws` is removed once gcp1 reconciles.
+  gcp:
+    # ADR-028 tier. Machine-readable projection of the topology the ADR
+    # narrates; consumed by the backup trigger model (BACKUP-044).
+    location: "always-on"
+    project_id: "kubelab-hub"
+    # europe-west4 (Eemshaven), not europe-west3 (Frankfurt): GCP prices compute
+    # per REGION and uniformly across the zones inside it — unlike AWS, where
+    # Spot is priced per AZ (which is why aws1 pays 20% more in eu-central-1a).
+    # west4 is $0.0088/hr against west3's $0.0127 for the same machine.
+    region: "europe-west4"
+    # No zone: the MIG is REGIONAL and places the VM wherever Spot capacity is,
+    # which is the failure #1066 was (no capacity in the one zone we picked).
+    machine_type: "e2-small"        # 2 vCPU / 2 GB — equal-or-better than t4g.small
+    image_family: "ubuntu-2404-lts-amd64"
+    image_project: "ubuntu-os-cloud"
+    # 12 GB mirrors the AWS sizing and its reasoning (RELIAB-009): K3s + Argo CD
+    # steady-state ~6.4GB plus headroom for Helm image pulls and log spikes
+    # before kubelet's 85% disk-pressure threshold trips.
+    disk_size_gb: 12
+    # pd-balanced carries a 3,000 IOPS per-instance floor independent of size, so
+    # 12 GB yields 3,072 — matching gp3's flat 3,000 rather than regressing.
+    disk_type: "pd-balanced"
+    hostname: "gcp1"
+    # No tailscale_ip on purpose. The address rotates on every re-registration —
+    # and under a MIG every preemption self-heals by recreating the VM, so it
+    # rotates routinely. MagicDNS (ADR-025) is the identity; a cached literal
+    # here would be a lie waiting for the first preemption.
+    tailscale_dns: "gcp1.kubelab.internal"
+    k3s_version: "v1.34.4+k3s1"  # Match spoke versions
+    # Homepage cockpit tile (SSOT-005). widget=ping mirrors aws1's (ADR-033).
+    dashboard:
+      display_name: "gcp1"
+      order: 6
+      icon: mdi-cloud-outline
+      description: "Hub · e2-small · 2vCPU · 2GB"
+      widget: ping
+      ping_url: "https://argo.kubelab.live"
   nodes:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
     # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed
