@@ -13,6 +13,7 @@ Design:
 
 from __future__ import annotations
 
+import re
 import secrets as stdlib_secrets
 from dataclasses import dataclass, field
 from enum import Enum
@@ -58,6 +59,20 @@ class SecretSpec:
     format_hint: str = ""  # Expected format (e.g. "argon2id hash", "PEM RSA key")
     rotate_note: str = ""  # What breaks or needs restarting on rotation
     envs: tuple[str, ...] = ("dev", "staging", "prod")  # Which envs need this
+    # Declares that this secret is DELIVERED to Google Secret Manager for the GCP
+    # hub's cloud-init to read at boot (ADR-063 D7, GCP-001 finding F1).
+    #
+    # Delivery, not storage, and the distinction is the same one `envs` gets
+    # wrong often enough to be a documented gotcha: SOPS remains the SSOT and the
+    # only place a value is ever authored. Secret Manager is a one-way copy that
+    # a recreated hub can reach when nothing else on the machine can -- it has no
+    # SOPS age key, no kubeconfig and no operator. Drift is resolved by
+    # re-syncing, never by reading back.
+    #
+    # Tagging here rather than in a second list is deliberate: a standalone list
+    # of "secrets to sync" would be a second declaration of a fact this catalog
+    # already owns, free to disagree with it silently.
+    sync_to_secret_manager: bool = False
 
 
 # -- Authelia base path shortcut --
@@ -356,6 +371,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="bcrypt hash ($2y$/$2a$...)",
         rotate_note="Regenerate via `toolkit credentials generate` (→ common.enc.yaml), then `make deploy-argocd`.",
         envs=("prod",),
+        sync_to_secret_manager=True,
     ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_argocd",
@@ -367,6 +383,7 @@ SECRET_CATALOG: list[SecretSpec] = [
             "then `make deploy-argocd`."
         ),
         envs=("prod",),
+        sync_to_secret_manager=True,
     ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_argocd_hash",
@@ -386,6 +403,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="https://hooks.slack.com/services/...",
         rotate_note="Re-create the webhook in Slack, update common.enc.yaml, then `make deploy-argocd`.",
         envs=("prod",),
+        sync_to_secret_manager=True,
     ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
@@ -395,6 +413,32 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="opaque shared secret (must match the GitHub webhook config)",
         rotate_note="Rotate on the GitHub webhook + common.enc.yaml, then `make deploy-argocd`.",
         envs=("prod",),
+        sync_to_secret_manager=True,
+    ),
+    # =========================================================================
+    # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
+    # =========================================================================
+    SecretSpec(
+        key_path="gcp.headscale_api_key",
+        description="Headscale API key the GCP hub reads at boot (node recycle + pre-auth minting)",
+        kind=SecretKind.EXTERNAL,
+        services=("headscale", "gcp1"),
+        format_hint="hskey-api-... (Headscale API key, NOT a pre-auth key)",
+        rotate_note=(
+            "Mint on the VPS with `headscale apikeys create`, update common.enc.yaml, "
+            "then re-run the Secret Manager sync. No hub restart needed: cloud-init "
+            "reads it only at boot, so the new value is picked up by the next recreate."
+        ),
+        # `prod`, NOT `common`. `envs` is the AUDIT dimension, not the file the
+        # value lives in: it declares which environments must have this secret.
+        # There is no `common` pseudo-env, so `envs=("common",)` matches no real
+        # env and the secret vanishes from every audit silently (ANSIBLE-033).
+        # The value itself lives in common.enc.yaml alongside the other hub keys.
+        envs=("prod",),
+        # The ONE secret cloud-init can read at boot, and deliberately the only
+        # one until Phase 2: with it the node mints its own short-lived pre-auth
+        # key instead of carrying a stored one (finding F2).
+        sync_to_secret_manager=True,
     ),
     # =========================================================================
     # Infrastructure (external — not auto-generated, but must exist in SOPS)
@@ -631,6 +675,58 @@ SECRET_CATALOG: list[SecretSpec] = [
 
 # Build lookup by key_path for quick access
 _CATALOG_BY_KEY: dict[str, SecretSpec] = {s.key_path: s for s in SECRET_CATALOG}
+
+
+def secret_manager_name(key_path: str) -> str:
+    """The Secret Manager id for a SOPS key path, by rule rather than by choice.
+
+    The two systems name things differently and neither can adopt the other's
+    convention: SOPS paths are dotted (`argocd.admin_password_hash`), and a
+    Secret Manager id accepts only `[A-Za-z0-9_-]` -- a dot is rejected outright.
+
+    So a translation has to exist. What matters is that it exists ONCE. Naming
+    each secret by hand on the GCP side would be a second declaration of an
+    identity the catalog already owns, and the two would be free to disagree in
+    the one direction nothing catches: cloud-init asking for a name the sync
+    never wrote, discovered unattended after a preemption.
+
+    The rule keeps the FULL path rather than the trailing leaf, so two secrets
+    whose leaves match -- `argocd.admin_password_hash` and a future
+    `gcp.admin_password_hash` -- cannot silently overwrite each other in what is
+    a flat namespace on the GCP side.
+
+    It is NOT injective, and pretending otherwise would be the more dangerous
+    error. Both `.` and `_` collapse to `-`, so `a.b_c` and `a.b.c` produce the
+    same id and the second write would silently replace the first. No current
+    pair collides; `tests/test_secret_manager_sync.py` asserts that over the
+    union of both input classes, which is where a future addition would be
+    caught -- at the moment it is added, rather than at 3am on a hub that booted
+    with another secret's value.
+    """
+    name = key_path.replace(".", "-").replace("_", "-")
+    # Assert rather than sanitise: every catalog key is already in this shape, so
+    # a violation means an assumption broke somewhere upstream.
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,255}", name):
+        raise ValueError(f"{key_path!r} does not map to a valid Secret Manager id (got {name!r})")
+    return name
+
+
+def secrets_synced_to_secret_manager() -> tuple[SecretSpec, ...]:
+    """The SOPS-authored half of what the GCP hub reads at boot (ADR-063 D7).
+
+    The synced set has TWO classes and this is only one of them. The other --
+    each spoke's Argo CD ServiceAccount token and cluster CA -- is not authored
+    in SOPS at all: Kubernetes generates it, `make register-spoke` reads it live
+    out of the spoke's `argocd-manager-token` Secret, and no human ever writes
+    it. Declaring it here would assert an origin it does not have, which is the
+    scalar-vs-derivation error ADR-063 D4 exists to name. It is derived from the
+    `argocd.spokes` keys in common.yaml instead, at sync time.
+
+    So a caller wanting "everything the hub can read" must union both classes,
+    and anything asserting against the Terraform module's IAM bindings must do
+    the same or it will report a false gap.
+    """
+    return tuple(s for s in SECRET_CATALOG if s.sync_to_secret_manager)
 
 
 # =============================================================================
