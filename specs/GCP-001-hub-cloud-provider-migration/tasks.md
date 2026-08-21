@@ -115,14 +115,14 @@ Artifact Registry `$0` (0.5 GB), budgets `$0` (no charge).
 - [x] Static test `tests/test_gcp_hub_module.py` — SPOT, `DELETE` termination,
       **regional** MIG at `target_size = 1`, **no `google_compute_address`**,
       `pd-balanced`, disk size mirroring the SSOT, no credential literal,
-      `network_tier` set explicitly.
+      `network_tier` set explicitly. ✓ 2026-08-20 (#1191)
 - [x] `infra/terraform/gcp/{main,variables,outputs}.tf` — firewall, service
       account with `secretAccessor` on **named secrets only**, instance template,
       regional MIG. **No autohealing in v1** (the test permits it only with an
-      explicit `initial_delay_sec`).
+      explicit `initial_delay_sec`). ✓ 2026-08-20 (#1191)
 - [x] `cloud-init.yml` — Secret Manager fetch → stale-node cleanup → **mints its
       own single-use pre-auth key** via `POST /api/v1/preauthkey` → `tailscale up`
-      → K3s. Closes **F2**.
+      → K3s. Closes **F2**. ✓ 2026-08-20 (#1191)
 - [ ] **[AC5]** `toolkit infra terraform gcp-tfvars`, mirroring `aws-tfvars`; the
       Makefile deletes the rendered file after every use.
 - [ ] **[AC5]** `make tf-gcp-{plan,apply,destroy}` and
@@ -130,10 +130,18 @@ Artifact Registry `$0` (0.5 GB), budgets `$0` (no charge).
       *Until these exist, runbook §6 and §8 are not executable — they document the
       end state. `gcp1-start`/`stop` set the MIG's `target_size`; note `aws1` never
       had a `start` target at all, so this is an improvement, not parity.*
-- [ ] **[P]** Register `gcp.headscale_api_key` in `SECRET_CATALOG` with
+- [x] **[P]** Register `gcp.headscale_api_key` in `SECRET_CATALOG` with
       **`envs=("prod",)`** — **not `("common",)`**, which matches no real env and
-      makes the secret vanish from every audit silently (ANSIBLE-033).
-- [ ] `make secrets-audit` clean.
+      makes the secret vanish from every audit silently (ANSIBLE-033). ✓ 2026-08-21
+- [ ] `make secrets-audit` clean. **Measured 2026-08-21: prod 47/48, the one gap
+      being `gcp.headscale_api_key` itself — registered, value not yet in SOPS.**
+      An operator step (mint on the VPS with `headscale apikeys create`), not a
+      defect. It also *proves* the `envs=("prod",)` choice: the audit surfaces it.
+      Registered as `("common",)` it would have matched no real env and vanished
+      from every audit silently, and the first symptom would have been a recreated
+      hub unable to mint its pre-auth key (ANSIBLE-033).
+      *(dev's 4 missing are the stale Gitea/OIDC catalog entries since ADR-061,
+      unrelated; staging is 35/35.)*
 
 # Phase 2 — the SOPS → Secret Manager sync, and F1
 
@@ -164,17 +172,17 @@ one level out. Not this phase's to fix; noted so it is not mistaken for new.)*
 
 ## Tasks
 
-- [ ] **[AC4]** A one-way sync pushing named SOPS values into Secret Manager.
+- [x] **[AC4]** A one-way sync pushing named SOPS values into Secret Manager.
       **SOPS stays the SSOT**; nothing is ever authored in Secret Manager, and
       drift is resolved by re-syncing rather than by reading (ADR-063 D7).
       Which secrets sync is declared by **tagging `SECRET_CATALOG`**, never by a
       second list, with a static test asserting the Terraform module's IAM-bound
-      secret names equal the tagged set.
-- [ ] **[P]** Register `gcp.headscale_api_key` in `SECRET_CATALOG` with
+      secret names equal the tagged set. ✓ 2026-08-21
+- [x] **[P]** Register `gcp.headscale_api_key` in `SECRET_CATALOG` with
       **`envs=("prod",)`** — **not `("common",)`**, which matches no real env and
       makes the secret vanish from every audit silently (ANSIBLE-033). It is the
-      sync's first input, so it belongs with the sync rather than before it.
-- [ ] **DECIDE, then record: the spoke SA token and CA are not SOPS-authored.**
+      sync's first input, so it belongs with the sync rather than before it. ✓ 2026-08-21
+- [x] **DECIDE, then record: the spoke SA token and CA are not SOPS-authored.**
       `register-spoke` reads them live out of the spoke's `argocd-manager-token`
       Secret — Kubernetes generates them, no human writes them. So "SOPS is the
       SSOT" does not describe them, and pretending otherwise would be the
@@ -184,7 +192,13 @@ one level out. Not this phase's to fix; noted so it is not mistaken for new.)*
       elsewhere; **(b)** have the sync read them from the spoke and push straight
       to Secret Manager, keeping origin honest at the cost of a second input path
       and a sync that needs spoke access at *sync* time (never at boot).
-- [ ] **[AC4]** Extend `cloud-init.yml` to install **Argo CD**, the spoke cluster
+      **RESOLVED (b)** ✓ 2026-08-21. The sync reads both from the spoke and pushes
+      straight to Secret Manager; they are deliberately NOT catalog-tagged,
+      because tagging asserts a SOPS origin they do not have. Recorded in the
+      `gcp_secret_sync` module docstring — the consequence that surprises is that
+      the sync needs the spokes reachable **at sync time** (staging ⇒ homelab on),
+      never at boot.
+- [x] **[AC4]** Extend `cloud-init.yml` to install **Argo CD**, the spoke cluster
       secrets and the Applications. Until this lands, a recreated hub has K3s and
       no Argo CD — the same place the AWS hub reaches, and **F1 is not closed**.
       - Embed `infra/helm/argocd/values.yaml` (6 KB, self-contained, no external
@@ -201,7 +215,12 @@ one level out. Not this phase's to fix; noted so it is not mistaken for new.)*
         to `/var/log/kubelab-bootstrap.log`, and the Makefile's `--set` pattern
         puts four secrets on the command line. Fetch into a `0600` file under
         `/dev/shm`, pass `helm -f`, remove it, and never echo a fetched value.
-- [ ] **Secret Manager discipline, asserted not assumed** — the four rules that
+      **Done ✓ 2026-08-21, with one deviation recorded:** the pins live under
+      `argocd.{chart_version,helm_version}`, **not** `networking.gcp` — they are
+      properties of the Argo CD install that `_deploy-argocd-helm` reads too, not
+      of the GCP node. Both ARE in the `MIRRORED` drift test as the plan required;
+      the map now holds dotted paths so it can span both sections.
+- [x] **Secret Manager discipline, asserted not assumed** — the four rules that
       keep it free, from the cost envelope:
       automatic replication (per-location billing); **≤6 active versions**;
       **destroy** superseded versions rather than disabling them (a *disabled*
@@ -210,7 +229,7 @@ one level out. Not this phase's to fix; noted so it is not mistaken for new.)*
       budget on access operations alone). Enforced in the sync tool itself, not
       only documented: no CI test can reach real GCP. The sync must also be
       **idempotent** — compare the payload and skip when unchanged, or every run
-      adds a version and walks the cap.
+      adds a version and walks the cap. ✓ 2026-08-21
 
 ## Two things this phase does NOT do, stated so nobody reads them in
 
@@ -234,6 +253,7 @@ literal, no secret on argv — and (b) mocked-client unit tests for the sync.
 Requires Phase 0 (a real project) and Phase 1's Makefile targets.
 
 - [x] `networking.gcp` in `common.yaml`; completeness guards extended to cover it.
+      ✓ 2026-08-20 (#1191)
 - [ ] **[AC5]** Point `clusters.hub.{node,ssh_alias}` at `gcp1`, then walk the
       remaining column-3 rows from `proposal.md` **one row per commit**, so the
       diff shows exactly what a provider change costs. Do **not** refactor them
