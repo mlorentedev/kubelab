@@ -39,6 +39,25 @@ TOKEN="$(cat {{ node_notify_secret_file }})"
 BODY_TAIL="$(journalctl -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pager 2>/dev/null \
   | tail -c {{ node_notify_body_bytes }})"
 
+# The unit's ACTUAL last result, so the title can state what is true rather than
+# assume that this script running means something failed.
+#
+# It does not. `OnFailure=` is one caller; `systemctl start kubelab-notify@X` by
+# hand is another, and that is exactly what the delivery test does. Before this,
+# the test posted "X failed on <node>" with a body showing X's last run --
+# which, the test being run on a healthy fleet, was a SUCCESS. Measured
+# 2026-08-21: an envelope titled "node-backup-ship.service failed on rpi3"
+# carrying `ship complete` and `Deactivated successfully` reached the operator's
+# phone at 08:00. A channel that cries failure over a healthy backup teaches
+# people to skim it, which is the exact indifference this whole path exists to
+# prevent.
+#
+# `| cut` rather than `--value`, which is systemd >= 230: this fleet is well
+# past that, but the parse costs nothing and the script also runs on the Jetson
+# class of node. `|| true` because `set -e` is active and an unknown unit is a
+# legitimate state here -- it yields an empty result and the neutral wording.
+UNIT_RESULT="$(systemctl show -p Result "$UNIT" 2>/dev/null | cut -d= -f2 || true)"
+
 # JSON-encode via python3 (present on every node Ansible manages) rather than
 # shell string interpolation -- journal content can contain quotes, newlines,
 # and other characters that would break a hand-built JSON string.
@@ -56,13 +75,29 @@ BODY_TAIL="$(journalctl -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pager
 # the first time, and a runtime value spliced into source is an injection
 # vector -- json.dumps would have escaped it for the payload, but only after
 # python had already parsed it as code.
-PAYLOAD="$(printf '%s' "$BODY_TAIL" | FAILED_UNIT="$UNIT" python3 -c "
+PAYLOAD="$(printf '%s' "$BODY_TAIL" | FAILED_UNIT="$UNIT" UNIT_RESULT="$UNIT_RESULT" python3 -c "
 import json, os, sys
 unit = os.environ['FAILED_UNIT']
+raw = os.environ.get('UNIT_RESULT', '')
+# An empty result means systemd does not know the unit, which is not a failure
+# either -- so anything but a positive failure signal takes the neutral wording.
+failed = bool(raw) and raw != 'success'
+shown = raw or 'unknown'
+# Resolved BEFORE the f-string. A quoted fallback inside the replacement field
+# needs a backslash to survive the surrounding shell double-quotes, and a
+# backslash inside an f-string expression is a syntax error on any Python
+# before 3.12 -- which this fleet does not uniformly have.
 print(json.dumps({
     'domain': 'fleet',
     'severity': '{{ node_notify_severity }}',
-    'title': f'{unit} failed on {{ inventory_hostname }}',
+    'title': (
+        f'{unit} failed on {{ inventory_hostname }}'
+        if failed
+        # No alarming word anywhere in this branch, deliberately: a phone shows
+        # the title and little else, and 'not in a failed state' still reads as
+        # 'failed' at a glance. State the result instead of negating a claim.
+        else f'notify path exercised on {{ inventory_hostname }} -- {unit} last result: {shown}'
+    ),
     'body': sys.stdin.buffer.read().decode('utf-8', 'replace'),
     'source': '{{ inventory_hostname }}/kubelab-notify',
 }))

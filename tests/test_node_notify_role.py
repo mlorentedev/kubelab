@@ -201,8 +201,12 @@ def test_notify_script_posts_to_the_public_webhook_ingress():
 # --- the encoding claim, executed rather than asserted about ---------------
 
 
-def _encode_via_rendered_script(journal_bytes: bytes) -> dict:
+def _encode_via_rendered_script(journal_bytes: bytes, result: str = "exit-code") -> dict:
     """Run the python3 encoder embedded in the rendered script over raw bytes.
+
+    `result` is what `systemctl show -p Result` reported for the unit. It
+    decides the envelope's wording, so it is a parameter rather than a constant:
+    the default is a real failure, and the tests below cover the other branch.
 
     Extracts the real ``python3 -c "..."`` body from the template output, so this
     exercises the shipped code path instead of a copy that can drift from it.
@@ -222,7 +226,7 @@ def _encode_via_rendered_script(journal_bytes: bytes) -> dict:
         [sys.executable, "-c", body.group(1)],
         input=journal_bytes,
         capture_output=True,
-        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service"},
+        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result},
     )
     assert proc.returncode == 0, f"encoder crashed: {proc.stderr.decode(errors='replace')}"
     return json.loads(proc.stdout)
@@ -580,4 +584,43 @@ def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
         "`make maintain-notify-test` cannot pass notify_test_unit, so the only way "
         "to exercise any unit but the default is a raw ansible-playbook invocation — "
         "which is exactly what these targets exist to prevent"
+    )
+
+
+def test_the_envelope_does_not_cry_failure_over_a_healthy_unit() -> None:
+    """`OnFailure=` is one caller of this script. It is not the only one.
+
+    The delivery test starts the notifier by hand, on a healthy fleet, and the
+    body it carries is the unit's last run — a SUCCESS. Titled "X failed on
+    <node>" that reaches the operator's phone as an alert about a backup that
+    worked. Measured 2026-08-21: an envelope titled "node-backup-ship.service
+    failed on rpi3" carrying `ship complete` and `Deactivated successfully`.
+
+    A channel that cries failure over healthy state teaches people to skim it,
+    which is the indifference this whole path exists to prevent. So the title is
+    derived from the unit's real result rather than assumed from the fact that
+    the script ran.
+    """
+    healthy = _encode_via_rendered_script(b"ship complete", result="success")
+    assert "failed" not in healthy["title"], (
+        f"a unit whose last result is `success` is announced as {healthy['title']!r}"
+    )
+    assert "node-backup-ship.service" in healthy["title"], "the unit must still be named"
+
+    failed = _encode_via_rendered_script(b"boom", result="exit-code")
+    assert "failed" in failed["title"], (
+        f"a genuinely failed unit must say so; got {failed['title']!r}"
+    )
+
+
+def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
+    """`systemctl show` on a unit systemd does not know returns nothing.
+
+    Empty is not evidence of failure, and treating it as one would put the
+    script back to asserting a failure it cannot see — so anything but a
+    positive failure signal takes the neutral wording.
+    """
+    envelope = _encode_via_rendered_script(b"", result="")
+    assert "failed" not in envelope["title"], (
+        f"an unknown unit is announced as {envelope['title']!r}"
     )
