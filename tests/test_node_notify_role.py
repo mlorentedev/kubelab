@@ -1,4 +1,9 @@
-"""Unit tests for the node_maintenance role's failure-notify path — ANSIBLE-035.
+"""Unit tests for the fleet failure-notify path — ANSIBLE-035, ANSIBLE-038.
+
+The mechanism lives in the ``node_notify`` role, which installs one
+``kubelab-notify@.service`` template for every unit in the fleet. ``node_maintenance``
+is now just its first consumer, and this file spans both roles for that reason:
+the linkage it asserts is precisely the thing that lives in neither one alone.
 
 Pure render + subprocess assertions: NO SSH, no live node, no n8n. Runs under
 ``make test`` (marker-less → collected by ``-m "not e2e and not infra"``).
@@ -10,7 +15,7 @@ review flagged that gap (F2) and it is the reason for this file.
 
 The contract encoded here:
 
-- ``OnFailure=kubelab-maintenance-notify.service`` on the main unit. This is the
+- ``OnFailure=kubelab-notify@%n.service`` on a consuming unit. This is the
   single line the whole alert path hangs from, and deleting it breaks NOTHING
   observable: maintenance keeps running, it just stops reporting its own
   failures. Exactly the defect a manual test cannot catch.
@@ -26,6 +31,7 @@ The contract encoded here:
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 import subprocess
@@ -38,14 +44,25 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 REPO = Path(__file__).resolve().parent.parent
-ROLE = REPO / "infra/ansible/roles/node_maintenance"
-TEMPLATES = ROLE / "templates"
-DEFAULTS = ROLE / "defaults/main.yml"
+NOTIFY_ROLE = REPO / "infra/ansible/roles/node_notify"
+MAINTENANCE_ROLE = REPO / "infra/ansible/roles/node_maintenance"
+# Both roles' template dirs, because the contract under test spans them: the
+# `OnFailure=` line lives on the consumer and the unit it names lives on the
+# provider, and a test that could only see one side would pass through exactly
+# the half-rename it exists to catch.
+TEMPLATES = [NOTIFY_ROLE / "templates", MAINTENANCE_ROLE / "templates"]
 
 
 def _defaults() -> dict[str, object]:
-    """The role's own defaults — so a renamed variable fails here, not in prod."""
-    return yaml.safe_load(DEFAULTS.read_text())
+    """Both roles' defaults, merged — so a renamed variable fails here, not in prod.
+
+    The two namespaces (`node_notify_*` and `maintenance_*`) do not collide, and
+    merging them means either role's template renders from one context.
+    """
+    merged: dict[str, object] = {}
+    for role in (NOTIFY_ROLE, MAINTENANCE_ROLE):
+        merged.update(yaml.safe_load((role / "defaults/main.yml").read_text()))
+    return merged
 
 
 def _render(template: str, **overrides: object) -> str:
@@ -62,7 +79,7 @@ def _render(template: str, **overrides: object) -> str:
     )
     ctx.update(overrides)
     env = Environment(
-        loader=FileSystemLoader(str(TEMPLATES)),
+        loader=FileSystemLoader([str(d) for d in TEMPLATES]),
         undefined=StrictUndefined,
         keep_trailing_newline=True,
     )
@@ -75,7 +92,11 @@ def _render(template: str, **overrides: object) -> str:
 def test_main_unit_declares_onfailure_to_the_notify_unit():
     """The one line the entire alert path depends on (AC6)."""
     unit = _render("kubelab-maintenance.service.j2")
-    assert "OnFailure=kubelab-maintenance-notify.service" in unit
+    assert "OnFailure=kubelab-notify@%n.service" in unit, (
+        "the consumer no longer names the fleet notifier. `%n` is load-bearing: it "
+        "is the consuming unit's own full name, and it becomes the notifier's "
+        "instance, which is how the notifier knows whose journal to read."
+    )
 
 
 def test_onfailure_target_names_a_unit_the_role_actually_installs():
@@ -88,16 +109,56 @@ def test_onfailure_target_names_a_unit_the_role_actually_installs():
     unit = _render("kubelab-maintenance.service.j2")
     target = re.search(r"^OnFailure=(\S+)$", unit, re.MULTILINE)
     assert target, "main unit has no OnFailure= directive"
-    assert (TEMPLATES / f"{target.group(1)}.j2").is_file()
+    # `foo@%n.service` is an INSTANCE of the template `foo@.service`. Resolve it
+    # back to the template before looking for the file, or this asserts the
+    # existence of a unit systemd never expects to find on disk.
+    template_unit = re.sub(r"@[^.]*", "@", target.group(1), count=1)
+    assert any((d / f"{template_unit}.j2").is_file() for d in TEMPLATES), (
+        f"OnFailure names {target.group(1)!r}, whose template {template_unit!r} exists "
+        f"in no role. systemd accepts this silently and the alert path is dead until "
+        f"the trigger fires — which is when nobody is watching."
+    )
+    # A template file on disk is not a template file INSTALLED. The original
+    # form of this assertion stopped at the first half, which would keep passing
+    # against a role that carried the .j2 and never rendered it — the source
+    # present, the node without it. Raised by review on #1212.
+    installer = next(
+        (
+            task
+            for task in yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+            if str(task.get("template", {}).get("src", "")) == f"{template_unit}.j2"
+        ),
+        None,
+    )
+    assert installer is not None, (
+        f"no task in node_notify renders {template_unit}.j2; the unit OnFailure names "
+        f"would never reach the node"
+    )
+    assert "node_notify_unit_name" in installer["template"]["dest"], (
+        "the install path is a literal rather than the declared variable, so the unit "
+        "name is now asserted in two places that can drift apart"
+    )
 
 
 def test_notify_unit_execstart_matches_the_script_the_role_deploys():
     """Unit and script must agree on the path; the tasks file installs both."""
-    unit = _render("kubelab-maintenance-notify.service.j2")
-    exec_start = re.search(r"^ExecStart=(\S+)$", unit, re.MULTILINE)
+    unit = _render("kubelab-notify@.service.j2")
+    # The script path is the first token; `%i` follows it as the argument.
+    exec_start = re.search(r"^ExecStart=(\S+)( .*)?$", unit, re.MULTILINE)
     assert exec_start, "notify unit has no ExecStart"
-    tasks = (ROLE / "tasks/main.yml").read_text()
-    assert exec_start.group(1) in tasks
+    tasks = (NOTIFY_ROLE / "tasks/main.yml").read_text()
+    # `==`, not `in`. As a substring check an ExecStart of `/opt` passed, because
+    # `/opt` is a substring of `/opt/kubelab-notify.sh` — the assertion accepted
+    # a unit pointing at a directory. Raised by review on #1212.
+    assert exec_start.group(1) == _defaults()["node_notify_script_path"], (
+        f"the unit runs {exec_start.group(1)!r}, which is not the "
+        f"{_defaults()['node_notify_script_path']!r} the role declares"
+    )
+    assert "node_notify_script_path" in tasks, "the role does not install that script"
+    assert (exec_start.group(2) or "").strip() == "%i", (
+        "the notifier must be handed the failing unit as `%i`; without it the script "
+        "refuses, and the failure is reported by nothing"
+    )
 
 
 # --- the design decisions worth pinning ------------------------------------
@@ -111,7 +172,7 @@ def test_notify_domain_is_a_literal_not_derived_from_env_config():
     ``config.*``. Matching raw text would also match the comment that explains
     the decision — i.e. it would punish documenting it.
     """
-    domain = _defaults()["maintenance_notify_domain"]
+    domain = _defaults()["node_notify_domain"]
     assert domain == "n8n.kubelab.live"
     assert "{{" not in str(domain), "domain must not be derived per-env"
 
@@ -125,13 +186,13 @@ def test_cleanup_and_timer_gates_are_independent(  # AC1
 
 
 def test_notify_script_reads_the_token_from_the_declared_secret_file():
-    script = _render("kubelab-maintenance-notify.sh.j2")
-    assert str(_defaults()["maintenance_notify_secret_file"]) in script
+    script = _render("kubelab-notify.sh.j2")
+    assert str(_defaults()["node_notify_secret_file"]) in script
     assert "set -euo pipefail" in script
 
 
 def test_notify_script_posts_to_the_public_webhook_ingress():
-    script = _render("kubelab-maintenance-notify.sh.j2")
+    script = _render("kubelab-notify.sh.j2")
     assert "https://n8n.kubelab.live/webhook/notify" in script
     # -f: an n8n 4xx/5xx must fail THIS unit rather than be swallowed.
     assert re.search(r"curl\s+-sS\s+-f", script)
@@ -149,13 +210,19 @@ def _encode_via_rendered_script(journal_bytes: bytes) -> dict:
     Bytes, not str, deliberately: the whole point of the truncation case is that
     what reaches the encoder is not guaranteed to be valid UTF-8.
     """
-    script = _render("kubelab-maintenance-notify.sh.j2")
+    script = _render("kubelab-notify.sh.j2")
     body = re.search(r'python3 -c "\n(.*?)\n"', script, re.DOTALL)
     assert body, "could not locate the python3 encoder in the rendered script"
+    # FAILED_UNIT reaches the encoder through the ENVIRONMENT, exactly as the
+    # script hands it over. Extracting this mechanism made the unit name a
+    # runtime value for the first time, and passing it in the environment rather
+    # than splicing it into the program text is what keeps it data instead of
+    # code — asserted here by running the encoder the same way the unit does.
     proc = subprocess.run(
         [sys.executable, "-c", body.group(1)],
         input=journal_bytes,
         capture_output=True,
+        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service"},
     )
     assert proc.returncode == 0, f"encoder crashed: {proc.stderr.decode(errors='replace')}"
     return json.loads(proc.stdout)
@@ -193,7 +260,7 @@ def test_journal_body_survives_json_encoding(journal_bytes: bytes):
 
 def test_curl_call_is_time_bounded():
     """ANSIBLE-038: an unreachable n8n must not stall the unit on curl defaults."""
-    script = _render("kubelab-maintenance-notify.sh.j2")
+    script = _render("kubelab-notify.sh.j2")
     assert "--connect-timeout" in script
     assert "--max-time" in script
 
@@ -250,7 +317,7 @@ def test_token_is_not_a_curl_argv_element():
     Asserted on the rendered text because argv is what ``/proc/<pid>/cmdline``
     exposes, and a process-inspection race would make this flaky for no gain.
     """
-    code = _executable_lines(_render("kubelab-maintenance-notify.sh.j2"))
+    code = _executable_lines(_render("kubelab-notify.sh.j2"))
     assert not re.search(r"-H\s+[\"']Authorization:", code), (
         "the bearer token is back in curl's argv, where ps can read it"
     )
@@ -280,13 +347,13 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
     The URL is the one substitution: the template hardcodes https, and standing
     up TLS here would test openssl rather than the escaping.
     """
-    script = _render("kubelab-maintenance-notify.sh.j2")
+    script = _render("kubelab-notify.sh.j2")
     block = script[script.index("TOKEN_ESC=") :]
 
     captured: list[bytes] = []
     port = _serve_one_request(captured)
     block = block.replace(
-        f"https://{_defaults()['maintenance_notify_domain']}", f"http://127.0.0.1:{port}"
+        f"https://{_defaults()['node_notify_domain']}", f"http://127.0.0.1:{port}"
     )
 
     proc = subprocess.run(
@@ -306,6 +373,20 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
     assert sent == [f"Authorization: Bearer {token}"], (
         f"token corrupted in transit: {sent!r}"
     )
+
+
+def test_the_envelope_names_the_unit_that_actually_failed() -> None:
+    """One notifier serves every unit, so the title is the only thing that says which.
+
+    Under the old single-purpose script the unit name was a Jinja literal and
+    could not be wrong. Now it is a runtime value, and an envelope that reports
+    the wrong unit — or reports none — sends the operator to the wrong journal.
+    """
+    envelope = _encode_via_rendered_script(b"whatever")
+    assert "node-backup-ship.service" in envelope["title"], (
+        f"the failing unit is missing from the envelope title: {envelope['title']!r}"
+    )
+    assert envelope["severity"] == "log"
 
 
 # --- ANSIBLE-038 f5: retry budget vs the unit's own timeout -----------------
@@ -334,10 +415,10 @@ def test_notify_unit_timeout_exceeds_the_script_retry_budget():
     Worst case is ``--retry-max-time`` (after which curl starts no NEW attempt)
     plus one final attempt bounded by ``--max-time``.
     """
-    script = _render("kubelab-maintenance-notify.sh.j2")
+    script = _render("kubelab-notify.sh.j2")
     worst_case = _flag(script, "--retry-max-time") + _flag(script, "--max-time")
 
-    unit = _render("kubelab-maintenance-notify.service.j2")
+    unit = _render("kubelab-notify@.service.j2")
     timeout = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
     assert timeout, "notify unit has no TimeoutStartSec"
 
@@ -353,10 +434,10 @@ def test_retry_is_in_curl_not_in_the_unit():
     Restart= means confronting it rather than ending up with both. Both at once
     is the bad outcome: systemd re-running a script that is already retrying.
     """
-    script = _render("kubelab-maintenance-notify.sh.j2")
+    script = _render("kubelab-notify.sh.j2")
     assert "--retry" in script
 
-    unit = _render("kubelab-maintenance-notify.service.j2")
+    unit = _render("kubelab-notify@.service.j2")
     directives = re.findall(r"^(Restart)=", unit, re.MULTILINE)
     assert not directives, (
         "Restart= on the unit duplicates the retry curl already performs"
@@ -381,3 +462,57 @@ def test_token_value_is_not_shell_interpreted():
     assert proc.stdout == f"Authorization: Bearer {hostile}"
     assert not Path("/tmp/kubelab-notify-pwned").exists()
     assert not Path("/tmp/kubelab-notify-pwned2").exists()
+
+
+# --- the tag topology, which a dry run found and no static test had ---------
+
+
+PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("provision-*.yml"))
+
+
+def _role_tags(playbook: Path, role_suffix: str) -> set[str] | None:
+    """Tags on one role entry in a playbook, or None if it does not include it."""
+    for play in yaml.safe_load(playbook.read_text()) or []:
+        for entry in play.get("roles") or []:
+            if isinstance(entry, dict) and str(entry.get("role", "")).endswith(role_suffix):
+                return set(entry.get("tags") or [])
+    return None
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_cannot_be_selected_without_its_consumer(playbook: Path):
+    """node_notify must not be reachable by a tag that misses node_maintenance.
+
+    This role REMOVES `kubelab-maintenance-notify.service`, which
+    `kubelab-maintenance.service` keeps naming until node_maintenance
+    re-templates it. A selector that reaches one and not the other leaves the
+    node notification-dark: systemd logs "unit not found" on the next failure
+    and nobody is told — silent, and only on the path nobody exercises.
+
+    Found by a `--check` run against the VPS, not by reading the diff: the role
+    carried a `notify` tag of its own and `TAGS=notify` selected exactly the
+    unsafe subset. Sharing the consumer's tag makes that unreachable rather
+    than documented, which is the difference between a rule and a comment.
+    """
+    notify = _role_tags(playbook, "roles/node_notify")
+    maintenance = _role_tags(playbook, "roles/node_maintenance")
+    if notify is None and maintenance is None:
+        pytest.skip(f"{playbook.stem} includes neither role")
+    assert notify is not None, (
+        f"{playbook.stem} includes node_maintenance without node_notify, so its "
+        f"`OnFailure=kubelab-notify@%n.service` names a unit that node never gets"
+    )
+    assert maintenance is not None, (
+        f"{playbook.stem} includes node_notify without node_maintenance"
+    )
+    # EQUAL, not merely a subset. The dependency runs both ways now that the
+    # teardown sits in node_maintenance: a selector reaching only node_notify
+    # installs a notifier nothing names, and one reaching only node_maintenance
+    # removes the old unit while re-pointing its own at a template that node
+    # may not have. The two roles are one migration and neither half is
+    # separately selectable.
+    assert notify == maintenance, (
+        f"{playbook.stem}: node_notify has {sorted(notify)!r} and node_maintenance "
+        f"{sorted(maintenance)!r}. Any tag in one and not the other selects half a "
+        f"migration, and the half that runs alone leaves the node notification-dark."
+    )
