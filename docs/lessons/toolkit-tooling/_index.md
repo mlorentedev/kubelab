@@ -4,6 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
+| 364 | [`make` has no unknown-variable error, so a flag one target ignores is a real run](lesson-364-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run.md) | 2026-08-21 |
 | 363 | [A test helper that mangles its input makes every guard downstream report on the mangled copy](lesson-363-a-test-helper-that-mangles-its-input-reports-on-the-mangled-copy.md) | 2026-08-21 |
 | 362 | [`make` has no unknown-variable error, so a flag one target ignores is a real run](lesson-362-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run.md) | 2026-08-21 |
 | 352 | [A gap in an allow-list has no self-evident meaning — the same absence was the control in one list and the bug in the next](lesson-352-a-gap-in-an-allow-list-has-no-self-evident-meaning.md) | 2026-08-19 |
