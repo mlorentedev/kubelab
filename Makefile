@@ -489,7 +489,10 @@ _deploy-argocd-helm:
 	test -n "$$OIDC_SECRET"       || { echo "FATAL: oidc_client_secret_argocd decrypted empty — refusing to install Argo CD with blank OIDC (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$SLACK_WEBHOOK"     || { echo "FATAL: argocd.slack_webhook_url decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$GH_WEBHOOK_SECRET" || { echo "FATAL: argocd.github_webhook_secret decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
+	ARGOCD_CHART=$$($(TOOLKIT) config get argocd.chart_version) && \
+	test -n "$$ARGOCD_CHART" || { echo "FATAL: argocd.chart_version missing from common.yaml — refusing to install an unpinned chart" >&2; exit 1; } && \
 	helm upgrade --install argocd argo/argo-cd \
+		--version "$$ARGOCD_CHART" \
 		--namespace argocd --create-namespace \
 		--kubeconfig $(HUB_KUBECONFIG) \
 		-f infra/helm/argocd/values.yaml \

@@ -21,6 +21,9 @@ These tests pin:
 
 from __future__ import annotations
 
+import pathlib
+import re
+
 from unittest.mock import patch
 
 from toolkit.config.settings import PROJECT_ROOT
@@ -108,3 +111,47 @@ class TestAuditTracksArgocdHubKeys:
         with patch.object(ConfigurationManager, "_decrypt_sops", return_value=partial):
             result = SecretsManager(PROJECT_ROOT).audit("prod")
         assert "apps.services.security.authelia.oidc_client_secret_argocd" in result.missing
+
+
+class TestTheChartVersionIsPinned:
+    """An unpinned chart makes every deploy a potential major upgrade of prod.
+
+    Measured 2026-08-21: `aws1` runs `argo-cd-9.5.13`, the repository's current
+    release is `10.4.0`. Until `argocd.chart_version` existed,
+    `_deploy-argocd-helm` ran `helm upgrade --install` with no `--version`, so
+    the next `make deploy-argocd` -- run for any reason, including a routine OIDC
+    refresh -- would have crossed that major boundary as a SIDE EFFECT.
+
+    The same value is read by the GCP hub's cloud-init, where the stakes rise
+    again: a MIG recreates unattended, so an unpinned chart there means a
+    preemption at 3am can also be an upgrade (GITOPS-002, #1209).
+    """
+
+    MAKEFILE = pathlib.Path(__file__).resolve().parents[1] / "Makefile"
+    COMMON = pathlib.Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml"
+
+    def test_the_ssot_declares_a_concrete_chart_version(self) -> None:
+        import yaml
+
+        argocd = yaml.safe_load(self.COMMON.read_text())["argocd"]
+        version = str(argocd.get("chart_version", ""))
+        assert version, "argocd.chart_version is missing from common.yaml"
+        # A moving target defeats the point: "latest"/"" resolve to whatever the
+        # repo serves that day, which is exactly the behaviour being removed.
+        assert re.fullmatch(r"\d+\.\d+\.\d+", version), (
+            f"argocd.chart_version is {version!r}. It must be an exact chart "
+            f"version -- a range or 'latest' reintroduces the unattended upgrade."
+        )
+
+    def test_the_deploy_target_passes_the_pin_to_helm(self) -> None:
+        body = self.MAKEFILE.read_text()
+        assert "--version" in body and "argo/argo-cd" in body, (
+            "`helm upgrade --install argo/argo-cd` runs without --version; helm "
+            "resolves that to the newest chart in the repo."
+        )
+        # Anchored to the SSOT read, not to a duplicated literal: a hardcoded
+        # version in the Makefile would satisfy a laxer assertion while creating
+        # the second declaration this pin exists to prevent.
+        assert "config get argocd.chart_version" in body, (
+            "the deploy target does not read the chart version from the SSOT"
+        )
