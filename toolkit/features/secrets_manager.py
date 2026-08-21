@@ -544,7 +544,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     # ANSIBLE-035: fleet-wide copy of the PROD n8n webhook token specifically,
     # under a DEDICATED key (not the one above) so the merge can't collide.
-    # All 7 kubelab-maintenance-notify.service nodes POST to prod n8n
+    # All 7 kubelab-notify@.service nodes POST to prod n8n
     # regardless of their own deploy_env (see specs/ANSIBLE-035-.../proposal.md
     # for why: alerting must not depend on ace1/staging-n8n's power state).
     # If this shared the `webhook_secret` key path above, the 3 nodes with
@@ -566,7 +566,7 @@ SECRET_CATALOG: list[SecretSpec] = [
             "Rotate apps.services.automation.notify.webhook_secret (env=prod) first, then copy "
             "the new value here with the same command used to create it (see ANSIBLE-035), then "
             "re-provision the fleet (`make provision NODE=x TAGS=maintenance` per node) — "
-            "kubelab-maintenance-notify.service reads this from a static 0600 file written at "
+            "kubelab-notify@.service reads this from a static 0600 file written at "
             "provision time, not decrypted live on the node."
         ),
         envs=("staging", "prod"),  # consumed by nodes provisioned under both envs

@@ -34,12 +34,24 @@ maintenance_rotated_log_retention_days: 3
 # to disable. RELIAB-009 incident 2026-05-10.
 maintenance_active_log_max_mb: 100
 
-# --- OnFailure notify (ANSIBLE-035, NOTIFY-001) ----------------------------
-# Always prod n8n, regardless of this node's own deploy_env: alerting must
-# not depend on ace1 (staging n8n's host) being powered on. See
-# specs/ANSIBLE-035-maintenance-timer-rollout/proposal.md for the measured
-# reasoning. Not derived from `config.*` on purpose -- 3 of the 7 nodes
-# running this role have deploy_env: staging, so config.apps.services.
-# automation.n8n.domain would resolve to staging's domain on those nodes.
-maintenance_notify_domain: "n8n.kubelab.live"
-maintenance_notify_secret_file: /opt/kubelab-maintenance-notify-secret
+# --- OnFailure notify ------------------------------------------------------
+# The mechanism moved to roles/node_notify (BACKUP-044 Part 5). This role keeps
+# the `OnFailure=kubelab-notify@%n.service` linkage on its own unit; the domain,
+# the secret file and the script are that role's SSOT now.
+#
+# The single-purpose notifier this role used to install is removed HERE, not
+# there, and the order is the reason. Ansible is additive, so deleting the
+# install tasks alone would strand these on every node that ever ran them (the
+# `dev_node` precedent in CLAUDE.md) -- but removing them from node_notify would
+# delete the unit file while systemd still has the OLD kubelab-maintenance.service
+# loaded and naming it. The removal therefore runs after this role re-templates
+# its own unit and reloads, at which point nothing references them.
+#
+# No `systemctl disable` step, and that is checked rather than assumed: the old
+# unit had no [Install] section, so it was never enabled and there is no symlink
+# to break. It was only ever reachable through the OnFailure= this role declares.
+maintenance_superseded_notify_units:
+  - kubelab-maintenance-notify.service
+maintenance_superseded_notify_files:
+  - /opt/kubelab-maintenance-notify.sh
+  - /opt/kubelab-maintenance-notify-secret

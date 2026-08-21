@@ -304,6 +304,23 @@
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"
 
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
+    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
+    # template it names while removing the single-purpose unit it replaces.
+    - role: ../roles/node_notify
+      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
+      # REMOVES the unit `kubelab-maintenance.service` still names until
+      # node_maintenance re-templates it, so a selector that reaches this role
+      # without reaching that one leaves the node notification-dark: systemd
+      # logs "unit not found" on the next failure and nobody is told.
+      #
+      # Found by a `--check` run scoped to a `notify` tag that used to exist
+      # here. Sharing node_maintenance's tag makes the unsafe scoping
+      # unreachable rather than merely documented, which is the difference
+      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
+      tags: [maintenance]
+
     # ANSIBLE-035: install-only. maintenance_run_cleanup: false so this play
     # doesn't ALSO run a synchronous cleanup pass (apt lists wipe, docker
     # prune -af) on every provisioning run — cleanup runs on the timer's own

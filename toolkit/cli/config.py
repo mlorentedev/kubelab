@@ -174,3 +174,48 @@ def validate(
     except Exception as e:
         logger.error(MESSAGES.ERROR_CONFIG_VALIDATION_FAILED_WITH_ERROR.format(e))
         raise typer.Exit(1) from None
+
+
+@app.command("get")
+def config_get(
+    path: Annotated[str, typer.Argument(help="Dotted path into common.yaml, e.g. argocd.chart_version")],
+) -> None:
+    """Print one NON-SECRET value from the SSOT, for scripts and Makefile targets.
+
+    Exists so a Makefile target can read `common.yaml` without an inline
+    `python -c "import yaml; ..."`. Those one-liners are a second reader of the
+    SSOT with its own error handling (usually none): a typo'd path yields an
+    empty string, the caller interpolates it, and the failure surfaces somewhere
+    else entirely. This fails loudly with the path it could not resolve.
+
+    Reads the PLAINTEXT config only -- never SOPS. Use `toolkit secrets show`
+    for anything encrypted; keeping the two commands separate is what stops a
+    secret being printed by a target that thought it was reading a version
+    number.
+
+    Example:
+      toolkit config get argocd.chart_version
+      toolkit config get networking.gcp.region
+    """
+    import yaml
+
+    from toolkit.config.settings import settings
+
+    common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
+    node = yaml.safe_load(common.read_text())
+
+    walked: list[str] = []
+    for part in path.split("."):
+        walked.append(part)
+        if not isinstance(node, dict) or part not in node:
+            logger.error(f"{path} is not in common.yaml (resolved as far as {'.'.join(walked[:-1]) or '<root>'})")
+            raise typer.Exit(1)
+        node = node[part]
+
+    if isinstance(node, dict | list):
+        logger.error(f"{path} resolves to a {type(node).__name__}, not a scalar")
+        raise typer.Exit(1)
+
+    # print(), not logger: the caller is `$(...)` in a shell and wants the bare
+    # value on stdout with no formatting, prefix or colour.
+    print(node)

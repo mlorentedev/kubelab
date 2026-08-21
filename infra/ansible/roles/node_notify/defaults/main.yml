@@ -1,0 +1,49 @@
+---
+# node_notify — one failure-notification mechanism for the whole fleet.
+#
+# Extracted from node_maintenance (ANSIBLE-035, NOTIFY-001), which carried the
+# only copy of it plus the five ANSIBLE-038 hardenings (#1088). BACKUP-044
+# Part 5 needs the same thing for four more units, and a second copy of a
+# hardened credential path is a copy that drifts — the first fix applied to one
+# side and not the other is silent, and the failure it causes is a
+# notification that never arrives.
+#
+# It installs a TEMPLATE unit, so any unit anywhere in the fleet gains failure
+# notification with one line:
+#
+#     OnFailure=kubelab-notify@%n.service
+#
+# `%n` is the full unit name, suffix included, and it becomes the instance —
+# verified against a live systemd, not assumed: `OnFailure=x@%n.service` on
+# `foo.service` resolves to `x@foo.service.service`, and `%i` inside it is
+# `foo.service`. So `journalctl -u %i` names the unit that actually failed.
+
+# Always prod n8n, regardless of this node's own deploy_env: alerting must not
+# depend on ace1 (staging n8n's host) being powered on. Not derived from
+# `config.*` on purpose — most nodes running this carry deploy_env: staging,
+# and config.apps.services.automation.n8n.domain would resolve to staging's
+# domain on them.
+node_notify_domain: "n8n.kubelab.live"
+
+# Static file, not a live SOPS decrypt: nodes never hold a SOPS decryption key,
+# only the plaintext Ansible already resolved (same pattern as the CrowdSec
+# bouncer key and the Headscale pre-auth key). Rotation = re-provision the
+# fleet — see the rotate_note on this secret in secrets_manager.py.
+node_notify_secret_file: /opt/kubelab-notify-secret
+
+node_notify_script_path: /opt/kubelab-notify.sh
+node_notify_unit_name: "kubelab-notify@.service"
+
+# Journal tail carried in the envelope. n8n and Apprise render the body as-is,
+# so this is a readability budget, not a transport limit.
+node_notify_journal_lines: 20
+node_notify_body_bytes: 2000
+
+# n8n routes by severity. `log` is the ratified level for fleet maintenance and
+# backup failures (2026-08-15) — they are actionable, not page-worthy.
+node_notify_severity: log
+
+# What this role supersedes is removed by `node_maintenance`, right after the
+# reload that leaves the old unit unreferenced -- see the note at the end of
+# this role's tasks for why the order is load-bearing rather than a matter of
+# which role owns the file. The lists live there, beside the removal.
