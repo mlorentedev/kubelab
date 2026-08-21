@@ -95,14 +95,35 @@ jobs:
     timeout-minutes: 15
     # A SECOND concurrency group, deliberately, and not a replacement for the
     # workflow-level one above. That one keys on the PR and cancels — it stops a
-    # PR racing itself. This one is global and QUEUES (`cancel-in-progress:
-    # false`): the NaN cluster allows 5 simultaneous requests, shared with other
-    # consumers, and exhausting them is the diagnosed cause of PR-Agent
-    # reporting success while publishing nothing (upstream #1107).
+    # PR racing itself. This one is global, and it protects the NaN cluster's 5
+    # simultaneous requests, shared with other consumers, whose exhaustion is
+    # the diagnosed cause of PR-Agent reporting success while publishing
+    # nothing (upstream #1107).
     #
-    # Known limit, stated rather than solved: concurrency groups are per
-    # repository, so this serialises kubelab's own runs and not the other
-    # repository's against the same cluster. Two serialised lanes, not one.
+    # It does NOT queue, and this comment said it did until #1203 measured
+    # otherwise. `cancel-in-progress: false` protects the run that is already
+    # EXECUTING, but GitHub holds only ONE pending run per group: when a new run
+    # enters, the run that was waiting is cancelled. Queue depth is 1, and past
+    # that it discards silently.
+    #
+    # Measured on PR #1202, run 32438555543: job `review` started 02:04:34Z and
+    # was cancelled at 02:06:09Z with `steps: 0` — it never executed a single
+    # step. 02:06:09Z is the second PR #1201's run entered this same group. The
+    # consequence is worst exactly when review matters most: with two or more
+    # PRs open, the second review is thrown away.
+    #
+    # Nothing inside this job can report that, either — a job cancelled while
+    # still pending never starts, so the `always()` step below never runs. From
+    # outside, a discarded review is indistinguishable from a review that ran
+    # and published nothing.
+    #
+    # Not solved here: the fix is a decision between raising the wait, dropping
+    # the group in favour of `fallback_models` (which reintroduces the #1107
+    # 429s if taken alone), and making the discard observable. Tracked in #1203.
+    #
+    # Second known limit, unchanged: concurrency groups are per repository, so
+    # this serialises kubelab's own runs and not the other repository's against
+    # the same cluster. Two serialised lanes, not one.
     concurrency:
       group: pr-agent-nan-inference
       cancel-in-progress: false
