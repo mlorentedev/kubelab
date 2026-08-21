@@ -199,7 +199,8 @@ source: values are synced one way and never authored there (ADR-063 D7).
 
 ```bash
 make secrets-audit                    # clean before adding
-make tf-gcp-secrets-sync              # SOPS -> Secret Manager, one way
+make sync-secret-manager              # SOPS -> Secret Manager, one way
+make sync-secret-manager-dry          # same, compare and report without writing
 ```
 
 The VM's service account gets `secretmanager.secretAccessor` on **named secrets

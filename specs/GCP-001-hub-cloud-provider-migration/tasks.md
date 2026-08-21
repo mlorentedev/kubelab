@@ -123,13 +123,48 @@ Artifact Registry `$0` (0.5 GB), budgets `$0` (no charge).
 - [x] `cloud-init.yml` — Secret Manager fetch → stale-node cleanup → **mints its
       own single-use pre-auth key** via `POST /api/v1/preauthkey` → `tailscale up`
       → K3s. Closes **F2**. ✓ 2026-08-20 (#1191)
-- [ ] **[AC5]** `toolkit infra terraform gcp-tfvars`, mirroring `aws-tfvars`; the
-      Makefile deletes the rendered file after every use.
-- [ ] **[AC5]** `make tf-gcp-{plan,apply,destroy}` and
-      `make gcp1-{status,start,stop,replace,destroy}`.
-      *Until these exist, runbook §6 and §8 are not executable — they document the
-      end state. `gcp1-start`/`stop` set the MIG's `target_size`; note `aws1` never
-      had a `start` target at all, so this is an improvement, not parity.*
+- [x] **[AC5]** `toolkit infra terraform gcp-tfvars`; the Makefile deletes the
+      rendered file after every use. ✓ 2026-08-21
+      **DEVIATION, and it is the measurement rather than an obstacle:** the task
+      said *"mirroring `aws-tfvars`"* and that mirror cannot be built.
+      `aws-tfvars` exists to inject two SOPS values into Terraform; the GCP module
+      needs **none** — cloud-init reads its credentials from Secret Manager at
+      boot, so Terraform carries no secret at all. Measured: all 19 variables have
+      a default and **none is `sensitive`**. A literal mirror renders an empty
+      file.
+      The **shape** survives (toolkit command, `-var-file`, removed after use) and
+      the **content** is redefined to what actually duplicates: the Terraform
+      defaults restating `common.yaml`, which the `MIRRORED` guard's own docstring
+      already named as this command's job. What is rendered is **derived** — every
+      `networking.gcp` key whose name equals a variable — with only the three
+      cross-section pairs declared, since no rule reaches them.
+      *This is a column-3 row for the closing inventory: AWS passes 2 secrets
+      through tfvars, GCP passes 0.*
+- [x] **[AC5]** `make tf-gcp-{plan,apply,destroy}` and
+      `make gcp1-{status,start,stop,replace,destroy}`. ✓ 2026-08-21
+      *`gcp1-start`/`stop` set the MIG's `target_size`; `aws1` never had a `start`
+      target at all, so this is capability added, not parity restored. The MIG
+      needs none of `aws1`'s out-of-band Spot-request cancellation — no shadow
+      object outlives the instance. `gcp1-replace` deletes the instance and lets
+      the group rebuild it, deliberately the same path a preemption takes.*
+      **What the runbook actually says, checked rather than assumed** (the first
+      draft of this note claimed §6/§8 were "executable as written" without
+      opening the file, which was wrong on three counts):
+      - §8's four `gcp1-*` names match, and `gcp1-status` was widened to report
+        what §8 promises — MIG state, instance state **and** a `dig` of the
+        MagicDNS name. A `describe` alone reports the group's opinion of itself,
+        which is precisely the fact that stays healthy while the node never
+        joined the mesh.
+      - §5 named `make tf-gcp-secrets-sync`, **a target that was never built** —
+        the sync shipped as `make sync-secret-manager`. Runbook corrected to the
+        name that exists.
+      - §6 is executable **up to its Phase 0 and Phase 3 dependencies**:
+        `tf-gcp-plan`/`apply` need a real project, and `provision NODE=gcp1` /
+        `maintain-notify-test` need the inventory entry and
+        `provision-gcp1.yml`, both of which Phase 3 owns. `gcp1-replace` chains
+        into those two, so it inherits the same dependency.
+
+      `outputs.tf`'s `next_steps` no longer says the targets do not exist.
 - [x] **[P]** Register `gcp.headscale_api_key` in `SECRET_CATALOG` with
       **`envs=("prod",)`** — **not `("common",)`**, which matches no real env and
       makes the secret vanish from every audit silently (ANSIBLE-033). ✓ 2026-08-21
@@ -169,6 +204,13 @@ spoke kubeconfig and must not need one.
 `argocd.spokes.<env>.node` → `tailscale_ip` + `k3s.api_port` in `common.yaml`, so
 Terraform templates it in. *(It resolves to a literal IP, which is the F3 pattern
 one level out. Not this phase's to fix; noted so it is not mistaken for new.)*
+
+**Update 2026-08-21:** that derivation existed in *three* places — the Makefile's
+inline `python -c "import yaml"`, the `spoke_servers` Terraform default, and the
+guard comparing them — of which only the guard goes red on disagreement. It now
+lives once, in `toolkit/features/argocd_spokes.py`, which is also the single
+place `networking`'s cloud/homelab asymmetry is encoded. Filed as **#1215**;
+the Makefile's copy is switched over there, not here.
 
 ## Tasks
 
