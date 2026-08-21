@@ -24,6 +24,7 @@ from toolkit.features.argo_manager import (
 from toolkit.features.argo_manager import (
     set_revision as argo_set_revision_feature,
 )
+from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.k8s_render import BootstrapEntry, render_and_apply
 from toolkit.features.validation import (
     confirm_dangerous_operation,
@@ -125,7 +126,7 @@ def argo_set_revision(
             help="Hub kubeconfig path (env: KUBECONFIG_HUB)",
             envvar="KUBECONFIG_HUB",
         ),
-    ] = os.path.expanduser("~/.kube/kubelab-hub-config"),
+    ] = str(output_path("hub")),
     namespace: Annotated[str, typer.Option("--namespace", "-n")] = "argocd",
 ) -> None:
     """Patch an Argo CD Application's spec.source.targetRevision.
@@ -159,7 +160,7 @@ def argo_check_drift(
             help="Hub kubeconfig path (env: KUBECONFIG_HUB)",
             envvar="KUBECONFIG_HUB",
         ),
-    ] = os.path.expanduser("~/.kube/kubelab-hub-config"),
+    ] = str(output_path("hub")),
     applications_dir: Annotated[
         str, typer.Option("--dir", help="Directory of Argo CD Application manifests")
     ] = "infra/k8s/argocd/applications",
@@ -509,8 +510,6 @@ def backup_list(
 # KUBERNETES COMMANDS
 # =============================================================================
 
-_K8S_KUBECONFIG_PATTERN = "~/.kube/kubelab-{env}-config"
-
 
 def _get_kubeconfig(env: str) -> str:
     """Get kubeconfig path for the given environment.
@@ -518,7 +517,7 @@ def _get_kubeconfig(env: str) -> str:
     Always derives from --env to ensure deterministic behavior
     regardless of shell KUBECONFIG env var.
     """
-    return os.path.expanduser(_K8S_KUBECONFIG_PATTERN.format(env=env))
+    return str(output_path(env))
 
 
 def _kubectl_cmd(kubeconfig: str) -> str:

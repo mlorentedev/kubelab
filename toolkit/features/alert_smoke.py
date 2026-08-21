@@ -34,6 +34,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from toolkit.core.logging import logger
+from toolkit.features.k8s_kubeconfig import output_path
 
 #: Throwaway objects carry this name in every environment. Fixed rather than
 #: random so an interrupted run leaves something findable and deletable.
@@ -142,9 +143,7 @@ def rule_state(rules_json: str, title: str = RULE_TITLE) -> str:
 
 
 def _default_kubectl(env: str) -> KubectlFn:
-    import os
-
-    kubeconfig = os.path.expanduser(f"~/.kube/kubelab-{env}-config")
+    kubeconfig = str(output_path(env))
 
     def run(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
