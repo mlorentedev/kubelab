@@ -38,7 +38,7 @@
       "provider": "nan",
       "model": "deepseek-v4-flash",
       "role": "primary",
-      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table."
+      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. FLAGGED 2026-08-21 (#1205), not changed: this same model returns a 200 with an EMPTY body under PR-Agent — it spends its OUTPUT budget on the reasoning chain and never writes the answer, measured at 4m15s of silence on kubelab#1202 run 32440498259. That is the behaviour already described in the mimo entry below, from this pool's own harness. PR-Agent's chain was inverted to lead with mimo; this pool's ordering was NOT, because its runner and prompt differ and no measurement of THIS harness exists yet. Read that as an open question about the primary, not as an endorsement of it."
     },
     {
       "id": "agy/gemini-3.1-pro-high",
@@ -46,6 +46,14 @@
       "model": "gemini-3.1-pro-high",
       "role": "fallback",
       "why": "A second provider family, independent of both NaN and Anthropic — provider diversity rather than merely a different model. Pro tier at high effort; the flash tiers are excluded for the same reason qwen3.6 is. agy has no --provider flag; the model id selects the family."
+    },
+    {
+      "id": "nan/mimo-v2.5",
+      "runner": "pi",
+      "model": "mimo-v2.5",
+      "role": "fallback",
+      "why": "Admitted 2026-08-21 as the SECOND fallback, after the provider-diverse one, and the ordering is meaning rather than sequence: gemini answers a NaN OUTAGE, mimo only answers NaN SATURATION. The weaker property must not be promoted above the stronger one. What the evaluation established: given the same planted-defect snippet, mimo returned a real, correct finding, and it is reasoning-class by profile (1M context, reasoning chain) against qwen3.6 and gemma4's 262K, which is the line this pool draws. What it did NOT establish: a quality ranking against deepseek — deepseek never produced content under the same harness, spending 29,299 characters of reasoning and returning finish_reason=length with an empty body. That is an instrumentation result, not a capability one, and it is stated here so nobody reads this entry as 'mimo matched deepseek'. Carried with its verdict from mlorentedev/dotfiles#1116 rather than re-derived. Also the PR-Agent fallback in .pr_agent.toml, because NaN's concurrency limit is per model, not per API key.",
+      "provider": "nan"
     }
   ]
 }

@@ -19,16 +19,61 @@
 [config]
 # `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's,
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
-model = "openai/deepseek-v4-flash"
-
-# NO cheap fallback, and this is the load-bearing line.
 #
-# If the reviewer fails, Part 1's gate reports `declined` and the PR goes red — a
-# LOUD absence. A latency-optimised fallback would trade that for a quiet rubber
-# stamp, and `harness/reviewer-pool.json` already holds the opposite policy for
-# the spec-level review: it rejects the flash tiers on quality grounds. Two files
-# in one repo holding opposing views on who may review is its own defect.
-fallback_models = []
+# mimo-v2.5 leads, deepseek-v4-flash follows, and the order was the other way
+# round until #1205 measured why it could not work. deepseek returns a 200 with
+# an empty body — it spends its OUTPUT budget on the reasoning chain and never
+# writes the answer — which raises no exception, so LiteLLM never consults the
+# fallback. With deepseek in front the chain was unreachable: the primary's
+# characteristic failure is precisely the one no fallback can catch.
+#
+# Inverted, the chain works for the first time. mimo's failure mode is
+# saturation (a 429), which DOES raise, so it falls through to deepseek.
+#
+# What is measured, stated narrowly: under the same harness mimo returned a
+# real, correct finding on a planted defect and deepseek returned nothing. That
+# is not a quality ranking — none exists, and harness/reviewer-pool.json says so
+# in its own entry. For a reviewer whose current failure is silence, delivering
+# an answer is the property being selected for.
+model = "openai/mimo-v2.5"
+
+# ONE fallback, and it is not the cheap kind this line used to forbid.
+#
+# The rule that stood here has not changed: no LATENCY-OPTIMISED fallback. If the
+# reviewer fails, the gate reports `declined` and the PR goes red — a LOUD
+# absence — and a flash-tier stand-in would trade that for a quiet rubber stamp.
+# `harness/reviewer-pool.json` holds the same policy for the spec-level review
+# and rejects the flash tiers on quality grounds; two files in one repo holding
+# opposing views on who may review is its own defect.
+#
+# Neither model in this chain crosses that line. Both are reasoning-class by
+# profile — 1M context and a reasoning chain, against qwen3.6 and gemma4's 262K,
+# which is the line that pool actually draws — and both are admitted there.
+# tests/test_pr_agent_workflow.py now enforces that agreement instead of leaving
+# it to whoever edits one file next.
+#
+# What this buys, measured: NaN's concurrency limit is PER MODEL, not per API
+# key. Eight simultaneous requests to deepseek return 5x200 and 3x429 while mimo
+# answers 200 through the same key during that same saturation. So a saturated
+# deepseek — the diagnosed cause of PR-Agent reporting success and publishing
+# nothing (#1107) — becomes a review served by the second model rather than a
+# review that never happened.
+#
+# What it does NOT buy, and the distinction cost a wrong diagnosis on #1202:
+# LiteLLM falls back on an EXCEPTION. A 200 carrying an empty or truncated body
+# is not one, so no fallback fires. Measured on #1202 run 32440498259: the
+# PR-Agent step concluded `success` after 4m15s, its last log line "Generating
+# prediction with openai/deepseek-v4-flash" at 02:38:06 followed by four silent
+# minutes, no RateLimitError, and mimo never attempted. That is the primary
+# spending its output budget on reasoning and never writing an answer — the
+# same shape recorded against deepseek in harness/reviewer-pool.json. It looks
+# identical from outside (green job, no review) and needs a different fix.
+# Tracked in #1205.
+#
+# NOT a licence to drop the inference concurrency group below. That group is
+# what caps this workflow's demand, and removing it without measuring first
+# reinstates the 429s this fallback exists to absorb. See #1203.
+fallback_models = ["openai/deepseek-v4-flash"]
 
 # `model_weak` is deliberately ABSENT. Upstream sets it to a flash-tier model for
 # descriptions and commit summaries. Two reasons not to carry it: `auto_describe`

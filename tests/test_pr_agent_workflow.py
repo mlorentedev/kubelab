@@ -23,6 +23,8 @@ import yaml
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
 GATE = REPO_ROOT / ".github/workflows/review-attestation.yml"
+PR_AGENT_CONFIG = REPO_ROOT / ".pr_agent.toml"
+REVIEWER_POOL = REPO_ROOT / "harness/reviewer-pool.json"
 
 
 def _load(path: pathlib.Path) -> dict:
@@ -93,14 +95,20 @@ def test_the_action_is_pinned_by_sha_not_by_tag() -> None:
     pins by tag — this is a place the port should exceed its source, and a test
     is what stops a later "bump" quietly reverting to one.
     """
-    step = next(
-        s for s in _load(REVIEWER)["jobs"]["review"]["steps"] if "uses" in s
-    )
-    ref = step["uses"].split("@", 1)[1]
-    assert len(ref) == 40 and all(c in "0123456789abcdef" for c in ref), (
-        f"the action is pinned to {ref!r}, which is not a commit SHA. A mutable "
-        "tag decides what runs with NAN_API_KEY on a public repo."
-    )
+    used = [s for s in _load(REVIEWER)["jobs"]["review"]["steps"] if "uses" in s]
+    assert used, "no `uses:` step in the reviewer job"
+    # EVERY `uses:` step, not the first one. This asserted `next(...)` while the
+    # job had exactly one action; the PR-number upload (#1184) made it two, and
+    # the first is now that upload -- so the original form would have gone on
+    # passing while PR-Agent itself reverted to a mutable tag. A guard that stops
+    # covering its subject without failing is the class lesson-357 catalogues.
+    for step in used:
+        ref = step["uses"].split("@", 1)[1]
+        assert len(ref) == 40 and all(c in "0123456789abcdef" for c in ref), (
+            f"{step['uses']!r} is pinned to {ref!r}, which is not a commit SHA. "
+            "Every action in this job runs alongside NAN_API_KEY on a public "
+            "repo, so a mutable tag decides what executes with that credential."
+        )
 
 
 def test_the_reviewer_verifies_it_actually_published() -> None:
@@ -217,3 +225,119 @@ def test_a_gate_that_cannot_answer_still_fails_the_job() -> None:
     final = next(s for s in steps if "could not answer" in s.get("name", ""))
     assert 'exit "$CODE"' in final["run"], "a non-verdict exit code must still fail"
     assert "::error::" in final["run"], "and must say so in the log"
+
+
+# The artifact carrying the PR number from the reviewer to the gate (#1184).
+# A literal, deliberately: the point of the assertions below is to anchor both
+# workflows to a value neither of them derives. Reading the name out of
+# `pr-agent.yml` and asserting the file agrees with itself would pass by
+# construction -- the failure class lesson-357 catalogues.
+ARTIFACT_NAME = "pr-number"
+
+
+def _review_steps() -> list[dict]:
+    return _load(REVIEWER)["jobs"]["review"]["steps"]
+
+
+def _first_index(steps: list[dict], prefix: str) -> int:
+    for i, step in enumerate(steps):
+        if str(step.get("uses", "")).startswith(prefix):
+            return i
+    return -1
+
+
+def test_the_pr_number_is_uploaded_under_the_name_the_gate_reads() -> None:
+    """A `/review` reaches the gate with no PR reference unless this runs.
+
+    `workflow_run` does not propagate the triggering event's context: a run
+    started by `issue_comment` is associated with the default branch, so the
+    gate sees `pull_requests[]` empty and `head_sha` at master, and correctly
+    skips. The reference is not lost in transit, it never enters it — which is
+    why the fix is on the SENDING side and why this assertion lives here.
+    """
+    uploads = [
+        s for s in _review_steps() if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+    ]
+    assert len(uploads) == 1, (
+        f"expected exactly one upload-artifact step in pr-agent.yml, found "
+        f"{len(uploads)}. The gate downloads one artifact by name; two would make "
+        f"which one it gets an ordering accident."
+    )
+    assert uploads[0].get("with", {}).get("name") == ARTIFACT_NAME, (
+        f"the PR-number artifact must be named {ARTIFACT_NAME!r}: the gate "
+        f"downloads by that literal string. Renaming one side degrades into "
+        f"silence — the reviewer reviews, the gate finds nothing, and the PR "
+        f"reads unreviewed."
+    )
+
+
+def test_the_upload_precedes_the_reviewer_so_a_cancelled_run_still_carries_it() -> None:
+    """Ordering is load-bearing, not tidiness.
+
+    This job is cancellable by the workflow-level concurrency group, and
+    `workflow_run: [completed]` fires for cancelled runs too. If the upload sat
+    after PR-Agent, a run cancelled mid-review would reach the gate with no
+    artifact — precisely the case the gate most needs to judge.
+    """
+    steps = _review_steps()
+    upload = _first_index(steps, "actions/upload-artifact@")
+    reviewer = _first_index(steps, "The-PR-Agent/pr-agent@")
+    assert upload >= 0, "no upload-artifact step in pr-agent.yml"
+    assert reviewer >= 0, "no PR-Agent step in pr-agent.yml"
+    assert upload < reviewer, (
+        "the PR-number upload must run BEFORE PR-Agent. A run cancelled during "
+        "the review would otherwise produce no artifact, and the gate would skip "
+        "the PR it most needed to judge."
+    )
+
+
+# --- the reviewer's model policy, held in two files ------------------------
+
+
+def _review_job() -> dict:
+    """The job that actually runs the reviewer, found by the action it uses
+    rather than by its key — a renamed job must not silently skip these."""
+    jobs = _load(REVIEWER)["jobs"]
+    return next(
+        j for j in jobs.values()
+        if any("pr-agent@" in str(step.get("uses", "")) for step in j.get("steps", []))
+    )
+
+
+def _fallback_model_names() -> set[str]:
+    """Model NAMES from .pr_agent.toml's fallback chain, with the transport
+    prefix stripped.
+
+    The prefix differs between the two files by design and comparing full ids
+    would make this guard either vacuous or permanently red: the toml says
+    `openai/mimo-v2.5` because LiteLLM reaches NaN over the OpenAI-compatible
+    transport, while the pool says `nan/mimo-v2.5` because that is the provider
+    a reviewer records. Same model, two namespaces.
+    """
+    raw = re.search(r"^fallback_models\s*=\s*\[(.*?)\]", PR_AGENT_CONFIG.read_text(), re.M | re.S)
+    assert raw, "fallback_models not found in .pr_agent.toml"
+    return {m.split("/")[-1] for m in re.findall(r'"([^"]+)"', raw.group(1))}
+
+
+def test_every_pr_agent_fallback_is_admitted_in_the_reviewer_pool() -> None:
+    """`.pr_agent.toml` says who may review a PR; `harness/reviewer-pool.json`
+    says who may sign a spec review. The toml's own comment names the failure
+    this prevents — "two files in one repo holding opposing views on who may
+    review is its own defect" — and it was held by hand until now."""
+    admitted = {e["id"].split("/")[-1] for e in json.loads(REVIEWER_POOL.read_text())["pool"]}
+    for model in _fallback_model_names():
+        assert model in admitted, (
+            f"{model!r} is a PR-Agent fallback but is not in the reviewer pool. "
+            "Admit it there with its evaluation, or drop it from the chain — the "
+            "two files must not disagree about who may review."
+        )
+
+
+def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> None:
+    """Without this, any comment by a collaborator starts a review — including
+    the reviewer's own triage tables and ordinary conversation, each of which
+    spends an inference slot the next real review needs."""
+    condition = " ".join(str(_review_job()["if"]).split())
+    assert "startsWith(github.event.comment.body, '/')" in condition, (
+        "the issue_comment path is not filtered to slash commands"
+    )
