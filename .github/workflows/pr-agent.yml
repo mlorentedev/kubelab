@@ -87,7 +87,8 @@ jobs:
       || (github.event_name == 'issue_comment'
             && github.event.issue.pull_request
             && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
-                        github.event.comment.author_association))
+                        github.event.comment.author_association)
+            && startsWith(github.event.comment.body, '/'))
     runs-on: ubuntu-latest
     # A run that hangs holds an inference slot for the full 6h default. Ported
     # from the upstream this reviewer came from, where the bound is what turns a
@@ -281,6 +282,9 @@ jobs:
             exit 0
           fi
           echo "::error::PR-Agent reported success but published no review (no comment carries \"${marker}\")."
-          echo "::error::Most likely cause: inference concurrency exhaustion — the NaN cluster allows 5"
-          echo "::error::simultaneous requests and is shared with other consumers."
+          echo "::error::With .pr_agent.toml's fallback chain in place this means BOTH"
+          echo "::error::deepseek-v4-flash AND mimo-v2.5 produced nothing. NaN's concurrency"
+          echo "::error::limit is per MODEL, not per API key, so saturation of one alone should"
+          echo "::error::no longer reach here — read the run log for the actual LiteLLM error"
+          echo "::error::rather than assuming exhaustion."
           exit 1

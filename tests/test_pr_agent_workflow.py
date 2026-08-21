@@ -23,6 +23,8 @@ import yaml
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
 GATE = REPO_ROOT / ".github/workflows/review-attestation.yml"
+PR_AGENT_CONFIG = REPO_ROOT / ".pr_agent.toml"
+REVIEWER_POOL = REPO_ROOT / "harness/reviewer-pool.json"
 
 
 def _load(path: pathlib.Path) -> dict:
@@ -286,4 +288,56 @@ def test_the_upload_precedes_the_reviewer_so_a_cancelled_run_still_carries_it() 
         "the PR-number upload must run BEFORE PR-Agent. A run cancelled during "
         "the review would otherwise produce no artifact, and the gate would skip "
         "the PR it most needed to judge."
+    )
+
+
+# --- the reviewer's model policy, held in two files ------------------------
+
+
+def _review_job() -> dict:
+    """The job that actually runs the reviewer, found by the action it uses
+    rather than by its key — a renamed job must not silently skip these."""
+    jobs = _load(REVIEWER)["jobs"]
+    return next(
+        j for j in jobs.values()
+        if any("pr-agent@" in str(step.get("uses", "")) for step in j.get("steps", []))
+    )
+
+
+def _fallback_model_names() -> set[str]:
+    """Model NAMES from .pr_agent.toml's fallback chain, with the transport
+    prefix stripped.
+
+    The prefix differs between the two files by design and comparing full ids
+    would make this guard either vacuous or permanently red: the toml says
+    `openai/mimo-v2.5` because LiteLLM reaches NaN over the OpenAI-compatible
+    transport, while the pool says `nan/mimo-v2.5` because that is the provider
+    a reviewer records. Same model, two namespaces.
+    """
+    raw = re.search(r"^fallback_models\s*=\s*\[(.*?)\]", PR_AGENT_CONFIG.read_text(), re.M | re.S)
+    assert raw, "fallback_models not found in .pr_agent.toml"
+    return {m.split("/")[-1] for m in re.findall(r'"([^"]+)"', raw.group(1))}
+
+
+def test_every_pr_agent_fallback_is_admitted_in_the_reviewer_pool() -> None:
+    """`.pr_agent.toml` says who may review a PR; `harness/reviewer-pool.json`
+    says who may sign a spec review. The toml's own comment names the failure
+    this prevents — "two files in one repo holding opposing views on who may
+    review is its own defect" — and it was held by hand until now."""
+    admitted = {e["id"].split("/")[-1] for e in json.loads(REVIEWER_POOL.read_text())["pool"]}
+    for model in _fallback_model_names():
+        assert model in admitted, (
+            f"{model!r} is a PR-Agent fallback but is not in the reviewer pool. "
+            "Admit it there with its evaluation, or drop it from the chain — the "
+            "two files must not disagree about who may review."
+        )
+
+
+def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> None:
+    """Without this, any comment by a collaborator starts a review — including
+    the reviewer's own triage tables and ordinary conversation, each of which
+    spends an inference slot the next real review needs."""
+    condition = " ".join(str(_review_job()["if"]).split())
+    assert "startsWith(github.event.comment.body, '/')" in condition, (
+        "the issue_comment path is not filtered to slash commands"
     )

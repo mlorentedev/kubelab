@@ -21,14 +21,33 @@
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
 model = "openai/deepseek-v4-flash"
 
-# NO cheap fallback, and this is the load-bearing line.
+# ONE fallback, and it is not the cheap kind this line used to forbid.
 #
-# If the reviewer fails, Part 1's gate reports `declined` and the PR goes red — a
-# LOUD absence. A latency-optimised fallback would trade that for a quiet rubber
-# stamp, and `harness/reviewer-pool.json` already holds the opposite policy for
-# the spec-level review: it rejects the flash tiers on quality grounds. Two files
-# in one repo holding opposing views on who may review is its own defect.
-fallback_models = []
+# The rule that stood here has not changed: no LATENCY-OPTIMISED fallback. If the
+# reviewer fails, the gate reports `declined` and the PR goes red — a LOUD
+# absence — and a flash-tier stand-in would trade that for a quiet rubber stamp.
+# `harness/reviewer-pool.json` holds the same policy for the spec-level review
+# and rejects the flash tiers on quality grounds; two files in one repo holding
+# opposing views on who may review is its own defect.
+#
+# mimo-v2.5 does not cross that line. It is reasoning-class by profile — 1M
+# context and a reasoning chain, against qwen3.6 and gemma4's 262K, which is the
+# line that pool actually draws — and it is admitted there as a fallback. Adding
+# it here satisfies the "two files must not disagree" rule rather than breaking
+# it, and tests/test_pr_agent_workflow.py now enforces that agreement instead of
+# leaving it to whoever edits one file next.
+#
+# What this buys, measured: NaN's concurrency limit is PER MODEL, not per API
+# key. Eight simultaneous requests to deepseek return 5x200 and 3x429 while mimo
+# answers 200 through the same key during that same saturation. So a saturated
+# deepseek — the diagnosed cause of PR-Agent reporting success and publishing
+# nothing (#1107), observed again on #1202 — becomes a review served by the
+# second model rather than a review that never happened.
+#
+# NOT a licence to drop the inference concurrency group below. That group is
+# what caps this workflow's demand, and removing it without measuring first
+# reinstates the 429s this fallback exists to absorb. See #1203.
+fallback_models = ["openai/mimo-v2.5"]
 
 # `model_weak` is deliberately ABSENT. Upstream sets it to a flash-tier model for
 # descriptions and commit summaries. Two reasons not to carry it: `auto_describe`
