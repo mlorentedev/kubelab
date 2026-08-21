@@ -282,9 +282,12 @@ jobs:
             exit 0
           fi
           echo "::error::PR-Agent reported success but published no review (no comment carries \"${marker}\")."
-          echo "::error::With .pr_agent.toml's fallback chain in place this means BOTH"
-          echo "::error::deepseek-v4-flash AND mimo-v2.5 produced nothing. NaN's concurrency"
-          echo "::error::limit is per MODEL, not per API key, so saturation of one alone should"
-          echo "::error::no longer reach here — read the run log for the actual LiteLLM error"
-          echo "::error::rather than assuming exhaustion."
+          echo "::error::Two different causes land here and they look identical from outside."
+          echo "::error::(1) Saturation: a 429 raises, .pr_agent.toml's fallback chain takes over,"
+          echo "::error::and reaching here means BOTH models produced nothing. NaN limits per"
+          echo "::error::MODEL, not per API key, so one saturated model alone should not."
+          echo "::error::(2) An empty or truncated body on a 200 — the primary spending its"
+          echo "::error::output budget on reasoning. No exception, so NO fallback fires (#1205)."
+          echo "::error::Tell them apart in the run log: a fallback attempt names the second"
+          echo "::error::model. Silence after \"Generating prediction with\" is case (2)."
           exit 1

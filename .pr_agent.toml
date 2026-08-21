@@ -41,8 +41,19 @@ model = "openai/deepseek-v4-flash"
 # key. Eight simultaneous requests to deepseek return 5x200 and 3x429 while mimo
 # answers 200 through the same key during that same saturation. So a saturated
 # deepseek — the diagnosed cause of PR-Agent reporting success and publishing
-# nothing (#1107), observed again on #1202 — becomes a review served by the
-# second model rather than a review that never happened.
+# nothing (#1107) — becomes a review served by the second model rather than a
+# review that never happened.
+#
+# What it does NOT buy, and the distinction cost a wrong diagnosis on #1202:
+# LiteLLM falls back on an EXCEPTION. A 200 carrying an empty or truncated body
+# is not one, so no fallback fires. Measured on #1202 run 32440498259: the
+# PR-Agent step concluded `success` after 4m15s, its last log line "Generating
+# prediction with openai/deepseek-v4-flash" at 02:38:06 followed by four silent
+# minutes, no RateLimitError, and mimo never attempted. That is the primary
+# spending its output budget on reasoning and never writing an answer — the
+# same shape recorded against deepseek in harness/reviewer-pool.json. It looks
+# identical from outside (green job, no review) and needs a different fix.
+# Tracked in #1205.
 #
 # NOT a licence to drop the inference concurrency group below. That group is
 # what caps this workflow's demand, and removing it without measuring first
