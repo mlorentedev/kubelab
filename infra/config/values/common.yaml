@@ -398,6 +398,22 @@ cluster_bootstrap:
 # ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
 # ===========================================================================
 argocd:
+  # Argo CD Helm chart version, PINNED. Read by `_deploy-argocd-helm` and by the
+  # GCP hub's cloud-init, so both installs agree on what "Argo CD" means.
+  #
+  # Measured 2026-08-21: aws1 runs argo-cd-9.5.13 (app v3.4.1), deployed
+  # 2026-05-10. The chart repo's latest is 10.4.0 -- a MAJOR jump. Until this
+  # line existed, `helm upgrade --install` with no `--version` meant the next
+  # `make deploy-argocd` would have carried prod's management plane across that
+  # boundary as a side effect of an unrelated deploy.
+  #
+  # The value is what is RUNNING, not what is newest, on purpose: pinning to
+  # latest would perform the upgrade while claiming to prevent it. Moving to 10.x
+  # is a deliberate change with its own release notes to read (#1209).
+  chart_version: "9.5.13"
+  # Pinned for the same reason one layer down: the GCP hub installs its own helm
+  # at boot, and an unattended recreate must not pick up whatever is current.
+  helm_version: "v3.18.4"
   # Hub: networking.aws.tailscale_dns (aws1.kubelab.internal) — MagicDNS (ADR-025)
   # All hub↔spoke traffic via Tailscale VPN (WireGuard mesh)
   # API server URL derived at runtime: https://{tailscale_dns}:{k3s.api_port}
