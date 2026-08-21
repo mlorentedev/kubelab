@@ -234,6 +234,48 @@ class TestModuleDefaultsMatchTheSSOT:
         )
 
 
+class TestTerraformBindsOnlyDeclaredSecrets:
+    """The module's IAM grants and the catalog's tags describe the same fact.
+
+    Terraform decides what the hub's service account may READ; the catalog
+    decides what the sync WRITES. Nothing couples them, so they can disagree in
+    two directions and neither shows up at plan time: a binding with no tag is a
+    grant to something the sync never delivers (a permission nobody chose), and a
+    tag with no binding is a secret the sync writes and cloud-init then cannot
+    read -- surfacing unattended, after a preemption, at the worst moment.
+    """
+
+    def test_every_iam_bound_secret_is_tagged_in_the_catalog(self, tf: str) -> None:
+        from toolkit.features.secrets_manager import (
+            secret_manager_name,
+            secrets_synced_to_secret_manager,
+        )
+
+        # The module names secrets through variables (`secret_id = var.<name>`),
+        # so read the bound variables and resolve each to its default.
+        bound_vars = re.findall(
+            r"google_secret_manager_secret_iam_member[^{]*\{[^}]*?secret_id\s*=\s*var\.([a-z_]+)",
+            tf,
+            re.S,
+        )
+        assert bound_vars, "no Secret Manager IAM binding found in the module"
+
+        # Compare through the ONE definition of the SOPS -> Secret Manager name
+        # mapping. Re-deriving it here (stripping a prefix, splitting on a dot)
+        # would make this test agree with its own guess instead of with the code
+        # the sync actually runs.
+        tagged = {secret_manager_name(s.key_path) for s in secrets_synced_to_secret_manager()}
+        for var_name in bound_vars:
+            default = _var_default(tf, var_name)
+            assert default, f'variable "{var_name}" is IAM-bound but has no default'
+            assert default in tagged, (
+                f"the module grants secretAccessor on {default!r}, but no "
+                f"SecretSpec carries sync_to_secret_manager=True for it. Either "
+                f"the sync never delivers it (cloud-init reads nothing) or the "
+                f"grant is wider than the design (ADR-063 D7)."
+            )
+
+
 class TestNoCredentialLiterals:
     """tfvars is rendered from SOPS and deleted after use; nothing lands in git."""
 

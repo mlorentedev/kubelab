@@ -135,5 +135,10 @@ variable "headscale_api_key_secret" {
     join the mesh (GCP-001 finding F2).
   EOT
   type        = string
-  default     = "headscale-api-key"
+  # Derived from the SOPS key path `gcp.headscale_api_key` by
+  # `toolkit.features.secrets_manager.secret_manager_name`, which is the single
+  # definition of that mapping. Do not hand-pick a name here: a Secret Manager id
+  # nothing in the catalog maps to is one the sync never writes, and cloud-init
+  # would ask for it unattended after a preemption.
+  default     = "gcp-headscale-api-key"
 }
