@@ -15,9 +15,15 @@ cataloguing, so it is asserted rather than left as a convention.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
+import shutil
+import subprocess
+import sys
+import zipfile
 
+import pytest
 import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -288,6 +294,277 @@ def test_the_upload_precedes_the_reviewer_so_a_cancelled_run_still_carries_it() 
         "the PR-number upload must run BEFORE PR-Agent. A run cancelled during "
         "the review would otherwise produce no artifact, and the gate would skip "
         "the PR it most needed to judge."
+    )
+
+
+# --- the gate's half of the handoff (#1184) --------------------------------
+
+
+def _gate_resolve_step() -> dict:
+    """The gate step that turns an event into a PR number.
+
+    Found by its `id:`, which every later step's `if:` already depends on,
+    rather than by its name — a rename must not silently skip these.
+    """
+    steps = _load(GATE)["jobs"]["attestation"]["steps"]
+    return next(s for s in steps if s.get("id") == "pr")
+
+
+def test_the_gate_may_read_a_run_and_may_do_nothing_else_to_it() -> None:
+    """`actions: read` is what makes the download possible, and its ceiling.
+
+    Below it, the gate cannot list the reviewer run's artifacts and every
+    `/review` resolves to nothing. Above it — `actions: write` — the gate could
+    start, cancel or re-run the workflow whose output it judges, which is a
+    judge holding the defendant's calendar.
+    """
+    permissions = _load(GATE)["permissions"]
+    assert permissions.get("actions") == "read", (
+        f"the gate's `actions:` permission is {permissions.get('actions')!r}. "
+        f"`read` is required to list the reviewer run's artifacts, and it is "
+        f"also the ceiling: a gate that can re-run what it judges is not a gate."
+    )
+
+
+def test_the_gate_downloads_the_artifact_under_the_name_the_reviewer_writes() -> None:
+    """The reading half of the two-file agreement.
+
+    Its sending half is asserted above. Until this existed the suite checked
+    only that `pr-agent.yml` uploads under a name the suite itself declares —
+    a sender agreeing with a fixture rather than with any consumer, which is
+    lesson-357's failure class wearing a passing test.
+    """
+    run = _gate_resolve_step()["run"]
+    assert f"/artifacts?name={ARTIFACT_NAME}" in run, (
+        f"the gate does not query the reviewer run's artifacts by the name "
+        f"{ARTIFACT_NAME!r}. The reviewer uploads under it; a gate looking for "
+        f"anything else finds nothing, falls through, and reports every "
+        f"`/review` as unreviewed — silently, which is the whole failure class."
+    )
+
+
+def test_the_handed_pr_number_is_preferred_over_the_inferred_one() -> None:
+    """Route ORDER is the fix, not the mere presence of a route.
+
+    On the `/review` path `commits/{head_sha}/pulls` asks about master's tip,
+    and GitHub answers — with the pull request that was merged to produce it.
+    Consulted first, that attests an already-merged PR and leaves the open one
+    exactly as unreviewed as before. Only the artifact carries the number from
+    the run being judged, so it goes first.
+    """
+    run = _gate_resolve_step()["run"]
+    handed = run.find(f"/artifacts?name={ARTIFACT_NAME}")
+    inferred = run.find("/commits/")
+    assert handed >= 0 and inferred >= 0, "both resolution routes must be present"
+    assert handed < inferred, (
+        "the gate consults `commits/{head_sha}/pulls` before the artifact. On a "
+        "comment-triggered run that head SHA is master's, so the inference wins "
+        "and answers about the wrong pull request."
+    )
+
+
+# The five tests below EXECUTE the shipped script with `gh` stubbed, rather than
+# reading it. That is not thoroughness for its own sake: `workflow_run` fires
+# only from the default-branch copy of a workflow, so this half cannot run on
+# the branch that introduces it and CI has no way to exercise it before merge.
+# Written after lesson-361 — "CI green" is not the same claim as "this runs" —
+# these are the claim CI could not otherwise make.
+_GH_STUB = """#!/usr/bin/env bash
+echo "$*" >> "$GH_CALLS"
+case "$*" in
+  *"/artifacts?name=pr-number"*) [ -n "${STUB_ARTIFACT_FAIL:-}" ] && exit 1
+                          printf '%s' "${STUB_ARTIFACT_ID:-}" ;;
+  *"/artifacts?name="*)   ;;
+  *"/artifacts/"*"/zip"*) [ -n "${STUB_ZIP:-}" ] && cat "$STUB_ZIP" || exit 1 ;;
+  *"/commits/"*"/pulls"*) printf '%s' "${STUB_SHA_PR:-}" ;;
+  *"/pulls/"*)            printf '%s\\n' "deadbeef" ;;
+  *) exit 1 ;;
+esac
+"""
+# The stub answers as GITHUB does, not as the gate expects: a query for any
+# other artifact name returns an empty list, exactly as the real API does for a
+# run that uploaded nothing under it. So a name drifting on the reading side is
+# caught behaviourally — the gate silently resolves the wrong PR — and not only
+# by the string assertion above.
+
+_needs_bash = pytest.mark.skipif(
+    shutil.which("bash") is None, reason="the gate's resolve step is a bash script"
+)
+
+
+def _zip_holding(tmp_path: pathlib.Path, label: str, payload: str) -> str:
+    """A stand-in for what `actions/upload-artifact` stores: one zipped file."""
+    path = tmp_path / f"{label}.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("pr-number.txt", payload)
+    return str(path)
+
+
+def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str], list[str]]:
+    """Run the resolve step as a `workflow_run` with no PR in its payload.
+
+    Returns its `GITHUB_OUTPUT` and the log of API calls it actually made. The
+    second is what makes route ORDER observable instead of merely declared.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    stub = bindir / "gh"
+    stub.write_text(_GH_STUB, encoding="utf-8")
+    stub.chmod(0o755)
+    output = tmp_path / "github_output"
+    output.touch()
+    calls = tmp_path / "gh_calls"
+    calls.touch()
+
+    step = _gate_resolve_step()
+    # Every env value the step declares as a LITERAL, taken from the workflow
+    # rather than restated here. The `${{ ... }}` ones are the event's, and the
+    # scenario supplies those below. Seeding from the file means a new literal
+    # the step comes to depend on arrives here automatically, instead of this
+    # harness passing while the real job fails on an unset variable.
+    literal_env = {
+        k: str(v) for k, v in (step.get("env") or {}).items() if "${{" not in str(v)
+    }
+
+    env = {
+        **os.environ,
+        **literal_env,
+        # The interpreter's own directory too: the script calls `python`, which
+        # `actions/setup-python` puts on PATH in the job and a bare `python3`
+        # environment would not have. Absent it this fails for a reason that has
+        # nothing to do with what is under test.
+        "PATH": os.pathsep.join(
+            [str(bindir), str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]
+        ),
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_REPOSITORY": "mlorentedev/kubelab",
+        "GH_CALLS": str(calls),
+        "GH_TOKEN": "stub",
+        "EVENT": "workflow_run",
+        "PR_FROM_EVENT": "",
+        # Empty, and that is the whole defect: a comment has no head ref, so the
+        # run is associated with the default branch and carries no pull requests.
+        "RUN_PRS": "[]",
+        "RUN_HEAD": "0" * 40,
+        "RUN_ID": "999",
+        "STUB_ARTIFACT_ID": "",
+        "STUB_ARTIFACT_FAIL": "",
+        "STUB_ZIP": "",
+        "STUB_SHA_PR": "",
+        **scenario,
+    }
+    proc = subprocess.run(  # noqa: S603
+        ["bash", "-c", step["run"]],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, (
+        f"the resolve step exited {proc.returncode}. It must always exit 0 on a "
+        f"resolution failure — the verdict is `skip`, not a broken job.\n"
+        f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+    )
+    parsed = dict(
+        line.split("=", 1) for line in output.read_text().splitlines() if "=" in line
+    )
+    return parsed, calls.read_text().splitlines()
+
+
+@_needs_bash
+def test_a_review_comment_resolves_its_pr_from_the_artifact(tmp_path: pathlib.Path) -> None:
+    """#1184's "Done when", executed: a run with no PR in its payload resolves.
+
+    This is the case the gate has never handled. Before the artifact route it
+    reached `commits/{master_sha}/pulls`, got an answer about the wrong pull
+    request or none at all, and skipped.
+    """
+    out, calls = _run_resolve(
+        tmp_path,
+        STUB_ARTIFACT_ID="77",
+        STUB_ZIP=_zip_holding(tmp_path, "good", "1208"),
+        STUB_SHA_PR="4242",
+    )
+    assert out["skip"] == "false"
+    assert out["number"] == "1208", (
+        f"resolved #{out['number']} rather than the #1208 the reviewer run handed "
+        f"over. #4242 is what the SHA inference would have answered."
+    )
+    assert not [c for c in calls if "/commits/" in c], (
+        "the inference ran anyway. A handed-over number must end the search — "
+        "consulting the fallback after it is at best wasted, at worst a race "
+        "between two answers about different pull requests."
+    )
+
+
+@_needs_bash
+def test_a_reviewer_run_with_no_artifact_still_falls_through(tmp_path: pathlib.Path) -> None:
+    """Absent is a legitimate state, not an error.
+
+    A run cancelled while PENDING (#1203) executes no steps at all, so it
+    uploads nothing — and `workflow_run: [completed]` fires for it regardless.
+    `set -euo pipefail` is active in this script, so an unguarded call on the
+    artifact route would end the job here instead of at the next route.
+    """
+    out, calls = _run_resolve(tmp_path, STUB_ARTIFACT_ID="", STUB_SHA_PR="4242")
+    assert out["skip"] == "false"
+    assert out["number"] == "4242", "the SHA route must still answer when no artifact exists"
+    assert [c for c in calls if "/commits/" in c], "the fallback was never reached"
+
+
+@_needs_bash
+def test_a_failed_artifact_lookup_does_not_take_the_gate_down_with_it(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The call itself can fail, and the job must survive it.
+
+    A 403 is the one to picture: drop `actions: read` from the gate's
+    permissions and every artifact lookup returns one. Under `set -e` that ends
+    the job before the SHA route, so a permission regression would stop being
+    "the new route is inert" — today's behaviour, which is the bound this
+    change promised — and become "the gate errors on every reviewer run".
+    """
+    out, calls = _run_resolve(tmp_path, STUB_ARTIFACT_FAIL="1", STUB_SHA_PR="4242")
+    assert out["number"] == "4242", "a failed artifact lookup must fall through, not abort"
+    assert [c for c in calls if "/commits/" in c], "the fallback was never reached"
+
+
+@_needs_bash
+def test_an_artifact_that_is_not_a_pr_number_demotes_rather_than_erupts(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The content is attacker-reachable, so it may not be trusted OR fatal.
+
+    A fork PR controls `pr-agent.yml` on the `pull_request` path and can put
+    anything in the artifact. Treating that as a broken assumption — the `exit
+    1` the shared check does at the end — would let any PR fail this gate's job
+    on unrelated runs. It is a bad input, so the route reports nothing found.
+    """
+    out, calls = _run_resolve(
+        tmp_path,
+        STUB_ARTIFACT_ID="77",
+        STUB_ZIP=_zip_holding(tmp_path, "hostile", "; rm -rf /"),
+        STUB_SHA_PR="4242",
+    )
+    assert out["skip"] == "false"
+    assert out["number"] == "4242", "a hostile artifact must demote to the next route"
+    assert [c for c in calls if "/commits/" in c], "the fallback was never reached"
+
+
+@_needs_bash
+def test_a_run_that_ties_to_nothing_skips_and_never_guesses(tmp_path: pathlib.Path) -> None:
+    """The terminal state, and the invariant the whole change is bounded by.
+
+    Every route ends here rather than in a recovery that invents a reference
+    (mlorentedev/dotfiles#1128). A gate that guesses which PR a run belongs to
+    publishes a verdict about a PR nobody looked at — a silently-broken gate
+    traded for a silently-permissive one.
+    """
+    out, _ = _run_resolve(tmp_path, STUB_ARTIFACT_ID="", STUB_SHA_PR="")
+    assert out == {"skip": "true"}, (
+        f"a workflow_run that ties to no pull request produced {out!r}. It must "
+        f"produce exactly `skip=true` — no number, and above all no status."
     )
 
 

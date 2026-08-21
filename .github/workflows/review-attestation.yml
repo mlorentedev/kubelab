@@ -72,6 +72,11 @@ permissions:
   contents: read
   pull-requests: read
   statuses: write   # the commit status is the product
+  # Download the `pr-number` artifact the reviewer run uploads (#1184). This
+  # is the narrowest scope that reaches `actions/runs/{id}/artifacts`, and it
+  # is read-only on purpose: the gate must never be able to start, cancel or
+  # re-run a workflow whose output it judges.
+  actions: read
 
 jobs:
   attestation:
@@ -155,16 +160,99 @@ jobs:
           PR_FROM_EVENT: ${{ github.event.pull_request.number || github.event.issue.number }}
           RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
           RUN_HEAD: ${{ github.event.workflow_run.head_sha }}
-        # A `workflow_run` payload does not always carry its pull requests, so
-        # fall back to resolving by head SHA. If neither yields a PR the job
-        # SKIPS rather than passing: a run with nothing to judge must not publish
-        # a green status for a PR it never looked at.
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          # A block scalar, so the interpreter receives it at column zero. Inline
+          # after `python -c` it is one 225-character line, which yamllint
+          # rejects and no reader forgives.
+          #
+          # `archive.open(...).read(32)` and NOT `archive.read(...)`: the second
+          # decompresses the whole member before slicing it. The content is
+          # attacker-reachable — a fork PR controls `pr-agent.yml` on the
+          # `pull_request` path — so the bound has to sit on the decompression,
+          # not on the result. Measured: a 194 KB member claiming 200 MB stops
+          # at 13 MB of RSS in 0.03s.
+          #
+          # Python, not `unzip`, because this job already sets Python up and
+          # already parses with it. A route that degrades to silence when a tool
+          # happens to be absent is the exact failure this gate exists to end.
+          READ_PR_NUMBER: |
+            import sys
+            import zipfile
+
+            archive = zipfile.ZipFile(sys.argv[1])
+            members = [m for m in archive.namelist() if m.endswith(".txt")]
+            head = archive.open(members[0]).read(32) if members else b""
+            sys.stdout.write(head.decode("utf-8", "replace"))
+        # A `workflow_run` gets three routes, tried in descending order of how
+        # directly each one knows the answer:
+        #
+        #   1. `workflow_run.pull_requests` — populated when the reviewer run was
+        #      itself triggered by the PR. Exact, and free.
+        #   2. The `pr-number` artifact that run uploaded (#1184; the sending
+        #      half is #1202). The ONLY route that works on the `/review` path:
+        #      a comment has no head ref, so GitHub schedules that run against
+        #      the DEFAULT BRANCH — route 1 arrives empty and route 3 is asking
+        #      which PRs have master's tip as their head, which is none.
+        #   3. `commits/{head_sha}/pulls`. An inference rather than a handoff,
+        #      kept because it is still a lookup and it covers a reviewer run
+        #      whose artifact expired or never uploaded. On the comment path it
+        #      answers about master and may name the PR that was merged INTO it;
+        #      route 2 running first is what keeps that from mattering.
+        #
+        # If none of the three yields a PR the job SKIPS rather than passing: a
+        # run with nothing to judge must not publish a green status for a PR it
+        # never looked at. There is deliberately no fourth route
+        # (mlorentedev/dotfiles#1128) — a recovery that INVENTS a reference
+        # turns a silently-broken gate into a silently-permissive one, which is
+        # strictly worse than the skip it replaces.
+        #
+        # #1184 states a property this looks like it breaks: "the reviewer must
+        # not be able to tell the gate which PR it reviewed." It is preserved,
+        # and the distinction is between NAMING and JUDGING. The artifact
+        # carries a number, never a verdict; the gate then re-fetches that PR
+        # and classifies it from its own comments, labels and body. So the worst
+        # a hostile artifact achieves — and a fork PR does control
+        # `pr-agent.yml` on the `pull_request` path — is an honest
+        # re-evaluation of some other PR, publishing that PR's real verdict. It
+        # cannot manufacture a green one.
         run: |
           set -euo pipefail
           number=""
           if [ "$EVENT" = "workflow_run" ]; then
             number="$(printf '%s' "$RUN_PRS" \
               | python -c 'import json,sys; d=json.load(sys.stdin) or []; print(d[0]["number"] if d else "")')"
+
+            if [ -z "$number" ] && [ -n "$RUN_ID" ]; then
+              # A missing artifact is a legitimate state, not an error: a run
+              # cancelled while PENDING (#1203) executes no steps at all, and
+              # `workflow_run: [completed]` fires for it regardless. Every call
+              # on this route therefore falls through instead of failing the
+              # job — `set -e` is active, and an unguarded `gh api` would end it
+              # here rather than at route 3.
+              artifact_id="$(gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?name=pr-number" \
+                --jq '.artifacts[0].id // ""' 2>/dev/null || true)"
+              if [ -n "$artifact_id" ]; then
+                gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+                  > pr-number-artifact.zip 2>/dev/null || true
+                candidate="$(python -c "$READ_PR_NUMBER" pr-number-artifact.zip \
+                  2>/dev/null | tr -d '[:space:]' || true)"
+                # Validated HERE, and not left to the shared assertion below,
+                # which exits 1 because a non-numeric value there means an
+                # assumption broke. On this route it means nothing of the sort —
+                # it means the artifact was hostile or truncated. So it demotes
+                # to "route 2 found nothing" and route 3 runs, instead of
+                # letting any PR fail this gate's job by uploading a letter.
+                case "$candidate" in
+                  ''|*[!0-9]*)
+                    echo "artifact 'pr-number' held no usable PR reference; falling through" ;;
+                  *)
+                    number="$candidate"
+                    echo "resolved PR #${number} from the reviewer run's artifact" ;;
+                esac
+              fi
+            fi
+
             if [ -z "$number" ] && [ -n "$RUN_HEAD" ]; then
               number="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD}/pulls" --jq '.[0].number // ""')"
             fi
