@@ -1,0 +1,46 @@
+# {{ ansible_managed }}
+# BACKUP-044 Part 4. The PERIODIC trigger, and the only timer in this role.
+#
+# It starts ship, not capture, deliberately: ship carries
+# `Wants=`/`After=node-backup-capture.service`, so one timed unit drives the
+# whole capture-then-ship cycle. Timing capture instead would leave ship
+# untriggered — `After=` orders, it never starts anything.
+#
+# The boot snapshot on on-demand nodes is NOT here. `OnBootSec=` fires N
+# seconds after boot, long after dockerd is up, and R-C's whole finding is that
+# the capture must precede `docker.service`. That guarantee comes from the
+# capture UNIT's ordering, never from a timer. See the capture unit.
+[Unit]
+Description=BACKUP-044 node-backup schedule ({{ inventory_hostname }})
+
+[Timer]
+{% if node_backup_location == 'always-on' %}
+# Always-on node: a plain wall-clock schedule, sized from the ratified RPO
+# tiers (#452). Nothing about this node's availability makes an interval
+# unreliable, so the simplest trigger is the right one.
+OnCalendar={{ node_backup_schedule }}
+# Survive a window missed while the node was down for maintenance. Harmless on
+# an always-on node and the difference between a gap and a late run.
+Persistent=true
+{% else %}
+# On-demand node: an interval, never a wall-clock time. The homelab runs in
+# 3-4 hour bursts, so a daily `OnCalendar` would simply never fire — the RPO
+# here is bounded by session length, not by the RPO number (#1090).
+#
+# NOT `Persistent=true`: on a node that is off most of the time, every boot
+# would look like a missed window and fire a catch-up run that the boot
+# capture has already covered, seconds earlier and against a quiescent
+# database.
+OnUnitActiveSec={{ node_backup_interval }}
+# The first tick of the session. The boot capture (ordered before dockerd) has
+# already run by now; this starts the clock for the hourly cadence and ships
+# that boot capture offsite, which the boot unit deliberately does not do.
+OnBootSec={{ node_backup_boot_ship_delay }}
+{% endif %}
+# Spread the fleet's uploads. Without it every always-on node hits R2 on the
+# same wall-clock second, which is the one part of this pipeline shared
+# between nodes.
+RandomizedDelaySec={{ node_backup_randomized_delay }}
+
+[Install]
+WantedBy=timers.target

@@ -1,11 +1,21 @@
 # {{ ansible_managed }}
 [Unit]
-Description=BACKUP-044 node-backup ship to R2 ({{ inventory_hostname }})
+Description=BACKUP-044 node-backup ship to R2{{ ' with integrity check' if node_backup_check else '' }} ({{ inventory_hostname }})
 # Ship reads what capture staged; running it first would ship stale or
-# missing data. Part 4's timers trigger capture then ship in sequence --
-# this ordering constraint is declared here so it holds regardless of how
-# a future trigger invokes either unit.
+# missing data. This ordering constraint is declared here so it holds
+# regardless of how a trigger invokes either unit.
 After={{ node_backup_capture_service_name }}
+# Part 4 settles the Requires=/Wants= question #1179 deferred: `Wants=`, so
+# ONE timed unit drives the whole cycle. The timer starts ship, `Wants=` pulls
+# capture in, `After=` runs it first. Timing capture instead would leave ship
+# untriggered, because `After=` orders and never starts.
+#
+# `Wants=` and not `Requires=`: on a failed capture, `Requires=` would stop
+# ship before it ran and the journal would show a unit that never started.
+# `Wants=` lets ship run and REFUSE on the missing sentinel (#1179), which
+# says "capture did not COMPLETE; refusing to ship a partial backup" in the
+# log of the unit an operator is actually looking at.
+Wants={{ node_backup_capture_service_name }}
 
 [Service]
 Type=oneshot
@@ -15,7 +25,7 @@ Type=oneshot
 # directory", after successfully reaching R2. Root, because these units carry
 # no User= and run as root like every other oneshot in this role.
 Environment=HOME=/root
-ExecStart={{ node_backup_ship_script_path }}
+ExecStart={{ node_backup_ship_script_path }}{{ ' --check' if node_backup_check else '' }}
 {% if node_backup_memory_max %}
 MemoryMax={{ node_backup_memory_max }}
 MemorySwapMax={{ node_backup_memory_swap_max }}

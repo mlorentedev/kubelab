@@ -529,3 +529,137 @@ restatement of AC4: AC4 covers a run that fails and therefore emits something, w
 node whose timer stopped emits nothing at all, and every check that asserts only "recent
 snapshots look healthy" agrees with it. That is the same shape as the gates this repo
 spent 2026-08-17 fixing — a control that cannot exhibit the failure it guards.
+
+---
+
+### Part 4 — first real deploy, and three defects merged code had never hit
+
+Part 3's role (#1179) merged with CI green and no test ever invoked it against real
+hardware — `make backup ENV=prod` had not been run since merge. Deploying it now,
+to measure real capture/ship timing for the AC5 trigger-model decision below,
+surfaced three environment-dependent failures, one per node class, none of them
+caught by lint, `--syntax-check`, or the unit tests:
+
+1. **rpi3 and rpi4 (apt):** `Install sqlite3` failed, "No package matching
+   'sqlite3' is available" — a cold apt cache, never refreshed because the task
+   omitted `update_cache`. VPS and Beelink happened to have a warm cache already
+   and never exposed it. Fixed: `update_cache: true`, `cache_valid_time: 3600`,
+   matching the existing convention in `base_system` and `dev_node`.
+2. **rpi4 only (bzip2):** restic install failed, `bunzip2: not found`. rpi4's
+   apt state has `libbz2-1.0` pinned at a build the configured repo no longer
+   carries (`apt-cache policy`: installed `1.0.8-5.1build0.1`, candidate
+   `1.0.8-5.1`), so `apt install bzip2` fails on an unresolved dependency —
+   fixing it would mean changing rpi4's package state, out of scope here.
+   Fixed instead by removing the dependency on the `bunzip2` binary entirely:
+   decompression now goes through `python3 -c "import bz2..."`, since every
+   node Ansible manages already guarantees a `python3` interpreter
+   (`ansible_python_interpreter`). Fleet-wide fix, not an rpi4 special case.
+3. **All four nodes (ship unit):** `node-backup-ship.service` has no `User=`,
+   so it runs as root with no `HOME` — restic's own error: "unable to locate
+   cache directory: neither $XDG_CACHE_HOME nor $HOME are defined". It failed
+   *after* successfully creating the R2 repository (`restic init` doesn't need
+   the cache; `backup` does), which is the failure mode this pipeline exists to
+   catch surfacing in its own deploy: a report that looked like a repository
+   was live when nothing had been shipped to it. Fixed: `Environment=HOME=/root`
+   in the unit.
+
+All three are runtime defects in already-merged Part 3 code, not Part 4 design.
+None is destructive — sqlite3/bzip2 are additive package installs, the
+decompression change and the environment variable are role-local. Sequencing
+note for whoever re-reads this: mid-fix, `systemctl show <unit> -p Environment`
+briefly reported empty against a file on disk that already had it, which read
+like a real bug for one investigation cycle. It was not — a stale in-memory
+unit from a prior daemon-reload, resolved by rerunning `daemon-reload`
+explicitly before the next `systemctl show`. Recorded so the next person
+doesn't re-spend the cycle.
+
+**Wants=/After= design, proven live.** rpi3, 2026-08-21 03:21 (local, CEST):
+
+```
+03:21:11  Starting node-backup-capture.service
+03:21:14  capture complete: 18M
+03:21:14  Starting node-backup-ship.service   <- pulled in by Wants=, ordered by After=
+03:21:26  ship complete
+```
+
+A single `systemctl start node-backup-ship.service` — the shape the AC1 timer
+will invoke — correctly drives the whole capture-then-ship cycle with no
+separate capture timer. This settles the Requires=/Wants= question Part 3 left
+open: `Wants=` lets ship run and refuse on a missing sentinel with the reason in
+the log an operator is actually reading, rather than silently blocking ship at
+the systemd level on a capture failure.
+
+**Timing, all four nodes, deployed 2026-08-21.** Every run below is a **first
+snapshot** (`no parent snapshot found, will read all files`) — vps, beelink and
+rpi4's numbers include one-time `restic init` (repository creation, ~3-5s).
+rpi3's does not (its repository already existed from an earlier failed attempt
+during this same session). Steady-state incremental runs will be faster on all
+four; `forget --prune` will slow as snapshot history accumulates. Do not treat
+these as steady-state numbers.
+
+| Node | Class | Capture | Ship (incl. init where noted) | Payload | Files |
+|---|---|---|---|---|---|
+| rpi3 | always-on | 3s | 12s | 18M / 4.234 MiB stored | 4 |
+| kubelab-vps | always-on | 1s | 13s (incl. ~5s init) | 140K / 16.629 KiB stored | 5 |
+| beelink | on-demand | <1s | 8s (incl. ~4s init) | 2.3M / 50.817 KiB stored | 24 |
+| rpi4 | on-demand | 1s | 12s (incl. ~3s init) | 24M / 8.697 MiB stored | 25 |
+
+Beelink's snapshot verified by content, not size alone (this session's own
+recurring failure mode is a component reporting success over the wrong data):
+`restic ls latest` against beelink's repository lists `gitea.db`, the git
+repositories directory, the JWT signing key, and all three SSH host keys —
+the actual critical subset, not an empty or partial capture.
+
+**Memory, measured against R-B's 128M cap (rpi3 only).** The ship run above
+peaked at **90M** (`systemd[1]: node-backup-ship.service: ... 90M memory
+peak`); an earlier failed attempt on the same node peaked at 75.7M. Real
+margin over the current repository size is ~1.4x, not the >5x headroom
+`defaults/main.yml` claims over the R-B floor (16-24M) — that comparison was
+against restic's baseline footprint before any real repository existed. Not
+acted on here (no-guessing-infra: this is the measurement that decision
+needs, not the decision itself) — flagged for the operator, since a grown
+rpi3 repository pushing past 128M gets restic OOM-killed on the monitoring-
+of-record node.
+
+**AC5, the shutdown-ordering question — answered.**
+Beelink and rpi4's full first-run cycles (capture+ship) completed in 8s and
+12s respectively; steady-state incremental runs will be shorter. That is well
+inside a systemd shutdown budget, which reverses the concern this spec's
+handoff carried into Part 4 ("only matters if the node never returns, and in
+that case it's worthless unless it also ships, which needs the measured ship
+duration") — shipping on graceful shutdown is measured as feasible, not
+merely theoretical. The ordering itself uses the mechanism this section's
+boot-side finding already established: a unit ordered `After=X` stops
+*before* X on shutdown (the inverse of start order), so a `RemainAfterExit`
+unit with its work in `ExecStop=`, ordered `After=` whichever unit actually
+stops the writer, runs while that writer is still live. Not a fleet-wide
+`docker.service` constant: Beelink's `kubelab-compose.service` is itself
+`After=docker.service` and stops itself before dockerd does, on its own
+schedule, so ordering against `docker.service` directly would race it with
+no guaranteed outcome — the new unit orders against `kubelab-compose.service`
+there, and against `docker.service` on RPi4, which has no equivalent
+compose-wrapping unit (its containers are reaped by dockerd itself).
+
+**Deployed and live, 2026-08-21 — operator-approved go-live, not a design
+default.** All four nodes: periodic ship timer and weekly integrity-check
+timer both `enabled` + `active`, confirmed via `systemctl list-timers` with
+the expected next-run times (rpi3's next `OnCalendar` fire: 2026-08-21
+04:00 CEST). On-demand nodes only: capture `enabled` with `Before=docker.service`
+loaded (`systemctl show`, confirmed on rpi4), and the shutdown-snapshot unit
+`active` with `After=kubelab-compose.service` (beelink) /
+`After=docker.service` (rpi4) loaded correctly per node. `restic` in the
+role's decompress step, the ship unit's `Environment=HOME`, and the apt
+cache fix travel through the same deploy but are tracked as a separate
+change (#1200) since they are runtime-defect fixes to already-merged code,
+independent of Part 4's scheduling itself.
+
+**Still open, deliberately.** The real power-cycle demonstration of the
+on-demand trigger model — tasks.md's own bar for AC5, "not by configuration
+review" — has not been run. Structural verification (dry-run, `systemctl
+show`, unit tests) is not a substitute for it; it is what makes the eventual
+power-cycle a confirmation rather than a first real test. Rollback, if
+needed before that demonstration: `systemctl disable --now
+node-backup-ship.timer node-backup-ship-check.timer` on every node, plus
+`node-backup-shutdown.service` and `node-backup-capture.service` on the
+on-demand pair — the capture/ship mechanism itself (Part 3) is unaffected
+and can keep being triggered by hand.
