@@ -296,6 +296,23 @@ def _real_seed() -> list[dict]:
 
 
 class TestApplyAgainstARealInstance:
+    @pytest.fixture(autouse=True)
+    def _tokens_for_the_real_seed(self, monkeypatch):
+        """Stand in for SOPS, for whatever push monitors the real seed declares.
+
+        `tmp_path` has no vault, so `_get_push_tokens` finds nothing and
+        `hydrate_push_tokens` refuses the sync — correctly, since a push monitor
+        without a token is one Uptime Kuma would mint a random address for.
+
+        Derived from the seed rather than listed, because the case that broke
+        this was adding four push monitors to `monitors.json` (BACKUP-044 AC9)
+        and finding out from CI: `make test-fast` deselects `integration`, so
+        the local run was green on a suite that could not have caught it.
+        A hardcoded token map would go stale the same way on the next node.
+        """
+        tokens = {m["key"]: f"tok-{m['key']}" for m in _real_seed() if m.get("type") == "push"}
+        monkeypatch.setattr(monitoring, "_get_push_tokens", lambda _root: tokens)
+
     def test_first_apply_creates_the_whole_seed(self, live, apply_seed):
         seed = _real_seed()
 
