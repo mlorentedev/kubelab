@@ -93,14 +93,20 @@ def test_the_action_is_pinned_by_sha_not_by_tag() -> None:
     pins by tag — this is a place the port should exceed its source, and a test
     is what stops a later "bump" quietly reverting to one.
     """
-    step = next(
-        s for s in _load(REVIEWER)["jobs"]["review"]["steps"] if "uses" in s
-    )
-    ref = step["uses"].split("@", 1)[1]
-    assert len(ref) == 40 and all(c in "0123456789abcdef" for c in ref), (
-        f"the action is pinned to {ref!r}, which is not a commit SHA. A mutable "
-        "tag decides what runs with NAN_API_KEY on a public repo."
-    )
+    used = [s for s in _load(REVIEWER)["jobs"]["review"]["steps"] if "uses" in s]
+    assert used, "no `uses:` step in the reviewer job"
+    # EVERY `uses:` step, not the first one. This asserted `next(...)` while the
+    # job had exactly one action; the PR-number upload (#1184) made it two, and
+    # the first is now that upload -- so the original form would have gone on
+    # passing while PR-Agent itself reverted to a mutable tag. A guard that stops
+    # covering its subject without failing is the class lesson-357 catalogues.
+    for step in used:
+        ref = step["uses"].split("@", 1)[1]
+        assert len(ref) == 40 and all(c in "0123456789abcdef" for c in ref), (
+            f"{step['uses']!r} is pinned to {ref!r}, which is not a commit SHA. "
+            "Every action in this job runs alongside NAN_API_KEY on a public "
+            "repo, so a mutable tag decides what executes with that credential."
+        )
 
 
 def test_the_reviewer_verifies_it_actually_published() -> None:
@@ -217,3 +223,67 @@ def test_a_gate_that_cannot_answer_still_fails_the_job() -> None:
     final = next(s for s in steps if "could not answer" in s.get("name", ""))
     assert 'exit "$CODE"' in final["run"], "a non-verdict exit code must still fail"
     assert "::error::" in final["run"], "and must say so in the log"
+
+
+# The artifact carrying the PR number from the reviewer to the gate (#1184).
+# A literal, deliberately: the point of the assertions below is to anchor both
+# workflows to a value neither of them derives. Reading the name out of
+# `pr-agent.yml` and asserting the file agrees with itself would pass by
+# construction -- the failure class lesson-357 catalogues.
+ARTIFACT_NAME = "pr-number"
+
+
+def _review_steps() -> list[dict]:
+    return _load(REVIEWER)["jobs"]["review"]["steps"]
+
+
+def _first_index(steps: list[dict], prefix: str) -> int:
+    for i, step in enumerate(steps):
+        if str(step.get("uses", "")).startswith(prefix):
+            return i
+    return -1
+
+
+def test_the_pr_number_is_uploaded_under_the_name_the_gate_reads() -> None:
+    """A `/review` reaches the gate with no PR reference unless this runs.
+
+    `workflow_run` does not propagate the triggering event's context: a run
+    started by `issue_comment` is associated with the default branch, so the
+    gate sees `pull_requests[]` empty and `head_sha` at master, and correctly
+    skips. The reference is not lost in transit, it never enters it — which is
+    why the fix is on the SENDING side and why this assertion lives here.
+    """
+    uploads = [
+        s for s in _review_steps() if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+    ]
+    assert len(uploads) == 1, (
+        f"expected exactly one upload-artifact step in pr-agent.yml, found "
+        f"{len(uploads)}. The gate downloads one artifact by name; two would make "
+        f"which one it gets an ordering accident."
+    )
+    assert uploads[0].get("with", {}).get("name") == ARTIFACT_NAME, (
+        f"the PR-number artifact must be named {ARTIFACT_NAME!r}: the gate "
+        f"downloads by that literal string. Renaming one side degrades into "
+        f"silence — the reviewer reviews, the gate finds nothing, and the PR "
+        f"reads unreviewed."
+    )
+
+
+def test_the_upload_precedes_the_reviewer_so_a_cancelled_run_still_carries_it() -> None:
+    """Ordering is load-bearing, not tidiness.
+
+    This job is cancellable by the workflow-level concurrency group, and
+    `workflow_run: [completed]` fires for cancelled runs too. If the upload sat
+    after PR-Agent, a run cancelled mid-review would reach the gate with no
+    artifact — precisely the case the gate most needs to judge.
+    """
+    steps = _review_steps()
+    upload = _first_index(steps, "actions/upload-artifact@")
+    reviewer = _first_index(steps, "The-PR-Agent/pr-agent@")
+    assert upload >= 0, "no upload-artifact step in pr-agent.yml"
+    assert reviewer >= 0, "no PR-Agent step in pr-agent.yml"
+    assert upload < reviewer, (
+        "the PR-number upload must run BEFORE PR-Agent. A run cancelled during "
+        "the review would otherwise produce no artifact, and the gate would skip "
+        "the PR it most needed to judge."
+    )

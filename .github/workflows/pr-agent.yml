@@ -107,6 +107,66 @@ jobs:
       group: pr-agent-nan-inference
       cancel-in-progress: false
     steps:
+      # The PR number, handed to `review-attestation.yml` (#1184).
+      #
+      # `workflow_run` does not propagate the triggering event's context. A run
+      # started by `issue_comment` -- a `/review` -- is associated with the
+      # DEFAULT BRANCH, because a comment has no head ref. The gate therefore
+      # receives `pull_requests[]` empty and `head_sha` pointing at master, its
+      # fallback asks which PRs carry master's SHA, gets none, and skips. That
+      # skip is CORRECT: a run with nothing to judge must not attest. The
+      # reference is not lost in the handoff -- it never enters it, so no
+      # additional resolution layer on the reading side could recover it.
+      #
+      # It is not missing from THIS run, though: the `Fail if no review was
+      # published` step below already resolves it from the same expression.
+      # Uploading it hands the gate the value from the run being judged, rather
+      # than letting it infer one from a SHA that is already wrong.
+      #
+      # FIRST on purpose. This job is cancellable by the workflow-level
+      # concurrency group, and `workflow_run: [completed]` fires for cancelled
+      # runs too. Written before PR-Agent starts, the artifact exists however
+      # this run ends.
+      #
+      # Needs no new permission: artifact upload goes through the Actions
+      # runtime, not the GITHUB_TOKEN scopes. Only the READER needs
+      # `actions: read`, and it is not added here -- this half is inert until
+      # the gate learns to read it, which is why it ships on its own.
+      - name: Record the PR number for the attestation gate
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          # Asserted, not sanitised: every path into PR_NUMBER yields an integer
+          # today. A non-numeric value means an assumption broke, and writing it
+          # would hand the gate a reference to something that is not a PR.
+          case "$PR_NUMBER" in
+            ''|*[!0-9]*)
+              echo "::error::resolved PR reference is not a number: $PR_NUMBER"
+              exit 1 ;;
+          esac
+          printf '%s' "$PR_NUMBER" > pr-number.txt
+
+      - name: Upload the PR number
+        # SHA-pinned like the reviewer action below, and for the same reason:
+        # every action in this job runs alongside `NAN_API_KEY` on a public
+        # repository, so a mutable tag decides what executes with that
+        # credential. Resolved 2026-08-20 from
+        # `repos/actions/upload-artifact/tags`. Bump it by re-resolving the tag
+        # you intend, never by editing the comment.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          # THE NAME IS A TWO-FILE AGREEMENT, exactly like this workflow's `name:`
+          # above: the gate will download by this literal string. Asserted in
+          # `tests/test_pr_agent_workflow.py` rather than left as a convention,
+          # because drift here degrades into silence -- the reviewer reviews, the
+          # gate finds no artifact, and the PR reads unreviewed.
+          name: pr-number
+          path: pr-number.txt
+          # The gate reads this within minutes of the run completing. Anything
+          # longer is storage held for nobody.
+          retention-days: 1
+
       - name: PR-Agent
         # Pinned by COMMIT SHA, not by tag, and this deliberately exceeds the
         # upstream it ports from. A tag is mutable: whoever can move `v0.42.0`
