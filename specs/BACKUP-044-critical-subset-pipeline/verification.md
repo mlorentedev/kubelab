@@ -621,14 +621,45 @@ needs, not the decision itself) — flagged for the operator, since a grown
 rpi3 repository pushing past 128M gets restic OOM-killed on the monitoring-
 of-record node.
 
-**AC5, the shutdown-ordering question — now answerable, not yet decided.**
+**AC5, the shutdown-ordering question — answered.**
 Beelink and rpi4's full first-run cycles (capture+ship) completed in 8s and
 12s respectively; steady-state incremental runs will be shorter. That is well
 inside a systemd shutdown budget, which reverses the concern this spec's
 handoff carried into Part 4 ("only matters if the node never returns, and in
 that case it's worthless unless it also ships, which needs the measured ship
-duration") — shipping on graceful shutdown is now measured as feasible, not
-merely theoretical. The ordering decision itself (capture before the compose
-unit stops, so Gitea is still live for the `sqlite3 .backup` snapshot, per
-tasks.md's own framing) has not been made — it is a design call on a
-ratified-parameters spec, for the operator, not for this session to default.
+duration") — shipping on graceful shutdown is measured as feasible, not
+merely theoretical. The ordering itself uses the mechanism this section's
+boot-side finding already established: a unit ordered `After=X` stops
+*before* X on shutdown (the inverse of start order), so a `RemainAfterExit`
+unit with its work in `ExecStop=`, ordered `After=` whichever unit actually
+stops the writer, runs while that writer is still live. Not a fleet-wide
+`docker.service` constant: Beelink's `kubelab-compose.service` is itself
+`After=docker.service` and stops itself before dockerd does, on its own
+schedule, so ordering against `docker.service` directly would race it with
+no guaranteed outcome — the new unit orders against `kubelab-compose.service`
+there, and against `docker.service` on RPi4, which has no equivalent
+compose-wrapping unit (its containers are reaped by dockerd itself).
+
+**Deployed and live, 2026-08-21 — operator-approved go-live, not a design
+default.** All four nodes: periodic ship timer and weekly integrity-check
+timer both `enabled` + `active`, confirmed via `systemctl list-timers` with
+the expected next-run times (rpi3's next `OnCalendar` fire: 2026-08-21
+04:00 CEST). On-demand nodes only: capture `enabled` with `Before=docker.service`
+loaded (`systemctl show`, confirmed on rpi4), and the shutdown-snapshot unit
+`active` with `After=kubelab-compose.service` (beelink) /
+`After=docker.service` (rpi4) loaded correctly per node. `restic` in the
+role's decompress step, the ship unit's `Environment=HOME`, and the apt
+cache fix travel through the same deploy but are tracked as a separate
+change (#1200) since they are runtime-defect fixes to already-merged code,
+independent of Part 4's scheduling itself.
+
+**Still open, deliberately.** The real power-cycle demonstration of the
+on-demand trigger model — tasks.md's own bar for AC5, "not by configuration
+review" — has not been run. Structural verification (dry-run, `systemctl
+show`, unit tests) is not a substitute for it; it is what makes the eventual
+power-cycle a confirmation rather than a first real test. Rollback, if
+needed before that demonstration: `systemctl disable --now
+node-backup-ship.timer node-backup-ship-check.timer` on every node, plus
+`node-backup-shutdown.service` and `node-backup-capture.service` on the
+on-demand pair — the capture/ship mechanism itself (Part 3) is unaffected
+and can keep being triggered by hand.
