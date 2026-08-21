@@ -19,15 +19,16 @@ output "magicdns_name" {
 }
 
 output "next_steps" {
-  description = "Post-apply sequence. NOT YET RUNNABLE -- see the note in the value."
+  description = "Post-apply sequence, runnable as written."
   value       = <<-EOT
-    The `make tf-gcp-*` and `make gcp1-*` targets do not exist yet; they land
-    with the gcp-tfvars renderer in a follow-up, so this module is not expected
-    to be applied before then. When it is:
-
     1. make wait-node-ready NODE=${var.hostname} ENV=hub   # sshd AND cloud-init
     2. dig +short ${var.hostname}.kubelab.internal          # assert the given-name resolved
     3. make provision NODE=${var.hostname} ENV=hub          # twice; second must be changed=0
     4. make maintain-notify-test NODE=${var.hostname} ENV=hub
+
+    Lifecycle afterwards, no terraform needed:
+      make gcp1-status                 # describe the MIG
+      make gcp1-stop / gcp1-start      # target_size 0 / 1
+      make gcp1-replace                # a preemption on demand, then reprovision
   EOT
 }

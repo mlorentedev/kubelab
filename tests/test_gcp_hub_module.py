@@ -292,6 +292,12 @@ class TestModuleDefaultsMatchTheSSOT:
 
     # dotted path in common.yaml  ->  Terraform variable name
     MIRRORED = {
+        # Found while building `gcp-tfvars`: both of these carry a description
+        # SAYING they mirror an SSOT key, and neither was compared. Same class as
+        # the two pins one commit earlier -- three instances now, which makes it
+        # the module's default failure mode rather than three oversights.
+        "networking.gcp.project_id": "project_id",
+        "networking.ssh_users.cloud": "deploy_user",
         "networking.gcp.region": "region",
         "networking.gcp.machine_type": "machine_type",
         "networking.gcp.image_family": "image_family",
