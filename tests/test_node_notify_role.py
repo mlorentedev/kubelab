@@ -438,3 +438,51 @@ def test_token_value_is_not_shell_interpreted():
     assert proc.stdout == f"Authorization: Bearer {hostile}"
     assert not Path("/tmp/kubelab-notify-pwned").exists()
     assert not Path("/tmp/kubelab-notify-pwned2").exists()
+
+
+# --- the tag topology, which a dry run found and no static test had ---------
+
+
+PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("provision-*.yml"))
+
+
+def _role_tags(playbook: Path, role_suffix: str) -> set[str] | None:
+    """Tags on one role entry in a playbook, or None if it does not include it."""
+    for play in yaml.safe_load(playbook.read_text()) or []:
+        for entry in play.get("roles") or []:
+            if isinstance(entry, dict) and str(entry.get("role", "")).endswith(role_suffix):
+                return set(entry.get("tags") or [])
+    return None
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_cannot_be_selected_without_its_consumer(playbook: Path):
+    """node_notify must not be reachable by a tag that misses node_maintenance.
+
+    This role REMOVES `kubelab-maintenance-notify.service`, which
+    `kubelab-maintenance.service` keeps naming until node_maintenance
+    re-templates it. A selector that reaches one and not the other leaves the
+    node notification-dark: systemd logs "unit not found" on the next failure
+    and nobody is told — silent, and only on the path nobody exercises.
+
+    Found by a `--check` run against the VPS, not by reading the diff: the role
+    carried a `notify` tag of its own and `TAGS=notify` selected exactly the
+    unsafe subset. Sharing the consumer's tag makes that unreachable rather
+    than documented, which is the difference between a rule and a comment.
+    """
+    notify = _role_tags(playbook, "roles/node_notify")
+    maintenance = _role_tags(playbook, "roles/node_maintenance")
+    if notify is None and maintenance is None:
+        pytest.skip(f"{playbook.stem} includes neither role")
+    assert notify is not None, (
+        f"{playbook.stem} includes node_maintenance without node_notify, so its "
+        f"`OnFailure=kubelab-notify@%n.service` names a unit that node never gets"
+    )
+    assert maintenance is not None, (
+        f"{playbook.stem} includes node_notify without node_maintenance"
+    )
+    assert notify <= maintenance, (
+        f"{playbook.stem}: node_notify carries {sorted(notify - maintenance)!r}, which "
+        f"node_maintenance does not. That tag selects the notifier without its "
+        f"consumer — the migration's one notification-dark window."
+    )

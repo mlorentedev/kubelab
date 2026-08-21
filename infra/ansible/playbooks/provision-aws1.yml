@@ -189,7 +189,17 @@
     # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
     # template it names while removing the single-purpose unit it replaces.
     - role: ../roles/node_notify
-      tags: [notify, maintenance]
+      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
+      # REMOVES the unit `kubelab-maintenance.service` still names until
+      # node_maintenance re-templates it, so a selector that reaches this role
+      # without reaching that one leaves the node notification-dark: systemd
+      # logs "unit not found" on the next failure and nobody is told.
+      #
+      # Found by a `--check` run scoped to a `notify` tag that used to exist
+      # here. Sharing node_maintenance's tag makes the unsafe scoping
+      # unreachable rather than merely documented, which is the difference
+      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
+      tags: [maintenance]
 
     # ANSIBLE-035: this is the ticket's motivating case. aws1 is a Spot
     # instance already replaced once (2026-05-06) — every replacement before
