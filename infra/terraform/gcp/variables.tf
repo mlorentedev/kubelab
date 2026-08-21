@@ -140,5 +140,84 @@ variable "headscale_api_key_secret" {
   # definition of that mapping. Do not hand-pick a name here: a Secret Manager id
   # nothing in the catalog maps to is one the sync never writes, and cloud-init
   # would ask for it unattended after a preemption.
-  default     = "gcp-headscale-api-key"
+  default = "gcp-headscale-api-key"
+}
+
+
+# ---------------------------------------------------------------------------
+# Argo CD bring-up (GCP-001 Phase 2, finding F1)
+# ---------------------------------------------------------------------------
+#
+# A MIG *recreates* rather than restarts, so cloud-init has to complete the whole
+# hub -- Argo CD included. Everything below is what that needs and cannot derive.
+
+variable "argocd_chart_version" {
+  description = <<-EOT
+    Argo CD Helm chart version, PINNED. Mirrors `argocd.chart_version` in
+    common.yaml, which `_deploy-argocd-helm` reads too, so the operator path and
+    the unattended path install the same thing.
+
+    Unpinned, `helm upgrade --install` resolves to the newest chart in the repo.
+    On a MIG that means a preemption at 3am is also a major upgrade of the
+    management plane. See #1209 for moving it deliberately.
+  EOT
+  type        = string
+  default     = "9.5.13"
+}
+
+variable "helm_version" {
+  description = "helm binary version installed at boot. Pinned for the same reason as the chart: an unattended recreate must not pick up whatever is current."
+  type        = string
+  default     = "v3.18.4"
+}
+
+variable "managed_spokes" {
+  description = <<-EOT
+    Which spokes THIS hub reconciles. The migration's core invariant is that
+    exactly one hub writes to any given spoke at any moment, and this list is
+    where that is enforced structurally rather than by a note in a runbook:
+    cloud-init installs a cluster secret and an Application only for the spokes
+    named here.
+
+    `gcp1` starts with staging only while `aws1` keeps prod. Prod is handed over
+    by scaling aws1's application-controller to 0 and adding "prod" here -- which
+    changes the instance template, so the MIG recreates the hub and the cutover
+    re-exercises the recreate path instead of bypassing it.
+  EOT
+  type        = list(string)
+  default     = ["staging"]
+}
+
+variable "spoke_servers" {
+  description = <<-EOT
+    Spoke apiserver URLs by env. Mirrors what `make register-spoke` derives from
+    `argocd.spokes.<env>.node` -> that node's `tailscale_ip` + `k3s.api_port`.
+
+    These are literal Tailscale IPs, which is the F3 pattern one level out: the
+    address rotates on re-registration. It does not rotate for these two -- the
+    spokes are not recreated -- but the coupling is real and belongs to #1182
+    rather than being silently inherited here.
+  EOT
+  type        = map(string)
+  default = {
+    staging = "https://100.64.0.11:6443"
+    prod    = "https://100.64.0.2:6443"
+  }
+}
+
+variable "argocd_secret_ids" {
+  description = <<-EOT
+    Secret Manager ids for the four credentials the Argo CD install needs, keyed
+    by the helm value they feed. Derived from their SOPS paths by
+    `toolkit.features.secrets_manager.secret_manager_name` -- the single
+    definition of that mapping. Do not hand-pick: an id nothing in the catalog
+    maps to is one the sync never writes.
+  EOT
+  type        = map(string)
+  default = {
+    admin_password_hash = "argocd-admin-password-hash"
+    oidc_client_secret  = "apps-services-security-authelia-oidc-client-secret-argocd"
+    slack_webhook_url   = "argocd-slack-webhook-url"
+    github_webhook      = "argocd-github-webhook-secret"
+  }
 }

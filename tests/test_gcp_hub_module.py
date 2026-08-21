@@ -96,6 +96,30 @@ def _var_default(tf: str, name: str) -> str | None:
     return d.group(1).strip() if d else None
 
 
+
+def _var_defaults_any(tf: str, name: str) -> list[str]:
+    """Every default value of a variable, whether it is a scalar or a map.
+
+    `_var_default` handles the scalar form. The Argo CD secret ids arrive as a
+    map, and a checker that silently skipped maps would report a clean result
+    while examining none of them.
+    """
+    scalar = _var_default(tf, name)
+    if scalar and scalar.startswith("["):
+        # A list default. Nothing in the access list should be one, and silently
+        # returning [] would let a list of secret ids go unchecked while the test
+        # reported clean -- so this is loud instead.
+        raise AssertionError(f'variable "{name}" defaults to a list; the access list expects scalars or a map')
+    if scalar and "{" not in scalar:
+        return [scalar]
+    block = re.search(r'variable\s+"' + re.escape(name) + r'"\s*\{(.*?)\n\}', tf, re.S)
+    if not block:
+        return []
+    default = re.search(r"default\s*=\s*\{(.*?)\n  \}", block.group(1), re.S)
+    if not default:
+        return []
+    return re.findall(r'=\s*"([^"]+)"', default.group(1))
+
 @pytest.fixture(scope="module")
 def tf() -> str:
     if not GCP_DIR.is_dir():
@@ -251,29 +275,54 @@ class TestTerraformBindsOnlyDeclaredSecrets:
             secrets_synced_to_secret_manager,
         )
 
-        # The module names secrets through variables (`secret_id = var.<name>`),
-        # so read the bound variables and resolve each to its default.
-        bound_vars = re.findall(
-            r"google_secret_manager_secret_iam_member[^{]*\{[^}]*?secret_id\s*=\s*var\.([a-z_]+)",
-            tf,
-            re.S,
-        )
-        assert bound_vars, "no Secret Manager IAM binding found in the module"
+        # The grants are a `for_each` over `local.hub_readable_secrets`, so the
+        # local IS the access list. Reading the resource block alone would find
+        # `each.value` and prove nothing.
+        block = re.search(r"hub_readable_secrets\s*=\s*concat\((.*?)\n  \)", tf, re.S)
+        assert block, "local.hub_readable_secrets is gone; the IAM grants can no longer be checked"
+        body = block.group(1)
 
-        # Compare through the ONE definition of the SOPS -> Secret Manager name
-        # mapping. Re-deriving it here (stripping a prefix, splitting on a dot)
-        # would make this test agree with its own guess instead of with the code
-        # the sync actually runs.
+        assert "google_secret_manager_secret_iam_member" in tf, "no Secret Manager IAM grant in the module"
+        assert 'role      = "roles/secretmanager.secretAccessor"' in tf, (
+            "the grant is not secretAccessor; a broader role would let the hub write "
+            "or manage secrets rather than only read the ones it boots from"
+        )
+
         tagged = {secret_manager_name(s.key_path) for s in secrets_synced_to_secret_manager()}
-        for var_name in bound_vars:
-            default = _var_default(tf, var_name)
-            assert default, f'variable "{var_name}" is IAM-bound but has no default'
-            assert default in tagged, (
-                f"the module grants secretAccessor on {default!r}, but no "
-                f"SecretSpec carries sync_to_secret_manager=True for it. Either "
-                f"the sync never delivers it (cloud-init reads nothing) or the "
-                f"grant is wider than the design (ADR-063 D7)."
+
+        # Strip the `for env in var.managed_spokes :` clause before looking for
+        # secret references. That one names the LOOP SOURCE, not a secret, and
+        # excluding it structurally beats an allowlist of variable names -- an
+        # allowlist grows silently and eventually excuses something real.
+        secret_refs = re.sub(r"for\s+\w+\s+in\s+var\.[a-z_]+\s*:", "", body)
+
+        # Every remaining `var.` reference resolves to a tagged secret.
+        for var_name in re.findall(r"var\.([a-z_]+)", secret_refs):
+            for value in _var_defaults_any(tf, var_name):
+                assert value in tagged, (
+                    f"the module grants secretAccessor on {value!r} (via var.{var_name}), "
+                    f"but no SecretSpec carries sync_to_secret_manager=True for it. Either "
+                    f"the sync never delivers it -- cloud-init would read nothing -- or the "
+                    f"grant is wider than the design (ADR-063 D7)."
+                )
+
+        # The spoke entries are the OTHER input class and are deliberately absent
+        # from the catalog: Kubernetes generates those credentials, so tagging
+        # them would assert a SOPS origin they do not have. What is asserted here
+        # is that they follow the same name mapping and are scoped to the spokes
+        # this hub manages -- a hub that does not reconcile prod must not be able
+        # to read prod's cluster credentials either.
+        spoke_literals = re.findall(r'"(argocd-spokes-[^"]*)"', body)
+        assert len(spoke_literals) == 2, f"expected token and ca per spoke, found {spoke_literals}"
+        for literal in spoke_literals:
+            assert literal.startswith("argocd-spokes-${env}-"), (
+                f"{literal!r} does not follow the spoke naming rule, so it cannot be "
+                f"what the sync wrote"
             )
+        assert "for env in var.managed_spokes" in body, (
+            "the spoke grants are not scoped to managed_spokes; this hub could read "
+            "credentials for a spoke another hub is reconciling"
+        )
 
 
 class TestNoCredentialLiterals:
@@ -305,11 +354,16 @@ class TestNoCredentialLiterals:
         # `sensitive = true` so it is not echoed into plan output or CI logs.
         for block in re.findall(r'variable\s+"([^"]+)"\s*\{(.*?)\n\}', tf, re.S):
             name, body = block
-            # `public` excludes ssh_public_key_path, and `_secret` names a Secret
-            # Manager secret *identifier* rather than its value -- neither is a
-            # credential, and marking them sensitive would hide harmless plan
-            # output for nothing.
-            if re.search(r"public|_secret\b", name, re.I):
+            # `public` excludes ssh_public_key_path. The `_secret` / `_secret_ids`
+            # suffix marks a variable holding a Secret Manager IDENTIFIER rather
+            # than a value -- `headscale_api_key_secret` names a secret, it does
+            # not contain one. Neither is a credential, and marking them
+            # sensitive would hide harmless plan output for nothing.
+            #
+            # The suffix is the whole convention, so it is narrow on purpose: a
+            # variable that actually carries a credential cannot accidentally
+            # acquire this exemption without being renamed to claim it.
+            if re.search(r"public|_secret\b|_secret_ids?\b", name, re.I):
                 continue
             if re.search(r"key|secret|token|password", name, re.I):
                 assert re.search(r"sensitive\s*=\s*true", body), (
