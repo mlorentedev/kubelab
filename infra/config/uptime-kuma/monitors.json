@@ -924,5 +924,119 @@
     "tags": [
       "iot"
     ]
+  },
+  {
+    "key": "ops-backup-node-beelink",
+    "name": "Ops \u00b7 Backup \u00b7 beelink node-path",
+    "type": "push",
+    "url": "https://",
+    "hostname": null,
+    "port": null,
+    "interval": 21600,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "BACKUP-044 AC9. beelink posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [],
+    "parent": null,
+    "tags": [
+      "backup",
+      "prod",
+      "on-demand"
+    ]
+  },
+  {
+    "key": "ops-backup-node-rpi3",
+    "name": "Ops \u00b7 Backup \u00b7 rpi3 node-path",
+    "type": "push",
+    "url": "https://",
+    "hostname": null,
+    "port": null,
+    "interval": 21600,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "BACKUP-044 AC9. rpi3 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "backup",
+      "prod"
+    ]
+  },
+  {
+    "key": "ops-backup-node-rpi4",
+    "name": "Ops \u00b7 Backup \u00b7 rpi4 node-path",
+    "type": "push",
+    "url": "https://",
+    "hostname": null,
+    "port": null,
+    "interval": 21600,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "BACKUP-044 AC9. rpi4 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [],
+    "parent": null,
+    "tags": [
+      "backup",
+      "prod",
+      "on-demand"
+    ]
+  },
+  {
+    "key": "ops-backup-node-vps",
+    "name": "Ops \u00b7 Backup \u00b7 vps node-path",
+    "type": "push",
+    "url": "https://",
+    "hostname": null,
+    "port": null,
+    "interval": 21600,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "BACKUP-044 AC9. vps posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "backup",
+      "prod"
+    ]
   }
 ]

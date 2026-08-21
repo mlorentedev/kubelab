@@ -235,6 +235,84 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Login with new password after restart.",
     ),
     # =========================================================================
+    # Uptime Kuma push monitors — BACKUP-044 AC9 coverage heartbeat
+    # =========================================================================
+    # One per node with a node-path backup. The token IS the authentication:
+    # `status.kubelab.live/api/push/<token>` is publicly routed and
+    # unauthenticated by design, so this value is a live credential and
+    # `infra/config/uptime-kuma/monitors.json` — a file in a PUBLIC repository —
+    # deliberately never carries it. `monitoring_diff.hydrate_push_tokens`
+    # marries the two in memory at apply time and raises for a declared monitor
+    # whose token is missing, rather than letting `uptime_kuma_api` mint a
+    # random one: that would create a working-looking monitor at an address no
+    # sender knows, which is a watchdog that alerts forever beside a heartbeat
+    # that arrives nowhere.
+    #
+    # Sub-keys use `_`, the seed uses `-`. Not an inconsistency — `_get_push_tokens`
+    # normalises, because a kebab sub-key flattens to an env var name containing
+    # hyphens that SECRET_DEFINITIONS cannot consume.
+    #
+    # `envs=("prod",)` with the value living in `common.enc.yaml`: Uptime Kuma is
+    # a singleton on the RPi3 serving every environment (#968), and `envs` is the
+    # AUDIT dimension — which environment must HAVE this secret — not the file it
+    # sits in (ANSIBLE-033).
+    SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.push_tokens.ops_backup_node_beelink",
+        description="Uptime Kuma push token for beelink's node-path backup heartbeat (on-demand)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("uptime-kuma", "node-backup"),
+        format_hint="opaque URL-safe token; the push endpoint's only credential",
+        rotate_note=(
+            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "re-run `make backup ENV=prod` so beelink sends it. Order matters: the node keeps "
+            "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
+            "reads as a missed heartbeat and pages after the 6h window."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.push_tokens.ops_backup_node_rpi3",
+        description="Uptime Kuma push token for rpi3's node-path backup heartbeat (always-on)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("uptime-kuma", "node-backup"),
+        format_hint="opaque URL-safe token; the push endpoint's only credential",
+        rotate_note=(
+            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "re-run `make backup ENV=prod` so rpi3 sends it. Order matters: the node keeps "
+            "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
+            "reads as a missed heartbeat and pages after the 6h window."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.push_tokens.ops_backup_node_rpi4",
+        description="Uptime Kuma push token for rpi4's node-path backup heartbeat (on-demand)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("uptime-kuma", "node-backup"),
+        format_hint="opaque URL-safe token; the push endpoint's only credential",
+        rotate_note=(
+            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "re-run `make backup ENV=prod` so rpi4 sends it. Order matters: the node keeps "
+            "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
+            "reads as a missed heartbeat and pages after the 6h window."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.push_tokens.ops_backup_node_vps",
+        description="Uptime Kuma push token for vps's node-path backup heartbeat (always-on)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("uptime-kuma", "node-backup"),
+        format_hint="opaque URL-safe token; the push endpoint's only credential",
+        rotate_note=(
+            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "re-run `make backup ENV=prod` so vps sends it. Order matters: the node keeps "
+            "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
+            "reads as a missed heartbeat and pages after the 6h window."
+        ),
+        envs=("prod",),
+    ),
+    # =========================================================================
     # CrowdSec
     # =========================================================================
     SecretSpec(

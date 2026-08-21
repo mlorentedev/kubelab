@@ -69,3 +69,53 @@ if [ "$RUN_CHECK" -eq 1 ]; then
 fi
 
 echo "ship complete: $REPO"
+
+# --- coverage heartbeat (BACKUP-044 AC9) ----------------------------------
+# LAST, and reached only on success: `set -e` aborts above on any failure, so
+# silence at the far end means no backup completed. That is the whole design --
+# the watcher is Uptime Kuma on the RPi3, outside this node's failure domain,
+# and it reports a run that NEVER STARTED, which no check on the runs that do
+# exist can ever see.
+#
+# It must NOT fail this unit, and that is the load-bearing decision here.
+# A 5xx from Kuma, or CrowdSec banning this node's IP -- which is in this very
+# request path -- would otherwise fire `OnFailure=` and page "backup failed"
+# about a backup that succeeded. That is the inverse of the defect fixed in
+# #1216, where the title claimed failure over healthy state.
+#
+# Nothing is lost by not failing: a heartbeat that does not arrive is exactly
+# what the monitor exists to notice, so the failure mode of this call IS the
+# signal. It reports itself, 6h later, through the control it belongs to.
+if [ -f "{{ node_backup_heartbeat_token_file }}" ]; then
+    HEARTBEAT_TOKEN="$(cat {{ node_backup_heartbeat_token_file }})"
+    # Validated, not escaped. `secrets.token_urlsafe` yields [A-Za-z0-9_-] only,
+    # so anything else means a corrupted or hand-edited file -- and this value
+    # is interpolated into a URL path, where a stray character would silently
+    # address a different monitor rather than fail.
+    case "$HEARTBEAT_TOKEN" in
+        ''|*[!A-Za-z0-9_-]*)
+            echo "node-backup-ship: heartbeat token is not a plausible push token; skipping" >&2 ;;
+        *)
+            # The token goes to curl through a config on STDIN, never as an argv
+            # element -- ANSIBLE-038 f4. The push endpoint takes it in the URL
+            # PATH, so `-o /dev/null <url>` would put a live credential in
+            # `ps` / /proc/<pid>/cmdline for the life of the call. `url =` in a
+            # config file is curl's own answer to that.
+            #
+            # Bounded like every other outbound call in this fleet (f1), with a
+            # retry budget deliberately smaller than the notifier's: this runs
+            # inside the ship unit's TimeoutStartSec and must not eat into it.
+            if printf 'url = "https://{{ node_backup_heartbeat_domain }}/api/push/%s"\n' \
+                 "$HEARTBEAT_TOKEN" \
+               | curl -sS -f --config - \
+                   --connect-timeout 5 --max-time 10 \
+                   --retry 2 --retry-delay 3 --retry-connrefused --retry-max-time 12 \
+                   -o /dev/null; then
+                echo "coverage heartbeat posted"
+            else
+                echo "node-backup-ship: heartbeat POST failed. The backup itself SUCCEEDED --" >&2
+                echo "  this unit is not failing over it. The missed heartbeat is its own" >&2
+                echo "  alert: the coverage monitor reports it after its window." >&2
+            fi ;;
+    esac
+fi

@@ -816,6 +816,19 @@ apps:
         # ignore the dashboard.
         muted_notification_tags:
           - staging
+          # BACKUP-044 AC9. An on-demand node is powered off most of the week,
+          # so its backup heartbeat stops arriving and its monitor goes DOWN —
+          # correctly. That state is the coverage view working, not an
+          # incident, and paging on it is the same mistake `staging` is here to
+          # avoid. The monitor stays visible and answers "when did this node
+          # last back up successfully"; it simply never wakes anyone.
+          #
+          # This is the ONLY mechanism that mutes a monitor: `wants_notifications`
+          # in monitoring_diff.py is `not (tags & muted_tags)`, and the seed's
+          # own `notificationIDList` is ignored by the apply path. Removing this
+          # entry starts paging at 3 AM the first night the homelab sleeps —
+          # asserted in tests/test_backup_heartbeat_monitors.py.
+          - on-demand
 
       glances:
         name: glances
