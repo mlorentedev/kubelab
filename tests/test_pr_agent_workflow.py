@@ -319,17 +319,31 @@ def _fallback_model_names() -> set[str]:
     return {m.split("/")[-1] for m in re.findall(r'"([^"]+)"', raw.group(1))}
 
 
-def test_every_pr_agent_fallback_is_admitted_in_the_reviewer_pool() -> None:
+def _primary_model_name() -> str:
+    """The model PR-Agent actually reviews with, transport prefix stripped."""
+    m = re.search(r'^model\s*=\s*"([^"]+)"', PR_AGENT_CONFIG.read_text(), re.M)
+    assert m, "model not found in .pr_agent.toml"
+    return m.group(1).split("/")[-1]
+
+
+def test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool() -> None:
     """`.pr_agent.toml` says who may review a PR; `harness/reviewer-pool.json`
     says who may sign a spec review. The toml's own comment names the failure
     this prevents — "two files in one repo holding opposing views on who may
-    review is its own defect" — and it was held by hand until now."""
+    review is its own defect" — and it was held by hand until now.
+
+    The PRIMARY is checked, not only the chain behind it. Covering fallbacks
+    alone left the model that actually runs unasserted: changing `model` to a
+    flash tier the pool explicitly rejects would have passed every test while
+    the reviewer ran a vetoed model — the exact failure this guard exists to
+    prevent, reachable through the one line it did not read.
+    """
     admitted = {e["id"].split("/")[-1] for e in json.loads(REVIEWER_POOL.read_text())["pool"]}
-    for model in _fallback_model_names():
+    for model in {_primary_model_name()} | _fallback_model_names():
         assert model in admitted, (
-            f"{model!r} is a PR-Agent fallback but is not in the reviewer pool. "
-            "Admit it there with its evaluation, or drop it from the chain — the "
-            "two files must not disagree about who may review."
+            f"{model!r} is a model PR-Agent reviews with but is not in the reviewer "
+            "pool. Admit it there with its evaluation, or drop it from the config — "
+            "the two files must not disagree about who may review."
         )
 
 
@@ -341,3 +355,12 @@ def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> No
     assert "startsWith(github.event.comment.body, '/')" in condition, (
         "the issue_comment path is not filtered to slash commands"
     )
+    # The other half of the same condition, and the one with teeth. This job
+    # holds NAN_API_KEY and pull-requests: write on a PUBLIC repository, so
+    # without the association check any account that can comment could start
+    # it. The guard is in the workflow; until now only the slash half was
+    # asserted, so deleting this line left every test green.
+    assert (
+        "contains(fromJSON('[\"OWNER\",\"MEMBER\",\"COLLABORATOR\"]'), "
+        "github.event.comment.author_association)"
+    ) in condition, "the issue_comment path is not restricted to repository members"
