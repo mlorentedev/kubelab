@@ -57,6 +57,51 @@ GCP_DIR = REPO / "infra/terraform/gcp"
 COMMON_YAML = REPO / "infra/config/values/common.yaml"
 
 
+def _strip_comments(text: str) -> str:
+    """Drop HCL line comments, leaving string literals intact.
+
+    The regex form this replaces (`re.sub(r"//[^\n]*", "", text)`) also ate every
+    URL in the module: `"https://100.64.0.11:6443"` became `"https:`. That is not
+    cosmetic. `TestNoCredentialLiterals` scans this same text, so a credential
+    embedded the way credentials usually are -- `https://user:token@host` -- was
+    truncated away before the scan, and the guard reported clean having looked at
+    a string that no longer contained what it was hunting for.
+
+    One left-to-right pass tracking quote state is enough: HCL line comments open
+    with `#` or `//` and run to end of line, and neither opens one inside a
+    double-quoted string. Escapes are honoured so a `\\"` does not end the string.
+    """
+    out: list[str] = []
+    in_string = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if ch == "\\" and i + 1 < len(text):
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "#" or text.startswith("//", i):
+            nl = text.find("\n", i)
+            if nl == -1:
+                break
+            i = nl
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _tf_text() -> str:
     """Every .tf file in the module, concatenated, comments stripped.
 
@@ -64,17 +109,36 @@ def _tf_text() -> str:
     an assertion about the configuration -- the failure mode where a test passes
     because someone wrote *about* the setting instead of setting it.
     """
-    parts = []
-    for path in sorted(GCP_DIR.glob("*.tf")):
-        text = path.read_text()
-        text = re.sub(r"#[^\n]*", "", text)
-        text = re.sub(r"//[^\n]*", "", text)
-        parts.append(text)
-    return "\n".join(parts)
+    return "\n".join(_strip_comments(path.read_text()) for path in sorted(GCP_DIR.glob("*.tf")))
 
 
 def _networking() -> dict:
     return yaml.safe_load(COMMON_YAML.read_text())["networking"]
+
+
+def _common() -> dict:
+    return yaml.safe_load(COMMON_YAML.read_text())
+
+
+def _ssot(dotted: str) -> object:
+    """Resolve a dotted path in common.yaml, failing loudly at the missing hop.
+
+    The mirror map spans two top-level sections -- sizing under `networking.gcp`,
+    the pinned versions under `argocd` -- so it holds full paths rather than bare
+    keys under one assumed parent. A bare-key map cannot express the second
+    section at all, which is how `argocd.chart_version` came to be documented as
+    mirrored and checked by nothing.
+    """
+    node: object = _common()
+    walked: list[str] = []
+    for part in dotted.split("."):
+        assert isinstance(node, dict) and part in node, (
+            f"common.yaml has no {dotted!r} -- resolved as far as "
+            f"{'.'.join(walked) or '<root>'}; the SSOT must carry it"
+        )
+        node = node[part]
+        walked.append(part)
+    return node
 
 
 def _var_default(tf: str, name: str) -> str | None:
@@ -95,6 +159,30 @@ def _var_default(tf: str, name: str) -> str | None:
     d = re.search(r'default\s*=\s*"?([^"\n]+)"?', m.group(1))
     return d.group(1).strip() if d else None
 
+
+
+def _var_defaults_any(tf: str, name: str) -> list[str]:
+    """Every default value of a variable, whether it is a scalar or a map.
+
+    `_var_default` handles the scalar form. The Argo CD secret ids arrive as a
+    map, and a checker that silently skipped maps would report a clean result
+    while examining none of them.
+    """
+    scalar = _var_default(tf, name)
+    if scalar and scalar.startswith("["):
+        # A list default. Nothing in the access list should be one, and silently
+        # returning [] would let a list of secret ids go unchecked while the test
+        # reported clean -- so this is loud instead.
+        raise AssertionError(f'variable "{name}" defaults to a list; the access list expects scalars or a map')
+    if scalar and "{" not in scalar:
+        return [scalar]
+    block = re.search(r'variable\s+"' + re.escape(name) + r'"\s*\{(.*?)\n\}', tf, re.S)
+    if not block:
+        return []
+    default = re.search(r"default\s*=\s*\{(.*?)\n  \}", block.group(1), re.S)
+    if not default:
+        return []
+    return re.findall(r'=\s*"([^"]+)"', default.group(1))
 
 @pytest.fixture(scope="module")
 def tf() -> str:
@@ -202,28 +290,34 @@ class TestModuleDefaultsMatchTheSSOT:
     cost drifted unnoticed for two years (ADR-063 D4).
     """
 
-    # common.yaml key under networking.gcp  ->  Terraform variable name
+    # dotted path in common.yaml  ->  Terraform variable name
     MIRRORED = {
-        "region": "region",
-        "machine_type": "machine_type",
-        "image_family": "image_family",
-        "image_project": "image_project",
-        "disk_size_gb": "disk_size_gb",
-        "disk_type": "disk_type",
-        "network_tier": "network_tier",
-        "hostname": "hostname",
-        "k3s_version": "k3s_version",
+        "networking.gcp.region": "region",
+        "networking.gcp.machine_type": "machine_type",
+        "networking.gcp.image_family": "image_family",
+        "networking.gcp.image_project": "image_project",
+        "networking.gcp.disk_size_gb": "disk_size_gb",
+        "networking.gcp.disk_type": "disk_type",
+        "networking.gcp.network_tier": "network_tier",
+        "networking.gcp.hostname": "hostname",
+        "networking.gcp.k3s_version": "k3s_version",
+        # The two pins. Their variable descriptions SAY they mirror these paths;
+        # nothing checked it, so the operator path (`_deploy-argocd-helm`, which
+        # reads the SSOT) and the unattended one (cloud-init, which reads the
+        # Terraform default) could install different versions of Argo CD while
+        # both truthfully claimed to be pinned.
+        "argocd.chart_version": "argocd_chart_version",
+        "argocd.helm_version": "helm_version",
     }
 
     @pytest.mark.parametrize("ssot_key,var_name", sorted(MIRRORED.items()))
     def test_default_matches_common_yaml(self, tf: str, ssot_key: str, var_name: str) -> None:
-        gcp = _networking()["gcp"]
-        assert ssot_key in gcp, f"networking.gcp is missing {ssot_key!r} -- the SSOT must carry it"
+        expected = _ssot(ssot_key)
         default = _var_default(tf, var_name)
         assert default is not None, f'no variable "{var_name}" in the module'
-        assert str(default) == str(gcp[ssot_key]), (
+        assert str(default) == str(expected), (
             f'variable "{var_name}" defaults to {default!r} but '
-            f"networking.gcp.{ssot_key} is {gcp[ssot_key]!r}; common.yaml is the SSOT"
+            f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
         )
 
     def test_boot_disk_is_pd_balanced(self, tf: str) -> None:
@@ -231,6 +325,153 @@ class TestModuleDefaultsMatchTheSSOT:
             "pd-balanced carries a 3,000 IOPS per-instance floor independent of "
             "size, which is what makes a 12 GB disk match gp3's flat 3,000 rather "
             "than regress on it"
+        )
+
+
+class TestCommentStrippingKeepsStrings:
+    """The stripper feeds every other test here, so its bugs become theirs.
+
+    Guarding it is not ceremony: the regex form it replaced silently truncated
+    `"https://..."` to `"https:`, weakening the credential scan below without
+    failing anything. A suite that reads a mangled copy of the file reports on
+    the copy.
+    """
+
+    def test_a_url_keeps_its_double_slash(self) -> None:
+        assert _strip_comments('a = "https://host:6443"') == 'a = "https://host:6443"'
+
+    def test_a_hash_inside_a_string_survives(self) -> None:
+        assert _strip_comments('a = "frag#ment"') == 'a = "frag#ment"'
+
+    def test_a_real_line_comment_is_still_removed(self) -> None:
+        """The stripper's original purpose, kept: a property discussed in a
+        comment must never satisfy an assertion about the configuration."""
+        assert "spot" not in _strip_comments("# provisioning_model = SPOT\nx = 1").lower()
+        assert "spot" not in _strip_comments("// provisioning_model = SPOT\nx = 1").lower()
+
+    def test_an_escaped_quote_does_not_end_the_string(self) -> None:
+        assert _strip_comments('a = "he said \\"hi\\"" # gone').rstrip() == 'a = "he said \\"hi\\""'
+
+
+class TestSpokeServersMatchTheSSOT:
+    """`spoke_servers` holds literal Tailscale IPs; common.yaml holds the truth.
+
+    `make register-spoke` derives each spoke's apiserver URL from
+    `argocd.spokes.<env>.node` -> that node's `tailscale_ip` -> `k3s.api_port`.
+    The Terraform default restates the RESULT of that derivation, so the two can
+    disagree with nothing to say so, and the disagreement surfaces as a recreated
+    hub whose cluster secret points at an address the spoke no longer answers on.
+
+    Deriving the expectation here rather than restating the literals is the whole
+    point: a test that hardcoded the same IPs would agree with the module and
+    with nothing else. This one reads the SSOT, so drift makes it red -- which is
+    what separates a guard from a fourth copy of the fact.
+
+    The node lookup carries `networking`'s cloud/homelab asymmetry (`vps` sits at
+    the top level, homelab nodes under `nodes`). That asymmetry is #1182 and is
+    NOT smoothed here: this spec exists to measure what a provider change costs,
+    and refactoring the shape mid-measurement destroys the reading.
+    """
+
+    def _expected(self) -> dict[str, str]:
+        common = _common()
+        net = common["networking"]
+        port = common["k3s"]["api_port"]
+        out: dict[str, str] = {}
+        for env, spoke in common["argocd"]["spokes"].items():
+            node = spoke["node"]
+            entry = net[node] if node in net else net["nodes"][node]
+            out[env] = f"https://{entry['tailscale_ip']}:{port}"
+        return out
+
+    def test_every_declared_spoke_matches_its_derivation(self, tf: str) -> None:
+        declared = _var_defaults_any(tf, "spoke_servers")
+        expected = self._expected()
+        assert set(declared) == set(expected.values()), (
+            f"spoke_servers defaults to {sorted(declared)} but common.yaml derives "
+            f"{sorted(expected.values())} from argocd.spokes -> tailscale_ip -> "
+            f"k3s.api_port. common.yaml is the SSOT."
+        )
+
+    def test_a_spoke_added_to_the_ssot_is_not_silently_missing(self, tf: str) -> None:
+        """Set equality above is symmetric; this names the direction that hurts.
+
+        A spoke declared in `argocd.spokes` and absent from `spoke_servers` gives
+        a hub asked to manage an env whose apiserver URL it cannot template --
+        failing inside cloud-init, unattended, after a preemption.
+        """
+        declared = _var_defaults_any(tf, "spoke_servers")
+        for env, url in self._expected().items():
+            assert url in declared, (
+                f"argocd.spokes declares {env!r} but spoke_servers has no entry "
+                f"resolving to {url!r}"
+            )
+
+
+class TestTerraformBindsOnlyDeclaredSecrets:
+    """The module's IAM grants and the catalog's tags describe the same fact.
+
+    Terraform decides what the hub's service account may READ; the catalog
+    decides what the sync WRITES. Nothing couples them, so they can disagree in
+    two directions and neither shows up at plan time: a binding with no tag is a
+    grant to something the sync never delivers (a permission nobody chose), and a
+    tag with no binding is a secret the sync writes and cloud-init then cannot
+    read -- surfacing unattended, after a preemption, at the worst moment.
+    """
+
+    def test_every_iam_bound_secret_is_tagged_in_the_catalog(self, tf: str) -> None:
+        from toolkit.features.secrets_manager import (
+            secret_manager_name,
+            secrets_synced_to_secret_manager,
+        )
+
+        # The grants are a `for_each` over `local.hub_readable_secrets`, so the
+        # local IS the access list. Reading the resource block alone would find
+        # `each.value` and prove nothing.
+        block = re.search(r"hub_readable_secrets\s*=\s*concat\((.*?)\n  \)", tf, re.S)
+        assert block, "local.hub_readable_secrets is gone; the IAM grants can no longer be checked"
+        body = block.group(1)
+
+        assert "google_secret_manager_secret_iam_member" in tf, "no Secret Manager IAM grant in the module"
+        assert 'role      = "roles/secretmanager.secretAccessor"' in tf, (
+            "the grant is not secretAccessor; a broader role would let the hub write "
+            "or manage secrets rather than only read the ones it boots from"
+        )
+
+        tagged = {secret_manager_name(s.key_path) for s in secrets_synced_to_secret_manager()}
+
+        # Strip the `for env in var.managed_spokes :` clause before looking for
+        # secret references. That one names the LOOP SOURCE, not a secret, and
+        # excluding it structurally beats an allowlist of variable names -- an
+        # allowlist grows silently and eventually excuses something real.
+        secret_refs = re.sub(r"for\s+\w+\s+in\s+var\.[a-z_]+\s*:", "", body)
+
+        # Every remaining `var.` reference resolves to a tagged secret.
+        for var_name in re.findall(r"var\.([a-z_]+)", secret_refs):
+            for value in _var_defaults_any(tf, var_name):
+                assert value in tagged, (
+                    f"the module grants secretAccessor on {value!r} (via var.{var_name}), "
+                    f"but no SecretSpec carries sync_to_secret_manager=True for it. Either "
+                    f"the sync never delivers it -- cloud-init would read nothing -- or the "
+                    f"grant is wider than the design (ADR-063 D7)."
+                )
+
+        # The spoke entries are the OTHER input class and are deliberately absent
+        # from the catalog: Kubernetes generates those credentials, so tagging
+        # them would assert a SOPS origin they do not have. What is asserted here
+        # is that they follow the same name mapping and are scoped to the spokes
+        # this hub manages -- a hub that does not reconcile prod must not be able
+        # to read prod's cluster credentials either.
+        spoke_literals = re.findall(r'"(argocd-spokes-[^"]*)"', body)
+        assert len(spoke_literals) == 2, f"expected token and ca per spoke, found {spoke_literals}"
+        for literal in spoke_literals:
+            assert literal.startswith("argocd-spokes-${env}-"), (
+                f"{literal!r} does not follow the spoke naming rule, so it cannot be "
+                f"what the sync wrote"
+            )
+        assert "for env in var.managed_spokes" in body, (
+            "the spoke grants are not scoped to managed_spokes; this hub could read "
+            "credentials for a spoke another hub is reconciling"
         )
 
 
@@ -263,11 +504,16 @@ class TestNoCredentialLiterals:
         # `sensitive = true` so it is not echoed into plan output or CI logs.
         for block in re.findall(r'variable\s+"([^"]+)"\s*\{(.*?)\n\}', tf, re.S):
             name, body = block
-            # `public` excludes ssh_public_key_path, and `_secret` names a Secret
-            # Manager secret *identifier* rather than its value -- neither is a
-            # credential, and marking them sensitive would hide harmless plan
-            # output for nothing.
-            if re.search(r"public|_secret\b", name, re.I):
+            # `public` excludes ssh_public_key_path. The `_secret` / `_secret_ids`
+            # suffix marks a variable holding a Secret Manager IDENTIFIER rather
+            # than a value -- `headscale_api_key_secret` names a secret, it does
+            # not contain one. Neither is a credential, and marking them
+            # sensitive would hide harmless plan output for nothing.
+            #
+            # The suffix is the whole convention, so it is narrow on purpose: a
+            # variable that actually carries a credential cannot accidentally
+            # acquire this exemption without being renamed to claim it.
+            if re.search(r"public|_secret\b|_secret_ids?\b", name, re.I):
                 continue
             if re.search(r"key|secret|token|password", name, re.I):
                 assert re.search(r"sensitive\s*=\s*true", body), (

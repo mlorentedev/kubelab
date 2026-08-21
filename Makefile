@@ -431,6 +431,14 @@ secrets-show:
 secrets-audit:
 	@$(TOOLKIT) secrets audit
 
+.PHONY: sync-secret-manager
+sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
+	@$(TOOLKIT) secrets sync-secret-manager
+
+.PHONY: sync-secret-manager-dry
+sync-secret-manager-dry: ## Same, but compare and report without writing
+	@$(TOOLKIT) secrets sync-secret-manager --dry-run
+
 # -----------------------------------------------------------------------------
 # Hub (AWS — Argo CD management plane)
 # -----------------------------------------------------------------------------

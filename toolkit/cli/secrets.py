@@ -446,3 +446,62 @@ def catalog(
         table.add_row(*row)
 
     logger.console.print(table)
+
+
+@app.command("sync-secret-manager")
+def sync_secret_manager(
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Compare and report without writing to Secret Manager")
+    ] = False,
+) -> None:
+    """Deliver the GCP hub's boot secrets to Google Secret Manager (one-way).
+
+    SOPS stays the SSOT. This copies named values out to the one channel a
+    recreated hub can reach at boot -- a MIG rebuilds it from a fresh disk with
+    no age key, no kubeconfig and no operator (GCP-001 F1, ADR-063 D7). Drift is
+    resolved by re-running this, never by reading back.
+
+    Two input classes: the entries tagged in SECRET_CATALOG, and each spoke's
+    Argo CD ServiceAccount token and CA -- which Kubernetes generates and this
+    reads live, so the spokes must be REACHABLE NOW. For staging that means the
+    homelab is powered on. Whatever is unreachable is reported by name and a
+    later re-run completes it.
+
+    Example:
+      toolkit secrets sync-secret-manager --dry-run
+      toolkit secrets sync-secret-manager
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.gcp_secret_sync import GcloudMissingError, sync_all
+
+    cm = ConfigurationManager("common", settings.project_root)
+    merged = cm.get_merged_config()
+
+    project_id = merged.get("networking", {}).get("gcp", {}).get("project_id", "")
+    if not project_id:
+        logger.error("networking.gcp.project_id is not set in common.yaml")
+        raise typer.Exit(1)
+
+    logger.section(f"Secret Manager sync -> {project_id}" + (" (dry-run)" if dry_run else ""))
+    try:
+        results = sync_all(merged, project_id, dry_run=dry_run)
+    except GcloudMissingError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    # Names and actions only. A value never reaches this table, by construction:
+    # SyncResult has no field that could carry one.
+    for result in results:
+        line = f"{result.action:<10} {result.secret_id}"
+        if result.action == "failed":
+            logger.error(f"{line}  {result.detail}")
+        elif result.action == "unchanged":
+            logger.info(line)
+        else:
+            logger.success(line)
+
+    failed = [r for r in results if r.action == "failed"]
+    if failed:
+        logger.error(f"{len(failed)} of {len(results)} secrets did not sync; re-run once the cause is fixed")
+        raise typer.Exit(1)
+    logger.success(f"{len(results)} secrets in sync")

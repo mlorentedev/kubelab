@@ -80,8 +80,29 @@ resource "google_service_account" "hub" {
 # Scoped to ONE secret by resource, not to the project. cloud-init needs the
 # Headscale API key and nothing else at boot: it mints its own pre-auth key with
 # that key rather than being handed a stored one (ADR-063 D7 / finding F2).
-resource "google_secret_manager_secret_iam_member" "headscale_api_key" {
-  secret_id = var.headscale_api_key_secret
+# Scoped to NAMED secrets by resource, never to the project. The set is derived
+# rather than listed twice: the spoke entries follow `managed_spokes`, so a hub
+# that does not reconcile prod cannot read prod's cluster credentials either.
+# That is the single-writer invariant expressed as an IAM grant rather than as a
+# convention -- adding a spoke to the list is what widens the access, in one
+# place, visibly in the plan.
+locals {
+  hub_readable_secrets = concat(
+    [var.headscale_api_key_secret],
+    values(var.argocd_secret_ids),
+    flatten([
+      for env in var.managed_spokes : [
+        "argocd-spokes-${env}-token",
+        "argocd-spokes-${env}-ca",
+      ]
+    ]),
+  )
+}
+
+resource "google_secret_manager_secret_iam_member" "hub_readable" {
+  for_each = toset(local.hub_readable_secrets)
+
+  secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.hub.email}"
 }
@@ -156,6 +177,32 @@ resource "google_compute_instance_template" "hub" {
       headscale_url            = var.headscale_url
       headscale_api_key_secret = var.headscale_api_key_secret
       project_id               = var.project_id
+
+      # --- Argo CD stage (finding F1) ---------------------------------------
+      argocd_chart_version = var.argocd_chart_version
+      helm_version         = var.helm_version
+      managed_spokes       = join(" ", var.managed_spokes)
+      spoke_servers        = jsonencode(var.spoke_servers)
+
+      # Passed individually rather than as one map: the bootstrap reads each by
+      # name, and a jq lookup per secret would add a parse step whose failure
+      # mode is an empty string -- which `--set-file` would then happily install
+      # as a blank admin password.
+      secret_admin_hash = var.argocd_secret_ids["admin_password_hash"]
+      secret_oidc       = var.argocd_secret_ids["oidc_client_secret"]
+      secret_slack      = var.argocd_secret_ids["slack_webhook_url"]
+      secret_github     = var.argocd_secret_ids["github_webhook"]
+
+      # Base64 so the embedded YAML never has to survive being quoted inside
+      # this YAML, and so a `$${}` inside the chart values cannot collide with
+      # templatefile interpolation. The repo file stays the SSOT and nothing is
+      # cloned on the node (CLAUDE.md forbids cloning on deployment targets).
+      argocd_values_b64 = base64encode(file("${path.module}/../../helm/argocd/values.yaml"))
+      applications_b64 = base64encode(join("\n---\n", [
+        for env in var.managed_spokes :
+        file("${path.module}/../../k8s/argocd/applications/${env}.yaml")
+      ]))
+      cluster_secret_tpl_b64 = base64encode(file("${path.module}/../../k8s/argocd/cluster-secret.yaml.tpl"))
     })
   }
 
