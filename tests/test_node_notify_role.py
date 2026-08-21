@@ -201,8 +201,12 @@ def test_notify_script_posts_to_the_public_webhook_ingress():
 # --- the encoding claim, executed rather than asserted about ---------------
 
 
-def _encode_via_rendered_script(journal_bytes: bytes) -> dict:
+def _encode_via_rendered_script(journal_bytes: bytes, result: str = "exit-code") -> dict:
     """Run the python3 encoder embedded in the rendered script over raw bytes.
+
+    `result` is what `systemctl show -p Result` reported for the unit. It
+    decides the envelope's wording, so it is a parameter rather than a constant:
+    the default is a real failure, and the tests below cover the other branch.
 
     Extracts the real ``python3 -c "..."`` body from the template output, so this
     exercises the shipped code path instead of a copy that can drift from it.
@@ -222,7 +226,7 @@ def _encode_via_rendered_script(journal_bytes: bytes) -> dict:
         [sys.executable, "-c", body.group(1)],
         input=journal_bytes,
         capture_output=True,
-        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service"},
+        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result},
     )
     assert proc.returncode == 0, f"encoder crashed: {proc.stderr.decode(errors='replace')}"
     return json.loads(proc.stdout)
@@ -467,52 +471,156 @@ def test_token_value_is_not_shell_interpreted():
 # --- the tag topology, which a dry run found and no static test had ---------
 
 
-PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("provision-*.yml"))
+PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("*.yml"))
 
 
-def _role_tags(playbook: Path, role_suffix: str) -> set[str] | None:
+def _notifier_consumers() -> set[str]:
+    """Every role with a unit template declaring `OnFailure=kubelab-notify@`.
+
+    Derived from the templates rather than listed here, because the case this
+    guard exists for is a NEW consumer whose playbook wiring was forgotten — and
+    a literal list is exactly the thing that would not contain it.
+    """
+    roles = set()
+    for template in (REPO / "infra/ansible/roles").glob("*/templates/*.j2"):
+        # Anchored to the start of a line, so the DIRECTIVE matches and a
+        # comment mentioning it does not. Without the anchor the scan counted
+        # `node_notify` itself as a consumer of its own notifier — its unit
+        # template documents the line callers should write — and every
+        # assertion below then compared that role's tags with themselves and
+        # passed trivially. A guard agreeing with itself, found by mutating the
+        # directive away and watching the vacuity check stay green (lesson-357).
+        if re.search(r"^OnFailure=kubelab-notify@", template.read_text(encoding="utf-8"), re.M):
+            roles.add(template.parents[1].name)
+    return roles
+
+
+def _role_tags(playbook: Path, role_name: str) -> set[str] | None:
     """Tags on one role entry in a playbook, or None if it does not include it."""
     for play in yaml.safe_load(playbook.read_text()) or []:
+        if not isinstance(play, dict):
+            continue
         for entry in play.get("roles") or []:
-            if isinstance(entry, dict) and str(entry.get("role", "")).endswith(role_suffix):
-                return set(entry.get("tags") or [])
+            name = entry.get("role", "") if isinstance(entry, dict) else str(entry)
+            if str(name).split("/")[-1] == role_name:
+                return set(entry.get("tags") or []) if isinstance(entry, dict) else set()
     return None
 
 
-@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
-def test_the_notifier_cannot_be_selected_without_its_consumer(playbook: Path):
-    """node_notify must not be reachable by a tag that misses node_maintenance.
+def test_the_derived_consumer_set_is_not_empty() -> None:
+    """The guard below is vacuous if the scan finds nothing.
 
-    This role REMOVES `kubelab-maintenance-notify.service`, which
-    `kubelab-maintenance.service` keeps naming until node_maintenance
-    re-templates it. A selector that reaches one and not the other leaves the
-    node notification-dark: systemd logs "unit not found" on the next failure
-    and nobody is told — silent, and only on the path nobody exercises.
-
-    Found by a `--check` run against the VPS, not by reading the diff: the role
-    carried a `notify` tag of its own and `TAGS=notify` selected exactly the
-    unsafe subset. Sharing the consumer's tag makes that unreachable rather
-    than documented, which is the difference between a rule and a comment.
+    A test parametrized over playbooks would go green on every one of them by
+    skipping, which is the shape lesson-357 catalogues: a guard reporting
+    coverage it does not have. So the scan asserts on itself first.
     """
-    notify = _role_tags(playbook, "roles/node_notify")
-    maintenance = _role_tags(playbook, "roles/node_maintenance")
-    if notify is None and maintenance is None:
-        pytest.skip(f"{playbook.stem} includes neither role")
+    assert _notifier_consumers(), (
+        "no role template declares `OnFailure=kubelab-notify@`, so the pairing "
+        "guard below checks nothing at all"
+    )
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
+    """Neither half of the pairing may be reachable by a tag the other lacks.
+
+    The dependency runs both ways. A selector reaching only `node_notify`
+    installs a notifier nothing names. One reaching only a consumer leaves its
+    units pointing at a template unit that node does not have — and systemd
+    accepts that silently, reporting "unit not found" on the next failure and
+    telling nobody, which is the entire failure class this mechanism exists to
+    remove, reintroduced by a tag.
+
+    `node_maintenance` adds a third reason: it removes the superseded notifier
+    after re-pointing its own unit, so running it without `node_notify` deletes
+    the old path and names a new one that is not there.
+
+    Found by a `--check` run against the VPS, not by reading a diff: the role
+    carried a `notify` tag of its own and `TAGS=notify` selected exactly the
+    unsafe subset.
+    """
+    consumers = {c: _role_tags(playbook, c) for c in _notifier_consumers()}
+    present = {c: tags for c, tags in consumers.items() if tags is not None}
+    notify = _role_tags(playbook, "node_notify")
+
+    if not present and notify is None:
+        pytest.skip(f"{playbook.stem} includes neither the notifier nor a consumer")
+
     assert notify is not None, (
-        f"{playbook.stem} includes node_maintenance without node_notify, so its "
-        f"`OnFailure=kubelab-notify@%n.service` names a unit that node never gets"
+        f"{playbook.stem} includes {sorted(present)} but not node_notify. Those "
+        f"units declare `OnFailure=kubelab-notify@%n.service`, and a node reached "
+        f"only by this playbook would never get the template they name."
     )
-    assert maintenance is not None, (
-        f"{playbook.stem} includes node_notify without node_maintenance"
+    assert present, (
+        f"{playbook.stem} includes node_notify and no consumer of it. Either a "
+        f"consumer's include was dropped, or this role is being installed where "
+        f"nothing names it."
     )
-    # EQUAL, not merely a subset. The dependency runs both ways now that the
-    # teardown sits in node_maintenance: a selector reaching only node_notify
-    # installs a notifier nothing names, and one reaching only node_maintenance
-    # removes the old unit while re-pointing its own at a template that node
-    # may not have. The two roles are one migration and neither half is
-    # separately selectable.
-    assert notify == maintenance, (
-        f"{playbook.stem}: node_notify has {sorted(notify)!r} and node_maintenance "
-        f"{sorted(maintenance)!r}. Any tag in one and not the other selects half a "
-        f"migration, and the half that runs alone leaves the node notification-dark."
+    for consumer, tags in present.items():
+        assert notify == tags, (
+            f"{playbook.stem}: node_notify has {sorted(notify)!r} and {consumer} "
+            f"{sorted(tags)!r}. Any tag in one and not the other selects half a "
+            f"pairing, and the half that runs alone leaves the node silent."
+        )
+
+
+def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
+    """A documented override that no caller can pass is not an override.
+
+    The playbook's header tells an operator to select the unit under test with
+    `-e notify_test_unit=<unit>`, and the notifier is one template shared by the
+    fleet — so `kubelab-maintenance.service` is a default, not the subject. The
+    variable arrived before any Makefile target could pass it, which left the
+    instruction true of `ansible-playbook` and false of every sanctioned entry
+    point. Found by needing it.
+    """
+    playbook = (REPO / "infra/ansible/playbooks/maintenance-notify-test.yml").read_text()
+    assert "notify_test_unit" in playbook, "the playbook no longer takes the override"
+
+    makefile = (REPO / "Makefile").read_text()
+    target = makefile[makefile.index("maintain-notify-test:") :]
+    target = target[: target.index("\n.PHONY:")]
+    assert "$(_EXTRA)" in target, (
+        "`make maintain-notify-test` cannot pass notify_test_unit, so the only way "
+        "to exercise any unit but the default is a raw ansible-playbook invocation — "
+        "which is exactly what these targets exist to prevent"
+    )
+
+
+def test_the_envelope_does_not_cry_failure_over_a_healthy_unit() -> None:
+    """`OnFailure=` is one caller of this script. It is not the only one.
+
+    The delivery test starts the notifier by hand, on a healthy fleet, and the
+    body it carries is the unit's last run — a SUCCESS. Titled "X failed on
+    <node>" that reaches the operator's phone as an alert about a backup that
+    worked. Measured 2026-08-21: an envelope titled "node-backup-ship.service
+    failed on rpi3" carrying `ship complete` and `Deactivated successfully`.
+
+    A channel that cries failure over healthy state teaches people to skim it,
+    which is the indifference this whole path exists to prevent. So the title is
+    derived from the unit's real result rather than assumed from the fact that
+    the script ran.
+    """
+    healthy = _encode_via_rendered_script(b"ship complete", result="success")
+    assert "failed" not in healthy["title"], (
+        f"a unit whose last result is `success` is announced as {healthy['title']!r}"
+    )
+    assert "node-backup-ship.service" in healthy["title"], "the unit must still be named"
+
+    failed = _encode_via_rendered_script(b"boom", result="exit-code")
+    assert "failed" in failed["title"], (
+        f"a genuinely failed unit must say so; got {failed['title']!r}"
+    )
+
+
+def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
+    """`systemctl show` on a unit systemd does not know returns nothing.
+
+    Empty is not evidence of failure, and treating it as one would put the
+    script back to asserting a failure it cannot see — so anything but a
+    positive failure signal takes the neutral wording.
+    """
+    envelope = _encode_via_rendered_script(b"", result="")
+    assert "failed" not in envelope["title"], (
+        f"an unknown unit is announced as {envelope['title']!r}"
     )

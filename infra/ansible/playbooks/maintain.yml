@@ -25,7 +25,40 @@
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
 
+    # Only `common.enc.yaml`, and that is sufficient rather than a shortcut:
+    # the one secret this playbook's roles need is
+    # apps.services.automation.notify.fleet_webhook_secret, which lives there
+    # deliberately so it resolves identically on every node regardless of its
+    # own deploy_env (see SECRET_CATALOG). This playbook has no deploy_env of
+    # its own to decrypt an env file with.
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Parse decrypted secrets
+      set_fact:
+        secrets: "{{ sops_common.stdout | from_yaml }}"
+      no_log: true
+
   roles:
+    # `make maintain TIMER=1` re-installs kubelab-maintenance.service, whose
+    # OnFailure names kubelab-notify@%n.service, and node_maintenance also
+    # removes the single-purpose notifier it replaces. Without this role that
+    # command leaves the node STRICTLY WORSE than it found it: the old path
+    # deleted and the new one absent, reported by systemd as "unit not found"
+    # on the next failure and by nobody else.
+    #
+    # `make maintain` is reachable without ever re-provisioning in between, so
+    # it cannot assume provisioning already ran. Caught by the pairing guard in
+    # tests/test_node_notify_role.py on its first execution, not by reading
+    # this file.
+    - role: ../roles/node_notify
+
     - role: ../roles/node_maintenance
       vars:
         maintenance_install_timer: "{{ install_timer | default(false) | bool }}"

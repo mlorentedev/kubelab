@@ -723,39 +723,59 @@ provision:
 
 .PHONY: maintain
 maintain:
-	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
+	$(eval _CHECK := $(if $(CHECK),--check,))
 	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER) $(_TAGS); \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER) $(_TAGS) $(_CHECK); \
 	else \
-		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS); \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS) $(_CHECK); \
 	fi
 
 # Live delivery test of the maintenance failure-notify path (ANSIBLE-035 AC7).
 # Really posts to prod n8n and really notifies — a delivery test that suppresses
 # delivery proves nothing. Re-run this after any change to the notify script or
 # its unit; ANSIBLE-038's fix requires it.
+#
+# EXTRA reaches the playbook's `notify_test_unit`, which selects WHICH unit's
+# failure is being simulated — the notifier is one template unit shared by the
+# fleet, so `kubelab-maintenance.service` is a default rather than the subject:
+#
+#   make maintain-notify-test NODE=rpi3 ENV=prod \
+#     EXTRA='notify_test_unit=node-backup-ship.service'
+#
+# The `EXTRA=` spelling is the one `make provision` already uses. The playbook
+# gained the variable before any target could pass it, which made the override
+# documented and unreachable.
 .PHONY: maintain-notify-test
 maintain-notify-test:
-	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV); \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) $(_EXTRA); \
 	else \
-		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE); \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE) $(_EXTRA); \
 	fi
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV)
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK)
 
+# CHECK=1 is a dry run. It is accepted HERE, and on every other target that
+# changes a node, because `make provision` accepted it and these did not:
+# `make backup ENV=prod CHECK=1` silently ignored the flag and deployed to all
+# four prod nodes for real. make has no notion of an unknown variable, so the
+# only signal was the absence of one. Asserted in tests/test_makefile_dry_run.py.
 .PHONY: backup
 backup:
-	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod) $(_CHECK)
 
 # K8s PVC backup — triggers a one-off Job from the CronJob (ADR-024)
 # Usage: make backup-pvc ENV=prod
