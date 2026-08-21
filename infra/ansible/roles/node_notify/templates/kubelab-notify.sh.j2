@@ -96,6 +96,17 @@ TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
 # ANSIBLE-038 f1: bounded timeouts. Without them curl uses its defaults and an
 # unreachable n8n stalls this unit until systemd kills it.
 #
+# 5/10 rather than the 10/15 #1088 suggested, and the tighter pair is the point
+# rather than a drift: the finding's own words are "a 30s stall on a path whose
+# entire job is to report promptly". A single attempt is not the reliability
+# budget here -- there are four of them (--retry 3), so a genuinely slow n8n is
+# covered by retrying rather than by waiting longer on the first try, and the
+# operator learns sooner when it is unreachable. Both pairs fit under
+# TimeoutStartSec=45 (30s worst case here, 35s at 10/15), so this is a choice
+# within the budget, not a constraint imposed by it. Settled when #1088 closed;
+# recorded here because a reviewer re-raised it, correctly, from a comment that
+# explained the retry arithmetic and not this.
+#
 # ANSIBLE-038 f5: the retry lives HERE rather than as Restart= on the unit.
 # systemd would re-run the whole script (re-reading the journal, re-encoding)
 # and its start-limit interacts badly with RestartSec; curl retries the request
