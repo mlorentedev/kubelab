@@ -15,11 +15,17 @@
 # possibly months after this template was written. Every step below therefore
 # has to be safe to run cold, with no operator present and no state carried over.
 #
-# Scope boundary, stated rather than left to inference: this file takes the node
-# to "K3s ready and on the mesh" — the same place the AWS hub's cloud-init
-# reaches. Installing Argo CD itself is GCP-001 finding F1 and lands with the
-# SOPS -> Secret Manager sync it depends on. Until then a recreated hub needs
-# `make deploy-argocd`, exactly as the AWS hub does today.
+# Scope: this file takes the node all the way to "Argo CD reconciling its
+# spokes", which is further than the AWS hub's cloud-init reaches. That is
+# finding F1, and it is not gold-plating -- aws1 survives a Spot interruption
+# because a stop/restart preserves its EBS volume, so Argo CD is still there
+# afterwards. A MIG has no such volume: every preemption is a fresh disk, so a
+# hub that stops at "K3s ready" is a hub that never comes back on its own.
+#
+# WHICH spokes it manages comes from `managed_spokes`, and that is the
+# migration's core invariant expressed as configuration: exactly one hub writes
+# to any given spoke at any moment. gcp1 starts with staging while aws1 keeps
+# prod.
 #
 # What is already fixed here is finding F2. aws1 baked a long-lived Headscale
 # pre-auth key into user_data, survivable only because user_data was rendered
@@ -56,6 +62,28 @@ swap:
   maxsize: 2147483648
 
 write_files:
+  # The chart values, the Applications and the cluster-secret template, embedded
+  # from the repository at plan time. Base64 for two reasons: YAML nested inside
+  # YAML survives no quoting scheme reliably, and a dollar-brace sequence inside
+  # chart values would otherwise collide with templatefile interpolation.
+  #
+  # Embedded rather than fetched: CLAUDE.md forbids cloning repositories on
+  # deployment targets, and a boot that depends on reaching github.com is a boot
+  # that fails when GitHub does. The repo files stay the SSOT -- these are copies
+  # made by `terraform apply`, so they cannot drift without a plan showing it.
+  - path: /opt/kubelab/argocd-values.yaml
+    permissions: "0644"
+    encoding: b64
+    content: ${argocd_values_b64}
+  - path: /opt/kubelab/argocd-applications.yaml
+    permissions: "0644"
+    encoding: b64
+    content: ${applications_b64}
+  - path: /opt/kubelab/cluster-secret.yaml.tpl
+    permissions: "0644"
+    encoding: b64
+    content: ${cluster_secret_tpl_b64}
+
   # Kept as a file rather than inlined into runcmd so a failed boot can be
   # re-run by hand: `bash /opt/kubelab/bootstrap.sh` after SSHing in. An
   # unattended failure is otherwise only readable through serial console output.
@@ -160,6 +188,108 @@ write_files:
       done
       kubectl get nodes >/dev/null 2>&1 || { echo "FATAL: K3s did not become ready" >&2; exit 1; }
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+
+      # --- Argo CD (finding F1) -----------------------------------------------
+      # aws1 does not do this: a Spot stop/restart preserves its EBS volume, so
+      # Argo CD survives an interruption there and only a deliberate replacement
+      # re-runs `make deploy-argocd`. A MIG has no such volume. Every preemption
+      # is a fresh disk, so anything not done here is not done at all.
+
+      # The metadata token is short-lived and K3s took minutes. Refresh rather
+      # than reuse: an expired token here would fail every secret read at once,
+      # which reads like "Secret Manager is broken" rather than "the token aged".
+      token=$(curl "$${curl_opts[@]}" "$${curl_retry[@]}" -H "Metadata-Flavor: Google" \
+        "$meta/instance/service-accounts/default/token" | jq -r .access_token)
+
+      sm_get() {
+        curl "$${curl_opts[@]}" "$${curl_retry[@]}" -H "Authorization: Bearer $token" \
+          "$sm/$1/versions/latest:access" | jq -r .payload.data | base64 -d
+      }
+
+      # helm, PINNED. Unpinned, `upgrade --install` resolves to the newest chart
+      # in the repo, so a preemption at 3am would also be a major upgrade of the
+      # management plane. The version mirrors argocd.chart_version in
+      # common.yaml, which `make deploy-argocd` reads too.
+      curl "$${curl_opts[@]}" "$${curl_retry[@]}" --max-time 180 -L \
+        "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz" -o /tmp/helm.tgz
+      tar -xzf /tmp/helm.tgz -C /tmp linux-amd64/helm
+      install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+      rm -rf /tmp/helm.tgz /tmp/linux-amd64
+
+      # Secrets land as FILES on tmpfs, never on argv and never in this log.
+      #
+      # `--set-file` rather than `--set` is the load-bearing choice. `--set` puts
+      # the value in helm's argv, readable by `ps` for the life of the install,
+      # and this script tees its output to /var/log. Building a values file with
+      # a heredoc would be worse still: a bcrypt hash begins `$2y$`, and an
+      # unquoted heredoc lets the shell expand that to nothing -- silently
+      # installing a blank admin password that works right up until someone
+      # tries to log in.
+      secdir=/dev/shm/kubelab-argocd
+      rm -rf "$secdir" && mkdir -p "$secdir" && chmod 700 "$secdir"
+      umask 077
+      sm_get "${secret_admin_hash}" > "$secdir/admin"
+      sm_get "${secret_oidc}"       > "$secdir/oidc"
+      sm_get "${secret_slack}"      > "$secdir/slack"
+      sm_get "${secret_github}"     > "$secdir/github"
+      for f in admin oidc slack github; do
+        if [ ! -s "$secdir/$f" ]; then
+          rm -rf "$secdir"
+          echo "FATAL: secret '$f' came back empty from Secret Manager" >&2
+          exit 1
+        fi
+      done
+
+      helm repo add argo https://argoproj.github.io/argo-helm
+      helm repo update argo
+      helm upgrade --install argocd argo/argo-cd \
+        --version "${argocd_chart_version}" \
+        --namespace argocd --create-namespace \
+        -f /opt/kubelab/argocd-values.yaml \
+        --set-file "configs.secret.argocdServerAdminPassword=$secdir/admin" \
+        --set-file "configs.secret.extra.oidc\.authelia\.clientSecret=$secdir/oidc" \
+        --set-file "notifications.secret.items.slack-webhook-url=$secdir/slack" \
+        --set-file "configs.secret.githubSecret=$secdir/github" \
+        --timeout 10m
+      rm -rf "$secdir"
+
+      # --- Spokes -------------------------------------------------------------
+      # ONLY the spokes this hub is configured to manage. That is the migration's
+      # invariant: exactly one hub writes to any given spoke at any moment. The
+      # spoke-side RBAC is NOT touched -- the ServiceAccount and its token are
+      # persistent spoke state, shared with whichever hub is live, and
+      # re-applying them would open a permission gap for the other one.
+      for env in ${managed_spokes}; do
+        server=$(printf '%s' '${spoke_servers}' | jq -r --arg e "$env" '.[$e] // empty')
+        if [ -z "$server" ]; then
+          echo "FATAL: no apiserver URL for spoke '$env'" >&2
+          exit 1
+        fi
+        spokedir=/dev/shm/kubelab-spoke
+        rm -rf "$spokedir" && mkdir -p "$spokedir" && chmod 700 "$spokedir"
+        sm_get "argocd-spokes-$env-token" > "$spokedir/token"
+        sm_get "argocd-spokes-$env-ca"    > "$spokedir/ca"
+        if [ ! -s "$spokedir/token" ] || [ ! -s "$spokedir/ca" ]; then
+          rm -rf "$spokedir"
+          echo "FATAL: spoke '$env' credentials missing from Secret Manager" >&2
+          exit 1
+        fi
+        # Rendered through a file and piped, so no credential reaches argv here
+        # either. `sed` reads the token from the file rather than taking it as a
+        # pattern argument.
+        awk -v env="$env" -v server="$server" \
+            -v tok="$(cat "$spokedir/token")" -v ca="$(cat "$spokedir/ca")" \
+            '{ gsub(/CLUSTER_NAME/, env); gsub(/CLUSTER_SERVER/, server);
+               gsub(/BEARER_TOKEN/, tok); gsub(/CA_DATA_BASE64/, ca); print }' \
+            /opt/kubelab/cluster-secret.yaml.tpl | kubectl apply -f -
+        rm -rf "$spokedir"
+        echo "registered spoke $env ($server)"
+      done
+
+      # The Applications themselves. Embedded at plan time for the managed
+      # spokes only, so this cannot install an Application whose cluster secret
+      # was never created.
+      kubectl apply -f /opt/kubelab/argocd-applications.yaml
 
       echo "=== bootstrap complete $(date -Is) ==="
 
