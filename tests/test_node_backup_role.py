@@ -50,12 +50,22 @@ def _defaults() -> dict[str, object]:
     return yaml.safe_load(DEFAULTS.read_text())
 
 
-def _install_task() -> dict:
-    """The apt task, read from tasks/main.yml itself — parsed as YAML rather
-    than substring-matched, so a package named only inside a comment cannot
-    satisfy it (lesson-357)."""
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
-    return next(t for t in tasks if "apt" in t)
+def _apt_packages() -> set[str]:
+    """Every package the role installs, across ALL apt tasks.
+
+    Read from tasks/main.yml as YAML rather than substring-matched, so a
+    package named only inside a comment cannot satisfy it — and gathered from
+    every apt task rather than the first, so a second apt task added later
+    cannot slip a dependency in behind a guard that only ever looked at one
+    (both halves of lesson-357).
+    """
+    packages: set[str] = set()
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+        if "apt" not in task:
+            continue
+        name = task["apt"]["name"]
+        packages.update([name] if isinstance(name, str) else name)
+    return packages
 
 
 def _render(template: str, **overrides: object) -> str:
@@ -394,8 +404,10 @@ def test_the_role_needs_no_external_decompressor():
     """Backup machinery has to install on a node that is already degraded, and
     a broken apt is a degraded node. Decompression uses Python's stdlib, so the
     role's only apt dependency stays sqlite3."""
-    packages = _install_task()["apt"]["name"]
-    assert packages == "sqlite3", "sqlite3 must remain the role's only apt package"
+    assert _apt_packages() == {"sqlite3"}, (
+        "sqlite3 must remain the role's only apt package — counted across every "
+        "apt task, not just the first one"
+    )
 
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
     shells = " ".join(str(t.get("shell", "")) for t in tasks)

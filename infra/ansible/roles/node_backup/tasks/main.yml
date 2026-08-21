@@ -55,8 +55,13 @@
   # binary where the capture and ship scripts expect a working one. Observed —
   # the earlier bunzip2 form exited 127 having already created a 0-byte
   # /usr/local/bin/restic.
+  # `rm -f` first, not after: a decompression that dies part-way leaves a
+  # partial .tmp, and the next run must start from nothing rather than write
+  # into whatever the last failure left. The `&& mv` already guarantees a
+  # partial is never promoted into place.
   shell: >
-    python3 -c 'import bz2,shutil,sys; shutil.copyfileobj(bz2.open(sys.argv[1],"rb"), open(sys.argv[2],"wb"))'
+    rm -f {{ node_backup_restic_install_path }}.tmp
+    && python3 -c 'import bz2,shutil,sys; shutil.copyfileobj(bz2.open(sys.argv[1],"rb"), open(sys.argv[2],"wb"))'
     /tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2
     {{ node_backup_restic_install_path }}.tmp
     && mv {{ node_backup_restic_install_path }}.tmp {{ node_backup_restic_install_path }}
