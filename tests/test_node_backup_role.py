@@ -50,6 +50,24 @@ def _defaults() -> dict[str, object]:
     return yaml.safe_load(DEFAULTS.read_text())
 
 
+def _apt_packages() -> set[str]:
+    """Every package the role installs, across ALL apt tasks.
+
+    Read from tasks/main.yml as YAML rather than substring-matched, so a
+    package named only inside a comment cannot satisfy it — and gathered from
+    every apt task rather than the first, so a second apt task added later
+    cannot slip a dependency in behind a guard that only ever looked at one
+    (both halves of lesson-357).
+    """
+    packages: set[str] = set()
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+        if "apt" not in task:
+            continue
+        name = task["apt"]["name"]
+        packages.update([name] if isinstance(name, str) else name)
+    return packages
+
+
 def _render(template: str, **overrides: object) -> str:
     """Render one role template with StrictUndefined.
 
@@ -370,3 +388,51 @@ def test_every_node_with_declared_sources_is_covered_by_a_play():
         assert hostname in targeted, (
             f"{short!r} declares backup sources but no play targets {hostname!r}"
         )
+
+
+# --- the install step's own prerequisites -----------------------------------
+#
+# Both of these were found by the FIRST real deploy of this role, not by the
+# suite. The RPi4 cannot install bzip2 at all (its apt refuses the package
+# against the installed libbz2), so a role that shells out to bunzip2 is a
+# role that cannot be installed there — and it died rc=127 having already
+# created a 0-byte /usr/local/bin/restic, because the shell evaluates the
+# redirect target before it resolves the command.
+
+
+def test_the_role_needs_no_external_decompressor():
+    """Backup machinery has to install on a node that is already degraded, and
+    a broken apt is a degraded node. Decompression uses Python's stdlib, so the
+    role's only apt dependency stays sqlite3."""
+    assert _apt_packages() == {"sqlite3"}, (
+        "sqlite3 must remain the role's only apt package — counted across every "
+        "apt task, not just the first one"
+    )
+
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    shells = " ".join(str(t.get("shell", "")) for t in tasks)
+    assert "bunzip2" not in shells, "no external decompressor — use stdlib bz2"
+    assert "import bz2" in shells, "decompression must come from Python's stdlib"
+
+
+def test_restic_is_decompressed_via_a_temp_path_never_onto_the_install_path():
+    """A redirect straight onto the install path truncates it before bunzip2
+    even runs, so any failure leaves a broken binary where the capture and
+    ship scripts expect a working one."""
+    tasks_src = (ROLE / "tasks/main.yml").read_text()
+    decompress = next(
+        t for t in yaml.safe_load(tasks_src) if "bz2" in str(t.get("shell", ""))
+    )
+    # Anchored to the SSOT variable, not to an expanded path: the folded
+    # scalar carries the Jinja reference verbatim, and asserting on it also
+    # proves the task never hardcodes the install location.
+    path = "{{ node_backup_restic_install_path }}"
+    shell = " ".join(decompress["shell"].split())
+    assert f"{path}.tmp" in shell, "decompress must write to a temp path"
+    assert f"&& mv {path}.tmp {path}" in shell, "then move into place"
+    # The install path must appear ONLY as the move's destination — never as a
+    # write target, whether by redirect or as the writer's own argument.
+    writes = shell.split("&& mv")[0]
+    assert path not in writes.replace(f"{path}.tmp", ""), (
+        "decompression must never write straight to the install path"
+    )
