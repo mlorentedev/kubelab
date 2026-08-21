@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+# BACKUP-044. The weekly `restic check` instance, uniform across both node
+# classes -- unlike the main ship timer, this one does not branch on
+# location.
+[Unit]
+Description=BACKUP-044 node-backup weekly integrity check ({{ inventory_hostname }})
+
+[Timer]
+OnCalendar=weekly
+# Unlike the main timer (Persistent=true only for always-on -- an on-demand
+# node's boot capture already covers a missed regular window), `restic
+# check` has no boot-time equivalent that already ran it. Persistent here
+# means at most one catch-up check per boot on a node that was off for the
+# whole calendar week, and roughly-weekly coverage across an on-demand
+# node's actual up-time -- the same #1090 reasoning that shaped the main
+# timer's on-demand branch, applied where it was previously missing.
+Persistent=true
+RandomizedDelaySec={{ node_backup_randomized_delay }}
+
+[Install]
+WantedBy=timers.target

@@ -217,11 +217,6 @@ def test_memory_cap_applies_with_swap_disabled_when_set():
     assert "MemorySwapMax=0" in unit
 
 
-def test_no_timer_unit_exists_yet():
-    """Part 3 scope guard: Part 4 owns scheduling, not this part."""
-    assert not any(TEMPLATES.glob("*.timer.j2"))
-
-
 # --- the partial-backup guard ----------------------------------------------
 #
 # A populated staging dir proves capture STARTED, not that it FINISHED. The
@@ -261,13 +256,26 @@ def test_sentinel_path_is_the_same_variable_on_both_sides():
     assert ref in (TEMPLATES / "node-backup-ship.sh.j2").read_text()
 
 
+def _directive_lines(unit: str) -> list[str]:
+    """Non-comment, non-blank lines of a rendered unit file.
+
+    Checking a raw substring against the whole file is a false-positive trap
+    the moment prose ABOUT a directive (a comment explaining why `Requires=`
+    was rejected, say) contains that directive's own name. Restricting the
+    check to actual directive lines is what makes the assertion mean what it
+    says.
+    """
+    return [line for line in unit.splitlines() if line.strip() and not line.strip().startswith("#")]
+
+
 def test_ship_unit_does_not_hard_require_capture():
     """`Requires=` would re-run capture on every ship start — both are oneshots
-    without RemainAfterExit — which decides Part 4's timer topology from here.
-    The sentinel covers the failure instead; this asserts the deferral holds."""
-    unit = _render("node-backup-ship.service.j2")
-    assert "Requires=" not in unit
-    assert "BindsTo=" not in unit
+    without RemainAfterExit — which would have decided Part 4's timer topology
+    from here. The sentinel covers the failure instead; `Wants=` is what Part 4
+    settled on, and this asserts the harder alternatives were not used too."""
+    lines = _directive_lines(_render("node-backup-ship.service.j2"))
+    assert not any(line.startswith(("Requires=", "BindsTo=")) for line in lines)
+    assert any(line.startswith("Wants=") for line in lines)
 
 
 # --- the playbook's availability split --------------------------------------
@@ -293,6 +301,99 @@ def test_on_demand_nodes_ignore_unreachable():
     assert len(on_demand) == 1
     assert on_demand[0]["ignore_unreachable"] is True
     assert "rpi4" in on_demand[0]["hosts"]
+
+
+# --- the trigger model (Part 4) ----------------------------------------------
+#
+# `node_backup_location` is never role-defaulted (playbook-computed from the
+# ADR-028 SSOT, tests/test_node_location_axis.py) -- every render below must
+# pass it explicitly, which is StrictUndefined doing its job: a class this
+# consequential must never resolve by accident.
+
+
+def test_always_on_timer_is_wall_clock_and_survives_a_missed_window():
+    timer = _render("node-backup-ship.timer.j2", node_backup_location="always-on")
+    lines = _directive_lines(timer)
+    assert any(line.startswith("OnCalendar=") for line in lines)
+    assert "Persistent=true" in lines
+    assert not any(line.startswith(("OnUnitActiveSec=", "OnBootSec=")) for line in lines)
+
+
+def test_on_demand_timer_is_an_interval_and_does_not_survive_a_missed_window():
+    """Persistent=true here would treat every boot as a missed window and
+    re-run a catch-up the boot capture already covered, seconds earlier and
+    against a quiescent database (see node-backup-capture.service.j2)."""
+    timer = _render("node-backup-ship.timer.j2", node_backup_location="on-demand")
+    lines = _directive_lines(timer)
+    assert any(line.startswith("OnUnitActiveSec=") for line in lines)
+    assert any(line.startswith("OnBootSec=") for line in lines)
+    assert not any(line.startswith("OnCalendar=") for line in lines)
+    assert "Persistent=true" not in lines
+
+
+def test_capture_unit_is_ordered_before_dockerd_only_on_demand():
+    """R-C (verification.md): boot-ordering only matters for a node that is
+    routinely power-cycled. Forcing it on an always-on node buys nothing and
+    adds a boot-path dependency it never needed."""
+    on_demand = _render("node-backup-capture.service.j2", node_backup_location="on-demand")
+    always_on = _render("node-backup-capture.service.j2", node_backup_location="always-on")
+    assert any(line.startswith("Before=docker.service") for line in _directive_lines(on_demand))
+    assert "[Install]" in on_demand
+    assert not any(line.startswith("Before=") for line in _directive_lines(always_on))
+    assert "[Install]" not in always_on
+
+
+def test_shutdown_unit_targets_the_unit_that_actually_stops_the_writer():
+    """Ordering against a fleet-wide `docker.service` constant would race
+    Beelink's kubelab-compose.service, which stops itself before dockerd does
+    on its own After=docker.service -- see node-backup-shutdown.service.j2."""
+    beelink = _render(
+        "node-backup-shutdown.service.j2",
+        inventory_hostname="beelink",
+        node_backup_shutdown_after="kubelab-compose.service",
+    )
+    rpi4 = _render(
+        "node-backup-shutdown.service.j2",
+        inventory_hostname="rpi4",
+        node_backup_shutdown_after="docker.service",
+    )
+    assert any(line.startswith("After=kubelab-compose.service") for line in _directive_lines(beelink))
+    assert any(line.startswith("After=docker.service") for line in _directive_lines(rpi4))
+
+
+def test_shutdown_unit_ships_best_effort_but_captures_unconditionally():
+    """No `-` on capture: if it fails, ship's own sentinel check already
+    refuses a partial backup, so there is nothing left worth attempting. `-`
+    on ship: an unreachable R2 at the moment of poweroff must never block
+    shutdown."""
+    unit = _render(
+        "node-backup-shutdown.service.j2",
+        node_backup_shutdown_after="docker.service",
+    )
+    lines = _directive_lines(unit)
+    exec_stops = [line for line in lines if line.startswith("ExecStop=")]
+    capture_path = _defaults()["node_backup_capture_script_path"]
+    assert f"ExecStop={capture_path}" in exec_stops
+    assert any(line.startswith("ExecStop=-") and "ship" in line for line in exec_stops)
+
+
+def test_weekly_check_service_passes_the_flag_the_frequent_one_omits():
+    checked = _render("node-backup-ship.service.j2", node_backup_check=True)
+    frequent = _render("node-backup-ship.service.j2", node_backup_check=False)
+    exec_start = next(line for line in _directive_lines(checked) if line.startswith("ExecStart="))
+    assert exec_start.endswith(" --check")
+    exec_start = next(line for line in _directive_lines(frequent) if line.startswith("ExecStart="))
+    assert not exec_start.endswith(" --check")
+
+
+def test_weekly_check_timer_is_persistent_on_both_node_classes():
+    """Unlike the main timer, Persistent=true here is not location-dependent:
+    a missed weekly check has no boot-time equivalent already covering it,
+    on either node class."""
+    timer = _render("node-backup-ship-check.timer.j2")
+    lines = _directive_lines(timer)
+    assert "OnCalendar=weekly" in lines
+    assert "Persistent=true" in lines
 
 
 def test_both_plays_share_one_role_invocation():

@@ -1,13 +1,18 @@
 ---
-# node_backup — BACKUP-044 Part 3. Installs restic + sqlite3, renders the
-# capture/ship scripts from the SSOT, and installs their systemd units
-# (unscheduled — Part 4 owns the timers).
+# node_backup — BACKUP-044. Installs restic + sqlite3, renders the
+# capture/ship scripts from the SSOT, installs their systemd units, and
+# enables the timers that drive them (periodic ship, weekly integrity check,
+# and — on-demand nodes only — boot-ordered capture and a shutdown
+# snapshot). The last block below is this pipeline's go-live: from here on,
+# a deploy is not just installing the mechanism, it is scheduling it.
 
 - name: Install sqlite3 (host package, unpinned like every other supporting
     tool in this fleet — only the payload restic gets an explicit version pin)
   apt:
     name: sqlite3
     state: present
+    update_cache: true
+    cache_valid_time: 3600
 
 - name: Detect system architecture
   set_fact:
@@ -33,10 +38,16 @@
     mode: "0644"
   when: node_backup_restic_version not in node_backup_restic_installed.stdout
 
-- name: Install restic (decompress the pinned binary into place)
-  shell: >
-    bunzip2 -c /tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2
-    > {{ node_backup_restic_install_path }}
+- name: Install restic (decompress the pinned binary into place). Via
+    python3's bz2 module rather than the bunzip2 binary — RPi4's image does
+    not carry it, and every node Ansible manages already guarantees a
+    python3 interpreter (ansible_python_interpreter), so this adds no new
+    host dependency.
+  command:
+    cmd: >-
+      python3 -c "import bz2,shutil;
+      shutil.copyfileobj(bz2.open('/tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2'),
+      open('{{ node_backup_restic_install_path }}', 'wb'))"
   when: node_backup_restic_version not in node_backup_restic_installed.stdout
   changed_when: true
 
@@ -102,3 +113,68 @@
     dest: "/etc/systemd/system/{{ node_backup_ship_service_name }}"
     mode: "0644"
   notify: Reload systemd (node_backup)
+
+- name: Install ship-with-check systemd unit (weekly instance, Part 4)
+  template:
+    src: node-backup-ship.service.j2
+    dest: "/etc/systemd/system/{{ node_backup_ship_check_service_name }}"
+    mode: "0644"
+  vars:
+    node_backup_check: true
+  notify: Reload systemd (node_backup)
+
+- name: Install ship timer (periodic trigger, Part 4)
+  template:
+    src: node-backup-ship.timer.j2
+    dest: "/etc/systemd/system/{{ node_backup_ship_timer_name }}"
+    mode: "0644"
+  notify: Reload systemd (node_backup)
+
+- name: Install weekly integrity-check timer (Part 4)
+  template:
+    src: node-backup-ship-check.timer.j2
+    dest: "/etc/systemd/system/{{ node_backup_ship_check_timer_name }}"
+    mode: "0644"
+  notify: Reload systemd (node_backup)
+
+- name: Install shutdown-snapshot unit (Part 4, on-demand nodes only — AC5)
+  template:
+    src: node-backup-shutdown.service.j2
+    dest: "/etc/systemd/system/{{ node_backup_shutdown_service_name }}"
+    mode: "0644"
+  when: node_backup_location == 'on-demand'
+  notify: Reload systemd (node_backup)
+
+# Reload now rather than at end-of-play: the enable/start tasks below need
+# systemd to have already loaded whatever changed above, in this same run —
+# `systemctl start` (unlike `enable`) acts on the daemon's loaded definition,
+# not the file on disk.
+- meta: flush_handlers
+
+- name: Enable capture at boot, ordered before docker.service (on-demand
+    nodes only — R-C; always-on nodes are never routinely power-cycled)
+  systemd:
+    name: "{{ node_backup_capture_service_name }}"
+    enabled: true
+  when: node_backup_location == 'on-demand'
+
+- name: Enable and start the periodic ship timer (Part 4 go-live)
+  systemd:
+    name: "{{ node_backup_ship_timer_name }}"
+    enabled: true
+    state: started
+
+- name: Enable and start the weekly integrity-check timer (Part 4 go-live)
+  systemd:
+    name: "{{ node_backup_ship_check_timer_name }}"
+    enabled: true
+    state: started
+
+- name: Enable and start the shutdown-snapshot unit (on-demand nodes only —
+    RemainAfterExit=yes, must be active now to protect this session's own
+    eventual shutdown, not just the next one)
+  systemd:
+    name: "{{ node_backup_shutdown_service_name }}"
+    enabled: true
+    state: started
+  when: node_backup_location == 'on-demand'

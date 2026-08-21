@@ -1,0 +1,48 @@
+# {{ ansible_managed }}
+# BACKUP-044 Part 4, on-demand nodes only. Captures (and best-effort ships) a
+# LIVE snapshot when this node powers off -- the boot capture (see
+# node-backup-capture.service) instead captures a quiescent one, and a node
+# that never comes back makes the boot capture from its LAST session the
+# only copy that ever existed until this one.
+#
+# Mechanism: a RemainAfterExit unit does no work at start -- it exists only
+# to be STOPPED, because ExecStop= is systemd's hook for "run this while the
+# unit it is ordered against is still up" (verification.md R-C, measured on
+# real hardware): a unit ordered After=X stops BEFORE X on shutdown (the
+# inverse of start order), so this unit's ExecStop fires while
+# {{ node_backup_shutdown_after }} -- and whatever it runs -- is still active.
+#
+# {{ node_backup_shutdown_after }} specifically, not a fleet-wide constant:
+# where a systemd-managed compose unit exists (Beelink's
+# kubelab-compose.service) it is itself After=docker.service, so it stops
+# BEFORE docker.service too, on its own schedule -- ordering against
+# docker.service here would race it with no guaranteed outcome. Ordering
+# directly against the unit that actually stops the writer is what makes the
+# guarantee hold. Where no such unit exists (RPi4 -- its containers rely on
+# `restart: unless-stopped` and are reaped by dockerd itself), docker.service
+# is the correct and only target.
+[Unit]
+Description=BACKUP-044 node-backup shutdown snapshot ({{ inventory_hostname }})
+After={{ node_backup_shutdown_after }} network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=HOME=/root
+ExecStart=/bin/true
+# No `-`: if capture fails, ship's own sentinel check (node-backup-ship.sh)
+# already refuses a partial backup, so there is nothing useful left for it to
+# attempt. The `-` on ship's line means an unreachable R2 at the moment of
+# poweroff never blocks shutdown -- best-effort ship, not a condition of it.
+ExecStop={{ node_backup_capture_script_path }}
+ExecStop=-{{ node_backup_ship_script_path }}
+# Bounded well above the measured real-world cycle (verification.md: 8-12s
+# first-run, on-demand nodes) so a stuck run delays poweroff instead of
+# hanging it indefinitely.
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

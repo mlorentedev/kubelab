@@ -18,8 +18,9 @@ node_backup_staging_dir: /opt/node-backup/staging
 # are oneshots without RemainAfterExit, so a hard requirement re-runs capture
 # on every ship start. That would pre-commit Part 4's trigger topology (one
 # timer or two) from here. A sentinel is scheduling-agnostic, and it also
-# covers a script invoked by hand, which no unit dependency ever would. The
-# Requires=/Wants= question stays open for Part 4, where the timers land.
+# covers a script invoked by hand, which no unit dependency ever would.
+# Settled in Part 4: `Wants=`, not `Requires=` (see node-backup-ship.service.j2) —
+# this sentinel is what lets ship run and refuse, instead of never starting.
 node_backup_capture_sentinel: "{{ node_backup_staging_dir }}/.capture-complete"
 
 # Per-host source map, passed by the playbook as
@@ -65,6 +66,10 @@ node_backup_capture_script_path: /opt/node-backup-capture.sh
 node_backup_ship_script_path: /opt/node-backup-ship.sh
 node_backup_capture_service_name: node-backup-capture.service
 node_backup_ship_service_name: node-backup-ship.service
+node_backup_ship_timer_name: node-backup-ship.timer
+node_backup_ship_check_service_name: node-backup-ship-check.service
+node_backup_ship_check_timer_name: node-backup-ship-check.timer
+node_backup_shutdown_service_name: node-backup-shutdown.service
 
 # Retention approved by the operator 2026-08-16 on measured arithmetic
 # (tasks.md "Approved operating parameters") — ~a year of restore points,
@@ -73,16 +78,62 @@ node_backup_ship_service_name: node-backup-ship.service
 node_backup_retention_flags: "--keep-daily 7 --keep-weekly 4 --keep-monthly 6"
 
 # `restic check` runs weekly, not per invocation (16x headroom on repository
-# growth, per the same approved-parameters table) — Part 4's weekly timer
-# instance passes --check; the frequent (hourly/4h) instance does not. The
-# ship script supports both modes now so Part 4 only has to wire the
-# schedule, not change the script.
+# growth, per the same approved-parameters table). The ship script supports
+# both modes; this flag picks which one a given rendering of
+# node-backup-ship.service.j2 gets — false for the frequent (hourly/4h) unit,
+# true for the weekly one (tasks/main.yml overrides it per-render).
+node_backup_check: false
 
-# RPi3 memory ceiling (Part 0 / R-B: measured floor 16-24M, this is >5x
-# headroom and ~14% of the node's RAM). MemorySwapMax=0 is deliberate, not
-# decoration -- the node has ~900MB swap and a restic that swaps thrashes
-# the monitoring of record instead of failing cleanly. Enforceable only
-# because ANSIBLE-040 (#1101) put the memory cgroup controller on the RPi3;
-# nodes that never needed the fix simply do not set this default.
+# RPi3 memory ceiling (Part 0 / R-B: measured floor 16-24M against restic's
+# baseline footprint, before any real repository existed -- read as >5x
+# headroom at the time). MemorySwapMax=0 is deliberate, not decoration -- the
+# node has ~900MB swap and a restic that swaps thrashes the monitoring of
+# record instead of failing cleanly. Enforceable only because ANSIBLE-040
+# (#1101) put the memory cgroup controller on the RPi3; nodes that never
+# needed the fix simply do not set this default.
+#
+# Measured against a real (if still small) repository (2026-08-21, first
+# deploy): ship peaked at 90M, ~1.4x margin, not >5x. Flagged for the
+# operator, not acted on here -- a grown rpi3 repository pushing past this
+# cap gets restic OOM-killed on the monitoring-of-record node. See
+# verification.md's Part 4 evidence section.
 node_backup_memory_max: ""
 node_backup_memory_swap_max: "0"
+
+# Trigger model (Part 4). Node class comes from `networking.*.location`
+# (ADR-028, #1107) via the playbook -- never redeclared here, so a node
+# reclassified in one SSOT cannot silently keep the wrong trigger model.
+# This asymmetry (wall-clock vs interval-while-up) is deliberate and must
+# not be generalised fleet-wide: an on-demand node given a wall-clock
+# schedule would simply never fire, because the homelab runs in 3-4h bursts
+# (#1090) -- the next person changing this reads it here first.
+
+# Always-on: every 4h, ratified (tasks.md "Approved operating parameters" --
+# #452's Tier 1 RPO < 6h; hourly over-delivered at 119k ops/month to do it).
+node_backup_schedule: "*-*-* 0/4:00:00"
+
+# On-demand: hourly while the node is up, ratified in the same table.
+node_backup_interval: "1h"
+
+# The remaining two knobs are NOT in the ratified table -- proposed here,
+# not decided; flag before treating them as settled.
+#
+# On-demand first tick after boot: long enough that the boot capture's own
+# network/DNS dependencies (Tailscale, DNS resolution to R2) are up before
+# ship's first attempt, short enough that a short homelab session still gets
+# an offsite copy of its boot capture.
+node_backup_boot_ship_delay: "2min"
+
+# Spreads uploads across the (small) always-on fleet so R2 is not hit by
+# every node on the same wall-clock second -- the one part of this pipeline
+# shared between nodes. Applied uniformly to both trigger shapes since the
+# timer template carries one RandomizedDelaySec regardless of branch.
+node_backup_randomized_delay: "5min"
+
+# `restic check` weekly, not per-run (Part 3's script already supports the
+# --check flag; this is Part 4 wiring it to its own timer). Ratified cadence
+# (tasks.md), unratified exact schedule string -- OnCalendar=weekly with
+# Persistent=true is uniform across both node classes on purpose: unlike the
+# main on-demand timer (whose missed window is already covered by the boot
+# capture), a missed weekly check has no boot-time equivalent, so Persistent
+# is the only thing that gives an on-demand node roughly-weekly coverage.
