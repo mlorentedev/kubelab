@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-27 lessons, newest first. Back to [all categories](../_index.md).
+28 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 363 | [A test helper that mangles its input makes every guard downstream report on the mangled copy](lesson-363-a-test-helper-that-mangles-its-input-reports-on-the-mangled-copy.md) | 2026-08-21 |
 | 362 | [`make` has no unknown-variable error, so a flag one target ignores is a real run](lesson-362-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run.md) | 2026-08-21 |
 | 352 | [A gap in an allow-list has no self-evident meaning — the same absence was the control in one list and the bug in the next](lesson-352-a-gap-in-an-allow-list-has-no-self-evident-meaning.md) | 2026-08-19 |
 | 320 | [A domain rename is invisible to `grep` when the reference lives in a template string inside a Python generator](lesson-320-a-domain-rename-is-invisible-to-grep-when-the.md) | 2026-08-12 |
