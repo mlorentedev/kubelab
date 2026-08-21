@@ -106,3 +106,37 @@ def test_the_gcp_headscale_key_is_not_confused_with_a_preauth_key() -> None:
         "single-use and short-lived (finding F2); a stored one expires inside the "
         "MIG's instance template and the next recreate silently never joins the mesh."
     )
+
+
+def test_no_two_synced_secrets_collide_on_their_secret_manager_id() -> None:
+    """The name mapping is not injective, so uniqueness is asserted, not assumed.
+
+    `secret_manager_name` collapses both `.` and `_` to `-`, because a Secret
+    Manager id rejects a dot. That makes `a.b_c` and `a.b.c` the same id. Secret
+    Manager has a flat namespace and no notion of two secrets sharing a name, so
+    a collision does not error: the second write lands as a new VERSION of the
+    first, and the hub boots with one secret's value under another's name.
+
+    Nothing collides today. This test exists so that a future addition fails
+    here, at the moment someone adds it, rather than unattended after a
+    preemption.
+
+    The union of BOTH input classes is checked. Checking only the catalog would
+    miss exactly the interesting case -- a SOPS key colliding with a
+    spoke-derived pseudo-path, which are declared in different files by
+    different people.
+    """
+    from toolkit.features.secrets_manager import secret_manager_name
+
+    spoke_paths = [
+        f"argocd.spokes.{env}.{field}" for env in ("staging", "prod") for field in ("token", "ca")
+    ]
+    all_paths = sorted(EXPECTED_SYNCED) + spoke_paths
+    ids = [secret_manager_name(p) for p in all_paths]
+
+    duplicates = {name for name in ids if ids.count(name) > 1}
+    assert not duplicates, (
+        f"these SOPS paths map to the same Secret Manager id: {sorted(duplicates)}. "
+        f"The second write would land as a new version of the first, and the hub "
+        f"would boot with the wrong value under the right name."
+    )

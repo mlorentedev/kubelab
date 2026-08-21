@@ -690,11 +690,18 @@ def secret_manager_name(key_path: str) -> str:
     the one direction nothing catches: cloud-init asking for a name the sync
     never wrote, discovered unattended after a preemption.
 
-    The rule is total and reversible-looking on purpose -- every separator
-    becomes a hyphen, nothing is dropped. Keeping the full path (rather than the
-    trailing leaf) means two secrets whose leaves collide, like a future
-    `gcp.admin_password_hash`, cannot silently overwrite each other in a flat
-    namespace.
+    The rule keeps the FULL path rather than the trailing leaf, so two secrets
+    whose leaves match -- `argocd.admin_password_hash` and a future
+    `gcp.admin_password_hash` -- cannot silently overwrite each other in what is
+    a flat namespace on the GCP side.
+
+    It is NOT injective, and pretending otherwise would be the more dangerous
+    error. Both `.` and `_` collapse to `-`, so `a.b_c` and `a.b.c` produce the
+    same id and the second write would silently replace the first. No current
+    pair collides; `tests/test_secret_manager_sync.py` asserts that over the
+    union of both input classes, which is where a future addition would be
+    caught -- at the moment it is added, rather than at 3am on a hub that booted
+    with another secret's value.
     """
     name = key_path.replace(".", "-").replace("_", "-")
     # Assert rather than sanitise: every catalog key is already in this shape, so
