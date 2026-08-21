@@ -12,27 +12,26 @@ created: "2026-08-20"
 > the plan after it was first written; starting from the phase list without that
 > context will re-derive work that is done.
 
-## State as of 2026-08-20
+## State as of 2026-08-21
 
 | PR | Contents | State |
 |---|---|---|
 | **#1185** | ADR-063, this spec, `gcp-hub-bootstrap.md`, lessons 354/355 | **merged** |
-| **#1187** | `_ssh_target` addresses cloud nodes by MagicDNS name | **open** — tests green, attestation gate red (see below) |
-| **#1191** | `networking.gcp` SSOT + Terraform module + static test | **open** |
+| **#1187** | `_ssh_target` addresses cloud nodes by MagicDNS name | **merged** |
+| **#1191** | `networking.gcp` SSOT + Terraform module + static test | **merged** |
+| **#1193** | cost envelope + rewritten plan + ADR-063 D8 | **merged** |
 
 **Nothing is applied. No GCP resource exists. AWS is untouched and running**
 (`sir-xng7dfkh` active/fulfilled since 2026-08-19 22:45 UTC, which mooted #1066).
 
-Two blockers that are **not** technical:
+One blocker remains, and it is not technical: **Phase 0 needs a human at a
+browser.** `gcloud` is not installed on the workstation, and §1 of the runbook
+records *which* billing account holds the credit — the one mistake in this whole
+plan that fails silently, because everything works and you simply pay.
 
-- **Phase 0 needs a human at a browser.** `gcloud` is not installed on the
-  workstation, and §1 of the runbook records *which* billing account holds the
-  credit — the one mistake in this whole plan that fails silently, because
-  everything works and you simply pay.
-- **#1187's red gate is not its code.** Filed as **#1189**: CodeRabbit reviewed
-  it cleanly and the classifier read that as "not reviewed", plus a second
-  symptom where PR-Agent published its declared marker and the gate still
-  refused. Neither is a defect in #1187.
+*(The earlier entry here about #1189 blocking #1187 is resolved: the attestation
+gate's inability to read a CLEAN CodeRabbit review was fixed in #1192, and #1188
+stopped the gate reporting its verdict as a broken job.)*
 
 ## Design decisions this breakdown resolves
 
@@ -140,20 +139,95 @@ Artifact Registry `$0` (0.5 GB), budgets `$0` (no charge).
 
 **This is the largest remaining piece and the one that closes F1.**
 
+## What "install Argo CD" actually means, measured 2026-08-21
+
+`make deploy-argocd` is **not** the whole reference implementation, and reading it
+as such would leave a recreated hub with Argo CD running, zero spokes and zero
+Applications — F1 open while looking closed. The real bring-up is three parts:
+
+| Part | Today | Survives a recreate? |
+|---|---|---|
+| Helm release | `_deploy-argocd-helm`, four SOPS secrets on `--set` | No — hub state |
+| Spoke **RBAC** | `register-spoke`, applies `spoke-rbac.yaml` **on the spoke** | **Yes** — spoke state |
+| Spoke **cluster secret** | `register-spoke`, reads the SA token + CA *from the spoke*, renders `cluster-secret.yaml.tpl`, applies **on the hub** | No — hub state |
+| Applications | `kubectl apply -f infra/k8s/argocd/applications/` | No — hub state |
+
+The split is the design. Everything the spoke owns is already persistent and needs
+no replay; everything the hub owns must be reconstructible from Secret Manager
+plus the repo, with **no access to the spokes at boot** — a recreated hub has no
+spoke kubeconfig and must not need one.
+
+`server` is the exception that needs no secret: it derives from
+`argocd.spokes.<env>.node` → `tailscale_ip` + `k3s.api_port` in `common.yaml`, so
+Terraform templates it in. *(It resolves to a literal IP, which is the F3 pattern
+one level out. Not this phase's to fix; noted so it is not mistaken for new.)*
+
+## Tasks
+
 - [ ] **[AC4]** A one-way sync pushing named SOPS values into Secret Manager.
       **SOPS stays the SSOT**; nothing is ever authored in Secret Manager, and
       drift is resolved by re-syncing rather than by reading (ADR-063 D7).
-- [ ] **[AC4]** Extend `cloud-init.yml` to install **Argo CD** and the spoke
-      cluster secrets from Secret Manager. Until this lands, a recreated hub has
-      K3s and no Argo CD — the same place the AWS hub reaches, and **F1 is not
-      closed**.
+      Which secrets sync is declared by **tagging `SECRET_CATALOG`**, never by a
+      second list, with a static test asserting the Terraform module's IAM-bound
+      secret names equal the tagged set.
+- [ ] **[P]** Register `gcp.headscale_api_key` in `SECRET_CATALOG` with
+      **`envs=("prod",)`** — **not `("common",)`**, which matches no real env and
+      makes the secret vanish from every audit silently (ANSIBLE-033). It is the
+      sync's first input, so it belongs with the sync rather than before it.
+- [ ] **DECIDE, then record: the spoke SA token and CA are not SOPS-authored.**
+      `register-spoke` reads them live out of the spoke's `argocd-manager-token`
+      Secret — Kubernetes generates them, no human writes them. So "SOPS is the
+      SSOT" does not describe them, and pretending otherwise would be the
+      scalar-vs-derivation error ADR-063 D4 exists to name. Two candidates, and
+      this is a real fork, not a formality: **(a)** store them in SOPS as a cache
+      so the sync has one uniform input, at the cost of a secret whose origin is
+      elsewhere; **(b)** have the sync read them from the spoke and push straight
+      to Secret Manager, keeping origin honest at the cost of a second input path
+      and a sync that needs spoke access at *sync* time (never at boot).
+- [ ] **[AC4]** Extend `cloud-init.yml` to install **Argo CD**, the spoke cluster
+      secrets and the Applications. Until this lands, a recreated hub has K3s and
+      no Argo CD — the same place the AWS hub reaches, and **F1 is not closed**.
+      - Embed `infra/helm/argocd/values.yaml` (6 KB, self-contained, no external
+        refs) as a `write_files` entry via `base64encode(file(...))` — dodges
+        YAML-in-YAML quoting and `${}` collision. The repo file stays SSOT and
+        nothing is cloned on the node (CLAUDE.md forbids it).
+      - **PIN the chart version** and the helm binary version in `networking.gcp`,
+        and add both to the `MIRRORED` drift test. `helm repo update` +
+        `upgrade --install` with no `--version` means every preemption installs
+        whatever is newest — an unattended Argo CD major upgrade at 3am. This is
+        ADR-063's own argument (rare supervised events becoming frequent
+        unattended ones) applied one level up.
+      - **No secret on argv and none in the log.** The bootstrap tees everything
+        to `/var/log/kubelab-bootstrap.log`, and the Makefile's `--set` pattern
+        puts four secrets on the command line. Fetch into a `0600` file under
+        `/dev/shm`, pass `helm -f`, remove it, and never echo a fetched value.
 - [ ] **Secret Manager discipline, asserted not assumed** — the four rules that
       keep it free, from the cost envelope:
       automatic replication (per-location billing); **≤6 active versions**;
       **destroy** superseded versions rather than disabling them (a *disabled*
       version still bills); **boot-time reads only, never a polling client**
       (an operator refreshing 6 secrets a minute is ~263k ops/mo = $0.76, over
-      budget on access operations alone). A test should assert the version count.
+      budget on access operations alone). Enforced in the sync tool itself, not
+      only documented: no CI test can reach real GCP. The sync must also be
+      **idempotent** — compare the payload and skip when unchanged, or every run
+      adds a version and walks the cap.
+
+## Two things this phase does NOT do, stated so nobody reads them in
+
+- **The Authelia OIDC pre-step is not needed on recreate.** `deploy-argocd` runs
+  `_deploy-authelia-oidc` first, but that registers the client on the **VPS**,
+  which is persistent spoke state. A recreated hub inherits it.
+- **This self-heals reconciliation, not the inbound UI.** The prod Argo CD
+  EndpointSlice holds a literal Tailscale IP that goes stale on every preemption,
+  so `argo.kubelab.live` is not covered by AC4. Phases 4/5 own it.
+
+## Verification constraint
+
+Nothing in this phase can be exercised against real GCP until Phase 0. Evidence
+is (a) static parse tests extending `tests/test_gcp_hub_module.py` to the
+cloud-init additions — Argo CD install present, chart version pinned, no secret
+literal, no secret on argv — and (b) mocked-client unit tests for the sync.
+**Phase 3 is the live proof, and nothing here should claim otherwise.**
 
 # Phase 3 — SSOT blast radius and bring-up
 
