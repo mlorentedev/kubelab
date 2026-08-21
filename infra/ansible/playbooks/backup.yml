@@ -90,6 +90,23 @@
         # would cap nodes never subjected to that measurement.
         node_backup_memory_max: "{{ '128M' if node_short_name == 'rpi3' else '' }}"
         node_backup_memory_swap_max: "0"
+        # ADR-028 tier (#1107), the SSOT the trigger model derives from
+        # (tests/test_node_location_axis.py). `vps`/`aws`/`gcp` are siblings
+        # of `nodes` in common.yaml rather than members of it — same shape
+        # SSOT-014a's SSH-user inference keys off — so this tries the node
+        # registry first and falls back to the top-level key.
+        node_backup_location: >-
+          {{ config.networking.nodes[node_short_name].location
+             if node_short_name in config.networking.nodes
+             else config.networking[node_short_name].location }}
+        # Shutdown-snapshot target (Part 4, on-demand only — see
+        # node-backup-shutdown.service.j2 for why this is per-node rather
+        # than a fleet-wide docker.service constant): Beelink's compose
+        # stack is wrapped in a systemd unit that stops itself before
+        # docker.service does, so ordering must name it directly. RPi4 has
+        # no such unit — its containers are reaped by dockerd itself, so
+        # docker.service is the correct and only target there.
+        node_backup_shutdown_after: "{{ 'kubelab-compose.service' if node_short_name == 'beelink' else 'docker.service' }}"
 
 - name: Deploy node-path backup to the on-demand nodes (BACKUP-044 Part 3)
   hosts: beelink,rpi4

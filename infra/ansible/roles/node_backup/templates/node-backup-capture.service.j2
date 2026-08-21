@@ -1,6 +1,17 @@
 # {{ ansible_managed }}
 [Unit]
 Description=BACKUP-044 node-backup capture ({{ inventory_hostname }})
+{% if node_backup_location == 'on-demand' %}
+# R-C (verification.md): on this node's actual failure mode -- an unclean
+# shutdown -- `restart: unless-stopped` resurrects the writer at the
+# docker.service mark, 23s before any ordering against the compose unit
+# would take effect. Only Before=docker.service dominates both the clean
+# and unclean shutdown paths, and it captures a quiescent database (dockerd
+# not yet up) rather than a live one. Boot-ordering is on-demand-only: an
+# always-on node is never routinely power-cycled, so there is no boot path
+# to order against.
+Before=docker.service
+{% endif %}
 
 [Service]
 Type=oneshot
@@ -8,3 +19,8 @@ ExecStart={{ node_backup_capture_script_path }}
 TimeoutStartSec=120
 StandardOutput=journal
 StandardError=journal
+{% if node_backup_location == 'on-demand' %}
+
+[Install]
+WantedBy=multi-user.target
+{% endif %}
