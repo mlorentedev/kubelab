@@ -2,7 +2,7 @@
 
 Pure render + assertion tests: NO SSH, no live node, no real restic/docker
 call. Runs under ``make test`` (marker-less -> collected by ``-m "not e2e and
-not infra"``), mirroring tests/test_node_maintenance_notify.py's pattern.
+not infra"``), mirroring tests/test_node_notify_role.py's pattern.
 
 The contract encoded here:
 
