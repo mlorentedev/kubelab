@@ -114,9 +114,29 @@ def test_onfailure_target_names_a_unit_the_role_actually_installs():
     # existence of a unit systemd never expects to find on disk.
     template_unit = re.sub(r"@[^.]*", "@", target.group(1), count=1)
     assert any((d / f"{template_unit}.j2").is_file() for d in TEMPLATES), (
-        f"OnFailure names {target.group(1)!r}, whose template {template_unit!r} is "
-        f"installed by no role. systemd accepts this silently and the alert path is "
-        f"dead until the trigger fires — which is when nobody is watching."
+        f"OnFailure names {target.group(1)!r}, whose template {template_unit!r} exists "
+        f"in no role. systemd accepts this silently and the alert path is dead until "
+        f"the trigger fires — which is when nobody is watching."
+    )
+    # A template file on disk is not a template file INSTALLED. The original
+    # form of this assertion stopped at the first half, which would keep passing
+    # against a role that carried the .j2 and never rendered it — the source
+    # present, the node without it. Raised by review on #1212.
+    installer = next(
+        (
+            task
+            for task in yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+            if str(task.get("template", {}).get("src", "")) == f"{template_unit}.j2"
+        ),
+        None,
+    )
+    assert installer is not None, (
+        f"no task in node_notify renders {template_unit}.j2; the unit OnFailure names "
+        f"would never reach the node"
+    )
+    assert "node_notify_unit_name" in installer["template"]["dest"], (
+        "the install path is a literal rather than the declared variable, so the unit "
+        "name is now asserted in two places that can drift apart"
     )
 
 
@@ -127,8 +147,12 @@ def test_notify_unit_execstart_matches_the_script_the_role_deploys():
     exec_start = re.search(r"^ExecStart=(\S+)( .*)?$", unit, re.MULTILINE)
     assert exec_start, "notify unit has no ExecStart"
     tasks = (NOTIFY_ROLE / "tasks/main.yml").read_text()
-    assert exec_start.group(1) in _defaults()["node_notify_script_path"], (
-        "the unit runs a script the role does not declare"
+    # `==`, not `in`. As a substring check an ExecStart of `/opt` passed, because
+    # `/opt` is a substring of `/opt/kubelab-notify.sh` — the assertion accepted
+    # a unit pointing at a directory. Raised by review on #1212.
+    assert exec_start.group(1) == _defaults()["node_notify_script_path"], (
+        f"the unit runs {exec_start.group(1)!r}, which is not the "
+        f"{_defaults()['node_notify_script_path']!r} the role declares"
     )
     assert "node_notify_script_path" in tasks, "the role does not install that script"
     assert (exec_start.group(2) or "").strip() == "%i", (
@@ -481,8 +505,14 @@ def test_the_notifier_cannot_be_selected_without_its_consumer(playbook: Path):
     assert maintenance is not None, (
         f"{playbook.stem} includes node_notify without node_maintenance"
     )
-    assert notify <= maintenance, (
-        f"{playbook.stem}: node_notify carries {sorted(notify - maintenance)!r}, which "
-        f"node_maintenance does not. That tag selects the notifier without its "
-        f"consumer — the migration's one notification-dark window."
+    # EQUAL, not merely a subset. The dependency runs both ways now that the
+    # teardown sits in node_maintenance: a selector reaching only node_notify
+    # installs a notifier nothing names, and one reaching only node_maintenance
+    # removes the old unit while re-pointing its own at a template that node
+    # may not have. The two roles are one migration and neither half is
+    # separately selectable.
+    assert notify == maintenance, (
+        f"{playbook.stem}: node_notify has {sorted(notify)!r} and node_maintenance "
+        f"{sorted(maintenance)!r}. Any tag in one and not the other selects half a "
+        f"migration, and the half that runs alone leaves the node notification-dark."
     )

@@ -43,12 +43,7 @@ node_notify_body_bytes: 2000
 # backup failures (2026-08-15) — they are actionable, not page-worthy.
 node_notify_severity: log
 
-# What this role supersedes, removed explicitly. Ansible is additive: dropping
-# the tasks that created these would leave them installed on every node that
-# ever ran the old role, and `kubelab-maintenance-notify.service` would sit
-# there forever, referenced by nothing (the `dev_node` precedent in CLAUDE.md).
-node_notify_superseded_units:
-  - kubelab-maintenance-notify.service
-node_notify_superseded_files:
-  - /opt/kubelab-maintenance-notify.sh
-  - /opt/kubelab-maintenance-notify-secret
+# What this role supersedes is removed by `node_maintenance`, right after the
+# reload that leaves the old unit unreferenced -- see the note at the end of
+# this role's tasks for why the order is load-bearing rather than a matter of
+# which role owns the file. The lists live there, beside the removal.

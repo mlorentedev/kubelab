@@ -28,25 +28,12 @@
     mode: "0644"
   notify: Reload systemd
 
-# --- retire what this role supersedes -------------------------------------
-# Ansible is additive: deleting the tasks that created these would leave them
-# installed on every node that ever ran the old role. The cleanup belongs to
-# whatever role still owns the concern, which is now this one (the `dev_node`
-# precedent in CLAUDE.md).
-#
-# No `systemctl disable` step: kubelab-maintenance-notify.service has no
-# [Install] section, so it was never enabled and there is no symlink to break.
-# It was only ever reachable through kubelab-maintenance.service's OnFailure=,
-# which this change re-points in the same commit.
-- name: Remove superseded notify units
-  file:
-    path: "/etc/systemd/system/{{ item }}"
-    state: absent
-  loop: "{{ node_notify_superseded_units }}"
-  notify: Reload systemd
-
-- name: Remove superseded notify files
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop: "{{ node_notify_superseded_files }}"
+# NOTE: the single-purpose notifier this replaces is removed by
+# `node_maintenance`, not here, and the reason is ordering rather than
+# ownership. Removing it from this role would delete the unit file while
+# systemd still has the OLD `kubelab-maintenance.service` loaded and pointing
+# at it -- the consumer is re-templated by a role that runs AFTER this one, and
+# a handler-driven `daemon-reload` would not fire until the end of the play
+# either way. A maintenance failure in that window would invoke a target whose
+# file is already gone. So the teardown lives immediately after the reload that
+# makes the old unit unreferenced. Raised by review on #1212.

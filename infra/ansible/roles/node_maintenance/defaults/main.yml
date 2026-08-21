@@ -35,6 +35,23 @@ maintenance_rotated_log_retention_days: 3
 maintenance_active_log_max_mb: 100
 
 # --- OnFailure notify ------------------------------------------------------
-# Moved to roles/node_notify (BACKUP-044 Part 5). This role keeps only the
-# `OnFailure=kubelab-notify@%n.service` linkage on its own unit; the domain,
+# The mechanism moved to roles/node_notify (BACKUP-044 Part 5). This role keeps
+# the `OnFailure=kubelab-notify@%n.service` linkage on its own unit; the domain,
 # the secret file and the script are that role's SSOT now.
+#
+# The single-purpose notifier this role used to install is removed HERE, not
+# there, and the order is the reason. Ansible is additive, so deleting the
+# install tasks alone would strand these on every node that ever ran them (the
+# `dev_node` precedent in CLAUDE.md) -- but removing them from node_notify would
+# delete the unit file while systemd still has the OLD kubelab-maintenance.service
+# loaded and naming it. The removal therefore runs after this role re-templates
+# its own unit and reloads, at which point nothing references them.
+#
+# No `systemctl disable` step, and that is checked rather than assumed: the old
+# unit had no [Install] section, so it was never enabled and there is no symlink
+# to break. It was only ever reachable through the OnFailure= this role declares.
+maintenance_superseded_notify_units:
+  - kubelab-maintenance-notify.service
+maintenance_superseded_notify_files:
+  - /opt/kubelab-maintenance-notify.sh
+  - /opt/kubelab-maintenance-notify-secret
