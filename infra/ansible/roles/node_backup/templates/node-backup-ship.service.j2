@@ -9,6 +9,12 @@ After={{ node_backup_capture_service_name }}
 
 [Service]
 Type=oneshot
+# A systemd service has no HOME unless User= sets one or it is declared here.
+# restic needs it (or XDG_CACHE_HOME) to place its local metadata cache —
+# without it, every run fails immediately with "unable to locate cache
+# directory", after successfully reaching R2. Root, because these units carry
+# no User= and run as root like every other oneshot in this role.
+Environment=HOME=/root
 ExecStart={{ node_backup_ship_script_path }}
 {% if node_backup_memory_max %}
 MemoryMax={{ node_backup_memory_max }}

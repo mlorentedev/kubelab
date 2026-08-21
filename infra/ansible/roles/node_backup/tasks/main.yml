@@ -8,6 +8,8 @@
   apt:
     name: sqlite3
     state: present
+    update_cache: true
+    cache_valid_time: 3600
 
 - name: Detect system architecture
   set_fact:
@@ -33,10 +35,16 @@
     mode: "0644"
   when: node_backup_restic_version not in node_backup_restic_installed.stdout
 
-- name: Install restic (decompress the pinned binary into place)
-  shell: >
-    bunzip2 -c /tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2
-    > {{ node_backup_restic_install_path }}
+- name: Install restic (decompress the pinned binary into place). Via
+    python3's bz2 module rather than the bunzip2 binary — RPi4's image does
+    not carry it, and every node Ansible manages already guarantees a
+    python3 interpreter (ansible_python_interpreter), so this adds no new
+    host dependency.
+  command:
+    cmd: >-
+      python3 -c "import bz2,shutil;
+      shutil.copyfileobj(bz2.open('/tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2'),
+      open('{{ node_backup_restic_install_path }}', 'wb'))"
   when: node_backup_restic_version not in node_backup_restic_installed.stdout
   changed_when: true
 
