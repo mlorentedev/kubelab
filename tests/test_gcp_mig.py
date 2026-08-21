@@ -52,7 +52,7 @@ class TestItAddressesTheRegionalGroup:
         A resize against the wrong project is not an error, it is a resize."""
         with patch("toolkit.features.gcp_mig._run") as run:
             run.return_value = 0
-            gcp_mig.status(config)
+            gcp_mig.resize(config, 1)
         assert "--project" in _argv(run)
 
 
@@ -109,10 +109,51 @@ class TestNoCredentialIsEverPassed:
     def test_no_command_carries_a_secret_flag(self, config: dict) -> None:
         """The MIG surface needs none: the instance authenticates to Secret
         Manager with its own service account."""
-        with patch("toolkit.features.gcp_mig._run") as run:
+        with (
+            patch("toolkit.features.gcp_mig._run") as run,
+            patch("toolkit.features.gcp_mig._list_instances", return_value=["gcp1-abcd"]),
+            patch("toolkit.features.k8s_render.resolve_magicdns", return_value="100.64.0.12"),
+        ):
             run.return_value = 0
             gcp_mig.status(config)
             gcp_mig.resize(config, 1)
+            gcp_mig.recreate(config)
         for call in run.call_args_list:
             joined = " ".join(call[0][0])
             assert not any(f in joined for f in ("--password", "--key", "--token", "--secret"))
+
+
+class TestStatusReportsWhatTheRunbookPromises:
+    """docs/runbooks/gcp-hub-bootstrap.md §8 says `gcp1-status` shows MIG state,
+    instance state and a `dig` of the MagicDNS name. A `describe` alone reports
+    the group's opinion of itself, which is exactly the fact that stays healthy
+    while the node fails to join the mesh."""
+
+    def test_it_reports_the_instances_and_resolves_the_magicdns_name(self, config: dict) -> None:
+        with (
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig._list_instances", return_value=["gcp1-abcd"]) as ls,
+            patch("toolkit.features.k8s_render.resolve_magicdns", return_value="100.64.0.12") as dig,
+        ):
+            assert gcp_mig.status(config) == 0
+        ls.assert_called_once()
+        dig.assert_called_once_with("gcp1.kubelab.internal")
+
+    def test_an_unresolvable_name_is_reported_without_failing_the_command(self, config: dict) -> None:
+        """A stopped hub legitimately does not resolve. Exiting non-zero would
+        make `gcp1-status` unusable for the state it exists to report."""
+        with (
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig._list_instances", return_value=[]),
+            patch("toolkit.features.k8s_render.resolve_magicdns", return_value=None),
+        ):
+            assert gcp_mig.status(config) == 0
+
+    def test_a_failed_describe_short_circuits(self, config: dict) -> None:
+        """No point digging for a name whose group could not even be read."""
+        with (
+            patch("toolkit.features.gcp_mig._run", return_value=1),
+            patch("toolkit.features.gcp_mig._list_instances") as ls,
+        ):
+            assert gcp_mig.status(config) == 1
+        ls.assert_not_called()

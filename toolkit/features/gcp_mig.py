@@ -78,8 +78,37 @@ def _list_instances(config: dict[str, Any]) -> list[str]:
 
 
 def status(config: dict[str, Any]) -> int:
-    """Describe the group. Read-only."""
-    return _run(["gcloud", "compute", "instance-groups", "managed", "describe", *_scope(config)])
+    """Group state, instance state, and whether the MagicDNS name resolves.
+
+    Three facts, because the interesting failures live between them. A MIG can
+    report a healthy managed instance while the node never joined the mesh, and
+    `gcp1.kubelab.internal` failing to resolve is what that looks like from
+    outside. A `describe` alone reports the group's own opinion of itself.
+
+    The `dig` is the one worth reading twice: Headscale names nodes by
+    given-name, so a re-registration without stale-node cleanup lands as
+    `gcp1-<random>` -- and the inventory, the kubeconfig and the prod
+    EndpointSlice all break at once, silently, because the old records keep
+    resolving until they do not.
+    """
+    from toolkit.features.k8s_render import resolve_magicdns
+
+    code = _run(["gcloud", "compute", "instance-groups", "managed", "describe", *_scope(config)])
+    if code != 0:
+        return code
+
+    instances = _list_instances(config)
+    logger.info(f"instances: {', '.join(instances) if instances else '(none — the group is at target_size 0)'}")
+
+    name = f"{_gcp(config)['hostname']}.kubelab.internal"
+    address = resolve_magicdns(name)
+    if address:
+        logger.success(f"{name} -> {address}")
+    else:
+        # Not an error exit: a stopped hub is a legitimate state and its name
+        # correctly does not resolve. Reported plainly so the reader decides.
+        logger.warning(f"{name} does not resolve — expected while stopped, a finding while running")
+    return 0
 
 
 def resize(config: dict[str, Any], size: int) -> int:
