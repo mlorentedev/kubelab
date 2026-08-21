@@ -80,9 +80,14 @@ A failed `kubelab-maintenance.service` run (a hard script abort — most
 individual sub-tasks tolerate failure deliberately via `ignore_errors`, so
 this means something like `apt-get clean` or `journalctl --vacuum-size`
 failing outright, not a single skipped prune) triggers
-`kubelab-maintenance-notify.service`, which POSTs a `log`-severity envelope
-to n8n's public `/webhook/notify` ingress (NOTIFY-001). This lands wherever
-`log`-tier fleet alerts land (Apprise → Telegram at the time of writing).
+`kubelab-notify@kubelab-maintenance.service.service`, which POSTs a
+`log`-severity envelope to n8n's public `/webhook/notify` ingress
+(NOTIFY-001). That name is not a typo: `kubelab-notify@.service` is one
+template serving every unit in the fleet, and the instance is the full name
+of the unit that failed — which is how the notifier knows whose journal to
+read. Any unit gains this with one line, `OnFailure=kubelab-notify@%n.service`.
+The envelope lands wherever `log`-tier fleet alerts land (Apprise → Telegram
+at the time of writing).
 
 **Always prod n8n** (`n8n.kubelab.live`), regardless of the node's own
 `deploy_env` — this is deliberate: three of the seven nodes provision under
@@ -92,9 +97,9 @@ make the alert path depend on ace1 (staging n8n's host) being powered on.
 **Responding to one**: check the linked node's `kubelab-maintenance.service`
 journal (see "Checking status" above) for the actual failure. A delivery
 failure of the notification itself (wrong token, n8n unreachable) shows up
-as `kubelab-maintenance-notify.service` itself failing — check that unit's
-own journal separately if the alert never arrived but you suspect a run
-failed.
+as `kubelab-notify@kubelab-maintenance.service.service` itself failing —
+check that unit's own journal separately if the alert never arrived but you
+suspect a run failed.
 
 **A failed delivery has already been retried** (ANSIBLE-038). `curl` retries
 transient failures — connection refused, timeouts, and 5xx — up to 3 times
@@ -106,8 +111,8 @@ failed, not one unlucky packet. Two consequences when reading its journal:
 - The retry lives in `curl`, **not** as `Restart=` on the unit. If you add
   `Restart=` you get both, and systemd will re-run the whole script — journal
   read and payload encode included — to retry one HTTP request. The rationale
-  is in the unit template, and `tests/test_node_maintenance_notify.py` fails
-  if the two ever drift apart or the retry budget outgrows the timeout.
+  is in the unit template, and `tests/test_node_notify_role.py` fails if the
+  two ever drift apart or the retry budget outgrows the timeout.
 
 **Testing the path without waiting for a failure**:
 
@@ -142,7 +147,8 @@ cache first and succeeds. If a `--check` run fails this way, re-run without
 
 ## References
 
-- Role: `infra/ansible/roles/node_maintenance/`
+- Roles: `infra/ansible/roles/node_maintenance/` (the timer) and
+  `infra/ansible/roles/node_notify/` (the notifier every unit shares)
 - Spec: `specs/ANSIBLE-035-maintenance-timer-rollout/` (or
   `specs/archive/ANSIBLE-035-maintenance-timer-rollout/` once archived)
 - NOTIFY-001 webhook contract: `infra/n8n/workflows/README.md`

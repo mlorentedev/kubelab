@@ -228,34 +228,10 @@
     mode: "0644"
   when: maintenance_install_timer | bool
 
-# --- OnFailure notify (ANSIBLE-035, NOTIFY-001) ---------------------------
-# Static file, not a live SOPS decrypt: nodes never hold a SOPS decryption
-# key, only the plaintext Ansible already resolved (same pattern as the
-# CrowdSec bouncer key and Headscale pre-auth key). Rotation = re-provision
-# the fleet -- see the rotate_note on this secret in secrets_manager.py.
-- name: Write fleet notify secret
-  copy:
-    content: "{{ secrets.apps.services.automation.notify.fleet_webhook_secret }}"
-    dest: "{{ maintenance_notify_secret_file }}"
-    owner: root
-    group: root
-    mode: "0600"
-  when: maintenance_install_timer | bool
-  no_log: true
-
-- name: Install maintenance notify script
-  template:
-    src: kubelab-maintenance-notify.sh.j2
-    dest: /opt/kubelab-maintenance-notify.sh
-    mode: "0700"
-  when: maintenance_install_timer | bool
-
-- name: Install maintenance notify service unit
-  template:
-    src: kubelab-maintenance-notify.service.j2
-    dest: /etc/systemd/system/kubelab-maintenance-notify.service
-    mode: "0644"
-  when: maintenance_install_timer | bool
+# The OnFailure notify path lives in the `node_notify` role now: one
+# `kubelab-notify@.service` template serving every unit in the fleet, plus the
+# fleet webhook secret it reads. This role only declares the linkage, in
+# kubelab-maintenance.service.j2.
 
 - name: Enable and start maintenance timer
   systemd:
@@ -264,3 +240,37 @@
     enabled: true
     daemon_reload: true
   when: maintenance_install_timer | bool
+
+# --- retire the single-purpose notifier -----------------------------------
+# Deliberately AFTER the reload above, which is what makes it safe: at this
+# point kubelab-maintenance.service on disk names kubelab-notify@%n.service,
+# systemd has re-read it, and nothing references the old unit any more.
+#
+# Run before that reload -- which is where these tasks first lived, in
+# node_notify -- and the file is gone while systemd still has the previous
+# version of the consumer loaded and pointing at it. A maintenance failure in
+# that window invokes a target that no longer exists. Seconds wide and
+# vanishingly unlikely, but it is a window that did not need to exist.
+- name: Remove the superseded notify unit
+  file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: "{{ maintenance_superseded_notify_units }}"
+  register: superseded_units_removed
+  when: maintenance_install_timer | bool
+
+- name: Remove the superseded notify script and its secret
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ maintenance_superseded_notify_files }}"
+  when: maintenance_install_timer | bool
+
+# Only when something was actually removed, so a re-provision of an
+# already-migrated node reports no change.
+- name: Drop the removed unit from systemd's view
+  systemd:
+    daemon_reload: true
+  when:
+    - maintenance_install_timer | bool
+    - superseded_units_removed.changed

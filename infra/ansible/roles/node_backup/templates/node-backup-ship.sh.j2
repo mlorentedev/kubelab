@@ -39,7 +39,7 @@ if [ ! -f "$SENTINEL" ]; then
 fi
 
 # Credentials from root-owned files, never argv or a literal in this script:
-# ANSIBLE-038's pattern (also used by kubelab-maintenance-notify.sh) -- argv
+# ANSIBLE-038's pattern (also used by kubelab-notify.sh) -- argv
 # is readable via `ps` / /proc/<pid>/cmdline for the life of the call. restic
 # and the AWS SDK it embeds both read these as plain environment variables,
 # which /proc/<pid>/environ restricts to the owning user (root, here) --

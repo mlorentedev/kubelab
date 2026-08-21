@@ -4,7 +4,14 @@ Description=KubeLab node maintenance
 # ANSIBLE-035: a failed run (not a skipped ignore_errors sub-task -- most of
 # those are tolerated deliberately -- but a hard script abort, e.g. apt-get
 # clean or journalctl --vacuum-size failing outright) fires the notify unit.
-OnFailure=kubelab-maintenance-notify.service
+# The notify mechanism moved to the `node_notify` role, which installs one
+# `kubelab-notify@.service` template for the whole fleet (BACKUP-044 Part 5
+# needed the same five ANSIBLE-038 hardenings for four backup units, and a
+# second copy of a hardened credential path is a copy that drifts).
+#
+# `%n` is this unit's own full name, suffix included, and it becomes the
+# instance -- so the notifier knows which unit to read the journal of.
+OnFailure=kubelab-notify@%n.service
 
 [Service]
 Type=oneshot
