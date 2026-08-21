@@ -19,6 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from toolkit.features.configuration import ConfigurationManager  # noqa: E402
+from toolkit.features.k8s_kubeconfig import output_path  # noqa: E402
 
 
 def get_config(env: str) -> dict[str, str]:
@@ -36,7 +37,7 @@ def get_config(env: str) -> dict[str, str]:
 
 def kubectl_exec(args_list: list[str], env: str) -> subprocess.CompletedProcess[str]:
     """Run a command inside the Gitea pod via kubectl exec."""
-    kubeconfig = str(Path.home() / f".kube/kubelab-{env}-config")
+    kubeconfig = str(output_path(env))
     full_cmd = [
         "kubectl",
         "exec",
@@ -119,7 +120,7 @@ def configure_gitea_oidc(config: dict[str, str], env: str) -> None:
             "-n",
             "kubelab",
             "--kubeconfig",
-            str(Path.home() / f".kube/kubelab-{env}-config"),
+            str(output_path(env)),
         ],
         capture_output=True,
         text=True,

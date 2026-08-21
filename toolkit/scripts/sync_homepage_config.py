@@ -23,6 +23,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from toolkit.core.io import write_text_lf
+from toolkit.features.k8s_kubeconfig import output_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMMON_YAML = PROJECT_ROOT / "infra/config/values/common.yaml"
@@ -57,7 +58,7 @@ def get_traefik_cluster_ip() -> str:
                 "-o",
                 "jsonpath={.spec.clusterIP}",
                 "--kubeconfig",
-                str(Path.home() / ".kube/kubelab-staging-config"),
+                str(output_path("staging")),
             ],
             capture_output=True,
             text=True,
