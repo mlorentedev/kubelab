@@ -1529,6 +1529,68 @@ def tf_aws_tfvars() -> None:
     logger.success(f"Generated {tfvars_path}")
 
 
+@terraform_app.command("gcp-tfvars")
+def tf_gcp_tfvars() -> None:
+    """Render gcp.tfvars from common.yaml. Carries no secret, by design.
+
+    `aws-tfvars` injects two SOPS values and deletes the file. This does NOT:
+    the GCP hub reads its credentials from Secret Manager at boot, so Terraform
+    carries none. What it renders instead is the config the Terraform defaults
+    currently restate -- see toolkit/features/gcp_tfvars.py for why the shape
+    survived while the content changed.
+    """
+    from toolkit.features import gcp_tfvars
+    from toolkit.features.configuration import ConfigurationManager
+
+    gcp_dir = settings.project_root / "infra" / "terraform" / "gcp"
+    if not (gcp_dir / "variables.tf").exists():
+        logger.error(f"no Terraform module at {gcp_dir}")
+        raise typer.Exit(1) from None
+
+    cm = ConfigurationManager("common", settings.project_root)
+    try:
+        path = gcp_tfvars.write(cm.get_merged_config(), gcp_dir)
+    except (KeyError, ValueError) as exc:
+        logger.error(f"cannot render gcp.tfvars: {exc}")
+        raise typer.Exit(1) from None
+    logger.success(f"Generated {path}")
+
+
+@terraform_app.command("gcp-status")
+def tf_gcp_status() -> None:
+    """Describe the hub's managed instance group. Read-only."""
+    _gcp_mig_call("status")
+
+
+@terraform_app.command("gcp-resize")
+def tf_gcp_resize(
+    size: int = typer.Option(..., "--size", help="Target size: 0 stops the hub, 1 rebuilds it."),
+) -> None:
+    """Set the MIG's target size. 0 stops paying for the VM; 1 boots a fresh one."""
+    _gcp_mig_call("resize", size)
+
+
+@terraform_app.command("gcp-recreate")
+def tf_gcp_recreate() -> None:
+    """Delete the running hub and let the MIG rebuild it — a preemption on demand."""
+    _gcp_mig_call("recreate")
+
+
+def _gcp_mig_call(action: str, *args: object) -> None:
+    """One entry point for the three MIG verbs, so error handling is written once."""
+    from toolkit.features import gcp_mig
+    from toolkit.features.configuration import ConfigurationManager
+
+    cm = ConfigurationManager("common", settings.project_root)
+    try:
+        code = getattr(gcp_mig, action)(cm.get_merged_config(), *args)
+    except (KeyError, ValueError, RuntimeError) as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from None
+    if code != 0:
+        raise typer.Exit(code) from None
+
+
 @terraform_app.command("validate")
 def tf_validate() -> None:
     """

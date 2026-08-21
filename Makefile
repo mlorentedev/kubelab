@@ -431,6 +431,14 @@ secrets-show:
 secrets-audit:
 	@$(TOOLKIT) secrets audit
 
+.PHONY: sync-secret-manager
+sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
+	@$(TOOLKIT) secrets sync-secret-manager
+
+.PHONY: sync-secret-manager-dry
+sync-secret-manager-dry: ## Same, but compare and report without writing
+	@$(TOOLKIT) secrets sync-secret-manager --dry-run
+
 # -----------------------------------------------------------------------------
 # Hub (AWS — Argo CD management plane)
 # -----------------------------------------------------------------------------
@@ -850,13 +858,63 @@ aws1-replace: _aws1-cancel-spot-request
 	@$(MAKE) --no-print-directory deploy-argocd
 	@echo "✓ aws1 replaced, provisioned and reconciling."
 
+# GCP Argo CD Hub — Terraform driven from the SSOT, not from SOPS.
+#
+# The tfvars carries NO secret and that is the whole difference from tf-aws-*:
+# the hub reads its credentials from Secret Manager at boot, so Terraform never
+# holds one. It is still removed after every use, because a generated file left
+# behind is a second declaration of the SSOT that `terraform plan` would silently
+# prefer to the current one.
+.PHONY: tf-gcp-plan tf-gcp-apply tf-gcp-destroy
+tf-gcp-plan:
+	@$(TOOLKIT) infra terraform gcp-tfvars
+	@cd infra/terraform/gcp && terraform plan -var-file=gcp.tfvars
+	@rm -f infra/terraform/gcp/gcp.tfvars
+
+tf-gcp-apply:
+	@$(TOOLKIT) infra terraform gcp-tfvars
+	@cd infra/terraform/gcp && terraform apply -auto-approve -var-file=gcp.tfvars
+	@rm -f infra/terraform/gcp/gcp.tfvars
+
+tf-gcp-destroy:
+	@$(TOOLKIT) infra terraform gcp-tfvars
+	@cd infra/terraform/gcp && terraform destroy -var-file=gcp.tfvars
+	@rm -f infra/terraform/gcp/gcp.tfvars
+
+# gcp1 lifecycle — a managed instance group, which is a different animal from
+# aws1's Spot request and needs none of its out-of-band cancellation. Resizing
+# the MIG to 0 stops paying for the VM; resizing back to 1 builds a fresh one
+# through cloud-init. aws1 never had a start/stop at all, so this is capability
+# the migration adds rather than parity it restores.
+#
+# gcp1-replace deletes the instance and lets the MIG rebuild it. That is
+# deliberately the SAME path a real preemption takes, so exercising it exercises
+# the recreate contract rather than a rehearsal of it.
+.PHONY: gcp1-status gcp1-start gcp1-stop gcp1-replace gcp1-destroy
+gcp1-status:
+	@$(TOOLKIT) infra terraform gcp-status
+
+gcp1-start:
+	@$(TOOLKIT) infra terraform gcp-resize --size 1
+
+gcp1-stop:
+	@$(TOOLKIT) infra terraform gcp-resize --size 0
+
+gcp1-replace:
+	@$(TOOLKIT) infra terraform gcp-recreate
+	@$(MAKE) --no-print-directory wait-node-ready NODE=gcp1 ENV=hub
+	@$(MAKE) --no-print-directory provision NODE=gcp1 ENV=hub
+	@echo "✓ gcp1 recreated and provisioned. Argo CD is installed by cloud-init."
+
+gcp1-destroy: tf-gcp-destroy
+
 # Block until a node can actually be provisioned: sshd answering AND cloud-init
 # finished. Two conditions, not one — sshd comes up long before cloud-init has
 # installed K3s and registered Tailscale. The logic lives in the playbook, not
 # here, so the Makefile keeps no inline shell.
 .PHONY: wait-node-ready
 wait-node-ready:
-	@test -n "$(NODE)" || (echo "Usage: make wait-node-ready NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4 [ENV=staging|prod|hub]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make wait-node-ready NODE=aws1|gcp1|ace1|ace2|beelink|vps|rpi3|rpi4 [ENV=staging|prod|hub]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	@$(TOOLKIT) infra ansible run -p wait-node-ready -e $(_ENV) -l $(NODE)
 
