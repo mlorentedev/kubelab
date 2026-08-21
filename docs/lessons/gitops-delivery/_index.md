@@ -1,9 +1,10 @@
 # Argo CD, releases and image promotion
 
-19 lessons, newest first. Back to [all categories](../_index.md).
+20 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 362 | [Designing a guard for a future hazard found it already loaded and aimed at prod](lesson-362-designing-a-guard-for-a-future-hazard-found.md) | 2026-08-21 |
 | 333 | [One placeholder document exiled a whole manifest from GitOps, and `Synced` said nothing](lesson-333-one-placeholder-document-exiled-a-whole-manif.md) | 2026-08-15 |
 | 330 | [Staging's `selfHeal: false` doesn't stop Argo CD from reverting a manual deploy mid-session — it only suppresses drift correction, not new-revision sync](lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd.md) | 2026-08-15 |
 | 331 | [A local `kubectl diff` against an Argo CD-managed cluster describes a merge that will never happen](lesson-331-a-local-kubectl-diff-against-an-argo-cd-manag.md) | 2026-08-15 |
