@@ -263,7 +263,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("uptime-kuma", "node-backup"),
         format_hint="opaque URL-safe token; the push endpoint's only credential",
         rotate_note=(
-            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "Rotate here, then `make monitoring-apply` so Kuma expects the new token, then "
             "re-run `make backup ENV=prod` so beelink sends it. Order matters: the node keeps "
             "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
             "reads as a missed heartbeat and pages after the 6h window."
@@ -277,7 +277,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("uptime-kuma", "node-backup"),
         format_hint="opaque URL-safe token; the push endpoint's only credential",
         rotate_note=(
-            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "Rotate here, then `make monitoring-apply` so Kuma expects the new token, then "
             "re-run `make backup ENV=prod` so rpi3 sends it. Order matters: the node keeps "
             "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
             "reads as a missed heartbeat and pages after the 6h window."
@@ -291,7 +291,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("uptime-kuma", "node-backup"),
         format_hint="opaque URL-safe token; the push endpoint's only credential",
         rotate_note=(
-            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "Rotate here, then `make monitoring-apply` so Kuma expects the new token, then "
             "re-run `make backup ENV=prod` so rpi4 sends it. Order matters: the node keeps "
             "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
             "reads as a missed heartbeat and pages after the 6h window."
@@ -305,7 +305,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("uptime-kuma", "node-backup"),
         format_hint="opaque URL-safe token; the push endpoint's only credential",
         rotate_note=(
-            "Rotate here, then `make monitors-apply` so Kuma expects the new token, then "
+            "Rotate here, then `make monitoring-apply` so Kuma expects the new token, then "
             "re-run `make backup ENV=prod` so vps sends it. Order matters: the node keeps "
             "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
             "reads as a missed heartbeat and pages after the 6h window."
