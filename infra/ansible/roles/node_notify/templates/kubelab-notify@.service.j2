@@ -1,25 +1,28 @@
 # {{ ansible_managed }}
 [Unit]
-Description=KubeLab maintenance failure notification (NOTIFY-001)
+# %i is the full name of the unit that failed, suffix included -- a unit
+# declaring `OnFailure=kubelab-notify@%n.service` hands its own `%n` over as
+# this instance's name. Verified against a live systemd rather than assumed:
+# `OnFailure=x@%n.service` on `foo.service` resolves to `x@foo.service.service`
+# and `%i` inside it is `foo.service`, which is what `journalctl -u` wants.
+Description=KubeLab failure notification for %i (NOTIFY-001)
 
 [Service]
 # ANSIBLE-038 f5: deliberately no Restart=. The review asked for one, and the
 # retry it wanted exists -- it lives in curl (--retry/--retry-delay in
-# kubelab-maintenance-notify.sh) rather than here. Stated explicitly because
-# the absence used to be documented only in the sibling script, and there it
-# explained the absence of an OnFailure= CASCADE, not the absence of a RETRY.
+# {{ node_notify_script_path }}) rather than here.
 #
 # Why not here: systemd would re-run the whole script -- re-reading the journal
 # and re-encoding the payload -- to retry one HTTP request, and Restart= plus
 # RestartSec= interacts with the start limit, so a sustained n8n outage ends
 # with the unit rate-limited into `failed` rather than having given up cleanly.
 Type=oneshot
-ExecStart=/opt/kubelab-maintenance-notify.sh
+ExecStart={{ node_notify_script_path }} %i
 # Must exceed the script's own retry budget or systemd truncates a delivery
 # that was still in progress. Worst case measured against a blackholed host:
 # --retry-max-time 20 + one final --max-time 10 attempt = 30s. 45 leaves
 # margin for DNS and process start. Raising the retry budget means raising
-# this too -- tests/test_node_maintenance_notify.py asserts the relationship.
+# this too -- tests/test_node_notify_role.py asserts the relationship.
 TimeoutStartSec=45
 StandardOutput=journal
 StandardError=journal

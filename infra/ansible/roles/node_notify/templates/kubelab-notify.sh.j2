@@ -1,42 +1,70 @@
 #!/bin/bash
 # {{ ansible_managed }}
-# Fires on kubelab-maintenance.service failure (OnFailure=, ANSIBLE-035).
-# Posts a `log`-severity envelope to n8n's public /webhook/notify ingress
-# (NOTIFY-001) -- n8n routes by severity and forwards to Apprise internally.
+# Fleet failure notification (NOTIFY-001). Fires from any unit that declares
 #
-# Always prod n8n, regardless of this node's own deploy_env: alerting must
-# not depend on ace1 (staging n8n's host) being powered on. See
-# specs/ANSIBLE-035-maintenance-timer-rollout/proposal.md for the full
-# reasoning. The token is prod n8n's Header Auth credential, resolved from
+#     OnFailure=kubelab-notify@%n.service
+#
+# and receives the failed unit's name as $1 (the template unit passes `%i`).
+# Posts a `{{ node_notify_severity }}`-severity envelope to n8n's public
+# /webhook/notify ingress -- n8n routes by severity and forwards to Apprise
+# internally.
+#
+# Extracted from kubelab-maintenance-notify.sh (ANSIBLE-035) when BACKUP-044
+# Part 5 needed the same five ANSIBLE-038 hardenings for the backup units.
+# They are preserved verbatim below, with their measurements, because each one
+# was paid for once and a re-derivation is where they get lost.
+#
+# Always prod n8n, regardless of this node's own deploy_env: alerting must not
+# depend on ace1 (staging n8n's host) being powered on. The token is prod
+# n8n's Header Auth credential, resolved from
 # apps.services.automation.notify.fleet_webhook_secret (a dedicated key,
 # immune to the staging-env override that apps.services.automation.notify.
 # webhook_secret carries on this node's own env).
 set -euo pipefail
 
-TOKEN="$(cat {{ maintenance_notify_secret_file }})"
+# The unit is systemd-supplied via `%i`, but this script is also runnable by
+# hand and its argument reaches `journalctl -u`. Constrained to the character
+# set a systemd unit name can actually contain, so a hand invocation cannot
+# turn it into an option or a second argument.
+UNIT="${1:?usage: $(basename "$0") <failed-unit-name>}"
+case "$UNIT" in
+  -*|*[!A-Za-z0-9@:.\\_-]*)
+    echo "refusing to notify for an implausible unit name: $UNIT" >&2
+    exit 64 ;;
+esac
+
+TOKEN="$(cat {{ node_notify_secret_file }})"
 
 # Trim to keep the envelope body small; n8n/Apprise render it as-is.
-BODY_TAIL="$(journalctl -u kubelab-maintenance.service -n 20 --no-pager 2>/dev/null | tail -c 2000)"
+BODY_TAIL="$(journalctl -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pager 2>/dev/null \
+  | tail -c {{ node_notify_body_bytes }})"
 
-# JSON-encode via python3 (present on every node Ansible manages) rather
-# than shell string interpolation -- journal content can contain quotes,
-# newlines, and other characters that would break a hand-built JSON string.
+# JSON-encode via python3 (present on every node Ansible manages) rather than
+# shell string interpolation -- journal content can contain quotes, newlines,
+# and other characters that would break a hand-built JSON string.
 #
 # ANSIBLE-038: read stdin as BYTES and decode with errors='replace' rather
-# than sys.stdin.read(). `tail -c 2000` above cuts on a byte boundary, so a
+# than sys.stdin.read(). `tail -c` above cuts on a byte boundary, so a
 # multi-byte UTF-8 character straddling it reaches python as a truncated
 # sequence and sys.stdin.read() raises UnicodeDecodeError -- which fails this
 # unit and loses the very notification it exists to deliver. Measured:
 # `printf 'caf\xc3' | python3 -c "...sys.stdin.read()..."` ->
 # "can't decode byte 0xc3 in position 3: unexpected end of data".
-PAYLOAD="$(printf '%s' "$BODY_TAIL" | python3 -c "
-import json, sys
+#
+# $UNIT reaches python through the ENVIRONMENT, never interpolated into the
+# program text. Extracting this script made the unit name a runtime value for
+# the first time, and a runtime value spliced into source is an injection
+# vector -- json.dumps would have escaped it for the payload, but only after
+# python had already parsed it as code.
+PAYLOAD="$(printf '%s' "$BODY_TAIL" | FAILED_UNIT="$UNIT" python3 -c "
+import json, os, sys
+unit = os.environ['FAILED_UNIT']
 print(json.dumps({
     'domain': 'fleet',
-    'severity': 'log',
-    'title': 'kubelab-maintenance failed on {{ inventory_hostname }}',
+    'severity': '{{ node_notify_severity }}',
+    'title': f'{unit} failed on {{ inventory_hostname }}',
     'body': sys.stdin.buffer.read().decode('utf-8', 'replace'),
-    'source': '{{ inventory_hostname }}/kubelab-maintenance-notify',
+    'source': '{{ inventory_hostname }}/kubelab-notify',
 }))
 ")"
 
@@ -62,8 +90,8 @@ TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
 
 # -f: a 4xx/5xx from n8n makes curl (and this script, under set -o pipefail)
 # exit non-zero, so a delivery failure is visible as THIS unit failing --
-# `systemctl status kubelab-maintenance-notify.service` / its journal --
-# rather than silently swallowed.
+# `systemctl status kubelab-notify@<unit>.service` / its journal -- rather
+# than silently swallowed.
 #
 # ANSIBLE-038 f1: bounded timeouts. Without them curl uses its defaults and an
 # unreachable n8n stalls this unit until systemd kills it.
@@ -86,7 +114,7 @@ TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
 printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl -sS -f --config - \
   --connect-timeout 5 --max-time 10 \
   --retry 3 --retry-delay 5 --retry-connrefused --retry-max-time 20 \
-  -X POST "https://{{ maintenance_notify_domain }}/webhook/notify" \
+  -X POST "https://{{ node_notify_domain }}/webhook/notify" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
   -o /dev/null

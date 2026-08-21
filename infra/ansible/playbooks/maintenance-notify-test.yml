@@ -1,8 +1,14 @@
 ---
 # =============================================================================
-# Maintenance notify path — live delivery test (ANSIBLE-035 AC7, ANSIBLE-038)
+# Fleet notify path — live delivery test (ANSIBLE-035 AC7, ANSIBLE-038)
 #
-# Starts kubelab-maintenance-notify.service and asserts it completed cleanly.
+# Starts the notifier for one unit and asserts it completed cleanly.
+#
+# The FILE and the make target keep their `maintenance-` names even though
+# the mechanism is now fleet-wide (roles/node_notify). Renaming them is a
+# separate decision from this migration, and an operator's muscle memory for
+# `make maintain-notify-test` is worth more than the tidiness. Override the
+# unit under test with `-e notify_test_unit=node-backup-ship.service`.
 # The unit's curl uses -f, so a 2xx from n8n is the only way it exits 0: this
 # is a real end-to-end delivery check, not a "did the file get written" check.
 #
@@ -28,25 +34,33 @@
   become: true
   gather_facts: false
 
+  vars:
+    # The unit whose failure we are pretending to report. Its name is the
+    # notifier's INSTANCE, exactly as `OnFailure=kubelab-notify@%n.service`
+    # would produce it — so this exercises the real instance path, not a
+    # special case that only the test takes.
+    notify_test_unit: kubelab-maintenance.service
+    notify_unit: "kubelab-notify@{{ notify_test_unit }}.service"
+
   tasks:
     - name: Reset any prior failed state on the notify unit
       # A unit left `failed` by an earlier run starts fine, but the status read
       # below would report the stale result rather than this run's.
       ansible.builtin.systemd:
-        name: kubelab-maintenance-notify.service
+        name: "{{ notify_unit }}"
         state: stopped
       failed_when: false
 
     - name: Trigger the notify unit
       ansible.builtin.systemd:
-        name: kubelab-maintenance-notify.service
+        name: "{{ notify_unit }}"
         state: started
       # Type=oneshot: `started` blocks until the unit finishes, so the status
       # read below is not a race.
 
     - name: Read the unit's result
       ansible.builtin.command:
-        cmd: systemctl show kubelab-maintenance-notify.service
+        cmd: systemctl show {{ notify_unit }}
              --property=Result --property=ExecMainStatus
       register: notify_result
       changed_when: false
@@ -62,4 +76,4 @@
         fail_msg: >-
           {{ inventory_hostname }}: notify FAILED
           ({{ notify_result.stdout_lines | join(', ') }}) —
-          `journalctl -u kubelab-maintenance-notify.service -n 30` on the node
+          `journalctl -u {{ notify_unit }} -n 30` on the node

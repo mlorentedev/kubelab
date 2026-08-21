@@ -1,0 +1,52 @@
+---
+# node_notify — installs the fleet's one failure-notification path and retires
+# the single-purpose one it replaces.
+
+- name: Write fleet notify secret
+  copy:
+    content: "{{ secrets.apps.services.automation.notify.fleet_webhook_secret }}"
+    dest: "{{ node_notify_secret_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install fleet notify script
+  template:
+    src: kubelab-notify.sh.j2
+    dest: "{{ node_notify_script_path }}"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install fleet notify template unit
+  template:
+    src: kubelab-notify@.service.j2
+    dest: "/etc/systemd/system/{{ node_notify_unit_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+# --- retire what this role supersedes -------------------------------------
+# Ansible is additive: deleting the tasks that created these would leave them
+# installed on every node that ever ran the old role. The cleanup belongs to
+# whatever role still owns the concern, which is now this one (the `dev_node`
+# precedent in CLAUDE.md).
+#
+# No `systemctl disable` step: kubelab-maintenance-notify.service has no
+# [Install] section, so it was never enabled and there is no symlink to break.
+# It was only ever reachable through kubelab-maintenance.service's OnFailure=,
+# which this change re-points in the same commit.
+- name: Remove superseded notify units
+  file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: "{{ node_notify_superseded_units }}"
+  notify: Reload systemd
+
+- name: Remove superseded notify files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ node_notify_superseded_files }}"

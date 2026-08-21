@@ -34,12 +34,7 @@ maintenance_rotated_log_retention_days: 3
 # to disable. RELIAB-009 incident 2026-05-10.
 maintenance_active_log_max_mb: 100
 
-# --- OnFailure notify (ANSIBLE-035, NOTIFY-001) ----------------------------
-# Always prod n8n, regardless of this node's own deploy_env: alerting must
-# not depend on ace1 (staging n8n's host) being powered on. See
-# specs/ANSIBLE-035-maintenance-timer-rollout/proposal.md for the measured
-# reasoning. Not derived from `config.*` on purpose -- 3 of the 7 nodes
-# running this role have deploy_env: staging, so config.apps.services.
-# automation.n8n.domain would resolve to staging's domain on those nodes.
-maintenance_notify_domain: "n8n.kubelab.live"
-maintenance_notify_secret_file: /opt/kubelab-maintenance-notify-secret
+# --- OnFailure notify ------------------------------------------------------
+# Moved to roles/node_notify (BACKUP-044 Part 5). This role keeps only the
+# `OnFailure=kubelab-notify@%n.service` linkage on its own unit; the domain,
+# the secret file and the script are that role's SSOT now.

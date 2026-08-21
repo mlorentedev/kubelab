@@ -304,6 +304,13 @@
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"
 
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
+    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
+    # template it names while removing the single-purpose unit it replaces.
+    - role: ../roles/node_notify
+      tags: [notify, maintenance]
+
     # ANSIBLE-035: install-only. maintenance_run_cleanup: false so this play
     # doesn't ALSO run a synchronous cleanup pass (apt lists wipe, docker
     # prune -af) on every provisioning run — cleanup runs on the timer's own

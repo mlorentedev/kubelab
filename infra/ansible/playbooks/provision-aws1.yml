@@ -184,6 +184,13 @@
         # MagicDNS auto-resolution, no kubeconfig edit (lesson 2026-03-26).
         k3s_api_address: "{{ config.networking.aws.tailscale_dns }}"
 
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
+    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
+    # template it names while removing the single-purpose unit it replaces.
+    - role: ../roles/node_notify
+      tags: [notify, maintenance]
+
     # ANSIBLE-035: this is the ticket's motivating case. aws1 is a Spot
     # instance already replaced once (2026-05-06) — every replacement before
     # this wiped the fleet's only maintenance timer with nothing noticing.

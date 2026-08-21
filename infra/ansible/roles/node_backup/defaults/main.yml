@@ -45,7 +45,7 @@ node_backup_r2_repo_prefix: ""
 node_backup_r2_repository: "{{ node_backup_r2_repo_prefix }}/{{ inventory_hostname }}"
 
 # Credentials, delivered as root-only (0600) files rather than argv or a
-# rendered literal — the kubelab-maintenance-notify.sh precedent (ANSIBLE-038):
+# rendered literal — the kubelab-notify.sh precedent (ANSIBLE-038):
 # argv is readable via `ps` for the life of the call, a file is not. Content
 # comes from SOPS (backup.r2.access_key_id/secret_access_key,
 # backup.restic_password) via the playbook's normal decrypt step, never

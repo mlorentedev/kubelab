@@ -143,6 +143,13 @@
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
 
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
+    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
+    # template it names while removing the single-purpose unit it replaces.
+    - role: ../roles/node_notify
+      tags: [notify, maintenance]
+
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every
     # provisioning run. See roles/node_maintenance/defaults/main.yml.
