@@ -38,7 +38,7 @@
       "provider": "nan",
       "model": "deepseek-v4-flash",
       "role": "primary",
-      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table."
+      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. FLAGGED 2026-08-21 (#1205), not changed: this same model returns a 200 with an EMPTY body under PR-Agent — it spends its OUTPUT budget on the reasoning chain and never writes the answer, measured at 4m15s of silence on kubelab#1202 run 32440498259. That is the behaviour already described in the mimo entry below, from this pool's own harness. PR-Agent's chain was inverted to lead with mimo; this pool's ordering was NOT, because its runner and prompt differ and no measurement of THIS harness exists yet. Read that as an open question about the primary, not as an endorsement of it."
     },
     {
       "id": "agy/gemini-3.1-pro-high",

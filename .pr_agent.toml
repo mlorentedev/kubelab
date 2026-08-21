@@ -19,7 +19,23 @@
 [config]
 # `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's,
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
-model = "openai/deepseek-v4-flash"
+#
+# mimo-v2.5 leads, deepseek-v4-flash follows, and the order was the other way
+# round until #1205 measured why it could not work. deepseek returns a 200 with
+# an empty body — it spends its OUTPUT budget on the reasoning chain and never
+# writes the answer — which raises no exception, so LiteLLM never consults the
+# fallback. With deepseek in front the chain was unreachable: the primary's
+# characteristic failure is precisely the one no fallback can catch.
+#
+# Inverted, the chain works for the first time. mimo's failure mode is
+# saturation (a 429), which DOES raise, so it falls through to deepseek.
+#
+# What is measured, stated narrowly: under the same harness mimo returned a
+# real, correct finding on a planted defect and deepseek returned nothing. That
+# is not a quality ranking — none exists, and harness/reviewer-pool.json says so
+# in its own entry. For a reviewer whose current failure is silence, delivering
+# an answer is the property being selected for.
+model = "openai/mimo-v2.5"
 
 # ONE fallback, and it is not the cheap kind this line used to forbid.
 #
@@ -30,12 +46,11 @@ model = "openai/deepseek-v4-flash"
 # and rejects the flash tiers on quality grounds; two files in one repo holding
 # opposing views on who may review is its own defect.
 #
-# mimo-v2.5 does not cross that line. It is reasoning-class by profile — 1M
-# context and a reasoning chain, against qwen3.6 and gemma4's 262K, which is the
-# line that pool actually draws — and it is admitted there as a fallback. Adding
-# it here satisfies the "two files must not disagree" rule rather than breaking
-# it, and tests/test_pr_agent_workflow.py now enforces that agreement instead of
-# leaving it to whoever edits one file next.
+# Neither model in this chain crosses that line. Both are reasoning-class by
+# profile — 1M context and a reasoning chain, against qwen3.6 and gemma4's 262K,
+# which is the line that pool actually draws — and both are admitted there.
+# tests/test_pr_agent_workflow.py now enforces that agreement instead of leaving
+# it to whoever edits one file next.
 #
 # What this buys, measured: NaN's concurrency limit is PER MODEL, not per API
 # key. Eight simultaneous requests to deepseek return 5x200 and 3x429 while mimo
@@ -58,7 +73,7 @@ model = "openai/deepseek-v4-flash"
 # NOT a licence to drop the inference concurrency group below. That group is
 # what caps this workflow's demand, and removing it without measuring first
 # reinstates the 429s this fallback exists to absorb. See #1203.
-fallback_models = ["openai/mimo-v2.5"]
+fallback_models = ["openai/deepseek-v4-flash"]
 
 # `model_weak` is deliberately ABSENT. Upstream sets it to a flash-tier model for
 # descriptions and commit summaries. Two reasons not to carry it: `auto_describe`
