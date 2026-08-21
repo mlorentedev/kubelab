@@ -720,14 +720,15 @@ provision:
 
 .PHONY: maintain
 maintain:
-	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
+	$(eval _CHECK := $(if $(CHECK),--check,))
 	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER) $(_TAGS); \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) $(_TIMER) $(_TAGS) $(_CHECK); \
 	else \
-		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS); \
+		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS) $(_CHECK); \
 	fi
 
 # Live delivery test of the maintenance failure-notify path (ANSIBLE-035 AC7).
@@ -746,13 +747,20 @@ maintain-notify-test:
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod" && exit 1)
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV)
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
+	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK)
 
+# CHECK=1 is a dry run. It is accepted HERE, and on every other target that
+# changes a node, because `make provision` accepted it and these did not:
+# `make backup ENV=prod CHECK=1` silently ignored the flag and deployed to all
+# four prod nodes for real. make has no notion of an unknown variable, so the
+# only signal was the absence of one. Asserted in tests/test_makefile_dry_run.py.
 .PHONY: backup
 backup:
-	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod)
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod) $(_CHECK)
 
 # K8s PVC backup — triggers a one-off Job from the CronJob (ADR-024)
 # Usage: make backup-pvc ENV=prod
