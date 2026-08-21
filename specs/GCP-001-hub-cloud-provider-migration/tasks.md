@@ -255,7 +255,23 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
 - [ ] **[AC3]** `make maintain-notify-test NODE=gcp1 ENV=hub` → `Result=success`.
       *This is the check ANSIBLE-035/041 exist to protect and the one a rebuild
       has historically dropped.*
-- [ ] **[AC3]** `make deploy-argocd`; both Applications Synced/Healthy.
+- [ ] **[AC3]** `gcp1` comes up managing **staging only**. Which spokes a hub
+      manages is a **Terraform variable** (a list, mirrored into
+      `networking.gcp` and covered by the `MIRRORED` drift test) — never a manual
+      edit on the node. Cloud-init installs the cluster secret and the
+      Application **only for the listed spokes**, so the invariant is structural:
+      **exactly one hub writes to any given spoke, at every moment.**
+      `aws1` keeps prod untouched throughout.
+- [ ] **[AC3]** The staging Application reports Synced/Healthy from `gcp1` while
+      prod continues to reconcile from `aws1`. That is the bring-up bar — not
+      "both Applications green on the new hub", which would mean two controllers
+      on prod.
+- [ ] **Do NOT run `make register-spoke` at any point in this migration.** The
+      spoke-side ServiceAccount and its `argocd-manager-token` Secret are
+      persistent spoke state; `gcp1` inherits access by *reading* them, with zero
+      spoke-side changes. Running it would delete and re-apply the spoke's
+      ClusterRoles — a permission gap for the hub that is currently live, since
+      both hubs share that one ServiceAccount.
 - [ ] **[AC8]** Measure the undocumented ceilings on the live node: disk IOPS
       (`fio`) and wall time of one full `make deploy-argocd` under the
       best-effort burst model. **A regression against the AWS baseline is a
@@ -282,6 +298,26 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
 
 # Phase 5 — cutover and decommission · strictly ordered
 
+> **NEVER `kubectl delete application` on either hub during this migration.**
+> Measured 2026-08-21: both `applications/{prod,staging}.yaml` carry
+> `resources-finalizer.argocd.argoproj.io`. That finalizer means deleting an
+> Application does not delete the Application — **it cascade-deletes every
+> workload that Application manages on the spoke.** It is the single step in this
+> whole migration that would cut user-facing service, and it is also the gesture
+> that looks most like tidying up after the old hub. The handover below therefore
+> PAUSES the old hub and never removes anything from it.
+
+- [ ] **Hand prod over by pausing, not by deleting.** Scale `aws1`'s
+      `argocd-application-controller` to 0 — the same primitive
+      `_deploy-argocd-helm` already uses for OOM mitigation, so it is in this
+      repo's vocabulary. Then flip the spokes variable to include prod and
+      `terraform apply`. **Changing the instance template makes the MIG recreate
+      the hub**, so the cutover re-exercises AC4's recreate path as a side effect
+      rather than bypassing it.
+- [ ] **Rollback is the paused hub, and it stays available until the destroy.**
+      `aws1` remains intact-but-paused through the soak; scaling its controller
+      back to 1 is an instant, complete rollback. This is why the destroy is last
+      and separate — the ordering below is the rollback window, not ceremony.
 - [ ] **[AC3]** Re-render the prod EndpointSlice against `gcp1` **before** any AWS
       teardown. Until this runs, prod's Argo CD route points at `aws1`.
 - [ ] **[AC3]** Verify `https://argo.kubelab.live` serves from the GCP hub.
