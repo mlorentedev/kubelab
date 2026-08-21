@@ -12,6 +12,7 @@ import yaml
 from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.k8s_kubeconfig import output_path
 
 
 @dataclass
@@ -129,9 +130,7 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
 
 def _get_kubeconfig(env: str) -> str:
     """Get kubeconfig path for the given environment."""
-    import os
-
-    return os.path.expanduser(f"~/.kube/kubelab-{env}-config")
+    return str(output_path(env))
 
 
 def _kubectl_base(env: str, namespace: str = "kubelab") -> list[str]:

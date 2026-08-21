@@ -24,7 +24,6 @@ deleting the workflow in n8n and re-running restores it identically.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +31,7 @@ from typing import Any
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.k8s_kubeconfig import output_path
 
 # n8n Header Auth credential shape. The webhook node compares the incoming header
 # byte-for-byte against `data.value`; the Bearer scheme (RFC 6750) is the contract
@@ -127,7 +127,7 @@ def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str]:
 
 
 def _kubeconfig_for(env: str) -> str:
-    return os.path.expanduser(f"~/.kube/kubelab-{env}-config")
+    return str(output_path(env))
 
 
 # A POSIX-sh snippet run inside the pod: read stdin into a tmpfs file under

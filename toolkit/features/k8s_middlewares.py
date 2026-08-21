@@ -31,6 +31,7 @@ from pathlib import Path
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.k8s_kubeconfig import output_path
 
 
 @dataclass(frozen=True)
@@ -168,9 +169,7 @@ def _render_middleware(spec: MiddlewareSpec, api_key: str, template_text: str) -
 
 
 def _kubeconfig_for(env: str) -> str:
-    import os
-
-    return os.path.expanduser(f"~/.kube/kubelab-{env}-config")
+    return str(output_path(env))
 
 
 def _kubectl_apply(env: str, namespace: str, rendered: str, spec_name: str) -> bool:
