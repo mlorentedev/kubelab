@@ -1,5 +1,5 @@
 ---
-id: lesson-360-ci-green-is-not-the-same-claim-as-this-runs-on-real-hardware
+id: lesson-361-ci-green-is-not-the-same-claim-as-this-runs-on-real-hardware
 type: lesson
 status: active
 created: "2026-08-21"

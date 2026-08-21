@@ -7,10 +7,16 @@
 # a deploy is not just installing the mechanism, it is scheduling it.
 
 - name: Install sqlite3 (host package, unpinned like every other supporting
-    tool in this fleet — only the payload restic gets an explicit version pin)
+    tool in this fleet — only the payload restic gets an explicit version pin).
+    It is the role's ONLY apt dependency, deliberately — see the decompress
+    step for why bzip2 is not a second one.
   apt:
     name: sqlite3
     state: present
+    # Fleet idiom (base_system, dev_node): refresh a genuinely empty list on a
+    # first provision, and cost nothing on a same-hour re-run. NOT a fix for
+    # the RPi4's apt conflict — that node's cache was already fresh and the
+    # conflict survived the refresh.
     update_cache: true
     cache_valid_time: 3600
 
@@ -38,16 +44,30 @@
     mode: "0644"
   when: node_backup_restic_version not in node_backup_restic_installed.stdout
 
-- name: Install restic (decompress the pinned binary into place). Via
-    python3's bz2 module rather than the bunzip2 binary — RPi4's image does
-    not carry it, and every node Ansible manages already guarantees a
-    python3 interpreter (ansible_python_interpreter), so this adds no new
-    host dependency.
-  command:
-    cmd: >-
-      python3 -c "import bz2,shutil;
-      shutil.copyfileobj(bz2.open('/tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2'),
-      open('{{ node_backup_restic_install_path }}', 'wb'))"
+- name: Install restic (decompress the pinned release asset into place)
+  # Python's stdlib bz2, NOT the bunzip2 binary. This is backup machinery — it
+  # has to work on a node that is already degraded, and a broken apt IS a
+  # degraded node. Measured on the RPi4, whose apt refuses bzip2 outright
+  # (bzip2 1.0.8-5.1 depends on libbz2-1.0 (= 1.0.8-5.1) while
+  # 1.0.8-5.1build0.1 is installed), so requiring the CLI would have made this
+  # role uninstallable there. python3 is guaranteed wherever Ansible already
+  # runs, and libbz2 is present on that node — only the CLI package is not.
+  #
+  # Via a temp path and a move: a redirect onto the install path is evaluated
+  # by the shell BEFORE the command resolves, so a failure leaves a truncated
+  # binary where the capture and ship scripts expect a working one. Observed —
+  # the earlier bunzip2 form exited 127 having already created a 0-byte
+  # /usr/local/bin/restic.
+  # `rm -f` first, not after: a decompression that dies part-way leaves a
+  # partial .tmp, and the next run must start from nothing rather than write
+  # into whatever the last failure left. The `&& mv` already guarantees a
+  # partial is never promoted into place.
+  shell: >
+    rm -f {{ node_backup_restic_install_path }}.tmp
+    && python3 -c 'import bz2,shutil,sys; shutil.copyfileobj(bz2.open(sys.argv[1],"rb"), open(sys.argv[2],"wb"))'
+    /tmp/restic_{{ node_backup_restic_version }}_linux_{{ node_backup_arch }}.bz2
+    {{ node_backup_restic_install_path }}.tmp
+    && mv {{ node_backup_restic_install_path }}.tmp {{ node_backup_restic_install_path }}
   when: node_backup_restic_version not in node_backup_restic_installed.stdout
   changed_when: true
 
