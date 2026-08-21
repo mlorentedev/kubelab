@@ -735,14 +735,26 @@ maintain:
 # Really posts to prod n8n and really notifies — a delivery test that suppresses
 # delivery proves nothing. Re-run this after any change to the notify script or
 # its unit; ANSIBLE-038's fix requires it.
+#
+# EXTRA reaches the playbook's `notify_test_unit`, which selects WHICH unit's
+# failure is being simulated — the notifier is one template unit shared by the
+# fleet, so `kubelab-maintenance.service` is a default rather than the subject:
+#
+#   make maintain-notify-test NODE=rpi3 ENV=prod \
+#     EXTRA='notify_test_unit=node-backup-ship.service'
+#
+# The `EXTRA=` spelling is the one `make provision` already uses. The playbook
+# gained the variable before any target could pass it, which made the override
+# documented and unreachable.
 .PHONY: maintain-notify-test
 maintain-notify-test:
-	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV); \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) $(_EXTRA); \
 	else \
-		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE); \
+		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE) $(_EXTRA); \
 	fi
 
 .PHONY: deploy

@@ -558,3 +558,26 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
             f"{sorted(tags)!r}. Any tag in one and not the other selects half a "
             f"pairing, and the half that runs alone leaves the node silent."
         )
+
+
+def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
+    """A documented override that no caller can pass is not an override.
+
+    The playbook's header tells an operator to select the unit under test with
+    `-e notify_test_unit=<unit>`, and the notifier is one template shared by the
+    fleet — so `kubelab-maintenance.service` is a default, not the subject. The
+    variable arrived before any Makefile target could pass it, which left the
+    instruction true of `ansible-playbook` and false of every sanctioned entry
+    point. Found by needing it.
+    """
+    playbook = (REPO / "infra/ansible/playbooks/maintenance-notify-test.yml").read_text()
+    assert "notify_test_unit" in playbook, "the playbook no longer takes the override"
+
+    makefile = (REPO / "Makefile").read_text()
+    target = makefile[makefile.index("maintain-notify-test:") :]
+    target = target[: target.index("\n.PHONY:")]
+    assert "$(_EXTRA)" in target, (
+        "`make maintain-notify-test` cannot pass notify_test_unit, so the only way "
+        "to exercise any unit but the default is a raw ansible-playbook invocation — "
+        "which is exactly what these targets exist to prevent"
+    )
