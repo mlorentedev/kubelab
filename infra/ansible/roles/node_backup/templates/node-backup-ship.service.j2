@@ -1,6 +1,17 @@
 # {{ ansible_managed }}
 [Unit]
 Description=BACKUP-044 node-backup ship to R2{{ ' with integrity check' if node_backup_check else '' }} ({{ inventory_hostname }})
+# BACKUP-044 Part 5, AC4. `%n` rather than a literal, which is what lets ONE
+# line cover both renderings of this template: the frequent ship unit and the
+# weekly integrity-check instance report under their own names.
+#
+# A failed capture therefore produces TWO envelopes: capture's own, and this
+# unit's when it refuses on the missing sentinel. Deliberate, not an oversight.
+# They are different claims -- "capture failed" and "the guard against shipping
+# a partial backup held" -- from two units with two journals, at `log` severity
+# rather than a page. Suppressing the second would mean the only in-band
+# evidence that the sentinel worked is its absence, which is not evidence.
+OnFailure=kubelab-notify@%n.service
 # Ship reads what capture staged; running it first would ship stale or
 # missing data. This ordering constraint is declared here so it holds
 # regardless of how a trigger invokes either unit.

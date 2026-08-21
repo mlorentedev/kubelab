@@ -76,6 +76,19 @@
       no_log: true
 
   roles: &backup_roles
+    # The notifier every node_backup unit names in its `OnFailure=`. Included
+    # HERE and not only in the provision playbooks, because `make backup` is a
+    # path a node can reach without ever being re-provisioned in between: a
+    # node reached only this way would carry four units pointing at a template
+    # unit it does not have, and systemd reports that as "unit not found" on
+    # the next failure and tells nobody.
+    #
+    # Tags match node_backup's exactly, which a guard asserts. Either half of
+    # this pair selected alone is a broken node: the notifier without its
+    # consumers is inert, the consumers without the notifier are silent.
+    - role: ../roles/node_notify
+      tags: [backup, node-backup]
+
     - role: ../roles/node_backup
       tags: [backup, node-backup]
       vars:

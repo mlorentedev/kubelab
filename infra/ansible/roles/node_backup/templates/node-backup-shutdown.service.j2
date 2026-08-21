@@ -23,6 +23,23 @@
 # is the correct and only target.
 [Unit]
 Description=BACKUP-044 node-backup shutdown snapshot ({{ inventory_hostname }})
+# Declared for consistency with the other three units, and with a limitation
+# stated rather than discovered: this one probably CANNOT deliver during a real
+# poweroff. Its work is in ExecStop=, which runs inside systemd's shutdown
+# transaction, and systemd does not start new jobs there -- so the notifier is
+# unlikely ever to run on the path this unit exists for.
+#
+# It is declared anyway for two reasons. A `systemctl stop` of this unit by
+# hand does fire it, which is how the path gets exercised at all. And an
+# OnFailure absent from one of four units invites a later "fix" that adds it
+# back without knowing why it was missing.
+#
+# The compensating controls are named rather than assumed: the boot capture on
+# the next power-on, and AC9's coverage view, which sees a run that never
+# happened. Whether the notifier fires across a REAL power cycle is part of
+# AC5's demonstration -- it is not asserted here, because nothing on this
+# branch can establish it.
+OnFailure=kubelab-notify@%n.service
 After={{ node_backup_shutdown_after }} network-online.target
 Wants=network-online.target
 

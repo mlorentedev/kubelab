@@ -1,6 +1,17 @@
 # {{ ansible_managed }}
 [Unit]
 Description=BACKUP-044 node-backup capture ({{ inventory_hostname }})
+# A failed capture is reported rather than left in the journal (BACKUP-044
+# Part 5, AC4). `%n` is this unit's own name and becomes the notifier's
+# instance, so one line serves every unit in this role without naming any of
+# them -- see roles/node_notify.
+#
+# AC4's second half needs no mechanism, and that is the point: a window missed
+# because an on-demand node was powered off produces no run, so no failure, so
+# no envelope. Alerting on the homelab being off is the thing this must not do,
+# and `OnFailure=` cannot do it by construction. A run that never STARTED is a
+# different failure and a different control (AC9).
+OnFailure=kubelab-notify@%n.service
 {% if node_backup_location == 'on-demand' %}
 # R-C (verification.md): on this node's actual failure mode -- an unclean
 # shutdown -- `restart: unless-stopped` resurrects the writer at the
