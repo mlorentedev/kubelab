@@ -1,5 +1,5 @@
 ---
-id: lesson-362-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run
+id: lesson-364-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run
 type: lesson
 status: active
 created: "2026-08-21"
