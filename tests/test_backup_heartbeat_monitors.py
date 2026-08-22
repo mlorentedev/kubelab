@@ -336,3 +336,57 @@ def test_the_domain_has_no_default_so_a_missing_one_fails_the_apply() -> None:
                 "inventory_hostname": "rpi3",
             }
         )
+
+
+def test_a_manual_run_takes_the_same_path_the_timer_does() -> None:
+    """`make backup-node` must start SHIP, never capture-then-ship by hand.
+
+    Ship carries `Wants=node-backup-capture.service` plus `After=`, so one start
+    pulls capture in and orders it first — Part 4's trigger topology. A playbook
+    that invoked the two scripts itself would be a second path exercised only by
+    that playbook, and it would silently skip the sentinel check, the retention
+    pass and the heartbeat.
+
+    Being the real path is also what makes it useful for AC9: it is how an
+    operator makes a heartbeat arrive without waiting for a 4h window.
+    """
+    playbook = yaml.safe_load(
+        (REPO / "infra/ansible/playbooks/backup-node.yml").read_text()
+    )
+    [play] = playbook
+    assert play["vars"]["backup_unit"] == "node-backup-ship.service", (
+        "the manual trigger must start the ship unit; starting capture instead "
+        "would stage a snapshot and never send it"
+    )
+    starts = [
+        task
+        for task in play["tasks"]
+        if task.get("ansible.builtin.systemd", {}).get("state") == "started"
+    ]
+    assert len(starts) == 1, "exactly one unit is started, or the topology is bypassed"
+
+
+def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:
+    """Under `--check` nothing is started, so there is no result to assert.
+
+    Measured before this guard existed: `make backup-node NODE=rpi3 CHECK=1`
+    printed `backup FAILED ()` — an empty result read as a failure, for a backup
+    that had never been asked to run. A rehearsal that reports a failure the
+    real run would not have is worse than no rehearsal.
+    """
+    playbook = yaml.safe_load(
+        (REPO / "infra/ansible/playbooks/backup-node.yml").read_text()
+    )
+    [play] = playbook
+    by_name = {t["name"]: t for t in play["tasks"]}
+
+    assertion = by_name["Assert the backup succeeded"]
+    assert assertion.get("when") == "not ansible_check_mode", (
+        "the assertion runs in check mode, where its inputs are empty"
+    )
+    # The reads it depends on must run in check mode anyway — a read changes
+    # nothing, and skipping it is what empties the assertion's input.
+    for name in ("Read the result", "Report what the run actually did"):
+        assert by_name[name].get("check_mode") is False, (
+            f"{name!r} is skipped under --check, so its stdout is empty"
+        )
