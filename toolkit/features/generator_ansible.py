@@ -165,6 +165,28 @@ class AnsibleGenerator(BaseGenerator):
                 }
             )
 
+        # GCP hub node (ADR-063, GCP-001). Same shape as the AWS block above and
+        # deliberately NOT merged with it into a loop over provider keys: that
+        # generalisation is #1182, and performing it here would erase the very
+        # measurement this migration exists to produce — the cost of adding a
+        # cloud provider, counted in edits. This duplication IS the finding, and
+        # it is row 2 of the spec's column-3 inventory.
+        #
+        # Additive, never a swap: both hubs appear in group `hub` while `gcp1` is
+        # proven against staging and `aws1` keeps reconciling prod. Nothing
+        # targets the group as a whole — every hub playbook names its own host —
+        # so two members is a coexistence, not a broadcast.
+        gcp = networking.get("gcp", {})
+        if gcp and (gcp.get("tailscale_dns") or gcp.get("tailscale_ip")):
+            all_nodes.append(
+                {
+                    "hostname": gcp.get("hostname", "gcp1"),
+                    "ansible_host": gcp.get("tailscale_dns") or gcp["tailscale_ip"],
+                    "ansible_user": self._resolve_ssh_user(gcp, networking, "cloud"),
+                    "groups": ["hub"],
+                }
+            )
+
         # Homelab nodes — bootstrap uses lan_ip, normal uses tailscale_ip
         for _node_key, node in nodes.items():
             if bootstrap and node.get("lan_ip"):
