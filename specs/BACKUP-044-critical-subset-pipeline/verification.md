@@ -148,6 +148,70 @@ in the envelope's journal tail rather than a run that ends mid-sentence.
 `InvocationID` is the tell: empty means the unit has never run, so a `success`
 beside it is a default rather than a result.
 
+### 2026-08-22 — Part 6: Gitea restored into an ephemeral instance (AC3)
+
+Not "the files came back" — **the service came up on them**.
+
+Restored beelink's newest snapshot from R2 into a scratch directory, copied it
+to a throwaway working dir, and started `gitea/gitea:1.25.5` against it. The live
+`/opt/gitea/data` was never touched, and that was verified afterwards rather than
+asserted.
+
+```
+restic restore latest --target <scratch>
+  Summary: Restored 51 files/dirs (2.102 MiB) in 0:00
+
+gitea doctor check --run check-db-version,check-db-consistency
+  [1] Check Database Version           OK   (expected 323)
+  [2] Check consistency of database    OK
+
+gitea web
+  /api/v1/version     -> HTTP 200  {"version":"1.25.5"}
+  /api/v1/users/manu  -> login=manu id=1 created=2026-08-14
+  /user/login         -> <title>Sign In - Gitea: Git with a cup of tea</title>
+```
+
+**`doctor` is the part that upgrades this from a file check to a restore.** It is
+Gitea's own binary declaring the schema and the data consistent — not a test
+reading a SQLite file and forming an opinion about it.
+
+#### The version mismatch that looked like a failure
+
+The first attempt used `gitea/gitea:1.24.6` and `doctor` reported *"current
+database version 323 is not equal to the expected version 321"*. That is not a
+corrupt backup: the image was OLDER than the one that wrote the data. The fleet
+runs `1.25.5` (`apps.services.core.gitea.image`), and against that version both
+checks pass.
+
+Worth recording because the failure mode is inverted from the usual one — a
+restore rehearsal on the wrong version reports a problem with the *backup*, and
+the natural reaction is to distrust the backup rather than the rehearsal.
+
+#### What this restore could NOT prove, and why
+
+**Gitea is empty.** One user, zero repositories, and `gitea.db` last written
+2026-08-14 — confirmed against the live node, so the backup is faithful and the
+source is simply idle. The restore therefore proves the *mechanism* end to end
+and cannot yet prove that repository content survives a round trip.
+
+The circularity is worth naming: #1076 (TOOL-035, no declarative path for getting
+repositories into Gitea) is gated on this restore being exercised, precisely so
+the first repository is not the first thing with no recovery path. That gate is
+now satisfied — and the fuller AC3 claim only becomes available after it opens.
+
+What the restore DID recover is the part that is irreplaceable rather than
+regenerable: three secrets in `app.ini` (`SECRET_KEY`, `INTERNAL_TOKEN`,
+`JWT_SECRET`), the SSH `authorized_keys`, and the user record. Repositories can
+be re-pushed from clones; those cannot be reconstructed from anything.
+
+#### AC8, closed by grep rather than by assertion
+
+Nothing in `roles/node_backup/`, the backup block of `common.yaml` or
+`backup_destination.py` references `minio:9000`. The single occurrence anywhere
+in the pipeline is a comment explaining what the old CronJob targets. The four
+files that do reference it are MinIO's own manifests and the CronJob being
+retired.
+
 ## Open questions, settled
 
 Part 0 of `tasks.md`. The three risks `proposal.md` named as gating are settled here, each
