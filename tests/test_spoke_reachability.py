@@ -42,6 +42,7 @@ import json
 from pathlib import Path
 
 import pytest
+from unittest.mock import patch
 
 from toolkit.features import spoke_reachability as sr
 
@@ -173,26 +174,55 @@ class TestAnAbsentRegistrationIsAStateNotAFault:
     It is the NORMAL condition during the AWS->GCP migration:
     `networking.gcp.managed_spokes` is ["staging"] while `argocd.spokes`
     declares both, so gcp1 legitimately holds no prod cluster secret. A command
-    that goes red for months trains everyone to ignore it -- which is precisely
-    how the false green this replaces survived.
+    that is red for months trains everyone to ignore it -- which is how the
+    false green this replaces survived so long.
+
+    Behavioural, not a text scan. The first version of these two asserted that
+    `Status.NOT_REGISTERED` APPEARED in the function body, and a mutation that
+    deleted the condition kept them green: the string still occurs in the loop
+    that prints. Same shape as lesson-363 -- a scan matching a different
+    occurrence than the one that matters. The exit code is the behaviour, so the
+    exit code is what is asserted.
     """
 
-    def test_the_cli_does_not_exit_nonzero_for_an_unregistered_spoke(self) -> None:
-        source = (REPO_ROOT / "toolkit/cli/infra.py").read_text()
-        marker = "def argo_check_spokes("
-        body = source[source.index(marker) :]
-        body = body[: body.index("\n@") if "\n@" in body else len(body)]
-        assert "Status.NOT_REGISTERED" in body, (
-            "the exit decision does not special-case NOT_REGISTERED, so gcp1 will "
-            "report failure for prod every run throughout the migration"
+    @staticmethod
+    def _run(results):  # noqa: ANN001, ANN205
+        from typer.testing import CliRunner
+
+        from toolkit.features import spoke_reachability
+        from toolkit.main import app
+
+        with patch.object(spoke_reachability, "check_all", return_value=results), patch(
+            "toolkit.features.argocd_spokes.spoke_envs", return_value=[r.env for r in results]
+        ):
+            return CliRunner().invoke(app, ["infra", "argo", "check-spokes"])
+
+    def test_an_unregistered_spoke_alone_exits_zero(self) -> None:
+        result = self._run(
+            [
+                sr.SpokeResult("staging", sr.Status.OK, "https://x:6443", "HTTP 200"),
+                sr.SpokeResult("prod", sr.Status.NOT_REGISTERED, None, "no cluster secret"),
+            ]
+        )
+        assert result.exit_code == 0, (
+            "an unregistered spoke failed the run. During the migration gcp1 holds "
+            "no prod secret by design, so this would be red every time it runs."
+        )
+        assert "prod" in result.stdout, "the unregistered spoke was not even reported"
+
+    def test_a_refused_credential_still_exits_nonzero(self) -> None:
+        """The exemption must stay narrow: only the absent case, never a real fault."""
+        result = self._run(
+            [
+                sr.SpokeResult("staging", sr.Status.CREDENTIAL_REFUSED, "https://x:6443", "HTTP 401"),
+                sr.SpokeResult("prod", sr.Status.NOT_REGISTERED, None, "no cluster secret"),
+            ]
+        )
+        assert result.exit_code != 0, (
+            "a spoke that refuses the hub's credential did not fail the run -- the "
+            "NOT_REGISTERED exemption has widened into ignoring everything"
         )
 
-    def test_it_still_fails_when_a_registered_spoke_is_broken(self) -> None:
-        """The exemption must be narrow: only the absent case, never a real fault."""
-        source = (REPO_ROOT / "toolkit/cli/infra.py").read_text()
-        marker = "def argo_check_spokes("
-        body = source[source.index(marker) :]
-        assert "not r.ok" in body and "typer.Exit(1)" in body, (
-            "the command no longer fails on a broken spoke; the exemption for "
-            "NOT_REGISTERED must not widen into ignoring everything"
-        )
+    def test_an_unreachable_spoke_still_exits_nonzero(self) -> None:
+        result = self._run([sr.SpokeResult("staging", sr.Status.UNREACHABLE, "https://x:6443", "refused")])
+        assert result.exit_code != 0
