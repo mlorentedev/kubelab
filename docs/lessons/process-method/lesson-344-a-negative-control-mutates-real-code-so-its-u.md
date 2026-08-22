@@ -16,4 +16,12 @@ tags: [kubelab, process-method]
 
 **Solution:** Re-applied the four edits from context and re-ran: 414 passed. The correct technique for a temporary mutation is a copy, writing the file aside and restoring from that copy, or staging the real work first so the index holds it and checkout becomes safe. Both scope the restore to the experiment rather than to the file. The rule: git checkout is not an undo, it is a reset to the last staged state, and its blast radius is the whole file no matter how small the experiment was. A useful tell for next time is that when a suite fails with a count exactly equal to a file just added, suspect the module under test vanished before suspecting the tests.
 
+> **Broken three times on 2026-08-22**, twice in this very file
+> (`toolkit/cli/infra.py`) — see
+> [`lesson-365`](lesson-365-a-lesson-with-no-mechanism-is-a-reminder-and-i-broke-mine-three-times.md).
+> This lesson was correct and had no mechanism behind it, which made it a
+> reminder; a reminder fails exactly when the situation it warns about arrives.
+> The procedure that actually holds is to **commit before mutating**, after
+> which `git checkout HEAD -- <file>` is safe by construction.
+
 **Tags:** `#git` `#negative-control` `#verification` `#uncommitted-work`
