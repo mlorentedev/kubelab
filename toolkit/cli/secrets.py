@@ -491,8 +491,18 @@ def sync_secret_manager(
 
     # Names and actions only. A value never reaches this table, by construction:
     # SyncResult has no field that could carry one.
+    #
+    # A DRY RUN SAYS SO IN EVERY LINE, in the future tense. It used to print
+    # `created  <name>` -- byte-identical to a real run -- so the only way to
+    # know nothing had happened was to remember which flag you passed. In a
+    # secrets tool that is how someone concludes a delivery occurred that did
+    # not, or panics that one did. The feature already carried the distinction
+    # in `detail`; nothing displayed it.
     for result in results:
-        line = f"{result.action:<10} {result.secret_id}"
+        # "would created" is not English; the actions are stored past-tense.
+        base = {"created": "create", "updated": "update"}.get(result.action, result.action)
+        verb = f"would {base}" if dry_run and result.action != "failed" else result.action
+        line = f"{verb:<14} {result.secret_id}"
         if result.action == "failed":
             logger.error(f"{line}  {result.detail}")
         elif result.action == "unchanged":
@@ -504,4 +514,7 @@ def sync_secret_manager(
     if failed:
         logger.error(f"{len(failed)} of {len(results)} secrets did not sync; re-run once the cause is fixed")
         raise typer.Exit(1)
-    logger.success(f"{len(results)} secrets in sync")
+    if dry_run:
+        logger.success(f"{len(results)} secrets would be in sync — nothing was written")
+    else:
+        logger.success(f"{len(results)} secrets in sync")
