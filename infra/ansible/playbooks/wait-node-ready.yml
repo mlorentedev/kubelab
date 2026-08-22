@@ -30,9 +30,18 @@
     # `tailscale_dns` with no `tailscale_ip` is how `networking` records an
     # address that rotates -- which today is only the MIG-backed hub, and
     # tomorrow is whatever else becomes ephemeral, without editing this file.
-    _node_address_is_ephemeral: >-
-      {{ (hostvars[inventory_hostname].ansible_host | default('')) is search('\\.kubelab\\.internal$')
-         and (hostvars[inventory_hostname].ansible_host | default('')) is not match('^[0-9.]+$') }}
+    # `ansible_host` DIRECTLY, and with no `default()`.
+    #
+    # The first version read `hostvars[inventory_hostname].ansible_host` and
+    # wrapped it in `| default('')`. At play-vars scope that lookup came back
+    # undefined, the default turned it into an empty string, the match failed,
+    # and the task SKIPPED -- silently, on the one run that needed it. Measured
+    # during a real preemption: `skipping: [gcp1]`, then a ten-minute hang on a
+    # host key nothing had cleared.
+    #
+    # No default now. If `ansible_host` is undefined the play should fail and say
+    # so, rather than decide the node is not ephemeral and move on.
+    _node_address_is_ephemeral: "{{ ansible_host is search('[.]kubelab[.]internal$') }}"
 
     # Generous by design: cloud-init on a t4g.small installs K3s from the
     # network. Failing early here means provisioning a half-built node.

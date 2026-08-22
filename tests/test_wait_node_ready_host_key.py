@@ -23,6 +23,7 @@ comment; every stable node records an IP.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -112,3 +113,98 @@ def test_only_the_gcp_hub_qualifies_today(plays: list[dict]) -> None:
         if isinstance(block, dict) and block.get("tailscale_dns") and not block.get("tailscale_ip")
     ]
     assert ephemeral == ["gcp"], f"expected only the GCP hub to have an ephemeral address, got {ephemeral}"
+
+
+class TestTheConditionEvaluates:
+    """Asserting that a `when:` NAMES a variable is not asserting that it fires.
+
+    The first version of this file checked only that the purge task's condition
+    mentioned `_node_address_is_ephemeral`. It did. The expression behind that
+    name evaluated FALSE for every host, because it read
+    `hostvars[inventory_hostname].ansible_host` -- undefined at play-vars scope --
+    and `| default('')` turned that into an empty string that matched nothing.
+
+    So the task skipped, silently, on the one run that needed it: measured during
+    a real preemption as `skipping: [gcp1]` followed by a ten-minute hang on a
+    host key nothing had cleared.
+
+    A guard that reads the shape of a condition and never evaluates it is the
+    same defect as a test that agrees with an ADR instead of the API
+    (lesson-366) -- and this one was written to prevent that class.
+    """
+
+    @staticmethod
+    def _evaluate(ansible_host: str) -> bool:
+        """Render the play's own expression, the way Ansible would."""
+        import re as _re
+
+        from jinja2 import Environment
+
+        plays = yaml.safe_load(PLAYBOOK.read_text())
+        expr = next(
+            p["vars"]["_node_address_is_ephemeral"]
+            for p in plays
+            if "_node_address_is_ephemeral" in (p.get("vars") or {})
+        )
+        env = Environment()
+        env.tests["search"] = lambda value, pattern: _re.search(pattern, value) is not None
+        env.tests["match"] = lambda value, pattern: _re.match(pattern, value) is not None
+        rendered = env.from_string(str(expr)).render(ansible_host=ansible_host).strip()
+        return rendered.lower() == "true"
+
+    def test_it_fires_for_a_magicdns_addressed_node(self) -> None:
+        """gcp1 -- the whole reason the task exists."""
+        assert self._evaluate("gcp1.kubelab.internal") is True
+
+    def test_it_does_not_fire_for_an_ip_addressed_node(self) -> None:
+        """Every stable node is addressed by a recorded IP and must keep its
+        host-key check; purging theirs would trade the fleet's MITM detection
+        for one node's convenience."""
+        assert self._evaluate("100.64.0.2") is False
+        assert self._evaluate("172.16.1.2") is False
+
+    def test_an_undefined_ansible_host_raises_rather_than_skipping(self) -> None:
+        """The exact failure. `| default('')` made an undefined lookup mean
+        "not ephemeral", which is indistinguishable from a deliberate decision.
+        Absent a host, this must break loudly instead."""
+        import jinja2
+
+        with pytest.raises((jinja2.exceptions.UndefinedError, TypeError)):
+            import re as _re
+
+            from jinja2 import Environment, StrictUndefined
+
+            plays = yaml.safe_load(PLAYBOOK.read_text())
+            expr = next(
+                p["vars"]["_node_address_is_ephemeral"]
+                for p in plays
+                if "_node_address_is_ephemeral" in (p.get("vars") or {})
+            )
+            env = Environment(undefined=StrictUndefined)
+            env.tests["search"] = lambda value, pattern: _re.search(pattern, value) is not None
+            env.from_string(str(expr)).render()
+
+
+def test_wait_node_ready_generates_the_inventory_it_needs() -> None:
+    """It reads a generated inventory and nothing was generating one.
+
+    `gcp1-replace` and `aws1-replace` both call `wait-node-ready` FIRST and
+    `provision` second. Only `provision` regenerates, so on a fresh worktree the
+    recreate chain died at its first step:
+
+        [ERROR] Inventory not found: infra/ansible/generated/hub/hosts.yml
+        [INFO] Run 'toolkit infra ansible generate --env {env}' first
+
+    Measured during a real preemption test. Fixed in `wait-node-ready` rather
+    than in the two callers, because the requirement belongs to the step that
+    has it -- otherwise the next caller inherits the same gap.
+    """
+    makefile = (Path(__file__).resolve().parent.parent / "Makefile").read_text()
+    recipe = re.search(r"^wait-node-ready:[^\n]*\n((?:\t.*\n)+)", makefile, re.M)
+    assert recipe, "wait-node-ready has no recipe"
+    body = recipe.group(1)
+
+    generate = body.find("ansible generate")
+    run = body.find("ansible run -p wait-node-ready")
+    assert generate != -1, "wait-node-ready never generates the inventory it reads"
+    assert generate < run, "the inventory is generated after the playbook has already run"
