@@ -35,6 +35,7 @@ So the order is load-bearing, and it is what these tests pin.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -141,13 +142,30 @@ class TestTheMakefileNoLongerCarriesTheFootgun:
             "other hub reconciling that spoke"
         )
 
-    def test_it_requires_an_explicit_hub(self) -> None:
-        """`HUB_KUBECONFIG` silently resolves to whichever hub is current."""
+    def test_the_kubeconfig_argument_is_the_explicit_hub(self) -> None:
+        """The VALUE passed to --kubeconfig, not merely that `$(HUB)` appears somewhere.
+
+        The first version asserted `"$(HUB)" in recipe`, and a mutation that
+        swapped the argument back to `$(HUB_KUBECONFIG)` stayed green: `$(HUB)`
+        still occurs in the usage message. Third time this session that a text
+        scan matched an adjacent occurrence instead of the load-bearing one
+        (lesson-363). The property is which variable reaches `--kubeconfig`.
+        """
         recipe = _recipe("unregister-spoke")
-        assert "$(HUB)" in recipe, (
-            "the recipe does not take an explicit HUB. With two hubs live, the "
-            "global default points at the one being migrated TO -- so detaching "
-            "the old hub would delete the new hub's credential."
+        match = re.search(r"--kubeconfig\s+(\S+)", recipe)
+        assert match, "the recipe passes no --kubeconfig at all"
+        assert match.group(1) == "$(HUB)", (
+            f"--kubeconfig receives {match.group(1)!r}. With two hubs live, a global "
+            "default points at the one being migrated TO -- so detaching the old hub "
+            "would delete the new hub's credential."
+        )
+
+    def test_the_hub_argument_is_mandatory(self) -> None:
+        """A guard clause, so omitting HUB fails fast instead of picking a hub for you."""
+        recipe = _recipe("unregister-spoke")
+        assert re.search(r"test -n \"\$\(HUB\)\"", recipe), (
+            "nothing refuses an empty HUB, so `make unregister-spoke ENV=staging` "
+            "would run against whatever --kubeconfig resolves to"
         )
 
     def test_it_delegates_to_the_toolkit(self) -> None:
