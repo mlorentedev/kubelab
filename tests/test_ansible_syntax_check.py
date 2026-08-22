@@ -90,7 +90,16 @@ def test_include_files_are_not_mistaken_for_playbooks():
 
     source = (REPO / "toolkit/cli/infra.py").read_text()
     body = source[source.index("def ansible_syntax_check") :]
-    body = body[: body.index("\n@ansible_app.command")]
+    # To the next top-level definition of ANY kind, not the next
+    # `@ansible_app.command`. `syntax-check` became the last command in its
+    # group when `ansible deploy` was retired (#1178), and the narrower
+    # delimiter then raised ValueError — a test failing because the code around
+    # it moved, saying nothing about the property under test.
+    end = min(
+        (i for i in (body.find("\n@", 1), body.find("\ndef ", 1), body.find("\nclass ", 1)) if i > 0),
+        default=len(body),
+    )
+    body = body[:end]
     assert 'playbook_dir.glob("*.yml")' in body, (
         "the gate no longer uses a non-recursive glob over playbooks/"
     )
