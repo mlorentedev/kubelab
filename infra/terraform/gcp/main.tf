@@ -263,6 +263,21 @@ resource "google_compute_region_instance_group_manager" "hub" {
     replacement_method           = "RECREATE"
     instance_redistribution_type = "NONE"
     max_surge_fixed              = 0
-    max_unavailable_fixed        = 1
+    # PERCENT, not a fixed count, and that was measured rather than chosen.
+    # A regional MIG rejects `max_unavailable_fixed = 1`:
+    #
+    #   Error 400: Fixed updatePolicy.maxUnavailable for regional managed
+    #   instance group has to be either 0 or at least equal to the number of
+    #   zones.
+    #
+    # europe-west4 has three, so `3` would also be accepted -- and would be a
+    # zone count hardcoded next to a `region` that is a variable. Change the
+    # region to one with a different number of zones and the literal is silently
+    # wrong in the direction that blocks replacement entirely.
+    #
+    # 100% says what is actually meant for a singleton: the one instance may be
+    # down while it is replaced. It is region-independent, and with
+    # `max_surge_fixed = 0` it still forbids two hubs existing at once.
+    max_unavailable_percent = 100
   }
 }

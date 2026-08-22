@@ -160,7 +160,6 @@ def _var_default(tf: str, name: str) -> str | None:
     return d.group(1).strip() if d else None
 
 
-
 def _var_default_list(tf: str, name: str) -> list[str] | None:
     """The declared default of a LIST-typed Terraform variable, or None.
 
@@ -200,6 +199,7 @@ def _var_defaults_any(tf: str, name: str) -> list[str]:
     if not default:
         return []
     return re.findall(r'=\s*"([^"]+)"', default.group(1))
+
 
 @pytest.fixture(scope="module")
 def tf() -> str:
@@ -353,8 +353,7 @@ class TestModuleDefaultsMatchTheSSOT:
         default = _var_default(tf, var_name)
         assert default is not None, f'no variable "{var_name}" in the module'
         assert str(default) == str(expected), (
-            f'variable "{var_name}" defaults to {default!r} but '
-            f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
+            f'variable "{var_name}" defaults to {default!r} but {ssot_key} is {expected!r}; common.yaml is the SSOT'
         )
 
     @pytest.mark.parametrize("ssot_key,var_name", sorted(MIRRORED_LISTS.items()))
@@ -364,8 +363,7 @@ class TestModuleDefaultsMatchTheSSOT:
         default = _var_default_list(tf, var_name)
         assert default is not None, f'variable "{var_name}" is absent or does not default to a list'
         assert default == [str(item) for item in expected], (
-            f'variable "{var_name}" defaults to {default!r} but '
-            f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
+            f'variable "{var_name}" defaults to {default!r} but {ssot_key} is {expected!r}; common.yaml is the SSOT'
         )
 
     def test_boot_disk_is_pd_balanced(self, tf: str) -> None:
@@ -451,8 +449,7 @@ class TestSpokeServersMatchTheSSOT:
         declared = _var_defaults_any(tf, "spoke_servers")
         for env, url in self._expected().items():
             assert url in declared, (
-                f"argocd.spokes declares {env!r} but spoke_servers has no entry "
-                f"resolving to {url!r}"
+                f"argocd.spokes declares {env!r} but spoke_servers has no entry resolving to {url!r}"
             )
 
 
@@ -514,8 +511,7 @@ class TestTerraformBindsOnlyDeclaredSecrets:
         assert len(spoke_literals) == 2, f"expected token and ca per spoke, found {spoke_literals}"
         for literal in spoke_literals:
             assert literal.startswith("argocd-spokes-${env}-"), (
-                f"{literal!r} does not follow the spoke naming rule, so it cannot be "
-                f"what the sync wrote"
+                f"{literal!r} does not follow the spoke naming rule, so it cannot be what the sync wrote"
             )
         assert "for env in var.managed_spokes" in body, (
             "the spoke grants are not scoped to managed_spokes; this hub could read "
@@ -568,3 +564,41 @@ class TestNoCredentialLiterals:
                     f'variable "{name}" looks like a credential but is not marked '
                     f"sensitive = true; plan output and CI logs would echo it"
                 )
+
+
+class TestTheMigCanActuallyReplaceItsInstance:
+    """A regional MIG rejects a `maxUnavailable` of 1, and the failure is late.
+
+    Measured on the first real apply: eleven resources created, then
+
+        Error 400: Fixed updatePolicy.maxUnavailable for regional managed
+        instance group has to be either 0 or at least equal to the number of
+        zones.
+
+    The rule exists because a regional group spans every zone in the region. The
+    tempting fix is the zone count -- 3 for europe-west4 -- which puts a literal
+    next to a `region` that is a variable, and goes silently wrong the moment
+    the region changes to one with a different number of zones. Wrong in the
+    worst direction, too: too low a value blocks replacement entirely, on the
+    exact path a MIG exists to perform.
+    """
+
+    def test_max_unavailable_is_not_a_fixed_zone_count(self, tf: str) -> None:
+        assert "max_unavailable_fixed" not in tf, (
+            "a regional MIG accepts only 0 or >= the zone count here, so a fixed "
+            "value is either a no-op or a hardcoded zone count beside a variable region"
+        )
+
+    def test_the_single_instance_may_be_taken_down_to_replace_it(self, tf: str) -> None:
+        """0% would forbid replacing the only instance, which is the one thing
+        the group has to be able to do."""
+        assert re.search(r"max_unavailable_percent\s*=\s*100", tf), (
+            "the singleton cannot be replaced: with target_size = 1 and no surge, "
+            "anything below 100% leaves no way to take the instance down"
+        )
+
+    def test_surge_stays_forbidden(self, tf: str) -> None:
+        """The invariant the percent change must not quietly relax: two hubs
+        must never exist at once, both registering the same Headscale
+        given-name and both reconciling the same spokes."""
+        assert re.search(r"max_surge_fixed\s*=\s*0", tf)
