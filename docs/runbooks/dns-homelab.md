@@ -222,11 +222,11 @@ kubelab.live {
 - Staging (K3s): Rely on the wildcard template (catches all `*.staging.kubelab.live`)
 - Prod (K3s on VPS): Add explicit entry in `kubelab.live` hosts block (`100.64.0.2 <service>.kubelab.live`)
 - Bare-metal: Add explicit entry in `kubelab.live` hosts block with the specific Tailscale IP
-- After editing: `make deploy-dns` to push to RPi4
+- After editing: `make deploy TARGET=dns ENV=staging` to push to RPi4
 
 **Deployment to RPi4** (semi-automated via Makefile):
 ```bash
-make deploy-dns   # SCP + restart CoreDNS on RPi4 via SSH
+make deploy TARGET=dns ENV=staging   # SCP + restart CoreDNS on RPi4 via SSH
 ```
 
 ## Verification
@@ -445,5 +445,5 @@ Currently a standalone playbook — no toolkit wrapper needed. If more homelab-w
 2026-02-21: Full chain verified. CoreDNS on port 5353, Pi-hole forwarding via compose bind mount, Headscale split DNS for `kubelab.live`.
 2026-03-03: Narrowed split DNS from `kubelab.live` → `staging.kubelab.live`. Prod domains now resolve via public Cloudflare DNS regardless of RPi4 state. Verified `status.kubelab.live` resolves via 1.1.1.1 from VPN clients.
 2026-02-22: DNS resilience playbook applied to all 7 nodes. `/etc/hosts` entries verified.
-2026-03-01: Corefile updated with gitea/n8n/minio/loki staging entries. Prod zone uses explicit hosts (removed template wildcard — it overrode hosts entries). Deployed to RPi4 via `make deploy-dns`. All bare-metal IPs verified correct.
+2026-03-01: Corefile updated with gitea/n8n/minio/loki staging entries. Prod zone uses explicit hosts (removed template wildcard — it overrode hosts entries). Deployed to RPi4 via `make deploy TARGET=dns ENV=staging`. All bare-metal IPs verified correct.
 2026-03-01: Fixed Tailscale bootstrap circular dependency. `vpn.kubelab.live` now resolves to public IP `162.55.57.175` in Corefile. RPi4 has permanent `/etc/hosts` fallback + `tailscale-watchdog.timer` (5-min auto-reconnect). Uptime Kuma proxied through K3s Traefik as external service.

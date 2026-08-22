@@ -236,7 +236,7 @@ Its installed version is driven by a **separate declaration** from the spokes:
 
    ```bash
    make tf-aws-apply            # or: terraform apply -replace=<spot_instance>
-   make fetch-kubeconfig-hub    # new host key + MagicDNS server URL
+   make fetch-kubeconfig ENV=hub    # new host key + MagicDNS server URL
    make deploy-argocd           # Helm install Argo CD on the fresh node
    make deploy-apps             # re-register Applications
    make register-spoke ENV=staging

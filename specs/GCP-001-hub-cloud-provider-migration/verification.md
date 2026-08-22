@@ -7,11 +7,42 @@ created: "2026-08-20"
 
 ## Evidence
 
-- [ ] AC1 billing account recorded -> `<account id>` / `verification.md` below
+- [x] AC1 billing account recorded -> `gcp.billing_account_id` in SOPS (ends
+      `…-CED2F4`, display name `GCP-Kubelab`). Confirmed by API, not console:
+      `gcloud billing projects describe kubelab-hub` reports
+      `billingAccountName: billingAccounts/0118CE-…` and `billingEnabled: true`.
+      The value is in SOPS rather than here because this repository is public;
+      it is an identifier, not a credential, but git history is permanent.
 - [ ] AC2 budget + kill switch -> `gcloud billing budgets list` output
-- [ ] AC2b kill switch fired -> function invocation log
+- [x] AC2b kill switch fired -> `make gcp-killswitch-prove`, 2026-08-22:
+      billing detached from `kubelab-killswitch-proof` in 10.7s, target restored
+      to `kubelab-hub` and the restore verified. Fired through the REAL topic
+      against the REAL deployed function, so the trigger and IAM were exercised
+      rather than a copy of the code.
 - [ ] AC3 hub reconciles from GCP -> `argocd app list` both Synced/Healthy
 - [ ] AC4 preemption self-heals -> delete → recreate → Synced transcript
+
+      **PARTIAL, and deliberately not ticked.** A template update triggered a MIG
+      replacement on 2026-08-22 and the recreate path worked end to end:
+
+      | Property | Before | After |
+      |---|---|---|
+      | instance | `gcp1-hx0q` | `gcp1-bxjh` |
+      | Tailscale address | `100.64.0.20` | `100.64.0.21` |
+      | MagicDNS | resolves | **follows the new node** |
+      | Headscale registration | `gcp1` | **`gcp1`, not `gcp1-<random>`** (F2) |
+      | cloud-init | `error` | **`done`** |
+      | Argo CD | 0 pods | **6 pods, installed unattended** (F1) |
+
+      What this is NOT: a preemption. AC4 asks for
+      `simulate-maintenance-event` or a direct delete, and a rolling template
+      update is a different trigger. Nor does it show "returns to Synced" — the
+      hub manages no spoke yet.
+
+      What it DOES settle: the IP rotates and MagicDNS is the stable identity
+      (the aws1 lesson, reproduced on GCP); stale-node cleanup works, so F2
+      holds; and F1 works **only after** the `KUBECONFIG` fix — it was broken on
+      the first boot, having been recorded as "closed in code" in #1217.
 - [ ] AC5 portability scored -> the table below, with real counts
 - [ ] AC6 AWS decommissioned -> three AWS API outputs, pasted
 - [ ] AC7 cost recorded as derivation -> ADR-063 D4

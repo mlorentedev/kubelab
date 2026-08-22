@@ -72,7 +72,7 @@ sudo bash infra/provisioning/rpi4/configure-sd.sh
 
 3. **Run Ansible provisioning** (from workstation) for Docker, Tailscale, Pi-hole, CoreDNS:
    ```bash
-   make provision-rpi4
+   make provision NODE=rpi4 ENV=staging
    ```
 
 ## Related
