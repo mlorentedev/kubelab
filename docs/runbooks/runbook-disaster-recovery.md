@@ -123,4 +123,4 @@ kubectl --kubeconfig ~/.kube/kubelab-config get pods -n kubelab
 - **ACME certificates**: Without `acme.json`, Traefik re-requests certs from Let's Encrypt (rate-limited to 5/week per domain)
 - **Tailscale on VPS**: Must use `--login-server=https://vpn.kubelab.live` with the PUBLIC IP (not Tailscale IP)
 - **DNS propagation**: Cloudflare TTL is 300s — plan for 5-10 min delay
-- **Backups**: Run `make backup-vps` regularly. Current retention: 3 backups on VPS
+- **Backups**: Run `make backup ENV=prod` regularly. Current retention: 3 backups on VPS
