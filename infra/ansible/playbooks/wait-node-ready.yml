@@ -26,6 +26,14 @@
   become: false
 
   vars:
+    # Derived from the SSOT, never a list of node names: a block carrying
+    # `tailscale_dns` with no `tailscale_ip` is how `networking` records an
+    # address that rotates -- which today is only the MIG-backed hub, and
+    # tomorrow is whatever else becomes ephemeral, without editing this file.
+    _node_address_is_ephemeral: >-
+      {{ (hostvars[inventory_hostname].ansible_host | default('')) is search('\\.kubelab\\.internal$')
+         and (hostvars[inventory_hostname].ansible_host | default('')) is not match('^[0-9.]+$') }}
+
     # Generous by design: cloud-init on a t4g.small installs K3s from the
     # network. Failing early here means provisioning a half-built node.
     wait_connection_timeout: 600
@@ -59,6 +67,44 @@
           `headscale nodes list` and rename if needed (see common.yaml:585,
           ADR-025). Otherwise: is Tailscale up on this workstation?
       when: _resolved.rc != 0
+
+    # --- 0. A recreated machine presents a new host key --------------------
+    #
+    # A MIG RECREATES rather than restarts, so every preemption yields a new
+    # machine with a new host key behind an unchanged MagicDNS name. ssh sees a
+    # changed key for a known name and aborts -- correctly, since that is also
+    # what an impostor looks like:
+    #
+    #   WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+    #
+    # `accept-new`, which the generated inventory uses, accepts UNKNOWN hosts
+    # and still refuses CHANGED ones. So the MIG self-heals and the operator
+    # stops at their own known_hosts, on a path that runs unattended.
+    #
+    # SCOPED, because a host key is a real protection. Only nodes the SSOT marks
+    # as having an ephemeral address get purged: `tailscale_dns` with no
+    # `tailscale_ip` is how `networking.gcp` records "this address rotates on
+    # every recreate". Every stable node records an IP and keeps its key check.
+    #
+    # THIS IS A MITIGATION, NOT THE FIX, and it should not be read as one.
+    # Purging means trusting whatever key the host now presents -- TOFU, every
+    # time. The exposure is small here only because every path to this node
+    # rides Tailscale, and WireGuard already authenticates the peer, making the
+    # SSH host key a weaker second check of the same fact. It is not nothing: a
+    # compromised node holding valid Tailscale credentials would still be caught
+    # by a host key, and this gives that up.
+    #
+    # The real fix is SSH host certificates -- trust a CA instead of a list of
+    # machines, and a recreated host needs no known_hosts edit at all while
+    # keeping MITM detection. Tracked as #1261, WHICH ALSO REQUIRES DELETING
+    # THIS TASK: leaving both means the purge silently covers for a broken CA.
+    - name: Forget the previous machine's host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      when: _node_address_is_ephemeral | default(false) | bool
 
     # --- 1. sshd answers ---------------------------------------------------
     - name: Wait for SSH to accept connections
