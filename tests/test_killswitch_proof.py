@@ -187,3 +187,26 @@ def test_the_published_message_matches_the_real_schema(gcloud) -> None:
     payload = json.loads(published[0][published[0].index("--message") + 1])
     assert set(payload) == set(proof._SCHEMA_KEYS)
     assert not any("project" in k.lower() for k in payload), f"the synthetic message names a project: {payload}"
+
+
+def test_an_unnamed_scratch_project_is_refused_by_name(gcloud) -> None:
+    """The Makefile derives `--scratch` from `terraform output -raw project_id`,
+    which can exit 0 printing nothing when the output exists but is empty.
+
+    The empty string used to fall through to the billing check and be refused
+    as "already has billing disabled" — blaming a project that was never named,
+    and sending the reader to check billing on something that does not exist.
+
+    Raised by review on #1245: the refusal was right, the reason was not.
+    """
+    gcloud()
+    with pytest.raises(proof.KillSwitchProofError, match="no scratch project named"):
+        proof.run_proof(
+            function="f",
+            region="r",
+            topic="t",
+            scratch_project="",
+            expected_home=HUB,
+            timeout_s=1.0,
+            poll_s=0.0,
+        )
