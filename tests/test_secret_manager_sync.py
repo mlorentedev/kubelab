@@ -128,9 +128,7 @@ def test_no_two_synced_secrets_collide_on_their_secret_manager_id() -> None:
     """
     from toolkit.features.secrets_manager import secret_manager_name
 
-    spoke_paths = [
-        f"argocd.spokes.{env}.{field}" for env in ("staging", "prod") for field in ("token", "ca")
-    ]
+    spoke_paths = [f"argocd.spokes.{env}.{field}" for env in ("staging", "prod") for field in ("token", "ca")]
     all_paths = sorted(EXPECTED_SYNCED) + spoke_paths
     ids = [secret_manager_name(p) for p in all_paths]
 
@@ -140,3 +138,53 @@ def test_no_two_synced_secrets_collide_on_their_secret_manager_id() -> None:
         f"The second write would land as a new version of the first, and the hub "
         f"would boot with the wrong value under the right name."
     )
+
+
+class TestADryRunSaysSo:
+    """A dry run's output must be unmistakable from a real one.
+
+    It used to print `created  <name>` in both modes -- byte-identical -- so the
+    only way to know whether anything had been written was to remember which
+    flag you passed. In a secrets tool that is how someone concludes a delivery
+    happened that did not, or panics that one did.
+
+    The feature already carried the distinction in `SyncResult.detail`
+    ("(dry-run, not written)"); nothing rendered it. This asserts on the rendered
+    output, because that is the artifact a human reads.
+    """
+
+    @staticmethod
+    def _render(dry_run: bool) -> str:
+        from unittest.mock import MagicMock, patch
+
+        from typer.testing import CliRunner
+
+        from toolkit.cli.secrets import app
+        from toolkit.features.gcp_secret_sync import SyncResult
+
+        results = [
+            SyncResult("argocd-admin-password-hash", "created", "origin"),
+            SyncResult("argocd-slack-webhook-url", "unchanged", "origin"),
+        ]
+        argv = ["sync-secret-manager"] + (["--dry-run"] if dry_run else [])
+        with (
+            patch("toolkit.features.gcp_secret_sync.sync_all", MagicMock(return_value=results)),
+            patch("toolkit.features.configuration.ConfigurationManager") as cm,
+        ):
+            cm.return_value.get_merged_config.return_value = {"networking": {"gcp": {"project_id": "p"}}}
+            return CliRunner().invoke(app, argv).stdout
+
+    def test_dry_run_uses_the_future_tense(self) -> None:
+        out = self._render(dry_run=True)
+        assert "would create" in out, f"a dry run reported in the past tense:\n{out}"
+        assert "nothing was written" in out
+
+    def test_a_real_run_does_not(self) -> None:
+        """The other half: if both modes said "would", the real one would lie."""
+        out = self._render(dry_run=False)
+        assert "would create" not in out, f"a real run reported as a dry run:\n{out}"
+
+    def test_the_two_modes_are_distinguishable(self) -> None:
+        """Stated as the property rather than as two independent facts: what
+        matters is that a reader can tell them apart, not the exact wording."""
+        assert self._render(dry_run=True) != self._render(dry_run=False)

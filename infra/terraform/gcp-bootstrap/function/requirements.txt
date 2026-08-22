@@ -1,0 +1,7 @@
+# Pinned, not floated. This function runs a few times a year at most and is
+# rebuilt only when the source changes, so an unpinned dependency would resolve
+# to whatever exists on the day the kill switch is redeployed -- which is the
+# day you least want a surprise.
+functions-framework==3.9.2
+google-api-python-client==2.184.0
+google-auth==2.42.1
