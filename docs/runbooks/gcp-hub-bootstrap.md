@@ -74,55 +74,101 @@ CLI's identity, `application-default login` writes the credentials the Terraform
 provider reads. Skipping the second produces a `could not find default
 credentials` failure at `terraform plan`, which reads like a provider bug.
 
-## §3 — Project (~3 min)
+## §3 — Record the billing account, then apply the bootstrap (~5 min)
+
+§3 and §4 used to be a list of `gcloud` commands. They are one Terraform root
+now — `infra/terraform/gcp-bootstrap/` — which creates the project, enables its
+APIs and lands both budgets. Two commands total.
+
+First, put the ID from §1 into SOPS. `--stdin` keeps it out of `argv`, which is
+readable by other users on the machine via `ps`:
 
 ```bash
-gcloud projects create kubelab-hub --name="KubeLab Hub"
-gcloud billing projects link kubelab-hub --billing-account=<ID from §1>
-
-# Verify the link — do not trust the create command's exit code
-gcloud billing projects describe kubelab-hub
-# Expect: billingEnabled: true, and billingAccountName matching §1
-
-gcloud config set project kubelab-hub
-gcloud services enable compute.googleapis.com secretmanager.googleapis.com \
-  cloudbilling.googleapis.com cloudbudgets.googleapis.com \
-  pubsub.googleapis.com cloudfunctions.googleapis.com
+toolkit secrets set gcp.billing_account_id --stdin --env common
 ```
 
-## §4 — Spend guardrails (~15 min) — before any resource exists
+It is not a credential — nothing can be spent with it absent IAM — but this
+repository is public and git history is permanent, so it does not go in a
+committed file. Everything else the root needs is already in `common.yaml`.
+
+Then:
+
+```bash
+make tf-gcp-bootstrap-plan     # read it: 13 resources, 0 to change, 0 to destroy
+make tf-gcp-bootstrap-apply
+```
+
+**Verify the link afterwards. Do not trust the apply's exit code:**
+
+```bash
+gcloud billing projects describe kubelab-hub
+# Expect billingEnabled: true AND billingAccountName matching §1.
+# `billingEnabled: true` alone does not say WHICH account, and the wrong one is
+# silent — everything works and the bill simply arrives.
+```
+
+Then, once per workstation:
+
+```bash
+gcloud config set project kubelab-hub
+gcloud auth application-default set-quota-project kubelab-hub
+```
+
+> **The second command is what clears the warning §2 left behind** — *"Cannot
+> find a quota project to add to ADC"*. It cannot be run any earlier: it needs
+> the project that §3 creates. Without it, `gcloud billing budgets list` fails
+> with a permission error naming a project number that is not yours. Terraform
+> itself is unaffected: the root sets `user_project_override`, which is the
+> programmatic equivalent.
+
+> **`cloudbudgets.googleapis.com` does not exist.** An earlier revision of this
+> runbook told you to enable it. The real API is `billingbudgets.googleapis.com`,
+> and because `gcloud services enable` takes the whole list in a single call, the
+> invented name did not merely skip a line — it failed the entire enablement
+> step. Recorded because it is the shape of error a runbook cannot catch by being
+> re-read: only by being run.
+
+## §4 — Spend guardrails — applied by §3, described here
 
 Two thresholds, two different mechanisms, because GCP does not offer one that
-does both.
+does both. Both land with `make tf-gcp-bootstrap-apply`; there is nothing extra
+to run. The code is `infra/terraform/gcp-bootstrap/budget.tf` — read it there
+rather than from a snippet here, so the two cannot drift.
 
 ### 4.1 Alert at $10 — the credit is exhausted
 
-A budget with alert thresholds at 50 / 90 / 100% of $10.
+Thresholds at 50 / 90 / 100%. The first two exist so the third is never the
+first thing anyone hears: a cost problem found at 100% has already been running
+for most of a month.
 
-**Set `credit_types_treatment = EXCLUDE_ALL_CREDITS`.** The default,
-`INCLUDE_ALL_CREDITS`, subtracts credits before comparing — so a $10 budget on
-the default fires at $10 of *real money*, i.e. $20 of usage, which is not what
-"the credit is exhausted" means. With credits excluded, $10 means $10 of usage
-and keeps that meaning if the credit ever lapses.
+**`credit_types_treatment = EXCLUDE_ALL_CREDITS` is the setting that matters.**
+The default, `INCLUDE_ALL_CREDITS`, subtracts credits before comparing — so a
+$10 budget on the default fires at $10 of *real money*, i.e. **$20 of usage**.
+The number on the budget and the number it enforces are different, and nothing
+surfaces the gap. With credits excluded, $10 means $10 of usage, and keeps that
+meaning if the credit ever lapses.
 
-Terraform (`infra/terraform/gcp/budget.tf`), not the console — it is
-infrastructure:
+> **This is worth checking on your own account, not just in this code.** On the
+> account used here, a pre-existing `$10 Monthly Budget Alert` was found with
+> `INCLUDE_ALL_CREDITS` — a budget whose displayed figure is double what it
+> enforces. List them and read the column:
+>
+> ```bash
+> gcloud billing budgets list --billing-account=<ID> \
+>   --format="table(displayName, amount.specifiedAmount.units, budgetFilter.creditTypesTreatment)"
+> ```
 
-```hcl
-resource "google_billing_budget" "alert" {
-  billing_account = var.billing_account
-  display_name    = "kubelab-hub alert"
-  budget_filter {
-    projects               = ["projects/${var.project_number}"]
-    credit_types_treatment = "EXCLUDE_ALL_CREDITS"
-  }
-  amount { specified_amount { currency_code = "USD"; units = "10" } }
-  threshold_rules { threshold_percent = 0.5 }
-  threshold_rules { threshold_percent = 0.9 }
-  threshold_rules { threshold_percent = 1.0 }
-  all_updates_rule { monitoring_notification_channels = [...] }
-}
-```
+**Two API constraints, both found by applying rather than by reading:**
+
+- **The budget's currency must equal the billing account's.** Check with
+  `gcloud billing accounts describe <ID>` and read `currencyCode`. Do not infer
+  it from where you live — this account is `USD` while the operator is in Europe.
+- **`disable_default_iam_recipients` is rejected** with a bare
+  `Error 400: Request contains an invalid argument` when `all_updates_rule`
+  carries only a `pubsub_topic`. It is valid only alongside
+  `monitoring_notification_channels`. Leaving the default e-mail on costs
+  nothing: Pub/Sub is what caps, and the human notice is a second channel rather
+  than a competing one.
 
 ### 4.2 Hard cap at $15 — the kill switch
 

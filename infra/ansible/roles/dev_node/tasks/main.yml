@@ -211,6 +211,24 @@
       become_user: root
       tags: [dev_node, mise]
 
+    # Non-interactive SSH sessions (e.g. Orca ADE remote relay, non-interactive CI
+    # runners, remote agent harnesses) bypass /etc/profile.d/ and ~/.bashrc (early
+    # return on [ -z "$PS1" ]). Symlinking the pinned mise node/npm/npx binaries
+    # to /usr/local/bin exposes them on standard non-interactive $PATH cleanly.
+    - name: Symlink mise node, npm, and npx into /usr/local/bin for non-interactive SSH tools
+      ansible.builtin.file:
+        src: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - node
+        - npm
+        - npx
+      become: true
+      become_user: root
+      tags: [dev_node, mise, orca]
+
     # ~/.bashrc.local and ~/.zshrc.local are the dotfiles-side seam (IDEAS-001):
     # gitignored, sourced LAST by the tracked rc files, and never redeployed by
     # setup-linux.sh — so this block survives a bootstrap and stops churning.

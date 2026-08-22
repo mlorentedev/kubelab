@@ -4,10 +4,13 @@
 # of size 1. VPN-only access via Headscale; the external IP is ephemeral and
 # exists solely so the instance has egress for its own bootstrap.
 #
-# NOT YET RUNNABLE. `make tf-gcp-*` and `make gcp1-*` do not exist: they land with
-# the `gcp-tfvars` renderer in a follow-up, and this module is not expected to be
-# applied before then. The end-state procedure is
-# docs/runbooks/gcp-hub-bootstrap.md §6 — do not follow it yet.
+# Runnable: `make tf-gcp-{plan,apply,destroy}` and `make gcp1-*` landed with the
+# `gcp-tfvars` renderer (#1220). Procedure: docs/runbooks/gcp-hub-bootstrap.md §6.
+#
+# This module assumes the PROJECT ALREADY EXISTS. It is created, with its APIs
+# and its spend guardrails, by infra/terraform/gcp-bootstrap/ — a separate root
+# with separate state, so that destroying the hub (routine: preemption drills,
+# machine-type changes, the AWS cutover) cannot take the project with it.
 
 terraform {
   required_version = ">= 1.5"

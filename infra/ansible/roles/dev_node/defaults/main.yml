@@ -55,6 +55,7 @@ dev_node_agent_workspaces:
   - claude-agent
   - codex-agent
   - pi-agent
+  - orca-agent
 dev_node_project_dirs:
   - "{{ dev_node_home }}/Projects"
   - "{{ dev_node_home }}/Projects/Workspace"
