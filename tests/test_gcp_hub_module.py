@@ -14,9 +14,11 @@ of these will look locally reasonable:
   $12.75 on AWS). On-demand `e2-small` in europe-west4 is $13.43/mo for compute
   alone, so a silent revert here costs more than the migration saved.
 
-- **`instance_termination_action = "DELETE"`** -- the API default is `STOP`,
-  which leaves a `TERMINATED` shell behind after every preemption. DELETE keeps
-  the MIG's reconciliation unambiguous and the project free of husks.
+- **No `instance_termination_action`** -- ADR-063 specified `DELETE`, and GCP
+  refuses it: *"Spot virtual machines with termination action set to DELETE
+  cannot be used with Managed Instance Groups."* Measured on the first real
+  apply, after the decision had been made, documented, encoded and pinned by a
+  test. A green suite asserted a configuration that could never exist.
 
 - **A REGIONAL MIG with `target_size = 1`** -- GCP Spot VMs do not auto-restart,
   unlike the AWS persistent Spot request this replaces. Regional rather than
@@ -31,8 +33,10 @@ of these will look locally reasonable:
   This is the likeliest single route to the $15 budget cap, designed out rather
   than merely alerted on.
 
-- **No autohealing in v1** -- with DELETE termination the MIG already restores
-  target size on preemption without a health check. A probe that fires before
+- **No autohealing in v1** -- the ADR justified this by DELETE termination
+  restoring target size without a health check. That premise died with DELETE,
+  and whether a MIG revives a STOPPED preempted Spot VM unaided is deliberately
+  NOT asserted here from documentation. AC4 settles it by observation. A probe that fires before
   cloud-init's multi-minute bootstrap finishes produces a recreate loop on a Spot
   hub. Adding autohealing later requires `initial_delay_sec` no shorter than the
   measured bootstrap time, so the guard here is "not silently present".
@@ -217,11 +221,24 @@ class TestSpotAndPreemption:
             "$13.43/mo for compute alone, more than the AWS setup this replaces"
         )
 
-    def test_termination_action_is_delete_not_the_stop_default(self, tf: str) -> None:
-        assert re.search(r'instance_termination_action\s*=\s*"DELETE"', tf), (
-            "instance_termination_action defaults to STOP, which leaves a "
-            "TERMINATED husk after every preemption; DELETE keeps the MIG's "
-            "reconciliation unambiguous"
+    def test_no_termination_action_is_set(self, tf: str) -> None:
+        """This test asserted `DELETE` and the API refuses it.
+
+            Spot virtual machines with termination action set to DELETE cannot
+            be used with Managed Instance Groups.
+
+        Measured on the first real apply, after the decision had been made in
+        ADR-063, written into the module, and pinned here. A green test asserted
+        a configuration that could never exist -- the test agreed with the ADR
+        rather than with GCP, which is the failure mode a static guard has when
+        nothing has ever run.
+
+        Inverted deliberately rather than deleted: someone reading the ADR will
+        try to restore DELETE, and this is what will stop them.
+        """
+        assert not re.search(r"instance_termination_action", tf), (
+            "instance_termination_action is set again. A MIG rejects DELETE outright, "
+            "and STOP is the default -- so any value here is either refused or noise."
         )
 
     def test_the_group_is_regional_not_zonal(self, tf: str) -> None:

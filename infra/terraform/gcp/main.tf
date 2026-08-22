@@ -130,11 +130,28 @@ resource "google_compute_instance_template" "hub" {
   tags         = [var.hostname]
 
   scheduling {
-    provisioning_model          = "SPOT"
-    preemptible                 = true
-    automatic_restart           = false
-    on_host_maintenance         = "TERMINATE"
-    instance_termination_action = "DELETE"
+    provisioning_model  = "SPOT"
+    preemptible         = true
+    automatic_restart   = false
+    on_host_maintenance = "TERMINATE"
+    # NO instance_termination_action, and not by choice. ADR-063 specified
+    # DELETE -- the API refuses it here:
+    #
+    #   Spot virtual machines with termination action set to DELETE cannot be
+    #   used with Managed Instance Groups.
+    #
+    # Measured on the first real apply. The decision was made, documented in the
+    # ADR, encoded in this module and asserted by a test, without anyone
+    # checking GCP permits it. STOP is the only available behaviour inside a MIG.
+    #
+    # WHAT THIS UNSETTLES: the ADR omitted autohealing on the stated grounds
+    # that "with DELETE termination the MIG already restores target size on
+    # preemption without a health check". That premise no longer holds as
+    # written, and whether a MIG recreates a STOPPED preempted Spot VM on its
+    # own is NOT asserted here from documentation. AC4 is the test that settles
+    # it: delete the instance and observe whether it returns unaided. If it does
+    # not, autohealing is required and the ADR's v1 omission was wrong for a
+    # second reason.
   }
 
   disk {
