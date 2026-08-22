@@ -163,3 +163,39 @@ def test_neither_path_reboots_the_node() -> None:
         "the Ansible path reboots the node; on the VPS that removes the VPN used to "
         "reach it if it does not come back"
     )
+
+
+def test_the_patch_tasks_report_change_only_when_they_change_something() -> None:
+    """Idempotence, asserted where it is decided rather than measured after.
+
+    Verified on the live VPS: two consecutive `make maintain NODE=vps ENV=prod`
+    runs both reported `ok=31` with `security patching: already current`, and
+    the only tasks reporting `changed` were the four pre-existing cleanup ones
+    (`Remove APT package lists`, `Recreate APT lists directory`, and the two
+    image prunes). Those are non-idempotent BY DESIGN — deleting and recreating
+    a directory changes something every time, which is the job.
+
+    None of the patch tasks may join them. `apt-mark hold/unhold` runs on every
+    pass and reports nothing; only the upgrade itself may claim a change, and
+    only when it applied one.
+    """
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+    by_name = {t.get("name", ""): t for t in tasks}
+
+    for name in ("Hold packages whose upgrade would restart a live workload", "Release the holds"):
+        task = by_name[name]
+        assert task.get("changed_when") is False, (
+            f"{name!r} would report `changed` on every run. A hold placed and released "
+            f"within one run changed nothing that outlives it, and a permanently noisy "
+            f"task is one whose output stops being read."
+        )
+        assert task.get("failed_when") is False, (
+            f"{name!r} can fail the run. Holding a package that is not installed is "
+            f"normal on a fleet where not every node runs docker or k3s."
+        )
+
+    upgrade = by_name["Apply security updates"]
+    assert upgrade.get("failed_when") is False, (
+        "a node that cannot patch must still get its disk cleaned — the RPi4's apt "
+        "has been broken since #1198 and it needs journal vacuuming more, not less"
+    )
