@@ -39,9 +39,12 @@ output "next_steps" {
     that `gcloud auth application-default login` emits. It cannot be run earlier:
     the project has to exist first.
 
-    The KILL SWITCH IS NOT COMPLETE. This root creates the budgets and the topic;
-    the function that detaches billing is not deployed yet, so today the hard cap
-    publishes to a topic nobody reads. Until that lands, the
-    ${var.budget_cap_amount} ${var.currency} threshold ALERTS rather than CAPS.
+    The kill switch is deployed: budget -> Pub/Sub -> function -> billing
+    detached. The ${var.budget_cap_amount} ${var.currency} threshold CAPS.
+
+    IT HAS NOT FIRED YET, and a rule that has never fired is not evidence
+    (AC2b). Prove it against a scratch project, never against this one -- testing
+    here would work, and prove it by taking the hub down. See
+    docs/runbooks/gcp-hub-bootstrap.md §4.3.
   EOT
 }
