@@ -1,7 +1,7 @@
 [
   {
     "key": "infra-node-vps-ssh",
-    "name": "Infra \u00b7 Node \u00b7 VPS SSH",
+    "name": "Infra · Node · VPS SSH",
     "type": "port",
     "url": "https://",
     "hostname": "162.55.57.175",
@@ -29,7 +29,7 @@
   },
   {
     "key": "infra-vpn-vps-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 VPS Tailscale",
+    "name": "Infra · VPN · VPS Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.2",
@@ -58,7 +58,7 @@
   },
   {
     "key": "infra-vpn-rpi4-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 RPi4 Tailscale",
+    "name": "Infra · VPN · RPi4 Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.10",
@@ -86,8 +86,39 @@
     ]
   },
   {
+    "key": "infra-dns-rpi4-resolves-staging",
+    "name": "Infra · DNS · RPi4 resolves staging",
+    "type": "dns",
+    "url": "https://",
+    "hostname": "staging.kubelab.live",
+    "port": 53,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "Resolution, not liveness. The rpi4 ping monitor stayed GREEN through the 2026-08-22 outage because the host was never down - Docker had restored CoreDNS before tailscaled assigned its address, the health-port bind failed, and that dropped the container's whole port publication including 5353:53. Pi-hole lost its upstream and staging stopped resolving for ~90 minutes with three green signals covering it. This asks the only question that would have failed: does rpi4 answer for a staging name? SSOT: networking.nodes.rpi4.tailscale_ip.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "infra",
+      "dns"
+    ],
+    "dns_resolve_server": "100.64.0.10",
+    "dns_resolve_type": "A"
+  },
+  {
     "key": "infra-vpn-ace1-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 Ace1 Tailscale",
+    "name": "Infra · VPN · Ace1 Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.11",
@@ -116,7 +147,7 @@
   },
   {
     "key": "infra-vpn-ace2-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 Ace2 Tailscale",
+    "name": "Infra · VPN · Ace2 Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.5",
@@ -145,7 +176,7 @@
   },
   {
     "key": "infra-vpn-beelink-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 Beelink Tailscale",
+    "name": "Infra · VPN · Beelink Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.3",
@@ -174,7 +205,7 @@
   },
   {
     "key": "infra-vpn-jetson-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 Jetson Tailscale",
+    "name": "Infra · VPN · Jetson Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.8",
@@ -203,7 +234,7 @@
   },
   {
     "key": "infra-vpn-rpi3-self-check",
-    "name": "Infra \u00b7 VPN \u00b7 RPi3 Self-Check",
+    "name": "Infra · VPN · RPi3 Self-Check",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.6",
@@ -232,7 +263,7 @@
   },
   {
     "key": "infra-vpn-aws1-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 AWS1 Tailscale",
+    "name": "Infra · VPN · AWS1 Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "100.64.0.7",
@@ -261,7 +292,7 @@
   },
   {
     "key": "infra-vpn-gcp1-tailscale",
-    "name": "Infra \u00b7 VPN \u00b7 GCP1 Tailscale",
+    "name": "Infra · VPN · GCP1 Tailscale",
     "type": "ping",
     "url": "https://",
     "hostname": "gcp1.kubelab.internal",
@@ -290,7 +321,7 @@
   },
   {
     "key": "infra-vpn-headscale",
-    "name": "Infra \u00b7 VPN \u00b7 Headscale",
+    "name": "Infra · VPN · Headscale",
     "type": "port",
     "url": "https://",
     "hostname": "vpn.kubelab.live",
@@ -304,7 +335,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Headscale v0.28 control server. No HTTP /health endpoint \u2014 uses TCP port check on 443. SSOT: apps.services.core.headscale.domain.",
+    "description": "Headscale v0.28 control server. No HTTP /health endpoint — uses TCP port check on 443. SSOT: apps.services.core.headscale.domain.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
@@ -319,7 +350,7 @@
   },
   {
     "key": "prod-web-mlorente-dev",
-    "name": "Prod \u00b7 Web \u00b7 mlorente.dev",
+    "name": "Prod · Web · mlorente.dev",
     "type": "http",
     "url": "https://mlorente.dev",
     "hostname": null,
@@ -349,7 +380,7 @@
   },
   {
     "key": "prod-api-api-kubelab-live",
-    "name": "Prod \u00b7 API \u00b7 api.kubelab.live",
+    "name": "Prod · API · api.kubelab.live",
     "type": "http",
     "url": "https://api.kubelab.live/health",
     "hostname": null,
@@ -379,7 +410,7 @@
   },
   {
     "key": "prod-web-kubelab-live",
-    "name": "Prod \u00b7 Web \u00b7 kubelab.live",
+    "name": "Prod · Web · kubelab.live",
     "type": "http",
     "url": "https://kubelab.live",
     "hostname": null,
@@ -410,7 +441,7 @@
   },
   {
     "key": "services-auth-authelia-prod",
-    "name": "Services \u00b7 Auth \u00b7 Authelia Prod",
+    "name": "Services · Auth · Authelia Prod",
     "type": "http",
     "url": "https://auth.kubelab.live/api/health",
     "hostname": null,
@@ -424,7 +455,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Authelia SSO health (prod). SSOT: apps.services.security.authelia.domain + health_path. Critical \u2014 gates all protected services.",
+    "description": "Authelia SSO health (prod). SSOT: apps.services.security.authelia.domain + health_path. Critical — gates all protected services.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
@@ -442,7 +473,7 @@
   },
   {
     "key": "services-auth-argo-cd",
-    "name": "Services \u00b7 Auth \u00b7 Argo CD",
+    "name": "Services · Auth · Argo CD",
     "type": "http",
     "url": "https://argo.kubelab.live",
     "hostname": null,
@@ -473,7 +504,7 @@
   },
   {
     "key": "services-data-grafana-prod",
-    "name": "Services \u00b7 Data \u00b7 Grafana Prod",
+    "name": "Services · Data · Grafana Prod",
     "type": "http",
     "url": "https://grafana.kubelab.live/api/health",
     "hostname": null,
@@ -504,7 +535,7 @@
   },
   {
     "key": "services-data-gitea-prod",
-    "name": "Services \u00b7 Data \u00b7 Gitea Prod",
+    "name": "Services · Data · Gitea Prod",
     "type": "http",
     "url": "https://gitea.kubelab.live/api/healthz",
     "hostname": null,
@@ -535,7 +566,7 @@
   },
   {
     "key": "services-data-minio-prod",
-    "name": "Services \u00b7 Data \u00b7 MinIO Prod",
+    "name": "Services · Data · MinIO Prod",
     "type": "http",
     "url": "https://minio.kubelab.live/minio/health/live",
     "hostname": null,
@@ -566,7 +597,7 @@
   },
   {
     "key": "services-data-minio-console-prod",
-    "name": "Services \u00b7 Data \u00b7 MinIO Console Prod",
+    "name": "Services · Data · MinIO Console Prod",
     "type": "http",
     "url": "https://console.minio.kubelab.live",
     "hostname": null,
@@ -597,7 +628,7 @@
   },
   {
     "key": "services-data-n8n-prod",
-    "name": "Services \u00b7 Data \u00b7 n8n Prod",
+    "name": "Services · Data · n8n Prod",
     "type": "http",
     "url": "https://n8n.kubelab.live/healthz",
     "hostname": null,
@@ -628,7 +659,7 @@
   },
   {
     "key": "services-monitoring-uptime-kuma-prod",
-    "name": "Services \u00b7 Monitoring \u00b7 Uptime Kuma Prod",
+    "name": "Services · Monitoring · Uptime Kuma Prod",
     "type": "http",
     "url": "https://status.kubelab.live",
     "hostname": null,
@@ -659,7 +690,7 @@
   },
   {
     "key": "staging-web-staging-mlorente-dev",
-    "name": "Staging \u00b7 Web \u00b7 staging.mlorente.dev",
+    "name": "Staging · Web · staging.mlorente.dev",
     "type": "http",
     "url": "https://staging.mlorente.dev",
     "hostname": null,
@@ -673,7 +704,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Staging web (K3s on ace1). VPN-only \u2014 resolves via Headscale split DNS. SSOT: networking.staging_zones.",
+    "description": "Staging web (K3s on ace1). VPN-only — resolves via Headscale split DNS. SSOT: networking.staging_zones.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
@@ -688,7 +719,7 @@
   },
   {
     "key": "staging-api-api-staging-kubelab-live",
-    "name": "Staging \u00b7 API \u00b7 api.staging.kubelab.live",
+    "name": "Staging · API · api.staging.kubelab.live",
     "type": "http",
     "url": "https://api.staging.kubelab.live/health",
     "hostname": null,
@@ -717,7 +748,7 @@
   },
   {
     "key": "services-auth-authelia-staging",
-    "name": "Services \u00b7 Auth \u00b7 Authelia Staging",
+    "name": "Services · Auth · Authelia Staging",
     "type": "http",
     "url": "https://auth.staging.kubelab.live/api/health",
     "hostname": null,
@@ -731,7 +762,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Authelia SSO health (staging). VPN-only. Critical \u2014 gates all protected staging services.",
+    "description": "Authelia SSO health (staging). VPN-only. Critical — gates all protected staging services.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
@@ -748,7 +779,7 @@
   },
   {
     "key": "staging-web-grafana-staging",
-    "name": "Staging \u00b7 Web \u00b7 Grafana Staging",
+    "name": "Staging · Web · Grafana Staging",
     "type": "http",
     "url": "https://grafana.staging.kubelab.live/api/health",
     "hostname": null,
@@ -778,7 +809,7 @@
   },
   {
     "key": "staging-web-gitea-staging",
-    "name": "Staging \u00b7 Web \u00b7 Gitea Staging",
+    "name": "Staging · Web · Gitea Staging",
     "type": "http",
     "url": "https://gitea.staging.kubelab.live/api/healthz",
     "hostname": null,
@@ -808,7 +839,7 @@
   },
   {
     "key": "staging-web-n8n-staging",
-    "name": "Staging \u00b7 Web \u00b7 n8n Staging",
+    "name": "Staging · Web · n8n Staging",
     "type": "http",
     "url": "https://n8n.staging.kubelab.live/healthz",
     "hostname": null,
@@ -838,7 +869,7 @@
   },
   {
     "key": "staging-web-minio-staging",
-    "name": "Staging \u00b7 Web \u00b7 MinIO Staging",
+    "name": "Staging · Web · MinIO Staging",
     "type": "http",
     "url": "https://minio.staging.kubelab.live/minio/health/live",
     "hostname": null,
@@ -868,7 +899,7 @@
   },
   {
     "key": "staging-web-homepage-staging",
-    "name": "Staging \u00b7 Web \u00b7 Homepage Staging",
+    "name": "Staging · Web · Homepage Staging",
     "type": "http",
     "url": "https://home.staging.kubelab.live",
     "hostname": null,
@@ -897,7 +928,7 @@
   },
   {
     "key": "services-monitoring-pi-hole-staging",
-    "name": "Services \u00b7 Monitoring \u00b7 Pi-hole Staging",
+    "name": "Services · Monitoring · Pi-hole Staging",
     "type": "http",
     "url": "https://pihole.staging.kubelab.live/admin/",
     "hostname": null,
@@ -928,7 +959,7 @@
   },
   {
     "key": "home-iot-smart-plug-co",
-    "name": "Home \u00b7 IoT \u00b7 Smart Plug CO",
+    "name": "Home · IoT · Smart Plug CO",
     "type": "ping",
     "url": "https://",
     "hostname": "10.0.0.167",
@@ -956,7 +987,7 @@
   },
   {
     "key": "ops-backup-node-beelink",
-    "name": "Ops \u00b7 Backup \u00b7 beelink node-path",
+    "name": "Ops · Backup · beelink node-path",
     "type": "push",
     "url": "https://",
     "hostname": null,
@@ -970,7 +1001,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "BACKUP-044 AC9. beelink posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
+    "description": "BACKUP-044 AC9. beelink posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
@@ -984,7 +1015,7 @@
   },
   {
     "key": "ops-backup-node-rpi3",
-    "name": "Ops \u00b7 Backup \u00b7 rpi3 node-path",
+    "name": "Ops · Backup · rpi3 node-path",
     "type": "push",
     "url": "https://",
     "hostname": null,
@@ -998,7 +1029,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "BACKUP-044 AC9. rpi3 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
+    "description": "BACKUP-044 AC9. rpi3 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
@@ -1013,7 +1044,7 @@
   },
   {
     "key": "ops-backup-node-rpi4",
-    "name": "Ops \u00b7 Backup \u00b7 rpi4 node-path",
+    "name": "Ops · Backup · rpi4 node-path",
     "type": "push",
     "url": "https://",
     "hostname": null,
@@ -1027,7 +1058,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "BACKUP-044 AC9. rpi4 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
+    "description": "BACKUP-044 AC9. rpi4 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
@@ -1041,7 +1072,7 @@
   },
   {
     "key": "ops-backup-node-vps",
-    "name": "Ops \u00b7 Backup \u00b7 vps node-path",
+    "name": "Ops · Backup · vps node-path",
     "type": "push",
     "url": "https://",
     "hostname": null,
@@ -1055,7 +1086,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "BACKUP-044 AC9. vps posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule \u2014 it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
+    "description": "BACKUP-044 AC9. vps posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,

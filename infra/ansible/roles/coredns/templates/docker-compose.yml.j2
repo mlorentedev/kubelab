@@ -14,8 +14,16 @@ services:
       - ./pihole-forwarding.conf:/etc/dnsmasq.d/pihole-forwarding.conf:ro
     environment:
       - TZ={{ pihole_timezone }}
+    # Resolves a STAGING name, not `localhost`. Pi-hole answers `localhost` from
+    # its own tables without ever consulting its upstream, so the old probe
+    # reported `healthy` for the entire 2026-08-22 outage while every real query
+    # failed. Only a name that CoreDNS serves proves the Pi-hole -> CoreDNS hop
+    # works, which is what `healthy` is taken to mean.
+    #
+    # `+short` alone is not enough: dig exits 0 on NXDOMAIN. `+short` prints
+    # nothing then, so the grep is what turns "no answer" into a failure.
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "localhost", "+short"]
+      test: ["CMD-SHELL", "dig @127.0.0.1 {{ staging_domain }} +short | grep -q ."]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -28,11 +36,23 @@ services:
     ports:
       - "{{ coredns_port }}:53/udp"
       - "{{ coredns_port }}:53/tcp"
-      # Health endpoint from the `health` plugin. Bound to the Tailscale address,
-      # never published bare: Docker's DNAT is evaluated before ufw's filter
-      # chains and DOCKER-USER is empty fleet-wide, so a published port is
-      # governed by its bind address and nothing else (#959).
-      - "{{ node_ips.rpi4 }}:{{ coredns_health_port }}:8080/tcp"
+      # Health endpoint from the `health` plugin. Bound rather than published
+      # bare, because Docker's DNAT is evaluated before ufw's filter chains and
+      # DOCKER-USER is empty fleet-wide, so a published port is governed by its
+      # bind address and nothing else (#959).
+      #
+      # Bound to the LAN address, NOT the Tailscale one. That distinction cost
+      # ninety minutes of staging DNS on 2026-08-22: on boot Docker restores
+      # containers under `restart: unless-stopped` and got there before
+      # tailscaled had assigned 100.64.0.10. The bind failed, and a failed bind
+      # takes the container's WHOLE port publication with it — including
+      # `5353:53` above, which is how Pi-hole reaches CoreDNS. The container ran,
+      # `docker inspect` still listed the bindings, and nothing served.
+      #
+      # The LAN address is on a physical interface the network stack configures
+      # before Docker starts, so there is no race to lose. #959's protection is
+      # kept; only the boot-order dependency is dropped.
+      - "{{ coredns_health_bind_ip }}:{{ coredns_health_port }}:8080/tcp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
     command: ["-conf", "/etc/coredns/Corefile"]
