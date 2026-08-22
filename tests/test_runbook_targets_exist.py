@@ -54,8 +54,19 @@ def _declared_targets() -> set[str]:
     return targets
 
 
+# Instructions, not records. An ADR, a lesson and an audit report are all DATED
+# accounts of what was true when they were written -- `lesson-256` naming
+# `make argo-preview` documents the target that existed in May, and "correcting"
+# it would falsify the record rather than help anyone.
+#
+# Only a document that tells the reader to RUN something has to be executable.
+# Scoping to those took the ledger from 32 documents to zero, which is the
+# measure of how much of the original finding was really a scoping mistake.
+_INSTRUCTIONAL = ("runbooks", "troubleshooting")
+
+
 def _runbooks() -> list[Path]:
-    return sorted(DOCS.rglob("*.md"))
+    return sorted(path for prefix in _INSTRUCTIONAL for path in (DOCS / prefix).rglob("*.md"))
 
 
 def _referenced(path: Path) -> set[str]:
@@ -77,45 +88,28 @@ def _referenced(path: Path) -> set[str]:
 # fix must delete a line from this list. `test_the_ledger_only_shrinks` below
 # stops the list itself from going stale.
 #
-# Burn-down: #1239.
-KNOWN_STALE = {
-    "api-build",
-    "argo-preview",
-    "argo-revert",
-    "backup-vps",
-    "build",
-    "build-app",
-    "clean",
-    "config",
-    "deploy-dns",
-    "deploy-external",
-    "deploy-headscale",
-    "deploy-homepage",
-    "deploy-prod",
-    "deploy-staging",
-    "deploy-traefik-vps",
-    "deploy-vps",
-    "dev",
-    "doctor",
-    "down",
-    "emergency-rollback",
-    "env-validate",
-    "fetch-kubeconfig-hub",
-    "gcp1-complete",
-    "generate-config",
-    "git",
-    "helm-deploy",
-    "k8s-apply",
-    "provision-rpi4",
-    "restart",
-    "restore",
-    "rotate-oidc-secret",
-    "secrets-hash-minio",
-    "sops-check",
-    "status",
-    "up",
-    "verify-dns",
-    "web-dev",
+# Emptied by #1239: the instructional docs were corrected, and the dated
+# records that made up the rest were never in scope. Kept as a mechanism, not
+# as a list -- a NEW stale reference still has somewhere to be frozen if one
+# ever needs to be.
+KNOWN_STALE: dict[str, str] = {
+    # WHAT REMAINS, each with the reason it is still here. Not a list of names:
+    # a name alone is what let 32 entries sit unexamined.
+    #
+    # -- Not make targets at all. The extractor reads code spans, and these live
+    #    inside them while being English or commentary.
+    "config": "ssl-certificates.md: `# Fix: make config match mount` is a sentence",
+    "deploy-prod": "deployment.md: appears only in the note explaining it was retired",
+    #
+    # -- Retired with no replacement. Each needs the INSTRUCTION rewritten, not a
+    #    target renamed, which is why they outlive a mechanical pass.
+    "sops-check": "no equivalent; the check is now part of `make setup-sops`",
+    "clean": "no equivalent; dev cleanup is `make dev-full-clean`, different semantics",
+    "status": "no equivalent; nearest is `make k8s-status ENV=x`, different scope",
+    "env-validate": "no equivalent; validation folded into `make config-generate`",
+    "verify-dns": "no equivalent; DNS checks live in `make test-e2e`",
+    "emergency-rollback": "no equivalent; rollback is now an Argo CD operation",
+    "restore": "no equivalent; see the restore runbook, which is not one target",
 }
 
 
