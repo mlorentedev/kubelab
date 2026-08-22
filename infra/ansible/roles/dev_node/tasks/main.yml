@@ -147,6 +147,19 @@
       changed_when: "'installing' in (_mise_install.stderr | lower) or 'installing' in (_mise_install.stdout | lower)"
       tags: [dev_node, mise]
 
+    # --- Agent CLI tooling (Claude Code, etc.) ---
+    - name: Install global agent CLI tools via mise node npm
+      ansible.builtin.command:
+        cmd: "{{ dev_node_home }}/.local/bin/mise exec -- npm install -g {{ item }}"
+      environment:
+        PATH: "{{ dev_node_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH | default('') }}"
+      loop: "{{ dev_node_global_agent_npm_packages }}"
+      register: _npm_global_install
+      changed_when: "'added' in _npm_global_install.stdout or 'changed' in _npm_global_install.stdout"
+      tags: [dev_node, mise, agents]
+
+
+
     # --- tmux-resurrect (vendored plugin; base tmux comes from base_system) ---
     - name: Vendor tmux-resurrect at a pinned version
       ansible.builtin.git:
@@ -215,7 +228,7 @@
     # runners, remote agent harnesses) bypass /etc/profile.d/ and ~/.bashrc (early
     # return on [ -z "$PS1" ]). Symlinking the pinned mise node/npm/npx binaries
     # to /usr/local/bin exposes them on standard non-interactive $PATH cleanly.
-    - name: Symlink mise node, npm, and npx into /usr/local/bin for non-interactive SSH tools
+    - name: Symlink mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools
       ansible.builtin.file:
         src: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
         dest: "/usr/local/bin/{{ item }}"
@@ -225,9 +238,21 @@
         - node
         - npm
         - npx
+        - claude
+      become: true
+      become_user: root
+      tags: [dev_node, mise, orca, agents]
+
+    - name: Symlink mise binary into /usr/local/bin
+      ansible.builtin.file:
+        src: "{{ dev_node_home }}/.local/bin/mise"
+        dest: "/usr/local/bin/mise"
+        state: link
+        force: true
       become: true
       become_user: root
       tags: [dev_node, mise, orca]
+
 
     # ~/.bashrc.local and ~/.zshrc.local are the dotfiles-side seam (IDEAS-001):
     # gitignored, sourced LAST by the tracked rc files, and never redeployed by

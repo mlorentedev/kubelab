@@ -1017,6 +1017,7 @@ gcp1-destroy: tf-gcp-destroy
 wait-node-ready:
 	@test -n "$(NODE)" || (echo "Usage: make wait-node-ready NODE=aws1|gcp1|ace1|ace2|beelink|vps|rpi3|rpi4 [ENV=staging|prod|hub]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	@$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null
 	@$(TOOLKIT) infra ansible run -p wait-node-ready -e $(_ENV) -l $(NODE)
 
 # Terraform DNS (Cloudflare) — SOPS-injected token
