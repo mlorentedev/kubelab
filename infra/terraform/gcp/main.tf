@@ -134,6 +134,26 @@ resource "google_compute_instance_template" "hub" {
     preemptible         = true
     automatic_restart   = false
     on_host_maintenance = "TERMINATE"
+
+    # DECLARED as STOP, which is what GCP applies to a Spot VM in a MIG anyway.
+    # Omitting it is not neutral: GCP writes STOP into the resource, Terraform
+    # compares that against an absent value, and this field FORCES REPLACEMENT --
+    #
+    #   ~ scheduling {
+    #       - instance_termination_action = "STOP" -> null # forces replacement
+    #
+    # so the template was replaced on EVERY apply, and with a PROACTIVE update
+    # policy that rebuilds the VM. Measured 2026-08-22: an apply immediately
+    # after a successful apply still planned `1 to add, 1 to destroy`. The hub
+    # was being recreated by the act of checking on it.
+    #
+    # Same family as the `distribution_policy_zones = []` defect (#1282), and
+    # found the same way -- by asking whether a second apply is a no-op. It was
+    # not, and an apply that is never a no-op is one nobody dares run.
+    #
+    # DELETE remains unavailable here (see the note below), so STOP is not a
+    # preference: it is the only legal value, now stated rather than inferred.
+    instance_termination_action = "STOP"
     # NO instance_termination_action, and not by choice. ADR-063 specified
     # DELETE -- the API refuses it here:
     #
