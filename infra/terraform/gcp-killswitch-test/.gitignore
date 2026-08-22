@@ -1,0 +1,6 @@
+# Rendered from SOPS by `toolkit infra terraform killswitch-test-tfvars` and
+# deleted after every use — it carries the billing account id.
+killswitch-test.tfvars
+.terraform/
+*.tfstate
+*.tfstate.backup
