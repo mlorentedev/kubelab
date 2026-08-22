@@ -61,9 +61,26 @@ Two consequences worth stating rather than discovering later:
   imposing its own retry budget, and the unit's own ceiling never applies. That
   number is not declared anywhere in this repository.
 
-Filed rather than fixed here: this is a diagnosability defect in a control that
-otherwise works, and conflating it with AC4's demonstration would leave neither
-clearly done.
+**Fixed the same day, and verified by re-injecting the same failure.** Two
+independent causes, both needed:
+
+- `--stuck-request-timeout 45s`. restic's 5m default outlived the unit, so
+  systemd killed the run before restic reached its own error path — which is
+  also why `TimeoutStartSec=600` never applied.
+- The `snapshots` probe discarded stderr. It is the FIRST call to touch R2, so
+  it is exactly where a bad credential is discovered, and its stderr was the
+  only explanation the run would ever produce.
+
+Same injection, after the fix:
+
+```
+Stat(<config/>) returned error, retrying after 49.1s: Stat: The request
+signature we calculated does not match the signature you provided. Check your
+secret access key and signing method.
+```
+
+180 seconds of silence became a named cause. The operator now gets the reason
+in the envelope's journal tail rather than a run that ends mid-sentence.
 
 #### A measurement error I made twice
 
