@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-45 lessons, newest first. Back to [all categories](../_index.md).
+46 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 366 | [A task that acquires state must survive the task that uses it](lesson-366-a-task-that-acquires-state-must-survive-the-task-that-uses-it.md) | 2026-08-22 |
 | 360 | [A shell creates the redirect target before it resolves the command](lesson-360-a-shell-creates-the-redirect-target-before-it-resolves-the-command.md) | 2026-08-21 |
 | 356 | [An Ansible play whose `hosts:` pattern matches nothing succeeds](lesson-356-unmatched-host-pattern-is-a-warning.md) | 2026-08-20 |
 | 349 | [Presence is not coverage — a package can be installed on a host nothing manages](lesson-349-presence-is-not-coverage-a-package-can-be-installed-and-unmanaged.md) | 2026-08-18 |
