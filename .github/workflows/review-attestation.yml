@@ -307,8 +307,13 @@ jobs:
           # input could contain — and a heredoc that terminates early writes
           # whatever follows as further outputs.
           delim="summary_$(openssl rand -hex 8)"
+          # The STATE, not only the code. `attested` and `disclosed` both exit 0
+          # and mean opposite things about whether anyone read this PR; the
+          # published status used to flatten them into "a review happened".
+          state_word="$(printf '%s\n' "$out" | grep -oE '\b(attested|exempt|disclosed|declined|pending)\b' | tail -n 1)"
           {
             echo "code=$code"
+            echo "state_word=${state_word:-unknown}"
             echo "summary<<$delim"
             printf '%s\n' "$out" | tail -n 5
             echo "$delim"
@@ -320,12 +325,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ steps.pr.outputs.sha }}
           CODE: ${{ steps.attest.outputs.code }}
+          STATE_WORD: ${{ steps.attest.outputs.state_word }}
         # A commit STATUS, never a check-run. A check-run belongs to the run that
         # created it and can never be revised, so a later attestation — the
         # reviewer finally speaking — could not clear an earlier red.
         run: |
           set -euo pipefail
-          if [ "$CODE" = "0" ]; then state="success"; description="a review happened"
+          # A DECLARED UNREVIEWED MERGE MUST NOT READ AS A REVIEWED ONE. Both
+          # exit 0, and the status is the durable artefact — what branch
+          # protection reads, and what a human sees months later. Saying "a
+          # review happened" over a declared escape recreates precisely the
+          # condition TOOL-021 was filed for: a green check with no review
+          # behind it.
+          if [ "$CODE" = "0" ] && [ "$STATE_WORD" = "disclosed" ]; then
+            state="success"; description="NOT reviewed — unreviewed merge declared"
+          elif [ "$CODE" = "0" ] && [ "$STATE_WORD" = "exempt" ]; then
+            state="success"; description="exempt from review"
+          elif [ "$CODE" = "0" ]; then state="success"; description="a review happened"
           elif [ "$CODE" = "1" ]; then state="failure"; description="not reviewed, and not declared as such"
           else state="error"; description="could not determine whether this PR was reviewed"
           fi

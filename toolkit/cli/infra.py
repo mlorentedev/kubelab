@@ -219,6 +219,46 @@ def argo_check_drift(
     raise typer.Exit(1)
 
 
+@argo_app.command("unregister-spoke")
+def argo_unregister_spoke(
+    env: Annotated[str, typer.Option("--env", "-e", help="Spoke environment to detach")],
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Kubeconfig of the hub to detach FROM (required: two hubs exist)"),
+    ],
+    remove_shared_rbac: Annotated[
+        bool,
+        typer.Option(
+            "--remove-shared-rbac",
+            help="Also delete the spoke's RBAC. Correct ONLY when no other hub reconciles it.",
+        ),
+    ] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the plan and change nothing")] = False,
+) -> None:
+    """Detach ONE hub from ONE spoke, without pruning the spoke.
+
+    `--kubeconfig` is required rather than defaulted: two hubs are live during
+    the migration, and the old global default resolves to the hub being migrated
+    TO -- so detaching the old one would delete the new one's credential.
+
+    The Application's `resources-finalizer.argocd.argoproj.io` is stripped
+    BEFORE the Application is deleted. Without that the delete CASCADES and
+    prunes every resource the Application manages, which is the whole spoke
+    namespace.
+    """
+    from toolkit.features.spoke_unregistration import unregister_spoke
+
+    logger.section(f"Detaching {env} from the hub at {kubeconfig}")
+    steps = unregister_spoke(env, Path(kubeconfig), remove_shared_rbac, dry_run)
+    for i, step in enumerate(steps, 1):
+        prefix = "would" if dry_run else "did"
+        logger.info(f"  {i}. {prefix}: {step.what}")
+    if dry_run:
+        logger.warning("dry-run — nothing was changed")
+        return
+    logger.success(f"{env} detached. The spoke's workloads were not touched.")
+
+
 @argo_app.command("check-spokes")
 def argo_check_spokes(
     kubeconfig: Annotated[
