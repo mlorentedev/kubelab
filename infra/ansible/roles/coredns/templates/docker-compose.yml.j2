@@ -20,10 +20,22 @@ services:
     # failed. Only a name that CoreDNS serves proves the Pi-hole -> CoreDNS hop
     # works, which is what `healthy` is taken to mean.
     #
-    # `+short` alone is not enough: dig exits 0 on NXDOMAIN. `+short` prints
-    # nothing then, so the grep is what turns "no answer" into a failure.
+    # The grep matches an ADDRESS, not merely "some output", and that precision
+    # is load-bearing. Measured on this very container: with the upstream dead,
+    # `dig +short` writes its diagnostics to STDOUT, not stderr —
+    #
+    #   ;; communications error to 127.0.0.1#5999: connection refused
+    #   ; <<>> DiG 9.20.24 <<>> ...
+    #
+    # — so `grep -q .` matches the error text and the probe passes on a resolver
+    # that answered nothing. A first draft of this healthcheck did exactly that.
+    # Diagnostic lines all begin with `;`; an A record begins with a digit.
+    #
+    # Note NXDOMAIN is NOT the case being guarded: CoreDNS serves a wildcard for
+    # this zone, so every name under it answers. What must be caught is the
+    # upstream being unreachable, which is what the outage actually was.
     healthcheck:
-      test: ["CMD-SHELL", "dig @127.0.0.1 {{ staging_domain }} +short | grep -q ."]
+      test: ["CMD-SHELL", "dig @127.0.0.1 {{ staging_domain }} +short | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'"]
       interval: 30s
       timeout: 5s
       retries: 3
