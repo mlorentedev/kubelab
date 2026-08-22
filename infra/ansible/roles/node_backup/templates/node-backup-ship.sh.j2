@@ -49,11 +49,34 @@ export AWS_ACCESS_KEY_ID="$(cat {{ node_backup_r2_access_key_file }})"
 export AWS_SECRET_ACCESS_KEY="$(cat {{ node_backup_r2_secret_key_file }})"
 
 REPO="{{ node_backup_r2_repository }}"
-RESTIC="{{ node_backup_restic_install_path }} --repo $REPO"
+# `--stuck-request-timeout` bounds how long restic waits on a request that is
+# going nowhere before retrying it. Measured 2026-08-22 by injecting two real
+# failures on beelink -- a blackholed endpoint and an invalid credential: with
+# restic's 5m default, BOTH surfaced identically as systemd `Result=timeout`
+# after ~180s, with NOT ONE restic error line in the journal. The operator got
+# "node-backup-ship.service failed" and a log tail that ended mid-run.
+#
+# The unit's own TimeoutStartSec=600 never applied, because restic was still
+# inside its first request's retry budget when systemd gave up. Shortening the
+# request timeout is what lets restic reach its own error path and SAY what
+# went wrong while the unit is still alive to log it.
+#
+# 45s is well above any healthy request to R2 (a full cycle on this fleet is
+# 2-12s end to end) and well under the unit's ceiling, so a genuinely slow link
+# still succeeds and a broken one reports rather than hangs.
+RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeout {{ node_backup_stuck_request_timeout }}"
 
 # Idempotent bootstrap: `restic init` fails loudly on an already-initialized
 # repository, so probe first rather than treating that failure as success.
-if ! $RESTIC snapshots -q >/dev/null 2>&1; then
+#
+# stderr is KEPT, and that is the fix rather than a detail. This probe is the
+# FIRST thing to touch R2, so it is where a bad credential or an unreachable
+# endpoint is discovered -- and discarding its stderr threw away the only
+# explanation the run would ever produce. stdout still goes to /dev/null (a
+# snapshot list is not evidence of anything here); stderr reaches the journal,
+# where the notifier reads it.
+if ! $RESTIC snapshots -q >/dev/null; then
+    echo "node-backup-ship: repository not readable (see the restic error above) -- attempting init" >&2
     $RESTIC init
 fi
 

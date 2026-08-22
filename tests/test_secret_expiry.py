@@ -227,3 +227,53 @@ class TestExpiryIsPartOfTheAudit:
         result = CliRunner().invoke(cli.app, ["audit", "--env", "prod"])
         assert result.exit_code == 0, result.stdout
         assert "expiry not checked" in result.stdout
+
+
+class TestTheSshTargetComesFromTheSSOT:
+    """It defaulted to `deployer@162.55.57.175` — both halves hardcoded, both of
+    them SSOT values, in a repository whose own rule reads "Never hardcode
+    IPs/CIDRs in K8s manifests, tests, or toolkit code".
+
+    Raised by review on #1247. Not cosmetic: the VPS's public IP has changed
+    before, and a stale literal here means the check silently asks the wrong
+    host — or nothing at all — while still reporting on the credentials it did
+    manage to reach.
+    """
+
+    def test_no_ip_literal_survives_in_the_command(self) -> None:
+        """Over the AST, so the comment explaining the removal cannot fail it."""
+        import ast
+        import inspect
+        import re
+        import textwrap
+
+        import toolkit.cli.secrets as cli
+
+        tree = ast.parse(textwrap.dedent(inspect.getsource(cli.check_expiry)))
+        literals = [
+            n.value
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant)
+            and isinstance(n.value, str)
+            and re.search(r"\b\d{1,3}(\.\d{1,3}){3}\b", n.value)
+        ]
+        assert not literals, f"an IP literal is back in check-expiry: {literals}"
+
+    def test_the_default_is_none_so_it_can_be_derived(self) -> None:
+        """A literal default would make the derivation unreachable — which mypy
+        reported when the signature and the body disagreed."""
+        import inspect
+
+        import toolkit.cli.secrets as cli
+
+        assert inspect.signature(cli.check_expiry).parameters["ssh_target"].default is None
+
+    def test_it_derives_the_public_ip_not_the_tailscale_one(self) -> None:
+        """Headscale IS the VPN. A check that reaches it over the VPN cannot
+        report on a VPN that is down."""
+        import inspect
+
+        import toolkit.cli.secrets as cli
+
+        src = inspect.getsource(cli.check_expiry)
+        assert "public_ip" in src and "tailscale_ip" not in src
