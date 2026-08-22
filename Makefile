@@ -636,7 +636,7 @@ register-spoke:
 	@echo "--- Extracting credentials from $(ENV) spoke ---"
 	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
 		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \
-		SERVER=$$($(POETRY) run python -c "import yaml;c=yaml.safe_load(open('infra/config/values/common.yaml'));n=c['argocd']['spokes']['$(ENV)']['node'];ip=c['networking']['vps']['tailscale_ip'] if n=='vps' else c['networking']['nodes'][n]['tailscale_ip'];print(f'https://{ip}:{c[\"k3s\"][\"api_port\"]}')") && \
+		SERVER=$$($(TOOLKIT) infra argo spoke-url --env $(ENV)) && \
 		test -n "$$TOKEN" || (echo "Error: token not populated" && exit 1) && \
 		test -n "$$CA" || (echo "Error: CA cert not found" && exit 1) && \
 		echo "--- Creating cluster secret on hub ($$SERVER) ---" && \
@@ -774,6 +774,26 @@ deploy:
 	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK)
+
+# Run ONE node-path backup now, rather than waiting for its timer (BACKUP-044).
+#
+# `make backup` deploys the pipeline; this makes a backup happen. The PVC class
+# has had that distinction since ADR-024 (`make backup-pvc`) and the node-path
+# class did not, so an operator about to do something risky had no way to take a
+# snapshot first.
+#
+# Starts the ship unit, which pulls capture in via `Wants=` — the real scheduled
+# path, so it also posts the AC9 coverage heartbeat.
+.PHONY: backup-node
+backup-node:
+	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=vps|rpi3|beelink|rpi4|all [ENV=prod] [CHECK=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@if [ "$(NODE)" = "all" ]; then \
+		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) $(_CHECK); \
+	else \
+		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK); \
+	fi
 
 # CHECK=1 is a dry run. It is accepted HERE, and on every other target that
 # changes a node, because `make provision` accepted it and these did not:

@@ -44,6 +44,36 @@ These are two different claims and the second is the one backups depend on. Both
 are safe against the live destination — they write a throwaway object under
 `_smoketest/` and remove it.
 
+## Backing up on demand
+
+The timers cover the schedule. This is for the moment before you do something
+risky, when the last snapshot is up to four hours old:
+
+```bash
+make backup-node NODE=vps ENV=prod        # one node
+make backup-node NODE=all ENV=prod        # the whole fleet
+make backup-node NODE=rpi3 ENV=prod CHECK=1   # rehearse, change nothing
+```
+
+**`make backup` and `make backup-node` are different commands.** The first
+DEPLOYS the pipeline — roles, units, timers, credentials. The second makes a
+backup happen now. Reaching for `make backup` to get a snapshot re-runs a
+deployment against every node, which is not what you wanted and is not idempotent
+in the way you were assuming.
+
+It starts `node-backup-ship.service`, which pulls capture in via `Wants=` and
+orders it first — the same path the timer takes, so it also posts the coverage
+heartbeat. That is how you make a heartbeat arrive without waiting for a window:
+
+```
+ship complete: s3:.../kubelab-backups/rpi3
+coverage heartbeat posted
+```
+
+An on-demand node that is powered off is skipped, not failed. Measured on the
+always-on pair, 2026-08-22: rpi3 in ~10s, VPS in ~2s, both with the heartbeat
+landing in Uptime Kuma.
+
 ## Restoring — normal case
 
 You have the repo checked out and the SOPS age key works.
