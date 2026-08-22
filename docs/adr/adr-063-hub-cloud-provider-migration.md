@@ -152,13 +152,48 @@ capacity — the exact failure that produced
 [#1066](https://github.com/mlorentedev/kubelab/issues/1066), where
 `eu-central-1a` had no capacity and the instance simply stayed stopped.
 
-The instance template sets `instance_termination_action = DELETE` rather than the
-`STOP` default, so a preempted VM leaves no `TERMINATED` shell behind and the
-MIG's reconciliation is unambiguous. Autohealing is **omitted in v1**: with DELETE
-termination the MIG already restores target size on preemption without a health
-check, whereas a health probe firing before cloud-init's multi-minute bootstrap
-completes would produce a recreate loop on a Spot hub. Adding autohealing later
-requires an `initial_delay_sec` no shorter than the measured bootstrap time.
+> **Corrected 2026-08-22, on the first real apply.** This paragraph originally
+> specified `instance_termination_action = DELETE`, reasoning that the `STOP`
+> default leaves a `TERMINATED` shell behind. **GCP refuses it:** *"Spot virtual
+> machines with termination action set to DELETE cannot be used with Managed
+> Instance Groups."* The decision was written here, encoded in the module, and
+> asserted by a test — all green, because nothing had run. Kept visible rather
+> than rewritten: the reasoning still reads well, and that is exactly why
+> someone will try to restore it. See
+> `docs/lessons/process-method/lesson-366-*.md`.
+
+The instance template leaves `instance_termination_action` unset, because a MIG
+permits only the `STOP` default. A preempted VM is stopped rather than deleted,
+and the MIG recreates it.
+
+Autohealing is **omitted in v1**, and the reason is *not* the one first given
+here. The original argument — that DELETE termination restores target size
+without a health check — died with DELETE. The conclusion survives on the
+documented behaviour of the STOP path
+([Spot VMs](https://docs.cloud.google.com/compute/docs/instances/spot)):
+
+> MIGs always attempt to maintain their target size [...] If Compute Engine
+> stops one or more Spot VMs in a MIG, the group repeatedly tries to recreate
+> those VMs using the specified instance template.
+
+Recreation therefore happens without autohealing, which addresses
+application-level failure rather than preemption. A health probe firing before
+cloud-init's multi-minute bootstrap completes would instead produce a recreate
+loop on a Spot hub. Adding autohealing later requires an `initial_delay_sec` no
+shorter than the measured bootstrap time.
+
+**AC4 still has to observe this.** A documented behaviour and an observed one are
+different claims, and believing the first without the second is what put DELETE
+in this ADR.
+
+**A singleton regional MIG constrains `maxUnavailable` to one legal value.**
+Measured, not documented in the general MIG guide: a regional group rejects a
+fixed value that is neither 0 nor at least the zone count, and rejects the
+percent form entirely below size 10. Zero would forbid replacing the only
+instance. So the zone count is the sole option, and the module derives it from
+`data.google_compute_zones` rather than writing `3` — which is a fact about
+`europe-west4`, not about this design, and would fail closed on any region with
+a different zone count.
 
 **Regional, not zonal, and explicitly not hand-picked.** On AWS, Spot pricing is
 set *per availability zone* — which is why this hub pays $0.0109/hr in

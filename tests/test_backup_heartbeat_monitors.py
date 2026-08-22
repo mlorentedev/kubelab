@@ -390,3 +390,78 @@ def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:
         assert by_name[name].get("check_mode") is False, (
             f"{name!r} is skipped under --check, so its stdout is empty"
         )
+
+
+# --- the shutdown receipt: proof that survives the phase with no journal ----
+
+
+def test_the_shutdown_path_leaves_proof_and_the_boot_path_reads_it() -> None:
+    """The shutdown snapshot's journal does not survive, so it writes a receipt.
+
+    Measured across a real power cycle 2026-08-22: the persistent journal stops
+    recording once the user session closes, well before systemd stops system
+    services. `ExecStop=` runs after that, into a log nobody keeps — so whether
+    the last power-off shipped was unknowable from outside.
+
+    Two indirect proofs were tried and both were WRONG, which is why a receipt
+    exists rather than a cleverer query:
+
+    - restic's cache mtime did not change on a run that demonstrably shipped.
+    - the snapshot COUNT did not rise, because `forget --prune` runs in the same
+      pass and retires one as it adds one. Identity changes; totals do not.
+    """
+    ship = SHIP.read_text(encoding="utf-8")
+    assert "SHUTDOWN_RECEIPT" in ship, "ship never writes a receipt"
+    assert 'if [ "${SHUTDOWN_RECEIPT:-}" != "" ]' in ship, (
+        "ship writes a receipt unconditionally, so the timer path would leave one "
+        "too and a boot could read a scheduled run as a shutdown run"
+    )
+
+    unit = (
+        REPO / "infra/ansible/roles/node_backup/templates/node-backup-shutdown.service.j2"
+    ).read_text(encoding="utf-8")
+    assert "Environment=SHUTDOWN_RECEIPT=" in unit, (
+        "the shutdown unit does not ask ship for a receipt"
+    )
+    # Order matters: clear before capture, so a stale file cannot be read as
+    # proof of THIS run.
+    clear = unit.index("rm -f")
+    capture = unit.index("ExecStop={{ node_backup_capture_script_path }}")
+    assert clear < capture, (
+        "the previous receipt is not cleared before this run starts. A receipt from "
+        "two shutdowns ago would read as success, which is worse than no receipt: it "
+        "reports a backup that did not happen."
+    )
+
+    capture_script = (
+        REPO / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2"
+    ).read_text(encoding="utf-8")
+    assert "node_backup_shutdown_receipt" in capture_script, (
+        "nothing reads the receipt back. A receipt nobody reads is a file, not a "
+        "control — and the boot capture is the first moment anyone can learn whether "
+        "the last power-off shipped."
+    )
+    assert "NO RECEIPT" in capture_script, (
+        "absence is not reported, so a missing receipt is indistinguishable from a "
+        "node that was never powered off"
+    )
+
+
+def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
+    """It must not live in the staging directory.
+
+    `node-backup-capture.sh` does `rm -rf "$STAGING"` at the top of every run,
+    so a receipt written there would be deleted by the very boot capture meant
+    to read it — before anyone could look.
+    """
+    import yaml as _yaml
+
+    defaults = _yaml.safe_load(
+        (REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text()
+    )
+    receipt = str(defaults["node_backup_shutdown_receipt"])
+    staging = str(defaults["node_backup_staging_dir"])
+    assert not receipt.startswith(staging), (
+        f"the receipt lives under {staging}, which capture wipes on every run — the "
+        f"boot capture would delete the evidence before reading it"
+    )

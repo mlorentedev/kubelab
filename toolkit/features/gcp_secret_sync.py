@@ -32,6 +32,8 @@ would be a new dependency class for a tool that shells out four times.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import subprocess
 from dataclasses import dataclass, field
@@ -186,11 +188,48 @@ def collect_spoke_items(config: dict[str, Any]) -> tuple[list[SyncItem], list[Sy
                     )
                 )
                 continue
+            # THE ASYMMETRY, and it is the whole point of this block.
+            #
+            # Kubernetes hands both fields back base64-encoded, because that is
+            # what `.data.*` is. Argo CD's cluster config wants them differently:
+            #
+            #     {"bearerToken": "<raw JWT>",
+            #      "tlsClientConfig": {"caData": "<base64 PEM>"}}
+            #
+            # So the token is decoded and the CA is not. `make register-spoke`
+            # has always done exactly this (`.data.token | base64 -d`, `ca.crt`
+            # untouched); porting the read into this module dropped the decode
+            # and shipped both verbatim.
+            #
+            # Measured cost on the live hub 2026-08-22: the stored token was 1228
+            # chars with ZERO dots — a JWT has two. Decoding once produced a
+            # valid token for `system:serviceaccount:kubelab:argocd-manager`. The
+            # credential was never wrong, only wrapped one layer too many, and
+            # every sync answered `the server has asked for the client to provide
+            # credentials`. A double-encoded secret looks exactly like a secret,
+            # which is why nothing caught it for the life of the hub.
+            raw = proc.stdout.strip()
+            if field_name == "token":
+                try:
+                    raw = base64.b64decode(raw, validate=True).decode()
+                except (binascii.Error, UnicodeDecodeError, ValueError):
+                    # Refuse rather than ship. An undecodable value written here
+                    # reproduces the original defect behind a different wrapper,
+                    # and nothing downstream inspects the shape before using it.
+                    failures.append(
+                        SyncResult(
+                            secret_id,
+                            "failed",
+                            f"the {env} spoke's {SPOKE_TOKEN_SECRET}/token is not valid base64, so it "
+                            "cannot be the ServiceAccount JWT Argo CD needs in `bearerToken`",
+                        )
+                    )
+                    continue
             items.append(
                 SyncItem(
                     secret_id=secret_id,
                     origin=f"{env} spoke {SPOKE_TOKEN_SECRET}/{field_name}",
-                    value=proc.stdout.strip(),
+                    value=raw,
                 )
             )
     return items, failures

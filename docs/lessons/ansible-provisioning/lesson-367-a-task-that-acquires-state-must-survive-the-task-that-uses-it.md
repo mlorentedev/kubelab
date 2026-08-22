@@ -1,5 +1,5 @@
 ---
-id: lesson-366-a-task-that-acquires-state-must-survive-the-task-that-uses-it
+id: lesson-367-a-task-that-acquires-state-must-survive-the-task-that-uses-it
 type: lesson
 status: active
 created: "2026-08-22"

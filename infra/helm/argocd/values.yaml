@@ -68,16 +68,47 @@ notifications:
       headers:
         - name: Content-Type
           value: application/json
+  # Two properties every trigger here needs, both learned the hard way and both
+  # taken from upstream's own catalog (argoproj/argo-cd
+  # notifications_catalog/triggers/*.yaml) rather than reinvented:
+  #
+  # 1. `operationState != nil` BEFORE any field of it. expr-lang RAISES on a nil
+  #    dereference, and a raised expression is a SKIPPED trigger — not a false
+  #    one. `operationState` is nil at the instant a sync starts, so an unguarded
+  #    `on-sync-failed` is blind during exactly the window a sync fails in.
+  #    Measured on the live hub 2026-08-22: ten `cannot fetch phase from <nil>`
+  #    errors, at the two timestamps syncs began, while `on-sync-failed` and
+  #    `on-health-degraded` each fired ZERO times in 24h. The alarm worked
+  #    whenever nothing was happening.
+  #
+  # 2. `oncePer` keyed on the REVISION. Without it Argo CD dedupes on the
+  #    condition hash, which does not change between deploys: both applications
+  #    logged the same key across every revision, so the notification for the
+  #    next deploy is suppressed as "already sent". `?.` is optional chaining and
+  #    is nil-safe by construction, which is why it needs no guard of its own.
+  #
+  # Guarded by tests/test_argocd_notification_triggers.py, structurally — the
+  # assertion holds for any trigger added later, not just these three.
   triggers:
     trigger.on-sync-failed: |
-      - when: app.status.sync.status == 'Unknown' || app.status.operationState.phase in ['Error', 'Failed']
+      # Folded (`>-`) purely to stay inside yamllint's 130-column limit; it
+      # joins to the single line Argo CD evaluates. Continuation lines must keep
+      # the SAME indent — a deeper one is literal, not folded, and would put a
+      # newline inside the expression.
+      - when: >-
+          app.status.sync.status == 'Unknown' ||
+          (app.status.operationState != nil and
+          app.status.operationState.phase in ['Error', 'Failed'])
         send: [app-sync-failed]
+        oncePer: app.status.operationState?.syncResult?.revision
     trigger.on-health-degraded: |
       - when: app.status.health.status == 'Degraded'
         send: [app-health-degraded]
+        oncePer: app.status.operationState?.syncResult?.revision
     trigger.on-sync-succeeded: |
-      - when: app.status.operationState.phase == 'Succeeded'
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded']
         send: [app-sync-succeeded]
+        oncePer: app.status.operationState?.syncResult?.revision
   templates:
     template.app-sync-failed: |
       webhook:

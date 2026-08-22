@@ -68,11 +68,14 @@ def test_the_runtime_packages_are_held_during_the_unattended_run() -> None:
         )
     script = _render()
     for pkg in blacklist:
-        assert f"apt-mark hold {pkg}" in script, f"{pkg} declared but never held"
-        assert f"apt-mark unhold {pkg}" in script, (
-            f"{pkg} is held and never released — an operator running `apt upgrade` by "
-            f"hand would be silently blocked by a hold this script placed"
-        )
+        # Quoted in the rendered script, and held only when NOT ALREADY held —
+        # see test_an_operators_existing_hold_survives_the_run for why the
+        # blanket form was a defect rather than a simplification.
+        assert f"apt-mark hold '{pkg}'" in script, f"{pkg} declared but never held"
+    assert "apt-mark unhold" in script, (
+        "nothing is released, so a hold this script placed outlives the run and "
+        "silently blocks an operator's own `apt upgrade`"
+    )
 
 
 def test_it_patches_the_security_pocket_only() -> None:
@@ -144,7 +147,7 @@ def test_both_implementations_of_this_role_patch() -> None:
     # And the two must agree on WHAT is held.
     script = _render()
     for pkg in _defaults()["maintenance_patch_blacklist"]:
-        assert f"apt-mark hold {pkg}" in script, f"{pkg} not held on the timer path"
+        assert f"apt-mark hold '{pkg}'" in script, f"{pkg} not held on the timer path"
     holds = [t for t in tasks if "apt-mark hold" in str(t.get("command", ""))]
     assert holds, "the Ansible path holds nothing; a `make maintain` could restart K3s"
 
@@ -182,7 +185,10 @@ def test_the_patch_tasks_report_change_only_when_they_change_something() -> None
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     by_name = {t.get("name", ""): t for t in tasks}
 
-    for name in ("Hold packages whose upgrade would restart a live workload", "Release the holds"):
+    for name in (
+        "Hold packages whose upgrade would restart a live workload",
+        "Release only the holds THIS RUN created",
+    ):
         task = by_name[name]
         assert task.get("changed_when") is False, (
             f"{name!r} would report `changed` on every run. A hold placed and released "
@@ -198,4 +204,110 @@ def test_the_patch_tasks_report_change_only_when_they_change_something() -> None
     assert upgrade.get("failed_when") is False, (
         "a node that cannot patch must still get its disk cleaned — the RPi4's apt "
         "has been broken since #1198 and it needs journal vacuuming more, not less"
+    )
+
+
+def test_an_operators_existing_hold_survives_the_run() -> None:
+    """Raised in review of #1258, and it was a real defect.
+
+    Both paths held every blacklist package and then unheld every one. Pinning a
+    package is how an operator stops an upgrade they already know breaks
+    something — and this role would have silently undone that pin on the next
+    weekly tick.
+
+    So the run records the prior hold state, adds only what was missing, and
+    releases only what it added.
+    """
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+    by_name = {t.get("name", ""): t for t in tasks}
+
+    assert any("ALREADY held" in n for n in by_name), (
+        "the run never reads the prior hold state, so it cannot tell its own holds "
+        "from an operator's and will release both"
+    )
+    release = next(t for n, t in by_name.items() if n.startswith("Release only"))
+    assert "difference" in str(release["loop"]), (
+        "the release loops over the whole blacklist rather than over what this run "
+        "added; a deliberate pin does not survive it"
+    )
+
+    script = _render()
+    assert "HELD_BEFORE" in script and "HELD_BY_US" in script, (
+        "the timer path still blanket-holds and blanket-unholds. The two "
+        "implementations must not diverge — that divergence is how the Ansible path "
+        "shipped without patching at all."
+    )
+    assert "apt-mark unhold" in script
+    assert "for pkg in $HELD_BY_US" in script, (
+        "the timer path releases more than it took"
+    )
+
+
+def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
+    """The distinction a blanket `failed_when: false` was hiding.
+
+    A hold failing because the package is not installed is normal — not every
+    node runs docker or k3s. A hold failing on a package apt DOES know about
+    means the protection is not in place, and upgrading anyway restarts the
+    workload the hold exists to protect.
+
+    Told apart by apt's own output rather than package facts: this role never
+    runs `package_facts`, so a filter on `ansible_facts.packages` would match
+    nothing on every node — a guard that can never fire. Measured on beelink:
+    `apt-mark hold docker-ce` (installed) -> rc=0; `apt-mark hold k3s` (absent)
+    -> rc=100, "Unable to locate package".
+    """
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+    by_name = {t.get("name", ""): t for t in tasks}
+
+    detect = by_name["Determine whether any hold failed on an INSTALLED package"]
+    expr = str(detect["set_fact"]["_unprotected"])
+    assert "Unable to locate package" in expr, (
+        "the check does not distinguish `not installed` from `could not hold`, so "
+        "either it stops on every node missing docker or it never stops at all"
+    )
+    assert "ansible_facts.packages" not in expr, (
+        "this role never gathers package_facts, so a filter on it matches nothing "
+        "and produces a guard that cannot fire"
+    )
+
+    upgrade = by_name["Apply security updates"]
+    assert "_unprotected" in str(upgrade["when"]), (
+        "the upgrade runs even when a runtime package could not be held. Leaving a "
+        "node unpatched is recoverable; restarting every container on it is not."
+    )
+
+    script = _render()
+    assert "Unable to locate package" in script, "the timer path lacks the distinction"
+    assert "PATCH_STATUS=\"unprotected\"" in script, (
+        "the timer path does not report the skip, so the node looks patched"
+    )
+
+
+def test_the_gating_conditionals_yield_booleans() -> None:
+    """Ansible rejects a conditional whose result is a list, and it is fatal.
+
+    Measured on beelink: `and not (_unprotected | default([]))` produced
+
+        Conditional result (False) was derived from value of type 'list'
+        Conditionals must have a boolean result.
+
+    The run aborted at that task — AFTER placing the holds and BEFORE releasing
+    them, so the node was left with docker, containerd and tailscale held by a
+    run that never came back to unhold them. A crash between hold and release
+    is the one failure mode this pair of tasks must not have.
+    """
+    # Parsed, not grepped. The first version of this guard walked lines with a
+    # `continue` that skipped every line it was meant to inspect — it passed
+    # against the exact mutation it exists to catch, which is a guard reporting
+    # coverage it does not have (lesson-357).
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+    offenders = [
+        (task.get("name", "?"), str(task["when"]))
+        for task in tasks
+        if "_unprotected" in str(task.get("when", "")) and "length" not in str(task["when"])
+    ]
+    assert not offenders, (
+        f"these conditionals test a bare list, which Ansible refuses at run time and "
+        f"which strands the holds between placing and releasing them: {offenders}"
     )
