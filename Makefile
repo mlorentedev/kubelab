@@ -663,18 +663,7 @@ unregister-spoke:
 # Verify all registered spokes are reachable (from workstation, not hub)
 .PHONY: check-spokes
 check-spokes:
-	@echo "=== Checking spoke cluster connectivity ==="
-	@for env in staging prod; do \
-		KC=~/.kube/kubelab-$$env-config; \
-		SECRET=$$(kubectl get secret cluster-$$env -n argocd --kubeconfig $(HUB_KUBECONFIG) -o name 2>/dev/null); \
-		if [ -z "$$SECRET" ]; then \
-			echo "  $$env: NOT REGISTERED"; \
-		elif kubectl --kubeconfig $$KC get ns kubelab >/dev/null 2>&1; then \
-			echo "  $$env: OK (registered + reachable)"; \
-		else \
-			echo "  $$env: REGISTERED but UNREACHABLE"; \
-		fi; \
-	done
+	@$(TOOLKIT) infra argo check-spokes --kubeconfig $(HUB_KUBECONFIG)
 
 # Rotate spoke SA token and re-register on hub
 .PHONY: rotate-spoke-token

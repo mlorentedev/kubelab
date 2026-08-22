@@ -219,6 +219,64 @@ def argo_check_drift(
     raise typer.Exit(1)
 
 
+@argo_app.command("check-spokes")
+def argo_check_spokes(
+    kubeconfig: Annotated[
+        str,
+        typer.Option(
+            "--kubeconfig",
+            help="Hub kubeconfig path (env: KUBECONFIG_HUB)",
+            envvar="KUBECONFIG_HUB",
+        ),
+    ] = str(output_path("hub")),
+) -> None:
+    """Probe every spoke with the credential THE HUB stores (#1277).
+
+    The previous check read the operator's own per-env kubeconfig, so it
+    measured whether YOU can reach the spoke -- true whenever you are running
+    the command -- and never exercised the hub's credential at all. It printed
+    `OK (registered + reachable)` for a hub that could not authenticate, every
+    time it ran, for that hub's whole life.
+
+    Four outcomes, because "the spoke is down" and "the spoke is fine and
+    refuses us" need different fixes and only the second is what a hub
+    migration produces.
+
+    Exit 0 = every spoke OK, 1 = at least one is not.
+    """
+    from toolkit.features.argocd_spokes import spoke_envs
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.spoke_reachability import Status, check_all
+
+    logger.section("Spoke reachability, from the hub's credential")
+
+    cm = ConfigurationManager("common", settings.project_root)
+    envs = spoke_envs(cm.get_merged_config())
+    results = check_all(envs, Path(kubeconfig))
+
+    for result in results:
+        line = f"{result.env}: {result.status.value}"
+        if result.status is Status.OK:
+            logger.success(f"  {line} — {result.detail}")
+        elif result.status is Status.NOT_REGISTERED:
+            logger.warning(f"  {line} — {result.detail}")
+        else:
+            logger.error(f"  {line} — {result.detail}")
+
+    # NOT_REGISTERED is reported and does NOT fail the run. This command asks one
+    # question -- does the credential the hub stores actually work -- and an
+    # absent registration is a different question with a different tool
+    # (`check-drift`, `register-spoke`). It is also the NORMAL state during the
+    # AWS->GCP migration: `networking.gcp.managed_spokes` is ["staging"] while
+    # `argocd.spokes` declares both, so gcp1 legitimately holds no prod secret.
+    # Failing on it would make the command red for months and train everyone to
+    # ignore it -- which is how the false green it replaces survived so long.
+    broken = [r for r in results if not r.ok and r.status is not Status.NOT_REGISTERED]
+    if not broken:
+        return
+    raise typer.Exit(1)
+
+
 # =============================================================================
 # N8N COMMANDS
 # =============================================================================
