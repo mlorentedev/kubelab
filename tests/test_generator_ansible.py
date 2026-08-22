@@ -145,3 +145,53 @@ class TestBootstrapBastionCombination:
         lan_ips = {n["lan_ip"] for n in net.get("nodes", {}).values() if n.get("lan_ip")}
         used = {hv["ansible_host"] for hv in hosts.values()}
         assert used & lan_ips, "bootstrap did not address any node by its lan_ip"
+
+
+class TestBothHubsCoexistInTheInventory:
+    """GCP-001: `gcp1` joins group `hub` while `aws1` is still reconciling prod.
+
+    The migration is additive-then-subtractive, never a swap — `Makefile:504`
+    renders prod's Argo CD EndpointSlice from `aws1.kubelab.internal`, so a
+    simultaneous swap would point prod's IngressRoute at a host about to stop
+    existing. Both hubs are therefore in the inventory at once, and the thing
+    worth pinning is that adding the second did not displace the first.
+
+    Every expectation derives from `common.yaml`, so these assertions follow the
+    SSOT rather than restating it.
+    """
+
+    def _hub_hosts(self) -> dict[str, Any]:
+        inv = AnsibleGenerator()._build_inventory(_networking())
+        return inv["all"]["children"]["hub"]["hosts"]
+
+    def test_the_gcp_hub_is_present(self) -> None:
+        net = _networking()
+        assert net["gcp"]["hostname"] in self._hub_hosts()
+
+    def test_the_aws_hub_was_not_displaced(self) -> None:
+        """The failure this guards is a swap disguised as an addition."""
+        net = _networking()
+        assert net["aws"]["hostname"] in self._hub_hosts(), (
+            "adding the GCP hub removed the AWS one; prod still reconciles from "
+            "aws1 and its EndpointSlice is rendered from that name"
+        )
+
+    def test_the_gcp_hub_is_addressed_by_magicdns(self) -> None:
+        """A MIG recreates on every preemption and the Tailscale IP rotates with
+        it, so an inventory pinned to an address needs regenerating each time."""
+        net = _networking()
+        entry = self._hub_hosts()[net["gcp"]["hostname"]]
+        assert entry["ansible_host"] == net["gcp"]["tailscale_dns"]
+
+    def test_the_gcp_hub_did_not_fall_through_to_the_homelab_ssh_user(self) -> None:
+        """SSOT-014a infers the SSH-user category from YAML POSITION.
+
+        `networking.gcp` is a top-level sibling like `vps` and `aws`, not an
+        entry under `nodes`, and the generator has to place it in the `cloud`
+        category explicitly. Getting this wrong yields `manu` instead of
+        `deployer` — an inventory that looks right and cannot authenticate.
+        """
+        net = _networking()
+        entry = self._hub_hosts()[net["gcp"]["hostname"]]
+        assert entry["ansible_user"] == net["ssh_users"]["cloud"]
+        assert entry["ansible_user"] != net["ssh_users"]["homelab"]
