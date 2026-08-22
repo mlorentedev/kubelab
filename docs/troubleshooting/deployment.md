@@ -63,7 +63,7 @@ toolkit apps logs api -f
 
 ```bash
 # Restart specific service
-make restart-dev APP=api ENV=production
+make restart-service SVC=api ENV=prod
 
 # Emergency rollback
 make emergency-rollback ENV=production

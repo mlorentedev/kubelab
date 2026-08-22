@@ -76,7 +76,7 @@ networking:
 Regenerate Ansible inventory:
 
 ```bash
-make config-generate ENV=staging ENV=prod
+make config-generate ENV=prod
 ```
 
 This makes `deploy-vps` run the traefik_vps and errors roles again (the `when: "'k3s_servers' not in group_names"` condition).
