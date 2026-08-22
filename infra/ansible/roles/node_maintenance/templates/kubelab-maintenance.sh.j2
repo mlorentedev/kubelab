@@ -5,6 +5,98 @@ set -euo pipefail
 
 echo "[$(date)] Starting maintenance on $(hostname)"
 
+{% if maintenance_security_updates | bool %}
+# --- security patching, BEFORE the cleanup that wipes the package lists ----
+# Order is load-bearing: the cleanup below deletes /var/lib/apt/lists, so
+# patching afterwards would re-download every index it just removed. Patch
+# while the lists are warm, then clean.
+#
+# `set -e` is active and this section deliberately does NOT abort the run: a
+# node that cannot patch still needs its disk cleaned, and the RPi4 is the
+# standing proof — its apt has been unable to resolve `bzip2` since #1198, and
+# a maintenance timer that gave up there would have stopped vacuuming journals
+# on a node with 8GB of storage.
+#
+# Failures are REPORTED instead. The unit's OnFailure= is reserved for the
+# maintenance run itself breaking; a patch that could not be applied is a
+# finding for the operator, not an alert at 3am.
+echo "--- security updates ---"
+PATCH_STATUS="ok"
+
+if ! apt-get update -qq 2>&1 | tail -3; then
+    echo "WARNING: apt-get update failed — package lists are stale, patching skipped"
+    PATCH_STATUS="update-failed"
+else
+    # Security pocket only, and only what is already installed. `--with-new-pkgs`
+    # is deliberately absent: pulling in a NEW package unattended is how a
+    # kernel meta-package drags in a whole new kernel line on a node nobody is
+    # watching.
+    #
+    # Raised in review of #1258: hold only what is NOT ALREADY HELD, and release
+    # only what this run added. A blanket unhold destroys a pin an operator
+    # placed deliberately — pinning is how you stop an upgrade you already know
+    # breaks something, and this would have quietly undone it every week.
+    HELD_BEFORE="$(apt-mark showhold 2>/dev/null || true)"
+    HELD_BY_US=""
+    UNPROTECTED=""
+{% for pkg in maintenance_patch_blacklist %}
+    if ! printf '%s\n' "$HELD_BEFORE" | grep -qx '{{ pkg }}'; then
+        # A hold on a package that is NOT INSTALLED fails, and that is fine —
+        # not every node runs docker or k3s. A hold that fails on a package apt
+        # DOES know about is a different thing, and the upgrade is skipped over
+        # it. Measured on beelink 2026-08-22: installed -> rc=0, absent ->
+        # rc=100 with "Unable to locate package".
+        # `if`, not `A && B || C`: with the latter, C also runs when A
+        # succeeds and B fails, so a failed assignment would be reported as a
+        # failed hold (SC2015).
+        if HOLD_ERR="$(apt-mark hold '{{ pkg }}' 2>&1 >/dev/null)"; then
+            HELD_BY_US="$HELD_BY_US {{ pkg }}"
+        else
+            case "$HOLD_ERR" in
+                *"Unable to locate package"*) : ;;
+                *) UNPROTECTED="$UNPROTECTED {{ pkg }}" ;;
+            esac
+        fi
+    fi
+{% endfor %}
+
+    if [ -n "$UNPROTECTED" ]; then
+        echo "WARNING: could not hold:$UNPROTECTED — skipping the upgrade. Patching"
+        echo "  without that hold would restart the workload it protects."
+        PATCH_STATUS="unprotected"
+    else
+
+    if ! DEBIAN_FRONTEND=noninteractive apt-get -qq -y \
+         -o Dpkg::Options::=--force-confdef \
+         -o Dpkg::Options::=--force-confold \
+         -t "$(lsb_release -cs 2>/dev/null || echo stable)-security" \
+         upgrade 2>&1 | tail -5; then
+        echo "WARNING: security upgrade returned non-zero — see above"
+        PATCH_STATUS="upgrade-failed"
+    fi
+
+    fi
+
+    # Release ONLY what this run held, so an operator's deliberate pin survives.
+    for pkg in $HELD_BY_US; do
+        apt-mark unhold "$pkg" >/dev/null 2>&1 || true
+    done
+fi
+
+echo "security patching: $PATCH_STATUS"
+{% endif %}
+
+{% if maintenance_report_reboot_required | bool %}
+# A kernel installed is not a kernel running. Nothing here reboots — the VPS
+# carries Headscale, so an unattended reboot that does not come back removes
+# the VPN used to reach it — so the state is reported and the operator decides.
+if [ -f /var/run/reboot-required ]; then
+    echo "REBOOT REQUIRED: $(tr '\n' ' ' < /var/run/reboot-required.pkgs 2>/dev/null)"
+else
+    echo "reboot required: no"
+fi
+{% endif %}
+
 # APT cleanup
 apt-get clean
 rm -rf /var/lib/apt/lists/*
