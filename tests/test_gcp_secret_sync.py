@@ -13,6 +13,7 @@ rather than a paraphrase of it.
 
 from __future__ import annotations
 
+import base64
 import subprocess
 from dataclasses import dataclass
 
@@ -180,3 +181,95 @@ class TestGcloudAbsenceIsNamed:
         monkeypatch.setattr(sync.subprocess, "run", missing)
         with pytest.raises(sync.GcloudMissingError, match="gcp-hub-bootstrap"):
             sync._gcloud(["describe", "x"], PROJECT)
+
+
+class TestTheSpokeTokenIsStoredInTheShapeArgoCDReads:
+    """The token must be DECODED and the CA must NOT be. Measured, not assumed.
+
+    Kubernetes stores both in `.data.*`, so both arrive base64. Argo CD's cluster
+    config wants them differently:
+
+        {"bearerToken": "<raw JWT>", "tlsClientConfig": {"caData": "<base64 PEM>"}}
+
+    `make register-spoke` has always encoded this asymmetry — it pipes the token
+    through `base64 -d` and leaves `ca.crt` alone. Porting the same read into
+    this module dropped the decode, so both travelled verbatim.
+
+    What that cost, measured on the live hub 2026-08-22: the token in
+    Secret Manager was 1228 chars with ZERO dots. A ServiceAccount token is a
+    JWT and has two. Base64-decoding it once yielded a valid 920-char JWT for
+    `system:serviceaccount:kubelab:argocd-manager`. The credential was never
+    wrong — only wrapped one layer too many. The hub answered every sync with
+    `the server has asked for the client to provide credentials`, the staging
+    Application sat at `Unknown`, and because `on-sync-failed` reads
+    `sync.status == 'Unknown'` it fired a Slack card every single minute.
+
+    A shape assertion rather than a value one: the failure was invisible
+    precisely because a double-encoded secret looks exactly like a secret.
+    """
+
+    @staticmethod
+    def _collect(monkeypatch: pytest.MonkeyPatch, token_b64: str, ca_b64: str):  # noqa: ANN205
+        def fake_kubectl(argv, **kwargs):  # noqa: ANN001, ANN202
+            if argv[0] != "kubectl":
+                return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+            jsonpath = next(a for a in argv if a.startswith("jsonpath="))
+            payload = token_b64 if "ca" not in jsonpath else ca_b64
+            return subprocess.CompletedProcess(argv, 0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(sync.subprocess, "run", fake_kubectl)
+        items, failures = sync.collect_spoke_items({"argocd": {"spokes": {"staging": {}}}})
+        assert not failures, failures
+        return {i.secret_id.rsplit("-", 1)[-1]: i.value for i in items}
+
+    def test_the_token_is_decoded_to_the_raw_jwt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Assembled from parts rather than written as a literal: a realistic JWT
+        # literal in a test file trips the gitleaks pre-commit hook, and that
+        # hook is right to fire — silencing it with an allowlist to accommodate a
+        # fixture would blunt a scanner that guards every real credential. Only
+        # the SHAPE matters here (three dot-separated segments), never the value.
+        jwt = ".".join(("header", "payload", "signature"))
+        got = self._collect(
+            monkeypatch,
+            base64.b64encode(jwt.encode()).decode(),
+            base64.b64encode(b"-----BEGIN CERTIFICATE-----").decode(),
+        )
+
+        assert got["token"] == jwt, (
+            "the token reached Secret Manager still base64-encoded. Argo CD puts it "
+            "straight into `bearerToken`, which must be the raw JWT — an extra layer "
+            "produces `Unauthorized` on every sync."
+        )
+        assert got["token"].count(".") == 2, "a ServiceAccount token is a JWT and has two dots"
+
+    def test_the_ca_stays_base64(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ca_b64 = base64.b64encode(b"-----BEGIN CERTIFICATE-----\nMIIB\n").decode()
+        got = self._collect(monkeypatch, base64.b64encode(b"a.b.c").decode(), ca_b64)
+
+        assert got["ca"] == ca_b64, (
+            "the CA was decoded. `caData` in Argo CD's cluster config expects base64 — "
+            "decoding it here is the mirror image of the token bug."
+        )
+
+    def test_a_token_that_is_not_valid_base64_fails_instead_of_shipping(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A success-shaped failure is the one that costs a day.
+
+        Shipping an undecodable value would reproduce the original defect with a
+        different wrapper, and nothing downstream inspects the shape.
+        """
+
+        def fake_kubectl(argv, **kwargs):  # noqa: ANN001, ANN202
+            if argv[0] != "kubectl":
+                return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+            jsonpath = next(a for a in argv if a.startswith("jsonpath="))
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=("!!!not base64!!!" if "ca" not in jsonpath else "aGk="), stderr=""
+            )
+
+        monkeypatch.setattr(sync.subprocess, "run", fake_kubectl)
+        items, failures = sync.collect_spoke_items({"argocd": {"spokes": {"staging": {}}}})
+
+        assert any(f.action == "failed" for f in failures), "an undecodable token was shipped as if fine"
+        assert not [i for i in items if i.secret_id.endswith("-token")], "the bad token still became an item"
