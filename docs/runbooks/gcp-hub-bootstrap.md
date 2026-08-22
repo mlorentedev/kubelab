@@ -283,6 +283,41 @@ make deploy-argocd
 The second `provision` is not redundant. Idempotence is the acceptance bar;
 completion is not.
 
+### What the first real apply refused — 2026-08-22
+
+Three API rejections, in this order, none of them visible to `terraform
+validate` or to any test. They are recorded because a reader hitting one of them
+should recognise it rather than re-derive it, and because all three were
+*decisions this repository had already made and encoded*:
+
+1. **`instance_termination_action = "DELETE"`** —
+   *"Spot virtual machines with termination action set to DELETE cannot be used
+   with Managed Instance Groups."* ADR-063 chose it; the module set it; a test
+   asserted it. Removed. STOP is the only behaviour available inside a MIG, and
+   the live instance now reports `instanceTerminationAction: STOP`.
+
+2. **`max_unavailable_fixed = 1`** —
+   *"has to be either 0 or at least equal to the number of zones."* A regional
+   MIG spans every zone in its region.
+
+3. **`max_unavailable_percent = 100`** —
+   *"only allowed for regional managed instance groups with size at least 10."*
+
+Taken together, (2) and (3) leave the **zone count as the only legal non-zero
+value** for a singleton regional MIG. It is derived, never typed:
+`length(data.google_compute_zones.available.names)`. Writing `3` would be a fact
+about `europe-west4` sitting beside a `region` that is a variable.
+
+**The knock-on worth checking.** ADR-063 omitted autohealing *because of* DELETE
+— "the MIG already restores target size on preemption without a health check".
+That reasoning died with DELETE. The conclusion survives for a different reason,
+[per the Spot docs](https://docs.cloud.google.com/compute/docs/instances/spot):
+*"If Compute Engine stops one or more Spot VMs in a MIG, the group repeatedly
+tries to recreate those VMs using the specified instance template."* §7 is what
+observes it; a documented behaviour and an observed one are different claims.
+
+See `docs/lessons/process-method/lesson-366-*.md`.
+
 ## §7 — Verify preemption self-healing
 
 The property the whole design turns on, and it must be observed rather than
