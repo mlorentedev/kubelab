@@ -26,6 +26,39 @@
     mode: "0644"
   notify: Restart rpi3 services
 
+# --- Boot ordering: bind address must exist before Docker publishes on it ---
+# The compose stack binds Uptime Kuma to {{ tailscale_ip }}. At boot Docker
+# restores containers independently of tailscaled, and losing that race means
+# the container comes up with NO published ports while still reporting
+# `running`. Same helper and same unit shape as beelink_services and glances.
+- name: Install the Tailscale address wait helper
+  copy:
+    src: wait-for-tailscale-addr.sh
+    dest: "{{ rpi3_deploy_dir }}/wait-for-tailscale-addr.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags: [boot]
+
+- name: Install the Compose stack systemd unit
+  template:
+    src: kubelab-rpi3.service.j2
+    dest: /etc/systemd/system/kubelab-rpi3.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags: [boot]
+
+- name: Enable the Compose stack unit at boot
+  systemd:
+    name: kubelab-rpi3.service
+    enabled: true
+    daemon_reload: true
+  become: true
+  tags: [boot]
+
 - name: Pull service images
   command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
   changed_when: false
