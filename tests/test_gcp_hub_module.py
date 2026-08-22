@@ -583,19 +583,25 @@ class TestTheMigCanActuallyReplaceItsInstance:
     exact path a MIG exists to perform.
     """
 
-    def test_max_unavailable_is_not_a_fixed_zone_count(self, tf: str) -> None:
-        assert "max_unavailable_fixed" not in tf, (
-            "a regional MIG accepts only 0 or >= the zone count here, so a fixed "
-            "value is either a no-op or a hardcoded zone count beside a variable region"
+    def test_max_unavailable_is_derived_not_written_as_a_number(self, tf: str) -> None:
+        """The zone count is the only legal non-zero value, and it is a fact
+        about the region rather than about this design."""
+        assert re.search(r"max_unavailable_fixed\s*=\s*length\(data\.google_compute_zones", tf), (
+            "maxUnavailable must be derived from the region's zone count. A literal "
+            "is a fact about europe-west4 sitting beside a `region` that is a variable, "
+            "and it fails closed on any region with a different zone count."
         )
 
-    def test_the_single_instance_may_be_taken_down_to_replace_it(self, tf: str) -> None:
-        """0% would forbid replacing the only instance, which is the one thing
-        the group has to be able to do."""
-        assert re.search(r"max_unavailable_percent\s*=\s*100", tf), (
-            "the singleton cannot be replaced: with target_size = 1 and no surge, "
-            "anything below 100% leaves no way to take the instance down"
-        )
+    def test_the_percent_form_is_not_used(self, tf: str) -> None:
+        """Rejected by the API for this group: percent is only allowed for
+        regional MIGs of size at least 10, and this one is a singleton."""
+        assert "max_unavailable_percent" not in tf
+
+    def test_the_zone_data_source_follows_the_region_variable(self, tf: str) -> None:
+        """Pinning it to a literal region would reintroduce the same drift one
+        level down -- a zone count read for a region the module does not use."""
+        block = re.search(r'data\s+"google_compute_zones"\s+"available"\s*\{(.*?)\n\}', tf, re.S)
+        assert block and "var.region" in block.group(1)
 
     def test_surge_stays_forbidden(self, tf: str) -> None:
         """The invariant the percent change must not quietly relax: two hubs

@@ -36,6 +36,12 @@ provider "google" {
 # Network — the default VPC, with only what the hub actually needs open
 # ---------------------------------------------------------------------------
 
+# Zones in the configured region. Read rather than assumed: it is the only legal
+# non-zero value for a regional MIG's maxUnavailable, and it differs by region.
+data "google_compute_zones" "available" {
+  region = var.region
+}
+
 data "google_compute_network" "default" {
   name = "default"
 }
@@ -263,21 +269,26 @@ resource "google_compute_region_instance_group_manager" "hub" {
     replacement_method           = "RECREATE"
     instance_redistribution_type = "NONE"
     max_surge_fixed              = 0
-    # PERCENT, not a fixed count, and that was measured rather than chosen.
+    # DERIVED from the region's zone count, never typed as a number. Both halves
+    # of that were forced by the API, one apply apart.
+    #
     # A regional MIG rejects `max_unavailable_fixed = 1`:
     #
-    #   Error 400: Fixed updatePolicy.maxUnavailable for regional managed
-    #   instance group has to be either 0 or at least equal to the number of
-    #   zones.
+    #   has to be either 0 or at least equal to the number of zones
     #
-    # europe-west4 has three, so `3` would also be accepted -- and would be a
-    # zone count hardcoded next to a `region` that is a variable. Change the
-    # region to one with a different number of zones and the literal is silently
-    # wrong in the direction that blocks replacement entirely.
+    # and rejects the percent form for a different reason:
     #
-    # 100% says what is actually meant for a singleton: the one instance may be
-    # down while it is replaced. It is region-independent, and with
-    # `max_surge_fixed = 0` it still forbids two hubs existing at once.
-    max_unavailable_percent = 100
+    #   Percent updatePolicy.maxUnavailable ... is only allowed for regional
+    #   managed instance groups with size at least 10
+    #
+    # So the zone count is the ONLY legal non-zero value here, and 0 would
+    # forbid replacing the only instance -- the one thing this group exists to
+    # do.
+    #
+    # Derived rather than written as `3`, because 3 is a fact about
+    # europe-west4, not about this design. Beside a `region` that is a variable,
+    # a literal goes silently wrong on any region with a different zone count,
+    # and wrong in the direction that blocks replacement.
+    max_unavailable_fixed = length(data.google_compute_zones.available.names)
   }
 }
