@@ -312,3 +312,135 @@ def verify_restic(
         logger.success("probe repository removed")
 
     return ok
+
+
+# --- coverage: what is actually in R2, asked from off the node --------------
+# BACKUP-044 AC1. "Verify every node-path consumer is present, by listing
+# snapshots FROM A MACHINE THAT IS NOT THE SOURCE NODE. Reading the playbook is
+# not verification."
+#
+# That last sentence is the whole design constraint. Every other control here
+# runs ON the node whose backup it is checking, so it shares the node's fate: a
+# node that is lying, broken or gone reports nothing, or reports what it
+# believes. This asks the destination instead, from a workstation, and it works
+# with the homelab powered off — which is when half the fleet cannot answer for
+# itself.
+
+
+def repository_name(cm: ConfigurationManager, node: str) -> str:
+    """The R2 repository name for a node in `backup.sources`.
+
+    NOT the same string as the `backup.sources` key, and the difference is not
+    cosmetic. `node_backup_r2_repository` is built from `inventory_hostname`,
+    and the inventory is not uniformly prefixed: the VPS is `kubelab-vps` while
+    beelink, rpi3 and rpi4 carry no prefix.
+
+    Verified against the live bucket 2026-08-22:
+
+        PRE beelink/   PRE kubelab-vps/   PRE rpi3/   PRE rpi4/
+
+    So a coverage report keyed on `backup.sources` alone would look for `vps/`,
+    find nothing, and report the VPS as UNCOVERED while its backup ran nightly.
+    The same regex the backup playbook uses, in reverse.
+    """
+    config = cm.get_merged_config()
+    networking = config.get("networking", {})
+    nodes = networking.get("nodes", {})
+    # `networking.<node>` for cloud nodes (vps, aws, gcp), `networking.nodes.<node>`
+    # for the homelab — the same sibling-vs-member shape SSOT-014a keys off.
+    entry = nodes.get(node) if node in nodes else networking.get(node, {})
+    # `hostname` IS the inventory name, verbatim, with no prefix rule to apply:
+    # `networking.vps.hostname` is already `kubelab-vps` while every homelab node
+    # is its own bare name. An earlier revision inferred the prefix from the
+    # node's position instead of reading it, and produced `kubelab-kubelab-vps`
+    # — reporting the VPS as UNCOVERED with a nightly backup sitting in R2.
+    # Caught by running it, not by reading it.
+    return str((entry or {}).get("hostname") or node)
+
+
+def coverage(
+    env: str = "prod",
+    project_root: Optional[Path] = None,
+    cm: Optional[ConfigurationManager] = None,
+    run: Optional[RunFn] = None,
+) -> bool:
+    """Report the newest snapshot per declared node, read from R2.
+
+    Answers "does every node that should have a backup actually have one, and
+    how old is it" — the question AC1 asks, from where AC1 requires it be asked.
+
+    Returns False when any declared node has no repository or no snapshot. It
+    does NOT judge age: the two node classes have different expectations (a
+    4-hour wall-clock schedule vs. hourly-while-up on hardware that is off most
+    of the week), and that judgement is the coverage monitor's job in Uptime
+    Kuma (AC9), which knows the class. Printing the age and letting the operator
+    read it keeps one control from silently disagreeing with the other.
+    """
+    logger.section("backup coverage — snapshots per node, read from R2")
+
+    cm = cm or ConfigurationManager(env, project_root)
+    run = run or _default_run
+
+    try:
+        dest = load_destination(cm)
+        credentials = load_credentials(cm)
+    except DestinationError as exc:
+        logger.error(str(exc))
+        return False
+
+    password = cm.get_secret_by_path(_RESTIC_PASSWORD_SECRET)
+    if not password:
+        logger.error(
+            f"Missing SOPS value at '{_RESTIC_PASSWORD_SECRET}' — generate it with `make backup-generate-password`."
+        )
+        return False
+
+    declared = sorted((cm.get_merged_config().get("backup", {}) or {}).get("sources", {}) or {})
+    if not declared:
+        logger.error("No nodes declared in backup.sources — nothing to report on.")
+        return False
+
+    renv = {**credentials, "RESTIC_PASSWORD": str(password).strip()}
+    rc, _, err = run(["restic", "version"], {})
+    if rc != 0:
+        logger.error(f"restic is required and was not runnable: {err.strip()}")
+        return False
+
+    import json
+    from datetime import datetime, timezone
+
+    ok = True
+    for node in declared:
+        repo = repo_url(dest, repository_name(cm, node))
+        rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], renv)
+        if rc != 0:
+            # A repository that does not exist and one that cannot be read are
+            # the same verdict here — uncovered — but the message says which,
+            # because the remedies differ entirely.
+            reason = "no repository" if "does not exist" in (err or "").lower() else err.strip()[:120]
+            logger.error(f"{node:10} UNCOVERED — {reason}")
+            ok = False
+            continue
+
+        try:
+            snapshots = json.loads(out or "[]")
+        except json.JSONDecodeError:
+            logger.error(f"{node:10} UNREADABLE — restic returned no usable JSON")
+            ok = False
+            continue
+
+        if not snapshots:
+            logger.error(f"{node:10} UNCOVERED — repository exists, zero snapshots")
+            ok = False
+            continue
+
+        newest = snapshots[0]
+        when = datetime.fromisoformat(newest["time"].replace("Z", "+00:00"))
+        age = datetime.now(timezone.utc) - when
+        hours = age.total_seconds() / 3600
+        logger.success(
+            f"{node:10} covered — newest {when.strftime('%Y-%m-%d %H:%M')}Z "
+            f"({hours:.1f}h ago), {len(newest.get('paths') or [])} path(s)"
+        )
+
+    return ok
