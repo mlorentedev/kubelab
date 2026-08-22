@@ -653,12 +653,9 @@ register-spoke:
 # Remove spoke from Argo CD hub + cleanup RBAC on spoke
 .PHONY: unregister-spoke
 unregister-spoke:
-	@test -n "$(ENV)" || (echo "Usage: make unregister-spoke ENV=staging|prod" && exit 1)
-	@echo "=== Removing $(ENV) spoke from hub ==="
-	@kubectl delete secret cluster-$(ENV) -n argocd --kubeconfig $(HUB_KUBECONFIG) --ignore-not-found
-	@echo "=== Removing spoke RBAC from $(ENV) cluster ==="
-	@kubectl delete -f infra/k8s/argocd/spoke-rbac.yaml --kubeconfig $(KUBECONFIG_PATH) --ignore-not-found
-	@echo "✓ Spoke $(ENV) unregistered"
+	@test -n "$(ENV)" || (echo "Usage: make unregister-spoke ENV=staging|prod HUB=<kubeconfig>" && exit 1)
+	@test -n "$(HUB)" || (echo "Usage: make unregister-spoke ENV=x HUB=<kubeconfig>  # required: two hubs are live, so the hub must be named explicitly" && exit 1)
+	@$(TOOLKIT) infra argo unregister-spoke --env $(ENV) --kubeconfig $(HUB) $(if $(REMOVE_SHARED_RBAC),--remove-shared-rbac,) $(if $(DRY_RUN),--dry-run,)
 
 # Verify all registered spokes are reachable (from workstation, not hub)
 .PHONY: check-spokes
