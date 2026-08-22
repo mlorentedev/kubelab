@@ -625,3 +625,57 @@ class TestTheMigCanActuallyReplaceItsInstance:
         must never exist at once, both registering the same Headscale
         given-name and both reconciling the same spokes."""
         assert re.search(r"max_surge_fixed\s*=\s*0", tf)
+
+
+class TestThePlanCanConverge:
+    """A module whose apply is never a no-op is a module nobody dares run.
+
+    `distribution_policy_zones = []` means "let GCP choose", and GCP chooses
+    every zone in the region -- then writes that list back. Terraform then
+    compares `[]` against `["europe-west4-a","-b","-c"]` forever, and that field
+    FORCES REPLACEMENT. Measured 2026-08-22 while shipping the `--node-name`
+    pin: a plan that should have read "replace the template" instead read
+
+        # google_compute_region_instance_group_manager.hub must be replaced
+        Plan: 2 to add, 0 to change, 2 to destroy.
+
+    Destroying the MIG takes the hub with it, for a field nobody edited. That is
+    lesson-367's failure arriving by a second route -- there it was applying
+    from a stale branch, here it is a plan that is never empty, so drift
+    accumulates because running the module always looks dangerous.
+
+    Declaring the value GCP would compute anyway makes the plan converge: the
+    MIG then updates in place.
+    """
+
+    @staticmethod
+    def _declared_value(body: str) -> str:
+        """The real declaration, with comment lines stripped first.
+
+        The comment above it quotes the broken plan output verbatim, including
+        `~ distribution_policy_zones = [`. A naive scan matches THAT and passes a
+        file that only documents the fix. Fourth occurrence of lesson-363's
+        shape in one session, so the stripping is not optional.
+        """
+        code = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("#"))
+        match = re.search(r"distribution_policy_zones\s*=\s*(.+)", code)
+        assert match, "distribution_policy_zones is not declared at all"
+        return match.group(1).strip()
+
+    def test_distribution_policy_zones_is_not_an_empty_list(self) -> None:
+        value = self._declared_value((GCP_DIR / "main.tf").read_text())
+        match = True
+        assert value != "[]", (
+            "distribution_policy_zones is `[]`. GCP expands that to every zone in "
+            "the region and writes it back, so Terraform sees a permanent diff on a "
+            "field that FORCES REPLACEMENT — every apply plans to destroy the MIG, "
+            "and the hub with it."
+        )
+
+    def test_it_derives_from_the_zones_data_source(self) -> None:
+        """A hardcoded zone list is the same trap one region change later."""
+        value = self._declared_value((GCP_DIR / "main.tf").read_text())
+        assert "data.google_compute_zones.available.names" in value, (
+            "distribution_policy_zones should read the same data source that already "
+            "drives max_unavailable_fixed, so a region change cannot desynchronise them"
+        )

@@ -265,11 +265,28 @@ resource "google_compute_instance_template" "hub" {
 # a Spot hub. Adding one later requires initial_delay_sec >= measured bootstrap.
 
 resource "google_compute_region_instance_group_manager" "hub" {
-  name                      = "${var.hostname}-mig"
-  base_instance_name        = var.hostname
-  region                    = var.region
-  target_size               = 1
-  distribution_policy_zones = []
+  name               = "${var.hostname}-mig"
+  base_instance_name = var.hostname
+  region             = var.region
+  target_size        = 1
+
+  # DECLARED, not left empty. `[]` means "let GCP choose", and GCP chooses every
+  # zone in the region -- then writes that list back into the resource. Terraform
+  # compares `[]` against the three real zones, sees a difference, and this field
+  # FORCES REPLACEMENT. So every `terraform apply` on this module planned to
+  # DESTROY AND RECREATE the MIG -- taking the hub with it -- for a field nobody
+  # had edited. Measured 2026-08-22 while shipping the `--node-name` pin: a plan
+  # that should have read "replace the template" instead read
+  # `2 to add, 0 to change, 2 to destroy`.
+  #
+  # That is lesson-367's failure arriving by a second route. There it was
+  # applying from a stale branch; here it is a plan that is never empty, so the
+  # module always looks dangerous to run, so nobody runs it, so drift grows.
+  #
+  # The same data source already drives `max_unavailable_fixed` below, so this
+  # adds no dependency -- it states the value GCP was going to compute anyway,
+  # and the MIG then updates in place.
+  distribution_policy_zones = data.google_compute_zones.available.names
 
   version {
     instance_template = google_compute_instance_template.hub.id
