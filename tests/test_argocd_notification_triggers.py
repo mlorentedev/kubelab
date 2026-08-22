@@ -87,6 +87,28 @@ def test_a_trigger_reading_operation_state_guards_against_nil(name: str):
 
 
 @pytest.mark.parametrize("name", sorted(_triggers()))
+def test_a_when_expression_folds_to_a_single_line(name: str):
+    """A folded (`>-`) expression must actually fold.
+
+    The one long expression here is wrapped only to stay inside yamllint's 130
+    columns, and YAML folding has a trap: continuation lines must keep the SAME
+    indent, because a DEEPER one is treated as literal and keeps its newline.
+    The file says so in a comment — this is that comment as a mechanism, since a
+    comment fails exactly when someone re-wraps the line.
+
+    Found by mutation: deepening one continuation line by two spaces left the
+    other assertions green while putting two newlines inside the expression.
+    """
+    for when in _when_clauses(_triggers()[name]):
+        assert "\n" not in when, (
+            f"trigger {name!r} has a newline inside its `when:` expression:\n"
+            f"  {when!r}\n"
+            "a folded scalar's continuation lines must share one indent level — "
+            "a deeper line is literal, not folded."
+        )
+
+
+@pytest.mark.parametrize("name", sorted(_triggers()))
 def test_a_trigger_dedupes_per_revision_not_per_condition(name: str):
     """Without `oncePer`, the dedup key is the condition — identical across revisions.
 
