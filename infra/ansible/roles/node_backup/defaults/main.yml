@@ -71,6 +71,17 @@ node_backup_ship_check_service_name: node-backup-ship-check.service
 node_backup_ship_check_timer_name: node-backup-ship-check.timer
 node_backup_shutdown_service_name: node-backup-shutdown.service
 
+# How long restic waits on a request that is going nowhere before retrying it.
+# Its own default is 5m, which exceeds this unit's useful lifetime: measured
+# 2026-08-22, an invalid credential and an unreachable endpoint BOTH produced
+# systemd `Result=timeout` at ~180s with no restic error in the journal at all.
+# Every failure looked the same and none said why.
+#
+# 45s is far above a healthy request (full cycles on this fleet run 2-12s) and
+# far below TimeoutStartSec, so restic reaches its own error path and reports
+# while the unit is still alive to log it.
+node_backup_stuck_request_timeout: "45s"
+
 # --- coverage heartbeat (BACKUP-044 AC9) ----------------------------------
 # The ship script posts here as its LAST step, so silence means no backup
 # completed. The watcher is Uptime Kuma on the RPi3 -- deliberately outside this
