@@ -1,0 +1,235 @@
+---
+# =============================================================================
+# gcp1 Day-2 Provisioning — Argo CD Hub (ADR-063, GCP-001)
+#
+# The GCP counterpart to provision-aws1.yml. That file's header predicted this
+# one — "a future GCP/Azure hub creates its own provision-<node>.yml but reuses
+# hub.yaml and every Ansible role unchanged" — and this playbook is the test of
+# that claim, not a restatement of it. What follows is what was MEASURED against
+# infra/terraform/gcp/cloud-init.yml, which is why two of aws1's header claims
+# are absent rather than copied: it documents a `terminate` + ASG contract that
+# was never applied, and 8 GB where the volume is 12.
+#
+# CLOUD-INIT vs ANSIBLE BOUNDARY — and it is NOT the same boundary as aws1's
+# ------------------------------------------------------------------------
+# A MIG **recreates**, it does not restart (finding F1). Every preemption is a
+# fresh boot disk, so cloud-init has to finish the whole bring-up unattended.
+# On aws1 a Spot stop/start preserves the EBS volume, so Argo CD survives an
+# interruption and only a deliberate `aws1-replace` reinstalls it. The practical
+# consequence here: this playbook may assume MORE pre-existing state, not less.
+#
+# Terraform cloud-init (infra/terraform/gcp/) handles:
+#   - 2 GB swap via the cloud-init `swap:` directive — cloud-init-managed so it
+#     survives every recreate (lesson 2026-03-22: 2 GB of RAM alone OOM-kills
+#     sshd under K3s + Argo CD).
+#   - sshd hardening baked in early, `UseDNS no` in particular: a stale PTR
+#     record makes sshd hang on connect, which presents as an unreachable host
+#     rather than as a DNS problem. The `ssh_hardening` role re-asserts it for
+#     drift.
+#   - Tailscale install + Headscale registration with a preauth key MINTED
+#     just-in-time via the Headscale API (`--expiration 1h`, single-use), plus
+#     stale-node cleanup. Finding F2: a key stored in the instance template
+#     expires, and a MIG fires cloud-init months after the template was written.
+#     Re-registration without cleanup lands as `gcp1-<random>`.
+#   - K3s install with its ExecStart flags (--disable=traefik --disable=servicelb
+#     --write-kubeconfig-mode=644 --resolv-conf --tls-san) — immortal once set.
+#   - Argo CD itself, from Secret Manager-delivered credentials (finding F1).
+#     This is the step aws1's cloud-init does NOT take: there it stops after
+#     creating the `argocd` namespace.
+#   - `instance_termination_action = DELETE` on a regional MIG of size 1 —
+#     cattle, not pets, and the contract aws1's header only ever described.
+#
+# This Ansible playbook (day-2) owns:
+#   - /etc/rancher/k3s/config.yaml — injects kube-controller-manager-arg
+#     `terminated-pod-gc-threshold` (RELIAB-009 §9.3). K3s reads both CLI and
+#     config.yaml; CLI wins on conflicts. config.yaml additions stack on top.
+#   - Base packages + timezone. UFW disabled — GCP VPC firewall rules
+#     (`google_compute_firewall.ssh_bootstrap` / `.tailscale` in main.tf) are the
+#     authoritative network ACL, and two firewalls on one host is how a rule
+#     nobody can find ends up blocking traffic.
+#   - SSH hardening drift check — converges sshd_config to current standard.
+#   - Tailscale config drift check — idempotent; no-op when already registered.
+#   - The fleet's maintenance timer and failure-notification path, which a
+#     rebuild has historically dropped (ANSIBLE-035/041).
+#
+# Hardware contract (asserted below):
+#   - e2-small Spot — 2 GB RAM, 2 GB swap, 12 GB pd-balanced.
+#   - Hub services live in common SOPS — singleton credentials, not env-scoped
+#     (lessons 2026-03-27, 2026-03-28: hub creds always in common.enc.yaml).
+#
+# Pre-deploy hygiene for Helm operations (handled by `make deploy-argocd`):
+#   - Scales all argocd Deployments/StatefulSets to 0 before upgrade to free
+#     RAM (lesson 2026-03-28). Never `kubectl patch` during Helm operations.
+#
+# Usage:
+#   make provision NODE=gcp1 ENV=hub
+#   toolkit infra ansible run -p provision-gcp1 -e hub
+#   toolkit infra ansible run -p provision-gcp1 -e hub --tags k3s
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight validation (no changes to target)
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate gcp1 connectivity"
+  hosts: gcp1
+  gather_facts: false
+  become: false
+  tags: [always]   # Pre-flight checks must run regardless of --tags filter
+  tasks:
+    - name: Verify SSH + Python connectivity
+      ansible.builtin.ping:
+
+    - name: Verify become (sudo) works
+      command: sudo -n true
+      become: true
+      changed_when: false
+
+    - name: Verify K3s is installed (cloud-init bootstrap prerequisite)
+      stat:
+        path: /usr/local/bin/k3s
+      register: _k3s_bin
+      failed_when: not _k3s_bin.stat.exists
+
+    - name: Verify Tailscale is up (cloud-init bootstrap prerequisite)
+      command: tailscale status --json
+      changed_when: false
+      register: _ts
+      failed_when: _ts.rc != 0
+
+# ---------------------------------------------------------------------------
+# Play 1: Day-2 convergence
+# ---------------------------------------------------------------------------
+- name: Provision gcp1 — Argo CD hub day-2 config
+  hosts: gcp1
+  become: true
+  gather_facts: true
+
+  vars:
+    deploy_env: hub
+
+  pre_tasks:
+    - name: Load base config (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/common.yaml"
+        name: common
+      tags: [always]  # prerequisite: config/secrets needed by any tag selection (e.g. --tags maintenance)
+
+    - name: Load hub overrides
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
+        name: env_overrides
+      tags: [always]
+
+    - name: Merge configs (hub overrides win)
+      set_fact:
+        config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
+
+    - name: Decrypt common secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
+      register: sops_common
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+      tags: [always]
+
+    - name: Expose secrets fact (common only — hub has no env-scoped secrets)
+      set_fact:
+        secrets: "{{ sops_common.stdout | from_yaml }}"
+      no_log: true
+      tags: [always]
+
+    - name: "Invariant: cloud-init swap directive applied"
+      assert:
+        that:
+          - ansible_facts["swaptotal_mb"] is defined
+          - ansible_facts["swaptotal_mb"] >= 1500
+        fail_msg: >-
+          Swap is {{ ansible_facts["swaptotal_mb"] | default(0) }}MB; expected
+          ≥1500MB from cloud-init. Lesson 2026-03-22: K3s + Argo CD OOM-kill
+          sshd without swap. On a MIG this is not a one-off to fix by hand —
+          every recreate reproduces it. Investigate cloud-init before continuing.
+
+    - name: "Invariant: host meets hub minimum (e2-small, 2GB RAM)"
+      assert:
+        that:
+          - ansible_facts["memtotal_mb"] >= 1700
+        fail_msg: >-
+          Memory is {{ ansible_facts["memtotal_mb"] }}MB; the hub minimum is
+          2GB (RELIAB-009, lesson 2026-03-28 — the 1GB predecessor OOMed on
+          every Helm upgrade). e2-small is the GCP equivalent of the t4g.small
+          that cleared it; a smaller machine_type will not hold Argo CD.
+
+    - name: Build TLS SAN list (MagicDNS only — the address rotates on recreate)
+      set_fact:
+        _k3s_tls_san:
+          - "{{ config.networking.gcp.tailscale_dns }}"
+
+  roles:
+    - role: ../roles/base_system
+      tags: [base]
+      vars:
+        system_timezone: "{{ config.global.timezone }}"
+        # No netplan — the GCE nic is cloud-init managed.
+        # No UFW — GCP VPC firewall rules are the authoritative network ACL.
+        firewall_enabled: false
+
+    - role: ../roles/ssh_hardening
+      tags: [ssh]
+
+    - role: ../roles/tailscale
+      tags: [tailscale]
+      vars:
+        # gcp1 is already registered (cloud-init, with a just-in-time minted
+        # key — F2). Role is idempotent: install task skips (binary present),
+        # `tailscale up` skips (BackendState=Running).
+        tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
+        tailscale_accept_routes: true   # Hub is remote — accepts subnet routes
+        tailscale_auth_key: ""           # No re-registration
+
+    - role: ../roles/k3s_server
+      tags: [k3s]
+      vars:
+        k3s_version: "{{ config.k3s.version }}"
+        k3s_install_script_url: "{{ config.k3s.install_script_url }}"
+        k3s_tls_san: "{{ _k3s_tls_san }}"
+        k3s_kubeconfig_mode: "{{ config.k3s.kubeconfig_mode }}"
+        k3s_resolv_conf: "/run/systemd/resolve/resolv.conf"
+        k3s_configure_traefik: "{{ config.k3s.configure_traefik }}"
+        k3s_traefik_acme_enabled: false
+        k3s_terminated_pod_gc_threshold: "{{ config.k3s.terminated_pod_gc_threshold }}"
+        k3s_etcd_snapshot_retention: "{{ config.k3s.etcd_snapshot_retention }}"
+        k3s_fetch_kubeconfig: true
+        k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
+        # MagicDNS in the kubeconfig server URL. On aws1 this spared a kubeconfig
+        # edit after a Spot replacement; on a MIG it is load-bearing rather than
+        # a convenience, because recreation is the normal case.
+        k3s_api_address: "{{ config.networking.gcp.tailscale_dns }}"
+
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
+    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
+    # template it names while removing the single-purpose unit it replaces.
+    - role: ../roles/node_notify
+      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
+      # REMOVES the unit `kubelab-maintenance.service` still names until
+      # node_maintenance re-templates it, so a selector that reaches this role
+      # without reaching that one leaves the node notification-dark: systemd
+      # logs "unit not found" on the next failure and nobody is told.
+      # Asserted in tests/test_node_notify_role.py.
+      tags: [maintenance]
+
+    # ANSIBLE-035. On aws1 this role's motivating case was a Spot instance
+    # replaced once, silently wiping the fleet's only maintenance timer. Here
+    # the exposure is structurally worse: a MIG recreates on every preemption,
+    # so an install that depends on someone re-running it is an install that is
+    # eventually absent. Install-only (maintenance_run_cleanup: false); cleanup
+    # runs on the timer's own weekly schedule. maintenance_is_k3s_node mirrors
+    # maintain.yml's own expression — gcp1 is the hub, not in k3s_servers.
+    - role: ../roles/node_maintenance
+      tags: [maintenance]
+      vars:
+        maintenance_run_cleanup: false
+        maintenance_is_k3s_node: "{{ 'k3s_servers' in group_names or 'hub' in group_names }}"
