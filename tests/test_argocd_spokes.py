@@ -117,3 +117,50 @@ class TestSpokeUrlCLI:
 
         result = CliRunner().invoke(app, ["argo", "spoke-url"])
         assert result.exit_code != 0
+
+    def test_stdout_is_the_url_and_nothing_else(self) -> None:
+        """The caller is `$(...)`, so every byte on stdout enters the variable.
+
+        This is not fastidiousness. The first version of this command resolved
+        through `ConfigurationManager`, which prints "[WARNING] SOPS is not
+        installed" to stdout -- Rich's default Console is stdout, not stderr.
+        On a workstation sops is installed and nothing appeared; on a runner it
+        is not, and `register-spoke` would have written a two-line warning
+        banner plus the URL into a cluster secret's `server` field. Green
+        locally, red on CI (#1223).
+        """
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        result = CliRunner().invoke(app, ["argo", "spoke-url", "--env", "staging"])
+
+        lines = result.stdout.splitlines()
+        assert len(lines) == 1, f"expected exactly one line of output, got {lines}"
+        assert lines[0].startswith("https://")
+
+    def test_the_command_does_not_reach_the_sops_backed_config_loader(self) -> None:
+        """Asserted over the function's parsed AST, never over its text.
+
+        A substring search for "ConfigurationManager" would match the docstring
+        that exists to explain why it is absent, and fail a command that is
+        correct -- the same defect as lesson-363 one mirror over. This walks the
+        names the function actually binds.
+
+        It fails everywhere, including locally, which is the point: the
+        behavioural test above only diverges on a machine without sops.
+        """
+        import ast
+        import inspect
+        import textwrap
+
+        from toolkit.cli import infra
+
+        tree = ast.parse(textwrap.dedent(inspect.getsource(infra.argo_spoke_url)))
+        names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)} | {
+            alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) for alias in node.names
+        }
+        assert "ConfigurationManager" not in names, (
+            "spoke-url resolves through the SOPS-backed loader again; it prints "
+            "warnings to stdout, and this command's stdout is consumed by `$(...)`"
+        )

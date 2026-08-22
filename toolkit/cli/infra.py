@@ -161,13 +161,27 @@ def argo_spoke_url(
     `argocd.spokes.<env>.node -> tailscale_ip -> k3s.api_port` with its own
     inline `python -c "import yaml; ..."`. See
     toolkit/features/argocd_spokes.py for why the node lookup is awkward.
-    """
-    from toolkit.features import argocd_spokes
-    from toolkit.features.configuration import ConfigurationManager
 
-    cm = ConfigurationManager("common", settings.project_root)
+    Reads the PLAINTEXT common.yaml directly, never SOPS -- the same rule
+    `config get` follows, and here it is load-bearing rather than tidy. The
+    caller is `$(...)` in a shell, so EVERY byte this process writes to stdout
+    lands inside the variable. `ConfigurationManager` prints
+    "[WARNING] SOPS is not installed" to stdout when sops is absent, which on a
+    runner without it silently produced a two-line warning banner followed by
+    the URL -- and `register-spoke` would have written that whole blob into a
+    cluster secret's server field. Caught by CI on #1223, never seen locally,
+    because a workstation has sops installed and a runner does not.
+
+    Nothing in this derivation is a secret, so the SOPS path bought nothing in
+    exchange for that hazard.
+    """
+    import yaml
+
+    from toolkit.features import argocd_spokes
+
+    common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
     try:
-        url = argocd_spokes.apiserver_url(cm.get_merged_config(), env)
+        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text()), env)
     except KeyError as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
