@@ -174,10 +174,30 @@ write_files:
       # exposed through the prod VPS. resolv-conf points at systemd-resolved's
       # real file because /etc/resolv.conf is the 127.0.0.53 stub, which pods
       # cannot reach.
+      # --node-name is PINNED, and that is not cosmetic. Without it K3s derives
+      # the node name from the OS hostname at the moment it starts, and on GCP
+      # that value is still in flux: the guest environment sets the instance's
+      # full internal DNS name before cloud-init's `hostname:` directive applies.
+      # K3s therefore registered as
+      # `gcp1-bxjh.europe-west4-b.c.kubelab-hub.internal` on the first boot.
+      #
+      # Measured consequence, 2026-08-22: a later `make provision NODE=gcp1`
+      # restarted K3s once the hostname had settled, it re-registered as `gcp1`,
+      # and the cluster ended up with TWO Node objects for ONE machine — same
+      # internal IP, the old one NotReady. Every pod bound to the dead name sat
+      # `Terminating` forever because no kubelet was left to confirm deletion,
+      # and `argocd-application-controller-0` is a StatefulSet ordinal, so its
+      # replacement could not start while the ghost held the name. With no
+      # application controller the hub reconciles nothing at all.
+      #
+      # The name is also load-bearing elsewhere: the Ansible inventory, the
+      # kubeconfig server URL and the Headscale given-name all say `gcp1`. A node
+      # name derived from a race is a node name that can disagree with all three.
       curl "$${curl_opts[@]}" "$${curl_retry[@]}" --max-time 120 -L https://get.k3s.io | \
         INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
         --disable=traefik --disable=servicelb \
         --write-kubeconfig-mode=644 \
+        --node-name=${hostname} \
         --resolv-conf=/run/systemd/resolve/resolv.conf \
         --tls-san=${hostname}.kubelab.internal \
         --tls-san="$ts_ip"
