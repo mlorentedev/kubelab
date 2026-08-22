@@ -246,7 +246,36 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "AWS t4g.micro hub (Argo CD). SSOT: networking.aws.tailscale_dns (aws1.kubelab.internal). MagicDNS IP 100.64.0.9.",
+    "description": "AWS t4g.small hub (Argo CD). SSOT: networking.aws.tailscale_ip. Pinned to the IP because aws1's address is recorded in common.yaml and changes only on a deliberate replacement -- unlike gcp1, whose MIG rotates it on every preemption. Retire with AC6 when AWS is decommissioned (#1249).",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "infra",
+      "vpn"
+    ]
+  },
+  {
+    "key": "infra-vpn-gcp1-tailscale",
+    "name": "Infra \u00b7 VPN \u00b7 GCP1 Tailscale",
+    "type": "ping",
+    "url": "https://",
+    "hostname": "gcp1.kubelab.internal",
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "GCP e2-small hub (Argo CD), regional MIG of size 1. Addressed by MagicDNS, NOT by IP: networking.gcp has no tailscale_ip on purpose -- the address rotates on every re-registration, and a MIG re-registers on every preemption. An IP here would go red during a recovery that succeeded.",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
