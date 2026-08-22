@@ -75,3 +75,45 @@ class TestItFailsLoudlyRatherThanSilently:
         del config["k3s"]["api_port"]
         with pytest.raises(KeyError, match="api_port"):
             argocd_spokes.apiserver_url(config, "staging")
+
+
+class TestSpokeUrlCLI:
+    """`Makefile:639` now calls this instead of its own inline `python -c`.
+
+    Reads the real `common.yaml`, same as the Makefile target does -- the
+    thing worth pinning here is the CLI's argument wiring and exit codes, not
+    the resolution logic already covered above.
+    """
+
+    def test_a_declared_env_prints_the_same_url_the_module_derives(self) -> None:
+        import yaml
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+        from toolkit.config.settings import settings
+
+        common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
+        expected = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text()), "staging")
+
+        result = CliRunner().invoke(app, ["argo", "spoke-url", "--env", "staging"])
+
+        assert result.exit_code == 0, result.stdout
+        assert result.stdout.strip() == expected
+
+    def test_an_unknown_env_exits_nonzero_and_names_it(self) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        result = CliRunner().invoke(app, ["argo", "spoke-url", "--env", "ghost"])
+
+        assert result.exit_code != 0
+        assert "ghost" in result.stdout
+
+    def test_missing_env_option_exits_nonzero(self) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        result = CliRunner().invoke(app, ["argo", "spoke-url"])
+        assert result.exit_code != 0

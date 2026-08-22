@@ -151,6 +151,32 @@ def argo_set_revision(
     logger.success("Application patched")
 
 
+@argo_app.command("spoke-url")
+def argo_spoke_url(
+    env: Annotated[str, typer.Option("--env", "-e", help="Spoke environment, e.g. staging or prod")],
+) -> None:
+    """Print one spoke's K3s apiserver URL, resolved from the SSOT (#1215).
+
+    Exists so a Makefile target can stop re-deriving
+    `argocd.spokes.<env>.node -> tailscale_ip -> k3s.api_port` with its own
+    inline `python -c "import yaml; ..."`. See
+    toolkit/features/argocd_spokes.py for why the node lookup is awkward.
+    """
+    from toolkit.features import argocd_spokes
+    from toolkit.features.configuration import ConfigurationManager
+
+    cm = ConfigurationManager("common", settings.project_root)
+    try:
+        url = argocd_spokes.apiserver_url(cm.get_merged_config(), env)
+    except KeyError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    # print(), not logger: the caller is `$(...)` in a shell and wants the
+    # bare URL on stdout with no formatting, prefix or colour.
+    print(url)
+
+
 @argo_app.command("check-drift")
 def argo_check_drift(
     kubeconfig: Annotated[
