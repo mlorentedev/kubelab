@@ -26,6 +26,19 @@ def _argv(mock) -> list[str]:
     return mock.call_args[0][0]
 
 
+def _mi(instance_id: str, action: str = "NONE", status: str = "RUNNING") -> list[dict]:
+    """One managed instance, in the shape `list-instances --format=json` returns."""
+    return [
+        {
+            "instance": "https://example/instances/gcp1-abcd",
+            "name": "gcp1-abcd",
+            "id": instance_id,
+            "instanceStatus": status,
+            "currentAction": action,
+        }
+    ]
+
+
 class TestItAddressesTheRegionalGroup:
     """A regional MIG answers to `--region`. Passing `--zone`, or omitting both,
     makes gcloud look for a group that does not exist -- and the failure names a
@@ -87,8 +100,15 @@ class TestRecreate:
     def test_it_names_an_instance_not_the_group(self, config: dict) -> None:
         """`recreate-instances` needs `--instances`. Without it gcloud rejects
         the call, but a helper that passed the group name would look right."""
-        with patch("toolkit.features.gcp_mig._list_instances") as ls, patch("toolkit.features.gcp_mig._run") as run:
-            ls.return_value = ["gcp1-abcd"]
+        # `_managed_instances`, not `_list_instances`: recreate now compares
+        # instance IDs to know the replacement finished, so it reads the full
+        # managed-instance objects. Two polls — one showing the old id, one the
+        # new — so the wait is exercised rather than skipped.
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=[_mi("1"), _mi("2")]),
+            patch("toolkit.features.gcp_mig._run") as run,
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
             run.return_value = 0
             gcp_mig.recreate(config)
         argv = _argv(run)
@@ -98,8 +118,10 @@ class TestRecreate:
     def test_an_empty_group_is_reported_not_silently_recreated(self, config: dict) -> None:
         """A MIG at size 0 has nothing to recreate. Calling gcloud anyway
         succeeds trivially and reports a recreate that never happened."""
-        with patch("toolkit.features.gcp_mig._list_instances") as ls, patch("toolkit.features.gcp_mig._run") as run:
-            ls.return_value = []
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", return_value=[]),
+            patch("toolkit.features.gcp_mig._run") as run,
+        ):
             with pytest.raises(RuntimeError, match="no instance"):
                 gcp_mig.recreate(config)
             run.assert_not_called()
@@ -112,6 +134,8 @@ class TestNoCredentialIsEverPassed:
         with (
             patch("toolkit.features.gcp_mig._run") as run,
             patch("toolkit.features.gcp_mig._list_instances", return_value=["gcp1-abcd"]),
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=[_mi("1"), _mi("2")]),
+            patch("toolkit.features.gcp_mig.time.sleep"),
             patch("toolkit.features.k8s_render.resolve_magicdns", return_value="100.64.0.12"),
         ):
             run.return_value = 0
@@ -157,3 +181,156 @@ class TestStatusReportsWhatTheRunbookPromises:
         ):
             assert gcp_mig.status(config) == 1
         ls.assert_not_called()
+
+
+class TestRecreateWaitsForTheMachineItAskedFor:
+    """`recreate-instances` returns when the request is ACCEPTED, not when it is done.
+
+    Measured 2026-08-22 running the full `make gcp1-replace` chain. gcloud
+    printed `SUCCESS` immediately, `wait-node-ready` ran next and connected to
+    the OLD VM -- still alive, still answering -- and cached its host key. By the
+    time `provision` ran, the replacement had happened and the host key had
+    changed, so ssh refused and the play hung for six minutes on its first probe.
+
+    #1265's host-key purge is correct and fired; what was wrong is WHEN. Purging
+    before the machine has actually been replaced just caches the dying VM's key.
+
+    The instance NAME cannot detect this: `replacement_method = RECREATE`
+    preserves it deliberately (the given-name collision hazard). The numeric `id`
+    does change, and `list-instances --format=json` returns it -- verified
+    against the live group mid-recreate:
+
+        {"name": "gcp1-bxjh", "id": "7978086404576288333",
+         "instanceStatus": "STAGING", "currentAction": "RECREATING"}
+
+    So the contract is: the recreate is done when every instance reports
+    `currentAction: NONE`, `instanceStatus: RUNNING`, and an id that is NOT one
+    of the ids observed before the request.
+    """
+
+    @staticmethod
+    def _managed(instance_id: str, action: str = "NONE", status: str = "RUNNING") -> list[dict]:
+        return [
+            {
+                "instance": "https://example/instances/gcp1-bxjh",
+                "name": "gcp1-bxjh",
+                "id": instance_id,
+                "instanceStatus": status,
+                "currentAction": action,
+            }
+        ]
+
+    def test_it_does_not_return_while_the_id_is_unchanged(self, config: dict) -> None:
+        """The old VM answering is the whole failure mode, so it must not satisfy the wait."""
+        polls = [
+            self._managed("111", action="RECREATING", status="STOPPING"),
+            self._managed("111", action="RECREATING", status="STAGING"),
+            self._managed("222"),  # replaced
+        ]
+        seen = []
+
+        def fake_managed(_config):  # noqa: ANN001, ANN202
+            seen.append(len(seen))
+            return polls[min(len(seen) - 1, len(polls) - 1)]
+
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=fake_managed),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
+            gcp_mig.recreate(config)
+
+        assert len(seen) >= 3, (
+            "recreate returned before the instance id changed. gcloud reports SUCCESS "
+            "on acceptance, so returning then hands the next step a VM that is about "
+            "to be destroyed — and its host key with it."
+        )
+
+    def test_it_does_not_accept_a_new_id_that_is_still_being_built(self, config: dict) -> None:
+        """RUNNING and NONE both matter: a STAGING instance has no sshd yet."""
+        # The FIRST call is the before-snapshot, so its id is what "old" means.
+        # An earlier draft started at 222 and thereby declared the replacement's
+        # own id stale, so the wait could never be satisfied and the test hung
+        # for the full ten-minute timeout. The fixture has to model the sequence
+        # the function actually sees, not just the states it cares about.
+        polls = [
+            self._managed("111"),  # before-snapshot
+            self._managed("222", action="CREATING", status="STAGING"),
+            self._managed("222"),
+        ]
+        seen = []
+
+        def fake_managed(_config):  # noqa: ANN001, ANN202
+            seen.append(len(seen))
+            return polls[min(len(seen) - 1, len(polls) - 1)]
+
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=fake_managed),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
+            gcp_mig.recreate(config)
+
+        assert len(seen) >= 3, "it accepted an instance still reporting CREATING/STAGING"
+
+    def test_the_old_id_does_not_satisfy_the_wait_even_when_idle_and_running(self, config: dict) -> None:
+        """Isolates the ID check from the action/status checks.
+
+        Found by mutation: deleting the id comparison left every test green,
+        because their fixtures were still RECREATING/STAGING and so blocked on
+        `currentAction` anyway. The condition that actually distinguishes the
+        old machine from its replacement was never exercised. Here the OLD
+        instance reports NONE and RUNNING — exactly what the dying VM looked
+        like when it answered `wait-node-ready` — so only the id can refuse it.
+        """
+        polls = [self._managed("111"), self._managed("111"), self._managed("222")]
+        seen = []
+
+        def fake_managed(_config):  # noqa: ANN001, ANN202
+            seen.append(len(seen))
+            return polls[min(len(seen) - 1, len(polls) - 1)]
+
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=fake_managed),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
+            gcp_mig.recreate(config)
+
+        assert len(seen) >= 3, (
+            "an instance with the OLD id was accepted because it reported NONE/RUNNING. "
+            "That is precisely the dying VM that answered wait-node-ready and handed it "
+            "a host key about to become invalid."
+        )
+
+    def test_a_new_id_that_is_idle_but_not_running_does_not_satisfy_the_wait(self, config: dict) -> None:
+        """Isolates the RUNNING check. A STAGING instance has no sshd yet."""
+        polls = [
+            self._managed("111"),
+            self._managed("222", action="NONE", status="STAGING"),
+            self._managed("222"),
+        ]
+        seen = []
+
+        def fake_managed(_config):  # noqa: ANN001, ANN202
+            seen.append(len(seen))
+            return polls[min(len(seen) - 1, len(polls) - 1)]
+
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=fake_managed),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
+            gcp_mig.recreate(config)
+
+        assert len(seen) >= 3, "a STAGING instance was accepted; the next step would find no sshd"
+
+    def test_it_gives_up_rather_than_waiting_for_ever(self, config: dict) -> None:
+        """A stuck replacement must fail loudly, not hang the chain silently."""
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", return_value=self._managed("111")),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+            pytest.raises(RuntimeError, match="did not replace"),
+        ):
+            gcp_mig.recreate(config, timeout_s=1)
