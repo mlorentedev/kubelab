@@ -1,0 +1,97 @@
+---
+# =============================================================================
+# Node-path backup — run one now (BACKUP-044)
+#
+# The PVC class has had a manual trigger since ADR-024 (`make backup-pvc`).
+# The node-path class had none: `make backup` DEPLOYS the pipeline, and the
+# only way to make a backup happen was to wait for a timer. So an operator
+# about to do something risky could not take a snapshot first, and the runbook
+# had no answer for "back this up now".
+#
+# Usage:
+#   make backup-node NODE=rpi3 ENV=prod
+#   make backup-node NODE=all ENV=prod
+#
+# Starts the SHIP unit, not capture. That is deliberate and it is the real
+# path: ship carries `Wants=node-backup-capture.service` plus `After=`, so one
+# start pulls capture in and orders it first (Part 4's trigger topology). A
+# capture-then-ship pair invoked by hand would be a second path that only this
+# playbook takes, and the one nobody tests is the one that rots.
+#
+# Because it is the real path, it also posts the AC9 coverage heartbeat — this
+# is how you make one arrive without waiting for a window.
+# =============================================================================
+
+- name: Node-path backup — run one now
+  hosts: all
+  become: true
+  gather_facts: false
+  # An on-demand node that is powered off is the expected state, not a fault
+  # (ADR-028). Same reasoning as backup.yml's second play: going red because
+  # the homelab is asleep teaches people to ignore the result.
+  ignore_unreachable: true
+
+  vars:
+    backup_unit: node-backup-ship.service
+
+  tasks:
+    - name: Reset any prior failed state
+      # A unit left `failed` by an earlier run starts fine, but the status read
+      # below would report the stale result rather than this run's.
+      ansible.builtin.systemd:
+        name: "{{ backup_unit }}"
+        state: stopped
+      failed_when: false
+
+    - name: Run the backup
+      # Type=oneshot: `started` blocks until it finishes, so the read below is
+      # not a race. The unit's own TimeoutStartSec=600 bounds it.
+      ansible.builtin.systemd:
+        name: "{{ backup_unit }}"
+        state: started
+
+    - name: Read the result
+      # `check_mode: false` — a read must run even in a dry run, or its
+      # `stdout` is empty and the assertion below reads that as a failed
+      # backup. Measured: `make backup-node NODE=rpi3 CHECK=1` reported
+      # "backup FAILED ()" for a backup that had never been asked to run.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: systemctl show {{ backup_unit }}
+             --property=Result --property=ExecMainStatus
+      register: backup_result
+      changed_when: false
+
+    - name: Report what the run actually did
+      check_mode: false
+      # The journal tail, not just the exit code: `ship complete` and the
+      # heartbeat line are the evidence a reader wants, and an exit code alone
+      # cannot show that the coverage heartbeat was posted.
+      ansible.builtin.command:
+        cmd: journalctl -u {{ backup_unit }} -n 15 --no-pager
+      register: backup_journal
+      changed_when: false
+
+    - name: Assert the backup succeeded
+      # Skipped in a dry run, and stated rather than left to the reader: under
+      # `--check` the systemd task above does not START anything, so there is
+      # no result to assert. Asserting anyway would make the dry run report a
+      # failure that the real run would not have — the inverse of a useful
+      # rehearsal.
+      when: not ansible_check_mode
+      ansible.builtin.assert:
+        that:
+          - "'Result=success' in backup_result.stdout"
+          - "'ExecMainStatus=0' in backup_result.stdout"
+        success_msg: >-
+          {{ inventory_hostname }}: backup complete
+          ({{ backup_result.stdout_lines | join(', ') }})
+        fail_msg: >-
+          {{ inventory_hostname }}: backup FAILED
+          ({{ backup_result.stdout_lines | join(', ') }}) —
+          journal below, and the OnFailure notifier has already reported it
+
+    - name: Show the journal
+      when: not ansible_check_mode
+      ansible.builtin.debug:
+        var: backup_journal.stdout_lines
