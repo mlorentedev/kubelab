@@ -31,6 +31,11 @@
         staging_zones: "{{ common.networking.staging_zones }}"
         vps_public_ip: "{{ common.networking.vps.public_ip }}"
         restart_policy: "{{ common.global.restart_policy }}"
+        # Where CoreDNS binds its health port. The LAN address deliberately, not
+        # `node_ips.rpi4`: Docker restores containers on boot before tailscaled
+        # has assigned the Tailscale address, and a failed bind drops the whole
+        # container's port publication. See the comment in docker-compose.yml.j2.
+        coredns_health_bind_ip: "{{ common.networking.nodes.rpi4.lan_ip }}"
         node_ips:
           vps: "{{ common.networking.vps.tailscale_ip }}"
           ace1: "{{ common.networking.nodes.ace1.tailscale_ip }}"

@@ -89,6 +89,13 @@ def _render(template: str, **overrides: object) -> str:
         # nobody, and surfacing 6h later as a coverage monitor blaming the backup
         # (#1221). Restated here for the same reason as the two values above it.
         node_backup_heartbeat_domain="status.kubelab.live",
+        # ADR-028 class, supplied by the playbook from `networking.*.location`
+        # like the three above it. The capture script branches on it to read
+        # back the shutdown receipt, which only exists on on-demand nodes —
+        # they are the ones that power off. Defaulting it in the ROLE would
+        # hide a playbook that forgot to pass it, which is what StrictUndefined
+        # is here to catch.
+        node_backup_location="on-demand",
     )
     ctx.update(overrides)
     env = Environment(

@@ -1,0 +1,40 @@
+# {{ ansible_managed }}
+# Brings the RPi3's Compose stack up once the node's Tailscale address exists.
+#
+# Ported from beelink_services/kubelab-compose.service.j2, which documents the
+# failure this prevents: at boot, Docker races tailscaled, the bind to the
+# Tailscale address fails, and the container never publishes its ports at all.
+# `restart: unless-stopped` does not cover it — the container IS running, so a
+# restart policy has nothing to restart. It just serves nothing.
+#
+# Why this node needed it most, and got it last. The RPi3 is always-on, so its
+# reboots are rare — which is exactly why the gap survived: a race you lose once
+# a year is a race nobody sees. And what it hosts is Uptime Kuma, the monitoring
+# of record (ADR-028). A silent bind failure here does not take down a service;
+# it takes down the thing that would have told you a service was down. Every
+# other monitor stays green because nothing is asking them.
+#
+# Measured precedent on rpi4, 2026-08-22: CoreDNS lost its ENTIRE port
+# publication to this race after a reboot, staging DNS was dead for ~90 minutes,
+# and three green signals covered it. rpi4 was fixed by binding to its LAN
+# address instead; the RPi3 is not on 172.16.1.0/24, so ordering is the only
+# remedy available here.
+[Unit]
+Description=KubeLab RPi3 Compose stack (Uptime Kuma)
+Documentation=https://github.com/mlorentedev/kubelab
+Requires=docker.service
+After=docker.service tailscaled.service network-online.target
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Comfortably above the wait script's own bound, so its explicit failure is what
+# surfaces rather than an opaque systemd timeout.
+TimeoutStartSec=180
+ExecStartPre={{ rpi3_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
+ExecStart=/usr/bin/docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+ExecStop=/usr/bin/docker compose -f {{ rpi3_deploy_dir }}/compose.yml stop
+
+[Install]
+WantedBy=multi-user.target
