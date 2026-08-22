@@ -25,6 +25,7 @@ from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.secret_expiry import Expiry
 
 # =============================================================================
 # Secret Catalog — authoritative registry of every secret
@@ -73,6 +74,23 @@ class SecretSpec:
     # of "secrets to sync" would be a second declaration of a fact this catalog
     # already owns, free to disagree with it silently.
     sync_to_secret_manager: bool = False
+    # WHEN this secret stops working, as a category -- never as a date.
+    #
+    # The catalog already says how to rotate every secret and said nothing about
+    # when any of them dies. Rotation is a procedure someone follows on purpose;
+    # expiry is a date that arrives whether or not anyone is looking. Measured
+    # 2026-08-22: `aws.headscale_api_key` expires 2027-03-27 and nothing in this
+    # repository knew.
+    #
+    # A DATE IS DELIBERATELY NOT STORED HERE. It would be a second declaration
+    # that drifts the moment a key is re-minted, and it drifts in the
+    # safe-looking direction -- still saying "fine" about a key replaced with a
+    # shorter-lived one. `Expiry.PROVIDER` means "ask the service that issued
+    # it"; `toolkit secrets check-expiry` does the asking.
+    #
+    # Defaults to UNKNOWN so a new entry surfaces as unclassified rather than
+    # being quietly assumed immortal.
+    expiry: Expiry = Expiry.UNKNOWN
 
 
 # -- Authelia base path shortcut --
@@ -494,10 +512,51 @@ SECRET_CATALOG: list[SecretSpec] = [
         sync_to_secret_manager=True,
     ),
     # =========================================================================
+    # AWS hub (ADR-023) — consumed by `aws-tfvars` and aws1's cloud-init
+    # =========================================================================
+    # NEITHER WAS REGISTERED until 2026-08-22, though both have existed in
+    # common.enc.yaml for months and both are read on every aws1 replacement.
+    # `make secrets-audit` walks this catalog, so it has never checked them: the
+    # registry that calls itself authoritative did not know the AWS hub had
+    # credentials at all.
+    SecretSpec(
+        key_path="aws.headscale_api_key",
+        description="Headscale API key aws1's cloud-init uses to clear its own stale node",
+        kind=SecretKind.EXTERNAL,
+        services=("headscale", "aws1"),
+        format_hint="hskey-api-... (Headscale API key, NOT a pre-auth key)",
+        expiry=Expiry.PROVIDER,
+        rotate_note=(
+            "Mint on the VPS with `headscale apikeys create`, update common.enc.yaml, "
+            "then `make tf-aws-apply` so the instance template carries the new value. "
+            "EXPIRES: measured 2027-03-27. An expired key does not fail loudly -- the "
+            "next Spot replacement simply cannot clean up its stale node and registers "
+            "as aws1-<random>, breaking the inventory and the kubeconfig."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="aws.headscale_preauth_key",
+        description="Stored pre-auth key aws1 registers with (the pattern finding F2 replaced on GCP)",
+        kind=SecretKind.EXTERNAL,
+        services=("headscale", "aws1"),
+        format_hint="Headscale pre-auth key",
+        expiry=Expiry.PROVIDER,
+        rotate_note=(
+            "Mint with `headscale preauthkeys create`, then `make tf-aws-apply`. "
+            "The GCP hub does NOT have an equivalent: it mints its own single-use key "
+            "at boot from the API key above (finding F2), precisely because a stored "
+            "pre-auth key expires between the template being written and a recreate "
+            "firing. This entry documents the older pattern that is still live on aws1."
+        ),
+        envs=("prod",),
+    ),
+    # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
     # =========================================================================
     SecretSpec(
         key_path="gcp.headscale_api_key",
+        expiry=Expiry.PROVIDER,
         description="Headscale API key the GCP hub reads at boot (node recycle + pre-auth minting)",
         kind=SecretKind.EXTERNAL,
         services=("headscale", "gcp1"),

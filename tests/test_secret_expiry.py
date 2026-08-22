@@ -1,0 +1,138 @@
+"""Provider-issued credentials must have a known expiry, asked not remembered.
+
+`SECRET_CATALOG` recorded how to rotate every secret and nothing about when any
+of them stops working. Rotation is a procedure someone follows on purpose;
+expiry is a date that arrives whether or not anyone is looking.
+
+Measured 2026-08-22: `aws.headscale_api_key` expires 2027-03-27, and nothing in
+this repository knew -- it was not even IN the catalog, though aws1's cloud-init
+reads it on every Spot replacement. An expired key fails silently: the
+replacement cannot clear its stale Headscale node, registers as `aws1-<random>`,
+and breaks the inventory and the kubeconfig months after anyone touched a key.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from toolkit.features.secret_expiry import (
+    Expiry,
+    ExpiryUnavailableError,
+    headscale_apikeys,
+    parse_headscale_apikeys,
+)
+from toolkit.features.secrets_manager import SECRET_CATALOG
+
+# Real output, ANSI included, copied from the VPS. A hand-cleaned sample would
+# test a format headscale does not emit.
+REAL_OUTPUT = (
+    "\x1b[96m\x1b[96mID\x1b[90m\x1b[90m | \x1b[0m\x1b[96m\x1b[0m\x1b[96mPrefix"
+    "                    \x1b[90m\x1b[90m | \x1b[0m\x1b[96m\x1b[0m\x1b[96mExpiration"
+    "         \x1b[90m\x1b[90m | \x1b[0m\x1b[96m\x1b[0m\x1b[96mCreated            \x1b[0m\n"
+    "\x1b[96m\x1b[0m\x1b[0m1 \x1b[90m\x1b[90m | \x1b[0mhskey-api-j4_9sZt5zTPr-***\x1b[90m\x1b[90m | "
+    "\x1b[0m\x1b[92m2027-03-27 04:33:43\x1b[0m\x1b[90m\x1b[90m | \x1b[0m2026-03-27 04:33:43\n"
+    "2 \x1b[90m\x1b[90m | \x1b[0mhskey-api-zcJQKhYGg5SW-***\x1b[90m\x1b[90m | "
+    "\x1b[0m\x1b[92m2029-05-17 02:55:43\x1b[0m\x1b[90m\x1b[90m | \x1b[0m2026-08-22 02:55:43\n"
+)
+
+
+class TestParsingWhatHeadscaleActuallyPrints:
+    def test_both_keys_are_found(self) -> None:
+        assert len(parse_headscale_apikeys(REAL_OUTPUT)) == 2
+
+    def test_the_expiry_dates_are_read(self) -> None:
+        keys = parse_headscale_apikeys(REAL_OUTPUT)
+        assert {k.expires_at.date().isoformat() for k in keys} == {"2027-03-27", "2029-05-17"}
+
+    def test_the_header_row_is_not_mistaken_for_a_key(self) -> None:
+        """It contains the word 'Expiration' and no date; a looser pattern would
+        yield a third 'key' with an unparseable lifetime."""
+        assert all(k.prefix.startswith("hskey-api-") for k in parse_headscale_apikeys(REAL_OUTPUT))
+
+    def test_only_the_truncated_prefix_is_captured(self) -> None:
+        """headscale truncates the prefix itself. Nothing usable as a credential
+        can reach a log, a CI transcript or a terminal through this path."""
+        for key in parse_headscale_apikeys(REAL_OUTPUT):
+            assert key.prefix.endswith("-***")
+
+    def test_days_left_is_derived_not_stored(self) -> None:
+        keys = parse_headscale_apikeys(REAL_OUTPUT)
+        soonest = min(keys, key=lambda k: k.expires_at)
+        expected = (soonest.expires_at - datetime.now(timezone.utc)).days
+        assert soonest.days_left == expected
+
+
+class TestAnUnaskableServiceIsNotAnEmptyOne:
+    def test_ssh_failure_raises_rather_than_reporting_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A check that cannot run must never be mistaken for one that found
+        nothing -- the same rule `argo check-drift` follows with exit code 2."""
+        from unittest.mock import MagicMock
+
+        import toolkit.features.secret_expiry as mod
+
+        monkeypatch.setattr(
+            mod.subprocess, "run", MagicMock(return_value=MagicMock(returncode=255, stdout="", stderr="timeout"))
+        )
+        with pytest.raises(ExpiryUnavailableError, match="could not ask headscale"):
+            headscale_apikeys("deployer@host")
+
+    def test_an_empty_key_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Every hub reads one at boot, so zero keys means the query failed."""
+        from unittest.mock import MagicMock
+
+        import toolkit.features.secret_expiry as mod
+
+        monkeypatch.setattr(
+            mod.subprocess, "run", MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+        )
+        with pytest.raises(ExpiryUnavailableError, match="no API keys"):
+            headscale_apikeys("deployer@host")
+
+
+class TestTheCatalogKnowsWhichSecretsExpire:
+    def test_the_headscale_credentials_are_provider_issued(self) -> None:
+        """The three the hubs read at boot. Anything issued by a service that
+        can be asked must say so, or `check-expiry` has nothing to check."""
+        by_path = {s.key_path: s for s in SECRET_CATALOG}
+        for path in ("aws.headscale_api_key", "aws.headscale_preauth_key", "gcp.headscale_api_key"):
+            assert path in by_path, f"{path} is consumed at boot but not registered in SECRET_CATALOG"
+            assert by_path[path].expiry is Expiry.PROVIDER
+
+    def test_the_aws_hub_credentials_are_registered_at_all(self) -> None:
+        """They existed in SOPS for months and in the catalog not at all, so
+        `secrets-audit` never checked them. The registry that calls itself
+        authoritative did not know the AWS hub had credentials."""
+        assert any(s.key_path.startswith("aws.") for s in SECRET_CATALOG)
+
+    def test_unclassified_is_the_default_not_never(self) -> None:
+        """A new entry should surface as unassessed rather than be assumed
+        immortal. `NEVER` has to be a decision someone made."""
+        from dataclasses import fields
+
+        default = next(f for f in fields(SECRET_CATALOG[0]) if f.name == "expiry").default
+        assert default is Expiry.UNKNOWN
+
+    def test_no_expiry_date_is_stored_in_the_catalog(self) -> None:
+        """A recorded date is a second declaration that drifts the moment a key
+        is re-minted -- and it drifts in the safe-looking direction, still
+        saying "fine" about a key replaced with a shorter-lived one.
+
+        `rotate_note` may MENTION a measured date as prose for a human; what
+        must not exist is a field the code reads instead of asking.
+        """
+        from dataclasses import fields
+
+        names = {f.name for f in fields(SECRET_CATALOG[0])}
+        assert not (names & {"expires_at", "expiry_date", "valid_until", "last_rotated"}), (
+            f"the catalog stores an expiry date: {names}. Ask the issuer instead."
+        )
+
+
+def test_a_key_inside_the_warning_window_is_detectable() -> None:
+    """The property the command acts on, pinned independently of the command."""
+    soon = datetime.now(timezone.utc) + timedelta(days=30)
+    row = f"1 | hskey-api-x-*** | {soon:%Y-%m-%d %H:%M:%S} | 2026-01-01 00:00:00\n"
+    (key,) = parse_headscale_apikeys(row)
+    assert key.days_left < 90

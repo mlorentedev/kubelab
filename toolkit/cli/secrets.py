@@ -448,6 +448,52 @@ def catalog(
     logger.console.print(table)
 
 
+@app.command("check-expiry")
+def check_expiry(
+    warn_days: Annotated[int, typer.Option("--warn-days", help="Fail below this many days remaining")] = 90,
+    ssh_target: Annotated[str, typer.Option("--ssh", help="Where headscale runs")] = "deployer@162.55.57.175",
+) -> None:
+    """Ask the issuing services when the provider-issued credentials expire.
+
+    The catalog says how to rotate every secret and said nothing about when any
+    of them dies. Rotation is a procedure someone follows on purpose; expiry is
+    a date that arrives whether or not anyone is looking.
+
+    ASKED, NEVER REMEMBERED. A date recorded in this repository would drift the
+    moment a key is re-minted, and it would drift in the safe-looking direction
+    -- still reporting "fine" about a key replaced with a shorter-lived one.
+
+    Exits 2, not 1, when the service cannot be reached: a check that could not
+    run must never be mistaken for one that found nothing.
+    """
+    from toolkit.features.secret_expiry import ExpiryUnavailableError, headscale_apikeys
+
+    logger.section("Provider-issued credential expiry")
+    try:
+        keys = headscale_apikeys(ssh_target)
+    except ExpiryUnavailableError as exc:
+        logger.error(f"CANNOT CHECK: {exc}")
+        raise typer.Exit(2) from exc
+
+    expiring = []
+    for key in sorted(keys, key=lambda k: k.expires_at):
+        line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
+        if key.days_left < warn_days:
+            logger.error(line)
+            expiring.append(key)
+        else:
+            logger.success(line)
+
+    if expiring:
+        logger.error(
+            f"{len(expiring)} Headscale API key(s) expire within {warn_days} days. "
+            "An expired key fails silently: the next hub recreate cannot clear its stale "
+            "node and registers as <host>-<random>, breaking the inventory and kubeconfig."
+        )
+        raise typer.Exit(1)
+    logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")
+
+
 @app.command("sync-secret-manager")
 def sync_secret_manager(
     dry_run: Annotated[
