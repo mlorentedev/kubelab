@@ -31,6 +31,11 @@ dev_node_toolchains:
   go: "1.26.5"
   python: "3.12.13"
 
+# --- Agent CLI tooling (global tools for remote CDE execution) -------------
+dev_node_global_agent_npm_packages:
+  - "@anthropic-ai/claude-code"
+
+
 # --- tmux-resurrect (vendored git clone: idempotent, offline-tolerant) ----
 # Base `tmux` ships via base_system (do NOT re-declare it here).
 dev_node_tmux_plugins_dir: "{{ dev_node_home }}/.tmux/plugins"
