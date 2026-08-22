@@ -63,7 +63,7 @@ toolkit apps logs api -f
 
 ```bash
 # Restart specific service
-make restart APP=api ENV=production
+make restart-dev APP=api ENV=production
 
 # Emergency rollback
 make emergency-rollback ENV=production
@@ -122,12 +122,12 @@ volumeMounts:
 
 ```bash
 # Quick restart
-make down && make up
+make down-dev && make up-dev
 
 # Nuclear option (kills all containers)
 docker kill $(docker ps -q)
 docker rm $(docker ps -aq)
-make clean && make up
+make clean && make up-dev
 ```
 
 ### Rollback Deployment
