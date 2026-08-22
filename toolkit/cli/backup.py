@@ -95,3 +95,26 @@ def generate_password_cmd(
 
     logger.success(f"Generated '{key}' in {env} (value not printed)")
     logger.warning("Copy it to the offsite escrow now: make secrets-show KEY=backup.restic_password SECRETS_ENV=common")
+
+
+@app.command("coverage")
+def coverage_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Report the newest snapshot for every node in `backup.sources`, read from R2.
+
+    BACKUP-044 AC1 asks for this to be answered "from a machine that is not the
+    source node", and that constraint is the point: every other backup control
+    runs ON the node it checks, so it shares the node's fate. This asks the
+    destination, works with the homelab powered off, and exits non-zero when a
+    declared node has no repository or no snapshot.
+
+    It reports snapshot AGE without judging it — the two node classes have
+    different expectations, and that judgement belongs to the coverage monitor
+    in Uptime Kuma, which knows the class.
+    """
+    from toolkit.features.backup_destination import coverage
+
+    if not coverage(env=env, project_root=project_root):
+        raise typer.Exit(code=1)
