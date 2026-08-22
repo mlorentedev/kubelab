@@ -32,7 +32,7 @@ echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 
 # Restart dev server
-make web-dev
+make up-dev
 ```
 
 ### Prevention
@@ -65,7 +65,7 @@ kill -9 <PID>
 ### Prevention
 
 - Use distinct port ranges for each service in development
-- Add port conflict checks to the `make dev` target
+- Add port conflict checks to the `make up-dev` target
 
 ## Local DNS for Development
 

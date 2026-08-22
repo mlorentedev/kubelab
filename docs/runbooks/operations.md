@@ -54,7 +54,7 @@ cd infra/terraform/aws && make tf-aws-plan
 make tf-aws-apply
 
 # After instance recreates:
-make fetch-kubeconfig-hub   # auto-accepts new SSH host key
+make fetch-kubeconfig ENV=hub   # auto-accepts new SSH host key
 make deploy-argocd          # Helm install + resolve EndpointSlice IP
 make deploy-apps            # re-register Applications
 make register-spoke ENV=staging
@@ -218,7 +218,7 @@ make provision NODE=jetson ENV=prod
 | Changed VPS Traefik config | `make deploy TARGET=vps ENV=prod` |
 | ArgoCD UI down | `make deploy-argocd` |
 | ArgoCD Helm upgrade failed | `make recover-argocd && make deploy-argocd` |
-| aws1 unresponsive | Reboot AWS console → `make fetch-kubeconfig-hub && make deploy-argocd` |
+| aws1 unresponsive | Reboot AWS console → `make fetch-kubeconfig ENV=hub && make deploy-argocd` |
 | New node to provision | `make provision NODE=x ENV=y` |
 | Uptime Kuma config changed | `make monitoring-apply` |
 | Need to check pod logs | `make logs SVC=x ENV=y` |

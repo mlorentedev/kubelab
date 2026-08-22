@@ -84,7 +84,7 @@ make deploy-k8s ENV=staging
 ```bash
 make tf-aws-apply             # Recreate Spot instance
 # Wait ~5 min for cloud-init (K3s + Tailscale)
-make fetch-kubeconfig-hub     # Get new kubeconfig
+make fetch-kubeconfig ENV=hub     # Get new kubeconfig
 make deploy-argocd            # Reinstall Argo CD
 make register-spoke ENV=staging
 make register-spoke ENV=prod
