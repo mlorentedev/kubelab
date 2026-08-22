@@ -193,6 +193,12 @@
     - role: ../roles/docker
       tags: [docker]
 
+    - role: ../roles/dns_resilience
+      tags: [dns, tailscale]
+      vars:
+        headscale_ip: "{{ config.networking.vps.public_ip }}"
+        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
+
     - role: ../roles/tailscale
       tags: [tailscale]
       vars:

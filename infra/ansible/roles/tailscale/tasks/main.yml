@@ -28,7 +28,7 @@
 - name: Build Tailscale up command
   set_fact:
     tailscale_up_cmd: >-
-      tailscale up
+      tailscale up --reset
       --login-server={{ tailscale_headscale_url }}
       --accept-dns={{ tailscale_accept_dns | lower }}
       --accept-routes={{ tailscale_accept_routes | lower }}
