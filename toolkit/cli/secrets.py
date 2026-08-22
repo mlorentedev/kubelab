@@ -263,6 +263,65 @@ def audit(
     for result in results:
         _print_audit_result(result)
 
+    # EXPIRY IS PART OF AN AUDIT, not a separate errand.
+    #
+    # `check-expiry` existed as its own command and nothing ran it -- which is
+    # the same shape as the finding it was built to fix: a control that reports
+    # only when someone remembers is a control that does not exist. Folding it
+    # in here costs nothing (this command already holds the decrypted config)
+    # and attaches it to a routine that is actually performed.
+    #
+    # Best effort by design: an unreachable issuer must not fail an audit whose
+    # subject is which secrets are PRESENT. It says so and moves on -- a
+    # scheduled check that can fail loudly is the follow-up, not this.
+    logger.subsection("Expiry (provider-issued credentials)")
+    try:
+        _report_expiry(warn_days=90)
+    except Exception as exc:  # noqa: BLE001 - never let this fail the audit
+        logger.warning(f"expiry not checked: {exc}")
+
+
+def _report_expiry(warn_days: int) -> None:
+    """Ask each issuer, report, and never raise. Shared with `check-expiry`."""
+    from datetime import datetime, timezone
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secret_expiry import (
+        PROVIDER_CHECKS,
+        Expiry,
+        ExpiryUnavailableError,
+        resolve_expiry,
+    )
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    merged = ConfigurationManager("common", settings.project_root).get_merged_config()
+
+    def dig(path: str) -> str:
+        node: object = merged
+        for part in path.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return ""
+            node = node[part]
+        return str(node or "")
+
+    for spec in SECRET_CATALOG:
+        if resolve_expiry(spec) is not Expiry.PROVIDER:
+            continue
+        check = PROVIDER_CHECKS.get(spec.key_path)
+        if check is None or not (value := dig(spec.key_path)):
+            continue
+        try:
+            expires = check(value)
+        except ExpiryUnavailableError as exc:
+            logger.warning(f"  {spec.key_path} — could not ask the issuer: {exc}")
+            continue
+        if expires is None:
+            logger.info(f"  {spec.key_path} — no expiry set")
+            continue
+        days = (expires - datetime.now(timezone.utc)).days
+        line = f"  {spec.key_path} — expires {expires:%Y-%m-%d} ({days}d)"
+        logger.error(line) if days < warn_days else logger.info(line)
+
 
 def _print_audit_result(result: AuditResult) -> None:
     """Pretty-print an audit result."""
@@ -448,6 +507,112 @@ def catalog(
     logger.console.print(table)
 
 
+@app.command("check-expiry")
+def check_expiry(
+    warn_days: Annotated[int, typer.Option("--warn-days", help="Fail below this many days remaining")] = 90,
+    ssh_target: Annotated[str, typer.Option("--ssh", help="Where headscale runs")] = "deployer@162.55.57.175",
+) -> None:
+    """Ask the issuing services when the provider-issued credentials expire.
+
+    The catalog says how to rotate every secret and said nothing about when any
+    of them dies. Rotation is a procedure someone follows on purpose; expiry is
+    a date that arrives whether or not anyone is looking.
+
+    ASKED, NEVER REMEMBERED. A date recorded in this repository would drift the
+    moment a key is re-minted, and it would drift in the safe-looking direction
+    -- still reporting "fine" about a key replaced with a shorter-lived one.
+
+    Exits 2, not 1, when the service cannot be reached: a check that could not
+    run must never be mistaken for one that found nothing.
+    """
+    from datetime import datetime, timezone
+
+    from toolkit.config.settings import settings as _settings
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secret_expiry import (
+        PROVIDER_CHECKS,
+        Expiry,
+        ExpiryUnavailableError,
+        headscale_apikeys,
+        resolve_expiry,
+    )
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    logger.section("Provider-issued credential expiry")
+
+    unreachable: list[str] = []
+    expiring = []
+
+    # --- Everything the issuer can be asked about directly -------------------
+    merged = ConfigurationManager("common", _settings.project_root).get_merged_config()
+
+    def _dig(path: str) -> str:
+        node: object = merged
+        for part in path.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return ""
+            node = node[part]
+        return str(node or "")
+
+    for spec in SECRET_CATALOG:
+        if resolve_expiry(spec) is not Expiry.PROVIDER:
+            continue
+        check = PROVIDER_CHECKS.get(spec.key_path)
+        if check is None:
+            continue  # Headscale keys are handled below, by asking the server.
+        value = _dig(spec.key_path)
+        if not value:
+            logger.warning(f"{spec.key_path}  declared PROVIDER but absent from SOPS")
+            continue
+        try:
+            expires = check(value)
+        except ExpiryUnavailableError as exc:
+            logger.error(f"{spec.key_path}  CANNOT CHECK: {exc}")
+            unreachable.append(spec.key_path)
+            continue
+        if expires is None:
+            logger.warning(f"{spec.key_path}  no expiry set (valid until revoked)")
+            continue
+        days = (expires - datetime.now(timezone.utc)).days
+        line = f"{spec.key_path}  expires {expires:%Y-%m-%d}  ({days}d)"
+        if days < warn_days:
+            logger.error(line)
+            expiring.append(spec.key_path)
+        else:
+            logger.success(line)
+
+    # --- Headscale, which is asked for all its keys at once -------------------
+    try:
+        keys = headscale_apikeys(ssh_target)
+    except ExpiryUnavailableError as exc:
+        logger.error(f"headscale  CANNOT CHECK: {exc}")
+        raise typer.Exit(2) from exc
+
+    for key in sorted(keys, key=lambda k: k.expires_at):
+        line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
+        if key.days_left < warn_days:
+            logger.error(line)
+            expiring.append(key.prefix)
+        else:
+            logger.success(line)
+
+    if unreachable:
+        logger.error(f"{len(unreachable)} credential(s) could not be checked: {unreachable}")
+        raise typer.Exit(2)
+
+    if expiring:
+        logger.error(
+            f"{len(expiring)} credential(s) expire within {warn_days} days: {expiring}. "
+            "Each fails SILENTLY at the moment it is needed rather than when it expires: "
+            "a Headscale key leaves the next hub recreate unable to clear its stale node, "
+            "so it registers as <host>-<random> and breaks the inventory and kubeconfig; "
+            "a GitHub PAT leaves the runner unable to register, or the dev node unable to "
+            "clone. Nothing raises an alarm on the expiry date itself."
+        )
+        raise typer.Exit(1)
+    logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")
+
+
 @app.command("sync-secret-manager")
 def sync_secret_manager(
     dry_run: Annotated[
@@ -491,8 +656,18 @@ def sync_secret_manager(
 
     # Names and actions only. A value never reaches this table, by construction:
     # SyncResult has no field that could carry one.
+    #
+    # A DRY RUN SAYS SO IN EVERY LINE, in the future tense. It used to print
+    # `created  <name>` -- byte-identical to a real run -- so the only way to
+    # know nothing had happened was to remember which flag you passed. In a
+    # secrets tool that is how someone concludes a delivery occurred that did
+    # not, or panics that one did. The feature already carried the distinction
+    # in `detail`; nothing displayed it.
     for result in results:
-        line = f"{result.action:<10} {result.secret_id}"
+        # "would created" is not English; the actions are stored past-tense.
+        base = {"created": "create", "updated": "update"}.get(result.action, result.action)
+        verb = f"would {base}" if dry_run and result.action != "failed" else result.action
+        line = f"{verb:<14} {result.secret_id}"
         if result.action == "failed":
             logger.error(f"{line}  {result.detail}")
         elif result.action == "unchanged":
@@ -504,4 +679,7 @@ def sync_secret_manager(
     if failed:
         logger.error(f"{len(failed)} of {len(results)} secrets did not sync; re-run once the cause is fixed")
         raise typer.Exit(1)
-    logger.success(f"{len(results)} secrets in sync")
+    if dry_run:
+        logger.success(f"{len(results)} secrets would be in sync — nothing was written")
+    else:
+        logger.success(f"{len(results)} secrets in sync")
