@@ -128,6 +128,19 @@ def run_proof(
     poll_s: float = 10.0,
 ) -> ProofResult:
     """Repoint, fire, verify, and restore no matter what happened."""
+    # NAMED FIRST, before anything else is judged. `make gcp-killswitch-prove`
+    # feeds this from `terraform output -raw project_id`, which can succeed and
+    # print nothing when the output exists but is empty -- and the empty string
+    # then failed the billing check instead, reporting "already has billing
+    # disabled" about a project that was never named. That sends the reader to
+    # check billing on a project that does not exist. Raised by review on #1245.
+    if not scratch_project.strip():
+        raise KillSwitchProofError(
+            "no scratch project named. `make gcp-killswitch-prove` derives it from "
+            "`terraform output -raw project_id`; an empty value there means the "
+            "scratch root was never applied, or its state is gone."
+        )
+
     home = current_target(function, region)
     if home != expected_home:
         # Refuse rather than proceed: if the switch is already aimed somewhere
