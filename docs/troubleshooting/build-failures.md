@@ -62,7 +62,7 @@ docker build --progress=plain .
 
 ```bash
 # Build single service instead of all at once
-make api-build
+make build-dev
 
 # Increase timeout in docker-compose if needed
 ```
@@ -82,7 +82,7 @@ Builds fail due to dependency resolution failures or cached stale dependencies.
 
 ```bash
 # Check build logs for specific dependency errors
-make build 2>&1 | grep -i "error\|fail"
+make build-dev 2>&1 | grep -i "error\|fail"
 ```
 
 ### Solution
@@ -93,7 +93,7 @@ make clean
 docker builder prune -a
 
 # Rebuild without cache
-make build --no-cache
+make build-dev --no-cache
 ```
 
 ### Prevention
