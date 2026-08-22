@@ -189,3 +189,41 @@ class TestEveryProviderSecretCanActuallyBeAsked:
         provider = [s.key_path for s in SECRET_CATALOG if resolve_expiry(s) is Expiry.PROVIDER]
         unaskable = [p for p in provider if p not in PROVIDER_CHECKS and "headscale" not in p]
         assert not unaskable, f"declared PROVIDER with no way to ask the issuer: {unaskable}"
+
+
+class TestExpiryIsPartOfTheAudit:
+    """A control that reports only when someone remembers does not exist.
+
+    `check-expiry` was its own command and nothing ran it — the same shape as
+    the finding it was built to fix. `secrets audit` IS run, so the report is
+    attached to that rather than left waiting to be invoked.
+    """
+
+    def test_audit_reports_expiry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        from typer.testing import CliRunner
+
+        import toolkit.cli.secrets as cli
+
+        called = MagicMock()
+        monkeypatch.setattr(cli, "_report_expiry", called)
+        monkeypatch.setattr(cli, "_get_manager", MagicMock())
+        result = CliRunner().invoke(cli.app, ["audit", "--env", "prod"])
+        assert called.called, f"the audit did not check expiry:\n{result.stdout}"
+
+    def test_an_unreachable_issuer_does_not_fail_the_audit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The audit's subject is which secrets are PRESENT. A network problem
+        reaching GitHub must not turn that into a failure — it says so and moves
+        on. A check that CAN fail loudly is the scheduled one, not this."""
+        from unittest.mock import MagicMock
+
+        from typer.testing import CliRunner
+
+        import toolkit.cli.secrets as cli
+
+        monkeypatch.setattr(cli, "_report_expiry", MagicMock(side_effect=RuntimeError("no network")))
+        monkeypatch.setattr(cli, "_get_manager", MagicMock())
+        result = CliRunner().invoke(cli.app, ["audit", "--env", "prod"])
+        assert result.exit_code == 0, result.stdout
+        assert "expiry not checked" in result.stdout

@@ -263,6 +263,65 @@ def audit(
     for result in results:
         _print_audit_result(result)
 
+    # EXPIRY IS PART OF AN AUDIT, not a separate errand.
+    #
+    # `check-expiry` existed as its own command and nothing ran it -- which is
+    # the same shape as the finding it was built to fix: a control that reports
+    # only when someone remembers is a control that does not exist. Folding it
+    # in here costs nothing (this command already holds the decrypted config)
+    # and attaches it to a routine that is actually performed.
+    #
+    # Best effort by design: an unreachable issuer must not fail an audit whose
+    # subject is which secrets are PRESENT. It says so and moves on -- a
+    # scheduled check that can fail loudly is the follow-up, not this.
+    logger.subsection("Expiry (provider-issued credentials)")
+    try:
+        _report_expiry(warn_days=90)
+    except Exception as exc:  # noqa: BLE001 - never let this fail the audit
+        logger.warning(f"expiry not checked: {exc}")
+
+
+def _report_expiry(warn_days: int) -> None:
+    """Ask each issuer, report, and never raise. Shared with `check-expiry`."""
+    from datetime import datetime, timezone
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secret_expiry import (
+        PROVIDER_CHECKS,
+        Expiry,
+        ExpiryUnavailableError,
+        resolve_expiry,
+    )
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    merged = ConfigurationManager("common", settings.project_root).get_merged_config()
+
+    def dig(path: str) -> str:
+        node: object = merged
+        for part in path.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return ""
+            node = node[part]
+        return str(node or "")
+
+    for spec in SECRET_CATALOG:
+        if resolve_expiry(spec) is not Expiry.PROVIDER:
+            continue
+        check = PROVIDER_CHECKS.get(spec.key_path)
+        if check is None or not (value := dig(spec.key_path)):
+            continue
+        try:
+            expires = check(value)
+        except ExpiryUnavailableError as exc:
+            logger.warning(f"  {spec.key_path} — could not ask the issuer: {exc}")
+            continue
+        if expires is None:
+            logger.info(f"  {spec.key_path} — no expiry set")
+            continue
+        days = (expires - datetime.now(timezone.utc)).days
+        line = f"  {spec.key_path} — expires {expires:%Y-%m-%d} ({days}d)"
+        logger.error(line) if days < warn_days else logger.info(line)
+
 
 def _print_audit_result(result: AuditResult) -> None:
     """Pretty-print an audit result."""
