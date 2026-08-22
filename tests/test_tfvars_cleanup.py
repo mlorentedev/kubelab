@@ -38,13 +38,21 @@ RENDERING_TARGETS = {
     "tf-gcp-destroy": "gcp.tfvars",
     "tf-gcp-bootstrap-plan": "gcp-bootstrap.tfvars",
     "tf-gcp-bootstrap-apply": "gcp-bootstrap.tfvars",
+    # MISSED by the first version of this list, and the worst one to miss: this
+    # is the target run during an incident, when nobody is auditing the working
+    # tree afterwards.
+    "aws1-replace": "aws.tfvars",
 }
 
 
 def _recipe(target: str) -> str:
     """The target's recipe as shell source, with Make syntax resolved."""
     text = MAKEFILE.read_text(encoding="utf-8")
-    m = re.search(rf"^{re.escape(target)}:\n((?:\t.*\n)+)", text, re.M)
+    # `[^\n]*` after the colon: a target may declare prerequisites
+    # (`aws1-replace: _aws1-cancel-spot-request`), and requiring a bare newline
+    # silently skipped every such target. It failed loudly here rather than
+    # passing vacuously, which is the only reason it was noticed at all.
+    m = re.search(rf"^{re.escape(target)}:[^\n]*\n((?:\t.*\n)+)", text, re.M)
     assert m, f"target {target!r} not found in the Makefile, or it has no recipe"
 
     lines = []
@@ -127,6 +135,13 @@ def _run(
     assert subs == 1, f"{target}: no tfvars renderer line found; the recipe changed shape"
     shell = re.sub(r"cd infra/terraform/\S+", f'cd "{module_dir}"', shell, count=1)
 
+    # Stripping `$(...)` leaves the residue of `$(MAKE) --no-print-directory ...`
+    # as a bare flag, which is not a command. `aws1-replace` chains three
+    # sub-makes after its cleanup and they are not this test's subject -- what
+    # matters is that the tfvars is gone and the exit code survived. Neutralised
+    # rather than deleted, so the line count and ordering stay honest.
+    shell = re.sub(r"^\s*--\S.*$", ":", shell, flags=re.M)
+
     # MAKE'S SEMANTICS, NOT THE SHELL'S, and this is the load-bearing part of the
     # harness. Make runs each recipe line in a SEPARATE shell and aborts at the
     # first non-zero exit. A single `sh -c` over the whole recipe does neither: it
@@ -176,3 +191,30 @@ class TestTheRenderedFileNeverOutlivesTheRun:
     def test_success_is_still_success(self, target: str, tfvars: str, tmp_path: pathlib.Path) -> None:
         result, _ = _run(target, tfvars, tmp_path, terraform_fails=False)
         assert result.returncode == 0, f"{target}: happy path exited {result.returncode}\n{result.stderr}"
+
+
+@pytest.mark.parametrize("target", sorted(RENDERING_TARGETS))
+def test_every_terraform_target_initialises_first(target: str) -> None:
+    """A target that assumes someone already ran `terraform init` by hand.
+
+    Which is exactly not the state of anyone following the runbook from scratch,
+    and not the state of a fresh worktree either. Measured twice in one session:
+    the first real run of `tf-gcp-bootstrap-plan` failed this way, and so did
+    `tf-gcp-plan` an hour later -- because the first fix was applied only to the
+    targets being written at the time and not to the ones it had just diagnosed.
+
+    `init` is idempotent and sub-second once the backend exists, so running it
+    every time costs nothing and removes a class of "works on the machine that
+    already did it".
+    """
+    recipe = _recipe(target)
+    verb = re.search(r"terraform (plan|apply|destroy)", recipe)
+    assert verb, f"{target} runs no terraform verb; update RENDERING_TARGETS"
+
+    init = recipe.find("terraform init")
+    assert init != -1, (
+        f"{target} never runs `terraform init`. On a fresh clone it fails with "
+        '"Backend initialization required", which reads as a broken checkout '
+        "rather than as a missing step."
+    )
+    assert init < verb.start(), f"{target} runs `terraform init` after the {verb.group(1)}"

@@ -14,9 +14,11 @@ of these will look locally reasonable:
   $12.75 on AWS). On-demand `e2-small` in europe-west4 is $13.43/mo for compute
   alone, so a silent revert here costs more than the migration saved.
 
-- **`instance_termination_action = "DELETE"`** -- the API default is `STOP`,
-  which leaves a `TERMINATED` shell behind after every preemption. DELETE keeps
-  the MIG's reconciliation unambiguous and the project free of husks.
+- **No `instance_termination_action`** -- ADR-063 specified `DELETE`, and GCP
+  refuses it: *"Spot virtual machines with termination action set to DELETE
+  cannot be used with Managed Instance Groups."* Measured on the first real
+  apply, after the decision had been made, documented, encoded and pinned by a
+  test. A green suite asserted a configuration that could never exist.
 
 - **A REGIONAL MIG with `target_size = 1`** -- GCP Spot VMs do not auto-restart,
   unlike the AWS persistent Spot request this replaces. Regional rather than
@@ -31,8 +33,10 @@ of these will look locally reasonable:
   This is the likeliest single route to the $15 budget cap, designed out rather
   than merely alerted on.
 
-- **No autohealing in v1** -- with DELETE termination the MIG already restores
-  target size on preemption without a health check. A probe that fires before
+- **No autohealing in v1** -- the ADR justified this by DELETE termination
+  restoring target size without a health check. That premise died with DELETE,
+  and whether a MIG revives a STOPPED preempted Spot VM unaided is deliberately
+  NOT asserted here from documentation. AC4 settles it by observation. A probe that fires before
   cloud-init's multi-minute bootstrap finishes produces a recreate loop on a Spot
   hub. Adding autohealing later requires `initial_delay_sec` no shorter than the
   measured bootstrap time, so the guard here is "not silently present".
@@ -160,7 +164,6 @@ def _var_default(tf: str, name: str) -> str | None:
     return d.group(1).strip() if d else None
 
 
-
 def _var_default_list(tf: str, name: str) -> list[str] | None:
     """The declared default of a LIST-typed Terraform variable, or None.
 
@@ -201,6 +204,7 @@ def _var_defaults_any(tf: str, name: str) -> list[str]:
         return []
     return re.findall(r'=\s*"([^"]+)"', default.group(1))
 
+
 @pytest.fixture(scope="module")
 def tf() -> str:
     if not GCP_DIR.is_dir():
@@ -217,11 +221,24 @@ class TestSpotAndPreemption:
             "$13.43/mo for compute alone, more than the AWS setup this replaces"
         )
 
-    def test_termination_action_is_delete_not_the_stop_default(self, tf: str) -> None:
-        assert re.search(r'instance_termination_action\s*=\s*"DELETE"', tf), (
-            "instance_termination_action defaults to STOP, which leaves a "
-            "TERMINATED husk after every preemption; DELETE keeps the MIG's "
-            "reconciliation unambiguous"
+    def test_no_termination_action_is_set(self, tf: str) -> None:
+        """This test asserted `DELETE` and the API refuses it.
+
+            Spot virtual machines with termination action set to DELETE cannot
+            be used with Managed Instance Groups.
+
+        Measured on the first real apply, after the decision had been made in
+        ADR-063, written into the module, and pinned here. A green test asserted
+        a configuration that could never exist -- the test agreed with the ADR
+        rather than with GCP, which is the failure mode a static guard has when
+        nothing has ever run.
+
+        Inverted deliberately rather than deleted: someone reading the ADR will
+        try to restore DELETE, and this is what will stop them.
+        """
+        assert not re.search(r"instance_termination_action", tf), (
+            "instance_termination_action is set again. A MIG rejects DELETE outright, "
+            "and STOP is the default -- so any value here is either refused or noise."
         )
 
     def test_the_group_is_regional_not_zonal(self, tf: str) -> None:
@@ -353,8 +370,7 @@ class TestModuleDefaultsMatchTheSSOT:
         default = _var_default(tf, var_name)
         assert default is not None, f'no variable "{var_name}" in the module'
         assert str(default) == str(expected), (
-            f'variable "{var_name}" defaults to {default!r} but '
-            f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
+            f'variable "{var_name}" defaults to {default!r} but {ssot_key} is {expected!r}; common.yaml is the SSOT'
         )
 
     @pytest.mark.parametrize("ssot_key,var_name", sorted(MIRRORED_LISTS.items()))
@@ -364,8 +380,7 @@ class TestModuleDefaultsMatchTheSSOT:
         default = _var_default_list(tf, var_name)
         assert default is not None, f'variable "{var_name}" is absent or does not default to a list'
         assert default == [str(item) for item in expected], (
-            f'variable "{var_name}" defaults to {default!r} but '
-            f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
+            f'variable "{var_name}" defaults to {default!r} but {ssot_key} is {expected!r}; common.yaml is the SSOT'
         )
 
     def test_boot_disk_is_pd_balanced(self, tf: str) -> None:
@@ -451,8 +466,7 @@ class TestSpokeServersMatchTheSSOT:
         declared = _var_defaults_any(tf, "spoke_servers")
         for env, url in self._expected().items():
             assert url in declared, (
-                f"argocd.spokes declares {env!r} but spoke_servers has no entry "
-                f"resolving to {url!r}"
+                f"argocd.spokes declares {env!r} but spoke_servers has no entry resolving to {url!r}"
             )
 
 
@@ -514,8 +528,7 @@ class TestTerraformBindsOnlyDeclaredSecrets:
         assert len(spoke_literals) == 2, f"expected token and ca per spoke, found {spoke_literals}"
         for literal in spoke_literals:
             assert literal.startswith("argocd-spokes-${env}-"), (
-                f"{literal!r} does not follow the spoke naming rule, so it cannot be "
-                f"what the sync wrote"
+                f"{literal!r} does not follow the spoke naming rule, so it cannot be what the sync wrote"
             )
         assert "for env in var.managed_spokes" in body, (
             "the spoke grants are not scoped to managed_spokes; this hub could read "
@@ -568,3 +581,47 @@ class TestNoCredentialLiterals:
                     f'variable "{name}" looks like a credential but is not marked '
                     f"sensitive = true; plan output and CI logs would echo it"
                 )
+
+
+class TestTheMigCanActuallyReplaceItsInstance:
+    """A regional MIG rejects a `maxUnavailable` of 1, and the failure is late.
+
+    Measured on the first real apply: eleven resources created, then
+
+        Error 400: Fixed updatePolicy.maxUnavailable for regional managed
+        instance group has to be either 0 or at least equal to the number of
+        zones.
+
+    The rule exists because a regional group spans every zone in the region. The
+    tempting fix is the zone count -- 3 for europe-west4 -- which puts a literal
+    next to a `region` that is a variable, and goes silently wrong the moment
+    the region changes to one with a different number of zones. Wrong in the
+    worst direction, too: too low a value blocks replacement entirely, on the
+    exact path a MIG exists to perform.
+    """
+
+    def test_max_unavailable_is_derived_not_written_as_a_number(self, tf: str) -> None:
+        """The zone count is the only legal non-zero value, and it is a fact
+        about the region rather than about this design."""
+        assert re.search(r"max_unavailable_fixed\s*=\s*length\(data\.google_compute_zones", tf), (
+            "maxUnavailable must be derived from the region's zone count. A literal "
+            "is a fact about europe-west4 sitting beside a `region` that is a variable, "
+            "and it fails closed on any region with a different zone count."
+        )
+
+    def test_the_percent_form_is_not_used(self, tf: str) -> None:
+        """Rejected by the API for this group: percent is only allowed for
+        regional MIGs of size at least 10, and this one is a singleton."""
+        assert "max_unavailable_percent" not in tf
+
+    def test_the_zone_data_source_follows_the_region_variable(self, tf: str) -> None:
+        """Pinning it to a literal region would reintroduce the same drift one
+        level down -- a zone count read for a region the module does not use."""
+        block = re.search(r'data\s+"google_compute_zones"\s+"available"\s*\{(.*?)\n\}', tf, re.S)
+        assert block and "var.region" in block.group(1)
+
+    def test_surge_stays_forbidden(self, tf: str) -> None:
+        """The invariant the percent change must not quietly relax: two hubs
+        must never exist at once, both registering the same Headscale
+        given-name and both reconciling the same spokes."""
+        assert re.search(r"max_surge_fixed\s*=\s*0", tf)
