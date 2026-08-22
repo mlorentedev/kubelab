@@ -775,6 +775,26 @@ deploy:
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK)
 
+# Run ONE node-path backup now, rather than waiting for its timer (BACKUP-044).
+#
+# `make backup` deploys the pipeline; this makes a backup happen. The PVC class
+# has had that distinction since ADR-024 (`make backup-pvc`) and the node-path
+# class did not, so an operator about to do something risky had no way to take a
+# snapshot first.
+#
+# Starts the ship unit, which pulls capture in via `Wants=` — the real scheduled
+# path, so it also posts the AC9 coverage heartbeat.
+.PHONY: backup-node
+backup-node:
+	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=vps|rpi3|beelink|rpi4|all [ENV=prod] [CHECK=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@if [ "$(NODE)" = "all" ]; then \
+		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) $(_CHECK); \
+	else \
+		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK); \
+	fi
+
 # CHECK=1 is a dry run. It is accepted HERE, and on every other target that
 # changes a node, because `make provision` accepted it and these did not:
 # `make backup ENV=prod CHECK=1` silently ignored the flag and deployed to all
