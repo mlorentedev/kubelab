@@ -36,6 +36,7 @@ So the order is load-bearing, and it is what these tests pin.
 from __future__ import annotations
 
 import re
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
@@ -138,8 +139,7 @@ class TestTheMakefileNoLongerCarriesTheFootgun:
     def test_it_does_not_delete_shared_rbac_inline(self) -> None:
         recipe = _recipe("unregister-spoke")
         assert "spoke-rbac.yaml" not in recipe, (
-            "the recipe still deletes the shared spoke RBAC, which disarms every "
-            "other hub reconciling that spoke"
+            "the recipe still deletes the shared spoke RBAC, which disarms every other hub reconciling that spoke"
         )
 
     def test_the_kubeconfig_argument_is_the_explicit_hub(self) -> None:
@@ -187,3 +187,61 @@ def _recipe(target: str) -> str:
             out.append(line)
     assert out, f"target {target!r} not found in the Makefile"
     return "\n".join(out)
+
+
+class TestAFailedStepStopsTheOnesAfterIt:
+    """The ordering is only a safeguard if the first step is CHECKED.
+
+    The first version ran every step and ignored each exit code:
+
+        for step in steps:
+            _kubectl(step.argv)
+
+    Re-running it printed "staging detached" while the finalizer patch had
+    failed with `NotFound` — a false green, and the mild half of the defect.
+
+    The severe half: if the Application EXISTS and the patch fails for any other
+    reason — RBAC, an API hiccup, a webhook — the delete runs anyway. With
+    `resources-finalizer.argocd.argoproj.io` still attached, that delete
+    CASCADES and prunes the entire spoke namespace. The exact catastrophe the
+    ordering was written to prevent, reachable because nothing enforced it.
+
+    Correct-in-sequence is not the same as correct.
+    """
+
+    def test_the_delete_does_not_run_when_the_finalizer_patch_fails(self) -> None:
+        attempted: list[list[str]] = []
+
+        def failing(argv: list[str]) -> tuple[int, str]:
+            attempted.append(list(argv))
+            if "patch" in argv:
+                return 1, 'Error from server (Forbidden): applications.argoproj.io "kubelab-staging" is forbidden'
+            return 0, ""
+
+        with patch.object(su, "_kubectl", failing), pytest.raises(RuntimeError, match="finalizer"):
+            su.unregister_spoke("staging", HUB)
+
+        joined = [" ".join(a) for a in attempted]
+        assert not [c for c in joined if "delete application" in c], (
+            "the Application was deleted after the finalizer patch failed. The finalizer "
+            "was therefore still attached, so that delete CASCADES and prunes the spoke."
+        )
+
+    def test_a_missing_application_is_tolerated_so_a_re_run_is_idempotent(self) -> None:
+        """`NotFound` on the patch means someone already detached this hub."""
+        calls: list[list[str]] = []
+
+        def not_found(argv: list[str]) -> tuple[int, str]:
+            calls.append(list(argv))
+            if "patch" in argv:
+                return 1, 'Error from server (NotFound): applications.argoproj.io "kubelab-staging" not found'
+            return 0, ""
+
+        with patch.object(su, "_kubectl", not_found):
+            su.unregister_spoke("staging", HUB)  # must not raise
+
+        joined = " ".join(" ".join(c) for c in calls)
+        assert "delete secret" in joined, (
+            "a NotFound Application aborted the whole run, so a half-finished detach "
+            "could never be completed by re-running it"
+        )
