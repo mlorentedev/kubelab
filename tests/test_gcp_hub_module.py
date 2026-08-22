@@ -161,6 +161,23 @@ def _var_default(tf: str, name: str) -> str | None:
 
 
 
+def _var_default_list(tf: str, name: str) -> list[str] | None:
+    """The declared default of a LIST-typed Terraform variable, or None.
+
+    `_var_default` cannot read one: its regex excludes the quote character, so
+    `default = ["staging"]` comes back as `"["`. That is not a bug there -- it is
+    built for scalars -- but it means a list mirror added to `MIRRORED` would
+    fail while reporting a comparison nobody can act on.
+    """
+    block = re.search(r'variable\s+"' + re.escape(name) + r'"\s*\{(.*?)\n\}', tf, re.S)
+    if not block:
+        return None
+    default = re.search(r"default\s*=\s*\[(.*?)\]", block.group(1), re.S)
+    if not default:
+        return None
+    return re.findall(r'"([^"]+)"', default.group(1))
+
+
 def _var_defaults_any(tf: str, name: str) -> list[str]:
     """Every default value of a variable, whether it is a scalar or a map.
 
@@ -316,12 +333,37 @@ class TestModuleDefaultsMatchTheSSOT:
         "argocd.helm_version": "helm_version",
     }
 
+    # Same contract as MIRRORED, separate because the comparison differs: these
+    # defaults are HCL lists, and `_var_default` returns "[" for one -- its regex
+    # stops at the first quote. Folding them into the scalar test would compare
+    # "[" against "['staging']" and fail with a message about the wrong thing.
+    MIRRORED_LISTS = {
+        # WHICH SPOKES THIS HUB WRITES TO. The invariant is that exactly one hub
+        # writes to any given spoke at any moment; cloud-init installs a cluster
+        # secret and an Application only for the spokes named here. A drift
+        # between the two declarations does not fail -- it produces a second
+        # controller on a spoke that already has one, which is the failure mode
+        # with no error message.
+        "networking.gcp.managed_spokes": "managed_spokes",
+    }
+
     @pytest.mark.parametrize("ssot_key,var_name", sorted(MIRRORED.items()))
     def test_default_matches_common_yaml(self, tf: str, ssot_key: str, var_name: str) -> None:
         expected = _ssot(ssot_key)
         default = _var_default(tf, var_name)
         assert default is not None, f'no variable "{var_name}" in the module'
         assert str(default) == str(expected), (
+            f'variable "{var_name}" defaults to {default!r} but '
+            f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
+        )
+
+    @pytest.mark.parametrize("ssot_key,var_name", sorted(MIRRORED_LISTS.items()))
+    def test_list_default_matches_common_yaml(self, tf: str, ssot_key: str, var_name: str) -> None:
+        expected = _ssot(ssot_key)
+        assert isinstance(expected, list), f"{ssot_key} is not a list in common.yaml; use MIRRORED instead"
+        default = _var_default_list(tf, var_name)
+        assert default is not None, f'variable "{var_name}" is absent or does not default to a list'
+        assert default == [str(item) for item in expected], (
             f'variable "{var_name}" defaults to {default!r} but '
             f"{ssot_key} is {expected!r}; common.yaml is the SSOT"
         )
