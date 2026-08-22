@@ -39,6 +39,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from toolkit.core.logging import logger
+
 
 @dataclass(frozen=True)
 class Step:
@@ -111,10 +113,37 @@ def unregister_spoke(
     remove_shared_rbac: bool = False,
     dry_run: bool = False,
 ) -> list[Step]:
-    """Detach one hub from one spoke. Returns the plan, executed unless dry_run."""
+    """Detach one hub from one spoke. Returns the plan, executed unless dry_run.
+
+    EVERY STEP IS CHECKED, and the first one is why. The ordering above --
+    finalizer before delete -- is only a safeguard if a failed patch STOPS the
+    delete. The first version of this ran every step and ignored each exit code,
+    which made the sequence decorative: a patch that failed for any reason other
+    than a missing Application left the finalizer attached, and the delete that
+    followed CASCADED, pruning the whole spoke namespace.
+
+    `NotFound` is the one tolerated failure, and only on the patch: it means this
+    hub was already detached, so a re-run should finish the remaining steps
+    rather than abort. That is what makes the operation idempotent instead of
+    merely repeatable.
+    """
     steps = plan(env, hub_kubeconfig, remove_shared_rbac)
     if dry_run:
         return steps
     for step in steps:
-        _kubectl(step.argv)
+        code, output = _kubectl(step.argv)
+        if code == 0:
+            continue
+        if "NotFound" in output or "not found" in output:
+            # Already gone. Keep going: a half-finished detach must be
+            # completable by running the same command again.
+            logger.info(f"  (already absent) {step.what}")
+            continue
+        raise RuntimeError(
+            f"step failed, and the remaining steps are NOT safe to run: {step.what}\n"
+            f"  {output}\n"
+            "Stopping here deliberately. If the finalizer patch did not succeed, the "
+            "Application still carries `resources-finalizer.argocd.argoproj.io`, and "
+            "deleting it would CASCADE — pruning every resource it manages on the spoke."
+        )
     return steps
