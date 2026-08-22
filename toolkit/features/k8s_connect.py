@@ -43,6 +43,12 @@ from toolkit.core.logging import logger
 # k3s serves the apiserver on 6443; overridable per cluster via clusters.<env>.apiserver_port.
 _DEFAULT_APISERVER_PORT = 6443
 
+# Cloud nodes sit at the TOP LEVEL of `networking`, unlike homelab nodes which are
+# iterated generically under `networking.nodes`. That asymmetry forces every "resolve
+# any node" consumer to carry this list -- SSOT-015 / #1182, whose whole point is that
+# adding a provider should not be an edit here. Ordered as the fleet acquired them.
+_CLOUD_KEYS: tuple[str, ...] = ("vps", "aws", "gcp")
+
 # ts-bridge binary discovery: env override -> well-known install dir -> PATH.
 _TS_BRIDGE_ENV = "TS_BRIDGE_BIN"
 _TS_BRIDGE_DEFAULTS: tuple[str, ...] = ("~/Apps/ts-bridge/ts-bridge.exe", "~/Apps/ts-bridge/ts-bridge")
@@ -105,17 +111,28 @@ def _node_block(networking: dict[str, Any], node: str) -> dict[str, Any]:
     """Position-aware lookup of a cluster's node block (mirrors SSOT-014a).
 
     Homelab nodes live under ``networking.nodes.<node>``; the cloud nodes live at
-    the top level (``networking.vps`` / ``networking.aws``), keyed by convention
-    or by ``hostname``. Raises ``KeyError`` naming the node if none matches.
+    the top level (``networking.vps`` / ``networking.aws`` / ``networking.gcp``),
+    keyed by convention or by ``hostname``. Raises ``KeyError`` naming the node
+    if none matches.
+
+    ``_CLOUD_KEYS`` is a hardcoded provider list inside a generic resolver, which
+    is exactly the coupling #1182 exists to remove -- adding a provider is O(number
+    of consumers) rather than O(1). It is NOT generalised here: GCP-001 exists to
+    measure that cost, and smoothing it mid-migration destroys the reading. Naming
+    the tuple makes the list greppable for the ticket that will delete it.
     """
     nodes = networking.get("nodes") or {}
     if node in nodes:
         return nodes[node]
-    for key in ("vps", "aws"):
+    for key in _CLOUD_KEYS:
         block = networking.get(key)
         if block and (key == node or block.get("hostname") == node):
             return block
-    raise KeyError(f"node {node!r} not found under networking.nodes / networking.vps / networking.aws")
+    # Derived from the tuple, never restated: a hand-written list here would be a
+    # second declaration of the same set, and the one that goes stale silently is
+    # always the error message nobody reads until it is wrong.
+    searched = " / ".join(f"networking.{k}" for k in ("nodes", *_CLOUD_KEYS))
+    raise KeyError(f"node {node!r} not found under {searched}")
 
 
 def resolve_transport(env: str, common_path: Path | None = None) -> ClusterTransport:
