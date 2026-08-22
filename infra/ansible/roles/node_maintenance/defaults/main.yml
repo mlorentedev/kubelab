@@ -23,6 +23,41 @@ maintenance_is_k3s_node: false
 # explicit manual invocation -- both of which inherit this `true` default.
 maintenance_run_cleanup: true
 
+# --- security patching (SEC-010) ------------------------------------------
+# The timer cleaned disk and patched NOTHING. Eight nodes accumulated CVEs
+# with no automation and no report; the VPS among them, which is the only
+# internet-facing host and the Headscale bootstrap dependency.
+#
+# `security` ONLY. A full `dist-upgrade` on an unattended timer is how a
+# routine Tuesday becomes an outage: this fleet has no on-call, and the
+# blacklist below cannot anticipate every package a full upgrade would touch.
+maintenance_security_updates: true
+
+# Packages NEVER upgraded by the timer, because upgrading them RESTARTS the
+# thing they belong to, unattended, on a node nobody is watching:
+#   docker/containerd — restarting the runtime stops every container. On ace1
+#     that is K3s itself; on beelink it is Gitea and the CI runner.
+#   k3s              — the cluster.
+#   tailscale        — the path this fleet is administered over. A failed
+#     upgrade removes the way in to fix it.
+# These are patched deliberately, by an operator who can watch, which is what
+# `make maintain NODE=x` is for.
+maintenance_patch_blacklist:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker.io
+  - containerd
+  - k3s
+  - tailscale
+
+# A kernel installed is not a kernel running. `unattended-upgrades` never
+# reboots here — see the role's tasks for why the VPS in particular must not —
+# so the run REPORTS whether a reboot is pending instead. Left unreported, a
+# patched-on-disk node reads as safe while running the old kernel, which is
+# worse than not patching: it manufactures confidence.
+maintenance_report_reboot_required: true
+
 # Rotated rsyslog files (syslog.1, syslog.2.gz, kern.log.1, auth.log.*…) older
 # than N days. logrotate keeps 7 by default; on low-disk nodes the spike from
 # a single bad day (e.g. K3s futex deadlock spamming syslog) can fill before

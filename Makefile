@@ -833,18 +833,21 @@ KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
 .PHONY: tf-aws-plan tf-aws-apply tf-aws-destroy
 tf-aws-plan:
 	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform plan -var-file=aws.tfvars; \
+	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
+		terraform plan -var-file=aws.tfvars; \
 		_exit=$$?; rm -f aws.tfvars; exit $$_exit
 
 tf-aws-apply:
 	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform apply -auto-approve -var-file=aws.tfvars; \
+	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
+		terraform apply -auto-approve -var-file=aws.tfvars; \
 		_exit=$$?; rm -f aws.tfvars; \
 		echo "✓ aws.tfvars cleaned (secrets in SOPS only)"; exit $$_exit
 
 tf-aws-destroy:
 	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform destroy -var-file=aws.tfvars; \
+	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
+		terraform destroy -var-file=aws.tfvars; \
 		_exit=$$?; rm -f aws.tfvars; exit $$_exit
 
 # aws1 lifecycle wrappers — cancel the underlying Spot Persistent Request
@@ -879,8 +882,9 @@ aws1-destroy: _aws1-cancel-spot-request tf-aws-destroy
 # so the missing notifier was never exercised either.
 aws1-replace: _aws1-cancel-spot-request
 	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform apply -auto-approve -var-file=aws.tfvars -replace=aws_instance.argo_hub
-	@rm -f infra/terraform/aws/aws.tfvars
+	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
+		terraform apply -auto-approve -var-file=aws.tfvars -replace=aws_instance.argo_hub; \
+		_exit=$$?; rm -f aws.tfvars; exit $$_exit
 	@$(MAKE) --no-print-directory wait-node-ready NODE=aws1 ENV=hub
 	@$(MAKE) --no-print-directory provision NODE=aws1 ENV=hub
 	@$(MAKE) --no-print-directory deploy-argocd
@@ -973,17 +977,20 @@ gcp-killswitch-teardown:
 .PHONY: tf-gcp-plan tf-gcp-apply tf-gcp-destroy
 tf-gcp-plan:
 	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && terraform plan -var-file=gcp.tfvars; \
+	@cd infra/terraform/gcp && terraform init -input=false >/dev/null && \
+		terraform plan -var-file=gcp.tfvars; \
 		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
 
 tf-gcp-apply:
 	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && terraform apply -auto-approve -var-file=gcp.tfvars; \
+	@cd infra/terraform/gcp && terraform init -input=false >/dev/null && \
+		terraform apply -auto-approve -var-file=gcp.tfvars; \
 		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
 
 tf-gcp-destroy:
 	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && terraform destroy -var-file=gcp.tfvars; \
+	@cd infra/terraform/gcp && terraform init -input=false >/dev/null && \
+		terraform destroy -var-file=gcp.tfvars; \
 		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
 
 # gcp1 lifecycle — a managed instance group, which is a different animal from
@@ -1039,12 +1046,14 @@ wait-node-ready:
 tf-dns-plan:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
 		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/dns && terraform plan -var-file=dns.tfvars
+		cd infra/terraform/dns && terraform init -input=false >/dev/null && \
+		terraform plan -var-file=dns.tfvars
 
 tf-dns-apply:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
 		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars
+		cd infra/terraform/dns && terraform init -input=false >/dev/null && \
+		terraform apply -auto-approve -var-file=dns.tfvars
 
 # sync-homepage regenerates config files from SSOT. Deployment happens via
 # `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.
