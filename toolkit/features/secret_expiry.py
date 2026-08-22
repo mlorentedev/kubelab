@@ -125,3 +125,87 @@ def headscale_apikeys(ssh_target: str, container: str = "headscale") -> list[Key
             "so an empty list means the query failed, not that none are needed."
         )
     return keys
+
+
+def resolve_expiry(spec: object) -> Expiry:
+    """A secret's expiry policy, with the rule applied rather than repeated.
+
+    THE RULE: if this repository generates the value, nothing can revoke it on a
+    schedule -- random tokens, argon2 hashes, RSA keys, passwords we chose. Those
+    are `NEVER` by construction, and writing `expiry=Expiry.NEVER` on 38 catalog
+    entries would be the same fact declared 38 times, free to disagree with the
+    `kind` beside it.
+
+    Only EXTERNAL secrets -- issued by somebody else -- can expire, so those are
+    the only ones a human has to classify. An unclassified EXTERNAL secret stays
+    `UNKNOWN`, which is the honest answer and the one that shows up in a report.
+    """
+    declared = getattr(spec, "expiry", Expiry.UNKNOWN)
+    if declared is not Expiry.UNKNOWN:
+        return declared
+    kind = getattr(getattr(spec, "kind", None), "value", None)
+    return Expiry.UNKNOWN if kind == "external" else Expiry.NEVER
+
+
+# --- Providers that can be asked ------------------------------------------
+#
+# One function per issuer, each returning the expiry it reports or None when the
+# credential genuinely has none. The credential is USED, never printed: asking
+# the issuer proves the value works and reveals its lifetime in one call, which
+# is the same "verify by consequence" rule the transcript doctrine states for
+# credentials generally.
+
+
+def github_pat_expiry(token: str, timeout: float = 15.0) -> datetime | None:
+    """Expiry of a GitHub PAT, from the header GitHub returns on any call.
+
+    None means a classic token with no expiry set -- valid forever until
+    revoked, which is its own risk but not this check's.
+    """
+    import urllib.request
+
+    req = urllib.request.Request(
+        "https://api.github.com/user",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.headers.get("github-authentication-token-expiration")
+    except Exception as exc:  # noqa: BLE001 - any failure here is "cannot check"
+        raise ExpiryUnavailableError(f"GitHub rejected or could not be reached: {exc}") from exc
+
+    if not raw:
+        return None
+    # "2026-09-14 23:52:41 UTC"
+    return datetime.strptime(raw.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def cloudflare_token_expiry(token: str, timeout: float = 15.0) -> datetime | None:
+    """Expiry of a Cloudflare API token, from its own verify endpoint."""
+    import json
+    import urllib.request
+
+    req = urllib.request.Request(
+        "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode())
+    except Exception as exc:  # noqa: BLE001
+        raise ExpiryUnavailableError(f"Cloudflare rejected or could not be reached: {exc}") from exc
+
+    raw = (body.get("result") or {}).get("expires_on")
+    if not raw:
+        return None
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+
+# key_path -> the function that asks its issuer. A secret marked PROVIDER with no
+# entry here is a gap the report names rather than skips: "we said this expires
+# and we cannot find out when" is a finding, not a blank line.
+PROVIDER_CHECKS = {
+    "cloudflare.api_token": cloudflare_token_expiry,
+    "apps.services.automation.github_runner.token": github_pat_expiry,
+    "apps.services.automation.dev_node.github_token": github_pat_expiry,
+}

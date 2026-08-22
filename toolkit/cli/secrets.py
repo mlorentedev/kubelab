@@ -466,29 +466,89 @@ def check_expiry(
     Exits 2, not 1, when the service cannot be reached: a check that could not
     run must never be mistaken for one that found nothing.
     """
-    from toolkit.features.secret_expiry import ExpiryUnavailableError, headscale_apikeys
+    from datetime import datetime, timezone
+
+    from toolkit.config.settings import settings as _settings
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secret_expiry import (
+        PROVIDER_CHECKS,
+        Expiry,
+        ExpiryUnavailableError,
+        headscale_apikeys,
+        resolve_expiry,
+    )
+    from toolkit.features.secrets_manager import SECRET_CATALOG
 
     logger.section("Provider-issued credential expiry")
+
+    unreachable: list[str] = []
+    expiring = []
+
+    # --- Everything the issuer can be asked about directly -------------------
+    merged = ConfigurationManager("common", _settings.project_root).get_merged_config()
+
+    def _dig(path: str) -> str:
+        node: object = merged
+        for part in path.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return ""
+            node = node[part]
+        return str(node or "")
+
+    for spec in SECRET_CATALOG:
+        if resolve_expiry(spec) is not Expiry.PROVIDER:
+            continue
+        check = PROVIDER_CHECKS.get(spec.key_path)
+        if check is None:
+            continue  # Headscale keys are handled below, by asking the server.
+        value = _dig(spec.key_path)
+        if not value:
+            logger.warning(f"{spec.key_path}  declared PROVIDER but absent from SOPS")
+            continue
+        try:
+            expires = check(value)
+        except ExpiryUnavailableError as exc:
+            logger.error(f"{spec.key_path}  CANNOT CHECK: {exc}")
+            unreachable.append(spec.key_path)
+            continue
+        if expires is None:
+            logger.warning(f"{spec.key_path}  no expiry set (valid until revoked)")
+            continue
+        days = (expires - datetime.now(timezone.utc)).days
+        line = f"{spec.key_path}  expires {expires:%Y-%m-%d}  ({days}d)"
+        if days < warn_days:
+            logger.error(line)
+            expiring.append(spec.key_path)
+        else:
+            logger.success(line)
+
+    # --- Headscale, which is asked for all its keys at once -------------------
     try:
         keys = headscale_apikeys(ssh_target)
     except ExpiryUnavailableError as exc:
-        logger.error(f"CANNOT CHECK: {exc}")
+        logger.error(f"headscale  CANNOT CHECK: {exc}")
         raise typer.Exit(2) from exc
 
-    expiring = []
     for key in sorted(keys, key=lambda k: k.expires_at):
         line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
         if key.days_left < warn_days:
             logger.error(line)
-            expiring.append(key)
+            expiring.append(key.prefix)
         else:
             logger.success(line)
 
+    if unreachable:
+        logger.error(f"{len(unreachable)} credential(s) could not be checked: {unreachable}")
+        raise typer.Exit(2)
+
     if expiring:
         logger.error(
-            f"{len(expiring)} Headscale API key(s) expire within {warn_days} days. "
-            "An expired key fails silently: the next hub recreate cannot clear its stale "
-            "node and registers as <host>-<random>, breaking the inventory and kubeconfig."
+            f"{len(expiring)} credential(s) expire within {warn_days} days: {expiring}. "
+            "Each fails SILENTLY at the moment it is needed rather than when it expires: "
+            "a Headscale key leaves the next hub recreate unable to clear its stale node, "
+            "so it registers as <host>-<random> and breaks the inventory and kubeconfig; "
+            "a GitHub PAT leaves the runner unable to register, or the dev node unable to "
+            "clone. Nothing raises an alarm on the expiry date itself."
         )
         raise typer.Exit(1)
     logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")

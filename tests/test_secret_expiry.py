@@ -136,3 +136,56 @@ def test_a_key_inside_the_warning_window_is_detectable() -> None:
     row = f"1 | hskey-api-x-*** | {soon:%Y-%m-%d %H:%M:%S} | 2026-01-01 00:00:00\n"
     (key,) = parse_headscale_apikeys(row)
     assert key.days_left < 90
+
+
+class TestTheRuleIsEncodedNotRepeated:
+    """38 catalog entries would otherwise carry `expiry=Expiry.NEVER` verbatim.
+
+    That would be one fact declared 38 times, free to disagree with the `kind`
+    sitting beside it. `resolve_expiry` states the rule instead: if this
+    repository generates the value, nothing can revoke it on a schedule.
+    """
+
+    def test_a_generated_secret_cannot_expire(self) -> None:
+        from toolkit.features.secret_expiry import resolve_expiry
+        from toolkit.features.secrets_manager import SecretKind, SecretSpec
+
+        spec = SecretSpec(key_path="x", description="", kind=SecretKind.RANDOM_TOKEN)
+        assert resolve_expiry(spec) is Expiry.NEVER
+
+    def test_an_unclassified_external_secret_stays_unknown(self) -> None:
+        """The honest answer, and the one that shows up in a report. Defaulting
+        it to NEVER would silently assume every third-party key is immortal."""
+        from toolkit.features.secret_expiry import resolve_expiry
+        from toolkit.features.secrets_manager import SecretKind, SecretSpec
+
+        spec = SecretSpec(key_path="x", description="", kind=SecretKind.EXTERNAL)
+        assert resolve_expiry(spec) is Expiry.UNKNOWN
+
+    def test_an_explicit_classification_always_wins(self) -> None:
+        from toolkit.features.secret_expiry import resolve_expiry
+        from toolkit.features.secrets_manager import SecretKind, SecretSpec
+
+        spec = SecretSpec(key_path="x", description="", kind=SecretKind.EXTERNAL, expiry=Expiry.PROVIDER)
+        assert resolve_expiry(spec) is Expiry.PROVIDER
+
+    def test_every_catalog_entry_is_now_classified(self) -> None:
+        """The point of the exercise. An UNKNOWN here is a third-party credential
+        nobody has decided about -- which is exactly how a PAT expiring in 23
+        days went unnoticed."""
+        from toolkit.features.secret_expiry import resolve_expiry
+
+        unknown = [s.key_path for s in SECRET_CATALOG if resolve_expiry(s) is Expiry.UNKNOWN]
+        assert not unknown, f"unclassified third-party credentials: {unknown}"
+
+
+class TestEveryProviderSecretCanActuallyBeAsked:
+    def test_each_PROVIDER_secret_has_a_checker_or_is_headscale(self) -> None:
+        """ "We said this expires and we cannot find out when" is a finding, not a
+        blank line. Headscale is the exception: its keys are enumerated from the
+        server rather than looked up per catalog entry."""
+        from toolkit.features.secret_expiry import PROVIDER_CHECKS, resolve_expiry
+
+        provider = [s.key_path for s in SECRET_CATALOG if resolve_expiry(s) is Expiry.PROVIDER]
+        unaskable = [p for p in provider if p not in PROVIDER_CHECKS and "headscale" not in p]
+        assert not unaskable, f"declared PROVIDER with no way to ask the issuer: {unaskable}"

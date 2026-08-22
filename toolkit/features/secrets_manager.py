@@ -493,6 +493,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="argocd.slack_webhook_url",
+        expiry=Expiry.NEVER,
         description="Slack incoming webhook URL for Argo CD notifications (argocd-notifications)",
         kind=SecretKind.EXTERNAL,
         services=("argocd",),
@@ -503,6 +504,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
+        expiry=Expiry.NEVER,
         description="Shared secret validating GitHub webhook deliveries to the Argo CD webhook receiver",
         kind=SecretKind.EXTERNAL,
         services=("argocd",),
@@ -579,6 +581,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="gcp.billing_account_id",
+        expiry=Expiry.NEVER,
         description="Billing account holding the monthly platform credit; budgets attach to it",
         kind=SecretKind.EXTERNAL,
         services=("terraform",),
@@ -606,6 +609,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     SecretSpec(
         key_path="cloudflare.api_token",
+        expiry=Expiry.PROVIDER,
         description="Cloudflare DNS API token (ACME certs + Terraform DNS)",
         kind=SecretKind.EXTERNAL,
         services=("traefik", "terraform"),
@@ -625,6 +629,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # silently absent — the failure is invisible until a restore is attempted.
     SecretSpec(
         key_path="backup.r2.access_key_id",
+        expiry=Expiry.NEVER,
         description="Cloudflare R2 S3 access key id — offsite restic destination",
         kind=SecretKind.EXTERNAL,
         services=("backup",),
@@ -638,6 +643,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="backup.r2.secret_access_key",
+        expiry=Expiry.NEVER,
         description="Cloudflare R2 S3 secret access key — offsite restic destination",
         kind=SecretKind.EXTERNAL,
         services=("backup",),
@@ -674,6 +680,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="apps.services.automation.github_runner.token",
+        expiry=Expiry.PROVIDER,
         description="GitHub PAT for self-hosted Actions runner registration",
         kind=SecretKind.EXTERNAL,
         services=("github-runner",),
@@ -689,6 +696,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # audited under `prod`. There is no `common` pseudo-env in this catalog.
     SecretSpec(
         key_path="apps.services.automation.dev_node.github_token",
+        expiry=Expiry.PROVIDER,
         description="Fine-grained GitHub PAT giving the ace2 dev node its own machine identity (gh + git over HTTPS)",
         kind=SecretKind.EXTERNAL,
         services=("dev-node",),
@@ -707,6 +715,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # the Apprise routing table (kubelab.yml); n8n no longer holds Telegram creds.
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.bot_token",
+        expiry=Expiry.NEVER,
         description="Telegram bot token for the Apprise notification gateway",
         kind=SecretKind.EXTERNAL,
         services=("apprise",),
@@ -716,6 +725,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.chat_page",
+        expiry=Expiry.NEVER,
         description="Telegram channel ID for the PAGE tier (push) — Apprise gateway",
         kind=SecretKind.EXTERNAL,
         services=("apprise",),
@@ -725,6 +735,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="apps.services.automation.apprise.telegram.chat_log",
+        expiry=Expiry.NEVER,
         description="Telegram channel ID for the LOG tier (archive, no push) — Apprise gateway",
         kind=SecretKind.EXTERNAL,
         services=("apprise",),
@@ -786,6 +797,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # (API + Authelia) read `INFRA_SMTP_*` env vars directly.
     SecretSpec(
         key_path="infra.smtp.pass",
+        expiry=Expiry.NEVER,
         description="SMTP app password (shared: API + Authelia outbound mail)",
         kind=SecretKind.EXTERNAL,
         services=("api", "authelia"),
@@ -805,6 +817,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
+        expiry=Expiry.NEVER,
         description="Beehiiv newsletter API key",
         kind=SecretKind.EXTERNAL,
         services=("api",),
@@ -816,6 +829,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # regex gap. Companion `api_key` stays in SOPS as a true secret.
     SecretSpec(
         key_path="apps.platform.api.zoho_client_id",
+        expiry=Expiry.NEVER,
         description="Zoho OAuth client ID",
         kind=SecretKind.EXTERNAL,
         services=("api",),
@@ -823,6 +837,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     SecretSpec(
         key_path="apps.platform.api.zoho_client_secret",
+        expiry=Expiry.NEVER,
         description="Zoho OAuth client secret",
         kind=SecretKind.EXTERNAL,
         services=("api",),
