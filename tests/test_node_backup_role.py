@@ -543,3 +543,55 @@ def test_restic_is_decompressed_via_a_temp_path_never_onto_the_install_path():
     assert path not in writes.replace(f"{path}.tmp", ""), (
         "decompression must never write straight to the install path"
     )
+
+
+def test_a_failing_ship_can_say_why():
+    """Every failure looked like a timeout, and none said why.
+
+    Measured 2026-08-22 by injecting two real failures on beelink — a
+    blackholed R2 endpoint and an invalid credential. BOTH surfaced as systemd
+    `Result=timeout` after ~180s with **no restic error line in the journal at
+    all**. The operator got "node-backup-ship.service failed" and a log tail
+    that ended mid-run.
+
+    Two independent causes, and the fix needs both:
+
+    - restic's `--stuck-request-timeout` defaults to 5m, which outlives the
+      unit's useful life: systemd killed it before restic reached its own error
+      path, so `TimeoutStartSec=600` never applied either.
+    - The `snapshots` probe discarded stderr. That probe is the FIRST thing to
+      touch R2, so it is exactly where a bad credential is discovered — and its
+      stderr was the only explanation the run would ever produce.
+    """
+    script = _render("node-backup-ship.sh.j2")
+    assert "--stuck-request-timeout" in script, (
+        "restic's 5m default outlives the unit; systemd kills it before it can "
+        "report, so every failure arrives as an unexplained timeout"
+    )
+    probe = next(line for line in script.splitlines() if "snapshots -q" in line)
+    assert "2>&1" not in probe, (
+        f"the repository probe discards stderr: {probe.strip()!r}. It is the first "
+        f"call to reach R2, so its stderr is where a bad credential or an "
+        f"unreachable endpoint explains itself — and the only place it ever will."
+    )
+
+
+def test_the_request_timeout_leaves_room_under_the_unit_ceiling():
+    """A request timeout above TimeoutStartSec puts the old defect straight back.
+
+    The whole point is that restic reaches its error path *while the unit is
+    still alive to log it*. Compared numerically rather than by eye, because
+    these live in two different files and drift silently.
+    """
+    import re
+
+    defaults = _defaults()
+    stuck = str(defaults["node_backup_stuck_request_timeout"])
+    seconds = int(re.match(r"^(\d+)s$", stuck).group(1))
+    unit = _render("node-backup-ship.service.j2")
+    ceiling = int(re.search(r"^TimeoutStartSec=(\d+)$", unit, re.M).group(1))
+    assert seconds < ceiling, (
+        f"stuck-request-timeout is {seconds}s against TimeoutStartSec={ceiling}s. "
+        f"systemd would kill the run before restic could explain itself, which is "
+        f"the defect this setting exists to remove."
+    )
