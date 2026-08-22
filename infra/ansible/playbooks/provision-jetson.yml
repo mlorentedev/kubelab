@@ -84,7 +84,7 @@
     - name: Reconnect Tailscale if needed
       raw: >
         tailscale status --self | grep -q 'offline' &&
-        sudo tailscale up --login-server=https://{{ config.apps.services.core.headscale.domain }}
+        sudo tailscale up --reset --login-server=https://{{ config.apps.services.core.headscale.domain }}
         --accept-routes=false || true
       changed_when: false
 
