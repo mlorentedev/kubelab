@@ -83,6 +83,12 @@ def _render(template: str, **overrides: object) -> str:
         node_backup_sources=BEELINK_SOURCES,
         node_backup_restic_version="0.19.1",
         node_backup_r2_repo_prefix="s3:https://acct.r2.cloudflarestorage.com/kubelab-backups",
+        # Supplied by the playbook, not by the role's defaults — deliberately, so
+        # StrictUndefined catches a playbook that forgot it. An empty default
+        # would render `https:///api/push/<token>`: structurally valid, reaching
+        # nobody, and surfacing 6h later as a coverage monitor blaming the backup
+        # (#1221). Restated here for the same reason as the two values above it.
+        node_backup_heartbeat_domain="status.kubelab.live",
     )
     ctx.update(overrides)
     env = Environment(

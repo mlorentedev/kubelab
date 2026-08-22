@@ -78,11 +78,18 @@ node_backup_shutdown_service_name: node-backup-shutdown.service
 # goes dark with it.
 #
 # Domain and token come from the playbook: the domain from
-# `apps.services.observability.uptime_kuma.domain` in common.yaml, the token from
-# SOPS. Neither is defaulted here -- an empty domain would post to a URL that
-# looks valid and reaches nobody, and a defaulted token would address the wrong
-# monitor. Left undefined so StrictUndefined fails the apply instead.
-node_backup_heartbeat_domain: ""
+# `apps.services.observability.uptime_kuma.domain` in common.yaml, the token
+# from SOPS. Neither is declared here, and the ABSENCE is the mechanism --
+# StrictUndefined only fires on a variable that does not exist, so a default of
+# `""` would defeat it. Measured: `https://{{ d }}/api/push/x` with `d=""`
+# renders `https:///api/push/x` and raises nothing, which is a URL that looks
+# structurally fine, reaches nobody, and leaves the coverage monitor DOWN 6h
+# later blaming the backup.
+#
+# An earlier revision of this file carried `node_backup_heartbeat_domain: ""`
+# under a comment claiming exactly the protection the line removed. Raised by
+# review on #1221 -- a comment that promises a guard the code does not have is
+# worse than no comment, because it stops the next reader looking.
 
 # Root-only file rather than argv or a rendered literal, the same reasoning as
 # the restic credentials above: the push endpoint is unauthenticated and the

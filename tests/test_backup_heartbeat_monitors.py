@@ -296,3 +296,43 @@ def test_an_implausible_token_is_refused_rather_than_posted(tmp_path: pathlib.Pa
         "curl was invoked with a token that is not a plausible push token; the URL it "
         "built addresses something other than this node's monitor"
     )
+
+
+def test_the_domain_has_no_default_so_a_missing_one_fails_the_apply() -> None:
+    """`StrictUndefined` only fires on a variable that does not EXIST.
+
+    A default of `""` defeats it silently: measured, `https://{{ d }}/api/push/x`
+    with `d=""` renders `https:///api/push/x` and raises nothing. That URL looks
+    structurally fine, reaches nobody, and surfaces 6h later as a coverage
+    monitor DOWN — blaming the backup for a wiring mistake.
+
+    This file carried exactly that, under a comment claiming the opposite.
+    Raised by review on #1221.
+    """
+    import jinja2
+
+    defaults = yaml.safe_load(
+        (REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text()
+    )
+    assert "node_backup_heartbeat_domain" not in defaults, (
+        "the heartbeat domain has a role default again. Any value here — `\"\"` "
+        "included — makes the variable defined, so StrictUndefined cannot catch a "
+        "playbook that forgot to pass it."
+    )
+
+    # And prove the consequence rather than asserting only the absence: rendering
+    # the ship template with the role's own defaults must raise, because that is
+    # the whole protection.
+    with pytest.raises(jinja2.exceptions.UndefinedError):
+        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(
+            SHIP.read_text()
+        ).render(
+            # The role's own defaults, plus only what Ansible supplies at runtime.
+            # Anything the defaults already carry is left alone — overriding it
+            # here would be this test inventing a context the apply never has.
+            {
+                **defaults,
+                "ansible_managed": "Ansible managed",
+                "inventory_hostname": "rpi3",
+            }
+        )
