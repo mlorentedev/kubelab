@@ -13,6 +13,20 @@ output "kill_switch_topic" {
   value       = google_pubsub_topic.budget_alerts.id
 }
 
+output "kill_switch_service_account" {
+  description = <<-EOT
+    The kill switch's identity. Needed by the AC2b proof: since the detach
+    permission is granted per PROJECT, the scratch project must grant this same
+    account before the switch can act on it.
+  EOT
+  value       = google_service_account.kill_switch.email
+}
+
+output "kill_switch_function" {
+  description = "Function name, for repointing TARGET_PROJECT during the AC2b proof."
+  value       = google_cloudfunctions2_function.kill_switch.name
+}
+
 # Deliberately NOT an output: billing_account_id. It is a `sensitive` input and
 # echoing it here would put it in `terraform output` and in the state's plain
 # output map, for no benefit -- every consumer already reads it from SOPS.
