@@ -283,6 +283,41 @@ make deploy-argocd
 The second `provision` is not redundant. Idempotence is the acceptance bar;
 completion is not.
 
+### What the first real apply refused — 2026-08-22
+
+Three API rejections, in this order, none of them visible to `terraform
+validate` or to any test. They are recorded because a reader hitting one of them
+should recognise it rather than re-derive it, and because all three were
+*decisions this repository had already made and encoded*:
+
+1. **`instance_termination_action = "DELETE"`** —
+   *"Spot virtual machines with termination action set to DELETE cannot be used
+   with Managed Instance Groups."* ADR-063 chose it; the module set it; a test
+   asserted it. Removed. STOP is the only behaviour available inside a MIG, and
+   the live instance now reports `instanceTerminationAction: STOP`.
+
+2. **`max_unavailable_fixed = 1`** —
+   *"has to be either 0 or at least equal to the number of zones."* A regional
+   MIG spans every zone in its region.
+
+3. **`max_unavailable_percent = 100`** —
+   *"only allowed for regional managed instance groups with size at least 10."*
+
+Taken together, (2) and (3) leave the **zone count as the only legal non-zero
+value** for a singleton regional MIG. It is derived, never typed:
+`length(data.google_compute_zones.available.names)`. Writing `3` would be a fact
+about `europe-west4` sitting beside a `region` that is a variable.
+
+**The knock-on worth checking.** ADR-063 omitted autohealing *because of* DELETE
+— "the MIG already restores target size on preemption without a health check".
+That reasoning died with DELETE. The conclusion survives for a different reason,
+[per the Spot docs](https://docs.cloud.google.com/compute/docs/instances/spot):
+*"If Compute Engine stops one or more Spot VMs in a MIG, the group repeatedly
+tries to recreate those VMs using the specified instance template."* §7 is what
+observes it; a documented behaviour and an observed one are different claims.
+
+See `docs/lessons/process-method/lesson-366-*.md`.
+
 ## §7 — Verify preemption self-healing
 
 The property the whole design turns on, and it must be observed rather than
@@ -300,6 +335,50 @@ and a re-registration without stale-node cleanup lands as `gcp1-<random>` — wh
 breaks the Ansible inventory, the kubeconfig server URL and the prod
 EndpointSlice at once, silently, because the old records keep resolving until
 they do not.
+
+### What a recreate actually changes — observed 2026-08-22
+
+From a template-update replacement, which exercises the same path a preemption
+takes. Recorded so a reader knows which differences are expected and which are
+a finding:
+
+| | Before | After |
+|---|---|---|
+| Instance name | `gcp1-hx0q` | `gcp1-bxjh` — a MIG suffixes `base_instance_name` |
+| Tailscale address | `100.64.0.20` | `100.64.0.21` — **rotates, every time** |
+| MagicDNS | resolves | **follows the new node**; this is the identity |
+| Headscale name | `gcp1` | `gcp1` — if this gains a suffix, F2 failed |
+| **SSH host key** | — | **changes** (see below) |
+| cloud-init | — | `done`, with Argo CD installed unattended |
+
+**Expect the SSH host key to change, and expect ssh to refuse it.** A new
+machine generates new host keys, and the MagicDNS name does not change, so:
+
+```
+WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+```
+
+`accept-new` — what the generated inventory uses — accepts *unknown* hosts and
+still refuses *changed* ones, which is correct in general and exactly wrong for
+a node that is replaced by design. `make wait-node-ready` now clears the stale
+key first, scoped to nodes the SSOT marks as having an ephemeral address. If you
+hit this outside that path:
+
+```bash
+ssh-keygen -R gcp1.kubelab.internal
+```
+
+That is a MITIGATION and not the fix — it means trusting whatever key the host
+now presents. Host certificates are the real answer and are tracked as
+**#1261**, which also requires removing the purge; leaving both would let it
+silently cover for a broken CA.
+
+**One thing to check that the first bring-up got wrong.** cloud-init reported
+`status: error` with zero Argo CD pods while the MIG considered the node
+healthy — helm had no `KUBECONFIG` and fell back to `localhost:8080`. If Argo CD
+is absent after a recreate, read `/var/log/cloud-init-output.log` before
+assuming the MIG failed: the group's opinion of itself is not evidence about
+what booted on the node. See `docs/lessons/gitops-delivery/lesson-368-*.md`.
 
 ## §8 — Day-2 lifecycle
 
