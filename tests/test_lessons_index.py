@@ -95,3 +95,29 @@ def test_every_lesson_appears_in_its_category_index() -> None:
     assert not missing, (
         "these lessons have no row in their category `_index.md`:\n  " + "\n  ".join(missing)
     )
+
+
+def test_the_declared_corpus_count_matches_the_files_on_disk() -> None:
+    """`_index.md` opens with "N lessons, one file each" — and N must be true.
+
+    Nothing checked it. `test_the_scan_finds_the_corpus` asserts only `> 300`,
+    so the number could drift silently for as long as nobody counted by hand.
+
+    Found sideways, 2026-08-22: a reviewer claimed the count was wrong on a PR
+    where it was right, having confused the lesson NUMBER (370) with the COUNT
+    (369). The claim was false — numbers are never reused, so gaps make the
+    highest number exceed the total — but checking it revealed that the
+    assertion it assumed existed did not.
+
+    The count is a claim about the corpus. A claim in a file nothing verifies is
+    a comment.
+    """
+    declared = re.search(r"(\d+) lessons, one file each", (LESSONS / "_index.md").read_text(encoding="utf-8"))
+    assert declared, "`_index.md` no longer opens with the corpus count; update this guard with it"
+
+    actual = len(_lesson_files())
+    assert int(declared.group(1)) == actual, (
+        f"`docs/lessons/_index.md` declares {declared.group(1)} lessons but {actual} files exist. "
+        "The count is the number of FILES, not the highest lesson number — numbers are "
+        "never reused, so gaps make the highest number exceed the total."
+    )
