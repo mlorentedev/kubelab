@@ -5,6 +5,67 @@ set -euo pipefail
 
 echo "[$(date)] Starting maintenance on $(hostname)"
 
+{% if maintenance_security_updates | bool %}
+# --- security patching, BEFORE the cleanup that wipes the package lists ----
+# Order is load-bearing: the cleanup below deletes /var/lib/apt/lists, so
+# patching afterwards would re-download every index it just removed. Patch
+# while the lists are warm, then clean.
+#
+# `set -e` is active and this section deliberately does NOT abort the run: a
+# node that cannot patch still needs its disk cleaned, and the RPi4 is the
+# standing proof — its apt has been unable to resolve `bzip2` since #1198, and
+# a maintenance timer that gave up there would have stopped vacuuming journals
+# on a node with 8GB of storage.
+#
+# Failures are REPORTED instead. The unit's OnFailure= is reserved for the
+# maintenance run itself breaking; a patch that could not be applied is a
+# finding for the operator, not an alert at 3am.
+echo "--- security updates ---"
+PATCH_STATUS="ok"
+
+if ! apt-get update -qq 2>&1 | tail -3; then
+    echo "WARNING: apt-get update failed — package lists are stale, patching skipped"
+    PATCH_STATUS="update-failed"
+else
+    # Security pocket only, and only what is already installed. `--with-new-pkgs`
+    # is deliberately absent: pulling in a NEW package unattended is how a
+    # kernel meta-package drags in a whole new kernel line on a node nobody is
+    # watching.
+{% for pkg in maintenance_patch_blacklist %}
+    apt-mark hold {{ pkg }} >/dev/null 2>&1 || true
+{% endfor %}
+
+    if ! DEBIAN_FRONTEND=noninteractive apt-get -qq -y \
+         -o Dpkg::Options::=--force-confdef \
+         -o Dpkg::Options::=--force-confold \
+         -t "$(lsb_release -cs 2>/dev/null || echo stable)-security" \
+         upgrade 2>&1 | tail -5; then
+        echo "WARNING: security upgrade returned non-zero — see above"
+        PATCH_STATUS="upgrade-failed"
+    fi
+
+    # Unhold, so an operator running `apt upgrade` by hand is not silently
+    # blocked by a hold this script placed. The hold exists for the duration of
+    # the unattended run and no longer.
+{% for pkg in maintenance_patch_blacklist %}
+    apt-mark unhold {{ pkg }} >/dev/null 2>&1 || true
+{% endfor %}
+fi
+
+echo "security patching: $PATCH_STATUS"
+{% endif %}
+
+{% if maintenance_report_reboot_required | bool %}
+# A kernel installed is not a kernel running. Nothing here reboots — the VPS
+# carries Headscale, so an unattended reboot that does not come back removes
+# the VPN used to reach it — so the state is reported and the operator decides.
+if [ -f /var/run/reboot-required ]; then
+    echo "REBOOT REQUIRED: $(tr '\n' ' ' < /var/run/reboot-required.pkgs 2>/dev/null)"
+else
+    echo "reboot required: no"
+fi
+{% endif %}
+
 # APT cleanup
 apt-get clean
 rm -rf /var/lib/apt/lists/*
