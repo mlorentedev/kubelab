@@ -23,5 +23,5 @@ The durable facts worth keeping:
 - The toolkit runs **locally** on your dev machine via `poetry run toolkit` (alias `tk`)
   and manages all environments remotely — it is never installed on servers.
 - Environment selection is always the `--env/-e` flag (e.g.
-  `toolkit deployment deploy --env staging`), never an environment variable.
+  `toolkit infra k8s deploy --env staging`), never an environment variable.
 - Terraform lives under `toolkit infra terraform …`; secrets under `toolkit secrets …`.

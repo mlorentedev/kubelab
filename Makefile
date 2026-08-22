@@ -10,7 +10,7 @@
 #   toolkit services up gitea
 #   toolkit services logs api
 #   toolkit services up grafana
-#   toolkit deployment deploy
+#   toolkit infra ansible run -p deploy-vps -e prod
 # =============================================================================
 
 SHELL := /bin/bash
