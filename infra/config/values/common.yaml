@@ -1062,6 +1062,46 @@ backup:
         sqlite: pihole-FTL.db
 
     vps:
+      # BACKUP-046 / #1111, taken through the node-path pipeline rather than a
+      # new one. These are Kubernetes PVCs, but `local-path` puts them on THIS
+      # node's disk, so restic on the VPS reaches them and no in-cluster job is
+      # needed. Verified 2026-08-22: all three prod claims are bound to
+      # `kubelab-vps`.
+      #
+      # This is what retires the prod `pvc-backup` CronJob and the in-cluster
+      # MinIO it writes to (#972). That CronJob copied Authelia and n8n to
+      # MinIO INSIDE the same cluster — a backup that burns with the thing it
+      # protects — and downloaded `mc` unpinned from the internet on every run,
+      # inside the backup path.
+      n8n:
+        # `namespace` + `claim`, the shape tests/test_backup_sources.py declared
+        # for this type before it had a consumer. A bare claim name is ambiguous
+        # the moment a second namespace holds one by the same name, and the
+        # resolver below filters on both.
+        pvc:
+          namespace: kubelab
+          claim: n8n-data
+        # Measured 2026-08-22: an 892 KB database carrying a 4.1 MB `-wal`.
+        # A file copy would omit four times more committed data than it copied,
+        # and look perfectly healthy doing it.
+        sqlite: database.sqlite
+      authelia:
+        pvc:
+          namespace: kubelab
+          claim: authelia-data
+        sqlite: db.sqlite3
+      # NOT here, deliberately, each for a different reason:
+      #   postgres  — measured empty (0 tables, 7.5 MB base) on 2026-08-22. It
+      #               has no consumer yet, so there is nothing to lose. It joins
+      #               this list the day something writes to it, and `pg_dump`
+      #               is a different capture mechanism than `sqlite3 .backup`.
+      #   grafana   — 49 MB of dashboards that belong in git (the
+      #               `grafana-dashboards` ConfigMap pattern already exists).
+      #               If any are hand-made and unversioned, THAT is the defect.
+      #   crowdsec  — 77 MB of decisions that regenerate themselves.
+      #   loki      — logs, Tier 3, ratified as not needing backup.
+      #   minio     — the backup destination being retired; backing it up would
+      #               be circular.
       headscale:
         # The most valuable single source in the fleet. Besides the database it
         # holds `noise_private.key` and `derp_server_private.key` — losing those

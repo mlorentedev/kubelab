@@ -144,3 +144,105 @@ class TestBackupSources:
                 f"{node}.{name} holds a live SQLite database but declares no `sqlite` key, "
                 "so the capture step would copy the file instead of snapshotting it."
             )
+
+
+class TestPvcSources:
+    """The PVC source type — BACKUP-046 (#1111) taken through this pipeline.
+
+    Authelia and n8n are Kubernetes PVCs, but `local-path` puts them on the
+    VPS's own disk, so the node-path pipeline reaches them and no in-cluster job
+    is needed. That is what retires the prod `pvc-backup` CronJob, which copied
+    them to MinIO INSIDE the same cluster — a backup that burns with the thing
+    it protects — and downloaded `mc` unpinned from the internet on every run.
+    """
+
+    # Derived from the module's existing root constant rather than a second
+    # `Path(__file__)` walk — one definition of where the repo is. `.resolve()`
+    # first: COMMON_YAML is built from a relative `__file__`, so without it this
+    # only lands on the right file when pytest happens to run from the repo root.
+    CAPTURE = (
+        COMMON_YAML.resolve().parents[3]
+        / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2"
+    )
+
+    @pytest.fixture(scope="module")
+    def sources(self, common: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        return common["backup"]["sources"]
+
+    def test_the_path_is_resolved_at_capture_time_never_hardcoded(self) -> None:
+        """`local-path` embeds the claim's UID, and a recreated PVC changes it.
+
+        Measured 2026-08-22 against prod:
+
+            n8n-data -> /var/lib/rancher/k3s/storage/pvc-c9613645-..._kubelab_n8n-data
+
+        Hardcode that and a recreated claim leaves the old directory on disk,
+        looking healthy, while the backup keeps archiving it and reporting
+        success. That is the silent failure this whole pipeline exists to end,
+        so the resolution has to happen on the node at capture time.
+        """
+        script = self.CAPTURE.read_text(encoding="utf-8")
+        assert "kubectl get pv" in script, (
+            "the capture script no longer resolves PVC paths from the cluster"
+        )
+        assert "/var/lib/rancher/k3s/storage/pvc-" not in script, (
+            "a resolved local-path directory is hardcoded in the capture script; "
+            "it embeds a claim UID and dies silently when the PVC is recreated"
+        )
+
+    def test_a_missing_claim_fails_the_capture_loudly(self) -> None:
+        """An unresolvable PVC must stop the run, not stage an empty directory.
+
+        `set -e` does not cover it: `kubectl` returning nothing is a success with
+        empty output, so without this check the script would `cd` into an empty
+        string and either fail three lines later for an unrelated-looking reason
+        or, worse, capture the wrong thing.
+        """
+        script = self.CAPTURE.read_text(encoding="utf-8")
+        assert "refusing to ship a backup that silently omits it" in script, (
+            "the capture script no longer refuses when a declared PVC resolves to "
+            "nothing — a claim that was renamed or deleted would be skipped in "
+            "silence and the snapshot would look complete"
+        )
+
+    def test_the_resolver_filters_on_namespace_and_claim(self) -> None:
+        """A bare claim name is ambiguous across namespaces.
+
+        `n8n-data` in `kubelab` and `n8n-data` in some future namespace are
+        different volumes; matching on the name alone would pick whichever the
+        API listed first.
+        """
+        script = self.CAPTURE.read_text(encoding="utf-8")
+        assert "claimRef.namespace" in script, "the resolver ignores the namespace"
+        assert "src.pvc.claim" in script, "the resolver does not filter on the claim name"
+
+    def test_n8n_is_captured_with_sqlite_backup_not_a_file_copy(self, sources: dict[str, Any]) -> None:
+        """The measurement that makes this non-negotiable.
+
+        2026-08-22, live: `database.sqlite` is 892 KB and its `-wal` is **4.1 MB**.
+        A file copy would omit four times more committed data than it copied, and
+        the result would restore cleanly — as a database missing most of its
+        recent history.
+        """
+        assert sources["vps"]["n8n"].get("sqlite") == "database.sqlite", (
+            "n8n's source must name its SQLite database so capture uses "
+            "`sqlite3 .backup`; a plain copy loses whatever is in the WAL"
+        )
+
+    def test_the_retired_and_deferred_pvcs_stay_out(self, sources: dict[str, Any]) -> None:
+        """Absence here is a decision, and each one has a different reason.
+
+        Left as a test so re-adding one is deliberate rather than incidental:
+        postgres was measured EMPTY (0 tables) and joins the day something
+        writes to it — with `pg_dump`, a different mechanism; grafana's
+        dashboards belong in git; crowdsec's decisions regenerate; minio is the
+        destination being retired, so backing it up would be circular.
+        """
+        declared = set(sources["vps"])
+        for name in ("postgres", "grafana", "crowdsec", "minio", "loki"):
+            assert name not in declared, (
+                f"{name} was added to the VPS backup sources. That may be right — "
+                f"postgres in particular joins the moment it stops being empty — "
+                f"but it needs its own reasoning and, for postgres, a capture "
+                f"mechanism that is not `sqlite3 .backup`."
+            )
