@@ -518,6 +518,30 @@ SECRET_CATALOG: list[SecretSpec] = [
         # key instead of carrying a stored one (finding F2).
         sync_to_secret_manager=True,
     ),
+    SecretSpec(
+        key_path="gcp.billing_account_id",
+        description="Billing account holding the monthly platform credit; budgets attach to it",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        format_hint="XXXXXX-XXXXXX-XXXXXX",
+        rotate_note=(
+            "Not rotatable — it identifies an account, not a credential. It changes only "
+            "if the project is relinked to a different billing account, which would also "
+            "move it off the credit: re-run `gcloud billing projects describe kubelab-hub` "
+            "and confirm `billingAccountName` before editing this."
+        ),
+        # Not a credential: nothing can be spent with it absent IAM. It is in SOPS
+        # because this repository is PUBLIC and git history is permanent, so a
+        # payment-account identifier would be disclosed forever at no benefit --
+        # and the cost of storing it here is one line. AC1 is still satisfied: the
+        # spec's verification.md records WHERE it lives and its last six digits, so
+        # a future reader re-checks rather than re-discovers.
+        envs=("prod",),
+        # NOT synced to Secret Manager: cloud-init has no use for it. Only the
+        # billing Terraform root reads it, and that runs from the workstation.
+        # Syncing it would put it on the very project whose spend it governs.
+        sync_to_secret_manager=False,
+    ),
     # =========================================================================
     # Infrastructure (external — not auto-generated, but must exist in SOPS)
     # =========================================================================

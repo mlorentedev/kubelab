@@ -1288,6 +1288,128 @@ def tf_aws_tfvars() -> None:
     logger.success(f"Generated {tfvars_path}")
 
 
+@terraform_app.command("killswitch-test-tfvars")
+def tf_killswitch_test_tfvars() -> None:
+    """Render the scratch project's tfvars: the billing id, and the SA to grant.
+
+    The service-account email is READ FROM THE BOOTSTRAP ROOT'S OUTPUT rather
+    than retyped. Since the detach permission is per-project, a stale copy grants
+    the wrong identity and the proof then fails as a 403 — which reads as "the
+    kill switch does not work" when what failed was the test's own setup.
+    """
+    import subprocess
+
+    from toolkit.features.configuration import ConfigurationManager
+
+    boot_dir = settings.project_root / "infra" / "terraform" / "gcp-bootstrap"
+    test_dir = settings.project_root / "infra" / "terraform" / "gcp-killswitch-test"
+
+    cm = ConfigurationManager("common", settings.project_root)
+    billing_id = cm.get_merged_config().get("gcp", {}).get("billing_account_id", "")
+    if not billing_id:
+        logger.error("gcp.billing_account_id not found in SOPS")
+        raise typer.Exit(1) from None
+
+    result = subprocess.run(
+        ["terraform", f"-chdir={boot_dir}", "output", "-raw", "kill_switch_service_account"],
+        capture_output=True,
+        text=True,
+    )
+    sa = result.stdout.strip()
+    if result.returncode != 0 or not sa:
+        logger.error(
+            "could not read kill_switch_service_account from the bootstrap root. "
+            "Apply infra/terraform/gcp-bootstrap first."
+        )
+        raise typer.Exit(1) from None
+
+    path = test_dir / "killswitch-test.tfvars"
+    path.write_text(f'billing_account_id = "{billing_id}"\nkill_switch_service_account = "{sa}"\n')
+    logger.success(f"Generated {path}")
+
+
+@terraform_app.command("verify-killswitch")
+def tf_verify_killswitch(
+    scratch_project: Annotated[str, typer.Option("--scratch", help="Expendable project to detach")],
+    function: Annotated[str, typer.Option("--function")] = "billing-kill-switch",
+    region: Annotated[str, typer.Option("--region")] = "europe-west4",
+    topic: Annotated[str, typer.Option("--topic")] = "billing-kill-switch",
+    hub_project: Annotated[str, typer.Option("--hub")] = "kubelab-hub",
+) -> None:
+    """Prove the billing kill switch fires, against a scratch project (AC2b).
+
+    A budget rule that has never fired is not evidence. This repoints the REAL
+    function at an expendable project, publishes a message matching the genuine
+    budget schema to the REAL topic, waits for billing to go away, and restores
+    the target unconditionally -- verifying the restore rather than assuming it.
+
+    Never run with --scratch pointing at the hub. It would work.
+    """
+    from toolkit.features import gcp_killswitch_proof as proof
+
+    logger.section("Kill switch proof (AC2b)")
+    try:
+        result = proof.run_proof(
+            function=function,
+            region=region,
+            topic=topic,
+            scratch_project=scratch_project,
+            expected_home=hub_project,
+        )
+    except proof.KillSwitchProofError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    logger.info(f"target restored to {result.restored_to}")
+    if not result.detached:
+        logger.error(
+            f"billing on {result.scratch_project} was STILL ENABLED after "
+            f"{result.seconds_waited}s. The switch did not fire — the hard cap "
+            "does not cap. Check the function's logs before trusting it."
+        )
+        raise typer.Exit(1)
+
+    logger.success(f"billing detached from {result.scratch_project} after {result.seconds_waited}s — the cap caps")
+
+
+@terraform_app.command("gcp-bootstrap-tfvars")
+def tf_gcp_bootstrap_tfvars() -> None:
+    """Render gcp-bootstrap.tfvars from SOPS. Carries exactly one secret.
+
+    This is the shape `aws-tfvars` has and the hub module turned out not to
+    need: a real SOPS value injected into Terraform and the file deleted after
+    use. The hub carries none because cloud-init reads its credentials from
+    Secret Manager; the BOOTSTRAP root predates Secret Manager existing, so its
+    one input has nowhere else to come from.
+
+    `gcp.billing_account_id` is not a credential -- nothing can be spent with it
+    absent IAM -- but this repository is public and git history is permanent, so
+    it is in SOPS rather than in a committed default.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+
+    boot_dir = settings.project_root / "infra" / "terraform" / "gcp-bootstrap"
+    if not (boot_dir / "variables.tf").exists():
+        logger.error(f"no Terraform module at {boot_dir}")
+        raise typer.Exit(1) from None
+
+    cm = ConfigurationManager("common", settings.project_root)
+    billing_id = cm.get_merged_config().get("gcp", {}).get("billing_account_id", "")
+
+    if not billing_id:
+        logger.error(
+            "gcp.billing_account_id not found in SOPS. Set it with:\n"
+            "  toolkit secrets set gcp.billing_account_id --stdin --env common"
+        )
+        raise typer.Exit(1) from None
+
+    path = boot_dir / "gcp-bootstrap.tfvars"
+    path.write_text(f'billing_account_id = "{billing_id}"\n')
+    # The path, never the value: this line goes to a terminal, a CI log and a
+    # session transcript, none of which can be un-printed.
+    logger.success(f"Generated {path}")
+
+
 @terraform_app.command("gcp-tfvars")
 def tf_gcp_tfvars() -> None:
     """Render gcp.tfvars from common.yaml. Carries no secret, by design.

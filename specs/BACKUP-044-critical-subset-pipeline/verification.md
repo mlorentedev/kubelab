@@ -20,6 +20,64 @@ name, or observed behavior).
 - [ ] AC8 (no new consumer of `minio:9000`) -> not started
 - [ ] AC9 (a node past its backup window alerts unprompted) -> not started
 
+### 2026-08-22 — the PVC class joins, and the first real restore
+
+**Authelia and n8n now have a copy outside the cluster they run in.** Until today
+their only backup was the prod `pvc-backup` CronJob writing to MinIO *inside the
+same cluster* — a copy that burns with the thing it protects — via an `mc`
+binary downloaded unpinned from the public internet on every run.
+
+Deployed to all four nodes and exercised on the VPS:
+
+```
+kubelab-vps : ok=28 changed=2 unreachable=0 failed=0
+kubelab-vps: backup complete (Result=success, ExecMainStatus=0)
+  ship complete: s3:.../kubelab-backups/kubelab-vps
+  coverage heartbeat posted
+```
+
+Contents of the resulting snapshot, listed from the workstation:
+
+```
+/opt/node-backup/staging/authelia/db.sqlite3       462848
+/opt/node-backup/staging/headscale/db.sqlite       118784
+/opt/node-backup/staging/n8n/database.sqlite       946176
+```
+
+**The number that proves the mechanism is 946176.** The live file is 892 KB;
+the snapshot holds 946 KB, because `sqlite3 .backup` folded in the 4.1 MB WAL
+measured on that database earlier the same day. A plain file copy would have
+stored the smaller, older file — and it would have restored *cleanly*, as a
+database missing most of its recent history. That is the failure this mechanism
+exists to prevent, and this is the first time the difference has been visible in
+a real artifact rather than argued from the manual.
+
+**AC2 closed, on the restored copy rather than on exit codes.** Restored from R2
+into a scratch directory on the workstation — never over the live data, which is
+the thing the backup exists to protect:
+
+```
+n8n/database.sqlite     integrity=ok   63 tables   credentials_entity: 1 row
+authelia/db.sqlite3     integrity=ok   26 tables
+```
+
+The scratch copy was deleted afterwards.
+
+**The PVC path resolver was the risk, and it held.** `local-path` embeds the
+claim UID in the directory name, so the path is resolved on the node at capture
+time via `kubectl get pv`, filtered on namespace *and* claim. Verified against
+the live cluster before deploying, and then implicitly by the capture succeeding
+— had it resolved to nothing, the run would have refused loudly rather than
+staging an empty directory.
+
+**A misreading corrected in passing.** `make backup-coverage` reports `1 path(s)`
+for the VPS both before and after. That field is restic's *backup argument*
+count — always the one staging directory — not the number of sources. It is not
+a coverage signal, and reading it as one would have hidden exactly this change.
+
+**Still not retired: the CronJob and MinIO (#972).** Deliberate ordering — they
+keep running until these snapshots have been verified in R2, which they now
+have, so that retirement is next rather than pending.
 ### 2026-08-22 — AC4's failure injection, three ways
 
 Run against **beelink** with the homelab powered on, from least to most
