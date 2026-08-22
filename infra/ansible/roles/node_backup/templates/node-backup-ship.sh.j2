@@ -93,6 +93,19 @@ fi
 
 echo "ship complete: $REPO"
 
+# --- shutdown receipt ------------------------------------------------------
+# Written only when this run was invoked by the shutdown unit's ExecStop, which
+# is the one path whose journal does not survive: the persistent journal stops
+# recording when the user session closes, well before systemd stops system
+# services (measured across a real power cycle, 2026-08-22).
+#
+# `$INVOCATION_ID` and `$SYSTEMD_UNIT` come from systemd itself, so this cannot
+# fire for a hand-run script or for the timer. The receipt is one line, on the
+# disk this run just captured from, and the next boot reads it back.
+if [ "${SHUTDOWN_RECEIPT:-}" != "" ]; then
+    printf '%s ship=ok repo=%s\n' "$(date -Iseconds)" "$REPO" > "$SHUTDOWN_RECEIPT" 2>/dev/null || true
+fi
+
 # --- coverage heartbeat (BACKUP-044 AC9) ----------------------------------
 # LAST, and reached only on success: `set -e` aborts above on any failure, so
 # silence at the far end means no backup completed. That is the whole design --

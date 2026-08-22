@@ -71,6 +71,26 @@ node_backup_ship_check_service_name: node-backup-ship-check.service
 node_backup_ship_check_timer_name: node-backup-ship-check.timer
 node_backup_shutdown_service_name: node-backup-shutdown.service
 
+# Where the shutdown snapshot leaves proof that it ran.
+#
+# The problem this solves is not the unit failing — it is that NOTHING CAN SEE
+# whether it worked. Measured across a real power cycle 2026-08-22: the
+# persistent journal stops recording once the user session closes, well before
+# systemd stops system services, so the last shutdown-phase line on disk is
+# from the user manager. `ExecStop=` runs after that, into a log nobody keeps.
+#
+# Two indirect proofs were tried and both were wrong, which is why this file
+# exists rather than a smarter query:
+#   - restic's cache mtime did NOT change on a run that demonstrably shipped.
+#   - the snapshot COUNT did not rise, because `forget --prune` runs in the
+#     same pass and retires one as it adds one. Identity changes; totals do not.
+#
+# So the run writes its own receipt, on the same disk it just captured from, and
+# the next boot reads it back. `/var/log` rather than the staging dir: capture
+# `rm -rf`s staging at the top of every run, which would delete the evidence of
+# the previous one before anyone could look at it.
+node_backup_shutdown_receipt: /var/log/node-backup-shutdown.receipt
+
 # How long restic waits on a request that is going nowhere before retrying it.
 # Its own default is 5m, which exceeds this unit's useful lifetime: measured
 # 2026-08-22, an invalid credential and an unreachable endpoint BOTH produced

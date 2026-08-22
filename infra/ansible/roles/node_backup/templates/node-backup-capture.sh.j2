@@ -11,6 +11,24 @@
 # cycle, not by editing this file.
 set -euo pipefail
 
+# --- read back the previous shutdown's receipt -----------------------------
+# A receipt nobody reads is a file, not a control. This runs at BOOT (the
+# capture unit is Before=docker.service on on-demand nodes), which is the first
+# moment anyone can learn whether the last power-off shipped.
+#
+# Absence is the finding, and it is why the shutdown unit deletes the file
+# before trying: a stale receipt from two shutdowns ago would read as success.
+{% if node_backup_location == 'on-demand' %}
+if [ -f "{{ node_backup_shutdown_receipt }}" ]; then
+    echo "previous shutdown snapshot: $(cat {{ node_backup_shutdown_receipt }})"
+else
+    echo "previous shutdown snapshot: NO RECEIPT — the last power-off did not ship." >&2
+    echo "  This session's boot capture covers the previous session, so nothing is" >&2
+    echo "  lost yet; but a node that never comes back would have left its last" >&2
+    echo "  session only in this snapshot. See BACKUP-044 AC5." >&2
+fi
+{% endif %}
+
 STAGING="{{ node_backup_staging_dir }}"
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
