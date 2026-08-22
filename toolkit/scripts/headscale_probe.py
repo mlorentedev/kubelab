@@ -39,10 +39,29 @@ class Flow:
     required: bool = True
 
 
+def hub_for_spoke(net: dict[str, Any], env: str) -> str:
+    """Which hub reconciles this spoke, from the SSOT rather than from a literal.
+
+    Two hubs coexist through GCP-001: `gcp1` takes staging first and `aws1` keeps
+    prod, with prod handed over later (spec design decision 1,
+    "additive-then-subtractive, never a swap"). `networking.gcp.managed_spokes`
+    is where that ownership is declared -- it is the same list cloud-init reads
+    to decide which cluster secrets to install, so a probe derived from it cannot
+    disagree with what the hub actually does.
+
+    Hardcoding `aws1` made the probe measure a path nobody uses: green while the
+    real staging path was broken, and red the moment aws1 legitimately stopped
+    reaching a spoke it no longer owned. Both wrong, neither loud.
+    """
+    if env in (net.get("gcp", {}).get("managed_spokes") or []):
+        return str(net["gcp"]["hostname"])
+    return str(net["aws"]["hostname"])
+
+
 def preserved_flows(net: dict[str, Any]) -> list[Flow]:
     """The ADR-041 C1 preserved flows, resolved from the networking SSOT."""
     # dst endpoints are literal addresses; src is a node NAME, resolved to an SSH
-    # target by _ssh_target at runtime (so aws1/rpi3 need no IP local here).
+    # target by _ssh_target at runtime (so the hubs/rpi3 need no IP local here).
     nodes = net["nodes"]
     vps = net["vps"]["tailscale_ip"]
     ace1 = nodes["ace1"]["tailscale_ip"]
@@ -50,13 +69,13 @@ def preserved_flows(net: dict[str, Any]) -> list[Flow]:
     return [
         # always-on (required): these must hold for the policy to be accepted
         Flow("admin->vps SSH", "controller", vps, 22),
-        Flow("hub->spoke :6443 (prod)", "aws1", vps, 6443),
+        Flow("hub->spoke :6443 (prod)", hub_for_spoke(net, "prod"), vps, 6443),
         Flow("monitoring rpi3->vps :443", "rpi3", vps, 443),
         # homelab on-demand (optional): probed when the source node is up, else skip+log
         Flow("admin->ace1 SSH", "controller", ace1, 22, required=False),
-        Flow("hub->spoke :6443 (staging)", "aws1", ace1, 6443, required=False),
+        Flow("hub->spoke :6443 (staging)", hub_for_spoke(net, "staging"), ace1, 6443, required=False),
         # rpi4 advertises 172.16.1.0/24; only route-accepting remotes (the workstation /
-        # VPS) reach the LAN through it — aws1 does NOT accept routes (CLAUDE.md), so the
+        # VPS) reach the LAN through it — the hubs do NOT accept routes (CLAUDE.md), so the
         # controller is the correct source to assert the route is preserved.
         Flow("rpi4 route 172.16.1.0/24 (controller->ace1 LAN)", "controller", ace1_lan, 22, required=False),
         Flow("intra-K3s spoke API (ace1 self :6443)", "ace1", ace1, 6443, required=False),
@@ -83,9 +102,24 @@ def _ssh_target(net: dict[str, Any], node: str) -> str:
     ``hostname`` field in this fleet (CLAUDE.md), so a name is not a safe substitute there.
     """
     users = net["ssh_users"]
-    if node in ("vps", "aws1", "aws"):
-        cloud = net["vps"] if node == "vps" else net["aws"]
-        return f"{users['cloud']}@{cloud.get('tailscale_dns') or cloud['tailscale_ip']}"
+
+    # Cloud nodes are TOP-LEVEL siblings of `nodes`, matched by their key or by
+    # their `hostname`. Derived rather than listed: this was
+    # `("vps", "aws1", "aws")`, which knew nothing of gcp1 -- so the moment the
+    # staging probe's source became the GCP hub, this fell through to the
+    # homelab branch and raised KeyError on `nodes['gcp1']`.
+    #
+    # The asymmetry itself is #1182 and is deliberately NOT smoothed here; this
+    # is one more consumer carrying it, which is the measurement GCP-001 exists
+    # to produce.
+    for key, block in net.items():
+        if not isinstance(block, dict) or key == "nodes":
+            continue
+        if key == node or block.get("hostname") == node:
+            addr = block.get("tailscale_dns") or block.get("tailscale_ip")
+            if addr:
+                return f"{users['cloud']}@{addr}"
+
     return f"{users['homelab']}@{net['nodes'][node]['tailscale_ip']}"
 
 
