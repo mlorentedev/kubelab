@@ -301,10 +301,25 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       diff shows exactly what a provider change costs. Do **not** refactor them
       into a generic lookup — that is **#1182**, and doing it here destroys the
       measurement this spec exists to produce.
-- [ ] `infra/ansible/playbooks/provision-gcp1.yml`, from `provision-aws1.yml` with
+- [x] `infra/ansible/playbooks/provision-gcp1.yml`, from `provision-aws1.yml` with
       the hardware assertions retargeted. **Do not copy its header's stale
       claims** (it documents a `terminate`+ASG contract never applied, and 8 GB
-      where the volume is 12).
+      where the volume is 12). ✓ 2026-08-21
+      - Both stale claims dropped; the header states what was **read** from
+        `infra/terraform/gcp/cloud-init.yml` instead. The cloud-init/Ansible
+        boundary is NOT aws1's: a MIG recreates, so cloud-init also installs
+        Argo CD (F1) and mints its own preauth key (F2), and the playbook may
+        assume *more* pre-existing state, not less.
+      - `tests/test_provision_gcp1_playbook.py` compares the playbook's hardware
+        assertions against what cloud-init actually boots, and refuses a
+        surviving `networking.aws.*` lookup — the copy-derivation hazard, which
+        would point the hub's kubeconfig at the node being decommissioned and
+        keep working until `aws1` is destroyed. **Seven mutations, seven reds.**
+      - Parity measured, not asserted: `ansible-lint` reports **17 findings on
+        each** of the two hub playbooks — no new debt. `syntax-check` parses all
+        21 playbooks.
+      - **Not exercised against a live node** (Phase 0). Every assertion is
+        static.
 - [ ] Regenerate the Ansible inventory; confirm `gcp1` lands in group `hub` with
       `ansible_user: deployer`. SSOT-014a infers the SSH-user category from **YAML
       position**, so verify it did not fall through to the homelab user.
