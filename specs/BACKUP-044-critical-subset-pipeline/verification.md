@@ -78,6 +78,75 @@ a coverage signal, and reading it as one would have hidden exactly this change.
 **Still not retired: the CronJob and MinIO (#972).** Deliberate ordering — they
 keep running until these snapshots have been verified in R2, which they now
 have, so that retirement is next rather than pending.
+### 2026-08-22 — AC4's failure injection, three ways
+
+Run against **beelink** with the homelab powered on, from least to most
+invasive, so each result bounds what the next can claim. Healthy baseline first:
+`beelink: backup complete (Result=success, ExecMainStatus=0)`.
+
+**1. Synthetic unit** — `ExecStart=/bin/false` carrying the same
+`OnFailure=kubelab-notify@%n.service`. The notifier ran as
+`kubelab-notify@backup-ac4-probe.service.service` with `Result=success`,
+`ExecMainStatus=0`. Since the script's curl uses `-f`, that is n8n answering
+2xx. Proves the linkage and `%n` -> `%i` expansion on real hardware. Does NOT
+prove a failing backup triggers it — which is exactly why AC4 says "inject a
+failure, not review configuration", and why this was only the first step.
+
+**2. R2 blackholed** via `/etc/hosts` on the node, no credential touched.
+`Result=timeout`, `ExecMainStatus=15`, notifier fired with a real
+`InvocationID`. `/etc/hosts` restored afterwards.
+
+**3. Invalid R2 credential** — the secret file replaced with 30 bytes of
+garbage, original saved and restored. Same verdict: `Result=timeout`,
+`ExecMainStatus=15`, notifier fired.
+
+**AC4's first half is closed**: a genuinely failed backup raises the envelope,
+demonstrated twice by two independent causes, not by reading the manifest.
+
+#### The finding: every failure looks like a timeout
+
+Both real injections settled as `Result=timeout` after **~180-195 seconds**, and
+the journal carried **no restic error at all** — no "denied", no "invalid", no
+"signature". A wrong credential and an unreachable endpoint are indistinguishable
+from the outside, and both are indistinguishable from a slow network.
+
+Two consequences worth stating rather than discovering later:
+
+- The operator receives "node-backup-ship.service failed on beelink" with a
+  journal tail that ends mid-run and explains nothing. The envelope is correct
+  and nearly useless for diagnosis.
+- 180s is not `TimeoutStartSec=600`. Something inside restic or the AWS SDK is
+  imposing its own retry budget, and the unit's own ceiling never applies. That
+  number is not declared anywhere in this repository.
+
+**Fixed the same day, and verified by re-injecting the same failure.** Two
+independent causes, both needed:
+
+- `--stuck-request-timeout 45s`. restic's 5m default outlived the unit, so
+  systemd killed the run before restic reached its own error path — which is
+  also why `TimeoutStartSec=600` never applied.
+- The `snapshots` probe discarded stderr. It is the FIRST call to touch R2, so
+  it is exactly where a bad credential is discovered, and its stderr was the
+  only explanation the run would ever produce.
+
+Same injection, after the fix:
+
+```
+Stat(<config/>) returned error, retrying after 49.1s: Stat: The request
+signature we calculated does not match the signature you provided. Check your
+secret access key and signing method.
+```
+
+180 seconds of silence became a named cause. The operator now gets the reason
+in the envelope's journal tail rather than a run that ends mid-sentence.
+
+#### A measurement error I made twice
+
+`systemctl show -p Result` returns the PREVIOUS run's verdict while a unit is
+`activating`, and `make backup-node` returns before a hung unit settles. I read
+`Result=success` on an injected failure twice before checking `ActiveState`.
+`InvocationID` is the tell: empty means the unit has never run, so a `success`
+beside it is a default rather than a result.
 
 ### 2026-08-22 — Part 6: Gitea restored into an ephemeral instance (AC3)
 
