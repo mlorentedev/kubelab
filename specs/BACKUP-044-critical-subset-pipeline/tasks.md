@@ -83,7 +83,15 @@ The substrate. #1092's AC3 changes the model from "enumerate volumes minus an ex
 
 ### Part 6 — a backup that has never been restored is a hypothesis
 
-- [ ] [AC3] Restore Gitea end-to-end into an **ephemeral instance**, never over the live `/opt/gitea/data`. Restoring over the thing being protected to prove the backup works risks exactly what the backup exists for. Doubles as the #492 DR drill; do not expand scope to close #492.
+- [x] [AC3] Restore Gitea end-to-end into an **ephemeral instance**, never over the live `/opt/gitea/data`. ✓ 2026-08-22 — restored from R2 to a scratch dir, booted `gitea/gitea:1.25.5` against it, and the SERVICE answered:
+
+  ```
+  /api/v1/version  -> HTTP 200  {"version":"1.25.5"}
+  /api/v1/users/manu -> login=manu id=1 created=2026-08-14
+  /user/login      -> <title>Sign In - Gitea…</title>
+  ```
+
+  Gitea's own `doctor` passed first (`Check Database Version: OK`, `Check consistency of database: OK`) — the binary accepting the data, not a test reading it. Live `/opt/gitea/data` untouched, verified afterwards; container and scratch removed. Original wording follows — Restoring over the thing being protected to prove the backup works risks exactly what the backup exists for. Doubles as the #492 DR drill; do not expand scope to close #492.
 - [x] [AC2] Restore one SQLite database and run an integrity check **on the restored copy** — content verified, not exit codes. ✓ 2026-08-22 — TWO databases, restored from R2 into a scratch directory on the workstation, never over the live data:
 
   ```
@@ -92,9 +100,9 @@ The substrate. #1092's AC3 changes the model from "enumerate volumes minus an ex
   ```
 
   **The number that proves the mechanism**: `database.sqlite` is 892 KB on disk and **946 KB inside the snapshot**. `sqlite3 .backup` folded in the 4.1 MB WAL; a file copy would have stored the smaller, older file and restored cleanly as a database missing its recent history. Measured, not argued.
-- [ ] [AC3] Restore at least one always-on consumer into a scratch location, with the transcript in `verification.md`.
+- [x] [AC3] Restore at least one always-on consumer into a scratch location, with the transcript in `verification.md`. ✓ 2026-08-22 — the VPS: Authelia and n8n restored from R2 and integrity-checked on the restored copy (`integrity=ok`, 63 and 26 tables). Transcript in `verification.md`.
 - [x] [AC1] Verify every **node-path** consumer in the proposal's table is present, by listing snapshots **from a machine that is not the source node**. ✓ 2026-08-22 (#PR) — `make backup-coverage ENV=prod`, run from the workstation with the homelab powered off: all four covered, newest snapshot and its age per node. The criterion had no tool until now; this is it, and it exits non-zero when a declared node has no repository or no snapshot. **The one thing that cannot be inferred is the repository NAME**: `node_backup_r2_repository` is built from `inventory_hostname`, and `networking.vps.hostname` is already `kubelab-vps` while homelab nodes are bare — a first revision inferred the prefix from the node's position and produced `kubelab-kubelab-vps`, reporting the VPS as UNCOVERED with a nightly backup in R2. Read from the SSOT now, pinned in `tests/test_backup_coverage_report.py`. Reading the playbook is not verification. The PVC class is out of scope by mechanism — BACKUP-046 (#1111), not a gap in this criterion.
-- [ ] [AC8] Confirm this spec introduced no new consumer of `minio:9000`, the guarantee #1056's original AC2 was reaching for. Note that closing this does **not** release #972 on its own — other PVCs still target MinIO, and #1056's "blocked by #972" was backwards.
+- [x] [AC8] ✓ 2026-08-22 — grepped `roles/node_backup/`, `common.yaml`'s backup block and `backup_destination.py`: the only occurrence of `minio:9000` anywhere in the pipeline is a COMMENT explaining what the old CronJob targets. Zero code paths. The four files that do reference it are MinIO's own manifests and the CronJob being retired. Original wording follows — Confirm this spec introduced no new consumer of `minio:9000`, the guarantee #1056's original AC2 was reaching for. Note that closing this does **not** release #972 on its own — other PVCs still target MinIO, and #1056's "blocked by #972" was backwards.
 
 ## Approved operating parameters
 
