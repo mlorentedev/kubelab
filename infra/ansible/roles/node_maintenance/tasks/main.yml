@@ -42,6 +42,84 @@
     msg: "BEFORE: {{ _disk_before.stdout_lines | default([]) | last | default('N/A (check mode)') }}"
   when: maintenance_run_cleanup | bool
 
+# --- security patching (SEC-010) ------------------------------------------
+# BEFORE the cleanup below, which deletes /var/lib/apt/lists: patching after it
+# would re-download every index it had just removed.
+#
+# This role has TWO implementations of the same work — these Ansible tasks for
+# `make maintain`, and kubelab-maintenance.sh for the weekly timer. The patch
+# step has to exist in both, or the command an operator runs by hand does
+# something different from the one that runs unattended. A guard asserts they
+# agree, because two implementations of one behaviour is exactly how they stop
+# agreeing.
+- name: Hold packages whose upgrade would restart a live workload
+  # docker/containerd restarting stops every container — on ace1 that is K3s
+  # itself. `tailscale` is the path this fleet is administered over: a failed
+  # upgrade removes the way in to fix it.
+  command: "apt-mark hold {{ item }}"
+  loop: "{{ maintenance_patch_blacklist }}"
+  changed_when: false
+  failed_when: false
+  when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
+        and ansible_facts.pkg_mgr == 'apt'
+
+- name: Apply security updates
+  # `only_upgrade` semantics: already-installed packages only, security pocket
+  # only. A full dist-upgrade unattended is how a routine Tuesday becomes an
+  # outage on a fleet with no on-call.
+  apt:
+    update_cache: true
+    upgrade: "no"
+    default_release: "{{ ansible_facts.distribution_release }}-security"
+    name: "*"
+    state: latest
+    only_upgrade: true
+  register: _security_patch
+  # A node that cannot patch still needs its disk cleaned. The RPi4 is the
+  # standing proof — its apt has been unable to resolve `bzip2` since #1198 —
+  # and a run that aborted there would have stopped vacuuming journals on a
+  # node with 8GB of storage, trading a CVE for a full disk.
+  failed_when: false
+  when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
+        and ansible_facts.pkg_mgr == 'apt'
+
+- name: Release the holds
+  # So an operator running `apt upgrade` by hand is not silently blocked by a
+  # hold this role placed. The hold lasts the run, not longer.
+  command: "apt-mark unhold {{ item }}"
+  loop: "{{ maintenance_patch_blacklist }}"
+  changed_when: false
+  failed_when: false
+  when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
+        and ansible_facts.pkg_mgr == 'apt'
+
+- name: Report the patch outcome
+  debug:
+    msg: >-
+      security patching:
+      {{ 'FAILED — ' ~ (_security_patch.msg | default('see above'))
+         if _security_patch.failed | default(false)
+         else ('applied' if _security_patch.changed | default(false) else 'already current') }}
+  when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
+        and ansible_facts.pkg_mgr == 'apt'
+
+- name: Check whether a reboot is pending
+  # A kernel installed is not a kernel running. Nothing here reboots — the VPS
+  # carries Headscale, so an unattended reboot that does not come back removes
+  # the VPN used to reach it — so the state is reported and the operator decides.
+  stat:
+    path: /var/run/reboot-required
+  register: _reboot_required
+  when: maintenance_report_reboot_required | bool
+
+- name: Report a pending reboot
+  debug:
+    msg: >-
+      {{ inventory_hostname }}: REBOOT REQUIRED — a patched kernel is on disk and
+      the old one is still running. Reboot deliberately; nothing here will.
+  when: maintenance_report_reboot_required | bool
+        and _reboot_required.stat.exists | default(false)
+
 # --- APT cleanup ---
 - name: Clean APT cache
   command: apt-get clean
