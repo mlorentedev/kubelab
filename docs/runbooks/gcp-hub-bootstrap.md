@@ -336,6 +336,50 @@ breaks the Ansible inventory, the kubeconfig server URL and the prod
 EndpointSlice at once, silently, because the old records keep resolving until
 they do not.
 
+### What a recreate actually changes — observed 2026-08-22
+
+From a template-update replacement, which exercises the same path a preemption
+takes. Recorded so a reader knows which differences are expected and which are
+a finding:
+
+| | Before | After |
+|---|---|---|
+| Instance name | `gcp1-hx0q` | `gcp1-bxjh` — a MIG suffixes `base_instance_name` |
+| Tailscale address | `100.64.0.20` | `100.64.0.21` — **rotates, every time** |
+| MagicDNS | resolves | **follows the new node**; this is the identity |
+| Headscale name | `gcp1` | `gcp1` — if this gains a suffix, F2 failed |
+| **SSH host key** | — | **changes** (see below) |
+| cloud-init | — | `done`, with Argo CD installed unattended |
+
+**Expect the SSH host key to change, and expect ssh to refuse it.** A new
+machine generates new host keys, and the MagicDNS name does not change, so:
+
+```
+WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+```
+
+`accept-new` — what the generated inventory uses — accepts *unknown* hosts and
+still refuses *changed* ones, which is correct in general and exactly wrong for
+a node that is replaced by design. `make wait-node-ready` now clears the stale
+key first, scoped to nodes the SSOT marks as having an ephemeral address. If you
+hit this outside that path:
+
+```bash
+ssh-keygen -R gcp1.kubelab.internal
+```
+
+That is a MITIGATION and not the fix — it means trusting whatever key the host
+now presents. Host certificates are the real answer and are tracked as
+**#1261**, which also requires removing the purge; leaving both would let it
+silently cover for a broken CA.
+
+**One thing to check that the first bring-up got wrong.** cloud-init reported
+`status: error` with zero Argo CD pods while the MIG considered the node
+healthy — helm had no `KUBECONFIG` and fell back to `localhost:8080`. If Argo CD
+is absent after a recreate, read `/var/log/cloud-init-output.log` before
+assuming the MIG failed: the group's opinion of itself is not evidence about
+what booted on the node. See `docs/lessons/gitops-delivery/lesson-368-*.md`.
+
 ## §8 — Day-2 lifecycle
 
 | Command | Effect |
