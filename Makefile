@@ -636,7 +636,7 @@ register-spoke:
 	@echo "--- Extracting credentials from $(ENV) spoke ---"
 	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
 		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \
-		SERVER=$$($(POETRY) run python -c "import yaml;c=yaml.safe_load(open('infra/config/values/common.yaml'));n=c['argocd']['spokes']['$(ENV)']['node'];ip=c['networking']['vps']['tailscale_ip'] if n=='vps' else c['networking']['nodes'][n]['tailscale_ip'];print(f'https://{ip}:{c[\"k3s\"][\"api_port\"]}')") && \
+		SERVER=$$($(TOOLKIT) infra argo spoke-url --env $(ENV)) && \
 		test -n "$$TOKEN" || (echo "Error: token not populated" && exit 1) && \
 		test -n "$$CA" || (echo "Error: CA cert not found" && exit 1) && \
 		echo "--- Creating cluster secret on hub ($$SERVER) ---" && \
