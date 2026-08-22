@@ -78,6 +78,139 @@ a coverage signal, and reading it as one would have hidden exactly this change.
 **Still not retired: the CronJob and MinIO (#972).** Deliberate ordering — they
 keep running until these snapshots have been verified in R2, which they now
 have, so that retirement is next rather than pending.
+### 2026-08-22 — AC4's failure injection, three ways
+
+Run against **beelink** with the homelab powered on, from least to most
+invasive, so each result bounds what the next can claim. Healthy baseline first:
+`beelink: backup complete (Result=success, ExecMainStatus=0)`.
+
+**1. Synthetic unit** — `ExecStart=/bin/false` carrying the same
+`OnFailure=kubelab-notify@%n.service`. The notifier ran as
+`kubelab-notify@backup-ac4-probe.service.service` with `Result=success`,
+`ExecMainStatus=0`. Since the script's curl uses `-f`, that is n8n answering
+2xx. Proves the linkage and `%n` -> `%i` expansion on real hardware. Does NOT
+prove a failing backup triggers it — which is exactly why AC4 says "inject a
+failure, not review configuration", and why this was only the first step.
+
+**2. R2 blackholed** via `/etc/hosts` on the node, no credential touched.
+`Result=timeout`, `ExecMainStatus=15`, notifier fired with a real
+`InvocationID`. `/etc/hosts` restored afterwards.
+
+**3. Invalid R2 credential** — the secret file replaced with 30 bytes of
+garbage, original saved and restored. Same verdict: `Result=timeout`,
+`ExecMainStatus=15`, notifier fired.
+
+**AC4's first half is closed**: a genuinely failed backup raises the envelope,
+demonstrated twice by two independent causes, not by reading the manifest.
+
+#### The finding: every failure looks like a timeout
+
+Both real injections settled as `Result=timeout` after **~180-195 seconds**, and
+the journal carried **no restic error at all** — no "denied", no "invalid", no
+"signature". A wrong credential and an unreachable endpoint are indistinguishable
+from the outside, and both are indistinguishable from a slow network.
+
+Two consequences worth stating rather than discovering later:
+
+- The operator receives "node-backup-ship.service failed on beelink" with a
+  journal tail that ends mid-run and explains nothing. The envelope is correct
+  and nearly useless for diagnosis.
+- 180s is not `TimeoutStartSec=600`. Something inside restic or the AWS SDK is
+  imposing its own retry budget, and the unit's own ceiling never applies. That
+  number is not declared anywhere in this repository.
+
+**Fixed the same day, and verified by re-injecting the same failure.** Two
+independent causes, both needed:
+
+- `--stuck-request-timeout 45s`. restic's 5m default outlived the unit, so
+  systemd killed the run before restic reached its own error path — which is
+  also why `TimeoutStartSec=600` never applied.
+- The `snapshots` probe discarded stderr. It is the FIRST call to touch R2, so
+  it is exactly where a bad credential is discovered, and its stderr was the
+  only explanation the run would ever produce.
+
+Same injection, after the fix:
+
+```
+Stat(<config/>) returned error, retrying after 49.1s: Stat: The request
+signature we calculated does not match the signature you provided. Check your
+secret access key and signing method.
+```
+
+180 seconds of silence became a named cause. The operator now gets the reason
+in the envelope's journal tail rather than a run that ends mid-sentence.
+
+#### A measurement error I made twice
+
+`systemctl show -p Result` returns the PREVIOUS run's verdict while a unit is
+`activating`, and `make backup-node` returns before a hung unit settles. I read
+`Result=success` on an injected failure twice before checking `ActiveState`.
+`InvocationID` is the tell: empty means the unit has never run, so a `success`
+beside it is a default rather than a result.
+
+### 2026-08-22 — Part 6: Gitea restored into an ephemeral instance (AC3)
+
+Not "the files came back" — **the service came up on them**.
+
+Restored beelink's newest snapshot from R2 into a scratch directory, copied it
+to a throwaway working dir, and started `gitea/gitea:1.25.5` against it. The live
+`/opt/gitea/data` was never touched, and that was verified afterwards rather than
+asserted.
+
+```
+restic restore latest --target <scratch>
+  Summary: Restored 51 files/dirs (2.102 MiB) in 0:00
+
+gitea doctor check --run check-db-version,check-db-consistency
+  [1] Check Database Version           OK   (expected 323)
+  [2] Check consistency of database    OK
+
+gitea web
+  /api/v1/version     -> HTTP 200  {"version":"1.25.5"}
+  /api/v1/users/manu  -> login=manu id=1 created=2026-08-14
+  /user/login         -> <title>Sign In - Gitea: Git with a cup of tea</title>
+```
+
+**`doctor` is the part that upgrades this from a file check to a restore.** It is
+Gitea's own binary declaring the schema and the data consistent — not a test
+reading a SQLite file and forming an opinion about it.
+
+#### The version mismatch that looked like a failure
+
+The first attempt used `gitea/gitea:1.24.6` and `doctor` reported *"current
+database version 323 is not equal to the expected version 321"*. That is not a
+corrupt backup: the image was OLDER than the one that wrote the data. The fleet
+runs `1.25.5` (`apps.services.core.gitea.image`), and against that version both
+checks pass.
+
+Worth recording because the failure mode is inverted from the usual one — a
+restore rehearsal on the wrong version reports a problem with the *backup*, and
+the natural reaction is to distrust the backup rather than the rehearsal.
+
+#### What this restore could NOT prove, and why
+
+**Gitea is empty.** One user, zero repositories, and `gitea.db` last written
+2026-08-14 — confirmed against the live node, so the backup is faithful and the
+source is simply idle. The restore therefore proves the *mechanism* end to end
+and cannot yet prove that repository content survives a round trip.
+
+The circularity is worth naming: #1076 (TOOL-035, no declarative path for getting
+repositories into Gitea) is gated on this restore being exercised, precisely so
+the first repository is not the first thing with no recovery path. That gate is
+now satisfied — and the fuller AC3 claim only becomes available after it opens.
+
+What the restore DID recover is the part that is irreplaceable rather than
+regenerable: three secrets in `app.ini` (`SECRET_KEY`, `INTERNAL_TOKEN`,
+`JWT_SECRET`), the SSH `authorized_keys`, and the user record. Repositories can
+be re-pushed from clones; those cannot be reconstructed from anything.
+
+#### AC8, closed by grep rather than by assertion
+
+Nothing in `roles/node_backup/`, the backup block of `common.yaml` or
+`backup_destination.py` references `minio:9000`. The single occurrence anywhere
+in the pipeline is a comment explaining what the old CronJob targets. The four
+files that do reference it are MinIO's own manifests and the CronJob being
+retired.
 
 ## Open questions, settled
 

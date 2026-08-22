@@ -510,7 +510,10 @@ def catalog(
 @app.command("check-expiry")
 def check_expiry(
     warn_days: Annotated[int, typer.Option("--warn-days", help="Fail below this many days remaining")] = 90,
-    ssh_target: Annotated[str, typer.Option("--ssh", help="Where headscale runs")] = "deployer@162.55.57.175",
+    ssh_target: Annotated[
+        str | None,
+        typer.Option("--ssh", help="Where headscale runs; defaults to the VPS from the SSOT"),
+    ] = None,
 ) -> None:
     """Ask the issuing services when the provider-issued credentials expire.
 
@@ -537,6 +540,18 @@ def check_expiry(
         resolve_expiry,
     )
     from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    # DERIVED, never a literal. This defaulted to `deployer@162.55.57.175` --
+    # both halves hardcoded, both of them SSOT values, in a repository whose own
+    # rule reads "Never hardcode IPs/CIDRs in K8s manifests, tests, or toolkit
+    # code". Raised by review on #1247.
+    #
+    # The PUBLIC ip, not the Tailscale one: Headscale *is* the VPN, so a check
+    # that reaches it over the VPN cannot report on a VPN that is down. Same
+    # reason `networking.vps.ansible_host` uses the public address.
+    if ssh_target is None:
+        _net = ConfigurationManager("common", _settings.project_root).get_merged_config()["networking"]
+        ssh_target = f"{_net['ssh_users']['cloud']}@{_net['vps']['public_ip']}"
 
     logger.section("Provider-issued credential expiry")
 

@@ -34,6 +34,40 @@ OUTPUT_DIR = PROJECT_ROOT / "infra/k8s/base/services/homepage-config"
 CLOUDFLARE_ZONE_ID = "a708cb04dd4572e76eb6da42cc09507d"
 
 
+def hub_node(config: dict[str, Any]) -> tuple[str, str]:
+    """The hub's name and the address to show for it, from the SSOT.
+
+    `clusters.hub.node` is what says which machine is the Argo CD hub, and it is
+    the single value the AWS->GCP cutover flips. Before this, four places in this
+    file spelled "aws1" as a literal -- a topology diagram, a flow diagram, an
+    ASCII table and a service row -- so the cutover was four edits nobody would
+    connect to each other, in a file whose whole job is to describe the fleet
+    accurately.
+
+    Address prefers the recorded IP and falls back to MagicDNS, which is the
+    opposite of `generator_ansible` and deliberately so: these tables are read by
+    a human looking for an address, and one of them is literally titled "IP
+    reference". aws1 therefore renders exactly as it did before this change.
+
+    gcp1 has NO recorded IP at all -- a MIG rotates it on every preemption, so
+    `networking.gcp` declines to cache one -- and falls back to
+    `gcp1.kubelab.internal`, which is its stable identity.
+    """
+    name = config.get("clusters", {}).get("hub", {}).get("node", "")
+    networking = config.get("networking", {})
+    block = networking.get(name)
+    if not isinstance(block, dict):
+        block = networking.get("nodes", {}).get(name, {})
+        # Cloud nodes sit at the top level keyed by provider, not by hostname.
+        if not block:
+            for candidate in networking.values():
+                if isinstance(candidate, dict) and candidate.get("hostname") == name:
+                    block = candidate
+                    break
+    addr = block.get("tailscale_ip") or block.get("tailscale_dns") or "?"
+    return name or "?", str(addr)
+
+
 def resolve_path(data: dict[str, Any], path: str) -> Any:
     """Resolve dotted path in nested dict."""
     current: Any = data
@@ -154,6 +188,7 @@ def build_service_tables(
     config: dict[str, Any],
 ) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
     """Build staging, prod, and shared service lists from common.yaml SSOT."""
+    hub_name, _hub_addr = hub_node(config)
     base = config.get("global", {}).get("base_domain", "kubelab.live")
     apps = config.get("apps", {})
     services = apps.get("services", {})
@@ -354,7 +389,7 @@ def build_service_tables(
             f"https://argo.{base}",
             "Authelia",
             "Core",
-            "aws1",
+            hub_name,
             "GitOps hub",
             version="2.14",
         ),
@@ -396,10 +431,10 @@ def build_service_tables(
 
 def build_mermaid_topology(config: dict[str, Any]) -> str:
     """Generate Mermaid topology diagram from common.yaml."""
+    hub_name, hub_addr = hub_node(config)
     networking = config.get("networking", {})
     n = networking.get("nodes", {})
     vps = networking.get("vps", {})
-    aws = networking.get("aws", {})
     lan_cidr = networking.get("lan_cidr", "?")
     return f"""graph TB
   subgraph Internet
@@ -408,7 +443,7 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
   end
   subgraph AlwaysOn["Always-On (24/7) — ADR-028"]
     VPS["VPS {vps.get("public_ip")} / {vps.get("tailscale_ip")}<br/>K3s Prod 8GB"]
-    AWS1["aws1 {aws.get("tailscale_ip")}<br/>Argo CD Hub 2GB"]
+    HUB["{hub_name} {hub_addr}<br/>Argo CD Hub 2GB"]
     RPI3["RPi3 {n["rpi3"]["tailscale_ip"]}<br/>Uptime Kuma 1GB"]
   end
   subgraph OnDemand["On-Demand homelab {lan_cidr} — ADR-028"]
@@ -419,8 +454,8 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
     JET["Jetson {n["jetson"]["lan_ip"]} / {n["jetson"]["tailscale_ip"]}<br/>Pollex 4GB"]
   end
   Users --> CF --> VPS
-  AWS1 -. Tailscale .-> VPS
-  AWS1 -. Tailscale .-> ACE1
+  HUB -. Tailscale .-> VPS
+  HUB -. Tailscale .-> ACE1
   VPS -. Tailscale .-> ACE1
   VPS -. Tailscale .-> RPI3
   ACE1 --- ACE2
@@ -431,14 +466,14 @@ def build_mermaid_topology(config: dict[str, Any]) -> str:
   classDef alwayson fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
   classDef ondemand fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
   classDef ext fill:#f3f4f6,stroke:#9ca3af
-  class VPS,AWS1,RPI3 alwayson
+  class VPS,HUB,RPI3 alwayson
   class ACE1,ACE2,BEE,RPI4,JET ondemand
   class CF,Users ext"""
 
 
 MERMAID_GITOPS = """graph LR
   DEV[Developer] -->|push| GH[GitHub]
-  GH -->|webhook| ARGO[Argo CD<br/>aws1 Hub]
+  GH -->|webhook| ARGO[Argo CD<br/>{hub_name} Hub]
   ARGO -->|"Tailscale sync"| STG[K3s Staging<br/>ace1]
   ARGO -->|"Tailscale sync"| PRD[K3s Prod<br/>VPS]
   GH -->|CI| GHA[GitHub Actions]
@@ -502,15 +537,14 @@ MERMAID_REQUEST = """graph LR
 
 def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
     """Generate ASCII topology diagram from common.yaml."""
+    hub_name, hub_addr = hub_node(config)
     networking = config.get("networking", {})
     n = networking.get("nodes", {})
     vps = networking.get("vps", {})
-    aws = networking.get("aws", {})
     lan_cidr = networking.get("lan_cidr", "?")
 
     vps_pub = vps.get("public_ip", "?")
     vps_ts = vps.get("tailscale_ip", "?")
-    aws_ts = aws.get("tailscale_ip", "?")
 
     def node(name: str) -> tuple[str, str]:
         nd = n.get(name, {})
@@ -529,7 +563,7 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
         "",
         "ALWAYS-ON 24/7 (ADR-028)",
         f"  VPS        {vps_pub} / {vps_ts}  K3s Prod 8GB",
-        f"  aws1       {aws_ts}              Argo CD Hub 2GB",
+        f"  {hub_name:<10} {hub_addr:<21} Argo CD Hub 2GB",
         f"  RPi3       {r3t}                 Uptime Kuma 1GB",
         "",
         f"ON-DEMAND homelab {lan_cidr} (ADR-028)",
@@ -541,7 +575,7 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
         "",
         "CONNECTIONS",
         "  VPS <--> ace1      Tailscale",
-        "  VPS <--> aws1      Tailscale",
+        f"  VPS <--> {hub_name:<10}Tailscale",
         "  VPS <--> RPi3      Tailscale",
         "  RPi4 <-> VPS       Tailscale",
         "  ace1 --- ace2      LAN",
@@ -554,9 +588,9 @@ def build_ascii_topology(config: dict[str, Any]) -> str:  # noqa: E501
 
 def build_ip_reference(config: dict[str, Any]) -> str:  # noqa: E501
     """Generate IP reference table from common.yaml."""
+    hub_name, hub_addr = hub_node(config)
     n = config.get("networking", {}).get("nodes", {})
     vps = config.get("networking", {}).get("vps", {})
-    aws = config.get("networking", {}).get("aws", {})
 
     def _node(name: str) -> tuple[str, str]:
         nd = n.get(name, {})
@@ -576,7 +610,7 @@ def build_ip_reference(config: dict[str, Any]) -> str:  # noqa: E501
         _row("NODE", "LAN", "TAILSCALE", "ROLE"),
         f"{'─' * 12} {'─' * 16} {'─' * 16} {'─' * 20}",
         _row("VPS", vps.get("public_ip", "?"), vps.get("tailscale_ip", "?"), "K3s Prod · 8GB"),
-        _row("aws1", "—", aws.get("tailscale_ip", "?"), "Argo CD Hub · 2GB"),
+        _row(hub_name, "—", hub_addr, "Argo CD Hub · 2GB"),
         _row("ace1", a1l, a1t, "K3s Staging · 12GB"),
         _row("ace2", a2l, a2t, "Dev node / CDE · 12GB"),
         _row("RPi4", r4l, r4t, "DNS Gateway · 8GB"),
@@ -615,6 +649,7 @@ def build_dns_map(config: dict[str, Any]) -> str:
 
 def build_tech_stack(config: dict[str, Any]) -> str:
     """Generate tech stack reference table from common.yaml."""
+    hub_name, hub_addr = hub_node(config)
     k3s_ver = config.get("k3s", {}).get("version", "?")
     rows = [
         f"{'TECHNOLOGY':<20} {'PURPOSE':<28} {'WHERE':<24} {'MANAGED BY'}",
@@ -650,7 +685,7 @@ def build_tech_stack(config: dict[str, Any]) -> str:
         f"  {'Uptime Kuma':<18} {'External monitoring':<28} {'RPi3 (Docker)':<24} Docker Compose",
         "",
         "GITOPS",
-        f"  {'Argo CD':<18} {'Hub-and-spoke GitOps':<28} {'aws1 (K3s)':<24} Helm",
+        f"  {'Argo CD':<18} {'Hub-and-spoke GitOps':<28} {hub_name + ' (K3s)':<24} Helm",
         f"  {'GitHub Actions':<18} {'CI/CD pipelines':<28} {'GitHub':<24} .github/workflows/",
         f"  {'release-please':<18} {'Automated releases':<28} {'GitHub':<24} .github/workflows/",
         "",
@@ -691,7 +726,7 @@ MERMAID_DEPLOY_PIPELINE = """graph LR
   IMG -->|push| DH[Docker Hub]
   GHA -->|release-please| TAG[SemVer Tag]
   TAG -.-> DH
-  DH -->|image ready| ARGO[Argo CD<br/>aws1 Hub]
+  DH -->|image ready| ARGO[Argo CD<br/>{hub_name} Hub]
   ARGO -->|Kustomize overlay| STG[K3s Staging<br/>ace1]
   ARGO -->|Kustomize overlay| PRD[K3s Prod<br/>VPS]
   STG -.->|HelmChartConfig| HELM1[Traefik Helm]
@@ -744,11 +779,15 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
     """Generate architecture diagrams + endpoint tables: Kroki SVG + ASCII art + JSON."""
     diagrams = {
         "topology": build_mermaid_topology(config),
-        "gitops": MERMAID_GITOPS,
+        # `.format()` rather than an f-string: these are module constants, so the
+        # hub's name has to be substituted where they are USED. Left as a plain
+        # string they would render the literal "{hub_name}" into a diagram that
+        # nobody re-reads once it looks like a picture.
+        "gitops": MERMAID_GITOPS.format(hub_name=hub_node(config)[0]),
         "dns": build_mermaid_dns(config),
         "request": MERMAID_REQUEST,
         "secret_flow": MERMAID_SECRET_FLOW,
-        "deploy_pipeline": MERMAID_DEPLOY_PIPELINE,
+        "deploy_pipeline": MERMAID_DEPLOY_PIPELINE.format(hub_name=hub_node(config)[0]),
     }
 
     # Generate SVGs via mermaid.ink. Always emit every key, even on failure
