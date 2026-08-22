@@ -16,10 +16,32 @@ rm -rf "$STAGING"
 mkdir -p "$STAGING"
 
 {% for service, src in node_backup_sources.items() %}
-# --- {{ service }} {{ '(bind mount)' if src.path is defined else '(Docker volume: ' ~ src.volume ~ ')' }} ---
+# --- {{ service }} {{ '(bind mount)' if src.path is defined else ('(PVC: ' ~ src.pvc.namespace ~ '/' ~ src.pvc.claim ~ ', local-path on this node)' if src.pvc is defined else '(Docker volume: ' ~ src.volume ~ ')') }} ---
 mkdir -p "$STAGING/{{ service }}"
 {% if src.path is defined %}
 SRC_DIR_{{ service }}="{{ src.path }}"
+{% elif src.pvc is defined %}
+# A Kubernetes PVC on `local-path`, which is a directory on THIS node -- so the
+# node-path pipeline reaches it and no in-cluster job is needed.
+#
+# The path is RESOLVED, never hardcoded, and that is the load-bearing part:
+# local-path embeds the claim's UID, e.g.
+#   <k3s storage root>/pvc-<claim-uid>_<namespace>_<claim>
+# A recreated PVC gets a new UID and a new directory, while the old one stays
+# on disk looking perfectly healthy. Hardcoding would keep archiving the dead
+# copy and reporting success -- the silent failure this pipeline exists to end.
+#
+# Read through the kubeconfig this node already has as a k3s server. `|| true`
+# plus the emptiness check below rather than `set -e` doing it: a PVC that is
+# genuinely gone must fail LOUDLY here, naming the claim, instead of failing
+# three lines later on a `cd` into an empty string.
+SRC_DIR_{{ service }}="$(KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get pv \
+    -o jsonpath='{range .items[?(@.spec.claimRef.namespace=="{{ src.pvc.namespace }}")]}{.spec.claimRef.name}{"\t"}{.spec.local.path}{"\n"}{end}' \
+    2>/dev/null | awk -F'\t' '$1 == "{{ src.pvc.claim }}" { print $2 }' || true)"
+if [ -z "$SRC_DIR_{{ service }}" ]; then
+    echo "node-backup-capture: no local-path PV bound to {{ src.pvc.namespace }}/{{ src.pvc.claim }} -- refusing to ship a backup that silently omits it" >&2
+    exit 1
+fi
 {% else %}
 SRC_DIR_{{ service }}="$(docker volume inspect {{ src.volume }} --format '{{ '{{' }}.Mountpoint{{ '}}' }}')"
 {% endif %}

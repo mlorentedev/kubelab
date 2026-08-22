@@ -10,7 +10,7 @@
 #   toolkit services up gitea
 #   toolkit services logs api
 #   toolkit services up grafana
-#   toolkit deployment deploy
+#   toolkit infra ansible run -p deploy-vps -e prod
 # =============================================================================
 
 SHELL := /bin/bash
@@ -1089,6 +1089,15 @@ backup-verify-destination:
 .PHONY: backup-verify-restic
 backup-verify-restic:
 	@$(TOOLKIT) backup verify-restic --env $(or $(ENV),prod)
+
+# BACKUP-044 AC1: does every declared node actually HAVE a backup, and how old
+# is it — asked from this workstation rather than from the nodes themselves.
+# Every other backup control runs on the node it checks, so it shares that
+# node's fate; this one works with the homelab powered off, which is exactly
+# when half the fleet cannot answer for itself.
+.PHONY: backup-coverage
+backup-coverage:
+	@$(TOOLKIT) backup coverage --env $(or $(ENV),prod)
 
 # Generate the restic repository password into SOPS. The value is never printed;
 # read it once with `make secrets-show KEY=backup.restic_password

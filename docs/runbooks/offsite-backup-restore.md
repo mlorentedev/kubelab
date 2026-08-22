@@ -44,6 +44,30 @@ These are two different claims and the second is the one backups depend on. Both
 are safe against the live destination — they write a throwaway object under
 `_smoketest/` and remove it.
 
+## Is everything actually backed up?
+
+```bash
+make backup-coverage ENV=prod
+```
+
+Reads the newest snapshot for every node in `backup.sources` **from R2**, not
+from the nodes. That is the point rather than an implementation detail: every
+other control here runs on the node it checks, so it shares that node's fate.
+This one answers with the homelab powered off, which is exactly when half the
+fleet cannot answer for itself.
+
+```
+[SUCCESS] beelink    covered — newest 2026-08-22 03:25Z (0.3h ago), 1 path(s)
+[SUCCESS] rpi3       covered — newest 2026-08-22 02:59Z (0.7h ago), 1 path(s)
+[SUCCESS] rpi4       covered — newest 2026-08-22 03:24Z (0.3h ago), 1 path(s)
+[SUCCESS] vps        covered — newest 2026-08-22 01:00Z (0.7h ago), 1 path(s)
+```
+
+Non-zero exit when any declared node has no repository or no snapshot. It prints
+the age and does **not** judge it — an on-demand node is legitimately hours or
+days stale, and that judgement belongs to the coverage monitor in Uptime Kuma
+(AC9), which knows the node's class. Two controls, one opinion each.
+
 ## Backing up on demand
 
 The timers cover the schedule. This is for the moment before you do something

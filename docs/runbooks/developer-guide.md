@@ -51,9 +51,7 @@ kubelab services list            # List available
 kubelab config generate          # Generate configs from templates
 kubelab config validate          # Validate configs
 kubelab credentials generate     # Generate credentials
-kubelab infra ansible deploy     # Deploy with Ansible
 kubelab infra terraform plan     # Terraform plan
-kubelab deployment deploy        # Full deployment pipeline
 kubelab dashboard                # Terminal dashboard
 kubelab monitoring backup         # Pull Uptime Kuma DB
 kubelab monitoring restore        # Push DB to RPi3
