@@ -212,6 +212,17 @@ def tf() -> str:
     return _tf_text()
 
 
+def _uncommented(text: str) -> str:
+    """Terraform source with comment lines removed.
+
+    Both the module comment and this file's docstrings quote
+    `instance_termination_action = "STOP"` verbatim while explaining it, so a
+    naive scan matches the prose. Fifth occurrence of that shape in one session
+    (lesson-363), which is why it is a shared helper now rather than a habit.
+    """
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+
 class TestSpotAndPreemption:
     """The cost case and the recovery model, which are the two load-bearing choices."""
 
@@ -235,10 +246,33 @@ class TestSpotAndPreemption:
 
         Inverted deliberately rather than deleted: someone reading the ADR will
         try to restore DELETE, and this is what will stop them.
+
+        NARROWED 2026-08-22, and the correction matters. This first asserted the
+        field was ABSENT, because omitting it was the fix at the time. Omitting
+        it is not neutral: GCP writes STOP into the resource, Terraform compares
+        that against an absent value, and the field FORCES REPLACEMENT --
+
+            ~ scheduling {
+                - instance_termination_action = "STOP" -> null # forces replacement
+
+        -- so the template was replaced on EVERY apply and the VM rebuilt with
+        it. An apply immediately after a successful apply still planned
+        `1 to add, 1 to destroy`. The hub was being recreated by the act of
+        checking on it.
+
+        So the assertion becomes what it always meant: never DELETE. STOP is
+        stated rather than inferred, and `terraform plan` finally reports
+        "No changes".
         """
-        assert not re.search(r"instance_termination_action", tf), (
-            "instance_termination_action is set again. A MIG rejects DELETE outright, "
-            "and STOP is the default -- so any value here is either refused or noise."
+        declared = re.search(r"instance_termination_action\s*=\s*\"(\w+)\"", _uncommented(tf))
+        assert declared, (
+            "instance_termination_action is not declared. Omitting it does not mean "
+            "'no opinion': GCP writes STOP, Terraform sees a diff on a "
+            "replacement-forcing field, and every apply rebuilds the hub."
+        )
+        assert declared.group(1) == "STOP", (
+            f"instance_termination_action is {declared.group(1)!r}. A MIG rejects DELETE "
+            "outright — measured on the first real apply — so STOP is the only legal value."
         )
 
     def test_the_group_is_regional_not_zonal(self, tf: str) -> None:
