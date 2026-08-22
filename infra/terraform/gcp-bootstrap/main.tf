@@ -36,6 +36,12 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    # Zips the kill switch's source. Declared rather than left implicit so the
+    # lock file pins it like everything else.
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 
   backend "local" {
@@ -124,6 +130,21 @@ locals {
     "pubsub.googleapis.com",               # budget -> kill switch transport
     "cloudfunctions.googleapis.com",       # the kill switch itself
     "run.googleapis.com",                  # 2nd-gen functions run on Cloud Run
+    # A 2nd-gen function is not one service. Deploying it BUILDS a container
+    # (cloudbuild), PUSHES it (artifactregistry), is TRIGGERED through eventarc,
+    # its source is uploaded to a bucket (storage), it runs as a service account
+    # (iam) and it writes logs (logging).
+    #
+    # This list was assembled by hitting the errors, one apply at a time, which
+    # is exactly what listing it here spares the next person. Each missing API
+    # fails with `SERVICE_DISABLED` naming THAT service -- not the resource you
+    # were creating -- so the message sends you looking at the wrong thing.
+    "cloudbuild.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "eventarc.googleapis.com",
+    "storage.googleapis.com",
+    "iam.googleapis.com",
+    "logging.googleapis.com",
   ]
 }
 

@@ -917,6 +917,48 @@ tf-gcp-bootstrap-apply:
 		terraform apply -var-file=gcp-bootstrap.tfvars; \
 		_exit=$$?; rm -f gcp-bootstrap.tfvars; exit $$_exit
 
+# AC2b — prove the kill switch fires, against an expendable project.
+#
+# `gcp-killswitch-prove` is the whole cycle: stand up a scratch project, repoint
+# the live function at it, publish a real-schema threshold message to the real
+# topic, wait for billing to disappear, restore the target, tear the scratch
+# down. The restore is inside the toolkit command and runs unconditionally --
+# never as a later Make line, which is precisely how a cleanup gets skipped.
+#
+# The teardown IS conditional on nothing: `; _exit=$$?` again, because a scratch
+# project left behind is a project whose id the next run collides with, and one
+# that sits detached from billing looking like an incident.
+.PHONY: gcp-killswitch-prove
+gcp-killswitch-prove:
+	@$(TOOLKIT) infra terraform killswitch-test-tfvars
+	@cd infra/terraform/gcp-killswitch-test && terraform init -input=false >/dev/null && \
+		terraform apply -auto-approve -var-file=killswitch-test.tfvars >/dev/null; \
+		_exit=$$?; rm -f killswitch-test.tfvars; \
+		if [ $$_exit -ne 0 ]; then echo "scratch project apply failed"; exit $$_exit; fi
+	@_scratch=$$(cd infra/terraform/gcp-killswitch-test && terraform output -raw project_id) && \
+		$(TOOLKIT) infra terraform verify-killswitch --scratch "$$_scratch"; \
+		_exit=$$?; \
+		$(TOOLKIT) infra terraform killswitch-test-tfvars >/dev/null && \
+		( cd infra/terraform/gcp-killswitch-test && \
+		  terraform destroy -auto-approve -var-file=killswitch-test.tfvars >/dev/null; \
+		  rm -f killswitch-test.tfvars ); \
+		exit $$_exit
+
+# Teardown is INLINED above rather than delegated with $(MAKE), and that was
+# measured: make runs sub-makes even under `-n`, so `make -n gcp-killswitch-prove`
+# invoked the real teardown. A dry run that destroys something is worse than no
+# dry run, because it is the command people reach for to find out what a target
+# does.
+#
+# Kept as its own target too, for the case the cycle died so hard the inline
+# teardown never ran.
+.PHONY: gcp-killswitch-teardown
+gcp-killswitch-teardown:
+	@$(TOOLKIT) infra terraform killswitch-test-tfvars
+	@cd infra/terraform/gcp-killswitch-test && \
+		terraform destroy -auto-approve -var-file=killswitch-test.tfvars; \
+		_exit=$$?; rm -f killswitch-test.tfvars; exit $$_exit
+
 # GCP Argo CD Hub — Terraform driven from the SSOT, not from SOPS.
 #
 # The tfvars carries NO secret and that is the whole difference from tf-aws-*:
@@ -982,14 +1024,26 @@ wait-node-ready:
 	@$(TOOLKIT) infra ansible run -p wait-node-ready -e $(_ENV) -l $(NODE)
 
 # Terraform DNS (Cloudflare) — SOPS-injected token
+# THE TOKEN GOES THROUGH THE ENVIRONMENT, NEVER THROUGH argv.
+#
+# These targets used `-var="cloudflare_api_token=$$TOKEN"`, which puts a live
+# Cloudflare API token in the process's command line -- readable by any user on
+# the machine through `ps`, and captured by anything that logs command lines.
+# Terraform reads `TF_VAR_<name>` from the environment, which is not in argv.
+#
+# Same rule the notification path already follows for the same reason
+# (ANSIBLE-038 f4): a credential belongs on stdin or in the environment of the
+# process that consumes it, never as an argument.
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
-	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
-		cd infra/terraform/dns && terraform plan -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
+	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_cloudflare_api_token && \
+		cd infra/terraform/dns && terraform plan -var-file=dns.tfvars
 
 tf-dns-apply:
-	@TOKEN=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
-		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars -var="cloudflare_api_token=$$TOKEN"
+	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_cloudflare_api_token && \
+		cd infra/terraform/dns && terraform apply -auto-approve -var-file=dns.tfvars
 
 # sync-homepage regenerates config files from SSOT. Deployment happens via
 # `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.
