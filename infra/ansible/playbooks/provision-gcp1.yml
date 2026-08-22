@@ -79,9 +79,22 @@
     - name: Verify SSH + Python connectivity
       ansible.builtin.ping:
 
-    - name: Verify become (sudo) works
+    # `become: false` deliberately, and this is the one place gcp1 diverges from
+    # provision-aws1.yml on purpose. With `become: true` Ansible elevates FIRST
+    # and the inner `sudo -n true` then runs as root, where it cannot fail. That
+    # still catches a broken NOPASSWD in the default path — the elevation itself
+    # fails — but NOT under `make provision ... ASK_PASS=1`, the documented route
+    # for a node whose NOPASSWD is not set up yet: become succeeds on the typed
+    # password and the check passes while NOPASSWD is absent.
+    #
+    # gcp1 is a MIG member rebuilt from scratch on every preemption, so "new node
+    # whose sudo config is unproven" is its normal state rather than a one-off.
+    # `deploy-harden-nodes.yml` already uses this form, under the more accurate
+    # name. Raised by review on #1225; the other six playbooks carry the weaker
+    # form and are ticketed, not changed here.
+    - name: Verify NOPASSWD sudo works
       command: sudo -n true
-      become: true
+      become: false
       changed_when: false
 
     - name: Verify K3s is installed (cloud-init bootstrap prerequisite)
