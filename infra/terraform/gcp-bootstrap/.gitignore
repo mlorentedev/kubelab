@@ -1,0 +1,11 @@
+# Rendered from SOPS by `toolkit infra terraform gcp-bootstrap-tfvars` and
+# deleted after every use — it must never be committed.
+#
+# It carries `billing_account_id`. Not a credential, but this repository is
+# public and git history is permanent, and the `rm -f` in the Makefile is not a
+# guarantee: a run interrupted between render and remove leaves the file in the
+# working tree, untracked and — without this — stageable by `git add -A`.
+gcp-bootstrap.tfvars
+.terraform/
+*.tfstate
+*.tfstate.backup
