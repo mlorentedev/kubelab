@@ -98,6 +98,18 @@
         node_backup_restic_password: "{{ secrets.backup.restic_password }}"
         node_backup_r2_access_key: "{{ secrets.backup.r2.access_key_id }}"
         node_backup_r2_secret_key: "{{ secrets.backup.r2.secret_access_key }}"
+        # BACKUP-044 AC9. Domain from the SSOT, token from SOPS keyed by the
+        # node's own short name — so adding a node to `backup.sources` and its
+        # token to the catalog is the whole wiring, with no list to update here.
+        #
+        # No `| default(...)` on either, deliberately: a missing token would
+        # otherwise render an empty credential file, the ship script would skip
+        # the heartbeat, and the monitor would page 6h later about a backup that
+        # ran perfectly. StrictUndefined fails the apply instead, naming the key.
+        node_backup_heartbeat_domain: "{{ config.apps.services.observability.uptime_kuma.domain }}"
+        node_backup_heartbeat_token: >-
+          {{ secrets.apps.services.observability.uptime_kuma.push_tokens[
+               'ops_backup_node_' ~ node_short_name] }}
         # RPi3 only (Part 0 / R-B): the sole node whose memory cgroup was
         # measured against the restic workload. Applying this fleet-wide
         # would cap nodes never subjected to that measurement.

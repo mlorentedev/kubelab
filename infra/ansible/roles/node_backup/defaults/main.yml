@@ -71,6 +71,31 @@ node_backup_ship_check_service_name: node-backup-ship-check.service
 node_backup_ship_check_timer_name: node-backup-ship-check.timer
 node_backup_shutdown_service_name: node-backup-shutdown.service
 
+# --- coverage heartbeat (BACKUP-044 AC9) ----------------------------------
+# The ship script posts here as its LAST step, so silence means no backup
+# completed. The watcher is Uptime Kuma on the RPi3 -- deliberately outside this
+# node's failure domain (ADR-028), because a watcher inside the thing it watches
+# goes dark with it.
+#
+# Domain and token come from the playbook: the domain from
+# `apps.services.observability.uptime_kuma.domain` in common.yaml, the token
+# from SOPS. Neither is declared here, and the ABSENCE is the mechanism --
+# StrictUndefined only fires on a variable that does not exist, so a default of
+# `""` would defeat it. Measured: `https://{{ d }}/api/push/x` with `d=""`
+# renders `https:///api/push/x` and raises nothing, which is a URL that looks
+# structurally fine, reaches nobody, and leaves the coverage monitor DOWN 6h
+# later blaming the backup.
+#
+# An earlier revision of this file carried `node_backup_heartbeat_domain: ""`
+# under a comment claiming exactly the protection the line removed. Raised by
+# review on #1221 -- a comment that promises a guard the code does not have is
+# worse than no comment, because it stops the next reader looking.
+
+# Root-only file rather than argv or a rendered literal, the same reasoning as
+# the restic credentials above: the push endpoint is unauthenticated and the
+# token IS the credential, so `ps` visibility would be a live leak.
+node_backup_heartbeat_token_file: /opt/node-backup-heartbeat-token
+
 # Retention approved by the operator 2026-08-16 on measured arithmetic
 # (tasks.md "Approved operating parameters") — ~a year of restore points,
 # dedup makes the history nearly free. Frozen here rather than re-derived at

@@ -114,6 +114,18 @@
     dest: "{{ node_backup_capture_script_path }}"
     mode: "0700"
 
+- name: Write the coverage-heartbeat push token
+  # 0600 and root-owned, like every other credential this role delivers. The
+  # ship script refuses a token that is not [A-Za-z0-9_-], so a corrupted file
+  # skips the heartbeat rather than posting to a wrong or malformed URL.
+  copy:
+    content: "{{ node_backup_heartbeat_token }}"
+    dest: "{{ node_backup_heartbeat_token_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
 - name: Render ship script
   template:
     src: node-backup-ship.sh.j2
