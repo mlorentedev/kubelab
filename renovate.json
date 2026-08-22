@@ -1,0 +1,103 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits"
+  ],
+  "timezone": "Europe/Madrid",
+  "schedule": [
+    "* 0-6 * * 1"
+  ],
+  "prConcurrentLimit": 3,
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "commitMessagePrefix": "fix(deps):",
+  "enabledManagers": [
+    "custom.regex"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Third-party service image tags pinned in the config SSOT. Dependabot cannot see these: it parses Dockerfiles, not arbitrary YAML (#974).",
+      "managerFilePatterns": [
+        "/^infra/config/values/common\\.yaml$/"
+      ],
+      "matchStrings": [
+        "image:\\s+(?<depName>(?:[a-z0-9._\\-]+(?:\\.[a-z0-9._\\-]+)*/)*[a-z0-9._\\-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._\\-]*)\\s*$"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Default: group patch+minor into one weekly PR. Majors stay individual \u2014 the review question is different, and burying one in a group is how it merges unread.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "service images (minor+patch)"
+    },
+    {
+      "description": "Headscale. Its clients are the Tailscale daemons on 8 nodes, pinned separately and NOT tracked here \u2014 so a server bump can outrun them. It is also the bootstrap dependency for the whole mesh: if the control plane rejects the clients, the VPN used to reach the VPS and fix it is the thing that broke. Never grouped, never silent.",
+      "matchPackageNames": [
+        "headscale/headscale"
+      ],
+      "groupName": null,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "needs-care"
+      ],
+      "prBodyNotes": [
+        "**Bootstrap dependency.** Check the release notes for client-protocol changes before merging, and be ready to reach the VPS over its public IP rather than the mesh."
+      ]
+    },
+    {
+      "description": "Postgres. A major is not an upgrade \u2014 it is a dump and restore, because the on-disk format changes and the new binary refuses the old data directory. Renovate cannot know that and would offer it as one more bump.",
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "needs-care"
+      ],
+      "prBodyNotes": [
+        "**Not an in-place upgrade.** A Postgres major needs pg_dump on the old version and restore on the new one. Confirm a verified backup exists (`make backup-coverage ENV=prod`) before starting."
+      ]
+    },
+    {
+      "description": "Authelia. It guards everything behind ForwardAuth, Argo CD included. A failed schema migration locks the operator out of the tools needed to roll it back.",
+      "matchPackageNames": [
+        "authelia/authelia"
+      ],
+      "groupName": null,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "needs-care"
+      ],
+      "prBodyNotes": [
+        "**Locks you out if it goes wrong.** Verify a current backup of `authelia-data` first; the session/WebAuthn store is in it."
+      ]
+    }
+  ],
+  "ignoreDeps": [
+    "cloudflare/cloudflared",
+    "fbonalair/traefik-crowdsec-bouncer",
+    "grafana/grafana-oss",
+    "myoung34/github-runner",
+    "quay.io/minio/minio"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate: service image updates"
+}
