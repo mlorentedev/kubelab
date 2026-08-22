@@ -52,6 +52,14 @@ ExecStart=/bin/true
 # already refuses a partial backup, so there is nothing useful left for it to
 # attempt. The `-` on ship's line means an unreachable R2 at the moment of
 # poweroff never blocks shutdown -- best-effort ship, not a condition of it.
+# The receipt path reaches ship through the environment rather than an
+# argument, so the script's signature is unchanged and the timer path — which
+# must NOT write a receipt — simply does not set it.
+Environment=SHUTDOWN_RECEIPT={{ node_backup_shutdown_receipt }}
+# Clear any receipt from the PREVIOUS shutdown before this one starts, so a
+# stale file can never be read as proof that this run succeeded. Absence is the
+# failure signal, and it has to be a signal this run can produce.
+ExecStop=-/bin/rm -f {{ node_backup_shutdown_receipt }}
 ExecStop={{ node_backup_capture_script_path }}
 ExecStop=-{{ node_backup_ship_script_path }}
 # Bounded well above the measured real-world cycle (verification.md: 8-12s
