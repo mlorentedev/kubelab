@@ -93,3 +93,33 @@ def test_no_hub_hostname_is_written_as_a_literal() -> None:
         and id(n) not in docstrings
     ]
     assert not literals, f"a hub hostname is hardcoded again: {literals}"
+
+
+class TestOnlyNodeShapedBlocksResolve:
+    """`_ssh_target` walks `networking`'s top-level dicts to find cloud nodes.
+
+    It must not match a block that merely happens to carry the right key or
+    hostname — `ssh_users`, `staging_zones`, and whatever is added next are all
+    top-level dicts too.
+
+    Measured when this was raised: today only `ssh_users` qualifies as a
+    non-node dict, and it has neither a hostname nor an address, so nothing was
+    exploitable. That is a fact about today's SSOT rather than a property of the
+    code, which is the reason to fix it anyway.
+    """
+
+    def test_a_non_node_dict_with_a_colliding_hostname_is_not_matched(self, net: dict[str, Any]) -> None:
+        from toolkit.scripts.headscale_probe import _ssh_target
+
+        poisoned = {**net, "some_future_section": {"hostname": "gcp1", "other": "value"}}
+        # Resolves through the real gcp block, not the impostor: the impostor has
+        # no address, and a node is a thing with an address.
+        assert _ssh_target(poisoned, "gcp1").endswith(net["gcp"]["tailscale_dns"])
+
+    def test_a_block_without_an_address_never_resolves_a_node(self, net: dict[str, Any]) -> None:
+        """The property that makes the walk safe, stated directly."""
+        from toolkit.scripts.headscale_probe import _ssh_target
+
+        stripped = {**net, "gcp": {"hostname": "gcp1"}}  # no tailscale_dns / _ip
+        with pytest.raises(KeyError):
+            _ssh_target(stripped, "gcp1")

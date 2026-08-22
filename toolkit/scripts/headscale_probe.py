@@ -115,10 +115,16 @@ def _ssh_target(net: dict[str, Any], node: str) -> str:
     for key, block in net.items():
         if not isinstance(block, dict) or key == "nodes":
             continue
-        if key == node or block.get("hostname") == node:
-            addr = block.get("tailscale_dns") or block.get("tailscale_ip")
-            if addr:
-                return f"{users['cloud']}@{addr}"
+        # A NODE IS A BLOCK WITH AN ADDRESS. The name test alone would also
+        # accept `ssh_users`, `staging_zones` and whatever is added next -- all
+        # top-level dicts too. Raised by review on #1271; measured at the time,
+        # only `ssh_users` qualified and it carries neither a hostname nor an
+        # address, so nothing was exploitable. That is a fact about today's SSOT
+        # rather than a property of this code, which is why the address is part
+        # of the match instead of a check after it.
+        addr = block.get("tailscale_dns") or block.get("tailscale_ip")
+        if addr and (key == node or block.get("hostname") == node):
+            return f"{users['cloud']}@{addr}"
 
     return f"{users['homelab']}@{net['nodes'][node]['tailscale_ip']}"
 
