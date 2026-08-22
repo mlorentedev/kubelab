@@ -273,6 +273,58 @@ class TestRecreateWaitsForTheMachineItAskedFor:
 
         assert len(seen) >= 3, "it accepted an instance still reporting CREATING/STAGING"
 
+    def test_the_old_id_does_not_satisfy_the_wait_even_when_idle_and_running(self, config: dict) -> None:
+        """Isolates the ID check from the action/status checks.
+
+        Found by mutation: deleting the id comparison left every test green,
+        because their fixtures were still RECREATING/STAGING and so blocked on
+        `currentAction` anyway. The condition that actually distinguishes the
+        old machine from its replacement was never exercised. Here the OLD
+        instance reports NONE and RUNNING — exactly what the dying VM looked
+        like when it answered `wait-node-ready` — so only the id can refuse it.
+        """
+        polls = [self._managed("111"), self._managed("111"), self._managed("222")]
+        seen = []
+
+        def fake_managed(_config):  # noqa: ANN001, ANN202
+            seen.append(len(seen))
+            return polls[min(len(seen) - 1, len(polls) - 1)]
+
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=fake_managed),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
+            gcp_mig.recreate(config)
+
+        assert len(seen) >= 3, (
+            "an instance with the OLD id was accepted because it reported NONE/RUNNING. "
+            "That is precisely the dying VM that answered wait-node-ready and handed it "
+            "a host key about to become invalid."
+        )
+
+    def test_a_new_id_that_is_idle_but_not_running_does_not_satisfy_the_wait(self, config: dict) -> None:
+        """Isolates the RUNNING check. A STAGING instance has no sshd yet."""
+        polls = [
+            self._managed("111"),
+            self._managed("222", action="NONE", status="STAGING"),
+            self._managed("222"),
+        ]
+        seen = []
+
+        def fake_managed(_config):  # noqa: ANN001, ANN202
+            seen.append(len(seen))
+            return polls[min(len(seen) - 1, len(polls) - 1)]
+
+        with (
+            patch("toolkit.features.gcp_mig._managed_instances", side_effect=fake_managed),
+            patch("toolkit.features.gcp_mig._run", return_value=0),
+            patch("toolkit.features.gcp_mig.time.sleep"),
+        ):
+            gcp_mig.recreate(config)
+
+        assert len(seen) >= 3, "a STAGING instance was accepted; the next step would find no sshd"
+
     def test_it_gives_up_rather_than_waiting_for_ever(self, config: dict) -> None:
         """A stuck replacement must fail loudly, not hang the chain silently."""
         with (
