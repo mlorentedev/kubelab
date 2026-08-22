@@ -144,14 +144,25 @@ resource "google_compute_instance_template" "hub" {
     # ADR, encoded in this module and asserted by a test, without anyone
     # checking GCP permits it. STOP is the only available behaviour inside a MIG.
     #
-    # WHAT THIS UNSETTLES: the ADR omitted autohealing on the stated grounds
-    # that "with DELETE termination the MIG already restores target size on
-    # preemption without a health check". That premise no longer holds as
-    # written, and whether a MIG recreates a STOPPED preempted Spot VM on its
-    # own is NOT asserted here from documentation. AC4 is the test that settles
-    # it: delete the instance and observe whether it returns unaided. If it does
-    # not, autohealing is required and the ADR's v1 omission was wrong for a
-    # second reason.
+    # THE ADR'S CONCLUSION SURVIVES, ITS REASON DOES NOT. It omitted autohealing
+    # because "with DELETE termination the MIG already restores target size on
+    # preemption without a health check" -- and DELETE is unavailable here, so
+    # that argument is gone.
+    #
+    # Checked against the documentation rather than assumed, after this class of
+    # mistake had already cost two applies:
+    #
+    #   MIGs always attempt to maintain their target size [...] If Compute
+    #   Engine stops one or more Spot VMs in a MIG, the group repeatedly tries
+    #   to recreate those VMs using the specified instance template.
+    #     -- cloud.google.com/compute/docs/instances/spot
+    #
+    # So recreation happens on the STOP path too, and autohealing is still not
+    # required: it addresses application-level failure, not preemption. v1
+    # rightly omits it, for this reason instead of the ADR's.
+    #
+    # AC4 still has to observe it. A documented behaviour and an observed one
+    # are different claims, and it was believing the first that put DELETE here.
   }
 
   disk {
