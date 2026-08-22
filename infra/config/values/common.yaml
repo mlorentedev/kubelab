@@ -141,6 +141,23 @@ networking:
     # here would be a lie waiting for the first preemption.
     tailscale_dns: "gcp1.kubelab.internal"
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
+    # Which spokes THIS hub reconciles. The migration's core invariant is that
+    # exactly one hub writes to any given spoke at any moment, and this list is
+    # where that is enforced structurally rather than by a note in a runbook:
+    # cloud-init installs a cluster secret and an Application only for the spokes
+    # named here.
+    #
+    # gcp1 starts with staging only while aws1 keeps prod. Prod is handed over by
+    # scaling aws1's application-controller to 0 and adding "prod" here — which
+    # changes the instance template, so the MIG recreates the hub and the cutover
+    # re-exercises the recreate path instead of bypassing it.
+    #
+    # Here rather than only in Terraform because it is deployment POLICY, and a
+    # policy value declared in one place and read from the other is how the AWS
+    # hub's cost drifted unnoticed for two years (ADR-063 D4). Guarded by the
+    # MIRRORED drift test, which is what makes this a mirror rather than a copy.
+    managed_spokes:
+      - "staging"
     # Homepage cockpit tile (SSOT-005). widget=ping mirrors aws1's (ADR-033).
     dashboard:
       display_name: "gcp1"

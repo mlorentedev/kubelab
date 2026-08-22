@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-44 lessons, newest first. Back to [all categories](../_index.md).
+45 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 365 | [A lesson with no mechanism is a reminder, and I broke my own three times in one session](lesson-365-a-lesson-with-no-mechanism-is-a-reminder-and-i-broke-mine-three-times.md) | 2026-08-22 |
 | 358 | [A passing re-run is not evidence against a flake — it is what a flake looks like](lesson-358-a-passing-re-run-is-not-evidence-against-a.md) | 2026-08-20 |
 | 357 | [A guard that cannot fail is worse than no guard](lesson-357-a-guard-that-cannot-fail-reports-coverage-it-does-not-have.md) | 2026-08-20 |
 | 355 | [A recovery path that runs rarely and supervised hides the defects it will have when it runs often and unattended](lesson-355-rare-and-supervised-hides-what-frequent-and-.md) | 2026-08-20 |

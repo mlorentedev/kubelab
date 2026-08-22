@@ -8,7 +8,6 @@ are not exercised here (they need a live mesh).
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -129,6 +128,61 @@ class TestResolveTransport:
             resolve_transport("staging", p)
 
 
+class TestTheGcpHubResolves:
+    """GCP-001 column-3 row 1: the cloud-provider list inside a generic resolver.
+
+    `_node_block` iterates a hardcoded tuple of top-level `networking` keys
+    because cloud nodes are siblings of `nodes` rather than members of it. Until
+    `gcp` was in that tuple, `clusters.hub.node: gcp1` raised `KeyError` -- so
+    this is a prerequisite for the cutover, not part of it. Nothing resolves
+    `gcp1` today, which is why adding the capability changes no live behaviour.
+    """
+
+    _GCP_COMMON = """\
+clusters:
+  hub:
+    node: gcp1
+    ssh_alias: gcp1
+    local_port: 16445
+networking:
+  gcp:
+    hostname: gcp1
+    tailscale_ip: 100.64.0.9
+  ssh_users:
+    homelab: manu
+    cloud: deployer
+"""
+
+    def test_a_hub_pointed_at_gcp1_resolves(self, tmp_path: Path) -> None:
+        """The cutover's first requirement: `clusters.hub.node: gcp1` must resolve."""
+        p = tmp_path / "common.yaml"
+        p.write_text(self._GCP_COMMON)
+        t = resolve_transport("hub", p)
+        assert t.kind == "ts-bridge"
+        assert t.target_host == "100.64.0.9"
+
+    def test_the_aws_hub_still_resolves(self, common_yaml: Path) -> None:
+        """Additive, not a swap -- `aws1` reconciles prod throughout the migration."""
+        assert resolve_transport("hub", common_yaml).target_host == "100.64.0.7"
+
+    def test_the_error_names_every_section_actually_searched(self, tmp_path: Path) -> None:
+        """The message is derived from the tuple, so it cannot fall out of step.
+
+        A hand-written list would be a second declaration of the same set, and
+        the stale one is always the message -- nobody reads it until it is wrong,
+        and by then it is telling the reader to look where the code does not.
+        """
+        p = tmp_path / "common.yaml"
+        p.write_text(
+            "clusters:\n  hub:\n    node: ghost\n    ssh_alias: ghost\n    local_port: 16445\n"
+            "networking:\n  nodes: {}\n"
+        )
+        with pytest.raises(KeyError) as exc:
+            resolve_transport("hub", p)
+        for key in tc._CLOUD_KEYS:
+            assert f"networking.{key}" in str(exc.value)
+
+
 class TestTsBridgeArgv:
     def test_builds_a_manual_mode_target_and_local_bind_for_apiserver(self) -> None:
         argv = ts_bridge_argv("/opt/ts-bridge", "100.64.0.11", 6443, 16443)
@@ -235,9 +289,7 @@ class TestTsBridgeTunnel:
         proc.poll.return_value = None
         return proc
 
-    def test_yields_pid_and_terminates_on_normal_exit(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_yields_pid_and_terminates_on_normal_exit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_binary = tmp_path / "ts-bridge"
         fake_binary.write_text("")
         monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
@@ -252,9 +304,7 @@ class TestTsBridgeTunnel:
 
         assert terminated == [42]
 
-    def test_guaranteed_teardown_when_body_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_guaranteed_teardown_when_body_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_binary = tmp_path / "ts-bridge"
         fake_binary.write_text("")
         monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
@@ -270,9 +320,7 @@ class TestTsBridgeTunnel:
 
         assert terminated == [42], "bridge process must be terminated even when body raises"
 
-    def test_early_exit_raises_before_yielding(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_early_exit_raises_before_yielding(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_binary = tmp_path / "ts-bridge"
         fake_binary.write_text("")
         monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
