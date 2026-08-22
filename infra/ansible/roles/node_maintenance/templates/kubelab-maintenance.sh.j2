@@ -31,9 +31,40 @@ else
     # is deliberately absent: pulling in a NEW package unattended is how a
     # kernel meta-package drags in a whole new kernel line on a node nobody is
     # watching.
+    #
+    # Raised in review of #1258: hold only what is NOT ALREADY HELD, and release
+    # only what this run added. A blanket unhold destroys a pin an operator
+    # placed deliberately — pinning is how you stop an upgrade you already know
+    # breaks something, and this would have quietly undone it every week.
+    HELD_BEFORE="$(apt-mark showhold 2>/dev/null || true)"
+    HELD_BY_US=""
+    UNPROTECTED=""
 {% for pkg in maintenance_patch_blacklist %}
-    apt-mark hold {{ pkg }} >/dev/null 2>&1 || true
+    if ! printf '%s\n' "$HELD_BEFORE" | grep -qx '{{ pkg }}'; then
+        # A hold on a package that is NOT INSTALLED fails, and that is fine —
+        # not every node runs docker or k3s. A hold that fails on a package apt
+        # DOES know about is a different thing, and the upgrade is skipped over
+        # it. Measured on beelink 2026-08-22: installed -> rc=0, absent ->
+        # rc=100 with "Unable to locate package".
+        # `if`, not `A && B || C`: with the latter, C also runs when A
+        # succeeds and B fails, so a failed assignment would be reported as a
+        # failed hold (SC2015).
+        if HOLD_ERR="$(apt-mark hold '{{ pkg }}' 2>&1 >/dev/null)"; then
+            HELD_BY_US="$HELD_BY_US {{ pkg }}"
+        else
+            case "$HOLD_ERR" in
+                *"Unable to locate package"*) : ;;
+                *) UNPROTECTED="$UNPROTECTED {{ pkg }}" ;;
+            esac
+        fi
+    fi
 {% endfor %}
+
+    if [ -n "$UNPROTECTED" ]; then
+        echo "WARNING: could not hold:$UNPROTECTED — skipping the upgrade. Patching"
+        echo "  without that hold would restart the workload it protects."
+        PATCH_STATUS="unprotected"
+    else
 
     if ! DEBIAN_FRONTEND=noninteractive apt-get -qq -y \
          -o Dpkg::Options::=--force-confdef \
@@ -44,12 +75,12 @@ else
         PATCH_STATUS="upgrade-failed"
     fi
 
-    # Unhold, so an operator running `apt upgrade` by hand is not silently
-    # blocked by a hold this script placed. The hold exists for the duration of
-    # the unattended run and no longer.
-{% for pkg in maintenance_patch_blacklist %}
-    apt-mark unhold {{ pkg }} >/dev/null 2>&1 || true
-{% endfor %}
+    fi
+
+    # Release ONLY what this run held, so an operator's deliberate pin survives.
+    for pkg in $HELD_BY_US; do
+        apt-mark unhold "$pkg" >/dev/null 2>&1 || true
+    done
 fi
 
 echo "security patching: $PATCH_STATUS"
