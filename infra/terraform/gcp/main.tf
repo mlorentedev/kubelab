@@ -36,6 +36,12 @@ provider "google" {
 # Network — the default VPC, with only what the hub actually needs open
 # ---------------------------------------------------------------------------
 
+# Zones in the configured region. Read rather than assumed: it is the only legal
+# non-zero value for a regional MIG's maxUnavailable, and it differs by region.
+data "google_compute_zones" "available" {
+  region = var.region
+}
+
 data "google_compute_network" "default" {
   name = "default"
 }
@@ -124,11 +130,39 @@ resource "google_compute_instance_template" "hub" {
   tags         = [var.hostname]
 
   scheduling {
-    provisioning_model          = "SPOT"
-    preemptible                 = true
-    automatic_restart           = false
-    on_host_maintenance         = "TERMINATE"
-    instance_termination_action = "DELETE"
+    provisioning_model  = "SPOT"
+    preemptible         = true
+    automatic_restart   = false
+    on_host_maintenance = "TERMINATE"
+    # NO instance_termination_action, and not by choice. ADR-063 specified
+    # DELETE -- the API refuses it here:
+    #
+    #   Spot virtual machines with termination action set to DELETE cannot be
+    #   used with Managed Instance Groups.
+    #
+    # Measured on the first real apply. The decision was made, documented in the
+    # ADR, encoded in this module and asserted by a test, without anyone
+    # checking GCP permits it. STOP is the only available behaviour inside a MIG.
+    #
+    # THE ADR'S CONCLUSION SURVIVES, ITS REASON DOES NOT. It omitted autohealing
+    # because "with DELETE termination the MIG already restores target size on
+    # preemption without a health check" -- and DELETE is unavailable here, so
+    # that argument is gone.
+    #
+    # Checked against the documentation rather than assumed, after this class of
+    # mistake had already cost two applies:
+    #
+    #   MIGs always attempt to maintain their target size [...] If Compute
+    #   Engine stops one or more Spot VMs in a MIG, the group repeatedly tries
+    #   to recreate those VMs using the specified instance template.
+    #     -- cloud.google.com/compute/docs/instances/spot
+    #
+    # So recreation happens on the STOP path too, and autohealing is still not
+    # required: it addresses application-level failure, not preemption. v1
+    # rightly omits it, for this reason instead of the ADR's.
+    #
+    # AC4 still has to observe it. A documented behaviour and an observed one
+    # are different claims, and it was believing the first that put DELETE here.
   }
 
   disk {
@@ -263,6 +297,26 @@ resource "google_compute_region_instance_group_manager" "hub" {
     replacement_method           = "RECREATE"
     instance_redistribution_type = "NONE"
     max_surge_fixed              = 0
-    max_unavailable_fixed        = 1
+    # DERIVED from the region's zone count, never typed as a number. Both halves
+    # of that were forced by the API, one apply apart.
+    #
+    # A regional MIG rejects `max_unavailable_fixed = 1`:
+    #
+    #   has to be either 0 or at least equal to the number of zones
+    #
+    # and rejects the percent form for a different reason:
+    #
+    #   Percent updatePolicy.maxUnavailable ... is only allowed for regional
+    #   managed instance groups with size at least 10
+    #
+    # So the zone count is the ONLY legal non-zero value here, and 0 would
+    # forbid replacing the only instance -- the one thing this group exists to
+    # do.
+    #
+    # Derived rather than written as `3`, because 3 is a fact about
+    # europe-west4, not about this design. Beside a `region` that is a variable,
+    # a literal goes silently wrong on any region with a different zone count,
+    # and wrong in the direction that blocks replacement.
+    max_unavailable_fixed = length(data.google_compute_zones.available.names)
   }
 }
