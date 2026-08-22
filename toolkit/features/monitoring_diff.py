@@ -69,6 +69,15 @@ WRITABLE_FIELDS = frozenset(
         "basic_auth_pass",
         "proxyId",
         "timeout",
+        # A `dns` monitor's own two settings. Absent from this set, Uptime Kuma
+        # creates the monitor against its DEFAULT public resolver — which
+        # answers for prod names and cannot see a VPN-only staging zone at all.
+        # The monitor would then be permanently red for a reason unrelated to
+        # what it watches, and a permanently red monitor gets muted rather than
+        # fixed. Added with the first dns monitor (the rpi4 resolver), not
+        # speculatively.
+        "dns_resolve_server",
+        "dns_resolve_type",
         # A push monitor's token is writable state like any other field, and it
         # is here for the failure it prevents rather than for completeness: a
         # token rotated in the Kuma UI leaves a monitor whose endpoint no longer
