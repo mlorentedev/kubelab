@@ -53,3 +53,13 @@ Content-Type: application/json
 
 Re-export (Workflows -> ... -> Download) and overwrite `notify-router.json` so Git stays
 the source of truth, until APP-CONFIG-003 automates the round-trip.
+
+---
+
+## `sre-auto-triage.json` — SRE Auto-Triage & Self-Healing Brain (ADR-064)
+
+`POST /webhook/sre-triage` -> parse alert labels & annotations -> query Loki telemetry -> 4-step root cause classifier -> `POST http://apprise:8000/notify/kubelab` (tag `agent`) -> respond `200 JSON`.
+
+- **Envelope**: Alertmanager alert object or `{ service, alert_name, severity, query, thread_ts }`.
+- **Diagnostic Engine**: Fingerprints tracebacks, correlates with SRE runbooks, and classifies OOMKilled, Connection Refused, and Timeout signatures.
+- **Import**: `make import-n8n ENV=staging` (idempotent upsert).

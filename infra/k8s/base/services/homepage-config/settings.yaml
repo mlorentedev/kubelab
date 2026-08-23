@@ -77,11 +77,21 @@ layout:
     columns: 1
     icon: mdi-tools
     tab: Flows
-  Repos:
+  Agents:
     style: row
     columns: 3
-    icon: si-github
-    tab: Repos
+    icon: mdi-brain
+    tab: AI & Automations
+  Workflows:
+    style: row
+    columns: 3
+    icon: si-n8n
+    tab: AI & Automations
+  Telemetry:
+    style: row
+    columns: 3
+    icon: si-grafana
+    tab: AI & Automations
   Tools:
     style: row
     columns: 4
