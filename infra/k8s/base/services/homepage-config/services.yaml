@@ -131,10 +131,6 @@
         icon: mdi-cloud-outline
         description: "Hub · e2-small · 2vCPU · 2GB"
         ping: https://argo.kubelab.live
-    - "aws1":
-        icon: mdi-cloud-outline
-        description: "Hub · t4g.small · 2vCPU · 2GB"
-        ping: https://argo.kubelab.live
     - "Beelink":
         icon: mdi-desktop-tower
         description: "Platform · N95 · 8GB"
