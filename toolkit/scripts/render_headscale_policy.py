@@ -35,7 +35,17 @@ def build_hosts(common_yaml: Path = COMMON_YAML) -> dict[str, str]:
     net = _networking(common_yaml)
     hosts = {name: node["tailscale_ip"] for name, node in net["nodes"].items()}
     hosts["vps"] = net["vps"]["tailscale_ip"]
-    hosts["aws1"] = net["aws"]["tailscale_ip"]
+    # No `aws1` alias. It mapped to networking.aws.tailscale_ip, and that host was
+    # destroyed on 2026-08-23 (GCP-001 AC6) -- but the entry would not have gone
+    # merely stale. Headscale reassigns freed addresses, so an alias naming
+    # 100.64.0.7 keeps resolving, to whichever node is handed that address next.
+    # A dangling ACL alias is not dead config; it is a rule pointed at an
+    # arbitrary future machine.
+    #
+    # `networking.aws` itself stays -- the Terraform module renders from it -- so
+    # this cannot be derived from the key's absence, and the guard in
+    # test_headscale_role.py is what keeps it from being re-added by symmetry with
+    # `vps` above. Restore it alongside a live host, never ahead of one.
     hosts["lan-rpi4"] = net["lan_cidr"]
     return hosts
 

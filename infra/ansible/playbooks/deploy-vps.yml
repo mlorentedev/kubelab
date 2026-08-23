@@ -58,9 +58,15 @@
         _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({item.key: item.value.tailscale_ip}) }}"
       loop: "{{ config.networking.nodes | dict2items }}"
 
-    - name: Add VPS, hub, and rpi4 LAN route to Headscale ACL hosts (SSOT)
+    # Mirrors `build_hosts` in toolkit/scripts/render_headscale_policy.py, which
+    # the CI gate renders from -- the two must agree or the gate compares this
+    # playbook's output against a different map. The `aws1` alias was dropped from
+    # both on 2026-08-23 with the host it named: Headscale reassigns freed
+    # addresses, so the alias would have kept resolving, to whichever node
+    # received 100.64.0.7 next.
+    - name: Add VPS and rpi4 LAN route to Headscale ACL hosts (SSOT)
       set_fact:
-        _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({'vps': config.networking.vps.tailscale_ip, 'aws1': config.networking.aws.tailscale_ip, 'lan-rpi4': config.networking.lan_cidr}) }}"
+        _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({'vps': config.networking.vps.tailscale_ip, 'lan-rpi4': config.networking.lan_cidr}) }}"
 
   roles:
     # --- Error pages (Docker Compose — only when K3s is NOT the ingress) ---
