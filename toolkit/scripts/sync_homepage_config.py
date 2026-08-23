@@ -891,12 +891,13 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
     if (!mermaidPromise) {
       mermaidPromise = import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
         .then(function(m) {
-          m.default.initialize({
+          var instance = m.default || m;
+          instance.initialize({
             startOnLoad: false,
             theme: "neutral",
             securityLevel: "loose"
           });
-          return m.default;
+          return instance;
         })
         .catch(function(err) {
           console.error("Mermaid ESM load error:", err);
@@ -1116,6 +1117,7 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
   }
 
   function checkHealth(container) {
+    var isHttps = (window.location.protocol === "https:");
     var dots = container.querySelectorAll(".ep-status[data-health-url]");
     dots.forEach(function(dot) {
       var url = dot.getAttribute("data-health-url");
@@ -1124,26 +1126,24 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
         dot.title = "Cluster-internal component";
         return;
       }
-      fetch(url, {signal: AbortSignal.timeout(8000)})
-        .then(function(res) {
-          if (res.ok || res.type === "opaque") {
-            dot.className = "ep-status ep-status-up";
-            dot.title = "Online (HTTP " + (res.status || "OK") + ")";
-          } else {
-            dot.className = "ep-status ep-status-down";
-            dot.title = "Degraded (HTTP " + res.status + ")";
-          }
+      if (isHttps && url.indexOf("http://") === 0) {
+        dot.className = "ep-status ep-status-internal";
+        dot.title = "Internal service (Tailscale / LAN)";
+        return;
+      }
+      fetch(url, {mode: "no-cors", signal: AbortSignal.timeout(6000)})
+        .then(function() {
+          dot.className = "ep-status ep-status-up";
+          dot.title = "Online (Reachable)";
         })
         .catch(function() {
-          fetch(url, {mode: "no-cors", signal: AbortSignal.timeout(4000)})
-            .then(function() {
-              dot.className = "ep-status ep-status-unknown";
-              dot.title = "Reachable (CORS protected)";
-            })
-            .catch(function() {
-              dot.className = "ep-status ep-status-down";
-              dot.title = "Unreachable";
-            });
+          if (url.indexOf(".staging.") !== -1) {
+            dot.className = "ep-status ep-status-internal";
+            dot.title = "Staging (On-demand cluster)";
+          } else {
+            dot.className = "ep-status ep-status-down";
+            dot.title = "Unreachable";
+          }
         });
     });
   }
