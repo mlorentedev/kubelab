@@ -444,26 +444,61 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       hubs, because `argocd-server` logs events rather than HTTP requests. An
       absent log line is not a negative result — it is an unanswered question,
       and reading it as "not this hub" would have confirmed either conclusion.
-- [ ] **[AC6]** `make aws1-destroy`.
-- [ ] **[AC6]** Verify by API, output pasted: `describe-instances` empty,
+- [x] **[AC6]** `make aws1-destroy`. ✓ 2026-08-23, in #1333.
+- [x] **[AC6]** Verify by API, output pasted: `describe-instances` empty,
       `describe-spot-instance-requests` cancelled, `describe-volumes` empty.
-- [ ] **[AC6]** **Credential rotation — the full exposure set.** Four secrets were
-      printed in plaintext during the 2026-08-20 study session. The operator
-      reports them rotated; this task is the audit that confirms it:
+      ✓ 2026-08-23, in #1333. Evidence in `verification.md` under AC6.
+- [x] **[AC6]** **Credential rotation — the audit ran, and it says NOT ROTATED.**
+      ✓ audited 2026-08-23. The task was always the audit, not the rotation; this
+      is its result. **None of the pre-exposure keys in `common.enc.yaml` were
+      rewritten** between 2026-08-15 and `a8750ed`.
 
-      | Secret | Retired by migration? | When |
+      Method, which decrypts nothing: SOPS preserves the ciphertext of values it
+      does not edit, so `git diff --numstat` over the encrypted file answers "did
+      this key change" without exposing it. Over `common.enc.yaml` the whole diff
+      is **10 added, 2 removed** — the additions are `gcp.{billing_account_id,
+      headscale_api_key}` and four `push_tokens.*`, the removals are
+      `lastmodified` and `mac`. **Zero existing keys rewritten.** The additions
+      are the positive control that proves the method can see a change at all.
+      `prod`/`staging.enc.yaml` show 9 added / 3 removed — Slack webhooks, plus a
+      third removal that is `version: 3.7.3 → 3.13.1`, a SOPS upgrade and not a
+      key. Working tree clean, so no uncommitted rotation is hiding either.
+
+      | Secret | Retired by migration? | Audit result |
       |---|---|---|
-      | `aws.access_key_id` / `secret_access_key` | yes | at cutover |
-      | `aws.headscale_preauth_key` | yes — D7 deletes it | **now** |
-      | `aws.headscale_api_key` | **no** — survives as `gcp.headscale_api_key` | **now** |
-      | `argocd.admin_password` (+ hash) | **no** — hub credential | **now** |
+      | `aws.access_key_id` / `secret_access_key` | claimed "at cutover" | **still in SOPS, unchanged.** Server-side validity UNVERIFIED — see below |
+      | `aws.headscale_preauth_key` | yes — D7 deletes it | **still in SOPS.** D7 never ran |
+      | `aws.headscale_api_key` | no — survives as `gcp.headscale_api_key` | **unchanged.** `gcp.headscale_api_key` was added 2026-08-21; ciphertext cannot tell minted-fresh from copied |
+      | `argocd.admin_password` (+ hash) | no — hub credential | **unchanged.** Byte-identical to 2026-08-15 |
 
-      *`make credentials-generate` also rotates OIDC client secrets and the HMAC,
-      so re-run `make deploy-argocd` after.*
-- [ ] Remove `infra/terraform/aws/`, `provision-aws1.yml`, `aws1-*` targets and
-      `networking.aws`. **Separate commit from the destroy**, so the teardown is
-      revertable independently of the code removal.
-- [ ] Retire `docs/runbooks/aws1-{destroy-replace,ebs-resize}.md`.
+      **The SSOT-drift reading matters in both directions.** If the operator
+      rotated the Argo password out-of-band on the hub, the exposed value is still
+      what SOPS holds — and the next `make deploy-argocd` reinstalls it silently.
+      Either way SOPS and the hub disagree.
+- [ ] **[AC6]** **Rotate, then re-audit.** Operator action — it touches prod.
+      `make credentials-generate` also rotates the OIDC client secrets and the
+      HMAC, so `make deploy-argocd` must follow. Re-run the ciphertext audit
+      afterwards; a rotation that did not change `common.enc.yaml` did not happen.
+- [ ] **[AC6]** **Two consequence checks the ciphertext cannot answer.** Neither
+      ran; both need an unlocked vault or VPS access.
+      - `dotf secrets run -- aws sts get-caller-identity` — auth failure means the
+        exposed IAM keys are dead, success means they are live. **Attempted
+        2026-08-23 and it proved nothing**: exit 1 came from `bw` reporting the
+        Bitwarden vault locked, not from AWS. Destroying aws1 does not touch IAM
+        keys, so "retired at cutover" remains an unverified claim.
+      - `headscale apikeys list` on the VPS — prefixes and creation dates settle
+        whether the exposed API key is revoked, and whether `gcp.headscale_api_key`
+        was minted fresh or copied from the exposed `aws.headscale_api_key`.
+- [~] ~~Remove `infra/terraform/aws/`, `provision-aws1.yml`, `aws1-*` targets and
+      `networking.aws`.~~ **SUPERSEDED by #1333, deliberately.** `toolkit/cli/
+      infra.py` renders the module's tfvars from `networking.aws`, so deleting the
+      block breaks `make tf-aws-apply` and with it the portability AC5 measures.
+      Config describing no live resource costs nothing. Only what asserted a *live*
+      aws1 was retired: the homepage tile, the Kuma monitor (paused, not deleted),
+      `clusters.hub-aws`, and the Headscale ACL alias.
+- [~] ~~Retire `docs/runbooks/aws1-{destroy-replace,ebs-resize}.md`.~~
+      **SUPERSEDED by the same decision** — they document rebuilding the module
+      that stays.
 
 # Phase 6 — optional, free, and worth doing once the hub is stable
 

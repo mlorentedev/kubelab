@@ -111,7 +111,10 @@ created: "2026-08-20"
       holds; and F1 works **only after** the `KUBECONFIG` fix — it was broken on
       the first boot, having been recorded as "closed in code" in #1217.
 - [ ] AC5 portability scored -> the table below, with real counts
-- [x] AC6 AWS decommissioned -> three AWS API outputs, pasted, 2026-08-23
+- [x] AC6 AWS decommissioned -> three AWS API outputs, pasted, 2026-08-23.
+      **Teardown only.** The credential-rotation half of AC6 is open and audited
+      NOT DONE — see the audit at the end of this entry. Do not read this `[x]`
+      as the whole criterion.
 
       **Reconciliation is handed over; the inbound route and the teardown are
       not.** Deliberately stopped here, 2026-08-22, at the last point where the
@@ -202,6 +205,44 @@ created: "2026-08-20"
       that config block. Deleting them would destroy the evidence rather than the
       infrastructure. The `common.yaml` comment promising to remove `networking.aws`
       predates that decision and is corrected in the same change.
+
+      **The teardown is done; the credential half of AC6 is not.** Audited
+      2026-08-23, and the audit contradicts the record. `tasks.md` carried "the
+      operator reports them rotated; this task is the audit that confirms it" —
+      the audit ran and confirms the opposite.
+
+      Method, which decrypts nothing and therefore prints nothing: SOPS preserves
+      the ciphertext of values it does not edit, so `git diff --numstat` over the
+      encrypted file answers "did this key change" without exposing it. Verify a
+      credential by consequence, never by printing it.
+
+      | Fact | Measurement |
+      |---|---|
+      | `common.enc.yaml`, 2026-08-15 → `a8750ed` | **10 added, 2 removed** |
+      | the additions | `gcp.{billing_account_id,headscale_api_key}`, four `push_tokens.*` |
+      | the removals | `lastmodified`, `mac` |
+      | **existing keys rewritten** | **zero** |
+      | `argocd.admin_password` ciphertext | byte-identical across the window |
+      | `prod`/`staging.enc.yaml` | 9 added / 3 removed — Slack webhooks; the third removal is `version: 3.7.3 → 3.13.1`, a SOPS upgrade, not a key |
+      | working tree | clean — no uncommitted rotation hiding |
+
+      The additions are the positive control: they prove the method can see a
+      change at all, which is what separates this negative result from an
+      unanswered question. All four exposed secrets are still in SOPS unchanged,
+      including `aws.headscale_preauth_key`, which D7 said to delete.
+
+      **Two consequence checks the ciphertext cannot answer, neither of which
+      ran.** `dotf secrets run -- aws sts get-caller-identity` was attempted and
+      **proved nothing**: exit 1 came from `bw` reporting the Bitwarden vault
+      locked, not from AWS rejecting the key. Destroying aws1 does not touch IAM
+      keys, so "retired at cutover" is still a claim. And `headscale apikeys list`
+      on the VPS is what would settle whether `gcp.headscale_api_key` was minted
+      fresh or copied from the exposed `aws.headscale_api_key` — a distinction
+      ciphertext cannot make.
+
+      **Drift, in whichever direction it resolves.** If the Argo password was
+      rotated out-of-band on the hub, SOPS still holds the exposed value and the
+      next `make deploy-argocd` reinstalls it silently.
 - [ ] AC7 cost recorded as derivation -> ADR-063 D4
 - [ ] AC8 ceilings measured -> `fio` output + `deploy-argocd` wall time
 
