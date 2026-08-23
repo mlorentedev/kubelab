@@ -441,9 +441,27 @@ def test_the_shutdown_path_leaves_proof_and_the_boot_path_reads_it() -> None:
         "control — and the boot capture is the first moment anyone can learn whether "
         "the last power-off shipped."
     )
-    assert "NO RECEIPT" in capture_script, (
-        "absence is not reported, so a missing receipt is indistinguishable from a "
-        "node that was never powered off"
+    # This asserted the literal string "NO RECEIPT", and its own failure message
+    # named the confusion that phrasing caused: a missing receipt WAS
+    # indistinguishable from a node that was never cleanly powered off, because
+    # one line covered both. On a fleet powered down by smart plug the second
+    # case is every boot, so the report was permanently true and permanently
+    # uninformative.
+    #
+    # The intent survives and is strengthened — absence must still be reported —
+    # but it is now asserted as the DISTINCTION rather than as a string, so the
+    # guard cannot be satisfied by a script that collapses the two again.
+    assert "node_backup_shutdown_attempt_marker" in capture_script, (
+        "the boot read-back does not consult the attempt marker, so a shutdown "
+        "sequence that ran and failed to ship is reported identically to a power cut "
+        "where no sequence ran at all — and only the first is a defect"
+    )
+    assert "did NOT ship" in capture_script, (
+        "the failed-shutdown-ship case is not reported, so absence is silent"
+    )
+    assert "unclean" in capture_script, (
+        "the power-cut case has no branch of its own, so it lands in whichever "
+        "branch remains — which is how it came to be reported as a failed backup"
     )
 
 
