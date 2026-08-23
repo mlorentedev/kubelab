@@ -3,12 +3,13 @@
 # -----------------------------------------------------------------------------
 
 resource "cloudflare_record" "mlorente_root" {
-  zone_id = var.zone_id_mlorente
-  name    = "mlorente.dev"
-  content = var.vps_ip
-  type    = "A"
-  ttl     = var.dns_ttl
-  proxied = false
+  zone_id         = var.zone_id_mlorente
+  name            = "mlorente.dev"
+  content         = var.vps_ip
+  type            = "A"
+  ttl             = var.dns_ttl
+  proxied         = false
+  allow_overwrite = true
 }
 
 # staging.mlorente.dev: resolved via Headscale split DNS → RPi4 CoreDNS → ace1
@@ -21,10 +22,11 @@ resource "cloudflare_record" "mlorente_root" {
 resource "cloudflare_record" "mlorente_svc" {
   for_each = local.mlorente_services
 
-  zone_id = var.zone_id_mlorente
-  name    = each.value.name
-  content = each.value.content
-  type    = "A"
-  ttl     = each.value.proxied ? 1 : var.dns_ttl
-  proxied = each.value.proxied
+  zone_id         = var.zone_id_mlorente
+  name            = each.value.name
+  content         = each.value.content
+  type            = "A"
+  ttl             = each.value.proxied ? 1 : var.dns_ttl
+  proxied         = each.value.proxied
+  allow_overwrite = true
 }
