@@ -322,9 +322,19 @@ The attempt:
 [final] title: 'Link Account - Gitea: Git with a cup of tea'
 [final] gitea session established: False
 [link_account] form actions: ['/user/link_account_signin', '/user/link_account_signup']
+[final] cookie names held (values never emitted): ['_csrf', 'authelia_session', 'i_like_gitea']
 [link_account] offers 'create new account' (signup): True
 [link_account] offers 'link to existing'  (signin):  True
 ```
+
+**Read that cookie line carefully, because it is a trap with teeth.** `i_like_gitea` is
+Gitea's session cookie and it is **present here while the user is not signed in** —
+Gitea sets it before authentication. The first version of this probe judged the session
+by cookie presence and would have reported success against a criterion that fails. The
+probe now judges by what the page proves (`href="/user/logout"`), and prints cookie
+*names* only, so the next person reads the fact instead of trusting a recollection. An
+AC3 test that asserts on this cookie is a **false positive**, not a false negative:
+it goes green exactly when the thing it guards is broken.
 
 And the control that makes the negative real — the user list *after* the attempt:
 
@@ -376,9 +386,12 @@ transcripts above are the deliverable.
   unmapped** (R5 above) — the fix is additive flags on the existing bootstrap call.
 - **AC3 needs an assertion that cannot pass on a `link_account` page.** R1a's probe walks
   the OIDC chain by hand and reports whether a Gitea *session* was established, which is
-  the property AC3 actually claims. Part 2 should land that as a test rather than a
-  scratch script; the naive assertion ("the SSO login was not refused") passes today,
-  against a criterion that fails today.
+  the property AC3 actually claims. It is committed alongside this file as
+  `r1a_sso_probe.py` so Part 2 can land it as a test instead of rewriting it. **Two
+  assertions look right and go green while AC3 fails**: "the SSO login was not refused"
+  (it is not — it parks), and "the Gitea session cookie is present" (`i_like_gitea` is
+  set before authentication). Assert on `/user/logout` being reachable, or on an
+  authenticated API call succeeding.
 - **`DISABLE_REGISTRATION = true` and a rendered `link_account_signup` form coexist.**
   Whether the POST is honoured is unmeasured and needs its own authorisation. Worth
   knowing before Part 2 assumes the global flag is sufficient to close self-service
