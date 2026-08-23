@@ -805,6 +805,26 @@ backup-node:
 		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK); \
 	fi
 
+# Report, disarm, or re-arm the backup timers on a node — WITHOUT redeploying
+# the pipeline to do it. `make backup-node` runs one backup and leaves the
+# schedule alone, which is the gap that made AC9's teardown a hand `systemctl`
+# over SSH: a demonstration that requires stopping a timer needs a supported
+# way to start it again, or the teardown depends on somebody remembering.
+#
+# STATE is optional and omitting it REPORTS ONLY. A target an operator runs to
+# look at the schedule must not change it.
+.PHONY: backup-schedule
+backup-schedule:
+	@test -n "$(NODE)" || (echo "Usage: make backup-schedule NODE=vps|rpi3|beelink|rpi4|all [ENV=prod] [STATE=started|stopped] [CHECK=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	$(eval _STATE := $(if $(STATE),--extra-vars state=$(STATE),))
+	@if [ "$(NODE)" = "all" ]; then \
+		$(TOOLKIT) infra ansible run -p backup-schedule -e $(_ENV) $(_STATE) $(_CHECK); \
+	else \
+		$(TOOLKIT) infra ansible run -p backup-schedule -e $(_ENV) -l $(NODE) $(_STATE) $(_CHECK); \
+	fi
+
 # CHECK=1 is a dry run. It is accepted HERE, and on every other target that
 # changes a node, because `make provision` accepted it and these did not:
 # `make backup ENV=prod CHECK=1` silently ignored the flag and deployed to all

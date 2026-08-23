@@ -27,7 +27,7 @@ Before=docker.service
 [Service]
 Type=oneshot
 ExecStart={{ node_backup_capture_script_path }}
-TimeoutStartSec=120
+TimeoutStartSec={{ node_backup_capture_timeout }}
 StandardOutput=journal
 StandardError=journal
 {% if node_backup_location == 'on-demand' %}
