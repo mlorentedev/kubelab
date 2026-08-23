@@ -65,20 +65,20 @@ class TestAppriseConfigGenerator:
     def test_page_tier_routes_to_alerts_channel(self) -> None:
         parsed, merged = self._build()
         slack = _slack_cfg(merged)
+        assert slack.get("webhook_alerts"), "apps.services.automation.apprise.slack.webhook_alerts must be configured in SOPS"
         page_urls = _urls_for_tag(parsed, "page")
-        if slack.get("webhook_alerts"):
-            assert any("#alerts" in u or "slack://" in u for u in page_urls), (
-                "the 'page' tier must route to #alerts via Slack webhook in SOPS"
-            )
+        assert any("#alerts" in u or "slack://" in u for u in page_urls), (
+            "the 'page' tier must route to #alerts via Slack webhook in SOPS"
+        )
 
     def test_log_tier_routes_to_ops_log_channel(self) -> None:
         parsed, merged = self._build()
         slack = _slack_cfg(merged)
+        assert slack.get("webhook_log"), "apps.services.automation.apprise.slack.webhook_log must be configured in SOPS"
         log_urls = _urls_for_tag(parsed, "log")
-        if slack.get("webhook_log"):
-            assert any("#ops-log" in u or "slack://" in u for u in log_urls), (
-                "the 'log' tier must route to #ops-log via Slack webhook in SOPS"
-            )
+        assert any("#ops-log" in u or "slack://" in u for u in log_urls), (
+            "the 'log' tier must route to #ops-log via Slack webhook in SOPS"
+        )
 
     def test_telegram_fallback_when_slack_absent(self) -> None:
         """Verify Telegram fallback works when only telegram is in SOPS."""
