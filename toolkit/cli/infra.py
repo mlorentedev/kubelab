@@ -1506,8 +1506,35 @@ def tf_killswitch_test_tfvars() -> None:
         )
         raise typer.Exit(1) from None
 
+    # A UNIQUE project id per run, and this is a fix rather than a flourish.
+    # The variable's default was the fixed `kubelab-killswitch-proof`, whose
+    # docstring blamed collisions on "leaving one behind". Measured 2026-08-23:
+    # the collision happens even when the destroy is CLEAN. GCP keeps a deleted
+    # project in DELETE_REQUESTED for ~30 days and reserves its id throughout, so
+    # a second run inside that window fails with
+    #
+    #   Error 409: Requested entity already exists, alreadyExists
+    #
+    # A proof of the billing kill switch that can only run once a month does not
+    # verify the kill switch -- it records that the switch worked on one day. The
+    # switch had just been redeployed when this was hit, so the window where it
+    # was unverifiable was exactly the window where verification mattered.
+    #
+    # Derived from the current time rather than random, so a failed run's orphan
+    # is identifiable by when it was created. 30-char limit on GCP project ids.
+    from datetime import datetime, timezone
+
+    # %y not %Y: a GCP project id is capped at 30 characters and the four-digit
+    # year put this at 31, which the API rejects at APPLY time with a validation
+    # error rather than at plan. Measured by hitting it.
+    stamp = datetime.now(timezone.utc).strftime("%y%m%d%H%M")
+    project_id = f"kubelab-killswitch-{stamp}"  # 29 chars
+
     path = test_dir / "killswitch-test.tfvars"
-    path.write_text(f'billing_account_id = "{billing_id}"\nkill_switch_service_account = "{sa}"\n')
+    path.write_text(
+        f'billing_account_id = "{billing_id}"\nkill_switch_service_account = "{sa}"\nproject_id = "{project_id}"\n'
+    )
+    logger.info(f"scratch project for this run: {project_id}")
     logger.success(f"Generated {path}")
 
 

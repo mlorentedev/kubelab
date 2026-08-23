@@ -28,12 +28,37 @@ variable "kill_switch_service_account" {
 
 variable "project_id" {
   description = <<-EOT
-    Scratch project id. Globally unique across all of GCP, and the previous
-    run's project must be gone before the next can use the name -- which is the
-    mechanism that makes leaving one behind noticeable.
+    Scratch project id, UNIQUE PER RUN. Rendered by
+    `toolkit infra terraform killswitch-test-tfvars` as
+    `kubelab-killswitch-<UTC timestamp>`.
+
+    The default used to be the fixed `kubelab-killswitch-proof`, on the reasoning
+    that a name collision is what makes an orphaned project noticeable. Measured
+    2026-08-23: the collision happens even when the destroy is CLEAN. GCP holds a
+    deleted project in DELETE_REQUESTED for ~30 days and reserves its id the whole
+    time, so a second run inside that window fails with
+    `Error 409: Requested entity already exists` -- which is not a signal about
+    orphans at all, it is the normal case.
+
+    A proof of the billing kill switch that can only run once a month does not
+    verify the kill switch; it records that the switch worked on one day. There is
+    deliberately NO default now: a fixed id is the defect, so the value must come
+    from the generator.
   EOT
   type        = string
-  default     = "kubelab-killswitch-proof"
+
+  # GCP caps a project id at 30 characters and rejects a violation at APPLY time,
+  # after the run has already started doing work. Asserting it here moves the
+  # failure to plan, where it costs nothing. Found by generating a 31-char id.
+  validation {
+    condition     = length(var.project_id) >= 6 && length(var.project_id) <= 30
+    error_message = "project_id must be 6-30 characters; GCP rejects longer ids at apply time, not at plan."
+  }
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]*[a-z0-9]$", var.project_id))
+    error_message = "project_id must start with a letter, contain only lowercase letters, digits and hyphens, and not end with a hyphen."
+  }
 }
 
 variable "quota_project" {
