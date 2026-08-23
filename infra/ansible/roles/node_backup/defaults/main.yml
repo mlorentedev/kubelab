@@ -91,6 +91,39 @@ node_backup_shutdown_service_name: node-backup-shutdown.service
 # the previous one before anyone could look at it.
 node_backup_shutdown_receipt: /var/log/node-backup-shutdown.receipt
 
+# Written by the shutdown unit's ExecStop as its FIRST action, before capture
+# and ship run. It exists to tell two absences apart, because on this fleet
+# they mean opposite things and used to read identically:
+#
+#   receipt              -> the shutdown snapshot ran and shipped.
+#   marker, no receipt   -> the shutdown sequence RAN and did not ship. Real
+#                           failure, and the one this control was written for.
+#   no marker, no receipt-> no shutdown sequence ran at all. Expected here.
+#
+# That third case is the normal one and it was being reported as the second.
+# The operator powers the homelab down with a SMART PLUG, so `ExecStop=` never
+# executes -- the same property that made beelink's compose stack come back
+# unreachable (#1303): a stop hook is not a guarantee, it is a request that a
+# power cut declines. So `NO RECEIPT -- the last power-off did not ship` was
+# printed on every boot, forever, describing a fleet behaving exactly as
+# configured. A control that cannot ever be quiet is not a control.
+#
+# A deliberate `reboot`/`shutdown` over SSH DOES run ExecStop, so the unit is
+# not dead code and the failure case above is reachable. That is why this is a
+# marker rather than deleting the shutdown path outright.
+node_backup_shutdown_attempt_marker: /var/log/node-backup-shutdown.attempted
+
+# Tmpfs, so the kernel clears it at every boot and nothing has to remember to.
+# It scopes the receipt read-back to the FIRST capture after boot.
+#
+# Needed because capture is not a boot-only unit: ship pulls it in via `Wants=`
+# on every hourly tick, so the read-back ran on every capture. Measured on rpi4
+# 2026-08-23 -- the NO RECEIPT block appears twice within four minutes, at
+# 08:46 (boot) and 08:50 (ship's pull). The question "did the last power-off
+# ship" only has an answer once per boot; asking it hourly manufactures noise
+# out of a fact that has not changed.
+node_backup_boot_check_flag: /run/node-backup-boot-check.done
+
 # How long restic waits on a request that is going nowhere before retrying it.
 # Its own default is 5m, which exceeds this unit's useful lifetime: measured
 # 2026-08-22, an invalid credential and an unreachable endpoint BOTH produced

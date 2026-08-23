@@ -637,3 +637,123 @@ def test_the_capture_ceiling_clears_the_overrun_that_was_measured():
         "the capture unit does not take its ceiling from node_backup_capture_timeout; "
         "a literal here drifts from the default that explains it"
     )
+
+
+# --- BACKUP-044 AC5: telling two absences apart ----------------------------
+
+
+def _capture_receipt_block() -> str:
+    """The boot read-back, comments stripped.
+
+    Every branch below is explained by a comment that quotes the other
+    branches, so a raw match on the rendered file would find `>&2` in the prose
+    about stderr and pass on a script that never writes to it.
+    """
+    script = _render("node-backup-capture.sh.j2", node_backup_location="on-demand")
+    code = "\n".join(
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    )
+    start = code.index("previous shutdown snapshot")
+    return code[code.rindex("if ", 0, start) : code.index("STAGING=", start)]
+
+
+def test_an_unclean_power_off_is_not_reported_as_a_failed_backup():
+    """The operator kills the homelab with a smart plug, so ExecStop never runs.
+
+    Absence of a receipt therefore has two meanings that used to print the
+    same: the shutdown sequence ran and failed to ship (a real defect), or no
+    shutdown sequence ran at all (Tuesday). The second is the normal path on
+    this fleet, and reporting it as `the last power-off did not ship` on every
+    boot is what emptied the line of meaning.
+
+    The attempt marker is what separates them, so the branch that has no
+    marker must NOT reach stderr -- `OnFailure=` and the operator's eye both
+    read stderr as the failure channel.
+    """
+    block = _capture_receipt_block()
+
+    assert "node-backup-shutdown.attempted" in block, (
+        "the read-back does not consult the attempt marker, so it cannot tell a "
+        "failed shutdown ship from a power cut that never ran one"
+    )
+
+    branches = block.split("elif")
+    assert len(branches) == 2, f"expected a three-way read-back, got: {block!r}"
+    unclean_branch = branches[1].split("else", 1)[1]
+
+    assert ">&2" not in unclean_branch, (
+        "the no-shutdown-sequence branch writes to stderr. On a smart-plug fleet that "
+        "fires on every single boot, which is the alarm fatigue this change removes."
+    )
+    assert ">&2" in branches[1].split("else", 1)[0], (
+        "the marker-without-receipt branch does NOT write to stderr, so the one case "
+        "that is a real failure has become as quiet as the normal one"
+    )
+
+
+def test_the_read_back_runs_once_per_boot_not_once_per_run():
+    """Ship pulls capture in via Wants= on every tick, so this is not a boot-only script.
+
+    Measured on rpi4 2026-08-23: the read-back printed at 08:46 (boot) and
+    again at 08:50, when ship pulled capture in. The answer cannot change
+    between those two, so the second one is noise by construction.
+    """
+    block = _capture_receipt_block()
+    flag = str(_defaults()["node_backup_boot_check_flag"])
+
+    assert flag.startswith("/run/"), (
+        f"the boot flag is at {flag!r}, off tmpfs — it would survive the reboot it is "
+        f"meant to be reset by, and the read-back would never run again"
+    )
+    assert flag in block, "the read-back is not scoped by the boot flag"
+
+
+def test_the_boot_read_back_clears_what_it_read():
+    """A receipt that outlives its boot is read as proof of the WRONG power-off.
+
+    The previous revision left clearing to the shutdown unit's first ExecStop
+    line. That unit does not run on a power cut — the whole reason this control
+    exists — so a receipt from the last clean reboot would still be sitting
+    there at the next boot and would be reported as a successful shutdown ship
+    that never happened.
+    """
+    block = _capture_receipt_block()
+    receipt = str(_defaults()["node_backup_shutdown_receipt"])
+    marker = str(_defaults()["node_backup_shutdown_attempt_marker"])
+
+    removal = [line for line in block.splitlines() if line.strip().startswith("rm ")]
+    assert removal, "the boot read-back never clears the files it just read"
+    cleared = " ".join(removal)
+    for path in (receipt, marker):
+        assert path in cleared, (
+            f"{path} survives the boot read-back, so the next boot can read this "
+            f"boot's outcome as its own"
+        )
+
+
+def test_the_shutdown_unit_marks_its_attempt_before_it_can_fail():
+    """The marker means 'this sequence started', so it must precede what may fail.
+
+    Written after capture or ship, it would only ever exist when they
+    succeeded — which is what the receipt already says, leaving the failure
+    case indistinguishable from the power cut all over again.
+    """
+    unit = _render(
+        "node-backup-shutdown.service.j2",
+        node_backup_location="on-demand",
+        inventory_hostname="rpi4",
+        node_backup_shutdown_after="docker.service",
+    )
+    stops = [line for line in _directive_lines(unit) if line.startswith("ExecStop=")]
+
+    marker = str(_defaults()["node_backup_shutdown_attempt_marker"])
+    touch_at = next((i for i, line in enumerate(stops) if marker in line), None)
+    assert touch_at is not None, "the shutdown unit never records that it attempted a ship"
+
+    capture_at = next(
+        i for i, line in enumerate(stops) if str(_defaults()["node_backup_capture_script_path"]) in line
+    )
+    assert touch_at < capture_at, (
+        f"the attempt marker is written at ExecStop position {touch_at}, after capture at "
+        f"{capture_at}. A marker that only appears on success cannot distinguish failure."
+    )

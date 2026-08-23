@@ -19,13 +19,38 @@ set -euo pipefail
 # Absence is the finding, and it is why the shutdown unit deletes the file
 # before trying: a stale receipt from two shutdowns ago would read as success.
 {% if node_backup_location == 'on-demand' %}
-if [ -f "{{ node_backup_shutdown_receipt }}" ]; then
-    echo "previous shutdown snapshot: $(cat {{ node_backup_shutdown_receipt }})"
-else
-    echo "previous shutdown snapshot: NO RECEIPT — the last power-off did not ship." >&2
-    echo "  This session's boot capture covers the previous session, so nothing is" >&2
-    echo "  lost yet; but a node that never comes back would have left its last" >&2
-    echo "  session only in this snapshot. See BACKUP-044 AC5." >&2
+# Once per boot, not once per run. Ship pulls this script in via `Wants=` on
+# every hourly tick, and "did the last power-off ship" is a question with one
+# answer per boot -- asking it hourly turns one fact into a stream. The flag
+# lives on tmpfs, so the kernel resets it and nothing has to remember to.
+if [ ! -e "{{ node_backup_boot_check_flag }}" ]; then
+    if [ -f "{{ node_backup_shutdown_receipt }}" ]; then
+        echo "previous shutdown snapshot: $(cat {{ node_backup_shutdown_receipt }})"
+    elif [ -f "{{ node_backup_shutdown_attempt_marker }}" ]; then
+        # The marker exists and the receipt does not: ExecStop RAN and ship
+        # failed inside it. This is the failure the control was written for,
+        # and the only one of the three branches that belongs on stderr.
+        echo "previous shutdown snapshot: the shutdown sequence RAN and did NOT ship." >&2
+        echo "  This session's boot capture covers the previous session, so nothing is" >&2
+        echo "  lost yet; but a node that never comes back would have left its last" >&2
+        echo "  session only in this snapshot. See BACKUP-044 AC5." >&2
+    else
+        # Neither file: no shutdown sequence ran. On this fleet that is the
+        # NORMAL path -- the homelab is powered down by smart plug, so
+        # `ExecStop=` never executes. Reporting it as a failure every boot is
+        # what made this line meaningless before; the boot capture below is
+        # the mitigation, and it is about to run.
+        echo "previous power-off was unclean (no shutdown sequence ran) — this boot's capture covers it."
+    fi
+
+    # Clear BOTH, so the next boot reads this boot's outcome and never an
+    # older one. Leaving it to the shutdown unit is what the previous revision
+    # did, and that only works when the shutdown unit runs: after a smart-plug
+    # cut a receipt from the last clean reboot would survive and be read as
+    # proof that the power-off shipped. Absence is the signal, so the signal
+    # has to be reset by something a power cut cannot skip.
+    rm -f "{{ node_backup_shutdown_receipt }}" "{{ node_backup_shutdown_attempt_marker }}"
+    : > "{{ node_backup_boot_check_flag }}"
 fi
 {% endif %}
 
