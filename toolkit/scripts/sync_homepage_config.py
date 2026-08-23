@@ -838,7 +838,7 @@ def render_mermaid_svg(mermaid_def: str, retries: int = 2, backoff_seconds: floa
 
 
 def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
-    """Generate architecture diagrams + endpoint tables: Kroki SVG + ASCII art + JSON."""
+    """Generate architecture diagrams + endpoint tables: Dynamic Mermaid + ASCII art + JSON."""
     diagrams = {
         "topology": build_mermaid_topology(config),
         # `.format()` rather than an f-string: these are module constants, so the
@@ -852,20 +852,7 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
         "deploy_pipeline": MERMAID_DEPLOY_PIPELINE.format(hub_name=hub_node(config)[0]),
     }
 
-    # Generate SVGs via mermaid.ink. Always emit every key, even on failure
-    # (empty payload rather than a dropped key) — TOOL-020: a transient
-    # network failure must produce a comparable file, not a structurally
-    # different one that reads as SSOT drift under --check.
-    svgs = {}
-    for name, mermaid_def in diagrams.items():
-        svg = render_mermaid_svg(mermaid_def)
-        svgs[name] = svg
-        if svg:
-            print(f"  Kroki SVG: {name} ({len(svg)} bytes)")
-        else:
-            print(f"  Kroki SVG: {name} FAILED")
-
-    # Write custom.js with embedded SVGs + ASCII
+    # Write custom.js with embedded Mermaid definitions + ASCII
     ascii_sections = {
         "ip_reference": build_ip_reference(config),
         "dns_map": build_dns_map(config),
@@ -881,9 +868,9 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
         "",
         "var KUBELAB_DIAGRAMS = {",
     ]
-    for name, svg in svgs.items():
-        b64 = base64.b64encode(svg.encode()).decode()
-        js_parts.append(f'  {name}: "data:image/svg+xml;base64,{b64}",')
+    for name, mermaid_def in diagrams.items():
+        escaped = mermaid_def.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+        js_parts.append(f"  {name}: `{escaped}`,")
     # Escape ASCII for JS
     for name, ascii_text in ascii_sections.items():
         escaped = ascii_text.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
@@ -898,6 +885,26 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
     js_parts.append("""
 (function() {
   var injected = {};
+  var mermaidPromise = null;
+
+  function getMermaid() {
+    if (!mermaidPromise) {
+      mermaidPromise = import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
+        .then(function(m) {
+          m.default.initialize({
+            startOnLoad: false,
+            theme: "neutral",
+            securityLevel: "loose"
+          });
+          return m.default;
+        })
+        .catch(function(err) {
+          console.error("Mermaid ESM load error:", err);
+          return null;
+        });
+    }
+    return mermaidPromise;
+  }
 
   function injectDiagram(groupTitle, dataKey, isAscii) {
     if (injected[dataKey]) return;
@@ -924,11 +931,31 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
         pre.textContent = data;
         container.appendChild(pre);
       } else {
-        var img = document.createElement("img");
-        img.src = data;
-        img.style.cssText = "max-width:100%;height:auto";
-        img.alt = dataKey + " diagram";
-        container.appendChild(img);
+        var diagramBox = document.createElement("div");
+        diagramBox.className = "diagram-svg-box";
+        diagramBox.style.cssText = "width:100%;display:flex;justify-content:center;align-items:center;min-height:180px";
+        diagramBox.textContent = "Rendering architecture diagram...";
+        container.appendChild(diagramBox);
+
+        getMermaid().then(function(m) {
+          if (!m) {
+            diagramBox.textContent = "Diagram rendering unavailable.";
+            return;
+          }
+          var renderId = "mermaid_" + dataKey + "_" + Math.floor(Math.random() * 100000);
+          m.render(renderId, data).then(function(res) {
+            diagramBox.innerHTML = res.svg;
+            var svgEl = diagramBox.querySelector("svg");
+            if (svgEl) {
+              svgEl.style.maxWidth = "100%";
+              svgEl.style.height = "auto";
+              svgEl.style.cursor = "zoom-in";
+              svgEl.setAttribute("alt", dataKey + " diagram");
+            }
+          }).catch(function(e) {
+            diagramBox.textContent = "Diagram render error: " + e.message;
+          });
+        });
       }
 
       // Insert after the header button and hide placeholder service cards
@@ -1242,13 +1269,13 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
     });
   })();
 
-  // Click-to-zoom on diagram images
+  // Click-to-zoom on diagram SVG and images
   document.addEventListener("click", function(e) {
-    var img = e.target.closest("img[alt*='diagram']");
-    if (img && !e.target.closest(".diagram-overlay")) {
+    var target = e.target.closest(".diagram-svg-box svg, img[alt*='diagram']");
+    if (target && !e.target.closest(".diagram-overlay")) {
       var overlay = document.createElement("div");
       overlay.className = "diagram-overlay";
-      var clone = img.cloneNode(true);
+      var clone = target.cloneNode(true);
       clone.style.cssText = "max-width:95vw;max-height:95vh;object-fit:contain;min-width:auto;cursor:zoom-out";
       overlay.appendChild(clone);
       overlay.addEventListener("click", function() { overlay.remove(); });
