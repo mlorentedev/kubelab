@@ -447,9 +447,14 @@ HUB_KUBECONFIG := ~/.kube/kubelab-hub-config
 # Fetch a cluster's kubeconfig (ADR-052): transport-agnostic server
 # (https://127.0.0.1:<local_port>) -> ~/.kube/kubelab-<ENV>-config.
 # Unifies the old inline hub-only fetch. ENV=staging|prod|hub.
+#
+# DIRECT=1 writes the node's MagicDNS name as the server instead, for an operator
+# box already on the mesh -- there the ts-bridge tunnel is a hop that buys nothing
+# and costs a running process plus its own credential. TLS still verifies: k3s puts
+# the MagicDNS name in the serving cert's SANs. The fetch is SSH either way.
 .PHONY: fetch-kubeconfig
 fetch-kubeconfig:
-	@$(TOOLKIT) infra k8s fetch-kubeconfig --env $(ENV)
+	@$(TOOLKIT) infra k8s fetch-kubeconfig --env $(ENV) $(if $(DIRECT),--direct,)
 
 # Cluster-access transport (ADR-052 Phase 2): map 127.0.0.1:<local_port> to the
 # env's apiserver -- ts-bridge over the mesh (staging|hub) or the direct public

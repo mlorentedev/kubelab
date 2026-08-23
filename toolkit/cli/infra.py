@@ -863,6 +863,14 @@ def k8s_restart(
 @k8s_app.command("fetch-kubeconfig")
 def k8s_fetch_kubeconfig(
     env: Annotated[str, typer.Option("--env", "-e", help="Cluster to fetch (staging|prod|hub)")],
+    direct: Annotated[
+        bool,
+        typer.Option(
+            "--direct",
+            help="Write the node's MagicDNS name as the server instead of 127.0.0.1 "
+            "(operator box already on the mesh; no `k8s connect` needed)",
+        ),
+    ] = False,
 ) -> None:
     """Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052).
 
@@ -874,12 +882,18 @@ def k8s_fetch_kubeconfig(
     for prod's public IP, an SSH local-forward on the LAN, or ts-bridge over the
     mesh -- so one kubeconfig works from any machine, including a non-admin box with
     no native Tailscale.
+
+    `--direct` writes the node's MagicDNS name instead, for an operator box that is
+    already on the mesh: there the tunnel is a hop that buys nothing and costs a
+    running process plus its own credential. TLS still verifies -- k3s puts the
+    MagicDNS name in the serving cert's SANs. The fetch is SSH either way, so
+    `clusters.<env>.ssh_alias` must resolve regardless of this flag.
     """
     from toolkit.core.logging import ExecutionError
     from toolkit.features.k8s_kubeconfig import fetch_kubeconfig
 
     try:
-        fetch_kubeconfig(env)
+        fetch_kubeconfig(env, direct=direct)
     except KeyError as e:
         logger.error(str(e))
         raise typer.Exit(2) from e

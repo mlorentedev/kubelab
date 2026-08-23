@@ -21,6 +21,7 @@ from toolkit.features.k8s_kubeconfig import (
     load_clusters,
     output_path,
     rewrite_server,
+    rewrite_server_direct,
 )
 
 # A minimal but realistic k3s admin kubeconfig (apiserver on the 127.0.0.1 default).
@@ -66,6 +67,40 @@ class TestRewriteServer:
     def test_raises_when_default_server_absent(self) -> None:
         with pytest.raises(ValueError, match="refusing to write"):
             rewrite_server("server: https://10.0.0.1:6443\n", 16443)
+
+
+class TestRewriteServerDirect:
+    """The mesh-native form: the node's MagicDNS name, no transport in between."""
+
+    def test_writes_the_mesh_name_not_localhost(self) -> None:
+        out = rewrite_server_direct(_K3S_YAML, "gcp1.kubelab.internal", 6443)
+        assert "server: https://gcp1.kubelab.internal:6443" in out
+        assert "https://127.0.0.1:6443" not in out
+
+    def test_preserves_certs_and_line_count(self) -> None:
+        out = rewrite_server_direct(_K3S_YAML, "aws1.kubelab.internal", 6443)
+        assert "client-key-data: REDACTED" in out
+        assert out.count("\n") == _K3S_YAML.count("\n")  # only the server substring changed
+
+    def test_never_disables_tls_verification(self) -> None:
+        # The whole reason this form is safe is that k3s puts the MagicDNS name in
+        # the serving cert's SANs. If a future edit ever reaches for
+        # insecure-skip-tls-verify instead, that is a different feature wearing
+        # this one's name.
+        out = rewrite_server_direct(_K3S_YAML, "gcp1.kubelab.internal", 6443)
+        assert "insecure-skip-tls-verify" not in out
+        assert "certificate-authority-data: REDACTED" in out
+
+    def test_distinct_hosts_isolate_hubs(self) -> None:
+        # The two-hub window this exists for: aws1 and gcp1 are both live, and a
+        # kubeconfig that cannot tell them apart is the defect, not the convenience.
+        aws = rewrite_server_direct(_K3S_YAML, "aws1.kubelab.internal", 6443)
+        gcp = rewrite_server_direct(_K3S_YAML, "gcp1.kubelab.internal", 6443)
+        assert aws != gcp
+
+    def test_raises_when_default_server_absent(self) -> None:
+        with pytest.raises(ValueError, match="refusing to write"):
+            rewrite_server_direct("server: https://10.0.0.1:6443\n", "gcp1.kubelab.internal", 6443)
 
 
 class TestClusterSSOT:
