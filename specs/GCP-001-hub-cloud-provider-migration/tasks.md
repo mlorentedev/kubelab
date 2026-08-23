@@ -444,26 +444,97 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       hubs, because `argocd-server` logs events rather than HTTP requests. An
       absent log line is not a negative result — it is an unanswered question,
       and reading it as "not this hub" would have confirmed either conclusion.
-- [ ] **[AC6]** `make aws1-destroy`.
-- [ ] **[AC6]** Verify by API, output pasted: `describe-instances` empty,
+- [x] **[AC6]** `make aws1-destroy`. ✓ 2026-08-23, in #1333.
+- [x] **[AC6]** Verify by API, output pasted: `describe-instances` empty,
       `describe-spot-instance-requests` cancelled, `describe-volumes` empty.
-- [ ] **[AC6]** **Credential rotation — the full exposure set.** Four secrets were
-      printed in plaintext during the 2026-08-20 study session. The operator
-      reports them rotated; this task is the audit that confirms it:
+      ✓ 2026-08-23, in #1333. Evidence in `verification.md` under AC6.
+- [x] **[AC6]** **Credential rotation — the audit ran, and it says NOT ROTATED.**
+      ✓ audited 2026-08-23. The task was always the audit, not the rotation; this
+      is its result. **None of the pre-exposure keys in `common.enc.yaml` were
+      rewritten** between 2026-08-15 and `a8750ed`.
 
-      | Secret | Retired by migration? | When |
+      Method, which decrypts nothing: SOPS preserves the ciphertext of values it
+      does not edit, so `git diff --numstat` over the encrypted file answers "did
+      this key change" without exposing it. Over `common.enc.yaml` the whole diff
+      is **10 added, 2 removed** — the additions are `gcp.{billing_account_id,
+      headscale_api_key}` and four `push_tokens.*`, the removals are
+      `lastmodified` and `mac`. **Zero existing keys rewritten.** The additions
+      are the positive control that proves the method can see a change at all.
+      `prod`/`staging.enc.yaml` show 9 added / 3 removed — Slack webhooks, plus a
+      third removal that is `version: 3.7.3 → 3.13.1`, a SOPS upgrade and not a
+      key. Working tree clean, so no uncommitted rotation is hiding either.
+
+      | Secret | Retired by migration? | Audit result |
       |---|---|---|
-      | `aws.access_key_id` / `secret_access_key` | yes | at cutover |
-      | `aws.headscale_preauth_key` | yes — D7 deletes it | **now** |
-      | `aws.headscale_api_key` | **no** — survives as `gcp.headscale_api_key` | **now** |
-      | `argocd.admin_password` (+ hash) | **no** — hub credential | **now** |
+      | `aws.access_key_id` / `secret_access_key` | claimed "at cutover" | **still in SOPS, unchanged.** Server-side validity UNVERIFIED — see below |
+      | `aws.headscale_preauth_key` | yes — D7 deletes it | **still in SOPS.** D7 never ran |
+      | `aws.headscale_api_key` | no — survives as `gcp.headscale_api_key` | **unchanged.** `gcp.headscale_api_key` was added 2026-08-21; ciphertext cannot tell minted-fresh from copied |
+      | `argocd.admin_password` (+ hash) | no — hub credential | **unchanged.** Byte-identical to 2026-08-15 |
 
-      *`make credentials-generate` also rotates OIDC client secrets and the HMAC,
-      so re-run `make deploy-argocd` after.*
-- [ ] Remove `infra/terraform/aws/`, `provision-aws1.yml`, `aws1-*` targets and
-      `networking.aws`. **Separate commit from the destroy**, so the teardown is
-      revertable independently of the code removal.
-- [ ] Retire `docs/runbooks/aws1-{destroy-replace,ebs-resize}.md`.
+      **The SSOT-drift reading matters in both directions.** If the operator
+      rotated the Argo password out-of-band on the hub, the exposed value is still
+      what SOPS holds — and the next `make deploy-argocd` reinstalls it silently.
+      Either way SOPS and the hub disagree.
+- [ ] **[AC6]** **Rotate, then re-audit.** Operator action — it touches prod.
+      Re-run the ciphertext audit afterwards; a rotation that did not change
+      `common.enc.yaml` did not happen.
+
+      **The blast radius written here was wrong and is corrected.** This entry
+      said `credentials-generate` "also rotates the OIDC client secrets and the
+      HMAC". It does not rotate the HMAC: `oidc_hmac_secret` is in
+      `IMMUTABLE_SECRETS` (`toolkit/features/credentials.py:36-41`) alongside
+      `storage_encryption_key`, `session_secret` and `jwt_secret_reset_password`,
+      all preserved when they already exist because overwriting them destroys
+      state. What it does rotate is the OIDC **client** secrets, which is why
+      `make deploy-argocd` must still follow. CLAUDE.md carries the same wrong
+      claim and needs the same correction.
+- [x] **[AC6]** **Headscale: answered, and the exposure does NOT reach the GCP
+      hub.** ✓ 2026-08-23 via `toolkit secrets check-expiry`, which asks the
+      issuer over SSH rather than decrypting anything:
+
+      | Key | Expires | Which |
+      |---|---|---|
+      | `hskey-api-j4_9sZt5zTPr-***` | 2027-03-27 (215d) | `aws.headscale_api_key` — matches the 2027-03-27 the catalog measured on 2026-08-22 |
+      | `hskey-api-zcJQKhYGg5SW-***` | 2029-05-17 (997d) | `gcp.headscale_api_key` |
+
+      **Two distinct keys.** The GCP hub's was minted fresh, corroborated by
+      `gcp.headscale_api_key` first appearing in SOPS on 2026-08-21 — after the
+      2026-08-20 exposure, so it cannot have been in the exposed set. **The
+      exposure does not propagate to the GCP hub.**
+
+      But `aws.headscale_api_key` **is still live on the server for 215 days**,
+      and after the teardown nothing consumes it. Expiring it costs nothing:
+      `headscale apikeys expire --prefix hskey-api-j4_9sZt5zTPr`.
+- [ ] **[AC6]** **The pre-auth key is still unanswered — absence from that table
+      is not death.** `check-expiry` asks about apikeys only, so
+      `aws.headscale_preauth_key` was never in scope. Reading its absence as
+      "revoked" is the same error as the User-Agent probe above. Settle it with
+      `headscale preauthkeys list`, then D7: expire it, and delete it from
+      `common.enc.yaml` **together with** its `SECRET_CATALOG` entry — it is
+      `envs=("prod",)`, so removing the value alone makes `secrets-audit` report
+      a gap forever.
+- [ ] **[AC6]** **IAM: re-run desambiguated, still unverified — and it surfaced
+      something else.** With the vault unlocked, `dotf secrets run -- aws sts
+      get-caller-identity` exits **0**, but `AWS_ACCESS_KEY_ID` is **UNSET** in
+      the child: `dotf` does not inject the SOPS AWS keys at all, so the call
+      authenticated with a credential in `~/.aws/` (access key ending `ODHC`,
+      region `us-east-1`). **The exit 0 says nothing about the exposed pair** —
+      the mirror image of the exit 1 that said nothing last time.
+      Settle it by comparing the last four characters, which are not the secret
+      half of the pair: `make secrets-show KEY=aws.access_key_id
+      SECRETS_ENV=common | tail -c 5` against `ODHC`. Match → the exposed key is
+      live and authenticating from disk. No match → still unverified, and the IAM
+      console is the answer (any Active access key created before 2026-08-20).
+- [~] ~~Remove `infra/terraform/aws/`, `provision-aws1.yml`, `aws1-*` targets and
+      `networking.aws`.~~ **SUPERSEDED by #1333, deliberately.** `toolkit/cli/
+      infra.py` renders the module's tfvars from `networking.aws`, so deleting the
+      block breaks `make tf-aws-apply` and with it the portability AC5 measures.
+      Config describing no live resource costs nothing. Only what asserted a *live*
+      aws1 was retired: the homepage tile, the Kuma monitor (paused, not deleted),
+      `clusters.hub-aws`, and the Headscale ACL alias.
+- [~] ~~Retire `docs/runbooks/aws1-{destroy-replace,ebs-resize}.md`.~~
+      **SUPERSEDED by the same decision** — they document rebuilding the module
+      that stays.
 
 # Phase 6 — optional, free, and worth doing once the hub is stable
 
