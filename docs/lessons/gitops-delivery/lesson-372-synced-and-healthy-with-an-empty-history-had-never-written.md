@@ -1,5 +1,5 @@
 ---
-id: lesson-371-synced-and-healthy-with-an-empty-history-had-never-written
+id: lesson-372-synced-and-healthy-with-an-empty-history-had-never-written
 type: lesson
 status: active
 created: "2026-08-23"
