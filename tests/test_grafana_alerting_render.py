@@ -36,11 +36,19 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 #: any pair of values.
 EXPECTED_RECEIVER = {"staging": "apprise-log", "prod": "apprise-page"}
 
-#: Every key the ConfigMap must still carry after the prod overlay merges into
-#: it. `behavior: merge` keeps the siblings; `behavior: replace` would drop them
-#: and leave prod routing to a receiver that no longer exists — a failure that
-#: only shows up as alerts going nowhere.
-REQUIRED_KEYS = {"contact-points.yaml", "templates.yaml", "policies.yaml", "rules.yaml"}
+REQUIRED_KEYS = {
+    "contact-points.yaml",
+    "templates.yaml",
+    "policies.yaml",
+    "rules.yaml",
+    "quota-rules.yaml",
+    "r2-backup-rules.yaml",
+    "inhibit-rules.yaml",
+    "sre-rules.yaml",
+    "disk-rules.yaml",
+    "slo-rules.yaml",
+    "security-rules.yaml",
+}
 
 
 def _kustomize(path: str) -> list[dict]:
