@@ -208,3 +208,75 @@ class TestNoOrphanManifests:
             "Either the target was renamed or removed (update OUT_OF_BAND), or the "
             "manifest now has no way to reach the cluster at all."
         )
+
+
+class TestRenderKeysMatchTheirManifests:
+    """Every `--render KEY=host` in the Makefile must name a placeholder that the
+    manifest it is applied to actually contains.
+
+    Raised in review of #1308. The rename it carried out (`RESOLVE_AWS1_*` ->
+    `RESOLVE_GCP1_*`) touches two files that must agree character for character,
+    and nothing checked that they did -- `test_orphan_manifests` mentions the
+    placeholder only inside a prose `reason` field, which asserts nothing.
+
+    What a mismatch would do is the reason this is not cosmetic. `render_text` is
+    fail-CLOSED and raises on an unmapped placeholder, but `render_and_apply`
+    converts that to a warning and returns SUCCESS when the entry is `optional`
+    (`k8s_render.py:155-157`). The Makefile passed `--optional` here until this
+    change, so a typo produced:
+
+        ✓ Argo CD deployed with OIDC
+
+    with prod's EndpointSlice still holding the PREVIOUS hub's address. Mid-hub-
+    migration that reads as "prod silently keeps routing to the hub you are
+    decommissioning".
+
+    Both halves are fixed: `--optional` is gone from the hub's entry, and this
+    test removes the typo class entirely rather than relying on the flag.
+    """
+
+    def _render_invocations(self) -> list[tuple[str, str]]:
+        """(manifest_path, placeholder) for each render-apply in the Makefile."""
+        import re
+
+        text = (REPO_ROOT / "Makefile").read_text()
+        # A recipe may wrap across escaped newlines; join them before matching.
+        joined = text.replace("\\\n", " ")
+        out = []
+        for line in joined.splitlines():
+            if "render-apply" not in line:
+                continue
+            manifest = re.search(r"--manifest\s+(\S+)", line)
+            for placeholder in re.findall(r"--render\s+(RESOLVE_[A-Z0-9_]+)=", line):
+                assert manifest, f"render-apply with --render but no --manifest: {line.strip()}"
+                out.append((manifest.group(1), placeholder))
+        return out
+
+    def test_every_render_key_appears_in_its_manifest(self) -> None:
+        invocations = self._render_invocations()
+        assert invocations, "no render-apply invocation found; this test is watching nothing"
+        for manifest, placeholder in invocations:
+            path = REPO_ROOT / manifest
+            assert path.exists(), f"--manifest {manifest} does not exist"
+            assert placeholder in path.read_text(), (
+                f"Makefile renders {placeholder} into {manifest}, which does not contain it. "
+                "The substitution would not happen, and the manifest would keep whatever "
+                "address it was last applied with -- reported as success if the entry is "
+                "--optional."
+            )
+
+    def test_every_placeholder_in_those_manifests_is_rendered(self) -> None:
+        # The other direction: a placeholder nobody renders is applied literally.
+        import re
+
+        by_manifest: dict[str, set[str]] = {}
+        for manifest, placeholder in self._render_invocations():
+            by_manifest.setdefault(manifest, set()).add(placeholder)
+        for manifest, rendered in by_manifest.items():
+            present = set(re.findall(r"RESOLVE_[A-Z0-9_]+", (REPO_ROOT / manifest).read_text()))
+            missing = present - rendered
+            assert not missing, (
+                f"{manifest} contains {sorted(missing)} which no --render maps. "
+                "render_text raises on this, and --optional would downgrade the raise to a "
+                "warning reported as success."
+            )

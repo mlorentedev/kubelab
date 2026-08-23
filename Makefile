@@ -488,7 +488,7 @@ _deploy-authelia-oidc:
 
 .PHONY: _deploy-argocd-helm
 _deploy-argocd-helm:
-	@echo "=== Step 2/2: Installing Argo CD on hub (aws1) ==="
+	@echo "=== Step 2/2: Installing Argo CD on the hub named by HUB_KUBECONFIG ==="
 	@echo "--- Stopping ALL ArgoCD pods for clean upgrade (t4g.micro OOM mitigation) ---"
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy --all -n argocd --replicas=0 2>/dev/null || true
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale statefulset --all -n argocd --replicas=0 2>/dev/null || true
@@ -518,7 +518,18 @@ _deploy-argocd-helm:
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
 	@echo "--- Updating ArgoCD EndpointSlice on prod (MagicDNS-resolved gcp1 Tailscale IP) ---"
-	@$(TOOLKIT) infra k8s render-apply --env prod --optional \
+	# NOT --optional, and that is a fix rather than an omission. `--optional` turns
+	# a RenderError into a warning and returns SUCCESS (k8s_render.py:155-157), so
+	# an unresolvable hostname or a mistyped placeholder made this step print
+	# "✓ Argo CD deployed" while prod's EndpointSlice kept the PREVIOUS hub's
+	# address. During a hub migration that failure mode is "prod silently keeps
+	# routing to the hub you are decommissioning" -- a false green with a
+	# consequence, not a skipped nicety.
+	#
+	# `--optional` exists for on-demand nodes (the RPi4 CoreDNS zone, absent when
+	# the homelab is off). The hub is always-on: if its MagicDNS name does not
+	# resolve, that IS the error, and stopping is the correct response.
+	@$(TOOLKIT) infra k8s render-apply --env prod \
 		--manifest infra/k8s/overlays/prod/argocd-endpointslice.yaml \
 		--render RESOLVE_GCP1_TAILSCALE_IP=gcp1.kubelab.internal
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
