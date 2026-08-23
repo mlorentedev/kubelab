@@ -69,6 +69,53 @@ class TestRewriteServer:
             rewrite_server("server: https://10.0.0.1:6443\n", 16443)
 
 
+class TestTheMigrationScaffoldingCannotOutliveTheMigration:
+    """`clusters.hub-aws` is temporary, and a comment saying so is not a mechanism.
+
+    Raised in review of #1299: the entry carries a REMOVE instruction and nothing
+    enforces it. This repository has already recorded what that is worth --
+    lesson-365, "a written lesson with no mechanism is a reminder, and a reminder
+    fails exactly when the situation arrives".
+
+    The tie is to `networking.aws`, because that is what makes the entry
+    meaningful: `hub-aws` exists to address the retiring hub, and the retiring
+    hub stops existing in the same commit that removes its networking block. So
+    the two are removed together or the suite goes red naming the survivor --
+    which is the Phase 5 checklist expressed as a test instead of as a promise.
+    """
+
+    def test_hub_aws_and_networking_aws_are_removed_together(self) -> None:
+        import yaml
+
+        from toolkit.features.k8s_kubeconfig import _common_path
+
+        config = yaml.safe_load(_common_path().read_text())
+        has_entry = "hub-aws" in (config.get("clusters") or {})
+        has_networking = "aws" in (config.get("networking") or {})
+
+        assert has_entry == has_networking, (
+            "clusters.hub-aws and networking.aws must be removed in the same commit. "
+            f"clusters.hub-aws present={has_entry}, networking.aws present={has_networking}. "
+            "The scaffolding exists only to address the retiring hub; keeping it after "
+            "the hub is gone leaves a cluster entry pointing at nothing, and removing it "
+            "while the hub is still live removes the rollback path."
+        )
+
+    def test_the_two_hub_entries_never_collide(self) -> None:
+        # Both are live simultaneously by design, so they must differ in every
+        # field that decides WHICH machine is reached or WHERE the kubeconfig
+        # lands. A shared local_port would have the two tunnels fight; a shared
+        # node would make the explicit naming decorative.
+        clusters = load_clusters()
+        if "hub-aws" not in clusters:
+            pytest.skip("the migration scaffolding is gone, which is the goal")
+        hub, retiring = clusters["hub"], clusters["hub-aws"]
+        assert hub.node != retiring.node
+        assert hub.ssh_alias != retiring.ssh_alias
+        assert hub.local_port != retiring.local_port
+        assert output_path("hub") != output_path("hub-aws")
+
+
 class TestRewriteServerDirect:
     """The mesh-native form: the node's MagicDNS name, no transport in between."""
 
