@@ -6,3 +6,32 @@
 - name: Reload systemd for kubelab-compose
   systemd:
     daemon_reload: true
+
+# `gitea admin auth update-oauth` writes to Gitea's SQLite, and the running web
+# process keeps the auth source it already parsed. Without this restart the
+# bootstrap reports success and the live process keeps presenting the OLD client
+# secret — measured on 2026-08-23, when a provision whose bootstrap task came
+# back `changed` left prod SSO answering `invalid_client` exactly as before.
+# That reads as "the fix did not work" rather than "the fix was not finished".
+#
+# Deliberately NOT the "Restart beelink services" handler above: that one runs
+# `compose up -d --force-recreate` across the whole stack, so a change to one
+# service's auth source would also bounce MinIO and the GitHub runner. Blast
+# radius should match the change.
+- name: Restart gitea
+  command: docker restart gitea
+  changed_when: true
+
+# A restarted Gitea accepts connections before it can serve OIDC, and nothing
+# else in the play waits. Without this the next thing to touch SSO — a probe, a
+# human, the next role — reads a transient failure as the real answer.
+- name: Wait for gitea to answer after restart
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/version"
+    method: GET
+    status_code: 200
+    timeout: 10
+  retries: 10
+  delay: 3
+  register: _gitea_post_restart
+  until: _gitea_post_restart is success

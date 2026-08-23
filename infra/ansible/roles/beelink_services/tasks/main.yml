@@ -216,6 +216,12 @@
   command: docker exec gitea sh /scripts/bootstrap.sh
   register: _gitea_bootstrap
   changed_when: "'Created' in _gitea_bootstrap.stdout or 'Updated' in _gitea_bootstrap.stdout"
+  # The script's writes go to SQLite; the running web process keeps the auth
+  # source it parsed at startup. `changed` here therefore means "the database
+  # was updated", never "the service is serving the new value" — the handler is
+  # what closes that gap, and its absence is what left prod SSO broken through a
+  # successful provision on 2026-08-23.
+  notify: Restart gitea
   tags: [gitea]
 
 - name: Report service status

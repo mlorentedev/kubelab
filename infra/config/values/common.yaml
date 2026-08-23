@@ -605,6 +605,34 @@ apps:
   auth:
     admin_username: operator
 
+    # ADR-062 D3 / AUTH-004 AC1. Identity names are declared ONCE, here, and
+    # every consumer resolves a name through a KEY of this map rather than as a
+    # literal. A map rather than flat keys because the set is expected to grow
+    # (a second human, a machine class) and each growth should add a row, not a
+    # new key name for every consumer to learn.
+    #
+    # `superadmin` is a named human and carries accountability; `operator` is a
+    # role account and is deliberately impersonal, which is exactly why D1 gives
+    # it no administrative rights — power without attribution is what makes a
+    # shared account dangerous.
+    #
+    # This is NOT cosmetic, and 2026-08-23 is the receipt. `credentials-generate
+    # ENV=prod` rotated `basic_auth.user`, and because `provision-bee.yml`
+    # aliased Gitea's admin username to that Traefik basic-auth value, the
+    # rotation silently REDEFINED the identity of Gitea's only admin. The next
+    # provision tried to create a second admin, collided on the shared contact
+    # e-mail, and aborted before it could deliver the rotated OIDC secret —
+    # leaving prod SSO down and its own repair path broken. Rotating a username
+    # is not rotation, it is a rename; the alias is what let one masquerade as
+    # the other.
+    #
+    # `admin_username` above stays for one commit so nothing breaks mid-change
+    # (tasks.md Part 1). Its removal, and the Grafana and MinIO legs, are the
+    # rest of AC1 and are NOT in this change.
+    identities:
+      superadmin: manu
+      operator: operator
+
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
   # the following downstream fields if they are empty/absent:
