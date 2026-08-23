@@ -150,7 +150,7 @@ To prevent alert storms, cascading noise, and false-quiet outages, Grafana Alert
 
 ### B. Dead Man's Switch Watchdog (`obs015-deadmansswitch-heartbeat`)
 - Continuous watchdog heartbeat rule evaluating Loki/Vector pipeline ingestion.
-- Configured with `noDataState: Alerting` and `execErrState: Alerting`: if the cluster observability pipeline dies or ceases evaluations, silence is immediately converted into an alert.
+- Configured with threshold `lt 1` and `noDataState: Alerting` / `execErrState: Alerting`: if Loki log ingestion ceases or returns no data during evaluation, an alert is triggered. External endpoint health checks (e.g. Uptime Kuma) cover whole-evaluator outages.
 
 ### C. TLS Certificate Early Warning (`obs015-tls-early-warning`)
 - Evaluates Traefik ingress logs for repeated ACME certificate renewal failures with `for: 5m`, generating actionable alert links before certificates expire.

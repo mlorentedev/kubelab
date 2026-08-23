@@ -64,8 +64,8 @@ groups:
               expression: B
               conditions:
                 - evaluator:
-                    type: gt
-                    params: [0]
+                    type: lt
+                    params: [1]
               datasource:
                 type: __expr__
                 uid: __expr__
