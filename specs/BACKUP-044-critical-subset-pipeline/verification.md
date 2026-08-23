@@ -10,14 +10,20 @@ created: "2026-08-15"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test
 name, or observed behavior).
 
-- [ ] AC1 (every node-path consumer present in its node's R2 repo, listed from a non-source machine) -> re-scoped below, not started
-- [ ] AC2 (all four SQLite DBs snapshotted with `sqlite3 .backup`, proven by restoring one) -> not started
-- [ ] AC3 (restore exercised end-to-end for Gitea + one always-on consumer) -> not started
-- [ ] AC4 (failed backup alerts on the #686 path; a missed window on a powered-off node does not) -> not started
-- [ ] AC5 (on-demand trigger model exercised across a real power cycle) -> design settled below (R-C), not built
-- [ ] AC6 (sources enumerated from an SSOT allow-list) -> substrate finding below, not built
-- [ ] AC7 (`restic check` passes on every repository as part of the run) -> feasibility settled below (R-B), not built
-- [ ] AC8 (no new consumer of `minio:9000`) -> not started
+> This index went stale and stayed stale: every line below read `not started`
+> while the dated sections underneath carried the evidence for all nine, some of
+> it weeks old. A summary that disagrees with its own body is worse than no
+> summary — it is the first thing an archive review reads, and it said this spec
+> had not begun. Re-synced 2026-08-23 against `tasks.md`, line by line.
+
+- [x] AC1 (every node-path consumer present in its node's R2 repo, listed from a non-source machine) -> `make backup-coverage ENV=prod` from the workstation, 2026-08-22
+- [x] AC2 (all four SQLite DBs snapshotted with `sqlite3 .backup`, proven by restoring one) -> two restored and integrity-checked on the copy, 2026-08-22
+- [x] AC3 (restore exercised end-to-end for Gitea + one always-on consumer) -> Gitea booted on restored data (API 200), plus Authelia and n8n on the VPS, 2026-08-22
+- [x] AC4 (failed backup alerts on the #686 path; a missed window on a powered-off node does not) -> both halves demonstrated, 2026-08-22 and 2026-08-23
+- [x] AC5 (on-demand trigger model exercised across a real power cycle) -> boot ordering measured, then a real smart-plug cycle 2026-08-23. Caveat recorded with AC4: the graceful-shutdown third of the trigger model does not fire on a smart-plug stop, by construction
+- [x] AC6 (sources enumerated from an SSOT allow-list) -> rendered from `backup.sources`, guarded by a test that fails on a declared source missing from disk, 2026-08-22
+- [x] AC7 (`restic check` passes on every repository as part of the run) -> weekly rather than per-run, per the ratified operating parameters, 2026-08-22
+- [x] AC8 (no new consumer of `minio:9000`) -> grepped the role, `common.yaml` and `backup_destination.py`: zero code paths, 2026-08-22
 - [x] AC9 (a node past its backup window alerts unprompted) -> demonstrated 2026-08-23, transcript below
 
 ### 2026-08-22 — the PVC class joins, and the first real restore
