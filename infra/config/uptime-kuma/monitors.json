@@ -277,7 +277,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "DORMANT — aws1 was decommissioned 2026-08-23 (GCP-001 AC6): instance terminated, EBS gone, Spot request cancelled. Paused rather than deleted, for the same reason infra/terraform/aws/ was kept: the module still renders from networking.aws, so rebuilding an AWS hub is a `make tf-aws-apply` away and this monitor is how you would watch it. Left active it pings 100.64.0.7 forever and pages on a machine that no longer exists. Re-enable with the host, not before.",
+    "description": "DORMANT — the t4g.small AWS hub was decommissioned 2026-08-23 (GCP-001 AC6): instance terminated, EBS gone, Spot request cancelled. Paused rather than deleted, for the same reason infra/terraform/aws/ was kept: the module still renders from networking.aws, so rebuilding an AWS hub is a `make tf-aws-apply` away and this is how you would watch it. Left active it pings 100.64.0.7 forever and pages on a machine that does not exist. Re-enable with the host, never ahead of it.",
     "active": false,
     "httpBodyEncoding": null,
     "maxredirects": 10,
