@@ -135,3 +135,22 @@ python3 "$VAULT_PATH/00_meta/scripts/vault-validate.py" --json --strict
    poetry run toolkit secrets apply --env staging
    kubectl --kubeconfig ~/.kube/kubelab-staging-config rollout restart deploy/apprise -n kubelab
    ```
+
+---
+
+## 6. SRE Smart Evaluation, Inhibit Rules & Dead Man's Switch (OBS-015)
+
+To prevent alert storms, cascading noise, and false-quiet outages, Grafana Alertmanager is provisioned with deterministic inhibit rules and watchdog monitoring:
+
+### A. Inhibit Rules Hierarchy (`inhibit-rules.yaml`)
+1. **Severity Escalation Suppression**: When `severity: critical` fires for an alert, duplicate `warning` or `info` notifications for the same alertname and namespace are suppressed.
+2. **Infrastructure Outage Suppression**: When a host/node failure alert fires (`NodeNotReady`, `KubeNodeNotReady`, `InstanceDown`), downstream container/pod restart alerts (`PodCrashLooping`, `ServiceDown`) on that instance are inhibited.
+3. **Edge Ingress Outage Suppression**: When edge ingress fails (`TraefikDown`), cascading HTTP 5xx rate alerts are suppressed.
+4. **Backup Job Failure vs Freshness**: Explicit backup job failures inhibit secondary freshness staleness warnings for the same bucket.
+
+### B. Dead Man's Switch Watchdog (`obs015-deadmansswitch-heartbeat`)
+- Continuous watchdog heartbeat rule evaluating Loki/Vector pipeline ingestion.
+- Configured with `noDataState: Alerting` and `execErrState: Alerting`: if the cluster observability pipeline dies or ceases evaluations, silence is immediately converted into an alert.
+
+### C. TLS Certificate Early Warning (`obs015-tls-early-warning`)
+- Evaluates Traefik ingress logs for repeated ACME certificate renewal failures with `for: 5m`, generating actionable alert links before certificates expire.
