@@ -159,3 +159,18 @@ Kuma; vault-validate SH-001/002) → (5) promote staging→prod. MVP ≈ 1 focus
   gated on the Hermes-webhook-deliver check.
 - The human-channel taxonomy is recorded but intentionally left as reversible config; client
   tooling (CRM, scheduler, video) is out of scope — each becomes a future *source*.
+
+---
+
+## Addendum (2026-08-22) — NOTIFY-002: Slack Multi-Channel Egress
+
+Grounded in operational feedback (#1296), Telegram single-sink was retired in favor of **Slack multi-channel routing**:
+1. **Apprise Multi-Channel URLs**: `_build_apprise_config` renders dedicated Slack incoming webhooks per functional domain from SOPS (`apps.services.automation.apprise.slack.*`).
+2. **Channel Mapping**:
+   - `tag: page` → `#alerts` (critical push alerts, Uptime Kuma, Grafana firing)
+   - `tag: vault` → `#vault-health` (knowledge vault validation, Dependabot-style health issues)
+   - `tag: deploy` → `#deployments` (Argo CD GitOps syncs)
+   - `tag: log` → `#ops-log` (backup completions, maintenance timers)
+   - `tag: agent` → `#agent-fleet` (Hermes & OpenClaw activity)
+3. **Format**: Minimalist SRE contract with distinct domain emojis (🚨, 🧠, 🚀, 📋, 🤖) and single-line bodies.
+4. **Operational Runbook**: `docs/runbooks/runbook-notifications-and-alerting.md`.

@@ -28,18 +28,18 @@ pytestmark = pytest.mark.requires_sops
 ENV = "staging"
 
 
-def _telegram_cfg(merged: dict) -> dict:
+def _slack_cfg(merged: dict) -> dict:
     return (
         merged.get("apps", {})
         .get("services", {})
         .get("automation", {})
         .get("apprise", {})
-        .get("telegram", {})
+        .get("slack", {})
     )
 
 
 def _urls_for_tag(parsed: dict, tag: str) -> list[str]:
-    """simple-mode entries are single-pair mappings {"tgram://…": {"tag": …}}."""
+    """simple-mode entries are single-pair mappings {"slack://…": {"tag": …}}."""
     return [url for entry in parsed["urls"] for url, meta in entry.items() if meta.get("tag") == tag]
 
 
@@ -52,7 +52,7 @@ class TestAppriseConfigGenerator:
         rendered = _build_apprise_config(cm)
         assert rendered, (
             "_build_apprise_config returned empty for staging — "
-            "bot_token/chat_page missing in SOPS (criterion #1 should have set them)"
+            "routing configuration missing in SOPS"
         )
         return yaml.safe_load(rendered), cm.get_merged_config()
 
@@ -62,25 +62,81 @@ class TestAppriseConfigGenerator:
             "apprise config must be a YAML mapping with a 'urls' list (simple-mode routing table)"
         )
 
-    def test_page_tier_routes_to_chat_page(self) -> None:
+    def test_page_tier_routes_to_alerts_channel(self) -> None:
         parsed, merged = self._build()
-        tg = _telegram_cfg(merged)
+        slack = _slack_cfg(merged)
+        assert slack.get("webhook_alerts"), "apps.services.automation.apprise.slack.webhook_alerts must be configured in SOPS"
         page_urls = _urls_for_tag(parsed, "page")
-        assert page_urls == [f"tgram://{tg.get('bot_token', '')}/{tg.get('chat_page', '')}"], (
-            "the 'page' tier must route to apps.services.automation.apprise.telegram.chat_page "
-            "via the shared bot_token"
+        assert any("#alerts" in u or "slack://" in u for u in page_urls), (
+            "the 'page' tier must route to #alerts via Slack webhook in SOPS"
         )
 
-    def test_log_tier_present_only_when_chat_log_set(self) -> None:
+    def test_log_tier_routes_to_ops_log_channel(self) -> None:
         parsed, merged = self._build()
-        tg = _telegram_cfg(merged)
-        chat_log = tg.get("chat_log", "")
+        slack = _slack_cfg(merged)
+        assert slack.get("webhook_log"), "apps.services.automation.apprise.slack.webhook_log must be configured in SOPS"
         log_urls = _urls_for_tag(parsed, "log")
-        if chat_log:
-            assert log_urls == [f"tgram://{tg.get('bot_token', '')}/{chat_log}"], (
-                "the 'log' tier must route to chat_log when it is set in SOPS"
-            )
-        else:
-            assert not log_urls, (
-                "the 'log' tier must be omitted (graceful degradation) when chat_log is unset"
-            )
+        assert any("#ops-log" in u or "slack://" in u for u in log_urls), (
+            "the 'log' tier must route to #ops-log via Slack webhook in SOPS"
+        )
+
+    def test_telegram_fallback_when_slack_absent(self) -> None:
+        """Verify Telegram fallback works when only telegram is in SOPS."""
+        from unittest.mock import MagicMock
+        mock_cm = MagicMock()
+        mock_cm.get_merged_config.return_value = {
+            "apps": {
+                "services": {
+                    "automation": {
+                        "apprise": {
+                            "telegram": {
+                                "bot_token": "123456:ABC-DEF",
+                                "chat_page": "-100111",
+                                "chat_log": "-100222",
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        rendered = _build_apprise_config(mock_cm)
+        parsed = yaml.safe_load(rendered)
+        assert _urls_for_tag(parsed, "page") == ["tgram://123456:ABC-DEF/-100111"]
+        assert _urls_for_tag(parsed, "log") == ["tgram://123456:ABC-DEF/-100222"]
+
+    def test_slack_multi_channel_rendering(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """NOTIFY-002: Verify Slack multi-channel URLs render cleanly with appropriate tags."""
+        from unittest.mock import MagicMock
+        from toolkit.features.k8s_secrets import _normalize_slack_url
+
+        # Test URL normalization
+        assert _normalize_slack_url("https://hooks.slack.com/services/T123/B456/789", "alerts") == "slack://T123/B456/789/#alerts"
+        assert _normalize_slack_url("slack://T123/B456/789/#alerts") == "slack://T123/B456/789/#alerts"
+
+        # Test config generation
+        mock_cm = MagicMock()
+        mock_cm.get_merged_config.return_value = {
+            "apps": {
+                "services": {
+                    "automation": {
+                        "apprise": {
+                            "slack": {
+                                "webhook_alerts": "https://hooks.slack.com/services/T1/B1/K1",
+                                "webhook_vault": "https://hooks.slack.com/services/T1/B1/K2",
+                                "webhook_deployments": "https://hooks.slack.com/services/T1/B1/K3",
+                                "webhook_log": "https://hooks.slack.com/services/T1/B1/K4",
+                                "webhook_agent": "https://hooks.slack.com/services/T1/B1/K5",
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        rendered = _build_apprise_config(mock_cm)
+        parsed = yaml.safe_load(rendered)
+        assert len(parsed["urls"]) == 5
+        assert _urls_for_tag(parsed, "page") == ["slack://T1/B1/K1/#alerts"]
+        assert _urls_for_tag(parsed, "vault") == ["slack://T1/B1/K2/#vault-health"]
+        assert _urls_for_tag(parsed, "deploy") == ["slack://T1/B1/K3/#deployments"]
+        assert _urls_for_tag(parsed, "log") == ["slack://T1/B1/K4/#ops-log"]
+        assert _urls_for_tag(parsed, "agent") == ["slack://T1/B1/K5/#agent-fleet"]
