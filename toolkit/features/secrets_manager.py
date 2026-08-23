@@ -920,6 +920,64 @@ class AuditResult:
     unexpected: list[str] = field(default_factory=list)
 
 
+class RotationRefused(Exception):
+    """A rotation this command must not perform, with the reason and the real procedure.
+
+    Refusing is a feature, not a gap. Three kinds of secret cannot be rotated by
+    generating a new random value, and each fails differently if you try:
+
+    EXTERNAL/CROWDSEC_API -- the value is minted by another system. Writing a
+    fresh random string into SOPS produces a credential that authenticates
+    against nothing, and the failure surfaces at the next boot rather than here.
+
+    IMMUTABLE -- the value has already encrypted or signed state that still
+    exists. Overwriting `storage_encryption_key` does not rotate anything, it
+    makes Authelia's database unreadable. These are not rotations, they are
+    migrations.
+
+    Not in the catalog -- `SECRET_CATALOG` is the authoritative registry. A key
+    absent from it has no declared consumers, so no restart list can be derived
+    and the rotation would land silently.
+    """
+
+
+@dataclass(frozen=True)
+class RotationPlan:
+    """What a rotation changed, and what still has to happen for it to take effect.
+
+    The second half is the point. Measured 2026-08-23: a rotation was applied to
+    prod while git still held the old values, and Argo CD -- doing exactly its
+    job under `selfHeal` -- reverted the cluster to a configuration that rejected
+    the new credentials. Rotating is not landing, and a rotation that reports
+    only what it wrote invites precisely that incident.
+    """
+
+    key_path: str
+    env: str
+    derived: tuple[str, ...] = ()
+    restart_services: tuple[str, ...] = ()
+    note: str = ""
+
+    @property
+    def next_steps(self) -> tuple[str, ...]:
+        """The ordered remainder: commit, land, then restart the consumers.
+
+        Order is load-bearing. Restarting a consumer before the new value is in
+        git means it picks up a credential the reverted config will reject; that
+        is the failure mode this ordering exists to prevent.
+        """
+        steps = [
+            f"git add -A && git commit -m 'chore(secrets): rotate {self.key_path} ({self.env})'",
+            "open a PR and merge it -- until then Argo CD will revert this on the next reconcile",
+        ]
+        if self.restart_services:
+            steps.append(
+                "after the merge syncs, restart the consumers so they read the new value: "
+                + ", ".join(self.restart_services)
+            )
+        return tuple(steps)
+
+
 # =============================================================================
 # SecretsManager — unified operations
 # =============================================================================
@@ -1286,6 +1344,107 @@ class SecretsManager:
                 return None
             current = current[key]
         return current
+
+    def rotate_secret(self, env: str, key_path: str) -> RotationPlan:
+        """Rotate ONE catalog entry and stop short of the cluster.
+
+        The module docstring has promised `rotate (regenerate + propagate)` since
+        it was written and nothing implemented it, so the only way to change one
+        credential was `credentials generate`, which rewrites 25 prod secrets and
+        2 hub secrets at once. That is why `rotate_note` entries describe
+        procedures in prose: with no verb to carry them, a note is all there is,
+        and `aws.headscale_preauth_key` sat unrotated from March to August.
+
+        Writes through `sops set`, which edits in place rather than rewriting the
+        file. A rotation done here is therefore visible as a ciphertext change on
+        exactly the keys it touched -- auditable afterwards with a plain
+        `git diff --numstat`, which is not true of a full regeneration.
+
+        Deliberately does NOT apply to the cluster. See RotationPlan.
+        """
+        from toolkit.features.credentials import IMMUTABLE_SECRETS
+
+        spec = next((s for s in SECRET_CATALOG if s.key_path == key_path), None)
+        if spec is None:
+            raise RotationRefused(
+                f"{key_path!r} is not in SECRET_CATALOG, the authoritative registry. "
+                "Register it there first: without a spec there are no declared "
+                "consumers, so nothing can tell you what to restart afterwards."
+            )
+
+        if key_path in IMMUTABLE_SECRETS:
+            raise RotationRefused(
+                f"{key_path!r} is immutable: it has already encrypted or signed state "
+                "that still exists, so overwriting it destroys that state rather than "
+                "rotating a credential. This is a migration, not a rotation."
+            )
+
+        if spec.kind in (SecretKind.EXTERNAL, SecretKind.CROWDSEC_API):
+            raise RotationRefused(
+                f"{key_path!r} is minted by another system, not generated here. "
+                "A random value written into SOPS would authenticate against nothing "
+                "and fail at next boot instead of now.\n\nProcedure:\n"
+                + (spec.rotate_note or "no rotate_note recorded — add one to the catalog")
+            )
+
+        if spec.kind == SecretKind.HUB_MANAGED:
+            raise RotationRefused(
+                f"{key_path!r} is HUB_MANAGED, which the catalog declares inert to the "
+                "per-env machinery (init/hash/rotate): hub credentials live in "
+                "common.enc.yaml and are written as a set by `credentials generate`.\n\n"
+                "That is honoured here rather than worked around, but it IS the "
+                "remaining half of #1338: rotating one hub credential still means "
+                "rotating all of them. Granular hub rotation needs the batch write in "
+                "credentials.py to be splittable first.\n\nProcedure today:\n"
+                + (spec.rotate_note or "no rotate_note recorded — add one to the catalog")
+            )
+
+        if env not in spec.envs:
+            raise RotationRefused(
+                f"{key_path!r} is not declared for env {env!r} (declared: {', '.join(spec.envs)}). "
+                "Note `envs` is the audit dimension, not the file the value lives in."
+            )
+
+        value = self._generate_secret(spec)
+        if not value:
+            raise RotationRefused(
+                f"no generator for kind {spec.kind.value!r}; {key_path!r} cannot be rotated by this command."
+            )
+
+        if not self.set_secret(env, key_path, value):
+            raise RotationRefused(f"failed to write {key_path!r} to the {env} vault")
+
+        derived = self._rotate_derived(env, key_path, value)
+        return RotationPlan(
+            key_path=key_path,
+            env=env,
+            derived=derived,
+            restart_services=spec.services,
+            note=spec.rotate_note,
+        )
+
+    def _rotate_derived(self, env: str, source_path: str, source_value: str) -> tuple[str, ...]:
+        """Regenerate every catalog entry declaring `derived_from` this key.
+
+        A hash left pointing at the previous plaintext is worse than an unrotated
+        secret: the credential changes and nothing accepts it, so the rotation
+        reads as done while the service is down.
+        """
+        written: list[str] = []
+        for spec in SECRET_CATALOG:
+            if spec.derived_from != source_path or env not in spec.envs:
+                continue
+            cm = self._credentials_manager()
+            if spec.kind == SecretKind.ARGON2_HASH:
+                digest = cm.generate_argon2_hash(source_value)
+            elif spec.kind == SecretKind.HTPASSWD:
+                digest = cm.generate_bcrypt_hash(source_value)
+            else:
+                logger.warning(f"  no derivation for {spec.key_path} (kind {spec.kind.value})")
+                continue
+            if self.set_secret(env, spec.key_path, digest):
+                written.append(spec.key_path)
+        return tuple(written)
 
     def _generate_secret(self, spec: SecretSpec) -> str:
         """Generate a secret value based on its kind."""
