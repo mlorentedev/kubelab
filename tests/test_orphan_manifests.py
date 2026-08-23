@@ -64,7 +64,7 @@ OUT_OF_BAND: dict[str, OutOfBand] = {
     "infra/k8s/overlays/prod/argocd-endpointslice.yaml": OutOfBand(
         trigger="deploy-argocd",
         reason=(
-            "Carries RESOLVE_AWS1_TAILSCALE_IP -- aws1 is a Spot instance and its "
+            "Carries RESOLVE_GCP1_TAILSCALE_IP -- gcp1 is a Spot instance and its "
             "Tailscale IP rotates on replacement, so the value cannot be committed "
             "(ADR-047 D3 / TOOL-009 T4). Split out of argocd.yaml so that only this "
             "one document stays out-of-band; the Service and IngressRoute alongside "

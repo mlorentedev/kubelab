@@ -24,7 +24,35 @@ RemainAfterExit=yes
 # surfaces rather than an opaque systemd timeout.
 TimeoutStartSec=180
 ExecStartPre={{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
-ExecStart=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+# `--force-recreate` is the whole fix for ANSIBLE-053, and it is not defensive.
+#
+# The wait script above is necessary and NOT sufficient. Measured 2026-08-23: on
+# a cold boot it reported `100.64.0.3 is up on tailscale0 after 20s`, the unit
+# then ran, reported success — and gitea and minio came up attached to NO network,
+# publishing nothing, `healthy` for over an hour. Their only traffic was their own
+# healthcheck from [::1]. github-runner, the one service in this stack that
+# declares no `ports:`, was unaffected.
+#
+# Plain `up -d` cannot repair that state, and this is measured rather than
+# reasoned: the broken state was reproduced deterministically with
+# `docker network disconnect kubelab gitea`, and `systemctl restart` on this unit
+# left it exactly as it was — HTTP 000 before and after. compose sees a container
+# whose spec hash is unchanged and starts it as-is; the network attachment is not
+# part of that hash.
+#
+# Why recreate rather than `ExecStop=... down`, which would also leave nothing
+# stale to start: `down` only runs on a GRACEFUL shutdown. BACKUP-044's Part 0
+# measured the path that matters here — on a power cut ExecStop never runs at all,
+# and dockerd resurrects the containers at +10s via `restart: unless-stopped`,
+# before tailscaled and before this unit. A fix that lives in ExecStop is absent
+# in exactly the scenario an on-demand node exists to survive. This one runs after
+# the guard on every boot, however that boot began and whatever dockerd already
+# resurrected.
+#
+# Cost: a few seconds per boot, and pre-boot `docker logs` are lost — persistent
+# journald (ANSIBLE-023) already covers that. Service data is in bind mounts and
+# is untouched by a recreate.
+ExecStart=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d --force-recreate
 ExecStop=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml stop
 
 [Install]
