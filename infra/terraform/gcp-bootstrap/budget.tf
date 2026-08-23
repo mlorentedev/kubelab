@@ -43,6 +43,27 @@ resource "google_billing_budget" "alerting" {
     }
   }
 
+  all_updates_rule {
+    monitoring_notification_channels = [
+      google_monitoring_notification_channel.notify_webhook.id
+    ]
+    disable_default_iam_recipients = false
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_monitoring_notification_channel" "notify_webhook" {
+  project      = google_project.hub.project_id
+  display_name = "KubeLab n8n Notification Fabric"
+  type         = "webhook_tokenauth"
+  labels = {
+    url = "https://n8n.kubelab.live/webhook/notify"
+  }
+  user_labels = {
+    domain = "ops"
+  }
+
   depends_on = [google_project_service.enabled]
 }
 

@@ -1,0 +1,25 @@
+---
+# Tasks for gcp_preemption role — installs daemon monitoring GCP Spot Preemption
+
+- name: Install GCP preemption watcher script
+  template:
+    src: gcp-preemption-watch.sh.j2
+    dest: "{{ gcp_preemption_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install GCP preemption watcher systemd service
+  template:
+    src: gcp-preemption-watch.service.j2
+    dest: "/etc/systemd/system/{{ gcp_preemption_service_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable and start GCP preemption watcher service
+  systemd:
+    name: "{{ gcp_preemption_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
