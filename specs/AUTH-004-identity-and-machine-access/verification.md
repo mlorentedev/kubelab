@@ -356,18 +356,17 @@ What this settles, and what it does not:
   tested: a probe asserting "login is not refused" would pass here while the criterion
   fails. Assert on reaching an authenticated Gitea session, never on the absence of an
   error.
-- **`DISABLE_REGISTRATION = true` does not remove the signup branch from that page.**
+- ~~**`DISABLE_REGISTRATION = true` does not remove the signup branch from that page.**
   Gitea renders `link_account_signup` regardless. Whether that form is *honoured* on
-  POST is unmeasured — it was outside the authorised scope, and it is the sharp form of
-  R1's original question. **Do not infer it from the rendered page**: a form that
-  renders and then refuses is exactly the "looks right and silently refuses" outcome R1
-  was written to prevent.
-  **Corrected 2026-08-23 by the POST measurement below — this bullet was itself an
-  example of the error it warns about.** The `<form>` element is emitted, but it is an
-  empty shell: a CSRF token and the sentence "Registration is disabled. Please contact
-  your site administrator.", with no username field, no email field and no submit. The
-  probe detected the element by its `action` attribute and reported "the signup branch
-  is offered", which was false. Detecting an element is not reading its contents.
+  POST is unmeasured.~~ **Withdrawn 2026-08-23 — both halves were wrong, and it is kept
+  struck through rather than deleted because how it was wrong is the lesson.** The
+  `<form>` element is emitted, but it is an **empty shell**: a CSRF token and the
+  sentence "Registration is disabled. Please contact your site administrator.", with no
+  username field, no email field and no submit. The probe detected the element by its
+  `action` attribute and reported "the signup branch is offered". Detecting an element
+  is not reading its contents. **POST enforcement is no longer unmeasured either** — see
+  the AC4 section below: both surfaces answer `403` at the handler. The bullet warned
+  against inferring behaviour from a rendered page and then did exactly that.
 - **R1's headline question — which flag combination admits a new user — remains open**,
   and cannot be closed without changing a flag on the live instance. That is a separate
   authorisation, and the change belongs in

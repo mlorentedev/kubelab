@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """AUTH-004 R1 / AC4 probe — are Gitea's two signup POSTs honoured or refused?
 
-R1a established that an SSO login parks at `/user/link_account`, and that Gitea
-renders BOTH branches of that page even though `DISABLE_REGISTRATION = true`. A
-rendered form proves nothing about whether its POST is honoured, and the
-unauthenticated `/user/sign_up` page has the same shape: it says "Registration is
-disabled" and still carries a `<form action="/user/sign_up">`.
+R1a established that an SSO login parks at `/user/link_account`, and reported that
+Gitea renders both branches of that page even though `DISABLE_REGISTRATION = true`.
+That report was wrong, and the way it was wrong is why this probe posts each form
+twice: the `<form action="/user/link_account_signup">` element IS emitted, but it
+is an empty shell -- a CSRF token and the sentence "Registration is disabled", with
+no username field, no email field and no submit. Detecting an element by its action
+attribute is not reading its contents.
 
-Two POSTs settle it, and they answer different criteria:
+So a rendered form proves nothing in either direction, and neither does posting one
+as rendered: with no inputs to send, that measures the TEMPLATE. Only a POST
+carrying the fields the template withheld reaches the handler, and only the handler
+is enforcement.
+
+The POSTs answer different criteria:
 
   A. POST /user/link_account_signup, carrying a valid OIDC identity.
      -> Decides which of R1's two flag candidates implements AC3.
@@ -147,31 +154,41 @@ def probe_link_account_signup(env: str) -> None:
             return
         print(f"  form fields as the page would send them: {show_fields(fields)}")
 
-        # The template ships this form as an EMPTY SHELL when registration is
-        # disabled: a CSRF token plus the sentence "Registration is disabled".
-        # Posting it as-is therefore measures the template, not the gate. Inject
-        # the fields the template withholds so the HANDLER is what answers --
-        # presentation that hides a control and a handler that refuses one are
+        def post(label: str, data: dict[str, str]) -> httpx.Response:
+            resp = c.post(
+                f"{GITEA}/user/link_account_signup",
+                data=data,
+                headers={"Referer": str(page.url), "Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+                nxt = str(httpx.URL(str(resp.url)).join(resp.headers["location"]))
+                print(f"  post -> {resp.status_code}, following to {redact(nxt)}")
+                follow = walk(c, nxt, "post")
+                if follow is not None:
+                    resp = follow
+            report(label, resp, c)
+            return resp
+
+        # A1 — post the form exactly as the page would. When registration is
+        # disabled the template ships this form as an EMPTY SHELL (a CSRF token
+        # plus the sentence "Registration is disabled"), so this measures the
+        # TEMPLATE and comes back an uninformative 200. It is run anyway, and
+        # first, because the difference between the two rows is the finding: an
+        # earlier probe stopped here and read the 200 as ambiguity in the gate.
+        print(f"\n  A1 — as rendered: {show_fields(fields)}")
+        post("A1", dict(fields))
+
+        # A2 — inject the fields the template withheld, so the HANDLER answers.
+        # Presentation that hides a control and a handler that refuses one are
         # different security properties, and only the second is enforcement.
-        fields.setdefault("user_name", "r1probe-sso-delete-me")
-        fields.setdefault("email", "r1probe-sso-delete-me@kubelab.test")
-        print(f"  fields actually posted (handler under test): {show_fields(fields)}")
-
-        resp = c.post(
-            f"{GITEA}/user/link_account_signup",
-            data=fields,
-            headers={"Referer": str(page.url), "Content-Type": "application/x-www-form-urlencoded"},
-        )
-        if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
-            nxt = str(httpx.URL(str(resp.url)).join(resp.headers["location"]))
-            print(f"  post -> {resp.status_code}, following to {redact(nxt)}")
-            follow = walk(c, nxt, "post")
-            if follow is not None:
-                resp = follow
-        report("A", resp, c)
+        injected = dict(fields)
+        injected.setdefault("user_name", "r1probe-sso-delete-me")
+        injected.setdefault("email", "r1probe-sso-delete-me@kubelab.test")
+        print(f"\n  A2 — handler under test: {show_fields(injected)}")
+        post("A2", injected)
 
 
-def probe_anonymous_signup() -> None:
+def probe_anonymous_signup() -> bool:
     print()
     print("=" * 78)
     print("B. POST /user/sign_up  — no identity at all")
@@ -184,8 +201,11 @@ def probe_anonymous_signup() -> None:
 
         fields = form_fields(page.text, "/user/sign_up")
         if not fields:
-            print("  no sign_up form on the page — nothing to POST, AC4 satisfied at the form layer")
-            return
+            print("  no sign_up form on the page — nothing to POST at all")
+            # Not a pass: the form layer is presentation. AC4 is a claim about
+            # the handler, and a handler nobody reached is a handler nobody
+            # tested. Report it as unproven rather than banking it.
+            return False
 
         throwaway = secrets.token_urlsafe(18)
         fields.update(
@@ -210,16 +230,31 @@ def probe_anonymous_signup() -> None:
             if follow is not None:
                 resp = follow
         report("B", resp, c)
+        return resp.status_code == 403
 
 
 def main() -> int:
     env = sys.argv[1] if len(sys.argv) > 1 else "prod"
     print(f"env={env}; credentials resolved in-process, never emitted\n")
     probe_link_account_signup(env)
-    probe_anonymous_signup()
+    ac4_holds = probe_anonymous_signup()
     print()
     print("Now run `gitea admin user list` again. Delete anything this created.")
-    return 0
+
+    # Exit status covers B ONLY, and the asymmetry is deliberate.
+    #
+    # B is AC4 and its expected answer never changes: an unauthenticated
+    # registration must be refused under every configuration this spec might
+    # adopt. That is a property worth failing on, which is what makes the
+    # AC4 re-demonstration Part 2 owes a re-run rather than a re-reading.
+    #
+    # A's expected answer DOES change. Today it is 403 because
+    # DISABLE_REGISTRATION blocks it; if Part 2 adopts R1's second candidate,
+    # a refusal there becomes the failure rather than the pass. Asserting on
+    # it would encode today's configuration as a permanent expectation and go
+    # red precisely when the spec succeeds. A reports; it does not judge.
+    print(f"\nAC4 (anonymous registration refused): {'HOLDS' if ac4_holds else 'DOES NOT HOLD'}")
+    return 0 if ac4_holds else 1
 
 
 if __name__ == "__main__":
