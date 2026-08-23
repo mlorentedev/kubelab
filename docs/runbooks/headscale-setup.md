@@ -356,6 +356,20 @@ Update `~/.ssh/config` with dual-path access: VPN primary, LAN fallback.
 
 **Pattern**: `ssh <host>` uses VPN (works from anywhere). `ssh <host>-lan` uses LAN (fallback when VPN down, local network only). `ssh vps-pub` uses public IP directly (VPS has no LAN).
 
+> **This block is hand-copied, and parts of it are stale — see #1289.** It is the
+> only consumer of `networking.*` that is not generated, so it drifts silently
+> while every other consumer (Ansible inventory, Headscale policy, CoreDNS zones,
+> EndpointSlices) stays correct. Known-stale entries below: `k3s-server`,
+> `k3s-agent-1` and `k3s-agent-2` are Proxmox VMs removed by ADR-023 Phase 1, and
+> `100.64.0.7` is aws1 today; `rpi4-lan` predates the move to `172.16.1.0/24`.
+> They are left rather than hand-corrected because #1289 replaces this section
+> with a generator, and a second hand-written copy would age the same way.
+>
+> **`networking.*` in `common.yaml` is the SSOT.** Prefer MagicDNS names over
+> Tailscale IPs when adding a host here: a Spot node's address rotates on every
+> preemption (aws1 did, gcp1 has twice), so a literal is a lie waiting for the
+> next one.
+
 ```sshconfig
 # --- KUBELAB-SSH-START ---
 # Primary: Headscale VPN (works from anywhere)
@@ -411,6 +425,21 @@ Host k3s-agent-2
 
 Host vps
   Hostname 100.64.0.2
+  User deployer
+  IdentityFile ~/.ssh/id_ed25519
+
+# --- Argo CD hubs (cloud, mesh-only: no LAN and no public fallback) ---
+# By MagicDNS name, never by Tailscale IP: both are Spot instances whose address
+# rotates on every preemption. `clusters.hub.ssh_alias` in common.yaml selects
+# which one `fetch-kubeconfig ENV=hub` reads, and the fetch is SSH regardless of
+# `--direct`, so an alias missing here is a fetch that silently reroutes.
+Host aws1
+  Hostname aws1.kubelab.internal
+  User deployer
+  IdentityFile ~/.ssh/id_ed25519
+
+Host gcp1
+  Hostname gcp1.kubelab.internal
   User deployer
   IdentityFile ~/.ssh/id_ed25519
 

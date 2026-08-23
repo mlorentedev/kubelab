@@ -461,8 +461,8 @@ clusters:
     ssh_alias: vps
     local_port: 16444
   hub:
-    node: aws1        # → networking.aws (mesh-only: no LAN/public fallback)
-    ssh_alias: aws1
+    node: gcp1        # → networking.gcp (mesh-only: no LAN/public fallback)
+    ssh_alias: gcp1
     local_port: 16445
   # TEMPORARY, and it exists because the migration made `clusters.hub` ambiguous.
   # GCP-001 runs two hubs at once by design (additive-then-subtractive), but
