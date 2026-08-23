@@ -45,6 +45,9 @@ REQUIRED_KEYS = {
     "r2-backup-rules.yaml",
     "inhibit-rules.yaml",
     "sre-rules.yaml",
+    "disk-rules.yaml",
+    "slo-rules.yaml",
+    "security-rules.yaml",
 }
 
 

@@ -154,3 +154,20 @@ To prevent alert storms, cascading noise, and false-quiet outages, Grafana Alert
 
 ### C. TLS Certificate Early Warning (`obs015-tls-early-warning`)
 - Evaluates Traefik ingress logs for repeated ACME certificate renewal failures with `for: 5m`, generating actionable alert links before certificates expire.
+
+## 7. Symptom-Based Multi-Window Multi-Burn-Rate SLOs (`slo-rules.yaml`)
+
+Following Google SRE error budget doctrine, public ingress alerts fire on actual user-visible symptom degradation rather than single-instant error spikes:
+- **Fast Burn Rate (`obs015-slo-fast-burn-rate`)**: 14.4x normal error rate capacity in a 1-hour window (evaluating >50 HTTP 5xx errors from Traefik ingress logs, `for: 2m`). Consumes ~2% of the 30-day budget in 1 hour; triggers an immediate page in prod.
+- **Medium Burn Rate (`obs015-slo-medium-burn-rate`)**: 6x normal error rate capacity in a 6-hour window (evaluating >100 HTTP 5xx errors from Traefik ingress logs, `for: 15m`). Consumes ~5% of the 30-day budget in 6 hours; triggers a warning in ops logs.
+
+## 8. Fleet Volume & Disk Saturation Watcher (`disk-watcher.yaml` & `disk-rules.yaml`)
+
+- In-cluster CronJob `disk-watcher` runs every 15 minutes inspecting PVCs and root disk capacity in `kubelab`.
+- Evaluates PVC Bound phase (`obs015-pvc-unbound-failure`) with `noDataState: Alerting`.
+- Alerts if root filesystem capacity crosses 90% (`obs015-disk-root-saturation`).
+
+## 9. Perimeter Threat Defense (`security-rules.yaml`)
+
+- Evaluates CrowdSec container decision and bouncer logs (`obs015-crowdsec-ban-surge`).
+- Alerts when more than 5 automated IP ban decisions occur in a 10-minute window.
