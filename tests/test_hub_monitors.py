@@ -73,12 +73,32 @@ class TestTheGcpHubIsWatched:
         assert gcp["notificationIDList"] == aws["notificationIDList"]
 
 
-class TestTheAwsHubStaysWatchedUntilItIsGone:
-    def test_its_monitor_is_still_present_and_active(self) -> None:
-        """Retiring it early leaves prod's hub unwatched while it is still the
-        one reconciling prod. It goes with AC6, not with the GCP bring-up."""
-        aws = _by_key("infra-vpn-aws1-tailscale")
-        assert aws["active"] is True
+class TestTheAwsHubIsDormantNotDeleted:
+    """AC6 landed on 2026-08-23, which is the condition the previous guard named.
+
+    That guard read `active is True` and explained itself as "retiring it early
+    leaves prod's hub unwatched while it is still the one reconciling prod. It
+    goes with AC6, not with the GCP bring-up." AC6 is done — instance terminated,
+    EBS gone, Spot request cancelled — so the assertion inverts rather than
+    disappears, and the two halves it now pins are both load-bearing in a way
+    neither was before.
+    """
+
+    def test_its_monitor_is_paused_now_that_the_host_is_gone(self) -> None:
+        """Left active it pings 100.64.0.7 on a schedule, forever, and pages."""
+        assert _by_key("infra-vpn-aws1-tailscale")["active"] is False
+
+    def test_its_monitor_is_not_deleted(self) -> None:
+        """Deleting it is the tempting cleanup and the wrong one.
+
+        `infra/terraform/aws/` was deliberately kept — it renders from
+        `networking.aws` and is what makes the portability claim AC5 measures
+        true — so an AWS hub can be stood back up with one command. Deleting its
+        monitor means the rebuilt host comes up unwatched, and nobody rebuilding
+        infrastructure remembers to re-author observability for it. `active` is
+        the field the Kuma sync honours; pausing is the whole mechanism.
+        """
+        assert _by_key("infra-vpn-aws1-tailscale") is not None
 
     def test_its_description_matches_the_machine_it_watches(self) -> None:
         """It said `t4g.micro` long after RELIAB-009 moved the hub to t4g.small,

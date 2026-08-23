@@ -161,6 +161,93 @@ This does not block Part 1. It does mean AC2 cannot be demonstrated on MinIO, an
 ADR-062 D5 an unenforced tier must be recorded as a named gap with its issue rather
 than quietly counted as passing.
 
+
+### R4 — how is login prohibited on a bot account
+
+**Settled 2026-08-23. Not through the CLI, which has no such verb — through the
+admin API's `PATCH /api/v1/admin/users/{username}` with `prohibit_login: true`.**
+
+R4 was never in Part 0's task list. It is named as a risk in `proposal.md` and
+Part 3 is written as *"gated on R4, R5"*, but no task existed to settle it, so
+nobody was going to. Found while re-reading the spec, measured the same pass.
+
+The CLI's whole surface for users, from the live binary:
+
+```
+$ docker exec -u git gitea gitea admin user --help
+COMMANDS:
+   create                 Create a new user in database
+   list                   List users
+   change-password        Change a user's password
+   delete                 Delete specific user by id, name or email
+   generate-access-token  Generate an access token for a specific user
+   must-change-password   Set the must change password flag for the provided users or all users
+```
+
+Six subcommands, none of which touches `prohibit_login`. `create` offers
+`--restricted`, and that is **not a substitute**: restricted is a visibility
+tier, not a login block. A restricted user still authenticates.
+
+The admin API does expose it. From the running instance's own schema:
+
+```
+$ curl -s http://100.64.0.3:3000/swagger.v1.json    # http=200, 816675 bytes
+EditUserOption:   ['admin', 'prohibit_login', 'restricted']
+CreateUserOption: ['restricted']
+paths admin/users: ['/admin/users', '/admin/users/{username}',
+                    '/admin/users/{username}/badges', '/admin/users/{username}/keys']
+```
+
+**The asymmetry is the operative detail**: `prohibit_login` is in
+`EditUserOption` and *not* in `CreateUserOption`, so it cannot be set at
+creation. The bot account therefore exists briefly in a loginable state, and
+the provisioning order is fixed rather than free:
+
+1. `gitea admin user create` (CLI)
+2. `PATCH /api/v1/admin/users/<bot>` with `prohibit_login: true` (API, superadmin token)
+3. `gitea admin user generate-access-token --username <bot> --scopes <...>` (CLI)
+
+All three are reproducible from Ansible, so AC5's "provisioned end to end from
+Ansible" survives — but it needs a superadmin token to exist before the bot can
+be locked, which the task line in Part 3 does not currently say.
+
+ADR-062 D1's second candidate mechanism — *never declaring the bot in Authelia*
+— remains available and costs nothing, but it is a convention rather than an
+enforcement: it prevents an SSO login by omission, and omission is not a
+control. `prohibit_login` is the enforced half. Belt and braces is the
+defensible answer; the spec asked for "enforced, not conventional", and only
+one of the two is.
+
+#### A measurement error, recorded because it nearly shipped the opposite answer
+
+The first pass at this ran `docker exec gitea gitea admin auth add-oauth --help`
+and grepped for `admin|group|claim`. It printed nothing, and nothing was read as
+*"no such flags"* — the conclusion that would have made R5's superadmin tier a
+provisioning step rather than a claim mapping.
+
+The command had not run at all:
+
+```
+$ docker exec gitea gitea admin auth add-oauth --help
+[F] Gitea is not supposed to be run as root. Sorry.
+```
+
+`docker exec` enters as root and Gitea refuses to start as root, so the grep was
+searching an error message. Re-run as `-u git`, the same command returns
+`--group-claim-name`, `--admin-group`, `--restricted-group` and
+`--group-team-map` — which is what R5 already recorded on 2026-08-15, and the
+duplicate measurement only survived long enough to disagree with the record.
+
+The same shape recurred minutes later: `curl http://localhost:3000/swagger.v1.json`
+from inside the node returned **0 bytes**, because the compose file binds Gitea to
+`{{ tailscale_ip }}:3000` and not to loopback (the DNAT rule in CLAUDE.md). Zero
+bytes is not an absent endpoint. Fetched from the Tailscale address it is 816 KB.
+
+Both are `dig ... && echo YES` again: **grepping an output without establishing
+that the output exists is not a measurement.** Every read-only probe in this file
+should carry a control that fails loudly — here, `GET /api/v1/version` returning
+`{"version":"1.25.5"}` before anything else is asked.
+
 ## Test status
 
 Part 0 is observation only — no code changed, so no suite was run against it. The

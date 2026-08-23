@@ -111,7 +111,7 @@ created: "2026-08-20"
       holds; and F1 works **only after** the `KUBECONFIG` fix — it was broken on
       the first boot, having been recorded as "closed in code" in #1217.
 - [ ] AC5 portability scored -> the table below, with real counts
-- [ ] AC6 AWS decommissioned -> three AWS API outputs, pasted
+- [x] AC6 AWS decommissioned -> three AWS API outputs, pasted, 2026-08-23
 
       **Reconciliation is handed over; the inbound route and the teardown are
       not.** Deliberately stopped here, 2026-08-22, at the last point where the
@@ -156,6 +156,52 @@ created: "2026-08-20"
       instant because nothing was deleted from aws1 — that is the entire reason
       the handover pauses rather than unregisters, and why `unregister-spoke`
       comes after the soak instead of here.
+
+      **DONE 2026-08-23. The rollback above no longer exists** — that sentence is
+      kept as the record of why the order was what it was, not as an option.
+
+      Unregistered first, with the hub still up, because the step needs it alive:
+
+      ```
+      1. did: strip the cascade finalizer from kubelab-prod (MUST precede the delete)
+      2. did: delete Application kubelab-prod — now inert, the spoke's workloads stay
+      3. did: delete this hub's cluster-prod credential
+      [SUCCESS] prod detached. The spoke's workloads were not touched.
+      ```
+
+      Run WITHOUT `--remove-shared-rbac`, and the dry-run confirmed why that
+      matters: all three actions are hub-side. The spoke's shared ClusterRoles —
+      the ones gcp1 also uses — were never touched.
+
+      Then `make aws1-destroy`, from `~/Projects/kubelab`. **The working directory
+      is load-bearing**: the AWS state is local-backend and exists only in that
+      checkout, so the same command from a worktree reports `0 to destroy`, exits
+      0, and leaves you paying.
+
+      The three AWS API outputs, `--region eu-central-1` given explicitly — the
+      default `us-east-1` returns empty for everything and reads exactly like a
+      completed teardown:
+
+      | Query | Result |
+      |---|---|
+      | `describe-instances` | `i-0be7ecf199975bf1a  terminated  t4g.small` |
+      | `describe-volumes` | *(empty — the 12 GB gp3 is gone)* |
+      | `describe-spot-instance-requests` | `sir-xng7dfkh  cancelled` |
+
+      **What proves the decommission rather than merely reporting it**: prod never
+      noticed. All 12 deployments stayed 1/1 (`authelia`, `grafana`, `loki`,
+      `minio`, `n8n`, `postgres`, `redis`, `web`, …) and `argo.kubelab.live` kept
+      answering 200 with gcp1's body hash. AWS spend goes from ~$8.9/mo to $0 —
+      and note the itemisation D4 demands: of $6.64 billed 1-23 August, **$1.86
+      was the public IPv4 address**, the line ADR-023 §3.1 never had.
+
+      **The code stays.** `infra/terraform/aws/`, its runbooks and
+      `networking.aws` are not dead weight to clear: they are what makes the
+      portability claim AC5 measures true, they cost nothing with no resources
+      alive, and `toolkit/cli/infra.py` renders the module's tfvars straight from
+      that config block. Deleting them would destroy the evidence rather than the
+      infrastructure. The `common.yaml` comment promising to remove `networking.aws`
+      predates that decision and is corrected in the same change.
 - [ ] AC7 cost recorded as derivation -> ADR-063 D4
 - [ ] AC8 ceilings measured -> `fio` output + `deploy-argocd` wall time
 
