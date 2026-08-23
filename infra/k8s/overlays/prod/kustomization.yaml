@@ -15,7 +15,7 @@ resources:
   - headscale.yaml
   - gitea.yaml
   - argocd.yaml
-  # argocd-endpointslice.yaml excluded — has the RESOLVE_AWS1_TAILSCALE_IP
+  # argocd-endpointslice.yaml excluded — has the RESOLVE_GCP1_TAILSCALE_IP
   # placeholder (aws1's Spot IP rotates), applied by `make deploy-argocd` with
   # dynamic IP resolution (MagicDNS). Only that ONE document is excluded: the
   # Service and IngressRoute in argocd.yaml carry no placeholder and belong

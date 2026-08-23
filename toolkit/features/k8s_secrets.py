@@ -206,35 +206,85 @@ def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str
     return result
 
 
-def _build_apprise_config(cm: ConfigurationManager) -> str:
-    """Build the Apprise routing table (tag → tgram URL) from SOPS values.
+def _normalize_slack_url(url: str, channel: str | None = None) -> str:
+    """Normalize a Slack webhook URL or token string to Apprise slack:// URI format."""
+    clean = url.strip()
+    if clean.startswith("https://hooks.slack.com/services/"):
+        tokens = clean.removeprefix("https://hooks.slack.com/services/").strip("/")
+        base = f"slack://{tokens}"
+    elif clean.startswith("slack://"):
+        base = clean
+    else:
+        base = f"slack://{clean}"
 
-    Option B (ADR-044): Apprise owns the tag→URL map; n8n only sends a tag.
+    if channel:
+        ch = channel.lstrip("#")
+        if not base.endswith(f"/#{ch}") and not base.endswith(f"/{ch}"):
+            base = f"{base.rstrip('/')}/#{ch}"
+    return base
+
+
+def _build_apprise_config(cm: ConfigurationManager) -> str:
+    """Build the Apprise routing table (tag → Slack / Telegram URLs) from SOPS values.
+
+    Option B (ADR-044 / NOTIFY-002): Apprise owns the tag→URL map; n8n only sends a tag.
     Rendered into the apprise-secrets Secret as kubelab.yml and mounted at /config,
     so `APPRISE_STATEFUL_MODE=simple` resolves `POST /notify/kubelab` by tag:
-      - tag `page` → PAGE channel (push)
-      - tag `log`  → LOG channel (archive)
-    Telegram bot-token URLs embed a colon, so each URL key is quoted to keep the
-    YAML mapping valid.
+      - tag `page`   → #alerts (critical push)
+      - tag `vault`  → #vault-health (knowledge governance)
+      - tag `deploy` → #deployments (Argo CD / GitOps)
+      - tag `log`    → #ops-log (archive / routine maintenance)
+      - tag `agent`  → #agent-fleet (AI / Hermes activities)
     """
     merged = cm.get_merged_config()
-    tg = merged.get("apps", {}).get("services", {}).get("automation", {}).get("apprise", {}).get("telegram", {})
-    bot_token = tg.get("bot_token", "")
-    chat_page = tg.get("chat_page", "")
-    chat_log = tg.get("chat_log", "")
+    apprise_cfg = merged.get("apps", {}).get("services", {}).get("automation", {}).get("apprise", {})
+    slack = apprise_cfg.get("slack", {})
+    telegram = apprise_cfg.get("telegram", {})
 
-    if not bot_token or not chat_page:
-        logger.warning("Apprise telegram bot_token/chat_page missing — skipping routing config")
+    urls: list[dict[str, dict[str, str]]] = []
+
+    # 1. Slack routing (NOTIFY-002 preferred)
+    if slack:
+        webhook_alerts = slack.get("webhook_alerts") or slack.get("webhook_page") or slack.get("webhook_url")
+        webhook_vault = slack.get("webhook_vault") or webhook_alerts
+        webhook_log = slack.get("webhook_log") or webhook_alerts
+        webhook_deploy = slack.get("webhook_deployments") or slack.get("webhook_deploy") or webhook_alerts
+        webhook_agent = slack.get("webhook_agent") or slack.get("webhook_agent_fleet") or webhook_alerts
+
+        if webhook_alerts:
+            urls.append({_normalize_slack_url(webhook_alerts, slack.get("channel_alerts", "alerts")): {"tag": "page"}})
+        if webhook_vault:
+            urls.append(
+                {_normalize_slack_url(webhook_vault, slack.get("channel_vault", "vault-health")): {"tag": "vault"}}
+            )
+        if webhook_deploy:
+            urls.append(
+                {
+                    _normalize_slack_url(webhook_deploy, slack.get("channel_deployments", "deployments")): {
+                        "tag": "deploy"
+                    }
+                }
+            )
+        if webhook_log:
+            urls.append({_normalize_slack_url(webhook_log, slack.get("channel_log", "ops-log")): {"tag": "log"}})
+        if webhook_agent:
+            urls.append(
+                {_normalize_slack_url(webhook_agent, slack.get("channel_agent", "agent-fleet")): {"tag": "agent"}}
+            )
+
+    # 2. Telegram fallback during transition
+    if telegram and not urls:
+        bot_token = telegram.get("bot_token", "")
+        chat_page = telegram.get("chat_page", "")
+        chat_log = telegram.get("chat_log", "")
+        if bot_token and chat_page:
+            urls.append({f"tgram://{bot_token}/{chat_page}": {"tag": "page"}})
+            if chat_log:
+                urls.append({f"tgram://{bot_token}/{chat_log}": {"tag": "log"}})
+
+    if not urls:
+        logger.warning("Apprise Slack/Telegram configuration missing — skipping routing config")
         return ""
-
-    # Build as a dict and yaml.safe_dump it (audit C13): a bot-token/chat id with a
-    # YAML-special char must not break the routing table. Each url is a single-key
-    # map {url: {tag: ...}} — the shape Apprise's `simple` mode expects.
-    urls: list[dict[str, dict[str, str]]] = [{f"tgram://{bot_token}/{chat_page}": {"tag": "page"}}]
-    if chat_log:
-        urls.append({f"tgram://{bot_token}/{chat_log}": {"tag": "log"}})
-    else:
-        logger.warning("apprise chat_log not set — the 'log' tier will not deliver until it is")
 
     return yaml.safe_dump({"version": 1, "urls": urls}, sort_keys=False, default_flow_style=False)
 
