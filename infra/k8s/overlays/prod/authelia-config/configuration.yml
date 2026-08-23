@@ -155,7 +155,7 @@ identity_providers:
     clients:
       - client_id: minio
         client_name: MinIO
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ZENMbw+Oru2372cUdxItFA$2cSPmiwXPbTp+m+/cytz9V6J/ppsnVKXW9Izlaq653o'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$p/BNIX9i6gqjnXBjfwinUQ$iGtV7Gguavf5n9rIY0yfZixFLU81q4xjET44HNg+G3E'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
@@ -169,7 +169,7 @@ identity_providers:
       - client_id: grafana
         client_name: Grafana
         # synced via: make sync-oidc-hashes ENV=prod
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$YFjurhJUZsZA7nET/rOWtQ$kCyKlh6EPH3FX5tO7Z15IOXBnOdqxp5EU05/aGMKe3M'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$0tvVo3us/vNbs+7RepHK1A$cX5TwgO0qdWiTMqqO+zwvyHREYkidP/HU7QwUsi9WGs'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
@@ -184,7 +184,7 @@ identity_providers:
       - client_id: gitea
         client_name: Gitea
         # synced via: make sync-oidc-hashes ENV=prod
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$dZFZpAXgnOINpkcZriaNBA$fTErQSrR/HFPha6he0Vvs/ibiBDKtNtCqVXZ99KMG5k'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ZwRKaO1ucGbvOO9SD1Vu8w$EhmlRLZVuMeNdRhuF4C2aj3Uqc6HM35ziwA1/x8mm/k'
         public: false
         authorization_policy: one_factor
         # Gitea sends client credentials in POST body. Authelia 4.39.x defaults to
@@ -201,7 +201,7 @@ identity_providers:
       - client_id: argocd
         client_name: Argo CD
         # synced via: make sync-oidc-hashes ENV=prod
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ITrEVRiT5s0czAnRKOPviA$00Z6kT5lnb+mbWluVLWZyd5tn7jtDOwJu0qbMhldTA8'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$yvjYkRfwEZ5V21RsUaQjhg$cMEmNbSBX60lKukCoseDBxQQ3KgLyIFjJpahdJn0Nw0'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
