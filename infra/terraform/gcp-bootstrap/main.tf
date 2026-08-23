@@ -145,12 +145,13 @@ locals {
     "storage.googleapis.com",
     "iam.googleapis.com",
     "logging.googleapis.com",
-    # The notification channel in budget.tf. Added late and the same way as the
-    # rest -- by hitting the error, not by reading: the channel arrived in a
-    # change that merged and was never applied, so nothing ever asked GCP for it
-    # and `Cloud Monitoring API has not been used in project kubelab-hub` sat
-    # undiscovered behind a green build. Enablement is what a merged-but-
-    # unapplied root cannot tell you.
+    # Added for a notification channel in budget.tf that no longer exists --
+    # budgets accept only e-mail channels, see FINDING F5 there. Kept anyway,
+    # and deliberately: the API is enabled in the project now, so dropping it
+    # from this list would not disable it, it would only stop Terraform managing
+    # it. An enabled API nobody declares is exactly the unmanaged remnant this
+    # root spent a state reconstruction cleaning up. The same reasoning as
+    # `disable_on_destroy` below -- leaving an API enabled costs nothing.
     "monitoring.googleapis.com",
   ]
 }

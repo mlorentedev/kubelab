@@ -169,6 +169,19 @@ meaning if the credit ever lapses.
   `monitoring_notification_channels`. Leaving the default e-mail on costs
   nothing: Pub/Sub is what caps, and the human notice is a second channel rather
   than a competing one.
+- **A budget accepts ONLY e-mail notification channels**, and the advice above
+  is a trap without this: "pair it with `monitoring_notification_channels`" does
+  not mean any channel will do. Google is explicit — *"For Cloud Billing budget
+  alerts, you must configure Email notification channels. Other types of
+  notification channels aren't supported"* (max 5). A `webhook_tokenauth`
+  channel pointing at the notification fabric creates without complaint and is
+  then refused by the Budgets API with the **same bare 400 as above** — no field
+  named, nothing to grep. It reads like a transient fault; re-applying after the
+  Monitoring API had fully propagated failed identically, which is what ruled
+  propagation out. To reach a webhook, go
+  `budget -> Pub/Sub -> push subscription -> endpoint`; Pub/Sub delivers an
+  envelope with base64 `message.data`, so the consumer decodes rather than
+  reading a bare payload.
 
 ### 4.2 Hard cap at $15 — the kill switch
 
