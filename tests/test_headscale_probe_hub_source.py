@@ -45,12 +45,25 @@ class TestTheSourceFollowsTheSSOT:
         assert "staging" in managed, "the SSOT no longer gives staging to the GCP hub"
         assert _flow(preserved_flows(net), "staging").src == net["gcp"]["hostname"]
 
-    def test_prod_is_still_probed_from_the_aws_hub(self, net: dict[str, Any]) -> None:
-        """Additive, never a swap: aws1 reconciles prod until AC6 retires it."""
+    def test_prod_is_probed_from_the_hub_that_manages_it(self, net: dict[str, Any]) -> None:
+        """Same contract as staging above, now that prod has moved (2026-08-22).
+
+        This previously asserted the opposite -- that prod was *still* probed
+        from aws1 -- reading the live SSOT to pin the pre-cutover world. It went
+        red the moment "prod" entered `managed_spokes`, which is the guard doing
+        its job: the probe's source changed, and something said so. Rewritten to
+        the same shape as the staging case rather than deleted, because the
+        assertion that matters is "the probe asks the hub that actually
+        reconciles it", in either direction.
+
+        The pre-cutover world stays covered, synthetically, by
+        `test_an_empty_managed_spokes_leaves_everything_on_aws`.
+        """
         from toolkit.scripts.headscale_probe import preserved_flows
 
-        assert "prod" not in net["gcp"].get("managed_spokes", [])
-        assert _flow(preserved_flows(net), "prod").src == net["aws"]["hostname"]
+        managed = net["gcp"].get("managed_spokes", [])
+        assert "prod" in managed, "the SSOT no longer gives prod to the GCP hub"
+        assert _flow(preserved_flows(net), "prod").src == net["gcp"]["hostname"]
 
     def test_moving_prod_moves_the_probe_with_no_code_edit(self, net: dict[str, Any]) -> None:
         """The cutover is adding "prod" to managed_spokes. The probe must follow

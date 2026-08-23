@@ -21,6 +21,7 @@ from toolkit.features.k8s_kubeconfig import (
     load_clusters,
     output_path,
     rewrite_server,
+    rewrite_server_direct,
 )
 
 # A minimal but realistic k3s admin kubeconfig (apiserver on the 127.0.0.1 default).
@@ -66,6 +67,160 @@ class TestRewriteServer:
     def test_raises_when_default_server_absent(self) -> None:
         with pytest.raises(ValueError, match="refusing to write"):
             rewrite_server("server: https://10.0.0.1:6443\n", 16443)
+
+
+class TestTheMigrationScaffoldingCannotOutliveTheMigration:
+    """`clusters.hub-aws` is temporary, and a comment saying so is not a mechanism.
+
+    Raised in review of #1299: the entry carries a REMOVE instruction and nothing
+    enforces it. This repository has already recorded what that is worth --
+    lesson-365, "a written lesson with no mechanism is a reminder, and a reminder
+    fails exactly when the situation arrives".
+
+    The tie is to `networking.aws`, because that is what makes the entry
+    meaningful: `hub-aws` exists to address the retiring hub, and the retiring
+    hub stops existing in the same commit that removes its networking block. So
+    the two are removed together or the suite goes red naming the survivor --
+    which is the Phase 5 checklist expressed as a test instead of as a promise.
+    """
+
+    def test_hub_aws_and_networking_aws_are_removed_together(self) -> None:
+        import yaml
+
+        from toolkit.features.k8s_kubeconfig import _common_path
+
+        config = yaml.safe_load(_common_path().read_text())
+        has_entry = "hub-aws" in (config.get("clusters") or {})
+        has_networking = "aws" in (config.get("networking") or {})
+
+        assert has_entry == has_networking, (
+            "clusters.hub-aws and networking.aws must be removed in the same commit. "
+            f"clusters.hub-aws present={has_entry}, networking.aws present={has_networking}. "
+            "The scaffolding exists only to address the retiring hub; keeping it after "
+            "the hub is gone leaves a cluster entry pointing at nothing, and removing it "
+            "while the hub is still live removes the rollback path."
+        )
+
+    def test_the_two_hub_entries_never_collide(self) -> None:
+        # Both are live simultaneously by design, so they must differ in every
+        # field that decides WHICH machine is reached or WHERE the kubeconfig
+        # lands. A shared local_port would have the two tunnels fight; a shared
+        # node would make the explicit naming decorative.
+        clusters = load_clusters()
+        if "hub-aws" not in clusters:
+            pytest.skip("the migration scaffolding is gone, which is the goal")
+        hub, retiring = clusters["hub"], clusters["hub-aws"]
+        assert hub.node != retiring.node
+        assert hub.ssh_alias != retiring.ssh_alias
+        assert hub.local_port != retiring.local_port
+        assert output_path("hub") != output_path("hub-aws")
+
+
+class TestRewriteServerDirect:
+    """The mesh-native form: the node's MagicDNS name, no transport in between."""
+
+    def test_writes_the_mesh_name_not_localhost(self) -> None:
+        out = rewrite_server_direct(_K3S_YAML, "gcp1.kubelab.internal", 6443)
+        assert "server: https://gcp1.kubelab.internal:6443" in out
+        assert "https://127.0.0.1:6443" not in out
+
+    def test_preserves_certs_and_line_count(self) -> None:
+        out = rewrite_server_direct(_K3S_YAML, "aws1.kubelab.internal", 6443)
+        assert "client-key-data: REDACTED" in out
+        assert out.count("\n") == _K3S_YAML.count("\n")  # only the server substring changed
+
+    def test_never_disables_tls_verification(self) -> None:
+        # The whole reason this form is safe is that k3s puts the MagicDNS name in
+        # the serving cert's SANs. If a future edit ever reaches for
+        # insecure-skip-tls-verify instead, that is a different feature wearing
+        # this one's name.
+        out = rewrite_server_direct(_K3S_YAML, "gcp1.kubelab.internal", 6443)
+        assert "insecure-skip-tls-verify" not in out
+        assert "certificate-authority-data: REDACTED" in out
+
+    def test_distinct_hosts_isolate_hubs(self) -> None:
+        # The two-hub window this exists for: aws1 and gcp1 are both live, and a
+        # kubeconfig that cannot tell them apart is the defect, not the convenience.
+        aws = rewrite_server_direct(_K3S_YAML, "aws1.kubelab.internal", 6443)
+        gcp = rewrite_server_direct(_K3S_YAML, "gcp1.kubelab.internal", 6443)
+        assert aws != gcp
+
+    def test_raises_when_default_server_absent(self) -> None:
+        with pytest.raises(ValueError, match="refusing to write"):
+            rewrite_server_direct("server: https://10.0.0.1:6443\n", "gcp1.kubelab.internal", 6443)
+
+    def test_a_recreatable_node_is_addressed_by_name_and_never_by_address(self) -> None:
+        """The aws1 lesson, bound to the code instead of asserted in prose.
+
+        This function's docstring originally claimed its host was "a MagicDNS
+        name, never a Tailscale IP" and invoked the aws1 lesson to justify it.
+        Measured, `--direct` on staging resolves to `100.64.0.11` and on prod to
+        a public IP -- so the comment was false about the very function carrying
+        it, which is lesson-363's shape reproduced inside the fix for it.
+
+        The rule that IS true binds narrowly: an address that ROTATES must not be
+        cached, and the SSOT marks exactly those nodes by declaring
+        `tailscale_dns` with no `tailscale_ip`. Asserted here over the real SSOT
+        so that adding a recreatable node whose transport resolves to a literal
+        fails, instead of being discovered after a preemption.
+        """
+        import yaml
+
+        # _node_block is reused rather than reimplemented: it resolves a node by
+        # HOSTNAME across networking's cloud sections (`gcp1` lives under
+        # `networking.gcp`, not `networking.gcp1`), and a second copy of that walk
+        # here would be one more thing to keep in step.
+        from toolkit.features.k8s_connect import _node_block, resolve_transport
+        from toolkit.features.k8s_kubeconfig import _common_path
+
+        config = yaml.safe_load(_common_path().read_text())
+        networking = config.get("networking") or {}
+        clusters = config.get("clusters") or {}
+
+        # EVERY hub is recreatable, asserted first and separately. Without this the
+        # guard below has a hole that a mutation found: adding `tailscale_ip` to a
+        # cattle node makes it stop matching `recreatable`, so the loop `continue`s
+        # and the node silently stops being checked -- the mutation DISABLES the
+        # guard instead of tripping it. The same predicate gates
+        # `wait-node-ready.yml`'s known_hosts purge, so the hole is not local to
+        # this test: caching an address on a hub would quietly switch off the
+        # host-key handling too.
+        hub = clusters["hub"]
+        hub_block = _node_block(networking, str(hub["node"]))
+        assert "tailscale_dns" in hub_block and "tailscale_ip" not in hub_block, (
+            f"clusters.hub is the live Argo CD hub, and a hub's machine is replaced "
+            f"on every preemption -- so {hub['node']} must declare tailscale_dns and "
+            "NO tailscale_ip. Adding an IP here does not merely cache a rotating "
+            "address: it removes the node from every check keyed on that shape, "
+            "including wait-node-ready.yml's known_hosts purge, which would then "
+            "silently stop running on the one node that needs it most."
+        )
+        # `hub-aws` is deliberately NOT held to this, and the reason is a finding
+        # rather than an exemption. `networking.aws` declares BOTH tailscale_ip
+        # and tailscale_dns, under a comment reading "Tailscale IP rotates on every
+        # Spot replacement ... prefer tailscale_dns over tailscale_ip in IaC" --
+        # the instruction sitting directly above the cached value it forbids.
+        #
+        # The consequence nobody had noticed: the known_hosts purge keys on this
+        # exact shape, so aws1 -- the hub with the most recreates behind it
+        # (2026-05-06, #1066) -- was never covered by it, while gcp1 is. Not
+        # corrected here because `networking.aws` is deleted in the Phase 5
+        # code-removal commit, and editing a block that is about to disappear buys
+        # risk with no return. Recorded so the pattern is not repeated on the next
+        # cloud node, where the fix is to declare tailscale_dns alone.
+
+        for name, cluster in clusters.items():
+            block = _node_block(networking, str(cluster["node"]))
+            recreatable = "tailscale_dns" in block and "tailscale_ip" not in block
+            if not recreatable:
+                continue
+            host = resolve_transport(name).target_host
+            assert not host.replace(".", "").isdigit(), (
+                f"clusters.{name} names a node whose instance is replaced "
+                f"({cluster['node']}), yet --direct would cache the literal {host!r}. "
+                "A recreatable node must be addressed by MagicDNS name: the address "
+                "rotates on every preemption and the name follows the node."
+            )
 
 
 class TestClusterSSOT:

@@ -31,6 +31,7 @@ from toolkit.core.logging import logger
 from toolkit.features.k8s_connect import (
     find_free_port,
     resolve_ssh_tunnel_params,
+    resolve_transport,
     ts_bridge_tunnel,
 )
 
@@ -102,6 +103,53 @@ def rewrite_server(kubeconfig_text: str, local_port: int) -> str:
     return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://127.0.0.1:{local_port}")
 
 
+def rewrite_server_direct(kubeconfig_text: str, target_host: str, apiserver_port: int) -> str:
+    """Repoint the apiserver at the node's own endpoint, with no transport between.
+
+    The counterpart to ``rewrite_server``, for the case ADR-052 does not cover:
+    an operator box that is *already* on the mesh. The tunnel exists so one
+    kubeconfig works from a machine with no native Tailscale; on a machine that
+    has it, the tunnel is a hop that buys nothing and costs a running process
+    and its own credential.
+
+    ``target_host`` is whatever ``resolve_transport`` resolved, and it is NOT
+    always a MagicDNS name — an earlier version of this docstring claimed it was,
+    while invoking the aws1 lesson to justify the claim. Measured, the three
+    shapes in this fleet are:
+
+    ===========  =====================  ====================================
+    cluster      resolves to            why
+    ===========  =====================  ====================================
+    ``hub``      ``gcp1.kubelab.…``     cattle: ``tailscale_dns``, no ``_ip``
+    ``prod``     ``162.55.57.175``      the VPS declares a ``public_ip``
+    ``staging``  ``100.64.0.11``        ace1 declares a stable ``tailscale_ip``
+    ===========  =====================  ====================================
+
+    All three are correct. The aws1 lesson is that an address which ROTATES must
+    not be cached, and it binds exactly where rotation happens: the hubs, whose
+    machine is replaced on every preemption, and which the SSOT marks by carrying
+    ``tailscale_dns`` with no ``tailscale_ip``. A literal for a node that never
+    moves is redundant, not wrong. Stating that here rather than restating the
+    rule as an absolute, because the absolute version was false about this very
+    function.
+
+    TLS verifies in all three cases, and for the same reason the ``127.0.0.1``
+    form does: k3s puts each of these in the serving certificate's SANs
+    (measured — ``DNS:aws1.kubelab.internal`` on the hub, the public IP on the
+    VPS). Nothing here is insecure-skip.
+
+    Raises for the same reason ``rewrite_server`` does — an unrecognised server
+    means the k3s default moved, and writing an unverified endpoint is worse
+    than failing.
+    """
+    if _K3S_DEFAULT_SERVER not in kubeconfig_text:
+        raise ValueError(
+            f"expected {_K3S_DEFAULT_SERVER!r} in the fetched kubeconfig; the k3s "
+            "default may have changed — refusing to write an unverified server"
+        )
+    return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://{target_host}:{apiserver_port}")
+
+
 def fetch_argv(ssh_alias: str) -> list[str]:
     """SSH argv that prints the remote k3s admin kubeconfig to stdout."""
     return ["ssh", ssh_alias, "sudo", "cat", _K3S_KUBECONFIG_PATH]
@@ -135,7 +183,7 @@ def _is_connect_failure(returncode: int, stderr: str) -> bool:
     return any(pattern in s for pattern in _SSH_CONNECT_FAILURES)
 
 
-def fetch_kubeconfig(env: str) -> Path:
+def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
     """Fetch, rewrite, and save the kubeconfig for one cluster. Returns the path.
 
     Tries a direct ``ssh <alias>`` first.  If the connection fails due to a
@@ -145,6 +193,16 @@ def fetch_kubeconfig(env: str) -> Path:
 
     Interactive key auth (passphrase / ssh-agent) is still required; this runs
     from an operator shell, not an unattended one.
+
+    ``direct`` selects ``rewrite_server_direct`` — the mesh-native form, for an
+    operator box already on the tailnet. It is an explicit flag rather than a
+    detection of what happens to be installed, deliberately: a file whose
+    contents depend on the ambient toolchain is a file whose provenance nobody
+    can read back, which is how the hand-made hub kubeconfig came to exist in
+    the first place.
+
+    Note ``direct`` changes only what is *written*. The fetch itself is SSH
+    either way, so ``clusters.<env>.ssh_alias`` must resolve regardless.
     """
     access = load_cluster_access(env)
     logger.section(f"Fetch kubeconfig — {env} (node {access.node}, ssh {access.ssh_alias})")
@@ -163,17 +221,22 @@ def fetch_kubeconfig(env: str) -> Path:
     else:
         raise RuntimeError(f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}")
 
-    rewritten = rewrite_server(raw, access.local_port)
+    if direct:
+        transport = resolve_transport(env)
+        rewritten = rewrite_server_direct(raw, transport.target_host, transport.apiserver_port)
+        endpoint = f"https://{transport.target_host}:{transport.apiserver_port}"
+        follow_up = "no transport needed — this box reaches the mesh natively."
+    else:
+        rewritten = rewrite_server(raw, access.local_port)
+        endpoint = f"https://127.0.0.1:{access.local_port}"
+        follow_up = f"Bring up the transport for {env} before using kubectl (ADR-052 `k8s connect`)."
 
     dest = output_path(env)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(rewritten)
     dest.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — kubeconfig holds admin certs
 
-    logger.success(
-        f"Saved {dest} (server https://127.0.0.1:{access.local_port}). "
-        f"Bring up the transport for {env} before using kubectl (ADR-052 `k8s connect`)."
-    )
+    logger.success(f"Saved {dest} (server {endpoint}). {follow_up}")
     return dest
 
 

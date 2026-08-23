@@ -179,13 +179,19 @@ variable "managed_spokes" {
     cloud-init installs a cluster secret and an Application only for the spokes
     named here.
 
-    `gcp1` starts with staging only while `aws1` keeps prod. Prod is handed over
+    `gcp1` started with staging only while `aws1` kept prod. Prod was handed over
     by scaling aws1's application-controller to 0 and adding "prod" here -- which
     changes the instance template, so the MIG recreates the hub and the cutover
     re-exercises the recreate path instead of bypassing it.
+
+    Adding an env here also WIDENS IAM: `hub_readable_secrets` in main.tf derives
+    the service account's secretAccessor grants from this list, so a hub that does
+    not reconcile an env cannot read its cluster credentials either. The invariant
+    is an IAM grant rather than a convention, and the widening is visible in the
+    plan.
   EOT
   type        = list(string)
-  default     = ["staging"]
+  default     = ["staging", "prod"]
 }
 
 variable "spoke_servers" {

@@ -259,6 +259,65 @@ def argo_unregister_spoke(
     logger.success(f"{env} detached. The spoke's workloads were not touched.")
 
 
+@argo_app.command("hub-pause")
+def argo_hub_pause(
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Kubeconfig of the hub to pause (required: two hubs exist)"),
+    ],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the plan and change nothing")] = False,
+) -> None:
+    """Stop ONE hub reconciling, without removing anything it holds.
+
+    The reversible half of a hub handover. `unregister-spoke` enforces the
+    single-writer invariant by DELETING the retiring hub's credential, which also
+    destroys the ability to go back; this enforces the same invariant while the
+    hub keeps its cluster secrets, Applications and history. `hub-resume` is then
+    a complete rollback in one command, which is why the destroy is last and
+    separate in the migration plan.
+
+    `--kubeconfig` is required for the same reason `unregister-spoke` requires it:
+    a default that silently names the wrong hub IS the defect.
+
+    Returns only once no application-controller pod remains. A `scale --replicas=0`
+    that exits 0 has changed the desired state and nothing else -- the controller
+    keeps writing to the spoke until its pod is actually gone, and a cutover's
+    next step assumes it stopped.
+    """
+    from toolkit.features.hub_pause import set_hub_paused
+
+    logger.section(f"Pausing the hub at {kubeconfig}")
+    steps = set_hub_paused(Path(kubeconfig), paused=True, dry_run=dry_run)
+    if dry_run:
+        for i, step in enumerate(steps, 1):
+            logger.info(f"  {i}. would: {step.what}")
+        logger.warning("dry-run — nothing was changed")
+
+
+@argo_app.command("hub-resume")
+def argo_hub_resume(
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Kubeconfig of the hub to resume (required: two hubs exist)"),
+    ],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the plan and change nothing")] = False,
+) -> None:
+    """Resume a paused hub — the rollback for `hub-pause`.
+
+    Returns only once the application-controller pod is running again, for the
+    mirror-image reason: a resume that did not take leaves the spoke with no
+    writer at all, which looks identical to a healthy paused hub.
+    """
+    from toolkit.features.hub_pause import set_hub_paused
+
+    logger.section(f"Resuming the hub at {kubeconfig}")
+    steps = set_hub_paused(Path(kubeconfig), paused=False, dry_run=dry_run)
+    if dry_run:
+        for i, step in enumerate(steps, 1):
+            logger.info(f"  {i}. would: {step.what}")
+        logger.warning("dry-run — nothing was changed")
+
+
 @argo_app.command("check-spokes")
 def argo_check_spokes(
     kubeconfig: Annotated[
@@ -307,8 +366,12 @@ def argo_check_spokes(
     # question -- does the credential the hub stores actually work -- and an
     # absent registration is a different question with a different tool
     # (`check-drift`, `register-spoke`). It is also the NORMAL state during the
-    # AWS->GCP migration: `networking.gcp.managed_spokes` is ["staging"] while
-    # `argocd.spokes` declares both, so gcp1 legitimately holds no prod secret.
+    # AWS->GCP migration, whenever `networking.gcp.managed_spokes` is narrower
+    # than `argocd.spokes`: a hub legitimately holds no secret for a spoke it does
+    # not reconcile. Deliberately not restating the list's current value -- an
+    # earlier version of this comment said `["staging"]` and went stale the day
+    # prod was handed over, which is the failure mode this codebase has hit five
+    # times (a comment describing config, drifting from it silently).
     # Failing on it would make the command red for months and train everyone to
     # ignore it -- which is how the false green it replaces survived so long.
     broken = [r for r in results if not r.ok and r.status is not Status.NOT_REGISTERED]
@@ -863,6 +926,14 @@ def k8s_restart(
 @k8s_app.command("fetch-kubeconfig")
 def k8s_fetch_kubeconfig(
     env: Annotated[str, typer.Option("--env", "-e", help="Cluster to fetch (staging|prod|hub)")],
+    direct: Annotated[
+        bool,
+        typer.Option(
+            "--direct",
+            help="Write the node's own endpoint as the server instead of 127.0.0.1 "
+            "(operator box already on the mesh; no `k8s connect` needed)",
+        ),
+    ] = False,
 ) -> None:
     """Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052).
 
@@ -874,12 +945,26 @@ def k8s_fetch_kubeconfig(
     for prod's public IP, an SSH local-forward on the LAN, or ts-bridge over the
     mesh -- so one kubeconfig works from any machine, including a non-admin box with
     no native Tailscale.
+
+    `--direct` writes the node's own endpoint instead, for an operator box that is
+    already on the mesh: there the tunnel is a hop that buys nothing and costs a
+    running process plus its own credential.
+
+    WHICH endpoint comes from `resolve_transport`, and it is not always a MagicDNS
+    name: `hub` resolves to `gcp1.kubelab.internal`, `prod` to the VPS's public IP,
+    `staging` to ace1's stable Tailscale IP. All three are correct and all three
+    verify -- k3s carries each in the serving cert's SANs. A literal is only wrong
+    for an address that ROTATES, which the SSOT marks by declaring `tailscale_dns`
+    with no `tailscale_ip`.
+
+    The fetch is SSH either way, so `clusters.<env>.ssh_alias` must resolve
+    regardless of this flag.
     """
     from toolkit.core.logging import ExecutionError
     from toolkit.features.k8s_kubeconfig import fetch_kubeconfig
 
     try:
-        fetch_kubeconfig(env)
+        fetch_kubeconfig(env, direct=direct)
     except KeyError as e:
         logger.error(str(e))
         raise typer.Exit(2) from e

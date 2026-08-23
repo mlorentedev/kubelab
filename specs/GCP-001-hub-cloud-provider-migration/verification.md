@@ -19,8 +19,75 @@ created: "2026-08-20"
       to `kubelab-hub` and the restore verified. Fired through the REAL topic
       against the REAL deployed function, so the trigger and IAM were exercised
       rather than a copy of the code.
-- [ ] AC3 hub reconciles from GCP -> `argocd app list` both Synced/Healthy
-- [ ] AC4 preemption self-heals -> delete → recreate → Synced transcript
+- [x] AC3 hub reconciles from GCP -> both Applications Synced/Healthy **with a
+      real write behind each**, 2026-08-22:
+
+      | Application | Sync | Health | operationState | history |
+      |---|---|---|---|---|
+      | `kubelab-prod` | Synced | Healthy | `Succeeded` | `[0]` — **93 resources** |
+      | `kubelab-staging` | Synced | Healthy | `Succeeded` | `[0]` |
+
+      `check-spokes` from the hub's own credential: **both** `ok — HTTP 200`.
+      `syncPolicy` survived the recreate intact and per-env (ADR-037):
+      prod `{"prune":true,"selfHeal":true}`, staging `selfHeal:false`.
+
+      **THE TENTH FALSE GREEN, and it is the one this AC exists to catch.**
+      Immediately after the recreate, before any sync was forced:
+
+          kubelab-prod   Synced   Healthy   history: EMPTY
+
+      Synced/Healthy with an empty history means the hub *compared* the spoke
+      against git and found them equal — because aws1 had already reconciled it
+      before being paused — and never exercised its own write path at all. The
+      state is indistinguishable from a working hub until you ask for the
+      history. It is the same shape that hid a broken staging hub last session,
+      reproduced here on prod, and the reason the acceptance is a forced sync
+      rather than a status read.
+
+      Corollary worth stating because it inverts the obvious test: **history is
+      per-hub, not per-Application-name.** aws1's `kubelab-prod` history ended at
+      id 51; gcp1's own starts at id 0. A check written as "history > 51" would
+      report failure on a hub that is working perfectly.
+- [x] AC4 preemption self-heals -> **a real recreate, unattended, end to end**,
+      2026-08-22 (the prod handover triggered it: changing `managed_spokes`
+      changes the instance template, so the MIG recreates the hub and the cutover
+      re-exercises this path instead of bypassing it).
+
+      | Property | Before | After |
+      |---|---|---|
+      | Tailscale address | `100.64.0.24` | `100.64.0.12` |
+      | SSH host key | — | **new** (a genuinely new machine) |
+      | MagicDNS | resolves | **follows the new node**, still `gcp1` (F2) |
+      | cloud-init | — | `status: done` |
+      | Argo CD | — | **installed unattended**, both spokes registered (F1) |
+      | prod cluster secret | absent | **installed from Secret Manager at boot** |
+      | Human steps between apply and Synced | — | **zero** |
+
+      **CORRECTION to the previous session's lesson, measured today.** That
+      lesson said to judge recreate completion by the instance **`id`** rather
+      than the name, because `RECREATE` preserves the name. The `id` reported by
+      `list-instances` is the **managed instance's** id, not the VM's, and it is
+      preserved too — it stayed `7978086404576288333` across a recreate that
+      demonstrably happened. A 10-minute poll waiting for it to change would
+      have run forever. **Neither name nor id changes.** The reliable signals are
+      the ones observable from outside the group: the Tailscale address and the
+      SSH host key, both of which rotated.
+
+      **The host key rotation is HANDLED, and I proved that by getting it wrong.**
+      Hitting the `REMOTE HOST IDENTIFICATION HAS CHANGED` warning, I filed it as
+      an unhandled gap (#1295) — then found `wait-node-ready.yml:110` already
+      purges the stale key, scoped to exactly the nodes whose instance rotates
+      (`tailscale_dns` with no `tailscale_ip`), tested, and annotated as the TOFU
+      mitigation it is, with the real fix tracked as **#1261** (SSH host
+      certificates) and an instruction that landing #1261 must delete the purge.
+      #1295 closed as redundant.
+
+      What actually happened is a sequencing error of mine: I ran `ssh gcp1`
+      directly instead of `make wait-node-ready NODE=gcp1 ENV=hub`, which the
+      module's own `next_steps` output lists as step 1 precisely so this is
+      handled. Recorded because the failure mode generalises — **a capability
+      that lives on one path looks absent from every other path**, and the
+      instinct on meeting the symptom is to file rather than to look.
 
       **PARTIAL, and deliberately not ticked.** A template update triggered a MIG
       replacement on 2026-08-22 and the recreate path worked end to end:
@@ -45,6 +112,31 @@ created: "2026-08-20"
       the first boot, having been recorded as "closed in code" in #1217.
 - [ ] AC5 portability scored -> the table below, with real counts
 - [ ] AC6 AWS decommissioned -> three AWS API outputs, pasted
+
+      **Reconciliation is handed over; the inbound route and the teardown are
+      not.** Deliberately stopped here, 2026-08-22, at the last point where the
+      rollback is one command.
+
+      State right now, and it is a confusing one to walk into cold:
+
+      | | gcp1 | aws1 |
+      |---|---|---|
+      | reconciles prod | **yes**, verified by a forced sync | no — controller at 0 |
+      | reconciles staging | yes | no — was detached earlier |
+      | holds `kubelab-prod` + `cluster-prod` | yes | **yes, untouched** |
+      | serves `argo.kubelab.live` | no | **yes** (HTTP 200) |
+
+      So **the Argo CD UI you reach right now is the paused hub's**, showing its
+      own last-known view of prod, while the hub actually reconciling prod has no
+      inbound route. Both facts are intended and neither is a defect — the
+      EndpointSlice repoint is the next step, and doing it later is what keeps
+      the rollback trivial.
+
+      **Rollback, if anything looks wrong before the repoint:**
+      `make hub-resume HUB=~/.kube/kubelab-hub-aws-config`. It is complete and
+      instant because nothing was deleted from aws1 — that is the entire reason
+      the handover pauses rather than unregisters, and why `unregister-spoke`
+      comes after the soak instead of here.
 - [ ] AC7 cost recorded as derivation -> ADR-063 D4
 - [ ] AC8 ceilings measured -> `fio` output + `deploy-argocd` wall time
 

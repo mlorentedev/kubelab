@@ -296,11 +296,32 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
 
 - [x] `networking.gcp` in `common.yaml`; completeness guards extended to cover it.
       ✓ 2026-08-20 (#1191)
-- [ ] **[AC5]** Point `clusters.hub.{node,ssh_alias}` at `gcp1`, then walk the
-      remaining column-3 rows from `proposal.md` **one row per commit**, so the
-      diff shows exactly what a provider change costs. Do **not** refactor them
-      into a generic lookup — that is **#1182**, and doing it here destroys the
-      measurement this spec exists to produce.
+- [x] **[AC5]** Point `clusters.hub.{node,ssh_alias}` at `gcp1` ✓ 2026-08-22, as
+      its own commit. Remaining column-3 rows still to walk **one row per
+      commit** (the `RESOLVE_AWS1_TAILSCALE_IP` group is next). Do **not**
+      refactor them into a generic lookup — that is **#1182**, and doing it here
+      destroys the measurement this spec exists to produce.
+      **The row had a second half, and that half is the finding:** the flip needs
+      an SSH alias, and `~/.ssh/config` is the ONE consumer of `networking.*`
+      that nothing generates — it is hand-copied from
+      `docs/runbooks/headscale-setup.md`. There was no `Host gcp1`, and there had
+      never needed to be, because Ansible reads the generated inventory's
+      `ansible_host` and never touches aliases; only `fetch-kubeconfig`, which
+      SSHes by alias, exposes it. Filed as **#1289**. The runbook's copy is
+      marked stale rather than hand-corrected — it still lists `k3s-server` and
+      two agents removed by ADR-023, and hand-fixing what a generator will own
+      just produces a second copy that ages the same way.
+- [x] **[AC5]** Operator access to the hub was itself a column-3 row, unplanned.
+      ✓ 2026-08-22. `clusters.hub` names exactly ONE node, so during a two-hub
+      migration there is no supported way to address the other — added
+      `clusters.hub-aws`, removed with `networking.aws` at the end.
+      And `fetch-kubeconfig` could only write the ts-bridge form
+      (`127.0.0.1:<port>`), while this workstation is mesh-native and has no
+      ts-bridge credential — which is why the hub kubeconfig in use was
+      hand-made, direct, and reproducible by no target. Added
+      `fetch-kubeconfig --direct`; the hand-made artifact is retired and both hub
+      kubeconfigs are now toolkit-produced. ts-bridge discovery defects found
+      alongside: **#1290**.
 - [x] `infra/ansible/playbooks/provision-gcp1.yml`, from `provision-aws1.yml` with
       the hardware assertions retargeted. **Do not copy its header's stale
       claims** (it documents a `terminate`+ASG contract never applied, and 8 GB
@@ -384,17 +405,26 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
 > that looks most like tidying up after the old hub. The handover below therefore
 > PAUSES the old hub and never removes anything from it.
 
-- [ ] **Hand prod over by pausing, not by deleting.** Scale `aws1`'s
-      `argocd-application-controller` to 0 — the same primitive
-      `_deploy-argocd-helm` already uses for OOM mitigation, so it is in this
-      repo's vocabulary. Then flip the spokes variable to include prod and
-      `terraform apply`. **Changing the instance template makes the MIG recreate
-      the hub**, so the cutover re-exercises AC4's recreate path as a side effect
-      rather than bypassing it.
-- [ ] **Rollback is the paused hub, and it stays available until the destroy.**
-      `aws1` remains intact-but-paused through the soak; scaling its controller
-      back to 1 is an instant, complete rollback. This is why the destroy is last
-      and separate — the ordering below is the rollback window, not ceremony.
+- [x] **Hand prod over by pausing, not by deleting.** ✓ 2026-08-22.
+      `make hub-pause HUB=~/.kube/kubelab-hub-aws-config` → `managed_spokes`
+      gains prod → `make tf-gcp-apply` (`3 added, 1 changed, 1 destroyed`) → MIG
+      recreate → cloud-init registers prod from Secret Manager → forced sync
+      `Succeeded`, **93 resources**. Zero human steps between apply and Synced.
+      **The plan named this primitive and no command implemented it** — the only
+      scale-to-0 in the repo is an OOM pre-step inside `_deploy-argocd-helm`, so
+      the highest-blast-radius step of the migration was a raw `kubectl`. Built
+      as `make hub-pause` / `hub-resume`, with `HUB=` required for the same
+      reason `unregister-spoke` requires it.
+      **`register-spoke` was NOT run**, per the warning below — cloud-init did
+      the registration, which is what makes the unattended path *proven* rather
+      than merely present.
+- [x] **Rollback is the paused hub, and it stays available until the destroy.**
+      ✓ verified 2026-08-22, not just asserted: after the handover, aws1 still
+      holds `application.argoproj.io/kubelab-prod` and `secret/cluster-prod`,
+      with its controller at `replicas=0`. `make hub-resume HUB=<aws1>` is a
+      complete rollback. A test asserts the pause plan contains no `delete` and
+      no `patch` — a pause that removes anything is an unregister wearing the
+      wrong name.
 - [ ] **[AC3]** Re-render the prod EndpointSlice against `gcp1` **before** any AWS
       teardown. Until this runs, prod's Argo CD route points at `aws1`.
 - [ ] **[AC3]** Verify `https://argo.kubelab.live` serves from the GCP hub.
