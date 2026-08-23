@@ -23,6 +23,7 @@ resources:
   - services/minio.yaml
   - services/homepage.yaml
   - services/quota-watcher.yaml
+  - services/r2-backup-watcher.yaml
 
 configMapGenerator:
   # Homepage config — hash suffix triggers rolling update on config change (RELIAB-002)
@@ -100,6 +101,7 @@ configMapGenerator:
       - services/grafana-alerting/policies.yaml
       - services/grafana-alerting/rules.yaml
       - services/grafana-alerting/quota-rules.yaml
+      - services/grafana-alerting/r2-backup-rules.yaml
 
 # Image tags synced from infra/config/values/common.yaml (SSOT).
 # Run `make sync-k8s-images` to refresh after bumping versions.
