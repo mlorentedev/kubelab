@@ -32,6 +32,69 @@
   when: netplan_address is defined
   notify: apply netplan
 
+# --- /etc/resolv.conf ownership --------------------------------------------
+# Tailscale picks its DNS-management mode by inspecting this file. When it is
+# systemd-resolved's stub symlink, Tailscale configures resolved over D-Bus and
+# leaves the file alone. When it is a regular file, Tailscale enters "direct"
+# mode: it copies the original to /etc/resolv.pre-tailscale-backup.conf and
+# overwrites the file with MagicDNS as the ONLY nameserver.
+#
+# Direct mode is unsurvivable on this fleet, because `override_local_dns` is
+# false by design (headscale role): MagicDNS serves the split zones and answers
+# SERVFAIL for everything else. In resolved mode that is correct — resolved
+# still has the link's own nameservers to fall through to. In direct mode there
+# is nothing to fall through to, because the file it wrote holds one nameserver.
+#
+# Measured on ace2, 2026-08-23: every public name failed to resolve, while
+# `resolvectl query github.com` answered via enp1s0 — a path glibc never takes,
+# since nsswitch is `hosts: files dns` with no `resolve` module. The node's own
+# pre-Tailscale backup held a plain `nameserver 1.1.1.1 / 8.8.8.8` file, so the
+# symlink was already gone BEFORE Tailscale ran. What removed it is unknown;
+# declaring the state makes the question moot, because every run puts it back.
+#
+# It does not self-heal: stopping tailscaled does NOT restore the file
+# (measured), so a node that enters direct mode stays there indefinitely.
+#
+# Ordered ahead of the apt tasks below deliberately — they resolve names, and a
+# node in this state fails them with an error that names the mirror, not DNS.
+- name: Detect systemd-resolved
+  command: systemctl is-active systemd-resolved
+  register: _resolved_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: not (legacy_python | default(false))
+
+- name: Detect tailscaled (so the handler can be conditioned on it)
+  command: systemctl cat tailscaled.service
+  register: _tailscaled_present
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: not (legacy_python | default(false))
+
+- name: Hand /etc/resolv.conf back to systemd-resolved
+  file:
+    src: ../run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: true
+  when:
+    - not (legacy_python | default(false))
+    - _resolved_state.stdout | default('') | trim == 'active'
+  notify: restart tailscaled
+
+# Not a spare copy of anything wanted: it is a snapshot of the broken state the
+# symlink above replaces, and `tailscale down` restores it — which would
+# reintroduce the fault on a node that had just been repaired.
+- name: Remove the stale pre-Tailscale resolv.conf backup
+  file:
+    path: /etc/resolv.pre-tailscale-backup.conf
+    state: absent
+  when:
+    - not (legacy_python | default(false))
+    - _resolved_state.stdout | default('') | trim == 'active'
+
 - name: Update apt cache
   apt:
     update_cache: true
