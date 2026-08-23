@@ -59,6 +59,10 @@
       "why": "PR-Agent (TOOL-021 Part 2) posts as github-actions via GITHUB_TOKEN and publishes through the comments API, not the reviews API — so reviews[] is empty on a PR it genuinely reviewed. Declared ahead of Part 2 landing: the gate must not call this repository's own reviewer unreviewed the day it starts running. The marker is the `review` command's own heading; `## PR Code Suggestions` (the `improve` command) is deliberately NOT here — suggestions are not a review."
     }
   ],
+  "triage": {
+    "marker": "## Review triage",
+    "why": "Omitted when this file was ported from dotfiles at 2bac1c5, and the omission was silent in the worst way: `dotf pr triage-queue` could never answer in this repository, replying 'declares no triage.marker' on every invocation. Its exit status is 1 both when work is pending AND when the question cannot be computed, precisely so an unanswerable queue is never mistaken for a clear one — but a check that ALWAYS reports the same thing stops being read, which is how a gate degrades into noise. Measured 2026-08-22 while closing GCP-001's prod handover: the queue had gone unanswerable for the whole life of the registry. The marker is a heading matched at line start, because a disposition recorded in a chat message evaporates and the Definition of Done's Review item then rests on a claim nobody can check."
+  },
   "escape": {
     "label": "merged-unreviewed",
     "section": "## Unreviewed merge rationale",
