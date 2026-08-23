@@ -171,11 +171,14 @@ def _recipe(target: str) -> str:
 class TestAnAbsentRegistrationIsAStateNotAFault:
     """`NOT_REGISTERED` must be reported and must not fail the run.
 
-    It is the NORMAL condition during the AWS->GCP migration:
-    `networking.gcp.managed_spokes` is ["staging"] while `argocd.spokes`
-    declares both, so gcp1 legitimately holds no prod cluster secret. A command
-    that is red for months trains everyone to ignore it -- which is how the
-    false green this replaces survived so long.
+    It is the NORMAL condition during the AWS->GCP migration whenever
+    `networking.gcp.managed_spokes` is narrower than `argocd.spokes`: a hub
+    legitimately holds no cluster secret for a spoke it does not reconcile. A
+    command that is red for months trains everyone to ignore it -- which is how
+    the false green this replaces survived so long.
+
+    The list's current value is deliberately not restated here. This docstring
+    said `["staging"]` and went stale the day prod was handed over.
 
     Behavioural, not a text scan. The first version of these two asserted that
     `Status.NOT_REGISTERED` APPEARED in the function body, and a mutation that

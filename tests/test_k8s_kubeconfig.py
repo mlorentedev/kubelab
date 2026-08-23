@@ -149,6 +149,47 @@ class TestRewriteServerDirect:
         with pytest.raises(ValueError, match="refusing to write"):
             rewrite_server_direct("server: https://10.0.0.1:6443\n", "gcp1.kubelab.internal", 6443)
 
+    def test_a_recreatable_node_is_addressed_by_name_and_never_by_address(self) -> None:
+        """The aws1 lesson, bound to the code instead of asserted in prose.
+
+        This function's docstring originally claimed its host was "a MagicDNS
+        name, never a Tailscale IP" and invoked the aws1 lesson to justify it.
+        Measured, `--direct` on staging resolves to `100.64.0.11` and on prod to
+        a public IP -- so the comment was false about the very function carrying
+        it, which is lesson-363's shape reproduced inside the fix for it.
+
+        The rule that IS true binds narrowly: an address that ROTATES must not be
+        cached, and the SSOT marks exactly those nodes by declaring
+        `tailscale_dns` with no `tailscale_ip`. Asserted here over the real SSOT
+        so that adding a recreatable node whose transport resolves to a literal
+        fails, instead of being discovered after a preemption.
+        """
+        import yaml
+
+        # _node_block is reused rather than reimplemented: it resolves a node by
+        # HOSTNAME across networking's cloud sections (`gcp1` lives under
+        # `networking.gcp`, not `networking.gcp1`), and a second copy of that walk
+        # here would be one more thing to keep in step.
+        from toolkit.features.k8s_connect import _node_block, resolve_transport
+        from toolkit.features.k8s_kubeconfig import _common_path
+
+        config = yaml.safe_load(_common_path().read_text())
+        networking = config.get("networking") or {}
+        clusters = config.get("clusters") or {}
+
+        for name, cluster in clusters.items():
+            block = _node_block(networking, str(cluster["node"]))
+            recreatable = "tailscale_dns" in block and "tailscale_ip" not in block
+            if not recreatable:
+                continue
+            host = resolve_transport(name).target_host
+            assert not host.replace(".", "").isdigit(), (
+                f"clusters.{name} names a node whose instance is replaced "
+                f"({cluster['node']}), yet --direct would cache the literal {host!r}. "
+                "A recreatable node must be addressed by MagicDNS name: the address "
+                "rotates on every preemption and the name follows the node."
+            )
+
 
 class TestClusterSSOT:
     """`clusters.<name>` is read from common.yaml and validated."""

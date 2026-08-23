@@ -103,8 +103,8 @@ def rewrite_server(kubeconfig_text: str, local_port: int) -> str:
     return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://127.0.0.1:{local_port}")
 
 
-def rewrite_server_direct(kubeconfig_text: str, mesh_host: str, apiserver_port: int) -> str:
-    """Repoint the apiserver at the node's mesh name, with no transport in between.
+def rewrite_server_direct(kubeconfig_text: str, target_host: str, apiserver_port: int) -> str:
+    """Repoint the apiserver at the node's own endpoint, with no transport between.
 
     The counterpart to ``rewrite_server``, for the case ADR-052 does not cover:
     an operator box that is *already* on the mesh. The tunnel exists so one
@@ -112,14 +112,31 @@ def rewrite_server_direct(kubeconfig_text: str, mesh_host: str, apiserver_port: 
     has it, the tunnel is a hop that buys nothing and costs a running process
     and its own credential.
 
-    TLS still verifies, and for the same reason the ``127.0.0.1`` form does:
-    k3s puts the node's MagicDNS name in the serving certificate's SANs
-    (measured on aws1 — ``DNS:aws1.kubelab.internal``). Nothing here is
-    insecure-skip.
+    ``target_host`` is whatever ``resolve_transport`` resolved, and it is NOT
+    always a MagicDNS name — an earlier version of this docstring claimed it was,
+    while invoking the aws1 lesson to justify the claim. Measured, the three
+    shapes in this fleet are:
 
-    ``mesh_host`` is a MagicDNS **name**, never a Tailscale IP. That is the aws1
-    lesson: a Spot node's address rotates on every preemption, so a cached
-    literal is a lie waiting for the next one, while the name follows the node.
+    ===========  =====================  ====================================
+    cluster      resolves to            why
+    ===========  =====================  ====================================
+    ``hub``      ``gcp1.kubelab.…``     cattle: ``tailscale_dns``, no ``_ip``
+    ``prod``     ``162.55.57.175``      the VPS declares a ``public_ip``
+    ``staging``  ``100.64.0.11``        ace1 declares a stable ``tailscale_ip``
+    ===========  =====================  ====================================
+
+    All three are correct. The aws1 lesson is that an address which ROTATES must
+    not be cached, and it binds exactly where rotation happens: the hubs, whose
+    machine is replaced on every preemption, and which the SSOT marks by carrying
+    ``tailscale_dns`` with no ``tailscale_ip``. A literal for a node that never
+    moves is redundant, not wrong. Stating that here rather than restating the
+    rule as an absolute, because the absolute version was false about this very
+    function.
+
+    TLS verifies in all three cases, and for the same reason the ``127.0.0.1``
+    form does: k3s puts each of these in the serving certificate's SANs
+    (measured — ``DNS:aws1.kubelab.internal`` on the hub, the public IP on the
+    VPS). Nothing here is insecure-skip.
 
     Raises for the same reason ``rewrite_server`` does — an unrecognised server
     means the k3s default moved, and writing an unverified endpoint is worse
@@ -130,7 +147,7 @@ def rewrite_server_direct(kubeconfig_text: str, mesh_host: str, apiserver_port: 
             f"expected {_K3S_DEFAULT_SERVER!r} in the fetched kubeconfig; the k3s "
             "default may have changed — refusing to write an unverified server"
         )
-    return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://{mesh_host}:{apiserver_port}")
+    return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://{target_host}:{apiserver_port}")
 
 
 def fetch_argv(ssh_alias: str) -> list[str]:

@@ -366,8 +366,12 @@ def argo_check_spokes(
     # question -- does the credential the hub stores actually work -- and an
     # absent registration is a different question with a different tool
     # (`check-drift`, `register-spoke`). It is also the NORMAL state during the
-    # AWS->GCP migration: `networking.gcp.managed_spokes` is ["staging"] while
-    # `argocd.spokes` declares both, so gcp1 legitimately holds no prod secret.
+    # AWS->GCP migration, whenever `networking.gcp.managed_spokes` is narrower
+    # than `argocd.spokes`: a hub legitimately holds no secret for a spoke it does
+    # not reconcile. Deliberately not restating the list's current value -- an
+    # earlier version of this comment said `["staging"]` and went stale the day
+    # prod was handed over, which is the failure mode this codebase has hit five
+    # times (a comment describing config, drifting from it silently).
     # Failing on it would make the command red for months and train everyone to
     # ignore it -- which is how the false green it replaces survived so long.
     broken = [r for r in results if not r.ok and r.status is not Status.NOT_REGISTERED]
@@ -926,7 +930,7 @@ def k8s_fetch_kubeconfig(
         bool,
         typer.Option(
             "--direct",
-            help="Write the node's MagicDNS name as the server instead of 127.0.0.1 "
+            help="Write the node's own endpoint as the server instead of 127.0.0.1 "
             "(operator box already on the mesh; no `k8s connect` needed)",
         ),
     ] = False,
@@ -942,11 +946,19 @@ def k8s_fetch_kubeconfig(
     mesh -- so one kubeconfig works from any machine, including a non-admin box with
     no native Tailscale.
 
-    `--direct` writes the node's MagicDNS name instead, for an operator box that is
+    `--direct` writes the node's own endpoint instead, for an operator box that is
     already on the mesh: there the tunnel is a hop that buys nothing and costs a
-    running process plus its own credential. TLS still verifies -- k3s puts the
-    MagicDNS name in the serving cert's SANs. The fetch is SSH either way, so
-    `clusters.<env>.ssh_alias` must resolve regardless of this flag.
+    running process plus its own credential.
+
+    WHICH endpoint comes from `resolve_transport`, and it is not always a MagicDNS
+    name: `hub` resolves to `gcp1.kubelab.internal`, `prod` to the VPS's public IP,
+    `staging` to ace1's stable Tailscale IP. All three are correct and all three
+    verify -- k3s carries each in the serving cert's SANs. A literal is only wrong
+    for an address that ROTATES, which the SSOT marks by declaring `tailscale_dns`
+    with no `tailscale_ip`.
+
+    The fetch is SSH either way, so `clusters.<env>.ssh_alias` must resolve
+    regardless of this flag.
     """
     from toolkit.core.logging import ExecutionError
     from toolkit.features.k8s_kubeconfig import fetch_kubeconfig
