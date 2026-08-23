@@ -35,7 +35,7 @@ spec:
               protocol: TCP
           env:
             - name: HOMEPAGE_ALLOWED_HOSTS
-              value: home.staging.kubelab.live,home.kubelab.live
+              value: home.kubelab.live
           envFrom:
             - secretRef:
                 name: homepage-secrets
@@ -78,7 +78,7 @@ spec:
               port: http
               httpHeaders:
                 - name: Host
-                  value: home.staging.kubelab.live
+                  value: home.kubelab.live
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
@@ -87,7 +87,7 @@ spec:
               port: http
               httpHeaders:
                 - name: Host
-                  value: home.staging.kubelab.live
+                  value: home.kubelab.live
             initialDelaySeconds: 5
             periodSeconds: 10
       volumes:
@@ -127,7 +127,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`home.staging.kubelab.live`)
+    - match: Host(`home.kubelab.live`)
       kind: Rule
       middlewares:
         - name: secure-headers
