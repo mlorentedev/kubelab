@@ -1063,14 +1063,30 @@ class SecretsManager:
         machine-generable secret, or ``rotate=[key, ...]`` to regenerate only the
         named keys.
 
+        NEVER regenerates a secret in ``IMMUTABLE_SECRETS``, whatever the flags say.
+        That sentence used to be false and the gap was not theoretical: all four
+        immutable secrets are ``RANDOM_TOKEN``, which is a kind this function
+        regenerates, and both ``force`` and ``rotate`` deliberately bypass the
+        idempotency check that was the only thing standing in the way. Measured
+        2026-08-23 with ``--force --dry-run`` against prod: it listed
+        ``storage_encryption_key`` among the 19 it would write. Executing that does
+        not rotate a credential -- it makes Authelia's database unreadable and takes
+        every registered second factor with it.
+
+        ``credentials generate`` has always preserved these. Two commands reaching
+        the same value with only one of them guarded is the whole defect.
+
         Does NOT generate:
         - Passwords (require interactive prompt)
         - Argon2 hashes (derived from passwords)
         - CrowdSec API keys (require running container)
         - External secrets (API tokens provided by user)
+        - Immutable secrets (see above)
 
         Returns dict of key_path → generated value (empty dict on validation error).
         """
+        from toolkit.features.credentials import IMMUTABLE_SECRETS
+
         auto_kinds = {
             SecretKind.RANDOM_HEX,
             SecretKind.RANDOM_TOKEN,
@@ -1090,6 +1106,18 @@ class SecretsManager:
             if non_machine:
                 logger.error(f"Not machine-generable (won't rotate): {', '.join(sorted(non_machine))}")
                 return {}
+            # Refuse the whole run rather than silently doing the safe subset: someone
+            # who named an immutable key is acting on a belief about what it does, and
+            # a partial success would leave that belief intact.
+            immutable = rotate_set & IMMUTABLE_SECRETS
+            if immutable:
+                logger.error(
+                    f"Refusing to regenerate immutable secret(s): {', '.join(sorted(immutable))}. "
+                    "These encrypt or sign state that still exists -- overwriting "
+                    "storage_encryption_key orphans Authelia's database rather than "
+                    "rotating anything. Replacing one is a migration, not a rotation."
+                )
+                return {}
 
         # Idempotency: skip secrets already present (non-empty). force/rotate bypass it.
         present = set() if (force or rotate_set) else set(self.audit(env).present)
@@ -1101,6 +1129,13 @@ class SecretsManager:
             if env not in spec.envs:
                 continue
             if spec.kind not in auto_kinds:
+                continue
+            # Before the kind check would let force through. Immutability outranks
+            # every flag: `--force` means "regenerate what is generable", and these
+            # are not -- their current value is load-bearing state, not a credential
+            # that happens to already exist.
+            if spec.key_path in IMMUTABLE_SECRETS:
+                logger.warning(f"  Preserving immutable secret: {spec.key_path}")
                 continue
             if rotate_set and spec.key_path not in rotate_set:
                 continue

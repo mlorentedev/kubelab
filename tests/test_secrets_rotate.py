@@ -99,6 +99,57 @@ class TestItRefusesWhatItMustNot:
             mgr.rotate_secret("staging", spec.key_path)
 
 
+class TestInitCannotDestroyImmutableState:
+    """The pre-existing hole this work uncovered, and the more dangerous half.
+
+    All four IMMUTABLE_SECRETS are `RANDOM_TOKEN` -- a kind `init_machine_secrets`
+    regenerates -- and both `force` and `rotate` bypass the idempotency check that
+    was the only thing stopping them. Measured 2026-08-23 against prod with
+    `--force --dry-run`: `storage_encryption_key` appeared among the 19 keys it
+    would write. Running that for real does not rotate a credential; it orphans
+    Authelia's database and every second factor registered in it.
+
+    `credentials generate` has always preserved them. Two commands reaching the
+    same value with one of them unguarded is the defect.
+    """
+
+    def test_force_preserves_every_immutable_secret(self, mocker) -> None:
+        from toolkit.features.credentials import IMMUTABLE_SECRETS
+
+        manager = SecretsManager()
+        mocker.patch.object(manager, "set_secret", return_value=True)
+        generated = manager.init_machine_secrets("prod", dry_run=True, force=True)
+        for key in IMMUTABLE_SECRETS:
+            assert key not in generated, (
+                f"--force would regenerate {key}. It is not a credential that happens "
+                "to exist, it is load-bearing state; regenerating it destroys what it "
+                "encrypted."
+            )
+
+    def test_naming_an_immutable_key_refuses_the_whole_run(self, mocker) -> None:
+        """Not a partial success: whoever named it holds a belief worth correcting."""
+        manager = SecretsManager()
+        mocker.patch.object(manager, "set_secret", return_value=True)
+        generated = manager.init_machine_secrets(
+            "prod",
+            dry_run=True,
+            rotate=["apps.services.security.authelia.storage_encryption_key"],
+        )
+        assert generated == {}, "naming an immutable key must abort, not silently skip"
+
+    def test_the_guard_reads_the_shared_list_not_a_copy(self) -> None:
+        """One list, imported. A second copy drifts the moment either side changes."""
+        source = (
+            __import__("inspect")
+            .getsource(SecretsManager.init_machine_secrets)
+            .replace(" ", "")
+        )
+        assert "IMMUTABLE_SECRETS" in source, (
+            "the guard must consult credentials.IMMUTABLE_SECRETS rather than "
+            "re-listing the keys here"
+        )
+
+
 class TestItRotatesAndPropagates:
     def test_a_generatable_secret_is_written_to_the_vault(self, mgr) -> None:
         spec = _first_of_kind(
