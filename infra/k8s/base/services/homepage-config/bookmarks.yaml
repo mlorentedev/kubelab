@@ -72,12 +72,31 @@
     - "Hetzner (~9€/mo)":
         - icon: si-hetzner
           href: https://console.hetzner.cloud/billing
+    - "GCP Hub (~$6/mo)":
+        - icon: si-googlecloud
+          href: https://console.cloud.google.com/welcome?project=kubelab-hub
+    - "Cloudflare R2":
+        - icon: si-cloudflare
+          href: https://dash.cloudflare.com/?to=/:account/r2/overview
     - "AWS (~$4/mo)":
         - icon: si-amazonaws
           href: https://console.aws.amazon.com/billing
     - Vault:
         - icon: si-obsidian
           href: obsidian://vault/knowledge
+- Incident Triage:
+    - "Grafana Logs":
+        - icon: si-grafana
+          href: https://grafana.kubelab.live/explore
+    - "Argo CD Sync":
+        - icon: si-argo
+          href: https://argo.kubelab.live
+    - "Status Overview":
+        - icon: si-uptimekuma
+          href: https://status.kubelab.live
+    - "SRE Runbooks":
+        - icon: mdi-book-open-page-variant
+          href: https://github.com/mlorentedev/kubelab/tree/master/docs/runbooks
 - Docs:
     - Kubernetes:
         - icon: si-kubernetes

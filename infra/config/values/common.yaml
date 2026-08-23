@@ -835,6 +835,10 @@ apps:
 
       homepage:
         name: homepage
+        domain: home.kubelab.live
+        default_port: 3000
+        health_path: /
+        enable_auth: false
         # Pinned, not :latest — v2.0.0 (2026-08-14) bumped Next.js to a release
         # that rejects kubelet's pod-IP-addressed probes as an invalid Host.
         image: ghcr.io/gethomepage/homepage:v1.13.2

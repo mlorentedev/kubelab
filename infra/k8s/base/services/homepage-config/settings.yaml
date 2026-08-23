@@ -102,6 +102,10 @@ layout:
     style: row
     columns: 5
     tab: Bookmarks
+  Incident Triage:
+    style: row
+    columns: 4
+    tab: Bookmarks
   Docs:
     style: row
     columns: 4

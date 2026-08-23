@@ -78,14 +78,58 @@ class TestBuildDnsMap:
         assert "100.64.0.11" in pihole_line
 
 
+class TestBuildNodeList:
+    def test_gcp_node_is_included_in_node_list(self) -> None:
+        config = {
+            "networking": {
+                "nodes": {
+                    "ace1": {
+                        "dashboard": {
+                            "display_name": "ace1",
+                            "order": 1,
+                            "icon": "mdi-server",
+                            "description": "K3s node",
+                            "widget": "glances",
+                        },
+                        "tailscale_ip": "100.64.0.11",
+                    }
+                },
+                "vps": {
+                    "dashboard": {
+                        "display_name": "vps",
+                        "order": 2,
+                        "icon": "mdi-server",
+                        "description": "VPS node",
+                        "widget": "glances",
+                    },
+                    "tailscale_ip": "100.64.0.5",
+                },
+                "gcp": {
+                    "dashboard": {
+                        "display_name": "gcp1",
+                        "order": 6,
+                        "icon": "mdi-cloud-outline",
+                        "description": "GCP Hub",
+                        "widget": "ping",
+                        "ping_url": "https://argo.kubelab.live",
+                    },
+                    "tailscale_dns": "gcp1.kubelab.internal",
+                },
+            }
+        }
+        nodes = sync_homepage_config.build_node_list(config)
+        node_names = [n[0] for n in nodes]
+        assert "gcp1" in node_names
+        gcp_tile = next(tile for name, tile in nodes if name == "gcp1")
+        assert gcp_tile["ping_url"] == "https://argo.kubelab.live"
+        assert gcp_tile["glances"] is False
+
+
 class TestBuildMermaidDns:
-    def test_extra_records_edge_no_longer_names_pihole(self) -> None:
-        # pihole never actually used this path (extra_records has never
-        # resolved for anything, #964) and definitely doesn't now.
+    def test_extra_records_edge_retired_from_dns_diagram(self) -> None:
         config = {"networking": {"vps": {"public_ip": "1.2.3.4"}, "nodes": {"ace1": {"tailscale_ip": "100.64.0.11"}}}}
         diagram = sync_homepage_config.build_mermaid_dns(config)
-        extra_records_line = next(line for line in diagram.splitlines() if "extra_records" in line)
-        assert "pihole" not in extra_records_line
+        assert "extra_records" not in diagram
 
 
 class TestRenderMermaidSvgRetries:

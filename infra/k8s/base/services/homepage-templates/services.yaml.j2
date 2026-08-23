@@ -81,7 +81,7 @@
         description: Staging proxy
         widget:
           type: traefik
-          url: http://{{ traefik_cluster_ip }}:9000
+          url: http://traefik.kube-system.svc:9000
     - Traefik Prod:
         icon: si-traefikproxy
         href: https://{{ services.core.traefik.domain }}/dashboard/
@@ -119,9 +119,10 @@
         widget:
           type: customapi
           url: https://api.github.com/repos/mlorentedev/kubelab
-          refreshInterval: 60000
+          refreshInterval: 300000
           headers:
             Accept: application/vnd.github.v3+json
+            Authorization: "Bearer {%raw%}{{HOMEPAGE_VAR_GITHUB_TOKEN}}{%endraw%}"
           mappings:
             - field: open_issues_count
               label: Issues
@@ -136,9 +137,10 @@
         widget:
           type: customapi
           url: https://api.github.com/search/issues?q=repo:mlorentedev/kubelab+type:pr+state:open
-          refreshInterval: 60000
+          refreshInterval: 300000
           headers:
             Accept: application/vnd.github.v3+json
+            Authorization: "Bearer {%raw%}{{HOMEPAGE_VAR_GITHUB_TOKEN}}{%endraw%}"
           mappings:
             - field: total_count
               label: Open PRs
