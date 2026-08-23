@@ -7,7 +7,7 @@ and not its guard. So the one property the aws1 tests pin — that a replacement
 finishes the job rather than printing what a human should do next — went
 unasserted on the hub that actually serves prod.
 
-What that cost, measured 2026-08-23 (lesson-374): adopting the instance template
+What that cost, measured 2026-08-23 (lesson-375): adopting the instance template
 rolled gcp1, its Tailscale address moved ``.12 -> .13``, and
 ``argo.kubelab.live`` went dark while the hub itself answered HTTP 200. Prod's
 ``argocd-external`` EndpointSlice still held the old address, because an
@@ -77,7 +77,7 @@ def _executed_lines(target: str) -> list[str]:
     return out
 
 
-# --- the absence lesson-374 is about ---------------------------------------
+# --- the absence lesson-375 is about ---------------------------------------
 
 
 def test_replace_repoints_the_route_at_the_hub_it_rebuilt():

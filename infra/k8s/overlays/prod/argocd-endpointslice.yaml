@@ -17,7 +17,7 @@
 # That sentence used to read "which is exactly the step `make gcp1-replace`
 # already tells you to run", and it was false: gcp1-replace never invoked or
 # mentioned it. A comment asserting that another target performs a step is
-# documentation, not a dependency (lesson-374) — which is why the claim above is
+# documentation, not a dependency (lesson-375) — which is why the claim above is
 # now a `$(MAKE)` line you can grep for, and a test asserts it stays one.
 #
 # The port below is a NodePort on the hub, and it is NOT hub-specific: both hubs

@@ -530,7 +530,7 @@ _deploy-argocd-helm:
 #
 # This used to be three lines buried at the end of `_deploy-argocd-helm`, and the
 # EndpointSlice's comment claimed `gcp1-replace` "already tells you to run" that
-# target. It never did -- see lesson-374. Repairing the route needed a ten-minute
+# target. It never did -- see lesson-375. Repairing the route needed a ten-minute
 # Helm upgrade you did not want, so the honest options were "run the wrong thing"
 # or "run kubectl by hand". Hence a target that does exactly the one thing.
 #
@@ -1070,7 +1070,7 @@ gcp1-replace:
 	@$(MAKE) --no-print-directory provision NODE=gcp1 ENV=hub
 	# A recreate rotates gcp1's Tailscale IP, which prod's inbound route carries as
 	# a literal address. Without this line the hub comes back healthy and
-	# `argo.kubelab.live` stays dark -- measured 2026-08-23, lesson-374.
+	# `argo.kubelab.live` stays dark -- measured 2026-08-23, lesson-375.
 	@$(MAKE) --no-print-directory argocd-repoint
 	@echo "✓ gcp1 recreated, provisioned, and the prod route repointed. Argo CD is installed by cloud-init."
 
