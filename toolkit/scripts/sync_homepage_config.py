@@ -155,7 +155,7 @@ def build_node_list(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     for name, node in (networking.get("nodes") or {}).items():
         if node.get("dashboard"):
             candidates.append((name, node["dashboard"], _ip_for(node)))
-    for singleton_key in ("vps", "aws"):
+    for singleton_key in ("vps", "gcp", "aws"):
         entry = networking.get(singleton_key) or {}
         if entry.get("dashboard"):
             candidates.append((singleton_key, entry["dashboard"], _ip_for(entry)))
@@ -349,6 +349,56 @@ def build_service_tables(
                 version=_ver(loki.get("image", "")),
             ),
             _svc(
+                "Apprise",
+                "http://apprise.kubelab.svc:8000",
+                "http://apprise.kubelab.svc:8000/health",
+                "Internal",
+                "Core",
+                nd,
+                "Notification gateway",
+                version="1.5.0",
+            ),
+            _svc(
+                "PostgreSQL",
+                "postgres.kubelab.svc:5432",
+                "postgres.kubelab.svc:5432",
+                "Internal",
+                "Data",
+                nd,
+                "Platform DB",
+                version="17-alpine",
+            ),
+            _svc(
+                "Redis",
+                "redis.kubelab.svc:6379",
+                "redis.kubelab.svc:6379",
+                "Internal",
+                "Data",
+                nd,
+                "Session cache",
+                version="7-alpine",
+            ),
+            _svc(
+                "Vector",
+                "vector.kubelab.svc:8686",
+                "vector.kubelab.svc:8686",
+                "Internal",
+                "Observability",
+                nd,
+                "Log pipeline agent",
+                version="DaemonSet",
+            ),
+            _svc(
+                "SRE Watchers",
+                "-",
+                "-",
+                "Internal",
+                "Observability",
+                nd,
+                "Quota / R2 / Disk",
+                version="CronJobs",
+            ),
+            _svc(
                 "Homepage",
                 f"https://home.{prefix}",
                 f"https://home.{prefix}",
@@ -423,7 +473,15 @@ def build_service_tables(
             "DNS filtering",
             version="v6",
         ),
-        _svc("Pollex", f"http://pollex.{base}", f"http://pollex.{base}", "Public", "AI", "Jetson", "Edge AI"),
+        _svc(
+            "Pollex",
+            "http://100.64.0.8:8000",
+            "http://100.64.0.8:8000",
+            "Tailscale",
+            "AI",
+            "Jetson",
+            "Edge AI · on-demand",
+        ),
     ]
 
     return staging, prod, shared
@@ -498,7 +556,6 @@ def build_mermaid_dns(config: dict[str, Any]) -> str:
   CFDNS -->|"pihole.kubelab.live<br/>(OPS-022)"| ACE1["ace1 Traefik {n["ace1"]["tailscale_ip"]}"]
   C -->|VPN| HS[Headscale]
   HS -->|"split DNS<br/>*.staging.kubelab.live ONLY"| PH["Pi-hole RPi4"]
-  HS -->|extra_records| ER["jetson<br/>direct to host"]
   PH -->|forward staging| CD["CoreDNS RPi4"]
   CD --> ACE1["ace1 Traefik {n["ace1"]["tailscale_ip"]}"]
   PH -->|non-staging| UP[1.1.1.1 / 8.8.8.8]
@@ -508,29 +565,31 @@ def build_mermaid_dns(config: dict[str, Any]) -> str:
   classDef vpn fill:#dcfce7,stroke:#22c55e,stroke-width:2px
   class PH,CD,CFDNS dns
   class VPS,ACE1 proxy
-  class C,HS,UP ext
-  class ER vpn"""
+  class C,HS,UP ext"""
 
 
 MERMAID_REQUEST = """graph LR
   U[User] --> T["Traefik<br/>(+ CrowdSec plugin)"]
   T -->|IP allowed| A{Authelia}
   T -->|IP blocked| BLOCK[403 Forbidden]
-  A -->|ok| APP[App]
+  A -->|ok| APP[Apps / API / Web / n8n]
   A -->|no| LOGIN[Login]
   A -.-> R[(Redis)]
+  APP -.-> DB[(PostgreSQL)]
   T -.->|stream mode 60s| LAPI[CrowdSec LAPI]
   APP -.-> V[Vector]
   V --> L[(Loki)]
   L --> G[Grafana]
+  G -->|Alerts| N8N[n8n Router]
+  N8N -->|Slack| SLACK[#alerts / #ops-log]
   classDef sec fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
   classDef app fill:#dcfce7,stroke:#22c55e,stroke-width:2px
   classDef obs fill:#ede9fe,stroke:#8b5cf6,stroke-width:2px
   classDef proxy fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
   classDef block fill:#fee2e2,stroke:#ef4444,stroke-width:2px
   class A,LOGIN,R,LAPI sec
-  class APP app
-  class V,L,G obs
+  class APP,DB app
+  class V,L,G,N8N,SLACK obs
   class T,U proxy
   class BLOCK block"""
 
@@ -700,14 +759,16 @@ def build_tech_stack(config: dict[str, Any]) -> str:
 
 
 MERMAID_SECRET_FLOW = """graph LR
-  SOPS["SOPS<br/>common.enc.yaml"] -->|decrypt| TK[toolkit secrets]
+  SOPS["SOPS<br/>staging.enc.yaml<br/>prod.enc.yaml"] -->|decrypt| TK[toolkit secrets]
   TK -->|hash argon2| AUTH["Authelia<br/>K8s Secret"]
   TK -->|hash bcrypt| ARGO["Argo CD<br/>K8s Secret"]
+  TK -->|webhook URLs| APPRISE["Apprise / n8n<br/>K8s Secret"]
   TK -->|plaintext| GENERIC["App Secrets<br/>K8s Secret"]
   TK -->|file mount| CS["CrowdSec<br/>kube-system Secret"]
   SOPS -.->|git| GIT[(Git Repo)]
   AUTH --> POD1[Authelia Pod]
   ARGO --> POD2[Argo CD Pod]
+  APPRISE --> POD5[Apprise / n8n Pods]
   GENERIC --> POD3[App Pods]
   CS --> POD4[Traefik Pod]
   classDef sops fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
@@ -716,14 +777,14 @@ MERMAID_SECRET_FLOW = """graph LR
   classDef pod fill:#f3f4f6,stroke:#9ca3af
   class SOPS,GIT sops
   class TK toolkit
-  class AUTH,ARGO,GENERIC,CS secret
-  class POD1,POD2,POD3,POD4 pod"""
+  class AUTH,ARGO,APPRISE,GENERIC,CS secret
+  class POD1,POD2,POD3,POD4,POD5 pod"""
 
 MERMAID_DEPLOY_PIPELINE = """graph LR
   DEV[Developer] -->|git push| GH[GitHub]
   GH -->|PR merge| GHA[GitHub Actions]
   GHA -->|build + test| IMG[Docker Image]
-  IMG -->|push| DH[Docker Hub]
+  IMG -->|push| DH[Docker Hub / GHCR]
   GHA -->|release-please| TAG[SemVer Tag]
   TAG -.-> DH
   DH -->|image ready| ARGO[Argo CD<br/>{hub_name} Hub]
@@ -736,13 +797,14 @@ MERMAID_DEPLOY_PIPELINE = """graph LR
   ANS -->|K3s + config| PRD
   DEV -->|make deploy-dns| TF[Terraform]
   TF -->|records| CF[Cloudflare]
+  TF -->|MIG Spot VM| GCP[GCP Hub]
   classDef ci fill:#f3f4f6,stroke:#9ca3af
   classDef hub fill:#fce7f3,stroke:#ec4899,stroke-width:2px
   classDef spoke fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
   classDef iac fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
   classDef helm fill:#ede9fe,stroke:#8b5cf6,stroke-width:2px
   class GH,GHA,IMG,DH,TAG ci
-  class ARGO hub
+  class ARGO,GCP hub
   class STG,PRD spoke
   class DEV,ANS,TF,CF iac
   class HELM1,HELM2 helm"""
@@ -1030,9 +1092,32 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
     var dots = container.querySelectorAll(".ep-status[data-health-url]");
     dots.forEach(function(dot) {
       var url = dot.getAttribute("data-health-url");
-      fetch(url, {mode: "no-cors", signal: AbortSignal.timeout(8000)})
-        .then(function() { dot.className = "ep-status ep-status-up"; })
-        .catch(function() { dot.className = "ep-status ep-status-down"; });
+      if (!url || url === "-" || url.indexOf("http") !== 0) {
+        dot.className = "ep-status ep-status-internal";
+        dot.title = "Cluster-internal component";
+        return;
+      }
+      fetch(url, {signal: AbortSignal.timeout(8000)})
+        .then(function(res) {
+          if (res.ok || res.type === "opaque") {
+            dot.className = "ep-status ep-status-up";
+            dot.title = "Online (HTTP " + (res.status || "OK") + ")";
+          } else {
+            dot.className = "ep-status ep-status-down";
+            dot.title = "Degraded (HTTP " + res.status + ")";
+          }
+        })
+        .catch(function() {
+          fetch(url, {mode: "no-cors", signal: AbortSignal.timeout(4000)})
+            .then(function() {
+              dot.className = "ep-status ep-status-unknown";
+              dot.title = "Reachable (CORS protected)";
+            })
+            .catch(function() {
+              dot.className = "ep-status ep-status-down";
+              dot.title = "Unreachable";
+            });
+        });
     });
   }
 

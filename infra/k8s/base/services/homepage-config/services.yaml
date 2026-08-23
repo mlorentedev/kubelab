@@ -124,6 +124,10 @@
           url: http://100.64.0.5:61208
           version: 4
           metric: info
+    - "gcp1":
+        icon: mdi-cloud-outline
+        description: "Hub · e2-small · 2vCPU · 2GB"
+        ping: https://argo.kubelab.live
     - "aws1":
         icon: mdi-cloud-outline
         description: "Hub · t4g.small · 2vCPU · 2GB"

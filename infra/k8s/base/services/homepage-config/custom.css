@@ -209,6 +209,32 @@ h1, .header-title, [class*="header"] h1 {
 .ep-status-down {
   background: #ef4444;
 }
+.ep-status-internal {
+  background: #3b82f6;
+}
+
+/* Dark mode overrides when dark theme is enabled */
+@media (prefers-color-scheme: dark) {
+  .services-group pre {
+    color: #f4f4f5 !important;
+    background: #18181b !important;
+    border-color: #27272a !important;
+  }
+  .ep-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+  .ep-table td {
+    border-bottom-color: #27272a !important;
+  }
+  .ep-copy {
+    border-color: #3f3f46;
+    color: #a1a1aa;
+  }
+  .ep-copy:hover {
+    background: #27272a;
+    color: #f4f4f5;
+  }
+}
 
 /* Footer */
 #kubelab-footer {
