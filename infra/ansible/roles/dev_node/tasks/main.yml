@@ -252,6 +252,8 @@
         dest: "/usr/local/bin/{{ item }}"
         mode: "0755"
         follow: false
+      vars:
+        wrapper_src_dir: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin"
       loop:
         - node
         - npm
@@ -260,6 +262,31 @@
       become: true
       become_user: root
       tags: [dev_node, mise, orca, agents]
+
+    # The same question as the loop above, for the tools that are NOT part of the
+    # node toolchain. A non-interactive SSH session's PATH is /etc/environment
+    # verbatim — measured on ace2: pam_env.so is in sshd's stack and the session
+    # PATH matches that file character for character. ~/.local/bin is not in it,
+    # so `dotf`, `hive` and `hive-vault` were installed and invisible: a remote
+    # agent running the project's own doctrine (`dotf pr triage-queue`,
+    # `dotf secrets run`) got "command not found", while an interactive login
+    # found them and reported everything fine.
+    #
+    # Not fixed by appending ~/.local/bin to /etc/environment: that puts a
+    # user-writable directory on root's PATH. A wrapper per tool states exactly
+    # what is exposed, which is also what makes the list reviewable.
+    - name: Wrap the dotfiles CLI and hive into /usr/local/bin for non-interactive SSH tools
+      ansible.builtin.template:
+        src: mise-bin-wrapper.sh.j2
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+        follow: false
+      vars:
+        wrapper_src_dir: "{{ dev_node_home }}/.local/bin"
+      loop: "{{ dev_node_local_bin_wrapped }}"
+      become: true
+      become_user: root
+      tags: [dev_node, dotfiles, orca, agents]
 
     - name: Symlink mise binary into /usr/local/bin
       ansible.builtin.file:

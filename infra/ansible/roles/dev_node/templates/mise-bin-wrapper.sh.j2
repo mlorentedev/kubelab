@@ -25,4 +25,15 @@
 # node and claude are real binaries and survive a symlink, but they use the same
 # wrapper anyway — one mechanism that is correct for both kinds beats two
 # mechanisms plus a rule for remembering which tool is which kind.
-exec "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}" "$@"
+#
+# `wrapper_src_dir` is the directory the real tool lives in, so the same template
+# serves the mise node install and the developer user's ~/.local/bin. The second
+# one exists because a non-interactive SSH session's PATH comes verbatim from
+# /etc/environment (measured: pam_env.so is in sshd's stack and the two strings
+# are identical), which does not include ~/.local/bin — so dotf, hive and
+# hive-vault were invisible to a remote agent even though they were installed.
+#
+# Deliberately NOT solved by appending ~/.local/bin to /etc/environment: that is
+# a user-writable directory on root's PATH, and a wrapper says exactly which
+# tools are exposed instead of exposing whatever happens to land in that dir.
+exec "{{ wrapper_src_dir }}/{{ item }}" "$@"
