@@ -1,0 +1,64 @@
+---
+# Shared pre-flight connectivity check (provision-ace1 / ace2 / bee).
+#
+# Two separate questions, deliberately not one, because they have different
+# remedies and only one of them is fatal here:
+#
+#   1. Can the node reach the internet by IP? Nothing in this repo repairs
+#      that — it is cabling, routing, or the upstream link. Fatal.
+#   2. Can the node resolve names? A node whose /etc/resolv.conf was taken over
+#      by Tailscale's direct mode resolves nothing, and `base_system` repairs
+#      exactly that by handing the file back to systemd-resolved. So it is
+#      fatal ONLY when that repair cannot apply.
+#
+# The single collapsed check this replaces (`curl -sf https://get.docker.com`)
+# reported a repairable DNS fault as "no internet" and aborted the very run
+# that would have fixed it. Measured on ace2, 2026-08-23: the IP probe below
+# returned OK on the same node and in the same second that the name probe
+# returned curl rc=6 (COULDNT_RESOLVE_HOST).
+#
+# A pre-flight that turns a self-healing fault into a hard stop is worse than
+# no pre-flight, because the operator's next move is to repair by hand what the
+# playbook was about to repair declaratively.
+
+- name: "Pre-flight: verify IP connectivity (no role here can repair this)"
+  command: curl -sf --connect-timeout 5 -o /dev/null https://1.1.1.1
+  changed_when: false
+
+- name: "Pre-flight: verify public name resolution"
+  command: curl -sf --connect-timeout 5 -o /dev/null https://get.docker.com
+  register: _preflight_dns
+  changed_when: false
+  failed_when: false
+
+# Only asked when resolution already failed — it decides which of the two
+# messages below the operator gets, and they call for opposite actions.
+- name: "Pre-flight: is the resolution fault repairable by base_system?"
+  command: systemctl is-active systemd-resolved
+  register: _preflight_resolved
+  changed_when: false
+  failed_when: false
+  when: _preflight_dns.rc != 0
+
+- name: "Pre-flight: name resolution is broken and this run cannot repair it"
+  fail:
+    msg: >-
+      {{ inventory_hostname }} reaches the internet by IP but resolves no names,
+      and systemd-resolved is not active — so base_system's `Hand /etc/resolv.conf
+      back to systemd-resolved` task will be skipped and every apt task after it
+      will fail with a mirror error that does not mention DNS. Fix name
+      resolution on the node first, then re-run.
+  when:
+    - _preflight_dns.rc != 0
+    - _preflight_resolved.stdout | default('') | trim != 'active'
+
+- name: "Pre-flight: name resolution is broken but repairable — continuing"
+  debug:
+    msg: >-
+      {{ inventory_hostname }} resolves no public names, but systemd-resolved is
+      active, so this is the Tailscale direct-mode takeover base_system repairs
+      (it restores the stub symlink and restarts tailscaled). Continuing; if the
+      apt tasks still fail after that, the cause is NOT this.
+  when:
+    - _preflight_dns.rc != 0
+    - _preflight_resolved.stdout | default('') | trim == 'active'
