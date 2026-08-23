@@ -464,6 +464,23 @@ clusters:
     node: aws1        # → networking.aws (mesh-only: no LAN/public fallback)
     ssh_alias: aws1
     local_port: 16445
+  # TEMPORARY, and it exists because the migration made `clusters.hub` ambiguous.
+  # GCP-001 runs two hubs at once by design (additive-then-subtractive), but
+  # `clusters.hub` names exactly ONE node, so `fetch-kubeconfig ENV=hub` follows
+  # whichever the entry above points at and there is no supported way to address
+  # the OTHER one. Pausing aws1's application-controller and rolling back to it
+  # both need its kubeconfig, so the retiring hub is named explicitly here --
+  # the same reason `unregister-spoke` requires HUB= rather than defaulting: a
+  # default that silently names the wrong hub IS the defect.
+  #
+  # Declaration only, no new code: `load_cluster_access` reads whatever this map
+  # holds. Fetches to ~/.kube/kubelab-hub-aws-config, distinct from the gcp1 one.
+  #
+  # REMOVE with `networking.aws` in the Phase 5 code-removal commit (2026-08-22).
+  hub-aws:
+    node: aws1        # → networking.aws (retiring hub, kept for pause + rollback)
+    ssh_alias: aws1
+    local_port: 16446
 
 # ===========================================================================
 # EDGE SERVICES (Reverse Proxy, Gateway, CDN)
