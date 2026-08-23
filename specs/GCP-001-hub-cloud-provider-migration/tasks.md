@@ -425,9 +425,25 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       complete rollback. A test asserts the pause plan contains no `delete` and
       no `patch` — a pause that removes anything is an unregister wearing the
       wrong name.
-- [ ] **[AC3]** Re-render the prod EndpointSlice against `gcp1` **before** any AWS
-      teardown. Until this runs, prod's Argo CD route points at `aws1`.
-- [ ] **[AC3]** Verify `https://argo.kubelab.live` serves from the GCP hub.
+- [x] **[AC3]** Re-render the prod EndpointSlice against `gcp1` **before** any AWS
+      teardown. ✓ 2026-08-23. `RESOLVE_AWS1_TAILSCALE_IP` →
+      `RESOLVE_GCP1_TAILSCALE_IP` across 7 sites, one column-3 row in one commit,
+      deliberately not genericised (#1182). Checked *before* editing that the
+      NodePort 30080 is not hub-specific — both hubs answered 200 on it, by
+      request rather than by reading the Service — which is what made this a
+      one-step change instead of two.
+- [x] **[AC3]** Verify `https://argo.kubelab.live` serves from the GCP hub.
+      ✓ 2026-08-23, **and HTTP 200 was not the proof**: both hubs answer 200, so
+      the obvious check cannot distinguish them. The conclusive one is the
+      SHA-256 of the served body — public `53a01d03…` equals gcp1's and differs
+      from aws1's `652d7690…` — corroborated by the EndpointSlice address
+      (`100.64.0.12`) and by the hubs being distinguishable at all (gcp1 knows 2
+      Applications, aws1 knows 1).
+      Two probes failed silently before that and are worth recording: a marked
+      `User-Agent` and a marked URL path both returned zero hits on **both**
+      hubs, because `argocd-server` logs events rather than HTTP requests. An
+      absent log line is not a negative result — it is an unanswered question,
+      and reading it as "not this hub" would have confirmed either conclusion.
 - [ ] **[AC6]** `make aws1-destroy`.
 - [ ] **[AC6]** Verify by API, output pasted: `describe-instances` empty,
       `describe-spot-instance-requests` cancelled, `describe-volumes` empty.
