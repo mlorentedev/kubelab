@@ -156,6 +156,27 @@ class TestPolicyHujsonContent:
         assert rendered_hosts["beelink"] == ssot["beelink"]
         assert rendered_hosts["lan-rpi4"] == ssot["lan-rpi4"]
 
+    def test_no_alias_names_a_host_that_no_longer_exists(self) -> None:
+        """A freed Tailscale address gets reassigned, so a stale alias keeps working.
+
+        `aws1` was an alias here until 2026-08-23, mapped to
+        `networking.aws.tailscale_ip`. That host is destroyed, but the entry would
+        not simply have stopped matching: Headscale hands 100.64.0.7 to the next
+        node that registers, and every ACL rule naming `aws1` would then apply to
+        it. Dead config that silently retargets is worse than dead config.
+
+        `networking.aws` deliberately survives the decommission — the Terraform
+        module renders its tfvars from that block — so nothing about the SSOT
+        signals the host is gone, and re-adding the alias by symmetry with `vps`
+        would look correct. This is the thing that says otherwise.
+        """
+        rendered_hosts = _load_hujson(_render_policy())["hosts"]
+        assert "aws1" not in rendered_hosts, (
+            "the ACL declares an alias for a destroyed host; Headscale will "
+            "reassign its address to some future node"
+        )
+        assert "aws1" not in _hosts_from_ssot(), "build_hosts re-added the aws1 alias"
+
     def test_tag_hermes_owned_by_registering_user(self) -> None:
         # the `agents` user registers tagged nodes, so it MUST own the tag (Headscale
         # rejects a node/key carrying a tag its user does not own); kubelab@ kept for

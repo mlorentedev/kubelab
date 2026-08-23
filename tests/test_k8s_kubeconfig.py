@@ -84,21 +84,39 @@ class TestTheMigrationScaffoldingCannotOutliveTheMigration:
     which is the Phase 5 checklist expressed as a test instead of as a promise.
     """
 
-    def test_hub_aws_and_networking_aws_are_removed_together(self) -> None:
+    def test_the_scaffolding_is_gone(self) -> None:
+        """The migration finished on 2026-08-23, so the entry must not come back.
+
+        This assertion used to be `has_entry == has_networking`, tying the two
+        keys together so neither could be removed alone. That tie was a PROXY:
+        `networking.aws` stood for "the retiring hub still exists", which held
+        for as long as the plan was to delete both in one Phase 5 commit.
+
+        The decommission broke the proxy deliberately, and that is why this test
+        is rewritten rather than deleted. `networking.aws` SURVIVES aws1:
+        `toolkit/cli/infra.py` renders `infra/terraform/aws/`'s tfvars from it, so
+        deleting the block would break `make tf-aws-apply` and with it the
+        portability AC5 measures. The config now means "an AWS hub can be built",
+        not "an AWS hub exists" — so it can no longer answer the question this
+        test asks.
+
+        The direct assertion is also the stronger one. Both hazards the old pair
+        guarded are settled rather than balanced: the hub is destroyed, so
+        removing the entry cannot take away a rollback, and keeping it could only
+        leave a cluster name resolving to nothing. Re-adding `hub-aws` for a
+        second live hub is a real future need — and one that should require
+        editing this test, which is the point.
+        """
         import yaml
 
         from toolkit.features.k8s_kubeconfig import _common_path
 
         config = yaml.safe_load(_common_path().read_text())
-        has_entry = "hub-aws" in (config.get("clusters") or {})
-        has_networking = "aws" in (config.get("networking") or {})
-
-        assert has_entry == has_networking, (
-            "clusters.hub-aws and networking.aws must be removed in the same commit. "
-            f"clusters.hub-aws present={has_entry}, networking.aws present={has_networking}. "
-            "The scaffolding exists only to address the retiring hub; keeping it after "
-            "the hub is gone leaves a cluster entry pointing at nothing, and removing it "
-            "while the hub is still live removes the rollback path."
+        assert "hub-aws" not in (config.get("clusters") or {}), (
+            "clusters.hub-aws is back. It addressed the hub retired by GCP-001 AC6, "
+            "which no longer exists, so the entry can only name a cluster that "
+            "cannot answer. If a second hub is live again, give it its own entry "
+            "and update this test to say so."
         )
 
     def test_the_two_hub_entries_never_collide(self) -> None:
