@@ -2,14 +2,19 @@
 # Backing endpoint for the `argocd` Service in `argocd.yaml`.
 #
 # This one document is deliberately OUTSIDE the Kustomize overlay, and it is the
-# only part of the Argo CD route that has to be: aws1 is a Spot instance, so its
-# Tailscale IP rotates on every replacement (it moved .4 -> .7 in May 2026) and
-# the value cannot be committed. `RESOLVE_AWS1_TAILSCALE_IP` is substituted at
-# apply time from MagicDNS by `toolkit infra k8s render-apply`
-# (ADR-047 D3 / TOOL-009 T4: "rpi3/aws1 EndpointSlices via a small toolkit
-# command each"). Applied by `make deploy-argocd`, which is exactly the step
-# `make aws1-replace` already tells you to run after a replacement — the one
-# event that changes this value.
+# only part of the Argo CD route that has to be: gcp1 is a Spot instance in a MIG,
+# so its Tailscale IP rotates on every recreate and the value cannot be committed.
+# Observed twice on gcp1 alone (.21 -> .24 -> .12 across August 2026), and on aws1
+# before it (.4 -> .7 in May 2026) — the reason this pattern exists at all.
+# `RESOLVE_GCP1_TAILSCALE_IP` is substituted at apply time from MagicDNS by
+# `toolkit infra k8s render-apply` (ADR-047 D3 / TOOL-009 T4: "rpi3/aws1
+# EndpointSlices via a small toolkit command each"). Applied by
+# `make deploy-argocd`, which is exactly the step `make gcp1-replace` already
+# tells you to run after a recreate — the one event that changes this value.
+#
+# The port below is a NodePort on the hub, and it is NOT hub-specific: both hubs
+# served 30080 during the handover, verified by request rather than by reading
+# the Service, which is what made repointing safe to do in one step.
 #
 # Nothing reconciles this object; it is listed in `OUT_OF_BAND` in
 # `tests/test_orphan_manifests.py` so that fact stays visible.
@@ -30,6 +35,6 @@ ports:
     protocol: TCP
 endpoints:
   - addresses:
-      - "RESOLVE_AWS1_TAILSCALE_IP"  # resolved at deploy time via: dig aws1.kubelab.internal
+      - "RESOLVE_GCP1_TAILSCALE_IP"  # resolved at deploy time via: dig gcp1.kubelab.internal
     conditions:
       ready: true

@@ -150,11 +150,15 @@ class TestBootstrapBastionCombination:
 class TestBothHubsCoexistInTheInventory:
     """GCP-001: `gcp1` joins group `hub` while `aws1` is still reconciling prod.
 
-    The migration is additive-then-subtractive, never a swap — `Makefile:504`
-    renders prod's Argo CD EndpointSlice from `aws1.kubelab.internal`, so a
-    simultaneous swap would point prod's IngressRoute at a host about to stop
-    existing. Both hubs are therefore in the inventory at once, and the thing
-    worth pinning is that adding the second did not displace the first.
+    The migration is additive-then-subtractive, never a swap: prod's Argo CD
+    EndpointSlice is rendered from ONE hub's MagicDNS name, so a simultaneous
+    swap would point prod's IngressRoute at a host about to stop existing. Both
+    hubs are therefore in the inventory at once, and the thing worth pinning is
+    that adding the second did not displace the first.
+
+    The render now names gcp1 (the repoint), and this docstring deliberately no
+    longer says which — it cited `Makefile:504` and a provider literal, and both
+    halves rotted: the line moved and the hub changed.
 
     Every expectation derives from `common.yaml`, so these assertions follow the
     SSOT rather than restating it.
