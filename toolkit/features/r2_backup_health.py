@@ -108,13 +108,7 @@ def _dispatch_notification(
             },
             method="POST",
         )
-        import ssl
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-
-        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status == 200:
                 logger.success(f"Dispatched R2 backup health alert to {url} (HTTP 200)")
                 return True
