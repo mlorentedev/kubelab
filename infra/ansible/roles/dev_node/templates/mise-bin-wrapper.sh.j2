@@ -1,0 +1,28 @@
+#!/bin/sh
+# Managed by Ansible (dev_node role) — do not edit on the node.
+#
+# Exposes a mise-pinned tool on the non-interactive $PATH. This is a wrapper
+# rather than a symlink, and the difference is not cosmetic.
+#
+# mise does not install `bin/npm` as a binary: it installs a bash script that
+# locates npm's own JS relative to ITSELF, via `dirname "${BASH_SOURCE[0]}"`.
+# `pwd -P` in that script normalises the *directory* but never resolves a
+# symlinked *file*, so invoking it through /usr/local/bin/npm made it compute
+# plugin_dir=/usr/local and look for /usr/local/lib/node_modules/npm/bin/npm-cli.js,
+# which does not exist:
+#
+#     $ npm --version
+#     Error: Cannot find module '/usr/local/lib/node_modules/npm/bin/npm-cli.js'
+#
+# `exec`ing the real path instead makes BASH_SOURCE[0] the real path, so the
+# script resolves against the mise install where its JS actually lives.
+#
+# Symlinking to npm-cli.js directly would also work and is deliberately not
+# done: mise's wrapper runs `mise reshim` after a global install, and this role
+# installs the agent CLIs with `npm i -g`. Dropping the wrapper would leave
+# those shims stale.
+#
+# node and claude are real binaries and survive a symlink, but they use the same
+# wrapper anyway — one mechanism that is correct for both kinds beats two
+# mechanisms plus a rule for remembering which tool is which kind.
+exec "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}" "$@"

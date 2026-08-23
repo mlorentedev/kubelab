@@ -228,12 +228,30 @@
     # runners, remote agent harnesses) bypass /etc/profile.d/ and ~/.bashrc (early
     # return on [ -z "$PS1" ]). Symlinking the pinned mise node/npm/npx binaries
     # to /usr/local/bin exposes them on standard non-interactive $PATH cleanly.
-    - name: Symlink mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools
-      ansible.builtin.file:
-        src: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
+    # A wrapper, not a symlink, and the earlier symlink was measured broken.
+    # mise ships `bin/npm` as a bash script that finds npm's JS relative to
+    # ITSELF via `dirname "${BASH_SOURCE[0]}"` — and `pwd -P` there normalises
+    # the directory without resolving a symlinked file. Reached through
+    # /usr/local/bin/npm it computed plugin_dir=/usr/local and looked for
+    # /usr/local/lib/node_modules/npm/bin/npm-cli.js. Measured on ace2
+    # 2026-08-23, the first time this ran against the node:
+    #
+    #     $ npm --version
+    #     Error: Cannot find module '/usr/local/lib/node_modules/npm/bin/npm-cli.js'
+    #
+    # `npx` survived only by accident — mise installs THAT one as a symlink to
+    # npx-cli.js, so resolution landed on a real JS file. Same task, same loop,
+    # opposite outcome, decided by how upstream happened to package each entry.
+    #
+    # `follow: false` matters: without it the template writes THROUGH the
+    # existing symlink and corrupts mise's own bin/npm, which is the file this
+    # wrapper needs to keep working.
+    - name: Wrap mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools
+      ansible.builtin.template:
+        src: mise-bin-wrapper.sh.j2
         dest: "/usr/local/bin/{{ item }}"
-        state: link
-        force: true
+        mode: "0755"
+        follow: false
       loop:
         - node
         - npm
