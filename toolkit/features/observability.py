@@ -261,15 +261,19 @@ class SreTriageEngine:
                 root_cause = f"Application Exception: {first_error[:120]}"
 
         # 4. Generate structured report
+        specific_runbook = next((a["runbook_url"] for a in matching_alerts if a.get("runbook_url")), None)
+        runbook_url = (
+            specific_runbook
+            or "https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md"
+        )
+
         report = {
             "service": service,
             "severity": severity,
             "root_cause": root_cause,
             "alerts": matching_alerts,
             "sample_errors": logs[:5],
-            "runbook_url": (
-                "https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md"
-            ),
+            "runbook_url": runbook_url,
             "recommended_action": f"kubectl describe pod -l app.kubernetes.io/name={service} -n kubelab",
         }
         return report

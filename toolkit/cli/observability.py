@@ -1,5 +1,6 @@
 """Observability & SRE triage CLI commands (ADR-064)."""
 
+import json
 from typing import Annotated, Optional
 
 import typer
@@ -41,14 +42,24 @@ def logs_cmd(
         int,
         typer.Option("--limit", "-n", help="Maximum log lines to return"),
     ] = 50,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", "-j", help="Output results in JSON format"),
+    ] = False,
 ) -> None:
     """Query Loki logs with LogQL filtering and traceback deduplication."""
     client = LokiClient()
     if query:
         entries = client.query_range(query=query, since=since, limit=limit)
+        if json_output:
+            typer.echo(json.dumps(entries, indent=2))
+            return
         lines = [f"[{e['timestamp']}] [{e['container']}@{e['node']}] {e['line']}" for e in entries]
     elif service:
         lines = client.query_service_logs(service=service, level=level, since=since, limit=limit)
+        if json_output:
+            typer.echo(json.dumps({"service": service, "lines": lines}, indent=2))
+            return
     else:
         logger.error("Must specify either --service or --query")
         raise typer.Exit(code=1)
@@ -63,10 +74,19 @@ def logs_cmd(
 
 
 @app.command("alerts")
-def alerts_cmd() -> None:
+def alerts_cmd(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", "-j", help="Output results in JSON format"),
+    ] = False,
+) -> None:
     """List active Grafana alerts and their firing states."""
     client = GrafanaAlertClient()
     alerts = client.get_alerts()
+
+    if json_output:
+        typer.echo(json.dumps(alerts, indent=2))
+        return
 
     if not alerts:
         typer.echo("✓ No firing or pending alerts in Grafana (All healthy).")
@@ -120,10 +140,18 @@ def triage_cmd(
         str,
         typer.Option("--since", help="Incident analysis time window"),
     ] = "15m",
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", "-j", help="Output results in JSON format"),
+    ] = False,
 ) -> None:
     """Execute the 4-step automated SRE triage pipeline."""
     engine = SreTriageEngine()
     report = engine.diagnose_service(service=service, since=since)
+
+    if json_output:
+        typer.echo(json.dumps(report, indent=2))
+        return
 
     typer.echo("============================================================")
     typer.echo(f"       AUTOMATED SRE INCIDENT DIAGNOSIS: {service.upper()}  ")

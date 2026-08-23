@@ -244,17 +244,36 @@ class TestCliCommands:
         assert result.exit_code == 0
         assert "Message posted" in result.output
 
+    @patch("toolkit.features.observability.LokiClient.query_service_logs")
+    def test_cli_obs_logs_json(self, mock_logs):
+        mock_logs.return_value = ["[2026-08-23 02:00:00] [authelia@vps] auth failed"]
+        result = runner.invoke(app, ["obs", "logs", "--service", "authelia", "--json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["service"] == "authelia"
+        assert len(parsed["lines"]) == 1
+
+    @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
+    def test_cli_obs_alerts_json(self, mock_alerts):
+        mock_alerts.return_value = [{"name": "obs007-acme-failure", "state": "alerting", "severity": "critical"}]
+        result = runner.invoke(app, ["obs", "alerts", "--json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert len(parsed) == 1
+        assert parsed[0]["name"] == "obs007-acme-failure"
+
     @patch("toolkit.features.observability.SreTriageEngine.diagnose_service")
-    def test_cli_obs_triage(self, mock_triage):
+    def test_cli_obs_triage_json(self, mock_triage):
         mock_triage.return_value = {
             "service": "api",
             "severity": "CRITICAL",
             "root_cause": "Database connection pool saturated",
             "recommended_action": "Restart postgres pooler",
             "runbook_url": "https://example.com",
-            "sample_errors": ["Error: pool timeout"],
+            "sample_errors": [],
         }
-        result = runner.invoke(app, ["obs", "triage", "--service", "api"])
+        result = runner.invoke(app, ["obs", "triage", "--service", "api", "--json"])
         assert result.exit_code == 0
-        assert "AUTOMATED SRE INCIDENT DIAGNOSIS: API" in result.output
-        assert "Database connection pool saturated" in result.output
+        parsed = json.loads(result.output)
+        assert parsed["service"] == "api"
+        assert parsed["severity"] == "CRITICAL"
