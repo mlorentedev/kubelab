@@ -53,3 +53,4 @@
 | 369 | [Applying Terraform from a feature branch destroyed the running hub](lesson-369-applying-terraform-from-a-feature-branch-destroyed-the-hub.md) | 2026-08-22 |
 | 370 | [Nine green signals described a broken hub, and running it found all nine](lesson-370-nine-green-signals-described-a-broken-hub.md) | 2026-08-22 |
 | 371 | [A truncated listing reads exactly like a complete one](lesson-371-a-truncated-listing-reads-exactly-like-a-complete-one.md) | 2026-08-23 |
+| 374 | [Grepping an output that was never produced](lesson-374-grepping-an-output-that-was-never-produced.md) | 2026-08-23 |
