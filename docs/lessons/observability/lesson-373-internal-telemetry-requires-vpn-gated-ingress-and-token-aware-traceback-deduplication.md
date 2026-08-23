@@ -1,5 +1,5 @@
 ---
-id: lesson-368-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication
+id: lesson-373-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication
 type: lesson
 status: active
 created: "2026-08-23"

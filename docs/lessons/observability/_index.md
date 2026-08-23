@@ -4,7 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
-| 368 | [Internal telemetry requires VPN-gated ingress and token-aware traceback deduplication](lesson-368-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication.md) | 2026-08-23 |
+| 373 | [Internal telemetry requires VPN-gated ingress and token-aware traceback deduplication](lesson-373-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication.md) | 2026-08-23 |
 | 326 | [`max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`](lesson-326-max-over-time-remembers-a-spike-long-after-th.md) | 2026-08-14 |
 | 329 | [An unpinned `:latest` image took down the dashboard the same day upstream shipped a major version](lesson-329-an-unpinned-latest-image-took-down-the-dashbo.md) | 2026-08-14 |
 | 323 | [A default value has to be judged by what it converges toward, not just whether it avoids a crash](lesson-323-a-default-value-has-to-be-judged-by-what-it-c.md) | 2026-08-13 |
