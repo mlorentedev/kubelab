@@ -102,6 +102,15 @@ def test_the_fix_does_not_live_in_execstop() -> None:
         "ExecStop must not be the place the fix lives; it does not run on a power "
         "cut, which is the path an on-demand node has to survive"
     )
+    # Rejecting only `down` left the test naming one spelling of the mistake
+    # instead of the mistake. Moving `--force-recreate` into ExecStop relocates
+    # the fix just as thoroughly, and the first version of this assertion passed
+    # on it. Both are rejected now. (CodeRabbit, #1304.)
+    assert not any("--force-recreate" in v for v in stop), (
+        "ExecStop must not carry --force-recreate either: recreating on the way "
+        "down is the same relocation as `down`, and it is equally absent when the "
+        "power is cut"
+    )
 
 
 def test_every_service_that_publishes_on_the_tailscale_address_is_covered() -> None:
