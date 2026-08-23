@@ -29,14 +29,18 @@ then echoes "Argo CD is installed by cloud-init" — it never invokes `deploy-ar
 and never mentions it. The comment described an automation that was never wired,
 and the recreate is the one event that invalidates the value.
 
-**Solution**: repointed with the same command `deploy-argocd` runs, rather than the
-ten-minute Helm upgrade around it, since Argo CD was already installed and serving:
+**Solution**: repoint the route on its own, rather than through the ten-minute Helm
+upgrade that happened to carry it — Argo CD was already installed and serving:
 
+```sh
+make argocd-repoint
 ```
-poetry run toolkit infra k8s render-apply --env prod --optional \
-  --manifest infra/k8s/overlays/prod/argocd-endpointslice.yaml \
-  --render RESOLVE_GCP1_TAILSCALE_IP=gcp1.kubelab.internal
-```
+
+That target did not exist at the time, which is why it does now. What was actually
+run was the raw invocation lifted out of `_deploy-argocd-helm`, `--optional` and
+all — and reproducing it here verbatim would hand the next reader the one flag
+this lesson argues against, since `--optional` reports success on a failed render.
+The target drops it.
 
 Verified by identity, not by status code — both hubs answer 200 on that NodePort,
 so the code proves nothing. The SHA-256 of the body served publicly matched the one
