@@ -90,6 +90,63 @@ def test_every_declared_node_can_be_named() -> None:
     assert not unnamed, f"these declared nodes resolve to no repository name: {unnamed}"
 
 
+def test_a_snapshot_stamped_in_local_time_is_reported_in_utc() -> None:
+    """The `Z` on the printed timestamp has to be true, not decorative.
+
+    restic stamps a snapshot with the *source node's* local offset, and the
+    fleet is not uniformly UTC: the VPS runs UTC while beelink, rpi3 and rpi4
+    run CEST. `datetime.fromisoformat` preserves that offset, so formatting the
+    result directly and appending "Z" prints a homelab wall-clock time labelled
+    as UTC — two hours ahead of the instant it names.
+
+    Measured 2026-08-23: `make backup-coverage ENV=prod` reported rpi3's newest
+    snapshot as `04:01Z (0.2h ago)` at 02:11Z — a timestamp two hours in the
+    *future*, beside an age that was correct. Only the age is load-bearing (the
+    heartbeat monitor makes the staleness call), so nothing was mis-guarded;
+    what was wrong is the one line a human reads to decide whether to worry.
+
+    A backup report that prints a future timestamp is the exact shape of signal
+    this pipeline exists to eliminate, so it is pinned here rather than left to
+    whoever next notices the arithmetic does not close.
+    """
+    from toolkit.features import backup_destination
+
+    # 04:01:16 CEST is 02:01:16 UTC. The two are the same instant; only one of
+    # them may be printed with a `Z`.
+    snapshot = '[{"time":"2026-08-23T04:01:16.123456+02:00","paths":["/opt/node-backup/staging"]}]'
+
+    def _run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+        if argv[:2] == ["restic", "version"]:
+            return 0, "restic 0.19.1", ""
+        return 0, snapshot, ""
+
+    class _StubCM:
+        def get_merged_config(self) -> dict:
+            return COMMON
+
+        def get_secret_by_path(self, path: str) -> str:
+            return "stub-password"
+
+    lines: list[str] = []
+    with (
+        patch.object(backup_destination, "load_credentials", return_value={}),
+        patch.object(backup_destination.logger, "success", side_effect=lines.append),
+    ):
+        assert backup_destination.coverage(cm=_StubCM(), run=_run) is True
+
+    assert lines, "the report printed nothing for a node with a readable snapshot"
+    for line in lines:
+        assert "2026-08-23 02:01Z" in line, (
+            f"expected the UTC instant in {line!r}; a snapshot carrying a +02:00 offset "
+            "must be converted before the `Z` is appended"
+        )
+        assert "04:01Z" not in line, (
+            f"{line!r} prints the source node's wall clock labelled as UTC. On a CEST "
+            "node that is a timestamp two hours in the future, which reads as a broken "
+            "clock rather than as a formatting bug."
+        )
+
+
 def test_an_uncovered_node_fails_the_command() -> None:
     """The exit code is what a cron or a human reads. It must not be advisory.
 

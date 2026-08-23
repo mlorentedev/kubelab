@@ -435,7 +435,15 @@ def coverage(
             continue
 
         newest = snapshots[0]
-        when = datetime.fromisoformat(newest["time"].replace("Z", "+00:00"))
+        # restic stamps a snapshot with the SOURCE NODE's local offset, and the
+        # fleet is not uniformly UTC — the VPS runs UTC while beelink, rpi3 and
+        # rpi4 run CEST. `fromisoformat` keeps that offset, so the conversion to
+        # UTC has to be explicit before a `Z` may be appended. Formatting the
+        # parsed value directly printed a homelab wall clock labelled as UTC:
+        # measured 2026-08-23, rpi3's newest snapshot reported as `04:01Z
+        # (0.2h ago)` at 02:11Z — a timestamp two hours in the future beside a
+        # correct age, because only the display dropped the offset.
+        when = datetime.fromisoformat(newest["time"].replace("Z", "+00:00")).astimezone(timezone.utc)
         age = datetime.now(timezone.utc) - when
         hours = age.total_seconds() / 3600
         logger.success(
