@@ -1,0 +1,135 @@
+# Grafana alerting — disk saturation & PersistentVolumeClaim health rules (OBS-015).
+#
+# Reads structured JSON log lines from `disk-watcher` (services/disk-watcher.yaml).
+# Evaluates PVC lifecycle phase and root filesystem saturation.
+---
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: storage
+    folder: kubelab
+    interval: 15m
+    rules:
+      - uid: obs015-pvc-unbound-failure
+        title: PersistentVolumeClaim unbound or failed
+        condition: C
+        for: 15m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            A PersistentVolumeClaim in namespace kubelab is not in 'Bound' state.
+            A storage backend outage or capacity ceiling is preventing stateful workloads from provisioning.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/backup-restore.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                last_over_time(
+                  {container="disk-watcher"}
+                    | json
+                    | metric=`disk_pvc_health`
+                    | unwrap healthy
+                  [30m]
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              datasource:
+                type: __expr__
+                uid: __expr__
+
+      - uid: obs015-disk-root-saturation
+        title: Node root filesystem disk space critical (>90%)
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: >-
+            Node root filesystem utilization crossed 90%. Immediate disk reclamation or volume resizing is required.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                last_over_time(
+                  {container="disk-watcher"}
+                    | json
+                    | metric=`disk_root_usage`
+                    | unwrap used_pct
+                  [30m]
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [90]
+              datasource:
+                type: __expr__
+                uid: __expr__

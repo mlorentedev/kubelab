@@ -1,0 +1,139 @@
+# Grafana alerting — Symptom-Based Multi-Window Multi-Burn-Rate SLO rules (OBS-015).
+#
+# Follows Google SRE / Rob Ewaschuk error budget burn rate alerting doctrine.
+# Evaluates HTTP 5xx errors from Traefik ingress access logs.
+#
+# - Fast Burn (14.4x budget consumption): 1-hour window, for: 2m -> immediate page in prod
+# - Medium Burn (6x budget consumption): 6-hour window, for: 15m -> notice in prod/staging
+---
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: slo-multi-burn-rate
+    folder: kubelab
+    interval: 5m
+    rules:
+      - uid: obs015-slo-fast-burn-rate
+        title: Ingress HTTP 5xx Fast Burn Rate (14.4x budget consumed)
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: >-
+            Public ingress error budget is burning at 14.4x normal rate over a 1-hour window.
+            Severe user-facing degradation detected on cluster services.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                sum(
+                  count_over_time(
+                    {container="traefik"}
+                      |~ `(?i)\b(500|502|503|504)\b`
+                    [1h]
+                  )
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [50]
+              datasource:
+                type: __expr__
+                uid: __expr__
+
+      - uid: obs015-slo-medium-burn-rate
+        title: Ingress HTTP 5xx Medium Burn Rate (6x budget consumed)
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: >-
+            Public ingress error budget is burning at 6x rate over a 6-hour window.
+            Persistent elevated error rate detected on public endpoints.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                sum(
+                  count_over_time(
+                    {container="traefik"}
+                      |~ `(?i)\b(500|502|503|504)\b`
+                    [6h]
+                  )
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [100]
+              datasource:
+                type: __expr__
+                uid: __expr__
