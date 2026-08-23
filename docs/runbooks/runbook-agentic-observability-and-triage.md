@@ -25,42 +25,21 @@ poetry run toolkit obs logs --service authelia --since 15m --level error
 
 # Query Traefik ingress logs with custom LogQL filter
 poetry run toolkit obs logs --query '{container="traefik"} |~ "50[0-9]"' --since 30m
-
-# Tail logs live (streaming)
-poetry run toolkit obs logs --service api --follow
 ```
 
 ### B. Checking Active Alerts (`toolkit obs alerts`)
 ```bash
 # List all currently firing and pending Grafana alerts
-poetry run toolkit obs alerts list
-
-# Create a temporary silence for planned maintenance
-poetry run toolkit obs alerts silence --uid obs015-pvc-unbound-failure --duration 2h --reason "Disk migration"
+poetry run toolkit obs alerts
 ```
 
-### C. Kubernetes SRE Event Slicing (`toolkit obs k8s`)
+### C. Reading and Replying to Slack (`toolkit obs slack`)
 ```bash
-# Extract recent Warning events across all namespaces
-poetry run toolkit obs k8s events --since 30m
-
-# List degraded/unhealthy pods and restart counts
-poetry run toolkit obs k8s pods --unhealthy
-
-# Check PVC binding state and storage capacity
-poetry run toolkit obs k8s pvc
-```
-
-### D. Reading and Replying to Slack (`toolkit obs slack`)
-```bash
-# Read the last 5 messages from #alerts or #ops
-poetry run toolkit obs slack read --channel alerts --limit 5
-
-# Read an incident thread by timestamp
-poetry run toolkit obs slack thread --channel alerts --ts 1724395000.123456
+# Verify channel connection
+poetry run toolkit obs slack --channel alerts
 
 # Post a triage response into an incident thread
-poetry run toolkit obs slack post --channel alerts --thread 1724395000.123456 --message "Root cause identified: OOMKilled"
+poetry run toolkit obs slack --channel alerts --thread 1724395000.123456 --post "Root cause identified: OOMKilled"
 ```
 
 ---
@@ -70,15 +49,13 @@ poetry run toolkit obs slack post --channel alerts --thread 1724395000.123456 --
 When an alert fires or when manually invoked, the triage engine executes a structured 4-step diagnostic sequence:
 
 ```bash
-poetry run toolkit obs triage --service <service_name>
-# or
-poetry run toolkit obs triage --alert <alert_uid>
+poetry run toolkit obs triage --service <service_name> --since 15m
 ```
 
 ### Diagnostic Sequence:
 1. **Pod & Node Health Check:** Calls Kubernetes API for the target workload. Identifies container crash codes (e.g., `137` = OOMKilled, `1` = Application Exception), restarts, and resource saturation.
-2. **Telemetry Log Slicing:** Extracts Loki logs from `T_alert - 5m` to `T_alert + 2m`. Deduplicates stack traces and highlights the initial failure line.
-3. **Runbook & Knowledge Correlation:** Resolves the `runbook_url` annotation in the alert rule (or maps the service to `docs/runbooks/runbook-*.md`).
+2. **Telemetry Log Slicing:** Extracts Loki logs around the incident. Deduplicates stack traces and highlights the initial failure line.
+3. **Runbook & Knowledge Correlation:** Resolves the `runbook_url` annotation in the alert rule (or maps the service to `docs/runbooks/`).
 4. **Structured Incident Synthesis:** Emits a formatted incident report.
 
 ---

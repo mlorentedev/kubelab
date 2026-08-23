@@ -58,6 +58,16 @@ class TestDeduplicateTracebacks:
         assert len(result) == 1
         assert "[Repeated 3x]" in result[0]
 
+    def test_repeated_bracketed_timestamp_logs(self):
+        lines = [
+            "[2026-08-23 02:00:00] [authelia@vps] user authentication failed",
+            "[2026-08-23 02:00:05] [authelia@vps] user authentication failed",
+            "[2026-08-23 02:00:10] [authelia@vps] user authentication failed",
+        ]
+        result = deduplicate_tracebacks(lines)
+        assert len(result) == 1
+        assert "[Repeated 3x]" in result[0]
+
 
 class TestLokiClient:
     @patch("urllib.request.urlopen")

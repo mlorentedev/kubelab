@@ -46,7 +46,7 @@ def deduplicate_tracebacks(log_lines: list[str]) -> list[str]:
 
     for line in log_lines:
         # Normalize timestamps and volatile IDs for fingerprinting
-        fingerprint = re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?", "", line)
+        fingerprint = re.sub(r"\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?Z?\]?", "", line)
         fingerprint = re.sub(r"0x[0-9a-fA-F]+", "0xADDR", fingerprint).strip()
         if not fingerprint:
             fingerprint = line.strip()
@@ -59,7 +59,7 @@ def deduplicate_tracebacks(log_lines: list[str]) -> list[str]:
 
     result = []
     for line in ordered_unique:
-        fingerprint = re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?", "", line)
+        fingerprint = re.sub(r"\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?Z?\]?", "", line)
         fingerprint = re.sub(r"0x[0-9a-fA-F]+", "0xADDR", fingerprint).strip()
         if not fingerprint:
             fingerprint = line.strip()
@@ -185,13 +185,7 @@ class SlackSreClient:
     """Client for reading and posting to Slack incident channels."""
 
     token: str | None = field(default_factory=lambda: os.environ.get("SLACK_BOT_TOKEN"))
-    channel_map: dict[str, str] = field(
-        default_factory=lambda: {
-            "alerts": "C08ALERT123",
-            "ops": "C08OPS12345",
-            "deployments": "C08DEPLOY12",
-        }
-    )
+    channel_map: dict[str, str] = field(default_factory=dict)
     timeout: int = 10
 
     def post_message(
@@ -205,7 +199,10 @@ class SlackSreClient:
             logger.info(f"[Mock Slack Post -> #{channel} (thread={thread_ts})]: {text[:80]}...")
             return {"ok": True, "ts": str(datetime.datetime.now().timestamp()), "mock": True}
 
-        channel_id = self.channel_map.get(channel, channel)
+        # Resolve channel name (e.g. 'alerts' -> '#alerts') or pass explicit channel ID
+        channel_id = self.channel_map.get(channel) or (
+            f"#{channel}" if not channel.startswith("#") and not channel.startswith("C") else channel
+        )
         url = "https://slack.com/api/chat.postMessage"
         payload: dict[str, Any] = {"channel": channel_id, "text": text}
         if thread_ts:
