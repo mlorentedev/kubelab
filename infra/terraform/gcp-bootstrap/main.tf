@@ -145,6 +145,14 @@ locals {
     "storage.googleapis.com",
     "iam.googleapis.com",
     "logging.googleapis.com",
+    # Added for a notification channel in budget.tf that no longer exists --
+    # budgets accept only e-mail channels, see FINDING F5 there. Kept anyway,
+    # and deliberately: the API is enabled in the project now, so dropping it
+    # from this list would not disable it, it would only stop Terraform managing
+    # it. An enabled API nobody declares is exactly the unmanaged remnant this
+    # root spent a state reconstruction cleaning up. The same reasoning as
+    # `disable_on_destroy` below -- leaving an API enabled costs nothing.
+    "monitoring.googleapis.com",
   ]
 }
 
