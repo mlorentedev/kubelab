@@ -162,8 +162,16 @@ def set_hub_paused(
 ) -> list[Step]:
     """Pause or resume one hub's reconciliation. Returns the plan, executed unless dry_run.
 
-    Idempotent: scaling to the replica count already in effect is a no-op that
-    still exits 0, and the wait then observes the state that is already true.
+    Idempotent, and worth being precise about which sense (raised in review of
+    #1299): the current replica count is deliberately NOT read before scaling.
+    `kubectl scale --replicas=N` is declarative — it sets the desired count to N
+    whatever it was, and exits 0 either way — so a read-then-write would add a
+    race and buy nothing. Re-running is therefore always safe, and the wait then
+    observes a state that is already true rather than one it caused.
+
+    What that does NOT promise, stated because the word invites the assumption:
+    nothing here detects that the hub was ALREADY paused by someone else. A
+    second `hub-pause` is a no-op, not an error.
     """
     replicas = 0 if paused else 1
     steps = plan(hub_kubeconfig, replicas)

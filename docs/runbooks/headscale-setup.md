@@ -369,6 +369,14 @@ Update `~/.ssh/config` with dual-path access: VPN primary, LAN fallback.
 > Tailscale IPs when adding a host here: a Spot node's address rotates on every
 > preemption (aws1 did, gcp1 has twice), so a literal is a lie waiting for the
 > next one.
+>
+> **The existing entries below contradict that advice, and are left alone on
+> purpose** (raised in review of #1299). Most predate MagicDNS and address stable
+> homelab nodes by Tailscale IP, where a literal is merely redundant rather than
+> wrong — those addresses do not rotate. The rule bites only for nodes whose
+> *machine* is replaced, which today means the cloud hubs, and those two are the
+> ones written by name. Read it as "MagicDNS for anything recreatable", not as a
+> pending rewrite of the block; the rewrite is #1289's, done by generating it.
 
 ```sshconfig
 # --- KUBELAB-SSH-START ---
