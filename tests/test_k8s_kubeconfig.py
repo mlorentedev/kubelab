@@ -185,17 +185,29 @@ class TestRewriteServerDirect:
         # `wait-node-ready.yml`'s known_hosts purge, so the hole is not local to
         # this test: caching an address on a hub would quietly switch off the
         # host-key handling too.
-        for name, cluster in clusters.items():
-            if not name.startswith("hub"):
-                continue
-            block = _node_block(networking, str(cluster["node"]))
-            assert "tailscale_dns" in block and "tailscale_ip" not in block, (
-                f"clusters.{name} is an Argo CD hub, and a hub's machine is replaced "
-                f"on every preemption -- so {cluster['node']} must declare "
-                "tailscale_dns and NO tailscale_ip. Adding an IP here does not just "
-                "cache a rotating address: it removes the node from every check "
-                "keyed on that shape, including wait-node-ready's known_hosts purge."
-            )
+        hub = clusters["hub"]
+        hub_block = _node_block(networking, str(hub["node"]))
+        assert "tailscale_dns" in hub_block and "tailscale_ip" not in hub_block, (
+            f"clusters.hub is the live Argo CD hub, and a hub's machine is replaced "
+            f"on every preemption -- so {hub['node']} must declare tailscale_dns and "
+            "NO tailscale_ip. Adding an IP here does not merely cache a rotating "
+            "address: it removes the node from every check keyed on that shape, "
+            "including wait-node-ready.yml's known_hosts purge, which would then "
+            "silently stop running on the one node that needs it most."
+        )
+        # `hub-aws` is deliberately NOT held to this, and the reason is a finding
+        # rather than an exemption. `networking.aws` declares BOTH tailscale_ip
+        # and tailscale_dns, under a comment reading "Tailscale IP rotates on every
+        # Spot replacement ... prefer tailscale_dns over tailscale_ip in IaC" --
+        # the instruction sitting directly above the cached value it forbids.
+        #
+        # The consequence nobody had noticed: the known_hosts purge keys on this
+        # exact shape, so aws1 -- the hub with the most recreates behind it
+        # (2026-05-06, #1066) -- was never covered by it, while gcp1 is. Not
+        # corrected here because `networking.aws` is deleted in the Phase 5
+        # code-removal commit, and editing a block that is about to disappear buys
+        # risk with no return. Recorded so the pattern is not repeated on the next
+        # cloud node, where the fix is to declare tailscale_dns alone.
 
         for name, cluster in clusters.items():
             block = _node_block(networking, str(cluster["node"]))
