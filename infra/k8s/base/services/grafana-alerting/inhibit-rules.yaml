@@ -1,0 +1,56 @@
+# Grafana alerting — SRE cascading inhibit rules (OBS-015 Phase 3).
+#
+# Prevents alert fatigue and spam storms during cascading failure modes.
+# Loaded into Grafana Alertmanager via file provisioning (apiVersion: 1).
+#
+# Doctrine:
+#   1. Critical severity suppresses warning/info for the same alert on the same service/target.
+#   2. Infrastructure/Node failures suppress downstream container/pod restart storms.
+#   3. Edge proxy (Traefik) outage suppresses secondary HTTP 5xx / service reachability noise.
+#   4. Active backup job failures suppress downstream freshness/staleness secondary alerts.
+---
+apiVersion: 1
+
+inhibitRules:
+  # Rule 1: Severity Escalation Suppression
+  # When an alert is actively firing at critical, suppress duplicate warning/info notifications
+  # for the same alertname in the same namespace.
+  - orgId: 1
+    source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity =~ warning|info
+    equal:
+      - alertname
+      - namespace
+
+  # Rule 2: Host & Node Infrastructure Outage Suppression
+  # When a host or Kubernetes node is down/not ready, suppress downstream container
+  # and pod crash loop alerts on that specific node.
+  - orgId: 1
+    source_matchers:
+      - alertname =~ NodeNotReady|KubeNodeNotReady|InstanceDown
+    target_matchers:
+      - alertname =~ ContainerRestarting|PodCrashLooping|KubePodCrashLooping|ServiceDown
+    equal:
+      - instance
+
+  # Rule 3: Edge Proxy Outage Suppression
+  # When Traefik edge ingress is down, suppress downstream HTTP 5xx rate and service unavailability alerts.
+  - orgId: 1
+    source_matchers:
+      - alertname =~ TraefikDown|IngressControllerDown
+    target_matchers:
+      - alertname =~ HTTP5xxRateHigh|ServiceUnavailable|EndpointUnreachable
+    equal:
+      - cluster
+
+  # Rule 4: Backup Active Job Failure vs Stale Coverage
+  # When an R2 backup job fails with an explicit error, suppress secondary freshness staleness warnings for the same bucket.
+  - orgId: 1
+    source_matchers:
+      - alertname = R2BackupJobFailed
+    target_matchers:
+      - alertname = R2BackupFreshnessStale
+    equal:
+      - bucket
