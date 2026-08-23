@@ -1,0 +1,19 @@
+---
+# Traefik Middleware: IP whitelist restricting internal telemetry & admin routes to VPN (Headscale/Tailscale).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: vpn-whitelist
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  ipAllowList:
+    sourceRange:
+      - 100.64.0.0/10 # Tailscale / Headscale CGNAT VPN range
+      - 127.0.0.1/32 # Local loopback
+      - 10.42.0.0/16 # K3s Pod CIDR
+      - 10.43.0.0/16 # K3s Service CIDR
+      - 172.16.0.0/12 # Homelab LAN subnet

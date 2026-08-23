@@ -810,6 +810,44 @@ MERMAID_DEPLOY_PIPELINE = """graph LR
   class HELM1,HELM2 helm"""
 
 
+MERMAID_AI_HARNESS = """graph TD
+  subgraph NeuralHive["🧠 Neural Hive Fleet & Multi-Agent Network"]
+    Curator["📚 Curator Agent<br/>Vault Brain & Memory SSOT"]
+    Architect["📐 Architect Agent<br/>Spec-Driven Dev (SDD)"]
+    Coder["💻 Implementer Agent<br/>Strict IaC & TDD"]
+    Reviewer["🛡️ Adversarial Reviewer<br/>CodeRabbit & Anti-Regression"]
+    SRE["🩺 SRE Triage Agent<br/>Loki LogQL & Auto-Healing"]
+  end
+
+  subgraph QualityGates["🔒 Deterministic Quality & Verification Gates"]
+    SpecGate["📋 Spec Archive Gate<br/>dotf spec archive"]
+    MutationGate["🧪 Mutation Testing Engine<br/>100% Mutant Kill Rate"]
+    TriageQueue["🚦 PR Triage Queue<br/>dotf pr triage-queue"]
+    SecretGate["🔐 Zero-Plaintext Memory Gate<br/>SOPS + Age Cryption"]
+  end
+
+  subgraph ReactiveMesh["⚡ Reactive Automation & Telemetry Mesh"]
+    AlertMgr["🚨 Alertmanager"] -->|Webhook /notify| N8N["⚡ n8n Event Router"]
+    N8N -->|1. Slices Telemetry| LokiAPI["📊 Loki API (VPN Ingress)"]
+    N8N -->|2. Posts Diagnosis| Slack["💬 Slack #alerts"]
+    ArgoCD["🐙 Argo CD GitOps Hub"] -->|Continuous Reconciliation| K3sFleet["☸️ K3s Hybrid Cloud Fleet"]
+  end
+
+  Curator <-->|Hive Vault MCP| Architect
+  Architect -->|Formal RFC & Threat Model| Coder
+  Coder -->|PR / Tests| Reviewer
+  Reviewer -->|Review Dispositions| TriageQueue
+  TriageQueue --> SpecGate
+  SpecGate --> ArgoCD
+
+  classDef agent fill:#fce7f3,stroke:#ec4899,stroke-width:2px
+  classDef gate fill:#dcfce7,stroke:#22c55e,stroke-width:2px
+  classDef mesh fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+  class Curator,Architect,Coder,Reviewer,SRE agent
+  class SpecGate,MutationGate,TriageQueue,SecretGate gate
+  class AlertMgr,N8N,LokiAPI,Slack,ArgoCD,K3sFleet mesh"""
+
+
 def render_mermaid_svg(mermaid_def: str, retries: int = 2, backoff_seconds: float = 1.0) -> str:
     """Render Mermaid to SVG via mermaid.ink. Returns SVG string or empty on failure.
 
@@ -850,6 +888,7 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
         "request": MERMAID_REQUEST,
         "secret_flow": MERMAID_SECRET_FLOW,
         "deploy_pipeline": MERMAID_DEPLOY_PIPELINE.format(hub_name=hub_node(config)[0]),
+        "ai_architecture": MERMAID_AI_HARNESS,
     }
 
     # Write custom.js with embedded Mermaid definitions + ASCII
@@ -1162,6 +1201,13 @@ def generate_diagrams(config: dict[str, Any]) -> None:  # noqa: C901
       injectDiagram("Secret Flow", "secret_flow", false);
       injectDiagram("Deploy Pipeline", "deploy_pipeline", false);
       injectDiagram("Tech Stack", "tech_stack", true);
+    }
+    var isAiTab = (
+      hash === "#ai-&-automations" || hash === "#ai" || hash === "#automations"
+      || hash.indexOf("ai") !== -1 || !hash
+    );
+    if (isAiTab) {
+      injectDiagram("AI Architecture", "ai_architecture", false);
     }
     if (hash === "#services") {
       injectServices("Shared", KUBELAB_SERVICES_SHARED);

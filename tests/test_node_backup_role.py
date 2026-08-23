@@ -657,6 +657,24 @@ def _capture_receipt_block() -> str:
     return code[code.rindex("if ", 0, start) : code.index("STAGING=", start)]
 
 
+def _branch_bodies(block: str) -> list[str]:
+    """The block's shell branches, split on the keyword at the START of a line.
+
+    Not `block.split("elif")`: that matches the word wherever it appears —
+    inside an `echo`, a path, a message — and manufactures branches out of
+    prose. Requiring it to open a line is what makes the split mean what it
+    says, the same reasoning `_directive_lines` applies to unit files.
+    """
+    bodies: list[list[str]] = [[]]
+    for line in block.splitlines():
+        first = line.strip().split(" ", 1)[0].rstrip(";")
+        if first in {"if", "elif", "else", "fi"}:
+            bodies.append([])
+        else:
+            bodies[-1].append(line)
+    return ["\n".join(b) for b in bodies if any(line.strip() for line in b)]
+
+
 def test_an_unclean_power_off_is_not_reported_as_a_failed_backup():
     """The operator kills the homelab with a smart plug, so ExecStop never runs.
 
@@ -677,15 +695,27 @@ def test_an_unclean_power_off_is_not_reported_as_a_failed_backup():
         "failed shutdown ship from a power cut that never ran one"
     )
 
-    branches = block.split("elif")
-    assert len(branches) == 2, f"expected a three-way read-back, got: {block!r}"
-    unclean_branch = branches[1].split("else", 1)[1]
+    bodies = _branch_bodies(block)
 
-    assert ">&2" not in unclean_branch, (
+    # Selected by what each branch SAYS, not by where it sits. A positional
+    # read (`branches[1]`) encodes the branch count as well as the property,
+    # so adding a fourth case later fails this test for a reason that has
+    # nothing to do with what it guards — raised on #1318 and correct in
+    # substance, though not in mechanism: the split ran on comment-stripped
+    # text, so a comment containing `elif` was never the risk.
+    unclean = [b for b in bodies if "unclean" in b]
+    failed_ship = [b for b in bodies if "did NOT ship" in b]
+
+    assert len(unclean) == 1, f"expected exactly one power-cut branch, found {len(unclean)}"
+    assert len(failed_ship) == 1, (
+        f"expected exactly one failed-shutdown-ship branch, found {len(failed_ship)}"
+    )
+
+    assert ">&2" not in unclean[0], (
         "the no-shutdown-sequence branch writes to stderr. On a smart-plug fleet that "
         "fires on every single boot, which is the alarm fatigue this change removes."
     )
-    assert ">&2" in branches[1].split("else", 1)[0], (
+    assert ">&2" in failed_ship[0], (
         "the marker-without-receipt branch does NOT write to stderr, so the one case "
         "that is a real failure has become as quiet as the normal one"
     )

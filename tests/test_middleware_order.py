@@ -134,13 +134,8 @@ def resolve_chains(env: str) -> dict[str, list[list[str]]]:
             base = routes.get(name)
             if base is None:
                 continue
-            for i, patched_route in enumerate(patch.get("spec", {}).get("routes", [])):
-                if "middlewares" not in patched_route:
-                    continue
-                base_routes = base.setdefault("spec", {}).setdefault("routes", [])
-                while len(base_routes) <= i:
-                    base_routes.append({})
-                base_routes[i]["middlewares"] = patched_route["middlewares"]
+            if "routes" in patch.get("spec", {}):
+                base.setdefault("spec", {})["routes"] = patch["spec"]["routes"]
 
     chains: dict[str, list[list[str]]] = {}
     for name, doc in routes.items():
