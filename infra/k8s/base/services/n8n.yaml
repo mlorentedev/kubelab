@@ -34,6 +34,7 @@ data:
   GENERIC_TIMEZONE: "Europe/Madrid"
   N8N_LOG_LEVEL: "info"
   N8N_LOG_OUTPUT: "console"
+  N8N_MIGRATE_FS_STORAGE_PATH: "true"
 ---
 apiVersion: apps/v1
 kind: Deployment

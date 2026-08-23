@@ -293,3 +293,30 @@ spec:
       - main: "kubelab.live"
         sans:
           - "*.kubelab.live"
+---
+# Override base homepage IngressRoute with prod domain
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: homepage
+  namespace: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`home.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: homepage
+          port: 3000
+  tls:
+    certResolver: letsencrypt
