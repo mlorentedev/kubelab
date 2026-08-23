@@ -1,9 +1,10 @@
 # Argo CD, releases and image promotion
 
-21 lessons, newest first. Back to [all categories](../_index.md).
+23 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 373 | [A comment claiming another target does it is not a chain](lesson-373-a-comment-claiming-another-target-does-it-is-not-a-chain.md) | 2026-08-23 |
 | 368 | ["Closed in code" is not closed, and the gap is invisible until something runs](lesson-368-a-finding-closed-in-code-was-never-executed.md) | 2026-08-22 |
 | 372 | [`Synced`/`Healthy` with an empty history had never written](lesson-372-synced-and-healthy-with-an-empty-history-had-never-written.md) | 2026-08-23 |
 | 362 | [Designing a guard for a future hazard found it already loaded and aimed at prod](lesson-362-designing-a-guard-for-a-future-hazard-found.md) | 2026-08-21 |
