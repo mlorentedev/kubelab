@@ -139,6 +139,42 @@ var KUBELAB_DIAGRAMS = {
   class STG,PRD spoke
   class DEV,ANS,TF,CF iac
   class HELM1,HELM2 helm`,
+  ai_architecture: `graph TD
+  subgraph NeuralHive["🧠 Neural Hive Fleet & Multi-Agent Network"]
+    Curator["📚 Curator Agent<br/>Vault Brain & Memory SSOT"]
+    Architect["📐 Architect Agent<br/>Spec-Driven Dev (SDD)"]
+    Coder["💻 Implementer Agent<br/>Strict IaC & TDD"]
+    Reviewer["🛡️ Adversarial Reviewer<br/>CodeRabbit & Anti-Regression"]
+    SRE["🩺 SRE Triage Agent<br/>Loki LogQL & Auto-Healing"]
+  end
+
+  subgraph QualityGates["🔒 Deterministic Quality & Verification Gates"]
+    SpecGate["📋 Spec Archive Gate<br/>dotf spec archive"]
+    MutationGate["🧪 Mutation Testing Engine<br/>100% Mutant Kill Rate"]
+    TriageQueue["🚦 PR Triage Queue<br/>dotf pr triage-queue"]
+    SecretGate["🔐 Zero-Plaintext Memory Gate<br/>SOPS + Age Cryption"]
+  end
+
+  subgraph ReactiveMesh["⚡ Reactive Automation & Telemetry Mesh"]
+    AlertMgr["🚨 Alertmanager"] -->|Webhook /notify| N8N["⚡ n8n Event Router"]
+    N8N -->|1. Slices Telemetry| LokiAPI["📊 Loki API (VPN Ingress)"]
+    N8N -->|2. Posts Diagnosis| Slack["💬 Slack #alerts"]
+    ArgoCD["🐙 Argo CD GitOps Hub"] -->|Continuous Reconciliation| K3sFleet["☸️ K3s Hybrid Cloud Fleet"]
+  end
+
+  Curator <-->|Hive Vault MCP| Architect
+  Architect -->|Formal RFC & Threat Model| Coder
+  Coder -->|PR / Tests| Reviewer
+  Reviewer -->|Review Dispositions| TriageQueue
+  TriageQueue --> SpecGate
+  SpecGate --> ArgoCD
+
+  classDef agent fill:#fce7f3,stroke:#ec4899,stroke-width:2px
+  classDef gate fill:#dcfce7,stroke:#22c55e,stroke-width:2px
+  classDef mesh fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+  class Curator,Architect,Coder,Reviewer,SRE agent
+  class SpecGate,MutationGate,TriageQueue,SecretGate gate
+  class AlertMgr,N8N,LokiAPI,Slack,ArgoCD,K3sFleet mesh`,
   ip_reference: `NODE         LAN              TAILSCALE        ROLE
 ──────────── ──────────────── ──────────────── ────────────────────
 VPS          162.55.57.175    100.64.0.2       K3s Prod · 8GB
@@ -883,6 +919,13 @@ var KUBELAB_SERVICES_SHARED = [
       injectDiagram("Deploy Pipeline", "deploy_pipeline", false);
       injectDiagram("Tech Stack", "tech_stack", true);
     }
+    var isAiTab = (
+      hash === "#ai-&-automations" || hash === "#ai" || hash === "#automations"
+      || hash.indexOf("ai") !== -1 || !hash
+    );
+    if (isAiTab) {
+      injectDiagram("AI Architecture", "ai_architecture", false);
+    }
     if (hash === "#services") {
       injectServices("Shared", KUBELAB_SERVICES_SHARED);
       injectServices("Staging", KUBELAB_SERVICES_STAGING);
@@ -1015,7 +1058,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config ef7040ce";
+    footer.textContent = "KubeLab IDP · config c60ff5bd";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);

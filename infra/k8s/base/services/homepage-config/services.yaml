@@ -25,6 +25,9 @@
 - Tech Stack:
     - placeholder:
         icon: mdi-tools
+- AI Architecture:
+    - placeholder:
+        icon: mdi-sitemap
 - Shared:
     - placeholder:
         icon: mdi-share-variant
@@ -128,10 +131,6 @@
         icon: mdi-cloud-outline
         description: "Hub · e2-small · 2vCPU · 2GB"
         ping: https://argo.kubelab.live
-    - "aws1":
-        icon: mdi-cloud-outline
-        description: "Hub · t4g.small · 2vCPU · 2GB"
-        ping: https://argo.kubelab.live
     - "Beelink":
         icon: mdi-desktop-tower
         description: "Platform · N95 · 8GB"
@@ -148,11 +147,74 @@
           url: http://100.64.0.8:61208
           version: 4
           metric: info
-- Repos:
-    - kubelab:
+- Agents:
+    - Curator Agent:
+        icon: mdi-brain
+        href: https://github.com/mlorentedev/knowledge
+        description: Neural Hive · Memory & ADR Synthesis
+        ping: https://github.com/mlorentedev/knowledge
+    - SRE Triage Agent:
+        icon: mdi-robot
+        href: https://github.com/mlorentedev/kubelab/blob/master/docs/adr/adr-064-agentic-observability-and-auto-triage.md
+        description: Reactive LogQL & Anomaly Classifier
+        ping: https://grafana.kubelab.live
+    - GitOps Delivery Agent:
+        icon: si-argo
+        href: https://argo.kubelab.live
+        description: Automated Release Attestation & Promotion
+        ping: https://argo.kubelab.live
+- Protocols:
+    - Spec-Driven Dev:
+        icon: mdi-file-document-edit
+        href: https://github.com/mlorentedev/knowledge/blob/master/00_meta/patterns/pattern-spec-driven-development.md
+        description: Formal RFCs, Threat Models & Archive Gates
+        ping: https://github.com/mlorentedev/knowledge
+    - Deterministic Gates:
+        icon: mdi-check-decagram
+        href: https://github.com/mlorentedev/kubelab/pulls
+        description: dotf pr triage-queue & 100% Mutation Kill
+        ping: https://github.com/mlorentedev/kubelab
+    - Zero-Debt Doctrine:
+        icon: mdi-book-open-page-variant
+        href: https://github.com/mlorentedev/kubelab/tree/master/docs/lessons
+        description: In-Flight Lessons & Real-Time ADR Recording
+        ping: https://github.com/mlorentedev/kubelab
+    - Zero Plaintext Secrets:
+        icon: mdi-shield-key
+        href: https://github.com/mlorentedev/kubelab/blob/master/docs/adr/adr-038-sops-age-encryption-for-secrets.md
+        description: Age / SOPS Cryption & In-Memory Injection
+        ping: https://github.com/mlorentedev/kubelab
+- Workflows:
+    - SRE Incident Auto-Triage:
+        icon: si-n8n
+        href: https://n8n.kubelab.live
+        description: Alertmanager Webhook -> Log Slicing -> Slack
+        ping: https://n8n.kubelab.live
+    - Secret Expiry & R2 Backup:
+        icon: mdi-shield-refresh
+        href: https://status.kubelab.live
+        description: Proactive Backup & Credential Rotator
+        ping: https://status.kubelab.live
+    - Spoke Reconciliation:
+        icon: mdi-sync
+        href: https://argo.kubelab.live
+        description: K8s Spoke Topology Drift Healing
+        ping: https://argo.kubelab.live
+- Telemetry:
+    - Loki Telemetry API:
+        icon: si-grafana
+        href: https://grafana.kubelab.live/explore
+        description: LogQL Cluster Telemetry & Tracebacks
+        ping: https://grafana.kubelab.live
+    - Health & SLO Monitor:
+        icon: si-uptimekuma
+        href: https://status.kubelab.live
+        description: Live Multi-Burn-Rate SLO Engine
+        ping: https://status.kubelab.live
+    - Codebase Activity:
         icon: si-github
         href: https://github.com/mlorentedev/kubelab
-        description: L0 Infrastructure
+        description: L0 Infrastructure Codebase
         widget:
           type: customapi
           url: https://api.github.com/repos/mlorentedev/kubelab
@@ -167,23 +229,3 @@
             - field: stargazers_count
               label: Stars
               format: number
-    - kubelab PRs:
-        icon: si-github
-        href: https://github.com/mlorentedev/kubelab/pulls
-        description: Open Pull Requests
-        widget:
-          type: customapi
-          url: https://api.github.com/search/issues?q=repo:mlorentedev/kubelab+type:pr+state:open
-          refreshInterval: 300000
-          headers:
-            Accept: application/vnd.github.v3+json
-            Authorization: "Bearer {{HOMEPAGE_VAR_GITHUB_TOKEN}}"
-          mappings:
-            - field: total_count
-              label: Open PRs
-              format: number
-    - mlorente.dev:
-        icon: si-github
-        href: https://github.com/mlorentedev/mlorente.dev
-        description: Personal site
-        ping: https://mlorente.dev

@@ -1,0 +1,186 @@
+{
+  "id": "d1000000-0000-4000-8000-000000000002",
+  "name": "sre-auto-triage",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "Agentic SRE Incident Auto-Triage (ADR-064): Alertmanager Webhook -> Log Slicing -> Root Cause Classifier -> Slack Thread Reply."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sre-triage",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a2000000-0000-4000-8000-000000000001",
+      "name": "Alertmanager Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        0
+      ],
+      "webhookId": "b2000000-0000-4000-8000-000000000001",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c1000000-0000-4000-8000-000000000001",
+          "name": "notify-webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// SRE-001 Incident Parsing (ADR-064)\nconst body = $json.body ?? $json;\nconst alert = (body.alerts && body.alerts[0]) ? body.alerts[0] : body;\nconst labels = alert.labels || {};\nconst annotations = alert.annotations || {};\n\nconst service = labels.service || labels.app || labels.container || 'system';\nconst alertName = labels.alertname || alert.name || 'Unknown Alert';\nconst severity = String(labels.severity || alert.severity || 'warning').toUpperCase();\nconst summary = annotations.summary || annotations.description || alert.summary || 'Alert fired in cluster';\nconst runbookUrl = annotations.runbook_url || annotations.runbook || alert.runbook_url || 'https://github.com/mlorentedev/kubelab/tree/master/docs/runbooks';\n\nreturn [{\n  json: {\n    service: service,\n    alert_name: alertName,\n    severity: severity,\n    summary: summary,\n    runbook_url: runbookUrl,\n    channel: 'alerts',\n    thread_ts: body.thread_ts || null,\n    query: `{container=\"${service}\"} |~ \"(?i)(error|exception|fail|timeout|oom|panic)\"`\n  }\n}];"
+      },
+      "id": "a2000000-0000-4000-8000-000000000002",
+      "name": "Parse Alert Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://loki:3100/loki/api/v1/query_range",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "limit",
+              "value": "25"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "a2000000-0000-4000-8000-000000000003",
+      "name": "Query Loki Telemetry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        140,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// SRE-002 Diagnostic Root Cause Classifier (ADR-064)\nconst alertInfo = $('Parse Alert Payload').first().json;\nconst lokiData = $json;\n\nlet logs = [];\nif (lokiData && lokiData.data && lokiData.data.result) {\n  for (const stream of lokiData.data.result) {\n    for (const entry of (stream.values || [])) {\n      logs.push(entry[1]);\n    }\n  }\n}\n\n// Traceback fingerprinting and deduplication\nconst seen = {};\nconst uniqueLogs = [];\nfor (const line of logs) {\n  const fp = line.replace(/\\[?\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z?\\]?/g, '').trim();\n  if (!seen[fp]) {\n    seen[fp] = 1;\n    uniqueLogs.push(line);\n  } else {\n    seen[fp]++;\n  }\n}\n\nlet rootCause = 'No active telemetry error signatures identified in recent window.';\nlet severity = alertInfo.severity;\nlet action = `kubectl describe pod -l app.kubernetes.io/name=${alertInfo.service} -n kubelab`;\n\nif (uniqueLogs.length > 0) {\n  const first = uniqueLogs[0].toLowerCase();\n  if (first.includes('oom') || first.includes('137') || first.includes('kill')) {\n    rootCause = 'Out-Of-Memory (OOMKilled): Container memory limit exceeded.';\n    severity = 'CRITICAL';\n    action = `kubectl top pod -l app.kubernetes.io/name=${alertInfo.service} -n kubelab && review memory limits`;\n  } else if (first.includes('502') || first.includes('connection refused') || first.includes('econnrefused')) {\n    rootCause = 'Upstream Connection Refused: Backend workload unreachable or crashed.';\n    severity = 'HIGH';\n    action = `kubectl get pods -l app.kubernetes.io/name=${alertInfo.service} -n kubelab`;\n  } else if (first.includes('timeout') || first.includes('etimedout')) {\n    rootCause = 'Downstream Network Timeout / Thread Pool Starvation.';\n    severity = 'HIGH';\n  } else {\n    rootCause = `Application Exception: ${uniqueLogs[0].substring(0, 120)}`;\n  }\n}\n\nconst triageReport = `\ud83d\udd0d *Automated SRE Triage Report: ${alertInfo.service.toUpperCase()}*\\n` +\n  `\u2022 *Alert:* ${alertInfo.alert_name} (${severity})\\n` +\n  `\u2022 *Root Cause:* ${rootCause}\\n` +\n  `\u2022 *Recommended Action:* \\`${action}\\`\\n` +\n  `\u2022 *Runbook:* <${alertInfo.runbook_url}|View SRE Runbook>`;\n\nreturn [{\n  json: {\n    tag: 'agent',\n    type: severity === 'CRITICAL' ? 'failure' : 'info',\n    title: `\ud83e\udd16 SRE Auto-Triage: ${alertInfo.service}`,\n    body: triageReport,\n    service: alertInfo.service,\n    root_cause: rootCause,\n    severity: severity\n  }\n}];"
+      },
+      "id": "a2000000-0000-4000-8000-000000000004",
+      "name": "Diagnose Root Cause",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://apprise:8000/notify/kubelab",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tag: $json.tag, title: $json.title, body: $json.body, type: $json.type }) }}",
+        "options": {}
+      },
+      "id": "a2000000-0000-4000-8000-000000000005",
+      "name": "Post Triage Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, triage: $json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a2000000-0000-4000-8000-000000000006",
+      "name": "Respond 200 JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Alertmanager Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Alert Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alert Payload": {
+      "main": [
+        [
+          {
+            "node": "Query Loki Telemetry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Loki Telemetry": {
+      "main": [
+        [
+          {
+            "node": "Diagnose Root Cause",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diagnose Root Cause": {
+      "main": [
+        [
+          {
+            "node": "Post Triage Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Triage Report": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -43,26 +43,33 @@ resource "google_billing_budget" "alerting" {
     }
   }
 
-  all_updates_rule {
-    monitoring_notification_channels = [
-      google_monitoring_notification_channel.notify_webhook.id
-    ]
-    disable_default_iam_recipients = false
-  }
-
-  depends_on = [google_project_service.enabled]
-}
-
-resource "google_monitoring_notification_channel" "notify_webhook" {
-  project      = google_project.hub.project_id
-  display_name = "KubeLab n8n Notification Fabric"
-  type         = "webhook_tokenauth"
-  labels = {
-    url = "https://n8n.kubelab.live/webhook/notify"
-  }
-  user_labels = {
-    domain = "ops"
-  }
+  # ---------------------------------------------------------------------------
+  # FINDING F5 — a budget cannot notify a webhook, and the API will not say so
+  # ---------------------------------------------------------------------------
+  # There is deliberately NO `all_updates_rule` here. One carrying a
+  # `webhook_tokenauth` notification channel pointing at the n8n fabric lived
+  # here briefly and CANNOT work:
+  #
+  #   For Cloud Billing budget alerts, you must configure Email notification
+  #   channels. Other types of notification channels aren't supported.
+  #   -- cloud.google.com/billing/docs/how-to/budgets-notification-recipients
+  #
+  # The channel object itself is valid and creates fine; it is the Budgets API
+  # that refuses it, with the same bare `Error 400: Request contains an invalid
+  # argument` this file already documents for a different rejected argument.
+  # That message names no field, so it reads like a transient fault -- it is not.
+  # Re-running the apply after the Monitoring API had fully propagated failed
+  # identically, which is what ruled propagation out.
+  #
+  # Nothing is silenced by its absence. Budgets e-mail their billing admins by
+  # default, and `disable_default_iam_recipients` defaults to false, so the
+  # 50/90/100% notices still arrive.
+  #
+  # Routing budget thresholds INTO the notification fabric is possible, just not
+  # by this shortcut: budget -> Pub/Sub -> push subscription -> the webhook, the
+  # programmatic path Google documents and the one `hard_cap` below already
+  # half-builds. Tracked separately; note that Pub/Sub delivers an envelope with
+  # base64 `message.data` rather than a bare payload, so the consumer decodes.
 
   depends_on = [google_project_service.enabled]
 }

@@ -277,8 +277,8 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "AWS t4g.small hub (Argo CD). SSOT: networking.aws.tailscale_ip. Pinned to the IP because aws1's address is recorded in common.yaml and changes only on a deliberate replacement -- unlike gcp1, whose MIG rotates it on every preemption. Retire with AC6 when AWS is decommissioned (#1249).",
-    "active": true,
+    "description": "DORMANT — the t4g.small AWS hub was decommissioned 2026-08-23 (GCP-001 AC6): instance terminated, EBS gone, Spot request cancelled. Paused rather than deleted, for the same reason infra/terraform/aws/ was kept: the module still renders from networking.aws, so rebuilding an AWS hub is a `make tf-aws-apply` away and this is how you would watch it. Left active it pings 100.64.0.7 forever and pages on a machine that does not exist. Re-enable with the host, never ahead of it.",
+    "active": false,
     "httpBodyEncoding": null,
     "maxredirects": 10,
     "notificationIDList": [

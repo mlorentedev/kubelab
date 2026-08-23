@@ -91,17 +91,23 @@ networking:
     tailscale_ip: "100.64.0.7"
     tailscale_dns: "aws1.kubelab.internal"
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
-    # Homepage cockpit tile (SSOT-005). Decision documented in ADR-033:
-    # widget=ping (not glances) until RELIAB-009 brings hub day-2 Ansible.
-    dashboard:
-      display_name: "aws1"
-      order: 6
-      icon: mdi-cloud-outline
-      description: "Hub · t4g.small · 2vCPU · 2GB"
-      widget: ping
-      ping_url: "https://argo.kubelab.live"
+    # NO `dashboard:` key, and its absence is the fix for DASH-010 rather than an
+    # omission. The tile pinged `https://argo.kubelab.live` — the same URL gcp1's
+    # tile pings — so once aws1 was destroyed it did not go red, it stayed GREEN
+    # forever, reporting the GCP hub's health under the name of a machine that no
+    # longer exists. A monitor that lies green is worse than one that falls over:
+    # the red gets fixed, the green gets believed. Restore this block alongside a
+    # host, never ahead of one.
   # GCP management plane (ADR-063 — supersedes ADR-023 §3.1's choice of AWS).
-  # Coexists with `aws` until the cutover; `aws` is removed once gcp1 reconciles.
+  #
+  # `aws` above is DORMANT, not pending deletion — the comment here used to say it
+  # would be "removed once gcp1 reconciles" and that is now wrong. aws1 was
+  # destroyed on 2026-08-23 (GCP-001 AC6) and the config stayed, deliberately:
+  # `toolkit/cli/infra.py` renders `infra/terraform/aws/`'s tfvars straight from
+  # that block, so deleting it would break `make tf-aws-apply` and with it the
+  # portability claim AC5 measures. Config describing no live resource costs
+  # nothing; the ability to stand the hub back up is the entire point of keeping
+  # the module. Its `tailscale_ip` names no running host until one exists again.
   gcp:
     # ADR-028 tier. Machine-readable projection of the topology the ADR
     # narrates; consumed by the backup trigger model (BACKUP-044).
@@ -480,11 +486,16 @@ clusters:
   # Declaration only, no new code: `load_cluster_access` reads whatever this map
   # holds. Fetches to ~/.kube/kubelab-hub-aws-config, distinct from the gcp1 one.
   #
-  # REMOVE with `networking.aws` in the Phase 5 code-removal commit (2026-08-22).
-  hub-aws:
-    node: aws1        # → networking.aws (retiring hub, kept for pause + rollback)
-    ssh_alias: aws1
-    local_port: 16446
+  # REMOVED 2026-08-23 with the hub it addressed. Everything in the paragraph
+  # above was true of a two-hub migration and none of it is true now: aws1 is
+  # terminated, so `hub-aws` named a cluster that cannot answer, and pointing
+  # `fetch-kubeconfig ENV=hub-aws` at it could only ever fail. `clusters.hub`
+  # is unambiguous again, which is what this entry existed to work around.
+  #
+  # Unlike `networking.aws`, this is NOT kept for a future rebuild: cluster
+  # access is fetched per host, so a new AWS hub gets a fresh entry naming
+  # whatever it actually is. Keeping this one would only mean a name that
+  # resolves to nothing.
 
 # ===========================================================================
 # EDGE SERVICES (Reverse Proxy, Gateway, CDN)
