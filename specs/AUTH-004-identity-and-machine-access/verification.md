@@ -11,7 +11,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - [ ] Criterion 1 (identity resolves from `apps.auth.identities`) -> Part 1, not started
 - [ ] Criterion 2 (`operator` is refused what the superadmin can do) -> Part 2, not started
-- [ ] Criterion 3 (SSO onboarding creates an account with no manual step) -> Part 2, gated on R1
+- [ ] Criterion 3 (SSO onboarding creates an account with no manual step) -> Part 2, gated on R1. **Measured failing 2026-08-23 (R1a): the flow parks at `/user/link_account`.** The baseline is now a transcript rather than an assumption, so Part 2 has something to demonstrate a change against.
 - [ ] Criterion 4 (unauthenticated registration refused) -> Part 2, not started
 - [ ] Criterion 5 (bot account, scoped token, both halves of the scope proven) -> Part 3, not started
 - [ ] Criterion 6 (test fails when admin identity resolves from anything else) -> Part 1, not started
@@ -23,6 +23,12 @@ Part 0 of `tasks.md`. Each entry is the command and its output, run against the 
 instance — never read off documentation. **R1 remains open** and is deliberately not
 run here: its throwaway-user SSO test touches **prod** Authelia, so it needs the
 operator's explicit go-ahead first.
+
+**Update 2026-08-23** — that go-ahead was given for the reversible half only. R1 is now
+half-settled: **R1a** is recorded below under its own heading. **R1b — an SSO login as
+`manu` — was not run and stays parked**, because that account holds no OIDC linkage and
+its first SSO login is therefore a one-shot, irreversible event on the sole admin
+account. The paragraph above still governs R1b.
 
 Environment: Gitea `1.25.5`, Docker Compose on the Beelink (`beelink_services` role,
 post-ADR-061), reached over Tailscale (`100.64.0.3`). Reachability confirmed with
@@ -248,6 +254,119 @@ that the output exists is not a measurement.** Every read-only probe in this fil
 should carry a control that fails loudly — here, `GET /api/v1/version` returning
 `{"version":"1.25.5"}` before anything else is asked.
 
+### R1a — does an SSO login by a non-admin Authelia user onboard itself into Gitea?
+
+**Settled 2026-08-23. No. The flow completes cleanly and then stops at a manual step,
+which is the specific failure AC3 forbids — not a refusal, and not an auto-created
+account.**
+
+Authorised by the operator on 2026-08-23, scoped to the reversible half. **R1b — an SSO
+login as `manu` — was not run and stays parked.**
+
+Prod Authelia needed no change at all. `common.yaml:982` already declares a non-admin
+`testuser` (groups: `users` only) for the e2e suite, and
+`apps.services.security.authelia.users_testuser_password_hash` is present in
+`prod.enc.yaml`, so the subject of the experiment already existed. Reusing it made the
+prod mutation for R1a **zero**, and left nothing to revert. Note the trap that makes
+this worth stating: `_build_users_database` (`k8s_secrets.py:313-315`) skips a declared
+user whose hash is missing from that env's SOPS *with a log warning only*, so "declared
+in `common.yaml`" never implies "exists in this environment" — the hash key does.
+
+The probe resolves the password **in-process** from the SOPS-merged config, the same
+source `tests/e2e/conftest.py:149-150` uses. It is never exported to the environment,
+never passed as an argument, and never printed; the transcript below carries only URLs,
+status codes and page titles, with `code` and `state` redacted at capture time.
+
+Baseline first, so the result is interpretable (and so the negative is a measurement
+rather than an absence — lesson 374):
+
+```
+$ docker exec gitea grep -nE '^\[(service|oauth2_client|openid)\]|^(DISABLE_REGISTRATION|...)' /data/gitea/conf/app.ini
+59:[service]
+60:DISABLE_REGISTRATION = true
+61:REQUIRE_SIGNIN_VIEW = false
+66:[openid]
+67:ENABLE_OPENID_SIGNIN = false
+68:ENABLE_OPENID_SIGNUP = false
+
+$ docker exec -u git gitea gitea admin user list
+ID   Username Email             IsActive IsAdmin 2FA
+1    manu     info@kubelab.live true     true    false
+
+$ docker exec -u git gitea gitea admin auth list
+ID	Name		Type	Enabled
+1	authelia	OAuth2	true
+```
+
+**There is no `[oauth2_client]` section in `app.ini` at all**, so
+`ENABLE_AUTO_REGISTRATION` sits at its built-in default and neither candidate from R1's
+text is currently set. That is the configuration the result below describes.
+
+The attempt:
+
+```
+[setup] env=prod user=testuser credential resolved in-process (not emitted)
+[reach] authelia https://auth.kubelab.live/api/health -> 200
+[reach] gitea    https://gitea.kubelab.live/api/healthz -> 200
+
+[authelia] POST /api/firstfactor as 'testuser' -> 200
+[authelia] status field: 'OK'  message: None
+[authelia] session cookie acquired: True
+
+[flow] GET https://gitea.kubelab.live/user/oauth2/authelia
+   1. 307 https://gitea.kubelab.live/user/oauth2/authelia
+   2. 303 https://auth.kubelab.live/api/oidc/authorization?client_id=gitea&...&state=<redacted>
+   3. 303 https://gitea.kubelab.live/user/oauth2/authelia/callback?code=<redacted>&iss=...
+   4. 200 https://gitea.kubelab.live/user/link_account
+
+[final] title: 'Link Account - Gitea: Git with a cup of tea'
+[final] gitea session established: False
+[link_account] form actions: ['/user/link_account_signin', '/user/link_account_signup']
+[final] cookie names held (values never emitted): ['_csrf', 'authelia_session', 'i_like_gitea']
+[link_account] offers 'create new account' (signup): True
+[link_account] offers 'link to existing'  (signin):  True
+```
+
+**Read that cookie line carefully, because it is a trap with teeth.** `i_like_gitea` is
+Gitea's session cookie and it is **present here while the user is not signed in** —
+Gitea sets it before authentication. The first version of this probe judged the session
+by cookie presence and would have reported success against a criterion that fails. The
+probe now judges by what the page proves (`href="/user/logout"`), and prints cookie
+*names* only, so the next person reads the fact instead of trusting a recollection. An
+AC3 test that asserts on this cookie is a **false positive**, not a false negative:
+it goes green exactly when the thing it guards is broken.
+
+And the control that makes the negative real — the user list *after* the attempt:
+
+```
+$ docker exec -u git gitea gitea admin user list
+ID   Username Email             IsActive IsAdmin 2FA
+1    manu     info@kubelab.live true     true    false
+```
+
+Unchanged. No account was created, so there was nothing to delete.
+
+What this settles, and what it does not:
+
+- **AC3 fails today, and now by measurement.** The OIDC leg is entirely healthy —
+  Authelia issued a code, Gitea exchanged it and read the identity — and Gitea still
+  refuses to conclude without a human at a form. "SSO onboarding creates an account
+  with no manual step" is false on the current configuration.
+- **The failure mode is `link_account`, not a refusal.** This matters for how Part 2 is
+  tested: a probe asserting "login is not refused" would pass here while the criterion
+  fails. Assert on reaching an authenticated Gitea session, never on the absence of an
+  error.
+- **`DISABLE_REGISTRATION = true` does not remove the signup branch from that page.**
+  Gitea renders `link_account_signup` regardless. Whether that form is *honoured* on
+  POST is unmeasured — it was outside the authorised scope, and it is the sharp form of
+  R1's original question. **Do not infer it from the rendered page**: a form that
+  renders and then refuses is exactly the "looks right and silently refuses" outcome R1
+  was written to prevent.
+- **R1's headline question — which flag combination admits a new user — remains open**,
+  and cannot be closed without changing a flag on the live instance. That is a separate
+  authorisation, and the change belongs in
+  `roles/beelink_services/files/gitea-bootstrap.sh` per R5, not by hand.
+
 ## Test status
 
 Part 0 is observation only — no code changed, so no suite was run against it. The
@@ -265,3 +384,15 @@ transcripts above are the deliverable.
   idempotently from Ansible.
 - **The `authelia` OAuth2 source is live and its `groups` scope is requested but
   unmapped** (R5 above) — the fix is additive flags on the existing bootstrap call.
+- **AC3 needs an assertion that cannot pass on a `link_account` page.** R1a's probe walks
+  the OIDC chain by hand and reports whether a Gitea *session* was established, which is
+  the property AC3 actually claims. It is committed alongside this file as
+  `r1a_sso_probe.py` so Part 2 can land it as a test instead of rewriting it. **Two
+  assertions look right and go green while AC3 fails**: "the SSO login was not refused"
+  (it is not — it parks), and "the Gitea session cookie is present" (`i_like_gitea` is
+  set before authentication). Assert on `/user/logout` being reachable, or on an
+  authenticated API call succeeding.
+- **`DISABLE_REGISTRATION = true` and a rendered `link_account_signup` form coexist.**
+  Whether the POST is honoured is unmeasured and needs its own authorisation. Worth
+  knowing before Part 2 assumes the global flag is sufficient to close self-service
+  registration — AC4 asserts exactly that, and this is the page where it would leak.
