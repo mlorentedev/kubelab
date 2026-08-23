@@ -111,7 +111,10 @@ created: "2026-08-20"
       holds; and F1 works **only after** the `KUBECONFIG` fix — it was broken on
       the first boot, having been recorded as "closed in code" in #1217.
 - [ ] AC5 portability scored -> the table below, with real counts
-- [x] AC6 AWS decommissioned -> three AWS API outputs, pasted, 2026-08-23
+- [x] AC6 AWS decommissioned -> three AWS API outputs, pasted, 2026-08-23.
+      **Teardown only.** The credential-rotation half of AC6 is open and audited
+      NOT DONE — see the audit at the end of this entry. Do not read this `[x]`
+      as the whole criterion.
 
       **Reconciliation is handed over; the inbound route and the teardown are
       not.** Deliberately stopped here, 2026-08-22, at the last point where the
@@ -202,6 +205,59 @@ created: "2026-08-20"
       that config block. Deleting them would destroy the evidence rather than the
       infrastructure. The `common.yaml` comment promising to remove `networking.aws`
       predates that decision and is corrected in the same change.
+
+      **The teardown is done; the credential half of AC6 is not.** Audited
+      2026-08-23, and the audit contradicts the record. `tasks.md` carried "the
+      operator reports them rotated; this task is the audit that confirms it" —
+      the audit ran and confirms the opposite.
+
+      Method, which decrypts nothing and therefore prints nothing: SOPS preserves
+      the ciphertext of values it does not edit, so `git diff --numstat` over the
+      encrypted file answers "did this key change" without exposing it. Verify a
+      credential by consequence, never by printing it.
+
+      | Fact | Measurement |
+      |---|---|
+      | `common.enc.yaml`, 2026-08-15 → `a8750ed` | **10 added, 2 removed** |
+      | the additions | `gcp.{billing_account_id,headscale_api_key}`, four `push_tokens.*` |
+      | the removals | `lastmodified`, `mac` |
+      | **existing keys rewritten** | **zero** |
+      | `argocd.admin_password` ciphertext | byte-identical across the window |
+      | `prod`/`staging.enc.yaml` | 9 added / 3 removed — Slack webhooks; the third removal is `version: 3.7.3 → 3.13.1`, a SOPS upgrade, not a key |
+      | working tree | clean — no uncommitted rotation hiding |
+
+      The additions are the positive control: they prove the method can see a
+      change at all, which is what separates this negative result from an
+      unanswered question. All four exposed secrets are still in SOPS unchanged,
+      including `aws.headscale_preauth_key`, which D7 said to delete.
+
+      **The consequence checks, with the vault unlocked.** One is answered, two
+      are not — and both non-answers arrived disguised as answers.
+
+      **Headscale: answered.** `toolkit secrets check-expiry` asks the issuer over
+      SSH and decrypts nothing. Two distinct API keys exist:
+      `hskey-api-j4_9sZt5zTPr-***` expiring 2027-03-27 — the date the catalog
+      measured for `aws.headscale_api_key` — and `hskey-api-zcJQKhYGg5SW-***`
+      expiring 2029-05-17. The GCP hub's key was minted fresh, corroborated by
+      `gcp.headscale_api_key` first appearing in SOPS on 2026-08-21, after the
+      exposure. **The exposure does not reach the GCP hub.** The exposed AWS key,
+      however, is live for another 215 days with nothing consuming it.
+
+      **The pre-auth key: still unanswered.** `check-expiry` asks about apikeys
+      only, so `aws.headscale_preauth_key` was never in scope. Its absence from
+      that table is not revocation — the same shape as the User-Agent probe above.
+
+      **IAM: re-run, and the exit code flipped without answering.** `dotf secrets
+      run -- aws sts get-caller-identity` now exits **0**, but `AWS_ACCESS_KEY_ID`
+      is UNSET in the child process: `dotf` never injects the SOPS AWS keys, so
+      the call authenticated with a credential in `~/.aws/` (ending `ODHC`,
+      region `us-east-1`). Exit 1 proved nothing last time because the vault was
+      locked; exit 0 proves nothing this time because the keys under test were
+      never in the process. Same question, twice, still open.
+
+      **Drift, in whichever direction it resolves.** If the Argo password was
+      rotated out-of-band on the hub, SOPS still holds the exposed value and the
+      next `make deploy-argocd` reinstalls it silently.
 - [ ] AC7 cost recorded as derivation -> ADR-063 D4
 - [ ] AC8 ceilings measured -> `fio` output + `deploy-argocd` wall time
 
