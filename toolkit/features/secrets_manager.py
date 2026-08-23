@@ -529,11 +529,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="hskey-api-... (Headscale API key, NOT a pre-auth key)",
         expiry=Expiry.PROVIDER,
         rotate_note=(
-            "Mint on the VPS with `headscale apikeys create`, update common.enc.yaml, "
-            "then `make tf-aws-apply` so the instance template carries the new value. "
-            "EXPIRES: measured 2027-03-27. An expired key does not fail loudly -- the "
-            "next Spot replacement simply cannot clean up its stale node and registers "
-            "as aws1-<random>, breaking the inventory and the kubeconfig."
+            "DO NOT ROTATE — EXPIRE. aws1 was destroyed 2026-08-23 and nothing reads "
+            "this key, but it remains VALID ON THE SERVER until 2027-03-27, and it was "
+            "printed in plaintext during the 2026-08-20 study session. A Headscale API "
+            "key is not read-only: it mints pre-auth keys, so holding one means issuing "
+            "tailnet admission at will. Expire it on the VPS with `headscale apikeys "
+            "expire --prefix <prefix>`; `toolkit secrets check-expiry` lists the "
+            "prefixes and asks the issuer rather than trusting a date stored here. "
+            "The GCP hub's key is separate and was minted fresh -- see gcp.headscale_api_key."
         ),
         envs=("prod",),
     ),
@@ -545,11 +548,16 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="Headscale pre-auth key",
         expiry=Expiry.PROVIDER,
         rotate_note=(
-            "Mint with `headscale preauthkeys create`, then `make tf-aws-apply`. "
-            "The GCP hub does NOT have an equivalent: it mints its own single-use key "
-            "at boot from the API key above (finding F2), precisely because a stored "
-            "pre-auth key expires between the template being written and a recreate "
-            "firing. This entry documents the older pattern that is still live on aws1."
+            "DO NOT ROTATE — RETIRE. aws1 was destroyed 2026-08-23, so nothing reads "
+            "this and minting a replacement would re-create the exposure. A stored, "
+            "REUSABLE pre-auth key is a standing admission ticket to the tailnet, and "
+            "the tailnet is the whole perimeter: staging is VPN-only. The GCP hub has "
+            "no equivalent by design -- it mints its own single-use key at boot from "
+            "the API key above (finding F2), so the entry credential lives for seconds "
+            "instead of months. Retire in one change: `headscale preauthkeys expire`, "
+            "then delete the value from common.enc.yaml AND this catalog entry "
+            "together -- it is envs=('prod',), so removing the value alone makes "
+            "`secrets-audit` report a gap forever. Tracked as D7 in GCP-001."
         ),
         envs=("prod",),
     ),
