@@ -517,10 +517,10 @@ _deploy-argocd-helm:
 		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
-	@echo "--- Updating ArgoCD EndpointSlice on prod (MagicDNS-resolved aws1 Tailscale IP) ---"
+	@echo "--- Updating ArgoCD EndpointSlice on prod (MagicDNS-resolved gcp1 Tailscale IP) ---"
 	@$(TOOLKIT) infra k8s render-apply --env prod --optional \
 		--manifest infra/k8s/overlays/prod/argocd-endpointslice.yaml \
-		--render RESOLVE_AWS1_TAILSCALE_IP=aws1.kubelab.internal
+		--render RESOLVE_GCP1_TAILSCALE_IP=gcp1.kubelab.internal
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Watch ArgoCD pods until all ready — logs timing to /tmp/argocd-timing.log
