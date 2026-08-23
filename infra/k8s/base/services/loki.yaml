@@ -168,12 +168,25 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`loki.staging.kubelab.live`)
+    - match: (Host(`loki.staging.kubelab.live`) || Host(`loki.kubelab.live`)) && HeadersRegexp(`Authorization`, `^Bearer .+`)
       kind: Rule
+      priority: 100
       middlewares:
         - name: secure-headers
         - name: rate-limit
         - name: error-pages
+        - name: vpn-whitelist
+      services:
+        - name: loki
+          port: 3100
+    - match: Host(`loki.staging.kubelab.live`) || Host(`loki.kubelab.live`)
+      kind: Rule
+      priority: 50
+      middlewares:
+        - name: secure-headers
+        - name: rate-limit
+        - name: error-pages
+        - name: vpn-whitelist
         - name: authelia
       services:
         - name: loki
