@@ -1524,11 +1524,22 @@ def tf_killswitch_test_tfvars() -> None:
     # is identifiable by when it was created. 30-char limit on GCP project ids.
     from datetime import datetime, timezone
 
-    # %y not %Y: a GCP project id is capped at 30 characters and the four-digit
-    # year put this at 31, which the API rejects at APPLY time with a validation
-    # error rather than at plan. Measured by hitting it.
-    stamp = datetime.now(timezone.utc).strftime("%y%m%d%H%M")
-    project_id = f"kubelab-killswitch-{stamp}"  # 29 chars
+    # SECOND granularity, and the year is dropped to pay for it. A GCP project id
+    # is capped at 30 characters, so the budget is 11 characters after the
+    # 19-character prefix: %Y%m%d%H%M is 31 (rejected at APPLY, not at plan) and
+    # %y%m%d%H%M fits but only resolves to the minute.
+    #
+    # Minute resolution is not enough, raised in review of #1310 and nearly
+    # demonstrated while writing it: the first attempt failed on the 31-character
+    # id and was retried about a minute later. A retry after a FAST failure — a
+    # validation error, a missing credential, anything before the project is
+    # created — lands in the same minute and collides with a 409, which reads as
+    # "the kill switch is broken" when nothing about it was exercised.
+    #
+    # The year is the safe thing to drop: this project lives ~90 seconds and GCP
+    # purges it after 30 days, so month-day-time identifies an orphan completely.
+    stamp = datetime.now(timezone.utc).strftime("%m%d%H%M%S")
+    project_id = f"kubelab-killswitch-{stamp}"  # 29 chars, unique per second
 
     path = test_dir / "killswitch-test.tfvars"
     path.write_text(

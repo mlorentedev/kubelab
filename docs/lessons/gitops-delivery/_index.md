@@ -5,6 +5,7 @@
 | # | Lesson | Date |
 |---|---|---|
 | 368 | ["Closed in code" is not closed, and the gap is invisible until something runs](lesson-368-a-finding-closed-in-code-was-never-executed.md) | 2026-08-22 |
+| 371 | [`Synced`/`Healthy` with an empty history had never written](lesson-371-synced-and-healthy-with-an-empty-history-had-never-written.md) | 2026-08-23 |
 | 362 | [Designing a guard for a future hazard found it already loaded and aimed at prod](lesson-362-designing-a-guard-for-a-future-hazard-found.md) | 2026-08-21 |
 | 333 | [One placeholder document exiled a whole manifest from GitOps, and `Synced` said nothing](lesson-333-one-placeholder-document-exiled-a-whole-manif.md) | 2026-08-15 |
 | 330 | [Staging's `selfHeal: false` doesn't stop Argo CD from reverting a manual deploy mid-session — it only suppresses drift correction, not new-revision sync](lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd.md) | 2026-08-15 |
