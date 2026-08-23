@@ -476,19 +476,55 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       what SOPS holds — and the next `make deploy-argocd` reinstalls it silently.
       Either way SOPS and the hub disagree.
 - [ ] **[AC6]** **Rotate, then re-audit.** Operator action — it touches prod.
-      `make credentials-generate` also rotates the OIDC client secrets and the
-      HMAC, so `make deploy-argocd` must follow. Re-run the ciphertext audit
-      afterwards; a rotation that did not change `common.enc.yaml` did not happen.
-- [ ] **[AC6]** **Two consequence checks the ciphertext cannot answer.** Neither
-      ran; both need an unlocked vault or VPS access.
-      - `dotf secrets run -- aws sts get-caller-identity` — auth failure means the
-        exposed IAM keys are dead, success means they are live. **Attempted
-        2026-08-23 and it proved nothing**: exit 1 came from `bw` reporting the
-        Bitwarden vault locked, not from AWS. Destroying aws1 does not touch IAM
-        keys, so "retired at cutover" remains an unverified claim.
-      - `headscale apikeys list` on the VPS — prefixes and creation dates settle
-        whether the exposed API key is revoked, and whether `gcp.headscale_api_key`
-        was minted fresh or copied from the exposed `aws.headscale_api_key`.
+      Re-run the ciphertext audit afterwards; a rotation that did not change
+      `common.enc.yaml` did not happen.
+
+      **The blast radius written here was wrong and is corrected.** This entry
+      said `credentials-generate` "also rotates the OIDC client secrets and the
+      HMAC". It does not rotate the HMAC: `oidc_hmac_secret` is in
+      `IMMUTABLE_SECRETS` (`toolkit/features/credentials.py:36-41`) alongside
+      `storage_encryption_key`, `session_secret` and `jwt_secret_reset_password`,
+      all preserved when they already exist because overwriting them destroys
+      state. What it does rotate is the OIDC **client** secrets, which is why
+      `make deploy-argocd` must still follow. CLAUDE.md carries the same wrong
+      claim and needs the same correction.
+- [x] **[AC6]** **Headscale: answered, and the exposure does NOT reach the GCP
+      hub.** ✓ 2026-08-23 via `toolkit secrets check-expiry`, which asks the
+      issuer over SSH rather than decrypting anything:
+
+      | Key | Expires | Which |
+      |---|---|---|
+      | `hskey-api-j4_9sZt5zTPr-***` | 2027-03-27 (215d) | `aws.headscale_api_key` — matches the 2027-03-27 the catalog measured on 2026-08-22 |
+      | `hskey-api-zcJQKhYGg5SW-***` | 2029-05-17 (997d) | `gcp.headscale_api_key` |
+
+      **Two distinct keys.** The GCP hub's was minted fresh, corroborated by
+      `gcp.headscale_api_key` first appearing in SOPS on 2026-08-21 — after the
+      2026-08-20 exposure, so it cannot have been in the exposed set. **The
+      exposure does not propagate to the GCP hub.**
+
+      But `aws.headscale_api_key` **is still live on the server for 215 days**,
+      and after the teardown nothing consumes it. Expiring it costs nothing:
+      `headscale apikeys expire --prefix hskey-api-j4_9sZt5zTPr`.
+- [ ] **[AC6]** **The pre-auth key is still unanswered — absence from that table
+      is not death.** `check-expiry` asks about apikeys only, so
+      `aws.headscale_preauth_key` was never in scope. Reading its absence as
+      "revoked" is the same error as the User-Agent probe above. Settle it with
+      `headscale preauthkeys list`, then D7: expire it, and delete it from
+      `common.enc.yaml` **together with** its `SECRET_CATALOG` entry — it is
+      `envs=("prod",)`, so removing the value alone makes `secrets-audit` report
+      a gap forever.
+- [ ] **[AC6]** **IAM: re-run desambiguated, still unverified — and it surfaced
+      something else.** With the vault unlocked, `dotf secrets run -- aws sts
+      get-caller-identity` exits **0**, but `AWS_ACCESS_KEY_ID` is **UNSET** in
+      the child: `dotf` does not inject the SOPS AWS keys at all, so the call
+      authenticated with a credential in `~/.aws/` (access key ending `ODHC`,
+      region `us-east-1`). **The exit 0 says nothing about the exposed pair** —
+      the mirror image of the exit 1 that said nothing last time.
+      Settle it by comparing the last four characters, which are not the secret
+      half of the pair: `make secrets-show KEY=aws.access_key_id
+      SECRETS_ENV=common | tail -c 5` against `ODHC`. Match → the exposed key is
+      live and authenticating from disk. No match → still unverified, and the IAM
+      console is the answer (any Active access key created before 2026-08-20).
 - [~] ~~Remove `infra/terraform/aws/`, `provision-aws1.yml`, `aws1-*` targets and
       `networking.aws`.~~ **SUPERSEDED by #1333, deliberately.** `toolkit/cli/
       infra.py` renders the module's tfvars from `networking.aws`, so deleting the

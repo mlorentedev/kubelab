@@ -231,14 +231,29 @@ created: "2026-08-20"
       unanswered question. All four exposed secrets are still in SOPS unchanged,
       including `aws.headscale_preauth_key`, which D7 said to delete.
 
-      **Two consequence checks the ciphertext cannot answer, neither of which
-      ran.** `dotf secrets run -- aws sts get-caller-identity` was attempted and
-      **proved nothing**: exit 1 came from `bw` reporting the Bitwarden vault
-      locked, not from AWS rejecting the key. Destroying aws1 does not touch IAM
-      keys, so "retired at cutover" is still a claim. And `headscale apikeys list`
-      on the VPS is what would settle whether `gcp.headscale_api_key` was minted
-      fresh or copied from the exposed `aws.headscale_api_key` — a distinction
-      ciphertext cannot make.
+      **The consequence checks, with the vault unlocked.** One is answered, two
+      are not — and both non-answers arrived disguised as answers.
+
+      **Headscale: answered.** `toolkit secrets check-expiry` asks the issuer over
+      SSH and decrypts nothing. Two distinct API keys exist:
+      `hskey-api-j4_9sZt5zTPr-***` expiring 2027-03-27 — the date the catalog
+      measured for `aws.headscale_api_key` — and `hskey-api-zcJQKhYGg5SW-***`
+      expiring 2029-05-17. The GCP hub's key was minted fresh, corroborated by
+      `gcp.headscale_api_key` first appearing in SOPS on 2026-08-21, after the
+      exposure. **The exposure does not reach the GCP hub.** The exposed AWS key,
+      however, is live for another 215 days with nothing consuming it.
+
+      **The pre-auth key: still unanswered.** `check-expiry` asks about apikeys
+      only, so `aws.headscale_preauth_key` was never in scope. Its absence from
+      that table is not revocation — the same shape as the User-Agent probe above.
+
+      **IAM: re-run, and the exit code flipped without answering.** `dotf secrets
+      run -- aws sts get-caller-identity` now exits **0**, but `AWS_ACCESS_KEY_ID`
+      is UNSET in the child process: `dotf` never injects the SOPS AWS keys, so
+      the call authenticated with a credential in `~/.aws/` (ending `ODHC`,
+      region `us-east-1`). Exit 1 proved nothing last time because the vault was
+      locked; exit 0 proves nothing this time because the keys under test were
+      never in the process. Same question, twice, still open.
 
       **Drift, in whichever direction it resolves.** If the Argo password was
       rotated out-of-band on the hub, SOPS still holds the exposed value and the
