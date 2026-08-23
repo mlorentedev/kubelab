@@ -158,6 +158,7 @@ networking:
     # MIRRORED drift test, which is what makes this a mirror rather than a copy.
     managed_spokes:
       - "staging"
+      - "prod"
     # Homepage cockpit tile (SSOT-005). widget=ping mirrors aws1's (ADR-033).
     dashboard:
       display_name: "gcp1"
