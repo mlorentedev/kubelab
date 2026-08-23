@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -75,7 +76,7 @@ def deduplicate_tracebacks(log_lines: list[str]) -> list[str]:
 class LokiClient:
     """Client for querying Grafana Loki LogQL streams."""
 
-    base_url: str = "http://100.64.0.2:3100"
+    base_url: str = field(default_factory=lambda: os.environ.get("LOKI_URL", "http://127.0.0.1:3100"))
     timeout: int = 10
 
     def query_range(
@@ -148,7 +149,7 @@ class LokiClient:
 class GrafanaAlertClient:
     """Client for checking Grafana Alertmanager firing state."""
 
-    base_url: str = "http://100.64.0.2:3000"
+    base_url: str = field(default_factory=lambda: os.environ.get("GRAFANA_URL", "https://grafana.kubelab.live"))
     timeout: int = 10
 
     def get_alerts(self) -> list[dict[str, Any]]:
@@ -183,7 +184,7 @@ class GrafanaAlertClient:
 class SlackSreClient:
     """Client for reading and posting to Slack incident channels."""
 
-    token: str | None = None
+    token: str | None = field(default_factory=lambda: os.environ.get("SLACK_BOT_TOKEN"))
     channel_map: dict[str, str] = field(
         default_factory=lambda: {
             "alerts": "C08ALERT123",
