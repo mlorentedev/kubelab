@@ -42,9 +42,8 @@
       vars:
         _ssh_key_path: "{{ ansible_ssh_private_key_file | default('~/.ssh/id_ed25519') }}"
 
-    - name: Verify target has internet
-      command: curl -sf --connect-timeout 5 https://get.docker.com -o /dev/null
-      changed_when: false
+    - name: Verify target connectivity (IP is fatal, DNS may be repairable)
+      ansible.builtin.include_tasks: _includes/check-internet.yml
 
     - name: Pre-flight VPS reachability check (SSOT-shared)
       ansible.builtin.include_tasks: _includes/check-vps-reachable.yml
