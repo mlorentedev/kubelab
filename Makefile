@@ -86,6 +86,8 @@ help:
 	@echo "  make unregister-spoke ENV=x    Remove spoke from Argo CD hub"
 	@echo "  make argo-set-revision APP=x REV=y  Patch Application targetRevision (preview/patch-back)"
 	@echo "  make check-spokes              Verify registered spokes are reachable"
+	@echo "  make hub-pause HUB=<kubecfg>   Stop one hub reconciling (reversible; keeps its state)"
+	@echo "  make hub-resume HUB=<kubecfg>  Resume a paused hub — the rollback for hub-pause"
 	@echo "  make rotate-spoke-token ENV=x  Rotate spoke SA token and re-register"
 	@echo ""
 	@echo "Quality:"
@@ -661,6 +663,23 @@ unregister-spoke:
 	@test -n "$(ENV)" || (echo "Usage: make unregister-spoke ENV=staging|prod HUB=<kubeconfig>" && exit 1)
 	@test -n "$(HUB)" || (echo "Usage: make unregister-spoke ENV=x HUB=<kubeconfig>  # required: two hubs are live, so the hub must be named explicitly" && exit 1)
 	@$(TOOLKIT) infra argo unregister-spoke --env $(ENV) --kubeconfig $(HUB) $(if $(REMOVE_SHARED_RBAC),--remove-shared-rbac,) $(if $(DRY_RUN),--dry-run,)
+
+# Pause / resume ONE hub's reconciliation. The reversible half of a hub handover:
+# unregister-spoke enforces the single-writer invariant by DELETING the retiring
+# hub's credential, which also destroys the rollback; this stops the hub writing
+# while it keeps everything it holds, so hub-resume is a complete rollback in one
+# command. HUB is required for the same reason unregister-spoke requires it -- a
+# default that silently names the wrong hub IS the defect.
+# Usage: make hub-pause HUB=~/.kube/kubelab-hub-aws-config [DRY_RUN=1]
+.PHONY: hub-pause
+hub-pause:
+	@test -n "$(HUB)" || (echo "Usage: make hub-pause HUB=<kubeconfig>  # required: two hubs are live, so the hub must be named explicitly" && exit 1)
+	@$(TOOLKIT) infra argo hub-pause --kubeconfig $(HUB) $(if $(DRY_RUN),--dry-run,)
+
+.PHONY: hub-resume
+hub-resume:
+	@test -n "$(HUB)" || (echo "Usage: make hub-resume HUB=<kubeconfig>  # required: two hubs are live, so the hub must be named explicitly" && exit 1)
+	@$(TOOLKIT) infra argo hub-resume --kubeconfig $(HUB) $(if $(DRY_RUN),--dry-run,)
 
 # Verify all registered spokes are reachable (from workstation, not hub)
 .PHONY: check-spokes

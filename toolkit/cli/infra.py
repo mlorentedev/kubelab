@@ -259,6 +259,65 @@ def argo_unregister_spoke(
     logger.success(f"{env} detached. The spoke's workloads were not touched.")
 
 
+@argo_app.command("hub-pause")
+def argo_hub_pause(
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Kubeconfig of the hub to pause (required: two hubs exist)"),
+    ],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the plan and change nothing")] = False,
+) -> None:
+    """Stop ONE hub reconciling, without removing anything it holds.
+
+    The reversible half of a hub handover. `unregister-spoke` enforces the
+    single-writer invariant by DELETING the retiring hub's credential, which also
+    destroys the ability to go back; this enforces the same invariant while the
+    hub keeps its cluster secrets, Applications and history. `hub-resume` is then
+    a complete rollback in one command, which is why the destroy is last and
+    separate in the migration plan.
+
+    `--kubeconfig` is required for the same reason `unregister-spoke` requires it:
+    a default that silently names the wrong hub IS the defect.
+
+    Returns only once no application-controller pod remains. A `scale --replicas=0`
+    that exits 0 has changed the desired state and nothing else -- the controller
+    keeps writing to the spoke until its pod is actually gone, and a cutover's
+    next step assumes it stopped.
+    """
+    from toolkit.features.hub_pause import set_hub_paused
+
+    logger.section(f"Pausing the hub at {kubeconfig}")
+    steps = set_hub_paused(Path(kubeconfig), paused=True, dry_run=dry_run)
+    if dry_run:
+        for i, step in enumerate(steps, 1):
+            logger.info(f"  {i}. would: {step.what}")
+        logger.warning("dry-run — nothing was changed")
+
+
+@argo_app.command("hub-resume")
+def argo_hub_resume(
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Kubeconfig of the hub to resume (required: two hubs exist)"),
+    ],
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the plan and change nothing")] = False,
+) -> None:
+    """Resume a paused hub — the rollback for `hub-pause`.
+
+    Returns only once the application-controller pod is running again, for the
+    mirror-image reason: a resume that did not take leaves the spoke with no
+    writer at all, which looks identical to a healthy paused hub.
+    """
+    from toolkit.features.hub_pause import set_hub_paused
+
+    logger.section(f"Resuming the hub at {kubeconfig}")
+    steps = set_hub_paused(Path(kubeconfig), paused=False, dry_run=dry_run)
+    if dry_run:
+        for i, step in enumerate(steps, 1):
+            logger.info(f"  {i}. would: {step.what}")
+        logger.warning("dry-run — nothing was changed")
+
+
 @argo_app.command("check-spokes")
 def argo_check_spokes(
     kubeconfig: Annotated[
