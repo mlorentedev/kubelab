@@ -252,3 +252,6 @@
       vars:
         maintenance_run_cleanup: false
         maintenance_is_k3s_node: "{{ 'k3s_servers' in group_names or 'hub' in group_names }}"
+
+    - role: ../roles/gcp_preemption
+      tags: [maintenance, gcp]

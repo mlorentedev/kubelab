@@ -118,3 +118,21 @@ def coverage_cmd(
 
     if not coverage(env=env, project_root=project_root):
         raise typer.Exit(code=1)
+
+
+@app.command("health-check")
+def health_check_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    notify: Annotated[bool, typer.Option("--notify/--no-notify", help="Dispatch notification to Slack")] = True,
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Run full R2 destination verification + fleet coverage check and notify Slack.
+
+    Executes verify-destination (scope, reach, write/read/delete round-trip) and
+    coverage (fleet snapshot checks), then dispatches a structured SRE report
+    to Slack #ops-log (on success) or #alerts (on failure).
+    """
+    from toolkit.features.r2_backup_health import run_r2_backup_health_check
+
+    if not run_r2_backup_health_check(env=env, notify=notify, project_root=project_root):
+        raise typer.Exit(code=1)

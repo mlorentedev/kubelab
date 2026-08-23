@@ -2,6 +2,8 @@
 name: CI
 
 on:
+  push:
+    branches: [master]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -233,3 +235,38 @@ jobs:
             && '"ubuntu-latest"'
             || vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
+
+  notify-delivery:
+    name: Notify Slack Deployment
+    needs: [validate, tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch notification to Slack
+        #  Deployments channel notification for master pushes
+        env:
+          NOTIFY_SECRET: ${{ secrets.NOTIFY_WEBHOOK_SECRET }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -n "$NOTIFY_SECRET" ]; then
+            SHORT_SHA="${COMMIT_SHA:0:7}"
+            FIRST_LINE=$(echo "$COMMIT_MSG" | head -n 1)
+            PAYLOAD=$(jq -n \
+              --arg title "[PROD] Build Passed: $FIRST_LINE ($SHORT_SHA)" \
+              --arg body "CI validation & test suite passed cleanly on master branch." \
+              --arg url "https://github.com/${{ github.repository }}/commit/${COMMIT_SHA}" \
+              '{
+                domain: "deploy",
+                severity: "notice",
+                title: $title,
+                body: $body,
+                source: "github/ci",
+                url: $url,
+                url_title: "View Commit on GitHub"
+              }')
+            curl -sS -X POST "https://n8n.kubelab.live/webhook/notify" \
+              -H "Authorization: Bearer $NOTIFY_SECRET" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD" || true
+          fi
