@@ -1,5 +1,5 @@
 ---
-id: lesson-373-a-comment-claiming-another-target-does-it-is-not-a-chain
+id: lesson-374-a-comment-claiming-another-target-does-it-is-not-a-chain
 type: lesson
 status: active
 created: "2026-08-23"
