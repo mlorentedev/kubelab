@@ -50,10 +50,35 @@ resource "google_project_iam_member" "kill_switch" {
 # reviewable as code. `archive_file` hashes the contents, and the object name
 # carries that hash -- which is what makes a source change redeploy the function
 # instead of silently leaving the old one running.
+#
+# EXCLUDES ARE LOAD-BEARING, not tidiness. `archive_file` zips the DIRECTORY as
+# it exists on disk, and it does not consult .gitignore -- so `__pycache__/`,
+# which IS gitignored and therefore invisible in review, was being packaged and
+# shipped to the function. A `.pyc` embeds the source file's mtime and size in
+# its header, so anything that touches main.py (a checkout, a fresh clone, a
+# local test run) changed the zip's bytes without changing a line of code.
+#
+# The consequence was not cosmetic: `terraform plan` reported
+# `detect_md5hash -> "different hash"` on EVERY run, so this root never
+# converged. A plan that always shows a change cannot detect drift, which is the
+# one thing a plan is for -- and worse, it MASKS it: had someone edited the
+# deployed function by hand, the plan would have looked exactly like this.
+# The compute root converges to "No changes"; this one never had.
+#
+# Measured 2026-08-23: the packaged zip contained
+# `__pycache__/main.cpython-312.pyc` (4,713 bytes) alongside main.py (3,537).
+# Timestamps were NOT the cause -- archive_file already pins them to 2049-01-01,
+# and checking that first is what ruled out the obvious hypothesis.
 data "archive_file" "kill_switch" {
   type        = "zip"
   source_dir  = "${path.module}/function"
   output_path = "${path.module}/.terraform/kill-switch.zip"
+
+  excludes = [
+    "__pycache__",
+    "__pycache__/**",
+    "*.pyc",
+  ]
 }
 
 resource "google_storage_bucket" "function_source" {

@@ -1,0 +1,50 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Monitors Google Cloud Compute Engine Spot VM preemption signal via metadata server.
+# Alerts Slack #alerts via n8n /webhook/notify when preemption is imminent (30s window).
+set -euo pipefail
+
+METADATA_URL="http://metadata.google.internal/computeMetadata/v1/instance/preempted"
+HEADER="Metadata-Flavor: Google"
+NOTIFY_SECRET_FILE="{{ node_notify_secret_file }}"
+NOTIFY_DOMAIN="{{ node_notify_domain }}"
+NODE_NAME="{{ inventory_hostname }}"
+INTERVAL="{{ gcp_preemption_check_interval_seconds }}"
+
+while true; do
+  STATUS=$(curl -s -m 4 -H "$HEADER" "$METADATA_URL" 2>/dev/null || echo "FALSE")
+  if [ "$STATUS" = "TRUE" ]; then
+    echo "GCP Spot Preemption signal received on $NODE_NAME. Emitting alert..."
+
+    if [ -f "$NOTIFY_SECRET_FILE" ]; then
+      TOKEN=$(cat "$NOTIFY_SECRET_FILE")
+      TOKEN_ESC=${TOKEN//\\/\\\\}
+      TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
+
+      PAYLOAD=$(python3 -c "
+import json
+print(json.dumps({
+    'domain': 'fleet',
+    'severity': 'page',
+    'title': f'[PROD] GCP Spot Preemption: {node} reclaiming in 30s',
+    'body': f'Google Cloud has signaled preemption for {node}. Instance termination is imminent.',
+    'source': f'{node}/gcp-preemption-watch',
+    'url': 'https://argo.kubelab.live',
+    'url_title': 'Open in Argo CD'
+}))
+" node="$NODE_NAME")
+
+      printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl -sS -f --config - \
+        --connect-timeout 3 --max-time 5 \
+        -X POST "https://$NOTIFY_DOMAIN/webhook/notify" \
+        -H "Content-Type: application/json" \
+        -d "$PAYLOAD" \
+        -o /dev/null || true
+    fi
+
+    # Sync storage buffers before preemption terminates the host
+    sync
+    exit 0
+  fi
+  sleep "$INTERVAL"
+done

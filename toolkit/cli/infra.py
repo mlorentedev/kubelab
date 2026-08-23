@@ -1506,8 +1506,46 @@ def tf_killswitch_test_tfvars() -> None:
         )
         raise typer.Exit(1) from None
 
+    # A UNIQUE project id per run, and this is a fix rather than a flourish.
+    # The variable's default was the fixed `kubelab-killswitch-proof`, whose
+    # docstring blamed collisions on "leaving one behind". Measured 2026-08-23:
+    # the collision happens even when the destroy is CLEAN. GCP keeps a deleted
+    # project in DELETE_REQUESTED for ~30 days and reserves its id throughout, so
+    # a second run inside that window fails with
+    #
+    #   Error 409: Requested entity already exists, alreadyExists
+    #
+    # A proof of the billing kill switch that can only run once a month does not
+    # verify the kill switch -- it records that the switch worked on one day. The
+    # switch had just been redeployed when this was hit, so the window where it
+    # was unverifiable was exactly the window where verification mattered.
+    #
+    # Derived from the current time rather than random, so a failed run's orphan
+    # is identifiable by when it was created. 30-char limit on GCP project ids.
+    from datetime import datetime, timezone
+
+    # SECOND granularity, and the year is dropped to pay for it. A GCP project id
+    # is capped at 30 characters, so the budget is 11 characters after the
+    # 19-character prefix: %Y%m%d%H%M is 31 (rejected at APPLY, not at plan) and
+    # %y%m%d%H%M fits but only resolves to the minute.
+    #
+    # Minute resolution is not enough, raised in review of #1310 and nearly
+    # demonstrated while writing it: the first attempt failed on the 31-character
+    # id and was retried about a minute later. A retry after a FAST failure — a
+    # validation error, a missing credential, anything before the project is
+    # created — lands in the same minute and collides with a 409, which reads as
+    # "the kill switch is broken" when nothing about it was exercised.
+    #
+    # The year is the safe thing to drop: this project lives ~90 seconds and GCP
+    # purges it after 30 days, so month-day-time identifies an orphan completely.
+    stamp = datetime.now(timezone.utc).strftime("%m%d%H%M%S")
+    project_id = f"kubelab-killswitch-{stamp}"  # 29 chars, unique per second
+
     path = test_dir / "killswitch-test.tfvars"
-    path.write_text(f'billing_account_id = "{billing_id}"\nkill_switch_service_account = "{sa}"\n')
+    path.write_text(
+        f'billing_account_id = "{billing_id}"\nkill_switch_service_account = "{sa}"\nproject_id = "{project_id}"\n'
+    )
+    logger.info(f"scratch project for this run: {project_id}")
     logger.success(f"Generated {path}")
 
 
