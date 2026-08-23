@@ -898,22 +898,22 @@
     "expiryNotification": true
   },
   {
-    "key": "staging-web-homepage-staging",
-    "name": "Staging · Web · Homepage Staging",
+    "key": "prod-web-homepage-cockpit",
+    "name": "Prod · Web · Homepage Cockpit",
     "type": "http",
-    "url": "https://home.staging.kubelab.live",
+    "url": "https://home.kubelab.live",
     "hostname": null,
     "port": null,
-    "interval": 120,
+    "interval": 60,
     "maxretries": 3,
     "method": "GET",
     "keyword": null,
-    "ignoreTls": true,
+    "ignoreTls": false,
     "upsideDown": false,
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Homepage IDP dashboard (staging). VPN-only. Tabs: Services, Infra, Topology, Flows, Links.",
+    "description": "Homepage IDP Developer Cockpit (prod). Public HTTPS. Tabs: Services, Infra, Topology, Flows, Links.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
@@ -922,7 +922,8 @@
     ],
     "parent": null,
     "tags": [
-      "staging"
+      "prod",
+      "web"
     ],
     "expiryNotification": true
   },
