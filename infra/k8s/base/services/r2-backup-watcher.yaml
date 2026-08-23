@@ -24,8 +24,27 @@ metadata:
     app.kubernetes.io/component: observability
     app.kubernetes.io/part-of: kubelab
 spec:
-  # Runs every day at 06:00 UTC
-  schedule: "0 6 * * *"
+  # Every 6h, not daily. The rule that reads this emitter asks
+  # `last_over_time(...[24h])` with `noDataState: Alerting`, so the producer's
+  # period IS the alert's margin — and a daily producer against a 24h window
+  # leaves none. One late or skipped run and the dead-man fires on a fleet
+  # whose backups are fine.
+  #
+  # Measured 2026-08-23. Prod: the rule shipped at 04:40Z with no emitter
+  # history in Loki, fired at 04:59Z, and only cleared at 06:19Z when the daily
+  # 06:00 tick finally produced a line. Staging then got the same rule at
+  # 07:06Z — past that day's only tick — and had no way to clear before 06:00
+  # the following morning. A fresh environment inherits a ~23h alert saying
+  # nodes may be unprotected, which is the shape that teaches people to close
+  # this alert unread.
+  #
+  # 6h holds four samples inside the window, so one missed run is survivable
+  # and the worst-case first-deploy noData is 6h rather than 24h. It also
+  # matches #452's Tier 1 RPO, which is the interval anyone reasoning about
+  # backup freshness here already has in their head. Cost is negligible: the
+  # probe is a restic snapshot listing, and BACKUP-044 budgeted ~63k Class A
+  # operations a month against 1M free.
+  schedule: "0 */6 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

@@ -393,6 +393,38 @@ def test_the_envelope_names_the_unit_that_actually_failed() -> None:
     assert envelope["severity"] == "log"
 
 
+def test_the_journal_excerpt_is_scoped_to_the_current_boot() -> None:
+    """An OnFailure= envelope must quote the run that just failed, not an older one.
+
+    Measured on rpi4 2026-08-23: `node-backup-capture.service` failed at
+    08:48:11 as PID 808 (`Failed with result 'timeout'`), and the envelope that
+    reached Slack carried PID 15956 — a run from the previous day's boot —
+    ending in `capture complete: 29M`. A failure alert quoting an older
+    success is worse than one with no excerpt: it reads as already-resolved.
+
+    `-b` is what makes the excerpt unambiguous. The failure that triggered this
+    script necessarily happened in the current boot, so scoping to it cannot
+    exclude the relevant run, and it excludes every other one by construction —
+    including on a node whose clock jumps mid-boot, which is what put the wrong
+    lines in that envelope.
+
+    Asserted against the executable lines only: the comment above the command
+    quotes the unscoped form to explain the fix, so a raw match on the file
+    would pass on the prose and never see the command regress.
+    """
+    code = _executable_lines(_render("kubelab-notify.sh.j2"))
+
+    journal_calls = re.findall(r"journalctl[^\n|]*", code)
+    assert journal_calls, "the notify script no longer reads the journal at all"
+
+    for call in journal_calls:
+        assert re.search(r"(?:^|\s)-b(?:\s|$)", call), (
+            "the journal excerpt is not scoped to the current boot; without -b "
+            "the lines are selected by timestamp across every retained boot, "
+            f"which is how PID 15956 ended up in a report about PID 808: {call!r}"
+        )
+
+
 # --- ANSIBLE-038 f5: retry budget vs the unit's own timeout -----------------
 
 

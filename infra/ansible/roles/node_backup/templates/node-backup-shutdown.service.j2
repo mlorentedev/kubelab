@@ -60,6 +60,12 @@ Environment=SHUTDOWN_RECEIPT={{ node_backup_shutdown_receipt }}
 # stale file can never be read as proof that this run succeeded. Absence is the
 # failure signal, and it has to be a signal this run can produce.
 ExecStop=-/bin/rm -f {{ node_backup_shutdown_receipt }}
+# The attempt marker, written BEFORE capture and ship are tried. Its whole job
+# is to prove this sequence started, so that a missing receipt afterwards means
+# "ship failed" instead of "nobody asked". On a smart-plug power cut none of
+# these ExecStop lines run at all, which is precisely the state the marker's
+# absence records at the next boot.
+ExecStop=-/bin/touch {{ node_backup_shutdown_attempt_marker }}
 ExecStop={{ node_backup_capture_script_path }}
 ExecStop=-{{ node_backup_ship_script_path }}
 # Bounded well above the measured real-world cycle (verification.md: 8-12s

@@ -36,7 +36,31 @@ esac
 TOKEN="$(cat {{ node_notify_secret_file }})"
 
 # Trim to keep the envelope body small; n8n/Apprise render it as-is.
-BODY_TAIL="$(journalctl -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pager 2>/dev/null \
+#
+# `-b` scopes the excerpt to the CURRENT boot, and for an `OnFailure=` handler
+# that is correct by construction: the failure that invoked this script just
+# happened, so it necessarily belongs to this boot. Without it the excerpt is
+# selected by timestamp across every retained boot, and on a node whose clock
+# jumps during boot that selection is not the run being reported.
+#
+# Measured on rpi4 2026-08-23: `node-backup-capture.service` failed at 08:48:11
+# (PID 808, `Failed with result 'timeout'`), and the envelope that arrived
+# carried PID 15956 -- a run from the boot of Aug 22 -- ending in
+# `capture complete: 29M`. An alert announcing a failure while quoting
+# yesterday's success invites closing the incident on the wrong evidence.
+#
+# The clock is why the selection could go wrong: rpi4 has no RTC (`RTC: n/a`),
+# so it boots with a stale realtime -- `journalctl --list-boots` showed this
+# boot opening at `2026-07-28 17:05`, 26 days behind -- and NTP corrects it
+# mid-boot, leaving a discontinuity that `-n` tail-seeks through. That
+# mechanism is ATTRIBUTED, not proven: re-running the unscoped query after NTP
+# settled returns the right lines, so the fault does not reproduce outside the
+# boot window. `-b` is shipped because it is correct under every mechanism
+# consistent with the evidence, not because the mechanism is pinned down.
+#
+# A hand invocation for a unit that has not run in this boot now yields an
+# empty body. That is the honest answer, and strictly better than a stale one.
+BODY_TAIL="$(journalctl -b -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pager 2>/dev/null \
   | tail -c {{ node_notify_body_bytes }})"
 
 # The unit's ACTUAL last result, so the title can state what is true rather than

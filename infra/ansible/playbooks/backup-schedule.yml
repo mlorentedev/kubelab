@@ -1,0 +1,119 @@
+---
+# =============================================================================
+# Node-path backup schedule — report it, stop it, put it back (BACKUP-044)
+#
+# The gap this closes was found by hitting it. AC9 asks for a demonstration
+# that a node past its backup window alerts unprompted, and the only way to
+# stage that is to stop a timer and wait. Stopping it was a hand
+# `systemctl stop` over SSH, and so was putting it back — six hours later, from
+# a handoff note, by someone who had to remember that `make backup-node` runs
+# ONE backup and does not restore the schedule.
+#
+# A demonstration that requires disarming a control needs a supported way to
+# re-arm it. Otherwise the teardown depends on memory, and the failure mode is
+# silent: the node keeps not backing up, and the only thing that notices is the
+# same monitor the exercise just finished proving works.
+#
+# Usage:
+#   make backup-schedule NODE=vps ENV=prod                  # report only
+#   make backup-schedule NODE=vps ENV=prod STATE=started    # re-arm (declared state)
+#   make backup-schedule NODE=vps ENV=prod STATE=stopped    # disarm, deliberately
+#
+# STATE=started is the state the role itself declares, so running it against an
+# already-armed node is a no-op and reports changed=0. That is the point: it is
+# the same convergence `make backup` performs, reachable without redeploying
+# the whole pipeline to a live production node just to start one timer.
+#
+# STATE=stopped exists so the disarm is codified too. The alternative is not
+# "nobody disarms a timer" — it is "somebody disarms it with an ad-hoc SSH
+# command that no runbook records and no playbook can undo".
+# =============================================================================
+
+- name: Node-path backup schedule
+  hosts: all
+  become: true
+  gather_facts: false
+  # An on-demand node that is powered off is the expected state, not a fault
+  # (ADR-028) — the same reasoning as backup-node.yml.
+  ignore_unreachable: true
+
+  vars:
+    # Both timers, because disarming only the ship timer leaves the weekly
+    # integrity check running and the node in a state no declaration describes.
+    backup_timers:
+      - node-backup-ship.timer
+      - node-backup-ship-check.timer
+    # Empty means report-only. A playbook whose default MUTATES is one an
+    # operator runs to look at something and changes it instead.
+    schedule_state: "{{ state | default('') }}"
+
+  tasks:
+    - name: Reject an unrecognised state
+      # An unknown value must not fall through to the report-only branch: the
+      # operator asked for a change, would be told nothing happened, and would
+      # read that as "already in that state". Same failure shape as CHECK=1
+      # being silently ignored (tests/test_makefile_dry_run.py).
+      when: schedule_state | length > 0
+      ansible.builtin.assert:
+        that:
+          - schedule_state in ['started', 'stopped']
+        fail_msg: >-
+          STATE={{ schedule_state }} is not one of started|stopped.
+
+    - name: Put the timers into the requested state
+      when: schedule_state | length > 0
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: "{{ schedule_state }}"
+        # `enabled` follows the state, so a disarm survives a reboot and a
+        # re-arm restores what the role declares. A timer stopped but still
+        # enabled comes back on the next boot, which would have quietly ended
+        # the AC9 window early and looked like the monitor was wrong.
+        enabled: "{{ schedule_state == 'started' }}"
+        daemon_reload: false
+      loop: "{{ backup_timers }}"
+
+    - name: Read the schedule back
+      # `check_mode: false` so a dry run still reports. A read that returns
+      # nothing under --check reads as "no timers", which is the exact wrong
+      # answer for the question this playbook exists to answer.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: systemctl list-timers {{ backup_timers | join(' ') }} --all --no-pager
+      register: timer_state
+      changed_when: false
+
+    - name: Report the schedule
+      # The next elapse, not just active/inactive: "active" says the unit is
+      # loaded, and the question an operator actually has after a teardown is
+      # when the next backup will happen.
+      #
+      # EXPECT `NEXT: -` IMMEDIATELY AFTER A RE-ARM, AND DO NOT PANIC AT IT.
+      # Measured on the VPS 2026-08-23: STATE=started reported `NEXT -` with
+      # `LAST ... 7s ago`, and 45 seconds later the same read returned
+      # `NEXT Sun 2026-08-23 12:02:01 UTC`. Always-on nodes carry
+      # `Persistent=true`, so starting a timer whose window was missed triggers
+      # the catch-up run at once, and systemd computes no next elapse while the
+      # unit it activates is still running.
+      #
+      # It reads exactly like a timer that is still dead, which is the reading
+      # that gets someone to re-run this in a loop. Wait for the run to finish
+      # and read it again.
+      check_mode: false
+      ansible.builtin.debug:
+        var: timer_state.stdout_lines
+
+    - name: Assert the timers are armed
+      # Only when the operator asked for them to be. After a deliberate disarm
+      # this must stay quiet, or the codified teardown reports itself as a
+      # failure and trains people back onto the SSH they were meant to stop
+      # using.
+      when:
+        - schedule_state == 'started'
+        - not ansible_check_mode
+      ansible.builtin.command:
+        cmd: systemctl is-active {{ item }}
+      register: timer_active
+      changed_when: false
+      failed_when: timer_active.stdout is not search('^active')
+      loop: "{{ backup_timers }}"

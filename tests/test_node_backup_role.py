@@ -602,3 +602,233 @@ def test_the_request_timeout_leaves_room_under_the_unit_ceiling():
         f"systemd would kill the run before restic could explain itself, which is "
         f"the defect this setting exists to remove."
     )
+
+
+def test_the_capture_ceiling_clears_the_overrun_that_was_measured():
+    """120s was not enough at the one moment capture matters — cold boot.
+
+    rpi4, 2026-08-23: capture started 08:46:11, was still running at 08:48:11,
+    and systemd killed it (`Failed with result 'timeout'`, SIGTERM). The retry
+    two minutes later copied the same 29 MB in ONE second. So the ceiling was
+    below what a booting Pi needs while being nowhere near what the work costs.
+
+    Guarded numerically, and deliberately against the OBSERVED overrun rather
+    than a round number: the next person tuning this has to clear the event
+    that caused it, not merely change the digits. The value is read from the
+    role default so the unit cannot drift from the knob that documents it.
+    """
+    import re
+
+    MEASURED_OVERRUN_SECONDS = 120
+
+    raw = str(_defaults()["node_backup_capture_timeout"])
+    match = re.match(r"^(\d+)s$", raw)
+    assert match, f"node_backup_capture_timeout is not a plain seconds value: {raw!r}"
+    configured = int(match.group(1))
+
+    assert configured > MEASURED_OVERRUN_SECONDS, (
+        f"capture TimeoutStartSec is {configured}s, at or under the {MEASURED_OVERRUN_SECONDS}s "
+        f"that was already measured overrunning on a cold boot. A run killed at boot is the "
+        f"one that covers the previous session on nodes that lose power without shutting down."
+    )
+
+    unit = _render("node-backup-capture.service.j2", node_backup_location="on-demand")
+    assert f"TimeoutStartSec={raw}" in unit, (
+        "the capture unit does not take its ceiling from node_backup_capture_timeout; "
+        "a literal here drifts from the default that explains it"
+    )
+
+
+# --- BACKUP-044 AC5: telling two absences apart ----------------------------
+
+
+def _capture_receipt_block() -> str:
+    """The boot read-back, comments stripped.
+
+    Every branch below is explained by a comment that quotes the other
+    branches, so a raw match on the rendered file would find `>&2` in the prose
+    about stderr and pass on a script that never writes to it.
+    """
+    script = _render("node-backup-capture.sh.j2", node_backup_location="on-demand")
+    code = "\n".join(
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    )
+    start = code.index("previous shutdown snapshot")
+    return code[code.rindex("if ", 0, start) : code.index("STAGING=", start)]
+
+
+def test_an_unclean_power_off_is_not_reported_as_a_failed_backup():
+    """The operator kills the homelab with a smart plug, so ExecStop never runs.
+
+    Absence of a receipt therefore has two meanings that used to print the
+    same: the shutdown sequence ran and failed to ship (a real defect), or no
+    shutdown sequence ran at all (Tuesday). The second is the normal path on
+    this fleet, and reporting it as `the last power-off did not ship` on every
+    boot is what emptied the line of meaning.
+
+    The attempt marker is what separates them, so the branch that has no
+    marker must NOT reach stderr -- `OnFailure=` and the operator's eye both
+    read stderr as the failure channel.
+    """
+    block = _capture_receipt_block()
+
+    assert "node-backup-shutdown.attempted" in block, (
+        "the read-back does not consult the attempt marker, so it cannot tell a "
+        "failed shutdown ship from a power cut that never ran one"
+    )
+
+    branches = block.split("elif")
+    assert len(branches) == 2, f"expected a three-way read-back, got: {block!r}"
+    unclean_branch = branches[1].split("else", 1)[1]
+
+    assert ">&2" not in unclean_branch, (
+        "the no-shutdown-sequence branch writes to stderr. On a smart-plug fleet that "
+        "fires on every single boot, which is the alarm fatigue this change removes."
+    )
+    assert ">&2" in branches[1].split("else", 1)[0], (
+        "the marker-without-receipt branch does NOT write to stderr, so the one case "
+        "that is a real failure has become as quiet as the normal one"
+    )
+
+
+def test_the_read_back_runs_once_per_boot_not_once_per_run():
+    """Ship pulls capture in via Wants= on every tick, so this is not a boot-only script.
+
+    Measured on rpi4 2026-08-23: the read-back printed at 08:46 (boot) and
+    again at 08:50, when ship pulled capture in. The answer cannot change
+    between those two, so the second one is noise by construction.
+    """
+    block = _capture_receipt_block()
+    flag = str(_defaults()["node_backup_boot_check_flag"])
+
+    assert flag.startswith("/run/"), (
+        f"the boot flag is at {flag!r}, off tmpfs — it would survive the reboot it is "
+        f"meant to be reset by, and the read-back would never run again"
+    )
+    assert flag in block, "the read-back is not scoped by the boot flag"
+
+
+def test_the_boot_read_back_clears_what_it_read():
+    """A receipt that outlives its boot is read as proof of the WRONG power-off.
+
+    The previous revision left clearing to the shutdown unit's first ExecStop
+    line. That unit does not run on a power cut — the whole reason this control
+    exists — so a receipt from the last clean reboot would still be sitting
+    there at the next boot and would be reported as a successful shutdown ship
+    that never happened.
+    """
+    block = _capture_receipt_block()
+    receipt = str(_defaults()["node_backup_shutdown_receipt"])
+    marker = str(_defaults()["node_backup_shutdown_attempt_marker"])
+
+    removal = [line for line in block.splitlines() if line.strip().startswith("rm ")]
+    assert removal, "the boot read-back never clears the files it just read"
+    cleared = " ".join(removal)
+    for path in (receipt, marker):
+        assert path in cleared, (
+            f"{path} survives the boot read-back, so the next boot can read this "
+            f"boot's outcome as its own"
+        )
+
+
+def test_the_shutdown_unit_marks_its_attempt_before_it_can_fail():
+    """The marker means 'this sequence started', so it must precede what may fail.
+
+    Written after capture or ship, it would only ever exist when they
+    succeeded — which is what the receipt already says, leaving the failure
+    case indistinguishable from the power cut all over again.
+    """
+    unit = _render(
+        "node-backup-shutdown.service.j2",
+        node_backup_location="on-demand",
+        inventory_hostname="rpi4",
+        node_backup_shutdown_after="docker.service",
+    )
+    stops = [line for line in _directive_lines(unit) if line.startswith("ExecStop=")]
+
+    marker = str(_defaults()["node_backup_shutdown_attempt_marker"])
+    touch_at = next((i for i, line in enumerate(stops) if marker in line), None)
+    assert touch_at is not None, "the shutdown unit never records that it attempted a ship"
+
+    capture_at = next(
+        i for i, line in enumerate(stops) if str(_defaults()["node_backup_capture_script_path"]) in line
+    )
+    assert touch_at < capture_at, (
+        f"the attempt marker is written at ExecStop position {touch_at}, after capture at "
+        f"{capture_at}. A marker that only appears on success cannot distinguish failure."
+    )
+
+
+# --- backup-schedule: the teardown verb AC9 needed and did not have ---------
+
+
+def _schedule_playbook() -> dict:
+    import yaml
+
+    path = REPO / "infra/ansible/playbooks/backup-schedule.yml"
+    assert path.exists(), "backup-schedule.yml is missing"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))[0]
+
+
+def test_reporting_the_schedule_cannot_change_it() -> None:
+    """`make backup-schedule NODE=x` with no STATE must be read-only.
+
+    An operator runs this to find out whether a node's backups are armed —
+    often precisely because something looks wrong. A default that mutates
+    would arm the timer as a side effect of asking, and destroy the state
+    being investigated. That is the shape of the AC9 harvest itself: evidence
+    first, teardown second, and a tool that does both at once has no first.
+    """
+    play = _schedule_playbook()
+    mutating = [
+        task
+        for task in play["tasks"]
+        if "ansible.builtin.systemd" in task or task.get("name", "").startswith("Put the timers")
+    ]
+    assert mutating, "the playbook has no task that changes the timers at all"
+
+    for task in mutating:
+        assert "when" in task, (
+            f"task {task.get('name')!r} changes timer state unconditionally, so a "
+            f"report-only invocation would mutate the thing it was asked to look at"
+        )
+        assert "schedule_state" in str(task["when"]), (
+            f"task {task.get('name')!r} is not gated on the requested state"
+        )
+
+
+def test_an_unrecognised_state_is_refused_rather_than_ignored() -> None:
+    """Silently ignoring STATE=stoped reports success and changes nothing.
+
+    The operator reads "completed successfully" as "the timer is stopped", and
+    the divergence surfaces hours later as a backup that did happen or one
+    that did not. Exactly the failure `make backup ENV=prod CHECK=1` had: make
+    has no notion of an unknown variable, so the only signal was the absence
+    of one.
+    """
+    play = _schedule_playbook()
+    guard = next(
+        (t for t in play["tasks"] if "ansible.builtin.assert" in t and "state" in t.get("name", "").lower()),
+        None,
+    )
+    assert guard is not None, "no task rejects an unrecognised STATE"
+
+    conditions = str(guard["ansible.builtin.assert"]["that"])
+    for allowed in ("started", "stopped"):
+        assert allowed in conditions, f"{allowed!r} is not in the accepted set"
+
+
+def test_both_timers_move_together() -> None:
+    """Disarming only the ship timer leaves the node in a state nothing declares.
+
+    The weekly integrity check would keep running against a repository nobody
+    is shipping to, and a later `is-active` on one timer would report a
+    schedule that is half there.
+    """
+    play = _schedule_playbook()
+    timers = play["vars"]["backup_timers"]
+    assert "node-backup-ship.timer" in timers
+    assert "node-backup-ship-check.timer" in timers, (
+        "the integrity-check timer is not managed alongside the ship timer, so a "
+        "disarm leaves half a schedule running"
+    )
