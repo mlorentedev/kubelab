@@ -9,8 +9,16 @@
 # `RESOLVE_GCP1_TAILSCALE_IP` is substituted at apply time from MagicDNS by
 # `toolkit infra k8s render-apply` (ADR-047 D3 / TOOL-009 T4: "rpi3/aws1
 # EndpointSlices via a small toolkit command each"). Applied by
-# `make deploy-argocd`, which is exactly the step `make gcp1-replace` already
-# tells you to run after a recreate — the one event that changes this value.
+# `make argocd-repoint`, which `make gcp1-replace` invokes as its last step and
+# `make deploy-argocd` calls too — the recreate is the one event that changes
+# this value, so the target that performs the recreate is the one that must
+# repoint.
+#
+# That sentence used to read "which is exactly the step `make gcp1-replace`
+# already tells you to run", and it was false: gcp1-replace never invoked or
+# mentioned it. A comment asserting that another target performs a step is
+# documentation, not a dependency (lesson-373) — which is why the claim above is
+# now a `$(MAKE)` line you can grep for, and a test asserts it stays one.
 #
 # The port below is a NodePort on the hub, and it is NOT hub-specific: both hubs
 # served 30080 during the handover, verified by request rather than by reading

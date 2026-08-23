@@ -517,11 +517,33 @@ _deploy-argocd-helm:
 		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
-	@echo "--- Updating ArgoCD EndpointSlice on prod (MagicDNS-resolved gcp1 Tailscale IP) ---"
-	@$(TOOLKIT) infra k8s render-apply --env prod --optional \
+	@$(MAKE) --no-print-directory argocd-repoint
+	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
+
+# Point prod's inbound Argo CD route at wherever gcp1 currently lives.
+#
+# Its own target, and called rather than inlined, because the event that
+# invalidates the address is NOT a deploy: gcp1 is Spot in a MIG, so any recreate
+# rotates its Tailscale IP (.21 -> .24 -> .12 -> .13 across August 2026) while the
+# hub itself stays perfectly healthy. An EndpointSlice takes an IP and cannot take
+# a DNS name, so the value has to be re-resolved from MagicDNS after every one.
+#
+# This used to be three lines buried at the end of `_deploy-argocd-helm`, and the
+# EndpointSlice's comment claimed `gcp1-replace` "already tells you to run" that
+# target. It never did -- see lesson-373. Repairing the route needed a ten-minute
+# Helm upgrade you did not want, so the honest options were "run the wrong thing"
+# or "run kubectl by hand". Hence a target that does exactly the one thing.
+#
+# NO `--optional` here, deliberately, and that is the difference from every other
+# render-apply call: `--optional` reports success on a failed render. On a target
+# whose entire purpose is repairing a dead route, a green tick over a failed
+# resolve is the worst possible outcome -- prod stays down and nothing says so.
+.PHONY: argocd-repoint
+argocd-repoint:
+	@echo "--- Pointing the prod Argo CD route at gcp1 (resolved from MagicDNS) ---"
+	@$(TOOLKIT) infra k8s render-apply --env prod \
 		--manifest infra/k8s/overlays/prod/argocd-endpointslice.yaml \
 		--render RESOLVE_GCP1_TAILSCALE_IP=gcp1.kubelab.internal
-	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
 # Watch ArgoCD pods until all ready — logs timing to /tmp/argocd-timing.log
 # Usage: make watch-argocd (run after deploy-argocd, safe to leave unattended)
@@ -1046,7 +1068,11 @@ gcp1-replace:
 	@$(TOOLKIT) infra terraform gcp-recreate
 	@$(MAKE) --no-print-directory wait-node-ready NODE=gcp1 ENV=hub
 	@$(MAKE) --no-print-directory provision NODE=gcp1 ENV=hub
-	@echo "✓ gcp1 recreated and provisioned. Argo CD is installed by cloud-init."
+	# A recreate rotates gcp1's Tailscale IP, which prod's inbound route carries as
+	# a literal address. Without this line the hub comes back healthy and
+	# `argo.kubelab.live` stays dark -- measured 2026-08-23, lesson-373.
+	@$(MAKE) --no-print-directory argocd-repoint
+	@echo "✓ gcp1 recreated, provisioned, and the prod route repointed. Argo CD is installed by cloud-init."
 
 gcp1-destroy: tf-gcp-destroy
 
