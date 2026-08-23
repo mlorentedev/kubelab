@@ -757,3 +757,78 @@ def test_the_shutdown_unit_marks_its_attempt_before_it_can_fail():
         f"the attempt marker is written at ExecStop position {touch_at}, after capture at "
         f"{capture_at}. A marker that only appears on success cannot distinguish failure."
     )
+
+
+# --- backup-schedule: the teardown verb AC9 needed and did not have ---------
+
+
+def _schedule_playbook() -> dict:
+    import yaml
+
+    path = REPO / "infra/ansible/playbooks/backup-schedule.yml"
+    assert path.exists(), "backup-schedule.yml is missing"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))[0]
+
+
+def test_reporting_the_schedule_cannot_change_it() -> None:
+    """`make backup-schedule NODE=x` with no STATE must be read-only.
+
+    An operator runs this to find out whether a node's backups are armed —
+    often precisely because something looks wrong. A default that mutates
+    would arm the timer as a side effect of asking, and destroy the state
+    being investigated. That is the shape of the AC9 harvest itself: evidence
+    first, teardown second, and a tool that does both at once has no first.
+    """
+    play = _schedule_playbook()
+    mutating = [
+        task
+        for task in play["tasks"]
+        if "ansible.builtin.systemd" in task or task.get("name", "").startswith("Put the timers")
+    ]
+    assert mutating, "the playbook has no task that changes the timers at all"
+
+    for task in mutating:
+        assert "when" in task, (
+            f"task {task.get('name')!r} changes timer state unconditionally, so a "
+            f"report-only invocation would mutate the thing it was asked to look at"
+        )
+        assert "schedule_state" in str(task["when"]), (
+            f"task {task.get('name')!r} is not gated on the requested state"
+        )
+
+
+def test_an_unrecognised_state_is_refused_rather_than_ignored() -> None:
+    """Silently ignoring STATE=stoped reports success and changes nothing.
+
+    The operator reads "completed successfully" as "the timer is stopped", and
+    the divergence surfaces hours later as a backup that did happen or one
+    that did not. Exactly the failure `make backup ENV=prod CHECK=1` had: make
+    has no notion of an unknown variable, so the only signal was the absence
+    of one.
+    """
+    play = _schedule_playbook()
+    guard = next(
+        (t for t in play["tasks"] if "ansible.builtin.assert" in t and "state" in t.get("name", "").lower()),
+        None,
+    )
+    assert guard is not None, "no task rejects an unrecognised STATE"
+
+    conditions = str(guard["ansible.builtin.assert"]["that"])
+    for allowed in ("started", "stopped"):
+        assert allowed in conditions, f"{allowed!r} is not in the accepted set"
+
+
+def test_both_timers_move_together() -> None:
+    """Disarming only the ship timer leaves the node in a state nothing declares.
+
+    The weekly integrity check would keep running against a repository nobody
+    is shipping to, and a later `is-active` on one timer would report a
+    schedule that is half there.
+    """
+    play = _schedule_playbook()
+    timers = play["vars"]["backup_timers"]
+    assert "node-backup-ship.timer" in timers
+    assert "node-backup-ship-check.timer" in timers, (
+        "the integrity-check timer is not managed alongside the ship timer, so a "
+        "disarm leaves half a schedule running"
+    )

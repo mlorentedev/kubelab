@@ -930,9 +930,38 @@ and coverage afterwards:
 [SUCCESS] vps        covered — newest 2026-08-23 07:14Z (0.0h ago), 1 path(s)
 ```
 
-**Carried forward, not closed here:** re-arming `node-backup-ship.timer`
-itself is a hand `systemctl start` over SSH, because the toolkit has no verb
-for starting a stopped unit — `make backup-node` runs one backup and does not
-restore the schedule. A demonstration that requires stopping a timer needs a
-supported way to start it again; until then the teardown depends on someone
-remembering the ssh, which is the shape this repo keeps writing lessons about.
+**The gap the teardown exposed, closed in the same pass.** Re-arming
+`node-backup-ship.timer` was a hand `systemctl start` over SSH: `make
+backup-node` runs one backup and does not restore the schedule, so nothing
+supported put the timer back. A demonstration that requires disarming a
+control needs a supported way to re-arm it, or the teardown depends on someone
+remembering — and the failure mode is silent, because the only thing that
+notices is the monitor the exercise just finished proving works.
+
+`make backup-schedule NODE=x ENV=y [STATE=started|stopped]` is that verb.
+Omitting `STATE` reports only; an operator asking whether backups are armed
+must not arm them by asking.
+
+Exercised on the VPS the same morning, which is also how the outstanding
+teardown was actually completed:
+
+```
+# report only — the timer was still stopped, hours after the demo
+NEXT  LEFT  LAST                         PASSED  UNIT
+-     -     Sun 2026-08-23 00:01:04 UTC  8h ago  node-backup-ship.timer
+
+# STATE=started
+kubelab-vps : ok=5  changed=1  unreachable=0  failed=0
+
+# re-run, unchanged
+kubelab-vps : ok=5  changed=0  unreachable=0  failed=0
+```
+
+**A reading trap, recorded because it was walked into.** Immediately after the
+re-arm the report still showed `NEXT -`, with `LAST ... 7s ago` — which reads
+exactly like a timer that is still dead. Forty-five seconds later the same
+read returned `NEXT Sun 2026-08-23 12:02:01 UTC`. Always-on nodes carry
+`Persistent=true`, so starting a timer whose window was missed fires the
+catch-up run immediately, and systemd computes no next elapse while the unit
+it activates is still running. The playbook says so at the point of the
+report, because the instinct on seeing `NEXT -` is to run it again.
