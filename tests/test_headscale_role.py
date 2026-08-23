@@ -19,12 +19,13 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 # Render helpers are imported from the single-source renderer (also used by the
 # CI gate `make check-headscale-policy`) so tests and CI never drift.
-from toolkit.scripts.headscale_probe import _ssh_target, run_probe
+from toolkit.scripts.headscale_probe import _ssh_target, preserved_flows, run_probe
 from toolkit.scripts.render_headscale_policy import build_hosts as _hosts_from_ssot
 from toolkit.scripts.render_headscale_policy import render_policy as _render_policy
 
@@ -222,11 +223,37 @@ class TestHeadscaleProbe:
         assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({ace1}))) == 0
 
     def test_required_source_down_fails(self) -> None:
-        # aws1 is the source of a REQUIRED flow (hub->spoke :6443 prod) → cannot be skipped.
-        # Addressed by MagicDNS name, not by IP: the hub's Tailscale address rotates on
-        # every re-registration (common.yaml networking.aws), so the literal is a cache.
-        aws1 = _net()["aws"]["tailscale_dns"]
-        assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({aws1}))) == 1
+        # The hub reconciling prod is the source of a REQUIRED flow (hub->spoke
+        # :6443) → cannot be skipped.
+        #
+        # WHICH hub that is comes from `preserved_flows`, never from a literal.
+        # This test named `aws1` outright and went red the moment prod moved to
+        # gcp1 -- correctly flagging the change, but as a failure of the probe
+        # rather than of the assumption. Deriving it means the next handover
+        # moves this test with it, which is the same property the probe itself
+        # has (`networking.gcp.managed_spokes`).
+        #
+        # Addressed by MagicDNS name, not by IP: a hub's Tailscale address
+        # rotates on every re-registration, so the literal is a cache.
+        prod_flow = next(f for f in preserved_flows(_net()) if f.required and "prod" in f.name)
+        source = _ssh_target(_net(), prod_flow.src)
+        assert run_probe(_net(), runner=_fake_runner(down_ips=frozenset({source}))) == 1
+
+    def test_the_retired_hub_being_down_is_not_a_failure(self) -> None:
+        # The other half, and the one that matters during a decommission: once a
+        # hub reconciles nothing, it is the source of no required flow, so it can
+        # be paused or destroyed without turning the probe red. A probe that
+        # failed here would go red on purpose-built teardown and train everyone
+        # to ignore it -- the same reasoning that keeps NOT_REGISTERED out of
+        # check-spokes' failure set.
+        net = _net()
+        sources = {f.src for f in preserved_flows(net) if f.required}
+        retired = [h for h in ("aws", "gcp") if h in net and net[h]["hostname"] not in sources]
+        if not retired:
+            pytest.skip("no hub is retired yet; both still source a required flow")
+        for hub in retired:
+            down = _ssh_target(net, net[hub]["hostname"])
+            assert run_probe(net, runner=_fake_runner(down_ips=frozenset({down}))) == 0
 
     def test_optional_broken_flow_is_logged_not_fatal(self) -> None:
         # an optional flow that fails (e.g. intra-K3s ace1:6443) is logged but must NOT
