@@ -177,6 +177,26 @@ class TestRewriteServerDirect:
         networking = config.get("networking") or {}
         clusters = config.get("clusters") or {}
 
+        # EVERY hub is recreatable, asserted first and separately. Without this the
+        # guard below has a hole that a mutation found: adding `tailscale_ip` to a
+        # cattle node makes it stop matching `recreatable`, so the loop `continue`s
+        # and the node silently stops being checked -- the mutation DISABLES the
+        # guard instead of tripping it. The same predicate gates
+        # `wait-node-ready.yml`'s known_hosts purge, so the hole is not local to
+        # this test: caching an address on a hub would quietly switch off the
+        # host-key handling too.
+        for name, cluster in clusters.items():
+            if not name.startswith("hub"):
+                continue
+            block = _node_block(networking, str(cluster["node"]))
+            assert "tailscale_dns" in block and "tailscale_ip" not in block, (
+                f"clusters.{name} is an Argo CD hub, and a hub's machine is replaced "
+                f"on every preemption -- so {cluster['node']} must declare "
+                "tailscale_dns and NO tailscale_ip. Adding an IP here does not just "
+                "cache a rotating address: it removes the node from every check "
+                "keyed on that shape, including wait-node-ready's known_hosts purge."
+            )
+
         for name, cluster in clusters.items():
             block = _node_block(networking, str(cluster["node"]))
             recreatable = "tailscale_dns" in block and "tailscale_ip" not in block
