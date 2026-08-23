@@ -1,0 +1,7 @@
+---
+# Defaults for gcp_preemption role
+gcp_preemption_script_path: "/usr/local/bin/gcp-preemption-watch.sh"
+gcp_preemption_service_name: "gcp-preemption-watch.service"
+gcp_preemption_check_interval_seconds: 5
+node_notify_secret_file: "/etc/kubelab/fleet-notify.secret"
+node_notify_domain: "{{ config.apps.services.automation.n8n.domain | default('n8n.kubelab.live') }}"

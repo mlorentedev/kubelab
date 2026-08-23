@@ -1,0 +1,23 @@
+[Unit]
+Description=GCP Spot Preemption Signal Monitor
+Documentation=https://cloud.google.com/compute/docs/instances/spot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ gcp_preemption_script_path }}
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+# Security sandbox
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/
+ReadWritePaths=/run /tmp
+
+[Install]
+WantedBy=multi-user.target
