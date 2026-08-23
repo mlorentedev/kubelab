@@ -252,7 +252,7 @@ class TestResolveMagicDNS:
             "run",
             lambda *a, **k: MagicMock(returncode=0, stdout="\n100.64.0.7\n", stderr=""),
         )
-        assert resolve_magicdns("aws1.kubelab.internal") == "100.64.0.7"
+        assert resolve_magicdns("gcp1.kubelab.internal") == "100.64.0.7"
 
     def test_none_on_empty_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(

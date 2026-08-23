@@ -126,11 +126,30 @@ created: "2026-08-20"
       | holds `kubelab-prod` + `cluster-prod` | yes | **yes, untouched** |
       | serves `argo.kubelab.live` | no | **yes** (HTTP 200) |
 
-      So **the Argo CD UI you reach right now is the paused hub's**, showing its
-      own last-known view of prod, while the hub actually reconciling prod has no
-      inbound route. Both facts are intended and neither is a defect — the
-      EndpointSlice repoint is the next step, and doing it later is what keeps
-      the rollback trivial.
+      **The route is repointed as of 2026-08-23** and the table above is now
+      history: `argo.kubelab.live` serves from gcp1.
+
+      **HTTP 200 does not prove it, and that is the trap.** Both hubs answer 200
+      on the same NodePort, so the obvious check cannot tell them apart — the
+      eleventh signal in this migration that looks like evidence and is not.
+      Three things were compared instead, and the third is the conclusive one:
+
+      | Check | Result |
+      |---|---|
+      | EndpointSlice address | `100.64.0.12` = gcp1 (aws1 is `100.64.0.7`) |
+      | Applications each hub knows | gcp1 **2**, aws1 **1** — they are distinguishable |
+      | **SHA-256 of the served body** | public `53a01d03…` **= gcp1**, aws1 `652d7690…` |
+
+      Two weaker probes were tried first and are recorded because they failed
+      silently rather than loudly: a marked `User-Agent` and a marked URL path
+      both returned zero hits on *both* hubs, because `argocd-server` logs events
+      and not HTTP requests. An absent log line is not a negative result.
+
+      Autonomous reconciliation was demonstrated by the merge of #1299 itself:
+      gcp1 picked up `eb41ee2` (a parallel session's merge, with nobody watching)
+      and then `ea1a7c2`, reaching `history: [0 1]` on both Applications. That is
+      stronger than the forced sync, which ran against the revision the spoke was
+      already at.
 
       **Rollback, if anything looks wrong before the repoint:**
       `make hub-resume HUB=~/.kube/kubelab-hub-aws-config`. It is complete and
