@@ -26,3 +26,18 @@
     name: logrotate.timer
     state: restarted
     daemon_reload: true
+
+# Handing /etc/resolv.conf back to systemd-resolved already restores public
+# resolution on its own — glibc reaches resolved through the stub and resolved
+# has the link's nameservers. What the restart adds is the split zones: Tailscale
+# re-detects the management mode at takeover, not at start, so until it runs
+# again the node resolves the internet but not `*.staging.kubelab.live`.
+#
+# Conditioned on the unit existing, because base_system also runs on a node
+# being provisioned for the first time, where the tailscale role has not
+# installed anything yet.
+- name: restart tailscaled
+  systemd:
+    name: tailscaled
+    state: restarted
+  when: _tailscaled_present.rc | default(1) == 0
