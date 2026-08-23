@@ -145,6 +145,13 @@ locals {
     "storage.googleapis.com",
     "iam.googleapis.com",
     "logging.googleapis.com",
+    # The notification channel in budget.tf. Added late and the same way as the
+    # rest -- by hitting the error, not by reading: the channel arrived in a
+    # change that merged and was never applied, so nothing ever asked GCP for it
+    # and `Cloud Monitoring API has not been used in project kubelab-hub` sat
+    # undiscovered behind a green build. Enablement is what a merged-but-
+    # unapplied root cannot tell you.
+    "monitoring.googleapis.com",
   ]
 }
 
