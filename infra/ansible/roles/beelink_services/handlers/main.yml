@@ -21,6 +21,12 @@
 - name: Restart gitea
   command: docker restart gitea
   changed_when: true
+  # Handlers do not chain implicitly. Without this the wait below is defined,
+  # reads like a safeguard, and never runs -- the same shape as the missing
+  # notify this change exists to fix, and harder to spot because the code is
+  # present. A handler may notify another handler provided that one is defined
+  # after it, which it is.
+  notify: Wait for gitea to answer after restart
 
 # A restarted Gitea accepts connections before it can serve OIDC, and nothing
 # else in the play waits. Without this the next thing to touch SSO — a probe, a
