@@ -53,6 +53,17 @@ dev_node_dotfiles_version: "main"
 # Run the (long) dotfiles bootstrap. Toggle off to only clone/update the repo.
 dev_node_dotfiles_run_setup: true
 
+# Tools installed into the developer user's ~/.local/bin that a NON-INTERACTIVE
+# SSH session must also see. That session's PATH is /etc/environment verbatim,
+# which never contains ~/.local/bin — so anything omitted here works when you
+# log in and does not exist for a remote agent. Kept as an explicit list rather
+# than "everything in that directory": the wrapper is what a reviewer reads to
+# know what /usr/local/bin exposes.
+dev_node_local_bin_wrapped:
+  - dotf
+  - hive
+  - hive-vault
+
 # --- workspace skeleton ----------------------------------------------------
 # Each agent gets its own clone dir for filesystem isolation between concurrent
 # agents (ADR-058 D1 / #809). v1 is tmux isolation only — no orchestration.
