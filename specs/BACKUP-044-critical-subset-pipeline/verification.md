@@ -18,7 +18,7 @@ name, or observed behavior).
 - [ ] AC6 (sources enumerated from an SSOT allow-list) -> substrate finding below, not built
 - [ ] AC7 (`restic check` passes on every repository as part of the run) -> feasibility settled below (R-B), not built
 - [ ] AC8 (no new consumer of `minio:9000`) -> not started
-- [ ] AC9 (a node past its backup window alerts unprompted) -> not started
+- [x] AC9 (a node past its backup window alerts unprompted) -> demonstrated 2026-08-23, transcript below
 
 ### 2026-08-22 — the PVC class joins, and the first real restore
 
@@ -855,3 +855,84 @@ node-backup-ship.timer node-backup-ship-check.timer` on every node, plus
 `node-backup-shutdown.service` and `node-backup-capture.service` on the
 on-demand pair — the capture/ship mechanism itself (Part 3) is unaffected
 and can keep being triggered by hand.
+
+---
+
+### 2026-08-23 — AC9 demonstrated: the monitor paged, unprompted, to the second
+
+**The last open half of AC4/AC9 is closed.** tasks.md set the bar as "stop a
+timer and observe the coverage monitor alert unprompted, plus a real power
+cycle on an on-demand node showing no alert" — explicitly *not* by reading the
+config. Both were observed in the same window.
+
+**Setup, from the previous session.** `node-backup-ship.timer` was stopped on
+the VPS at **02:14:54Z**. Anchor: the last ship + heartbeat at **00:01:04Z**,
+monitor window 6h, so the prediction on record was that the monitor would go
+DOWN at **~06:01:15Z**. `node-backup-ship-check.timer` was deliberately left
+running (next fire outside the window), and forcing the result by shortening
+the monitor's interval was considered and rejected: a monitor edited seconds
+earlier, firing under conditions arranged for it, is not the "unprompted" the
+criterion asks for.
+
+**What arrived, in the operator's Slack:**
+
+```
+Uptime Kuma
+[Ops · Backup · vps node-path] [Down] No heartbeat in the time window
+Time (America/Denver) 2026-08-23 00:01:17
+```
+
+00:01:17 Denver is **06:01:17Z**, against a prediction of ~06:01:15Z. Nobody
+touched the monitor between arming and firing.
+
+**The negative control ran in the same window, without being arranged.** The
+operator powered the homelab off by smart plug at ~04:47Z. `Infra · VPN ·
+Jetson Tailscale` and `Infra · VPN · Beelink Tailscale` both went DOWN and
+notified — and **no `Ops · Backup · beelink node-path` or `rpi4 node-path`
+alert was raised at any point**, through a full off/on cycle. That is the
+`on-demand` tag muting working on live hardware, which is AC4's second half:
+a window missed because a node was powered off must produce no alert. The two
+halves are worth more together than separately — a backup monitor that also
+paged when the homelab went to sleep would have trained the operator to skim
+the channel, and the 06:01 page would have been skimmed with it.
+
+**The two controls disagreed, and that is the design.** Run from the
+workstation at 06:54Z, with the VPS 7.0h without a snapshot:
+
+```
+[SUCCESS] beelink    covered — newest 2026-08-23 06:51Z (0.1h ago), 1 path(s)
+[SUCCESS] rpi3       covered — newest 2026-08-23 06:05Z (0.9h ago), 1 path(s)
+[SUCCESS] rpi4       covered — newest 2026-08-23 06:50Z (0.1h ago), 1 path(s)
+[SUCCESS] vps        covered — newest 2026-08-23 00:01Z (7.0h ago), 1 path(s)
+```
+
+`backup-coverage` reports the VPS as covered while it is an hour past its
+window, and that is correct behaviour, not a blind spot: `coverage()` states
+in its own docstring that it does not judge age, because the two node classes
+have different expectations and the class-aware judgement belongs to the Kuma
+monitor. Coverage prints the age; Kuma decides. Here coverage printed 7.0h and
+Kuma had already paged. **This is exactly the failure AC9 was written for** —
+the one that survives every check asserting only that the snapshots which do
+exist look healthy.
+
+**Teardown, evidence first.** The one-shot backup that closed the gap:
+
+```
+ship complete: s3:.../kubelab-backups/kubelab-vps
+coverage heartbeat posted
+node-backup-ship.service: Deactivated successfully.
+kubelab-vps : ok=6 changed=1 unreachable=0 failed=0
+```
+
+and coverage afterwards:
+
+```
+[SUCCESS] vps        covered — newest 2026-08-23 07:14Z (0.0h ago), 1 path(s)
+```
+
+**Carried forward, not closed here:** re-arming `node-backup-ship.timer`
+itself is a hand `systemctl start` over SSH, because the toolkit has no verb
+for starting a stopped unit — `make backup-node` runs one backup and does not
+restore the schedule. A demonstration that requires stopping a timer needs a
+supported way to start it again; until then the teardown depends on someone
+remembering the ssh, which is the shape this repo keeps writing lessons about.
