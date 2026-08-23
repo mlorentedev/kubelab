@@ -135,3 +135,39 @@ python3 "$VAULT_PATH/00_meta/scripts/vault-validate.py" --json --strict
    poetry run toolkit secrets apply --env staging
    kubectl --kubeconfig ~/.kube/kubelab-staging-config rollout restart deploy/apprise -n kubelab
    ```
+
+---
+
+## 6. SRE Smart Evaluation, Inhibit Rules & Dead Man's Switch (OBS-015)
+
+To prevent alert storms, cascading noise, and false-quiet outages, Grafana Alertmanager is provisioned with deterministic inhibit rules and watchdog monitoring:
+
+### A. Inhibit Rules Hierarchy (`inhibit-rules.yaml`)
+1. **Severity Escalation Suppression**: When `severity: critical` fires for an alert, duplicate `warning` or `info` notifications for the same alertname and namespace are suppressed.
+2. **Infrastructure Outage Suppression**: When a host/node failure alert fires (`NodeNotReady`, `KubeNodeNotReady`, `InstanceDown`), downstream container/pod restart alerts (`PodCrashLooping`, `ServiceDown`) on that instance are inhibited.
+3. **Edge Ingress Outage Suppression**: When edge ingress fails (`TraefikDown`), cascading HTTP 5xx rate alerts are suppressed.
+4. **Backup Job Failure vs Freshness**: Explicit backup job failures inhibit secondary freshness staleness warnings for the same bucket.
+
+### B. Dead Man's Switch Watchdog (`obs015-deadmansswitch-heartbeat`)
+- Continuous watchdog heartbeat rule evaluating Loki/Vector pipeline ingestion.
+- Configured with threshold `lt 1` and `noDataState: Alerting` / `execErrState: Alerting`: if Loki log ingestion ceases or returns no data during evaluation, an alert is triggered. External endpoint health checks (e.g. Uptime Kuma) cover whole-evaluator outages.
+
+### C. TLS Certificate Early Warning (`obs015-tls-early-warning`)
+- Evaluates Traefik ingress logs for repeated ACME certificate renewal failures with `for: 5m`, generating actionable alert links before certificates expire.
+
+## 7. Symptom-Based Multi-Window Multi-Burn-Rate SLOs (`slo-rules.yaml`)
+
+Following Google SRE error budget doctrine, public ingress alerts fire on actual user-visible symptom degradation rather than single-instant error spikes:
+- **Fast Burn Rate (`obs015-slo-fast-burn-rate`)**: 14.4x normal error rate capacity in a 1-hour window (evaluating >50 HTTP 5xx errors from Traefik ingress logs, `for: 2m`). Consumes ~2% of the 30-day budget in 1 hour; triggers an immediate page in prod.
+- **Medium Burn Rate (`obs015-slo-medium-burn-rate`)**: 6x normal error rate capacity in a 6-hour window (evaluating >100 HTTP 5xx errors from Traefik ingress logs, `for: 15m`). Consumes ~5% of the 30-day budget in 6 hours; triggers a warning in ops logs.
+
+## 8. Fleet Volume & Disk Saturation Watcher (`disk-watcher.yaml` & `disk-rules.yaml`)
+
+- In-cluster CronJob `disk-watcher` runs every 15 minutes inspecting PVCs and root disk capacity in `kubelab`.
+- Evaluates PVC Bound phase (`obs015-pvc-unbound-failure`) with `noDataState: Alerting`.
+- Alerts if root filesystem capacity crosses 90% (`obs015-disk-root-saturation`).
+
+## 9. Perimeter Threat Defense (`security-rules.yaml`)
+
+- Evaluates CrowdSec container decision and bouncer logs (`obs015-crowdsec-ban-surge`).
+- Alerts when more than 5 automated IP ban decisions occur in a 10-minute window.
