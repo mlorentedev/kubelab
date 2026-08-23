@@ -102,6 +102,28 @@ node_backup_shutdown_receipt: /var/log/node-backup-shutdown.receipt
 # while the unit is still alive to log it.
 node_backup_stuck_request_timeout: "45s"
 
+# How long the CAPTURE unit gets before systemd kills it. Separate from ship's
+# 600s because capture never talks to R2 -- it is a local copy, and on this
+# fleet it moves 29 MB in about a second.
+#
+# It was 120s, and that was measured too tight at the one moment it matters.
+# rpi4, 2026-08-23, first run of a cold boot: started 08:46:11, still running
+# at 08:48:11, `Failed with result 'timeout'`, killed with SIGTERM. The retry
+# two minutes later finished in ONE second. So the work is not slow and the
+# source is not hung -- the same copy that overran two minutes at boot took 1s
+# once the node had settled.
+#
+# The cause is INFERRED, not measured: contention on a Pi that is bringing up
+# its whole userspace at once, on removable storage. Nobody has profiled the
+# boot IO, so do not treat 300s as a computed bound -- it is 300x the observed
+# work with room for a machine under load.
+#
+# The ceiling that keeps this honest is `Before=docker.service` on on-demand
+# nodes: whatever this value is, it is also the longest a wedged capture can
+# hold up dockerd at boot. Raising it further trades a false page for a slower
+# boot, and past some point the right answer stops being a bigger timeout.
+node_backup_capture_timeout: "300s"
+
 # --- coverage heartbeat (BACKUP-044 AC9) ----------------------------------
 # The ship script posts here as its LAST step, so silence means no backup
 # completed. The watcher is Uptime Kuma on the RPi3 -- deliberately outside this

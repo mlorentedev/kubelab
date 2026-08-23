@@ -602,3 +602,38 @@ def test_the_request_timeout_leaves_room_under_the_unit_ceiling():
         f"systemd would kill the run before restic could explain itself, which is "
         f"the defect this setting exists to remove."
     )
+
+
+def test_the_capture_ceiling_clears_the_overrun_that_was_measured():
+    """120s was not enough at the one moment capture matters — cold boot.
+
+    rpi4, 2026-08-23: capture started 08:46:11, was still running at 08:48:11,
+    and systemd killed it (`Failed with result 'timeout'`, SIGTERM). The retry
+    two minutes later copied the same 29 MB in ONE second. So the ceiling was
+    below what a booting Pi needs while being nowhere near what the work costs.
+
+    Guarded numerically, and deliberately against the OBSERVED overrun rather
+    than a round number: the next person tuning this has to clear the event
+    that caused it, not merely change the digits. The value is read from the
+    role default so the unit cannot drift from the knob that documents it.
+    """
+    import re
+
+    MEASURED_OVERRUN_SECONDS = 120
+
+    raw = str(_defaults()["node_backup_capture_timeout"])
+    match = re.match(r"^(\d+)s$", raw)
+    assert match, f"node_backup_capture_timeout is not a plain seconds value: {raw!r}"
+    configured = int(match.group(1))
+
+    assert configured > MEASURED_OVERRUN_SECONDS, (
+        f"capture TimeoutStartSec is {configured}s, at or under the {MEASURED_OVERRUN_SECONDS}s "
+        f"that was already measured overrunning on a cold boot. A run killed at boot is the "
+        f"one that covers the previous session on nodes that lose power without shutting down."
+    )
+
+    unit = _render("node-backup-capture.service.j2", node_backup_location="on-demand")
+    assert f"TimeoutStartSec={raw}" in unit, (
+        "the capture unit does not take its ceiling from node_backup_capture_timeout; "
+        "a literal here drifts from the default that explains it"
+    )
