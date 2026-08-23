@@ -15,6 +15,7 @@ from toolkit.cli import (
     deployment,
     infra,
     monitoring,
+    observability,
     registry,
     secrets,
     services,
@@ -127,6 +128,7 @@ app.add_typer(dashboard.app, name="dashboard")
 app.add_typer(deployment.app, name="deployment")
 app.add_typer(infra.app, name="infra")
 app.add_typer(monitoring.app, name="monitoring")
+app.add_typer(observability.app, name="obs")
 app.add_typer(registry.app, name="registry")
 app.add_typer(secrets.app, name="secrets")
 app.add_typer(services.app, name="services")
