@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-28 lessons, newest first. Back to [all categories](../_index.md).
+29 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 378 | [When two commands reach the same value, the guard on one is not a guard](lesson-378-two-paths-to-one-value-and-only-one-guarded.md) | 2026-08-23 |
 | 364 | [`make` has no unknown-variable error, so a flag one target ignores is a real run](lesson-364-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run.md) | 2026-08-21 |
 | 363 | [A test helper that mangles its input makes every guard downstream report on the mangled copy](lesson-363-a-test-helper-that-mangles-its-input-reports-on-the-mangled-copy.md) | 2026-08-21 |
 | 362 | [`make` has no unknown-variable error, so a flag one target ignores is a real run](lesson-362-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run.md) | 2026-08-21 |
