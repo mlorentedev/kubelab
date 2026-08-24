@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-49 lessons, newest first. Back to [all categories](../_index.md).
+50 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 376 | [A SOPS diff answers "did this key change" without decrypting anything](lesson-376-auditing-a-rotation-without-decrypting-it.md) | 2026-08-23 |
 | 335 | [Refuting a finding does not vaccinate the line it was about](lesson-335-refuting-a-finding-does-not-vaccinate-the-lin.md) | 2026-08-15 |
 | 307 | [A perfect evidence chain measured against a stale baseline (SEC-001)](lesson-307-a-perfect-evidence-chain-measured-against-a-s.md) | 2026-08-09 |
 | 292 | [A `sops` subprocess with a bare `os.environ` passes in your shell and returns empty in CI (TOOL-017)](lesson-292-a-sops-subprocess-with-a-bare-os-environ-pass.md) | 2026-07-08 |
