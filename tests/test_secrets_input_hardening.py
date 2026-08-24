@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
+from toolkit.features.credentials import IMMUTABLE_SECRETS
 from toolkit.features.secrets_manager import (
     SECRET_CATALOG,
     AuditResult,
@@ -42,8 +43,23 @@ AUTO_KINDS = {
 
 
 def _machine_keys(env: str) -> list[str]:
-    """Machine-generable secret key paths registered for an env."""
-    return [s.key_path for s in SECRET_CATALOG if env in s.envs and s.kind in AUTO_KINDS]
+    """Machine-generable secret key paths registered for an env, minus the immutable ones.
+
+    The exclusion is not cosmetic. All four IMMUTABLE_SECRETS are RANDOM_TOKEN, so
+    they satisfy AUTO_KINDS and this helper used to hand them out as ordinary
+    subjects -- which is why the idempotency tests below asserted that `--force`
+    regenerates `session_secret` and that a missing `storage_encryption_key` gets
+    generated. Those assertions encoded the defect fixed alongside this change:
+    `init` would happily overwrite the key that decrypts Authelia's database.
+
+    They are excluded here rather than in each test so a future immutable entry
+    cannot silently become a test subject again.
+    """
+    return [
+        s.key_path
+        for s in SECRET_CATALOG
+        if env in s.envs and s.kind in AUTO_KINDS and s.key_path not in IMMUTABLE_SECRETS
+    ]
 
 
 def _patch_gen():
