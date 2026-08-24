@@ -93,18 +93,34 @@ class TestAnUnaskableServiceIsNotAnEmptyOne:
 
 class TestTheCatalogKnowsWhichSecretsExpire:
     def test_the_headscale_credentials_are_provider_issued(self) -> None:
-        """The three the hubs read at boot. Anything issued by a service that
-        can be asked must say so, or `check-expiry` has nothing to check."""
+        """Anything issued by a service that can be asked must say so, or
+        `check-expiry` has nothing to check.
+
+        This named three keys until 2026-08-23. The two `aws.*` ones were retired
+        that day: aws1 was destroyed, both keys were expired at the source, and a
+        catalog entry describing a machine that no longer exists is not a
+        registration, it is a claim that something is still watched.
+        """
         by_path = {s.key_path: s for s in SECRET_CATALOG}
-        for path in ("aws.headscale_api_key", "aws.headscale_preauth_key", "gcp.headscale_api_key"):
+        for path in ("gcp.headscale_api_key",):
             assert path in by_path, f"{path} is consumed at boot but not registered in SECRET_CATALOG"
             assert by_path[path].expiry is Expiry.PROVIDER
 
-    def test_the_aws_hub_credentials_are_registered_at_all(self) -> None:
-        """They existed in SOPS for months and in the catalog not at all, so
-        `secrets-audit` never checked them. The registry that calls itself
-        authoritative did not know the AWS hub had credentials."""
-        assert any(s.key_path.startswith("aws.") for s in SECRET_CATALOG)
+    def test_the_retired_aws_headscale_keys_stay_retired(self) -> None:
+        """Retirement is a state to defend, not an event that happened once.
+
+        Both keys were exposed in plaintext on 2026-08-20 and outlived the host
+        that read them; the API key stayed valid on the server until 2027-03-27,
+        and an API key is not read-only -- it mints pre-auth keys. Re-adding
+        either entry without a live consumer would restore a credential this fleet
+        deliberately stopped having.
+        """
+        registered = {s.key_path for s in SECRET_CATALOG}
+        for path in ("aws.headscale_api_key", "aws.headscale_preauth_key"):
+            assert path not in registered, (
+                f"{path} is back in SECRET_CATALOG. It was retired with its SOPS value "
+                "on 2026-08-23; re-register it only alongside a host that reads it."
+            )
 
     def test_unclassified_is_the_default_not_never(self) -> None:
         """A new entry should surface as unassessed rather than be assumed

