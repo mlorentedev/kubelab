@@ -221,10 +221,20 @@
         gitea_ssh_host: "{{ gitea_config.apps.services.core.gitea.ssh_host }}"
         gitea_cpu_limit: "{{ gitea_config.apps.services.core.gitea.resources.cpu_limit }}"
         gitea_memory_limit: "{{ gitea_config.apps.services.core.gitea.resources.memory_limit }}"
-        # Same alias the K8s Secret used (ADMIN_USER <- BASIC_AUTH_USER). Resolves
-        # to the OS-level user rather than the apps.auth.admin_username SSOT; that
-        # drift is #1013's to fix, and is deliberately not renamed here.
-        gitea_admin_user: "{{ gitea_secrets.basic_auth.user }}"
+        # ADR-062 D3 / AUTH-004 AC1. Was `gitea_secrets.basic_auth.user` — the
+        # Traefik basic-auth credential, aliased into application identity with no
+        # semantic relationship to it. That alias made Gitea's admin username a
+        # SECRET, and therefore a thing `credentials-generate` would rotate: on
+        # 2026-08-23 it did, the bootstrap below then tried to create a second
+        # admin, collided on the shared contact e-mail, and aborted before
+        # reaching its own `update-oauth` — so the rotated OIDC secret never
+        # landed and prod SSO stayed down. An identity resolved from a secret
+        # store is an identity something else is entitled to change.
+        #
+        # `gitea_config` is `common.yaml` merged with the prod values file, so a
+        # plaintext common.yaml key resolves here; `gitea_admin_email` below
+        # already relies on exactly that.
+        gitea_admin_user: "{{ gitea_config.apps.auth.identities.superadmin }}"
         gitea_admin_password: "{{ gitea_secrets.apps.services.core.gitea.admin_password }}"
         # SSOT-014c: the config loader injects this for K8s, but Ansible reads the
         # raw values file, where only apps.contact.email exists.
