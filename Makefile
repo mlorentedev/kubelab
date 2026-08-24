@@ -486,10 +486,28 @@ _deploy-authelia-oidc:
 	@kubectl --kubeconfig ~/.kube/kubelab-prod-config rollout status deployment/authelia -n kubelab --timeout=60s
 	@echo "✓ Authelia OIDC ready"
 
+# A scale-to-0 whose failures are swallowed cannot tell "nothing to scale" from
+# "cannot reach the cluster". Measured 2026-08-23: a MIG recreate left the hub
+# kubeconfig carrying a stale CA, every scale silently no-op'd, and the run only
+# failed later at helm with a message naming neither cause. Asking first turns
+# that into one loud error. The `|| true` below STAYS -- it is still correct for
+# an empty namespace, and this target is what makes it unambiguous. (TOOL-042)
+.PHONY: _require-hub-reachable
+_require-hub-reachable:
+	@kubectl --kubeconfig $(HUB_KUBECONFIG) version -o json --request-timeout=15s >/dev/null 2>&1 \
+		|| $(MAKE) --no-print-directory _hub-unreachable
+
+.PHONY: _hub-unreachable
+_hub-unreachable:
+	@echo "[ERROR] hub apiserver unreachable via $(HUB_KUBECONFIG)"
+	@echo "        A recreate rotates the cluster CA, the SSH host key and the mesh address."
+	@echo "        Refresh it:  make fetch-kubeconfig ENV=hub DIRECT=1"
+	@exit 1
+
 .PHONY: _deploy-argocd-helm
-_deploy-argocd-helm:
-	@echo "=== Step 2/2: Installing Argo CD on hub (aws1) ==="
-	@echo "--- Stopping ALL ArgoCD pods for clean upgrade (t4g.micro OOM mitigation) ---"
+_deploy-argocd-helm: _require-hub-reachable
+	@echo "=== Step 2/2: Installing Argo CD on the hub ==="
+	@echo "--- Stopping ALL ArgoCD pods for clean upgrade (OOM mitigation) ---"
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale deploy --all -n argocd --replicas=0 2>/dev/null || true
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) scale statefulset --all -n argocd --replicas=0 2>/dev/null || true
 	@echo "--- Waiting for pods to terminate ---"
