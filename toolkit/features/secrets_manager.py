@@ -514,54 +514,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         sync_to_secret_manager=True,
     ),
     # =========================================================================
-    # AWS hub (ADR-023) — consumed by `aws-tfvars` and aws1's cloud-init
-    # =========================================================================
-    # NEITHER WAS REGISTERED until 2026-08-22, though both have existed in
-    # common.enc.yaml for months and both are read on every aws1 replacement.
-    # `make secrets-audit` walks this catalog, so it has never checked them: the
-    # registry that calls itself authoritative did not know the AWS hub had
-    # credentials at all.
-    SecretSpec(
-        key_path="aws.headscale_api_key",
-        description="Headscale API key aws1's cloud-init uses to clear its own stale node",
-        kind=SecretKind.EXTERNAL,
-        services=("headscale", "aws1"),
-        format_hint="hskey-api-... (Headscale API key, NOT a pre-auth key)",
-        expiry=Expiry.PROVIDER,
-        rotate_note=(
-            "DO NOT ROTATE — EXPIRE. aws1 was destroyed 2026-08-23 and nothing reads "
-            "this key, but it remains VALID ON THE SERVER until 2027-03-27, and it was "
-            "printed in plaintext during the 2026-08-20 study session. A Headscale API "
-            "key is not read-only: it mints pre-auth keys, so holding one means issuing "
-            "tailnet admission at will. Expire it on the VPS with `headscale apikeys "
-            "expire --prefix <prefix>`; `toolkit secrets check-expiry` lists the "
-            "prefixes and asks the issuer rather than trusting a date stored here. "
-            "The GCP hub's key is separate and was minted fresh -- see gcp.headscale_api_key."
-        ),
-        envs=("prod",),
-    ),
-    SecretSpec(
-        key_path="aws.headscale_preauth_key",
-        description="Stored pre-auth key aws1 registers with (the pattern finding F2 replaced on GCP)",
-        kind=SecretKind.EXTERNAL,
-        services=("headscale", "aws1"),
-        format_hint="Headscale pre-auth key",
-        expiry=Expiry.PROVIDER,
-        rotate_note=(
-            "DO NOT ROTATE — RETIRE. aws1 was destroyed 2026-08-23, so nothing reads "
-            "this and minting a replacement would re-create the exposure. A stored, "
-            "REUSABLE pre-auth key is a standing admission ticket to the tailnet, and "
-            "the tailnet is the whole perimeter: staging is VPN-only. The GCP hub has "
-            "no equivalent by design -- it mints its own single-use key at boot from "
-            "the API key above (finding F2), so the entry credential lives for seconds "
-            "instead of months. Retire in one change: `headscale preauthkeys expire`, "
-            "then delete the value from common.enc.yaml AND this catalog entry "
-            "together -- it is envs=('prod',), so removing the value alone makes "
-            "`secrets-audit` report a gap forever. Tracked as D7 in GCP-001."
-        ),
-        envs=("prod",),
-    ),
-    # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
     # =========================================================================
     SecretSpec(
