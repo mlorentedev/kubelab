@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-49 lessons, newest first. Back to [all categories](../_index.md).
+51 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 382 | [A control returning the same code as the real attempt measured nothing](lesson-382-a-control-returning-the-same-code-as-the-real-attempt-measured-nothing.md) | 2026-08-23 |
 | 366 | [A green test can pin a configuration the provider refuses](lesson-366-a-green-test-can-pin-a-configuration-the-api-refuses.md) | 2026-08-22 |
 | 365 | [A lesson with no mechanism is a reminder, and I broke my own three times in one session](lesson-365-a-lesson-with-no-mechanism-is-a-reminder-and-i-broke-mine-three-times.md) | 2026-08-22 |
 | 358 | [A passing re-run is not evidence against a flake — it is what a flake looks like](lesson-358-a-passing-re-run-is-not-evidence-against-a.md) | 2026-08-20 |
