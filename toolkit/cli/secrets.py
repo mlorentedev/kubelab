@@ -440,6 +440,59 @@ def set_secret(
         raise typer.Exit(1)
 
 
+@app.command("rotate")
+def rotate_secret(
+    key: Annotated[str, typer.Argument(help="Dot-separated key path from SECRET_CATALOG")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt")] = False,
+) -> None:
+    """Rotate ONE credential, and stop before the cluster.
+
+    Until this existed the only way to change a single credential was
+    `credentials generate`, which rewrites 25 prod secrets and 2 hub secrets in
+    one shot -- so rotating an exposed Argo CD password also rotated Grafana,
+    MinIO, Uptime Kuma and every OIDC client secret.
+
+    IT DOES NOT APPLY TO THE CLUSTER, ON PURPOSE. Prod runs `selfHeal: true`.
+    Applying a rotation that git does not yet carry is not a shortcut, it is an
+    outage: measured 2026-08-23, Argo CD reverted Authelia to the committed
+    config and the freshly rotated client secrets stopped being accepted. Landing
+    goes through commit -> PR -> merge -> sync, and the output says so.
+
+    Refuses what it must not do: secrets minted elsewhere (their procedure is
+    printed instead), immutable secrets whose rotation is really a migration, and
+    keys absent from the catalog, which have no declared consumers to restart.
+
+    Example:
+      toolkit secrets rotate argocd.admin_password --env common
+    """
+    from toolkit.features.secrets_manager import RotationRefused
+
+    valid_envs = ("common", "dev", "staging", "prod")
+    if env not in valid_envs:
+        logger.error(f"Invalid env: {env}. Must be one of: {', '.join(valid_envs)}")
+        raise typer.Exit(1)
+
+    if not yes and not typer.confirm(f"Rotate '{key}' in {env}?"):
+        logger.info("Aborted — nothing was written")
+        raise typer.Exit(1)
+
+    mgr = _get_manager()
+    try:
+        plan = mgr.rotate_secret(env, key)
+    except RotationRefused as refusal:
+        logger.error(str(refusal))
+        raise typer.Exit(2) from refusal
+
+    logger.success(f"Rotated {plan.key_path} in {plan.env}")
+    for path in plan.derived:
+        logger.info(f"  re-derived: {path}")
+
+    logger.warning("NOT applied to the cluster. It is not rotated until it is merged:")
+    for index, step in enumerate(plan.next_steps, start=1):
+        logger.info(f"  {index}. {step}")
+
+
 # =============================================================================
 # unset — Remove a secret from the SOPS vault
 # =============================================================================

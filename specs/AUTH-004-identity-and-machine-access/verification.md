@@ -12,7 +12,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] Criterion 1 (identity resolves from `apps.auth.identities`) -> Part 1, not started
 - [ ] Criterion 2 (`operator` is refused what the superadmin can do) -> Part 2, not started
 - [ ] Criterion 3 (SSO onboarding creates an account with no manual step) -> Part 2, gated on R1. **Measured failing 2026-08-23 (R1a): the flow parks at `/user/link_account`.** The baseline is now a transcript rather than an assumption, so Part 2 has something to demonstrate a change against.
-- [ ] Criterion 4 (unauthenticated registration refused) -> Part 2, not started
+- [x] Criterion 4 (unauthenticated registration refused) -> **demonstrated 2026-08-23**, both surfaces refused at the handler (403). **Conditional on the current flags**: it must be re-demonstrated if Part 2 changes `DISABLE_REGISTRATION`, because that is the flag it currently rests on.
 - [ ] Criterion 5 (bot account, scoped token, both halves of the scope proven) -> Part 3, not started
 - [ ] Criterion 6 (test fails when admin identity resolves from anything else) -> Part 1, not started
 - [ ] Criterion 7 (break-glass drill) -> Part 4, not started
@@ -356,16 +356,85 @@ What this settles, and what it does not:
   tested: a probe asserting "login is not refused" would pass here while the criterion
   fails. Assert on reaching an authenticated Gitea session, never on the absence of an
   error.
-- **`DISABLE_REGISTRATION = true` does not remove the signup branch from that page.**
+- ~~**`DISABLE_REGISTRATION = true` does not remove the signup branch from that page.**
   Gitea renders `link_account_signup` regardless. Whether that form is *honoured* on
-  POST is unmeasured — it was outside the authorised scope, and it is the sharp form of
-  R1's original question. **Do not infer it from the rendered page**: a form that
-  renders and then refuses is exactly the "looks right and silently refuses" outcome R1
-  was written to prevent.
+  POST is unmeasured.~~ **Withdrawn 2026-08-23 — both halves were wrong, and it is kept
+  struck through rather than deleted because how it was wrong is the lesson.** The
+  `<form>` element is emitted, but it is an **empty shell**: a CSRF token and the
+  sentence "Registration is disabled. Please contact your site administrator.", with no
+  username field, no email field and no submit. The probe detected the element by its
+  `action` attribute and reported "the signup branch is offered". Detecting an element
+  is not reading its contents. **POST enforcement is no longer unmeasured either** — see
+  the AC4 section below: both surfaces answer `403` at the handler. The bullet warned
+  against inferring behaviour from a rendered page and then did exactly that.
 - **R1's headline question — which flag combination admits a new user — remains open**,
   and cannot be closed without changing a flag on the live instance. That is a separate
   authorisation, and the change belongs in
   `roles/beelink_services/files/gitea-bootstrap.sh` per R5, not by hand.
+
+### AC4, and R1's flag question — both signup POSTs are refused by the handler
+
+**Settled 2026-08-23, authorised by the operator as a single batch. AC4 passes. Every
+registration surface measured refuses at the handler, not merely in the template.**
+
+`r1_signup_probe.py` runs the two POSTs that R1a deliberately left unrun, and a third
+was added once the first came back ambiguous. Baseline and control are
+`gitea admin user list` before and after, as in R1a.
+
+| Surface | Identity presented | Result |
+|---|---|---|
+| `POST /user/sign_up` | none | **403** |
+| `POST /user/link_account_signup`, form as rendered | valid OIDC (`testuser`) | 200, page re-rendered, no session |
+| `POST /user/link_account_signup`, fields injected | valid OIDC (`testuser`) | **403** |
+
+The middle row is why the third was needed, and it is the finding worth keeping:
+
+```
+--- the link_account_signup form, in full ---
+<form class="ui form" action="/user/link_account_signup" method="post">
+    <input type="hidden" name="_csrf" value="<redacted>">
+    <p>Registration is disabled. Please contact your site administrator.</p>
+</form>
+```
+
+The form is an **empty shell** — a CSRF token and a refusal sentence, no username
+field, no email field, no submit. Posting it as rendered therefore measures the
+*template* and answers nothing; the 200 is Gitea re-rendering a form with no input.
+**Presentation that hides a control and a handler that refuses one are different
+security properties, and only the second is enforcement.** Injecting the withheld
+fields puts the handler under test, and it answers `403` — a body of 10 bytes, no
+redirect, no flash.
+
+Control, after all three POSTs:
+
+```
+$ docker exec -u git gitea gitea admin user list
+ID   Username Email             IsActive IsAdmin 2FA
+1    manu     info@kubelab.live true     true    false
+```
+
+Unchanged. Nothing was created, so nothing was deleted.
+
+What this settles:
+
+- **AC4 passes, demonstrated rather than asserted from `app.ini`.** An unauthenticated
+  registration attempt is refused, and so is a registration attempt that has already
+  proven an Authelia identity. Both refusals are handler-level.
+- **`DISABLE_REGISTRATION = true` is a real gate on every path measured**, which makes
+  R1's first candidate — `ENABLE_AUTO_REGISTRATION=true` alone — the less likely of the
+  two. Stated as a probability rather than a conclusion on purpose: auto-registration
+  fires in the *callback* path, before `link_account` is ever reached, and that is a
+  different code path from the one measured here. Settling it still requires flipping
+  the flag on the live instance, which remains unauthorised and out of scope.
+
+**And the tension nobody had written down: AC3 and AC4 run through the same flag, in
+opposite directions.** AC4 passes today *because* AC3 fails today — the flag that
+refuses self-service registration is the same one blocking SSO onboarding. If Part 2
+adopts R1's second candidate (`DISABLE_REGISTRATION=false` +
+`ALLOW_ONLY_EXTERNAL_REGISTRATION=true`), AC4's guarantee moves off a flag that has
+just been shown to hold and onto one that has never been tested. **AC4 must therefore
+be re-demonstrated after any Part 2 flag change, not carried forward as passed.**
+`r1_signup_probe.py` exists so that re-demonstration is a re-run rather than a rewrite.
 
 ## Test status
 

