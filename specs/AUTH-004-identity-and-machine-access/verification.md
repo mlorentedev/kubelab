@@ -465,3 +465,90 @@ transcripts above are the deliverable.
   Whether the POST is honoured is unmeasured and needs its own authorisation. Worth
   knowing before Part 2 assumes the global flag is sufficient to close self-service
   registration — AC4 asserts exactly that, and this is the page where it would leak.
+
+---
+
+## 2026-08-24 — AC1 / C6 closed, and what staging could not prove
+
+### The measurement that changed how this was validated
+
+`make apply-secrets ENV=staging` reported **every** secret `unchanged`, including
+`grafana-admin` and `minio-secrets`. That is not evidence the change works — it
+is evidence it made no difference *here*:
+
+```
+staging  basic_auth.user == 'manu'?  SI
+common   basic_auth.user == 'manu'?  NO (len=57)
+```
+
+**In staging the old alias and the new SSOT resolve to the same value**, so the
+generated secrets are byte-identical either way. A live staging login therefore
+cannot distinguish the old resolution path from the new one — it would pass
+against `BASIC_AUTH_USER` just as happily. That is lesson-382's shape, caught
+before it was written up as proof.
+
+So the evidence is split, deliberately:
+
+- **The resolution SOURCE** is proven by `tests/test_admin_identity_ssot.py`,
+  whose fixture sets `identities.superadmin` and `basic_auth.user` to different
+  values and asserts the basic-auth account appears in no generated secret. That
+  is the only place the two can be told apart.
+- **Non-regression** is proven live, below. It is what staging can honestly say.
+
+Recorded because it is also a finding about the environments: prod's
+`basic_auth.user` is a 57-character rotated string and staging's is `manu`, so
+**the two environments' Grafana admin identities had silently diverged**.
+Applying this to prod renames Grafana's admin from that string to `manu` —
+intended (it is the repair), and lesson-379's shape performed deliberately.
+
+### Live, from inside the cluster
+
+Port-forwarded rather than routed through Traefik, so Authelia's ForwardAuth
+cannot answer for the backend — the 302 that lesson-382 records being misread as
+Grafana's verdict. Credentials passed via a curl config file, never argv, never
+stdout.
+
+```
+superadmin resolved from apps.auth.identities = 'manu'
+
+── Grafana ──
+  control A (right user, wrong password): HTTP 401
+  control B (wrong user, right password): HTTP 401
+  REAL     (SSOT superadmin)            : HTTP 200
+  Grafana reports: login='manu' isGrafanaAdmin=True
+
+── MinIO ──
+  control-bad-user: InvalidAccessKeyId
+  control-bad-pass: SignatureDoesNotMatch
+  REAL: OK
+
+── Authelia (users database, generated) ──
+  users in the generated database: ['operator', 'testuser']
+    operator: groups=['admins', 'users'] password_is_argon2=True
+    testuser: groups=['users'] password_is_argon2=True
+```
+
+**Both controls differ from the real attempt in every case**, which is the bar
+lesson-382 sets and the reason the MinIO probe asks for the error *code* rather
+than for success: `InvalidAccessKeyId` and `SignatureDoesNotMatch` are three
+distinct outcomes with the real attempt, so the probe demonstrably measures
+MinIO rather than something in front of it.
+
+Authelia's generated database resolves `identity: operator` to `operator` with
+the `admins` group and an argon2 hash — the `is_admin` flag is gone and the user
+is unchanged, which is the intended no-op for that leg.
+
+### A control that was broken twice before it worked
+
+Worth recording, because it is the same error twice in one sitting and the
+lesson already exists:
+
+1. `make secrets-show KEY=apps.auth.identities.superadmin` returned **74
+   characters** — an error message, because that key is plaintext config and not
+   a secret. The shell guard was `${U:-manu}`, which only fires on *empty*, so
+   the probe authenticated with a 74-character username and got 401. The 401 was
+   the probe's, not Grafana's.
+2. `pkill -f "port-forward svc/grafana"` matched the shell running it and killed
+   the caller.
+
+Neither was a fact about the system. Both looked like one.
