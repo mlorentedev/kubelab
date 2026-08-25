@@ -1,9 +1,9 @@
 package services
 
 import (
-	"github.com/mlorentedev/mlorente-backend/internal/constants"
-	"github.com/mlorentedev/mlorente-backend/internal/models"
-	"github.com/mlorentedev/mlorente-backend/pkg/logger"
+	"github.com/mlorentedev/kubelab/apps/api/internal/constants"
+	"github.com/mlorentedev/kubelab/apps/api/internal/models"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
 // ProcessSubscription processes a complete subscription (verification, creation, tagging)

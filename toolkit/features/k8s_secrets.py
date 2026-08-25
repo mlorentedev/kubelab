@@ -11,7 +11,7 @@ import yaml
 
 from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
-from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.k8s_kubeconfig import output_path
 
 
@@ -50,7 +50,10 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     SecretMapping(
         name="grafana-admin",
         keys={
-            "admin-user": "BASIC_AUTH_USER",
+            # `admin-user` is NOT here: it is an identity, not a credential, and
+            # arrives as a literal resolved from apps.auth.identities.superadmin
+            # (AUTH-004 C1). It used to map to BASIC_AUTH_USER — see the comment
+            # in _build_dynamic_literals for what that alias cost.
             "password": "APPS_SERVICES_OBSERVABILITY_GRAFANA_ADMIN_PASSWORD",
             "oidc-client-secret": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_GRAFANA",
         },
@@ -92,7 +95,10 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     SecretMapping(
         name="minio-secrets",
         keys={
-            "MINIO_ROOT_USER": "APPS_SERVICES_DATA_MINIO_ROOT_USER",
+            # `MINIO_ROOT_USER` is NOT here: it was a SECOND copy of the admin
+            # identity stored in SOPS, and one identity stored twice drifts —
+            # #1355 facet 3 records exactly that happening. It now arrives as a
+            # literal resolved from apps.auth.identities.superadmin.
             "MINIO_ROOT_PASSWORD": "APPS_SERVICES_DATA_MINIO_ROOT_PASSWORD",
             "MINIO_IDENTITY_OPENID_CLIENT_SECRET": "APPS_SERVICES_DATA_MINIO_OIDC_CLIENT_SECRET",
         },
@@ -188,12 +194,49 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     return all_ok
 
 
+def _resolve_superadmin(cm: ConfigurationManager) -> str:
+    """The declared superadmin, from `apps.auth.identities` and nowhere else.
+
+    Deliberately has no fallback to `apps.auth.admin_username` or to
+    `basic_auth.user`. A fallback would make the map optional, and an optional
+    SSOT is the state this closes: `apps.auth.identities` was declared on
+    2026-08-23 and read by nothing for a day, while the alias kept resolving —
+    a catalog nothing acts on (lesson-380). Returning "" makes the omission
+    loud at apply time rather than silently reinstating the alias.
+    """
+    identities = cm.get_merged_config().get("apps", {}).get("auth", {}).get("identities", {})
+    superadmin = str(identities.get("superadmin", "") or "")
+    if not superadmin:
+        logger.warning(
+            "apps.auth.identities.superadmin is not declared — Grafana and MinIO will keep "
+            "whatever admin identity the cluster already holds (ADR-062 D3)"
+        )
+    return superadmin
+
+
 def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str]]:
     """Build pre-rendered secret values that require config + SOPS merging.
 
     Returns {secret_name: {k8s_key: rendered_value}}.
     """
     result: dict[str, dict[str, str]] = {}
+
+    # AUTH-004 C1/C6 (ADR-062 D3): every service's admin identity resolves from
+    # ONE declaration, `apps.auth.identities.superadmin`. It is plaintext config
+    # rather than a SOPS value, which is why it arrives as a `literal` here
+    # instead of through `SecretMapping.keys`.
+    #
+    # What this replaces, and why it is not a tidy-up. `grafana-admin.admin-user`
+    # was mapped to BASIC_AUTH_USER — the *Traefik basic-auth account* — and
+    # MinIO kept a second copy of the identity in SOPS. Both are identities that
+    # something else is entitled to rewrite: on 2026-08-23 a routine rotation
+    # rewrote `basic_auth.user`, silently renamed the only admin of a live
+    # service, and broke the repair path in the same run (#1352, lessons
+    # 378/379). An identity is a declaration, not a credential.
+    superadmin = _resolve_superadmin(cm)
+    if superadmin:
+        result["grafana-admin"] = {"admin-user": superadmin}
+        result["minio-secrets"] = {"MINIO_ROOT_USER": superadmin}
 
     users_db = _build_users_database(cm)
     if users_db:
@@ -294,8 +337,6 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     merged = cm.get_merged_config()
     authelia = merged.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {})
     users = authelia.get("users", [])
-    # SSOT-014b: admin entry derives username from apps.auth.admin_username.
-    admin_username = merged.get("apps", {}).get("auth", {}).get("admin_username", "")
 
     if not users or not isinstance(users, list):
         logger.warning("No Authelia users found in config")
@@ -306,7 +347,12 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     # an invalid users_database.yml locks everyone out of Authelia.
     db: dict[str, dict[str, object]] = {}
     for user in users:
-        username = admin_username if user.get("is_admin") else user.get("username", "")
+        # AUTH-004 C1: one resolver, shared with generator_authelia. See
+        # configuration.resolve_user_identity for why it is not inlined here.
+        username = resolve_user_identity(user, merged)
+        if not username:
+            logger.warning(f"  Skipping user entry that resolves to no identity: {user!r}")
+            continue
         hash_key = f"users_{username}_password_hash"
         password_hash = authelia.get(hash_key, "")
 
