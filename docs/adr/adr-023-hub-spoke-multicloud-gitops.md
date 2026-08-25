@@ -17,6 +17,7 @@ Accepted (2026-03-16). Extends ADR-020 (IaC Lifecycle), ADR-021 (Helm Packaging)
 > **Refined by [ADR-029](adr-029-intelligence-layer.md)** (2026-03-28): ace2 repurposed from Platform Node to Ollama bare metal. kubelab-gateway and kubelab-memory absorbed.
 > **Refined by [ADR-028](adr-028-operational-topology.md)** (2026-03-28): Topology redefined as always-on vs on-demand. VPS prod absorbs observability + Gitea + PostgreSQL. Beelink replaces ace2 as Platform Node (on-demand). RPi4 reclassified on-demand.
 > **Backup leg superseded by [ADR-049](adr-049-edge-object-storage-placement-doctrine.md)** (2026-06-19): the "MinIO → Backblaze B2" 3-2-1 off-site leg is retired; `tier-offsite` = Hetzner Storage Box + Borg (bulk) + Cloudflare R2 (critical subset, zero-egress).
+> **§3.1 superseded by [ADR-063](adr-063-hub-cloud-provider-migration.md)** (2026-08-23): the control plane moved from AWS `t4g.small` Spot to GCP `e2-small` Spot behind a regional MIG in `europe-west4`. The hub-and-spoke topology, the Autonomous Spoke property and every other section stand — only the provider choice and its cost figure are replaced.
 
 ## Date
 
@@ -137,6 +138,15 @@ EDGE / SHARED SERVICES (RPi4, RPi3, Beelink, Jetson)
 ### 3. Key architectural decisions
 
 #### 3.1 AWS for control plane
+
+> **SUPERSEDED by [ADR-063](adr-063-hub-cloud-provider-migration.md)** (2026-08-23).
+> The hub runs on GCP; AWS holds no billable resource. The `~$3.60/mo` below is
+> kept as the record of a specific failure and must not be read as a price: AWS
+> began billing public IPv4 on 2024-02-01, which made this line wrong with nobody
+> editing a word, and it was still being quoted at plan time in August 2026. The
+> real figure at migration was **$12.75/mo**. ADR-063 D4 requires every cost to be
+> recorded as a derivation — rate × quantity with each line item named — precisely
+> so the next input that moves is visible instead of silent.
 
 - **Why AWS**: Multi-cloud on CV (3 providers: AWS + Hetzner + on-prem). Cost is ~$3.60/mo (no Elastic IP — VPN-only access).
 - **Why t4g.micro**: 1GB RAM is tight but sufficient for non-HA Argo CD managing 2 spokes with <15 apps. Upgrade to t4g.small ($5 more/mo) when needed — one line in Terraform.
