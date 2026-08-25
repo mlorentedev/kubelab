@@ -71,8 +71,22 @@ networking:
       exclude_volumes:
       - "jekyll-staging-data"
       - "jekyll-staging-site-data"
-  # AWS management plane (ADR-023 Phase 3)
+  # AWS management plane (ADR-023 Phase 3) — RETIRED, kept as a rebuild recipe
   aws:
+    # THE MACHINE DOES NOT EXIST. GCP-001's AC6 destroyed it on 2026-08-23 and
+    # this block stayed, because #1333 decided deliberately to keep what rebuilds
+    # AWS: `infra/terraform/aws/` and `provision-aws1.yml` are a one-command
+    # restoration, and they need these values.
+    #
+    # The two are different things and nothing said so, which cost a red test
+    # suite: every consumer that enumerates nodes kept enumerating a destroyed
+    # host, and `make test-infra` spent six SSH timeouts finding that out
+    # (#1365). `retired` is the distinction, stated once — a declaration that is
+    # a RECIPE, not an inventory of what is running.
+    #
+    # To bring AWS back: set this to false, regenerate the inventory, apply the
+    # terraform. Nothing else here changes.
+    retired: true
     # ADR-028 tier. Machine-readable projection of the topology the ADR
     # narrates; consumed by the backup trigger model (BACKUP-044).
     location: "always-on"

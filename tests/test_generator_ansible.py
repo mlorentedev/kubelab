@@ -172,13 +172,27 @@ class TestBothHubsCoexistInTheInventory:
         net = _networking()
         assert net["gcp"]["hostname"] in self._hub_hosts()
 
-    def test_the_aws_hub_was_not_displaced(self) -> None:
-        """The failure this guards is a swap disguised as an addition."""
+    def test_the_aws_hub_is_gone_because_it_was_RETIRED_not_displaced(self) -> None:
+        """This assertion was inverted on 2026-08-24, and the reason matters.
+
+        It used to require `aws1` to still be present, guarding "a swap disguised
+        as an addition" during the coexistence window. That window closed:
+        GCP-001's AC6 destroyed the machine, and prod reconciles from gcp1. The
+        old assertion would now demand a host that does not exist.
+
+        So the invariant is not deleted, it is re-aimed. What must stay true is
+        that the AWS hub leaves the inventory by an EXPLICIT retirement in the
+        SSOT and never as a side effect of editing the GCP block beside it —
+        those two blocks are deliberately duplicated (#1182), which is exactly
+        the condition under which a copy-paste displaces its neighbour.
+        """
         net = _networking()
-        assert net["aws"]["hostname"] in self._hub_hosts(), (
-            "adding the GCP hub removed the AWS one; prod still reconciles from "
-            "aws1 and its EndpointSlice is rendered from that name"
+
+        assert net["aws"].get("retired") is True, (
+            "aws must be absent because it is declared retired, not because its "
+            "address or block was quietly removed"
         )
+        assert net["aws"]["hostname"] not in self._hub_hosts()
 
     def test_the_gcp_hub_is_addressed_by_magicdns(self) -> None:
         """A MIG recreates on every preemption and the Tailscale IP rotates with
@@ -199,3 +213,50 @@ class TestBothHubsCoexistInTheInventory:
         entry = self._hub_hosts()[net["gcp"]["hostname"]]
         assert entry["ansible_user"] == net["ssh_users"]["cloud"]
         assert entry["ansible_user"] != net["ssh_users"]["homelab"]
+
+
+class TestRetiredCloudNodes:
+    """A declaration that is a rebuild recipe must not become an inventory host.
+
+    GCP-001's AC6 destroyed `aws1` and #1333 kept `networking.aws` on purpose,
+    because `infra/terraform/aws/` and `provision-aws1.yml` restore it in one
+    command and read those values. Nothing distinguished the two, so every
+    consumer that enumerates nodes kept enumerating a machine that does not
+    exist — `make test-infra` found it as six SSH timeouts (#1365).
+    """
+
+    def test_a_retired_cloud_node_produces_no_host(self) -> None:
+        net = _networking()
+        assert net["aws"].get("retired") is True, "the SSOT should still mark aws as retired"
+
+        hosts = _hosts(AnsibleGenerator()._build_inventory(net))
+
+        assert not [h for h in hosts if "aws" in h], f"a retired node reached the inventory: {sorted(hosts)}"
+
+    def test_it_keeps_the_address_that_makes_restoration_one_flag(self) -> None:
+        """`retired` is checked BEFORE the address, never instead of it.
+
+        Deleting `tailscale_dns` would also remove the node from the inventory,
+        and would make bringing AWS back a reconstruction rather than a flag.
+        """
+        aws = _networking()["aws"]
+
+        assert aws.get("tailscale_dns") or aws.get("tailscale_ip")
+
+    def test_clearing_the_flag_brings_the_host_back(self) -> None:
+        net = _networking()
+        net["aws"] = {**net["aws"], "retired": False}
+
+        hosts = _hosts(AnsibleGenerator()._build_inventory(net))
+
+        assert [h for h in hosts if "aws" in h], "un-retiring must restore the host, or the flag is a one-way door"
+
+    def test_the_live_hub_is_not_retired(self) -> None:
+        """Guards the copy-paste: the two cloud blocks are deliberately duplicated
+        (#1182), so a flag added to one is one edit away from landing on the other."""
+        net = _networking()
+        assert not net["gcp"].get("retired")
+
+        hosts = _hosts(AnsibleGenerator()._build_inventory(net))
+
+        assert [h for h in hosts if "gcp" in h], "the running hub must still be in the inventory"

@@ -154,8 +154,12 @@ class AnsibleGenerator(BaseGenerator):
         # AWS hub node (ADR-023 Phase 3) — prefer MagicDNS (ADR-025) so Spot
         # replacement does not require an inventory regenerate. Falls back to
         # tailscale_ip only when tailscale_dns is unset (e.g. early bootstrap).
+        # `retired` skips a declaration that is a REBUILD RECIPE rather than a
+        # running machine. It is checked before the address, not instead of it:
+        # a retired node keeps its `tailscale_dns` precisely so restoring it is
+        # one flag, and an address is not evidence that anything answers on it.
         aws = networking.get("aws", {})
-        if aws and (aws.get("tailscale_dns") or aws.get("tailscale_ip")):
+        if aws and not aws.get("retired") and (aws.get("tailscale_dns") or aws.get("tailscale_ip")):
             all_nodes.append(
                 {
                     "hostname": aws.get("hostname", "aws1"),
@@ -177,7 +181,7 @@ class AnsibleGenerator(BaseGenerator):
         # targets the group as a whole — every hub playbook names its own host —
         # so two members is a coexistence, not a broadcast.
         gcp = networking.get("gcp", {})
-        if gcp and (gcp.get("tailscale_dns") or gcp.get("tailscale_ip")):
+        if gcp and not gcp.get("retired") and (gcp.get("tailscale_dns") or gcp.get("tailscale_ip")):
             all_nodes.append(
                 {
                     "hostname": gcp.get("hostname", "gcp1"),
