@@ -1,7 +1,7 @@
 ---
 id: "GCP-001-hub-cloud-provider-migration"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-20"
 issue: "mlorentedev/kubelab#1181"
 tags: [spec, proposal, infra, cost, gitops]
