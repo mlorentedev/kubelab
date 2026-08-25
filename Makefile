@@ -818,6 +818,21 @@ maintain-notify-test:
 		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE) $(_EXTRA); \
 	fi
 
+# Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded
+# file, unconditional cleanup — the reasoning is in the playbook's header, where
+# it stays next to the flags it justifies.
+#
+# NODE is required with no default and `all` is deliberately NOT supported: this
+# writes to a live filesystem and reads IOPS, and a fleet-wide sweep is a
+# decision to run it on production nodes you did not name.
+.PHONY: benchmark-disk
+benchmark-disk:
+	@test -n "$(NODE)" || (echo "Usage: make benchmark-disk NODE=gcp1|vps|ace1|bee|rpi3|rpi4 [ENV=staging|prod|hub] [CHECK=1] [EXTRA='bench_size_mb=1024']" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
+	@$(TOOLKIT) infra ansible run -p benchmark-disk -e $(_ENV) -l $(NODE) $(_CHECK) $(_EXTRA)
+
 .PHONY: deploy
 deploy:
 	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)

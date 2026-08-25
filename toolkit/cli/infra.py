@@ -105,6 +105,61 @@ def headscale_probe() -> None:
         raise typer.Exit(rc)
 
 
+@headscale_app.command("recycle-stale")
+def headscale_recycle_stale(
+    name: Annotated[str, typer.Option("--name", help="Canonical node name to reclaim, e.g. gcp1")],
+    apply: Annotated[bool, typer.Option("--apply", help="Perform the deletion and rename")] = False,
+    ssh_target: Annotated[
+        str | None,
+        typer.Option("--ssh-target", help="user@host running Headscale; defaults to the VPS from the SSOT"),
+    ] = None,
+) -> None:
+    """Reclaim a canonical node name from a dead record after a preemption (#1369).
+
+    A rebuilt node registers as `<name>-<random>` when its predecessor's record
+    still exists, and `<name>.kubelab.internal` then resolves to the dead one —
+    taking the prod Argo CD EndpointSlice, the inventory and the kubeconfig with
+    it. This deletes the dead record and renames the live node onto the name.
+
+    Reports a plan and changes nothing without `--apply`.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.headscale_nodes import (
+        HeadscaleUnavailableError,
+        RecycleRefused,
+        apply_recycle,
+        list_nodes,
+        plan_recycle,
+    )
+
+    if ssh_target is None:
+        net = ConfigurationManager("common", settings.project_root).get_merged_config()["networking"]
+        ssh_target = f"{net['ssh_users']['cloud']}@{net['vps']['public_ip']}"
+
+    logger.section(f"Headscale — reclaim {name}")
+    try:
+        plan = plan_recycle(list_nodes(ssh_target), name)
+    except (HeadscaleUnavailableError, RecycleRefused) as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    logger.info(f"delete  {plan.stale.label}")
+    logger.info(f"rename  {plan.live.label} -> {plan.canonical}")
+
+    if not apply:
+        logger.warning("plan only — re-run with --apply to perform it")
+        return
+
+    try:
+        apply_recycle(ssh_target, plan)
+    except (HeadscaleUnavailableError, RecycleRefused) as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    logger.success(f"{plan.canonical} now points at {plan.live.address}")
+    logger.info("MagicDNS follows the given name — re-run `make argocd-repoint` so the EndpointSlice does too")
+
+
 @argo_app.command("set-revision")
 def argo_set_revision(
     application: Annotated[str, typer.Option("--app", help="Argo CD Application name")],
