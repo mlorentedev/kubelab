@@ -30,6 +30,13 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUnde
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/beelink_services"
+
+#: From the SSOT, never a literal (CLAUDE.md). Fixed alongside #1399, where a
+#: reviewer caught the same violation in a new file next door — the rule is
+#: repo-wide and this file predates it being enforced.
+BEELINK_TAILSCALE_IP = yaml.safe_load(
+    (REPO / "infra/config/values/common.yaml").read_text()
+)["networking"]["nodes"]["beelink"]["tailscale_ip"]
 UNIT_TEMPLATE = "kubelab-compose.service.j2"
 
 
@@ -38,7 +45,7 @@ def _render() -> str:
     return env.get_template(UNIT_TEMPLATE).render(
         ansible_managed="Ansible managed",
         beelink_deploy_dir="/opt/kubelab",
-        tailscale_ip="100.64.0.3",
+        tailscale_ip=BEELINK_TAILSCALE_IP,
     )
 
 
@@ -132,13 +139,13 @@ def test_every_service_that_publishes_on_the_tailscale_address_is_covered() -> N
         env.get_template("compose.yml.j2").render(
             ansible_managed="Ansible managed",
             beelink_deploy_dir="/opt/kubelab",
-            tailscale_ip="100.64.0.3",
+            tailscale_ip=BEELINK_TAILSCALE_IP,
         )
     )
     publishing = [
         name
         for name, svc in (compose.get("services") or {}).items()
-        if any("100.64.0.3" in str(p) for p in (svc.get("ports") or []))
+        if any(BEELINK_TAILSCALE_IP in str(p) for p in (svc.get("ports") or []))
     ]
     assert publishing, (
         "no service publishes on the Tailscale address — if that is now true by "

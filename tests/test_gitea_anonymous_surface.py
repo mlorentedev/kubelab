@@ -36,6 +36,17 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/beelink_services"
+COMMON = REPO / "infra/config/values/common.yaml"
+
+
+def _beelink_tailscale_ip() -> str:
+    """From the SSOT, never a literal — CLAUDE.md's rule, and it has teeth here.
+
+    A test that hardcodes an address keeps passing after the address changes,
+    which makes it a slower version of no test at all. Raised in review of #1399.
+    """
+    common = yaml.safe_load(COMMON.read_text())
+    return common["networking"]["nodes"]["beelink"]["tailscale_ip"]
 
 #: Values Ansible supplies from outside the role. The rest render as empty via
 #: ChainableUndefined, and that is SAFE HERE for a reason worth stating rather
@@ -47,7 +58,6 @@ ROLE = REPO / "infra/ansible/roles/beelink_services"
 #: variable anywhere in the stack would break it for no security reason.
 _EXTERNAL = dict(
     ansible_managed="Ansible managed",
-    tailscale_ip="100.64.0.3",
     gitea_image="gitea/gitea:1.25.5",
     gitea_domain="gitea.kubelab.live",
 )
@@ -55,7 +65,7 @@ _EXTERNAL = dict(
 
 def _vars() -> dict:
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text()) or {}
-    return {**defaults, **_EXTERNAL}
+    return {**defaults, **_EXTERNAL, "tailscale_ip": _beelink_tailscale_ip()}
 
 
 def _gitea_environment() -> dict[str, str]:
