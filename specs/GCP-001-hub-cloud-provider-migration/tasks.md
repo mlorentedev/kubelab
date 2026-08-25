@@ -374,9 +374,32 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       (`fio`) and wall time of one full `make deploy-argocd` under the
       best-effort burst model. **A regression against the AWS baseline is a
       finding to report, not a number to file away.**
-- [ ] **[AC8]** **Measure egress** over a representative window and add the row to
+
+      **IOPS DONE 2026-08-24; the wall time deferred as a decision.**
+
+      - *`fio` IOPS* — **3,209 read / 3,233 write** (random 4K, `--direct=1`,
+        iodepth 64, 30s) via `make benchmark-disk NODE=gcp1 ENV=hub`, added in
+        [#1371](https://github.com/mlorentedev/kubelab/pull/1371). Codified rather
+        than an ad-hoc `fio` over SSH: that is both the standing order and
+        ANSIBLE-035's adversarial finding about unreproducible numbers.
+        **Report the comparison honestly** — the AWS column is `3,000 (gp3 spec)`,
+        a datasheet for a disk that no longer exists, so this shows the GCP
+        ceiling clears the figure the decision was made against, not a
+        like-for-like result.
+      - *`deploy-argocd` wall time* — obtaining it means running a real deploy
+        against the live hub, and the last one died between its two phases
+        (2026-08-23, #1348). Running prod to collect a baseline inverts the risk:
+        the number is diagnostic, the deploy is not. Record it on the **next
+        legitimate deploy** — [#1209](https://github.com/mlorentedev/kubelab/issues/1209)
+        (the hub's Argo CD chart is two majors behind) forces one.
+- [x] **[AC8]** **Measure egress** over a representative window and add the row to
       the derivation in ADR-063 and `verification.md` — `$0` with its allowance
       named if it is inside the tier's free band (ADR-063 D8).
+      Done 2026-08-24: Cloud Monitoring `instance/network/sent_bytes_count`,
+      **~4.5 GiB/mo** against a Standard Tier allowance of **200 GB per region**
+      (quoted from the primary source, which also cleared the `UNVERIFIED` flag in
+      `gcp-cost-envelope.md`). Row is `$0.00`; the derivation's net `$0.43/mo`
+      stands.
 
 # Phase 4 — preemption evidence · the design's load-bearing claim
 

@@ -1,0 +1,141 @@
+---
+# =============================================================================
+# Disk performance ceiling — random 4K IOPS on a live node (GCP-001 AC8)
+#
+# Answers ONE question: what does this node's disk actually sustain for the I/O
+# shape its workload has? The hub runs K3s with SQLite and etcd snapshots, so
+# the shape is small random reads and writes — not sequential throughput, which
+# is the number every cloud datasheet leads with and the one that predicts
+# nothing here.
+#
+# Why this is a playbook and not an ssh one-liner: the same reason
+# `maintenance-notify-test.yml` is one. ANSIBLE-035's adversarial review FAILED
+# a spec for an unreproducible number in verification.md, and a measurement that
+# exists only in one operator's scrollback is that defect wearing a different
+# hat. Anyone can re-run this and get a comparable answer.
+#
+# THREE choices carry the whole result, and getting any of them wrong produces a
+# beautiful number that means nothing:
+#
+#   1. `--direct=1`. Without it the kernel serves the test from the page cache.
+#      The hub has 2 GB of RAM and this writes a 512 MB file, so it would fit
+#      entirely in cache and report memory bandwidth as if it were disk IOPS.
+#   2. `--bs=4k --rw=randread|randwrite`. Random small blocks. `pd-balanced` and
+#      `gp3` are both quoted in IOPS at this size; measuring anything else makes
+#      the comparison to the datasheet invalid.
+#   3. `--time_based --runtime`. A fixed duration rather than a fixed byte count,
+#      so a slow disk is not rewarded with a shorter test.
+#
+# The file is bounded and its removal is in `always`, never as a later task: a
+# cleanup reachable only on the happy path is not a cleanup, and this one leaves
+# 512 MB behind on a 12 GB disk whose kubelet evicts at 85%.
+#
+# It REPORTS rather than asserts a threshold. AC8's wording is deliberate — "a
+# regression against the baseline is a finding to report, not a number to file
+# away" — and a shared-core e2 instance has a burst model that would make a
+# hard threshold flake. Judgement about the number belongs to whoever reads it.
+#
+# Usage:
+#   make benchmark-disk NODE=gcp1 ENV=hub
+#   make benchmark-disk NODE=vps ENV=prod
+#
+# Direct:
+#   toolkit infra ansible run -p benchmark-disk -e hub -l gcp1
+# =============================================================================
+
+- name: Disk performance ceiling — random 4K IOPS
+  hosts: all
+  become: true
+  gather_facts: false
+  # An on-demand node that is powered off is the expected state, not a fault
+  # (ADR-028) — same reasoning as backup-node.yml.
+  ignore_unreachable: true
+
+  vars:
+    bench_dir: /var/tmp/kubelab-benchmark
+    bench_file: /var/tmp/kubelab-benchmark/randrw.dat
+    # 512 MB: large enough that `--direct=1` is doing real work against the
+    # device, small enough to be a rounding error against the smallest disk in
+    # the fleet. Raise it only after checking the headroom guard below still
+    # passes on every node you intend to run against.
+    bench_size_mb: 512
+    bench_runtime: 30
+
+  tasks:
+    - name: Read free space on the benchmark filesystem
+      # The guard exists because the failure it prevents is not "the test fails"
+      # — it is kubelet crossing its 85% disk-pressure threshold on a live node
+      # and evicting pods to make room for a benchmark.
+      ansible.builtin.command:
+        cmd: df --output=avail -m /var/tmp
+      register: bench_avail
+      changed_when: false
+
+    - name: Refuse to run without twice the file size free
+      ansible.builtin.assert:
+        that:
+          - (bench_avail.stdout_lines[-1] | trim | int) > (bench_size_mb * 2)
+        fail_msg: >-
+          {{ inventory_hostname }}: only
+          {{ bench_avail.stdout_lines[-1] | trim }} MB free on /var/tmp,
+          need more than {{ bench_size_mb * 2 }} MB. Refusing — a benchmark is
+          never worth pushing a live node into disk pressure.
+        success_msg: >-
+          {{ inventory_hostname }}:
+          {{ bench_avail.stdout_lines[-1] | trim }} MB free, proceeding
+
+    - name: Install fio
+      ansible.builtin.apt:
+        name: fio
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create the benchmark directory
+      ansible.builtin.file:
+        path: "{{ bench_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Measure and clean up
+      block:
+        - name: Random 4K read
+          ansible.builtin.command:
+            cmd: >-
+              fio --name=randread --filename={{ bench_file }}
+              --size={{ bench_size_mb }}m --bs=4k --rw=randread
+              --direct=1 --ioengine=libaio --iodepth=64 --numjobs=1
+              --runtime={{ bench_runtime }} --time_based
+              --group_reporting --output-format=json
+          register: bench_read
+          changed_when: false
+
+        - name: Random 4K write
+          ansible.builtin.command:
+            cmd: >-
+              fio --name=randwrite --filename={{ bench_file }}
+              --size={{ bench_size_mb }}m --bs=4k --rw=randwrite
+              --direct=1 --ioengine=libaio --iodepth=64 --numjobs=1
+              --runtime={{ bench_runtime }} --time_based
+              --group_reporting --output-format=json
+          register: bench_write
+          changed_when: false
+
+      always:
+        - name: Remove the benchmark file
+          ansible.builtin.file:
+            path: "{{ bench_dir }}"
+            state: absent
+
+    - name: Report the ceiling
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          random 4K read
+          {{ (bench_read.stdout | from_json).jobs[0].read.iops | round | int }} IOPS
+          ({{ ((bench_read.stdout | from_json).jobs[0].read.bw / 1024) | round(1) }} MiB/s),
+          random 4K write
+          {{ (bench_write.stdout | from_json).jobs[0].write.iops | round | int }} IOPS
+          ({{ ((bench_write.stdout | from_json).jobs[0].write.bw / 1024) | round(1) }} MiB/s),
+          direct=1 iodepth=64 runtime={{ bench_runtime }}s
+      when: bench_read is defined and bench_write is defined
