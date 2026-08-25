@@ -103,6 +103,13 @@ help:
 	@echo "  make validate           Validate toolkit config"
 	@echo "  make smoke-test         Health check running services"
 	@echo ""
+	@echo "Governance (bitácora board):"
+	@echo "  make board-streams        Dry-run: what the Stream field should be, per harness/board-streams.yaml"
+	@echo "  make board-streams-apply  Write the Stream field (creates it on first run)"
+	@echo "  make board-streams-check  Exit 1 if any open issue is unplaced or out of date"
+	@echo "  make board-parts          Dry-run: parent links the registry's parts: section implies"
+	@echo "  make board-parts-apply    Add the missing parent/sub-issue links"
+	@echo ""
 	@echo "Toolkit CLI (use directly for most operations):"
 	@echo "  toolkit services up gitea        Start Gitea"
 	@echo "  toolkit services logs api        View API logs"
@@ -913,6 +920,27 @@ backup-pvc:
 	@kubectl create job --from=cronjob/pvc-backup pvc-backup-manual-$$(date +%s) \
 		--namespace kubelab --kubeconfig $(KUBECONFIG_PATH)
 	@echo "✓ Backup job created. Monitor: kubectl get jobs -n kubelab --kubeconfig $(KUBECONFIG_PATH)"
+
+# Bitácora board — the Stream field is derived from harness/board-streams.yaml (GOV-002)
+# Usage: make board-streams          (dry-run)
+#        make board-streams-apply    (write; creates the field on first run)
+#        make board-streams-check    (exit 1 while any open issue is unplaced)
+.PHONY: board-streams board-streams-apply board-streams-check
+board-streams:
+	@$(TOOLKIT) board streams
+
+board-streams-apply:
+	@$(TOOLKIT) board streams --apply
+
+board-streams-check:
+	@$(TOOLKIT) board streams --check
+
+.PHONY: board-parts board-parts-apply
+board-parts:
+	@$(TOOLKIT) board parts
+
+board-parts-apply:
+	@$(TOOLKIT) board parts --apply
 
 # K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
