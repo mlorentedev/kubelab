@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.5](https://github.com/mlorentedev/kubelab/compare/api-v1.1.4...api-v1.1.5) (2026-08-25)
+
+
+### Bug Fixes
+
+* **api:** bump golang.org/x/text to v0.39.0 for CVE-2026-56852 ([#1382](https://github.com/mlorentedev/kubelab/issues/1382)) ([30f8dc3](https://github.com/mlorentedev/kubelab/commit/30f8dc3f93623a4352a1d44198f78ec1886e2d34))
+* **deps:** bump golang from 1.26-alpine to 1.27-alpine in /apps/api in the api-docker-minor-patch group ([#1358](https://github.com/mlorentedev/kubelab/issues/1358)) ([6366074](https://github.com/mlorentedev/kubelab/commit/6366074faa3fe66dc5e87ef7d2c55a3355df0950))
+* **images:** say which stage the security gate judges, and patch at build time ([#1388](https://github.com/mlorentedev/kubelab/issues/1388)) ([5325ab6](https://github.com/mlorentedev/kubelab/commit/5325ab6e334334c3cfc9794c8106eed7c2bb76d5))
+
+
+### Code Refactoring
+
+* **api:** reposition apps/api as the kubelab platform API (ADR-057 D1) ([#1397](https://github.com/mlorentedev/kubelab/issues/1397)) ([3c4de31](https://github.com/mlorentedev/kubelab/commit/3c4de31bc059f4e8e9407a05750223c2a29a1688))
+
 ## [1.1.4](https://github.com/mlorentedev/kubelab/compare/api-v1.1.3...api-v1.1.4) (2026-07-08)
 
 
