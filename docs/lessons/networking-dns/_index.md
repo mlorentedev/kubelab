@@ -1,9 +1,10 @@
 # DNS, VPN mesh and host networking
 
-44 lessons, newest first. Back to [all categories](../_index.md).
+45 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 393 | [A public apex name makes an IP allow-list block the legitimate users](lesson-393-a-public-apex-name-makes-an-ip-allowlist-block-the-legitimate-users.md) | 2026-08-24 |
 | 384 | [A predicate testing `== false` against proto3 JSON selects nothing, not "the false ones"](lesson-384-proto3-omits-false-so-the-predicate-selected-nothing.md) | 2026-08-24 |
 | 340 | [`tailscale status` says `active` about a machine that is powered off](lesson-340-tailscale-status-says-active-about-a-machine-.md) | 2026-08-16 |
 | 309 | [Five candidate triggers eliminated, and the reboot turned out to be the repair](lesson-309-five-candidate-triggers-eliminated-and-the-re.md) | 2026-08-11 |
