@@ -13,7 +13,24 @@ created: "2026-08-20"
       `billingAccountName: billingAccounts/0118CE-…` and `billingEnabled: true`.
       The value is in SOPS rather than here because this repository is public;
       it is an identifier, not a credential, but git history is permanent.
-- [ ] AC2 budget + kill switch -> `gcloud billing budgets list` output
+- [x] AC2 budget + kill switch -> live, queried 2026-08-24 against billing
+      account `0118CE-…`:
+
+      | Display name | Units | Credit treatment | Thresholds |
+      |---|---|---|---|
+      | `kubelab-hub alerting (10 USD)` | 10 | `EXCLUDE_ALL_CREDITS` | 0.5 / 0.9 / 1.0 |
+      | `kubelab-hub HARD CAP (15 USD)` | 15 | `EXCLUDE_ALL_CREDITS` | 1.0 |
+
+      `EXCLUDE_ALL_CREDITS` on both is the setting F4 exists for: on the API
+      default the $10 budget would fire at $10 of *real money* against a $10
+      credit — $20 of usage — and nothing would surface the gap.
+
+      The mechanism behind the cap is in `terraform state list` for
+      `gcp-bootstrap`, not only in the budget: `google_pubsub_topic.budget_alerts`
+      -> `google_cloudfunctions2_function.kill_switch` (+
+      `google_service_account.kill_switch`, `google_project_iam_member.kill_switch`).
+      A budget alone notifies; these are what detach billing, and AC2b is the
+      proof they fire.
 - [x] AC2b kill switch fired -> `make gcp-killswitch-prove`, 2026-08-22:
       billing detached from `kubelab-killswitch-proof` in 10.7s, target restored
       to `kubelab-hub` and the restore verified. Fired through the REAL topic
@@ -52,6 +69,32 @@ created: "2026-08-20"
       2026-08-22 (the prod handover triggered it: changing `managed_spokes`
       changes the instance template, so the MIG recreates the hub and the cutover
       re-exercises this path instead of bypassing it).
+
+      > **A REAL PREEMPTION ON 2026-08-24 CONFIRMED HALF OF THIS AND FALSIFIED
+      > THE OTHER HALF ([#1369](https://github.com/mlorentedev/kubelab/issues/1369)).**
+      > The `[x]` stands for the criterion as written — the MIG recreated the VM
+      > after a genuine preemption and the hub came back with **no human
+      > involved**, in **18 seconds**: `preempted 17:13:39` → `repair.recreateInstance
+      > 17:13:47` → `insert 17:13:57`. That is stronger evidence than the
+      > template-change recreate below, and it also settles the question
+      > `main.tf:184` left open, since recreation on the STOP path is now
+      > *observed* rather than quoted from the documentation.
+      >
+      > **The MagicDNS row is the falsified one.** It reads "follows the new node,
+      > still `gcp1`", and on 2026-08-24 the replacement registered as
+      > `gcp1-mj5bsge9` while the dead record kept the name — so
+      > `gcp1.kubelab.internal` resolved to a corpse and `argo.kubelab.live` went
+      > down. The stale-node cleanup in `cloud-init.yml` had never worked: its
+      > predicate tests `.online == false`, an offline node omits that field
+      > entirely, and `null == false` matches nothing.
+      >
+      > **The demonstration below passed because it was gentler than reality.**
+      > Both recreates that produced this evidence were *graceful* — a template
+      > change and a `gcloud compute instances delete` — where the node logs out on
+      > the way down. The branch that runs on an abrupt preemption was never
+      > exercised. Recorded here rather than only in the fix, because the lesson
+      > belongs to the acceptance criterion: **"a real simulated preemption, not a
+      > MIG config screenshot" was satisfied and still measured the wrong path.**
 
       | Property | Before | After |
       |---|---|---|
@@ -110,7 +153,9 @@ created: "2026-08-20"
       (the aws1 lesson, reproduced on GCP); stale-node cleanup works, so F2
       holds; and F1 works **only after** the `KUBECONFIG` fix — it was broken on
       the first boot, having been recorded as "closed in code" in #1217.
-- [ ] AC5 portability scored -> the table below, with real counts
+- [x] AC5 portability scored -> the table below, with real counts. Column 1
+      confirmed (10/10 paths untouched across the 39 migration commits); column 3
+      undercounted by two, both in observability and both now #1249.
 - [x] AC6 AWS decommissioned -> three AWS API outputs, pasted, 2026-08-23.
       **Teardown only.** The credential-rotation half of AC6 is open and audited
       NOT DONE — see the audit at the end of this entry. Do not read this `[x]`
@@ -211,6 +256,27 @@ created: "2026-08-20"
       operator reports them rotated; this task is the audit that confirms it" —
       the audit ran and confirms the opposite.
 
+      > **CLOSED LATER THE SAME DAY — 2026-08-23, after this audit was written.**
+      > The audit below is what made it happen and is kept verbatim; read it as
+      > history, not as current state. All four exposed credentials were
+      > neutralised **at the source**, which is the only place that counts: the
+      > three Headscale keys were expired at the issuer, the IAM access key ending
+      > `…IQYC` was deleted, and `kubelab-terraform` was left holding **zero**
+      > keys (#1335, #1349, #1353).
+      >
+      > Re-checked 2026-08-24 by consequence, decrypting nothing: SOPS key *names*
+      > are plaintext, so the key tree answers what changed. `aws.headscale_preauth_key`
+      > — the one D7 said to delete and the audit found still present — is **gone**
+      > from `common.enc.yaml`, retired by #1353.
+      >
+      > **What remains is dead ciphertext, not a live credential.** `aws.access_key_id`
+      > and `aws.secret_access_key` are still in SOPS and now authenticate nothing,
+      > because the key they hold was deleted at AWS. That residue is
+      > [#1351](https://github.com/mlorentedev/kubelab/issues/1351) (SSOT-025).
+      > It cannot be re-verified by an AWS API call *precisely because the keys are
+      > gone* — the disclosure belongs in the record rather than being presented as
+      > an unanswered question.
+
       Method, which decrypts nothing and therefore prints nothing: SOPS preserves
       the ciphertext of values it does not edit, so `git diff --numstat` over the
       encrypted file answers "did this key change" without exposing it. Verify a
@@ -258,8 +324,23 @@ created: "2026-08-20"
       **Drift, in whichever direction it resolves.** If the Argo password was
       rotated out-of-band on the hub, SOPS still holds the exposed value and the
       next `make deploy-argocd` reinstalls it silently.
-- [ ] AC7 cost recorded as derivation -> ADR-063 D4
-- [ ] AC8 ceilings measured -> `fio` output + `deploy-argocd` wall time
+- [x] AC7 cost recorded as derivation -> the table below, every line item named
+      including the $0 ones (ADR-063 D4/D8), **and the source closed**: ADR-023
+      §3.1 now carries a supersession marker at the section itself, not only in
+      its Status block, because the stale `~$3.60/mo` is what a grep or a deep
+      link lands on. The egress row is measured (2026-08-24) rather than deferred.
+- [~] AC8 ceilings measured -> **two of three done, the third deferred as a
+      stated decision.** Egress and disk IOPS are measured (2026-08-24, tables
+      below). The `make deploy-argocd` wall time is **not**: obtaining it means
+      running a real deploy against the live hub, and the last one died between
+      its two phases (#1348). Running production to collect a diagnostic number
+      inverts the risk, so it is recorded on the next legitimate deploy — #1209
+      (the hub's chart is two majors behind) forces one.
+
+      The IOPS number is measured through `make benchmark-disk` (#1371) rather
+      than an ad-hoc `fio` over SSH, because ANSIBLE-035's adversarial review
+      already failed a spec for an unreproducible number in a file exactly like
+      this one.
 
 ## The portability scorecard (AC5)
 
@@ -268,22 +349,78 @@ created: "2026-08-20"
 > falsifies the claim in `provision-aws1.yml:46`, which is a finding of equal
 > value to confirming it, and must not be reframed as expected churn.
 
+Scored 2026-08-24 over the 39 commits from `cf5f98f^` (the ADR + plan, #1185) to
+master whose subject names the migration — 117 distinct files. Scoring the whole
+range would have counted the unrelated work the arc ran alongside.
+
 | Column | Predicted | Actual | Delta |
 |---|---|---|---|
-| 1 — reused unchanged | 7 groups | | |
-| 2 — net-new (expected) | 6 items | | |
-| 3 — touched due to naming (**findings**) | 10 rows, 1 legitimate | | |
+| 1 — reused unchanged | 7 groups | **7 groups, 10/10 paths untouched** | none |
+| 2 — net-new (expected) | 6 items | 6 items, all present | none |
+| 3 — touched due to naming (**findings**) | 10 rows, 1 legitimate | **11 sites**, 1 legitimate; 8 of the 9 predicted files touched | +2 found, −1 not touched |
 
-Verdict on `provision-aws1.yml:46` — *"reuses `hub.yaml` and every Ansible role
-unchanged"*: `<confirmed / falsified / partially held>`, with the reason.
+**Column 1 — confirmed, and it is the result.** None of `hub.yaml`, the roles
+`base_system` / `ssh_hardening` / `tailscale` / `k3s_server` / `node_maintenance`,
+`wait-node-ready.yml`, `maintain.yml`, `infra/k8s/argocd/**` or
+`toolkit/features/argo_manager.py` appears in the touched set. The provider under
+them changed and they did not.
+
+**Column 3 — two corrections to the prediction, in opposite directions.**
+
+- Row 9 (`infra/ansible/inventories/homelab.yml`) was **not** touched. Not a
+  point for portability: the committed inventory is generated and stale, which is
+  its own open bug ([#1228](https://github.com/mlorentedev/kubelab/issues/1228)).
+  A file that would have needed the edit and did not receive one is a gap in the
+  inventory, not an abstraction holding.
+- **Two sites the inventory missed entirely**, raised by the operator rather than
+  by the plan and now [#1249](https://github.com/mlorentedev/kubelab/issues/1249):
+  `infra/config/uptime-kuma/monitors.json` and
+  `toolkit/scripts/sync_homepage_config.py`, both hardcoding `aws1`. So column 3
+  was *undercounted*, and the way it was undercounted is the more interesting
+  half — the omission was in the observability layer, which no acceptance
+  criterion covered.
+
+**A residue that is neither column 3 nor nothing.** Five Column-1 files still say
+`aws1` — in comments and `make` usage examples only, never in executable content:
+`hub.yaml:3,14` (*"Currently single hub on AWS"*), `wait-node-ready.yml:17,20,54`,
+`maintain.yml:8,11,14`, `node_maintenance/defaults/main.yml:10`, and
+`dns/main.tf:43` (legitimate — it records why the IP map exists). They were reused
+unchanged, which is what the column claims, and their prose is now wrong, which
+the column does not measure. `hub.yaml` is corrected in this change; the rest are
+usage examples that GCP-002 covers.
+
+**Verdict on `provision-aws1.yml:46`** — *"reuses `hub.yaml` and every Ansible role
+unchanged"*: **confirmed, by measurement rather than by assertion.** The claim was
+about executable reuse and it held exactly. It says nothing about documentation,
+and documentation is where the migration leaked.
 
 ## Measured baselines (AC8)
 
 | Metric | AWS `t4g.small` baseline | GCP `e2-small` measured | Regression? |
 |---|---|---|---|
-| Disk IOPS (live, `fio`) | 3,000 (gp3 spec) | | |
-| `make deploy-argocd` wall time | | | |
-| Preemption events observed | ≥2 (2026-05-06, #1066) | | |
+| Disk IOPS, random 4K read | 3,000 (gp3 **spec sheet**) | **3,209** (12.5 MiB/s) | no, +7% |
+| Disk IOPS, random 4K write | 3,000 (gp3 **spec sheet**) | **3,233** (12.6 MiB/s) | no, +8% |
+| `make deploy-argocd` wall time | — | deferred, see AC8 above | — |
+| Preemption events observed | ≥2 (2026-05-06, #1066) | **1** (2026-08-24, #1369) | see below |
+
+`make benchmark-disk NODE=gcp1 ENV=hub`, 2026-08-24, `--direct=1 --bs=4k
+--iodepth=64 --runtime=30 --time_based`. `--direct=1` is what makes the number
+mean anything: the hub has 2 GB of RAM and the test file is 512 MB, so without it
+the kernel serves the whole run from the page cache and reports memory bandwidth.
+
+**Read the comparison honestly.** The AWS column is a **datasheet**, not a
+measurement, and the disk it describes no longer exists to measure. So this shows
+the GCP ceiling clears the figure the decision was made against — the module
+predicted 3,072 from `pd-balanced`'s per-instance floor and the live number is
+above it — and it does **not** show a like-for-like comparison. "No regression"
+is the correct verdict for the decision at hand and the weaker claim of the two.
+
+**The preemption row is the important one and it is not a performance number.**
+The single observed event (2026-08-24, 17:13:39 UTC-7) had the MIG rebuild the
+hub in **18 seconds** unattended — better than the AWS path, which was a manual
+`make aws1-replace` and, in #1066, no replacement at all for want of capacity.
+The same event also broke `argo.kubelab.live`, for a reason that has nothing to
+do with the MIG: #1369.
 
 ## Cost, as a derivation (AC7)
 
@@ -298,22 +435,37 @@ went missing from the original derivation.
 | `e2-small` Spot, europe-west4 | $0.0088/hr | 730 h | 6.42 | — |
 | External IPv4 (Spot rate) | $0.0025/hr | 730 h | 1.83 | — |
 | `pd-balanced` boot disk | $0.11/GB-mo | 12 GB | 1.32 | — |
-| **Network egress** | tier-dependent | **TO MEASURE** | **?** | Standard: 200 GiB/mo · Premium: ~1 GiB per destination |
+| **Network egress** | $0.085/GiB after the allowance | **4.5 GiB/mo measured** | **0.00** | Standard Tier: 200 GB/mo per region, across all projects — usage is **2.2%** of it |
 | Secret Manager | $0.06/version-location | 1 version | 0.00 | 6 active versions, 10,000 access ops/mo |
 | Pub/Sub (budget → kill switch) | $40/TiB | ~KB | 0.00 | 10 GiB/mo |
 | Cloud Run function (kill switch) | per-request | a few/mo | 0.00 | 2M invocations/mo |
 | Artifact Registry (`gcf-artifacts`) | $0.10/GiB-mo | small | 0.00 | 0.5 GB (needs a cleanup policy) |
 | Budgets | — | 2 | 0.00 | no charge |
-| **Total** | | | **9.57 + egress** | |
+| **Total** | | | **9.57** | |
 | Monthly credit applied | | | −10.00 | |
-| **Net** | | | **0.43 − egress** | |
+| **Net** | | | **0.43** | |
 
-**The egress row is the open one.** ADR-063's original derivation omitted it
-entirely, which is the failure D4 of that same ADR exists to prevent. It is
-measured in Phase 3 (AC8) and the tier allowance confirmed in the console at plan
-review — the two Network Service Tiers differ by roughly two orders of magnitude
-in free allowance against **$0.43/mo of headroom**. Full constraint map:
-`docs/architecture/infra/gcp-cost-envelope.md`.
+**The egress row was the open one, and it is now closed by measurement.** ADR-063's
+original derivation omitted it entirely — the failure D4 of that same ADR exists to
+prevent. Two facts settle it, both from a primary source rather than from the
+console at plan review:
+
+- The VM is on **Standard Tier** (`gcloud compute instances list` →
+  `NETWORK_TIER: STANDARD`), whose allowance is *"200 GB of free Standard Tier
+  usage per month in each region that you use across all of your projects, on a
+  per SKU basis"* — not the Compute Engine Always Free 1 GB, which is a different
+  allowance, applies to North American origins, and does not stack. Getting those
+  two confused is what the "two orders of magnitude" warning was about, and the
+  hub is on the generous side of it.
+- Measured send volume is **~4.5 GiB/mo** (Cloud Monitoring
+  `instance/network/sent_bytes_count`, the two complete days since the MIG
+  recreated the VM on 2026-08-23: 187.6 MB and 131.7 MB). That is **2.2%** of the
+  allowance, and it is a ceiling — the metric counts everything leaving the NIC,
+  including traffic that is not billable internet egress.
+
+So the row is $0.00 with ~44x headroom, and the **$0.43/mo net stands as written**.
+Full constraint map: `docs/architecture/infra/gcp-cost-envelope.md`, where the
+`UNVERIFIED` flag on the tier allowance is now cleared with the source quoted.
 
 Replaces: AWS at **$12.75/mo** (`t4g.small` Spot `eu-central-1a` $7.96 + public
 IPv4 $3.65 + 12 GB gp3 $1.14), measured 2026-08-20.
