@@ -70,6 +70,32 @@ created: "2026-08-20"
       changes the instance template, so the MIG recreates the hub and the cutover
       re-exercises this path instead of bypassing it).
 
+      > **A REAL PREEMPTION ON 2026-08-24 CONFIRMED HALF OF THIS AND FALSIFIED
+      > THE OTHER HALF ([#1369](https://github.com/mlorentedev/kubelab/issues/1369)).**
+      > The `[x]` stands for the criterion as written — the MIG recreated the VM
+      > after a genuine preemption and the hub came back with **no human
+      > involved**, in **18 seconds**: `preempted 17:13:39` → `repair.recreateInstance
+      > 17:13:47` → `insert 17:13:57`. That is stronger evidence than the
+      > template-change recreate below, and it also settles the question
+      > `main.tf:184` left open, since recreation on the STOP path is now
+      > *observed* rather than quoted from the documentation.
+      >
+      > **The MagicDNS row is the falsified one.** It reads "follows the new node,
+      > still `gcp1`", and on 2026-08-24 the replacement registered as
+      > `gcp1-mj5bsge9` while the dead record kept the name — so
+      > `gcp1.kubelab.internal` resolved to a corpse and `argo.kubelab.live` went
+      > down. The stale-node cleanup in `cloud-init.yml` had never worked: its
+      > predicate tests `.online == false`, an offline node omits that field
+      > entirely, and `null == false` matches nothing.
+      >
+      > **The demonstration below passed because it was gentler than reality.**
+      > Both recreates that produced this evidence were *graceful* — a template
+      > change and a `gcloud compute instances delete` — where the node logs out on
+      > the way down. The branch that runs on an abrupt preemption was never
+      > exercised. Recorded here rather than only in the fix, because the lesson
+      > belongs to the acceptance criterion: **"a real simulated preemption, not a
+      > MIG config screenshot" was satisfied and still measured the wrong path.**
+
       | Property | Before | After |
       |---|---|---|
       | Tailscale address | `100.64.0.24` | `100.64.0.12` |
@@ -303,14 +329,18 @@ created: "2026-08-20"
       §3.1 now carries a supersession marker at the section itself, not only in
       its Status block, because the stale `~$3.60/mo` is what a grep or a deep
       link lands on. The egress row is measured (2026-08-24) rather than deferred.
-- [~] AC8 ceilings measured -> **split, and only one half is a gap.** Egress is
-      **done** (2026-08-24, see the derivation below). `fio` IOPS and the
-      `deploy-argocd` wall time are **deferred as a stated decision**, reasons in
-      `tasks.md`: the wall time needs a real prod deploy and the last one died
-      mid-flight (#1348), so it is recorded on the next legitimate deploy (#1209);
-      and the `fio` comparison would measure GCP live against an AWS **spec
-      sheet** for a disk that no longer exists. Neither is load-bearing for any
-      decision this spec made.
+- [~] AC8 ceilings measured -> **two of three done, the third deferred as a
+      stated decision.** Egress and disk IOPS are measured (2026-08-24, tables
+      below). The `make deploy-argocd` wall time is **not**: obtaining it means
+      running a real deploy against the live hub, and the last one died between
+      its two phases (#1348). Running production to collect a diagnostic number
+      inverts the risk, so it is recorded on the next legitimate deploy — #1209
+      (the hub's chart is two majors behind) forces one.
+
+      The IOPS number is measured through `make benchmark-disk` (#1371) rather
+      than an ad-hoc `fio` over SSH, because ANSIBLE-035's adversarial review
+      already failed a spec for an unreproducible number in a file exactly like
+      this one.
 
 ## The portability scorecard (AC5)
 
@@ -368,9 +398,29 @@ and documentation is where the migration leaked.
 
 | Metric | AWS `t4g.small` baseline | GCP `e2-small` measured | Regression? |
 |---|---|---|---|
-| Disk IOPS (live, `fio`) | 3,000 (gp3 spec) | | |
-| `make deploy-argocd` wall time | | | |
-| Preemption events observed | ≥2 (2026-05-06, #1066) | | |
+| Disk IOPS, random 4K read | 3,000 (gp3 **spec sheet**) | **3,209** (12.5 MiB/s) | no, +7% |
+| Disk IOPS, random 4K write | 3,000 (gp3 **spec sheet**) | **3,233** (12.6 MiB/s) | no, +8% |
+| `make deploy-argocd` wall time | — | deferred, see AC8 above | — |
+| Preemption events observed | ≥2 (2026-05-06, #1066) | **1** (2026-08-24, #1369) | see below |
+
+`make benchmark-disk NODE=gcp1 ENV=hub`, 2026-08-24, `--direct=1 --bs=4k
+--iodepth=64 --runtime=30 --time_based`. `--direct=1` is what makes the number
+mean anything: the hub has 2 GB of RAM and the test file is 512 MB, so without it
+the kernel serves the whole run from the page cache and reports memory bandwidth.
+
+**Read the comparison honestly.** The AWS column is a **datasheet**, not a
+measurement, and the disk it describes no longer exists to measure. So this shows
+the GCP ceiling clears the figure the decision was made against — the module
+predicted 3,072 from `pd-balanced`'s per-instance floor and the live number is
+above it — and it does **not** show a like-for-like comparison. "No regression"
+is the correct verdict for the decision at hand and the weaker claim of the two.
+
+**The preemption row is the important one and it is not a performance number.**
+The single observed event (2026-08-24, 17:13:39 UTC-7) had the MIG rebuild the
+hub in **18 seconds** unattended — better than the AWS path, which was a manual
+`make aws1-replace` and, in #1066, no replacement at all for want of capacity.
+The same event also broke `argo.kubelab.live`, for a reason that has nothing to
+do with the MIG: #1369.
 
 ## Cost, as a derivation (AC7)
 

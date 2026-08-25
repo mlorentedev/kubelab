@@ -375,22 +375,23 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       best-effort burst model. **A regression against the AWS baseline is a
       finding to report, not a number to file away.**
 
-      **DEFERRED 2026-08-24, as a decision rather than an omission**, and each
-      half for its own reason:
+      **IOPS DONE 2026-08-24; the wall time deferred as a decision.**
 
+      - *`fio` IOPS* — **3,209 read / 3,233 write** (random 4K, `--direct=1`,
+        iodepth 64, 30s) via `make benchmark-disk NODE=gcp1 ENV=hub`, added in
+        [#1371](https://github.com/mlorentedev/kubelab/pull/1371). Codified rather
+        than an ad-hoc `fio` over SSH: that is both the standing order and
+        ANSIBLE-035's adversarial finding about unreproducible numbers.
+        **Report the comparison honestly** — the AWS column is `3,000 (gp3 spec)`,
+        a datasheet for a disk that no longer exists, so this shows the GCP
+        ceiling clears the figure the decision was made against, not a
+        like-for-like result.
       - *`deploy-argocd` wall time* — obtaining it means running a real deploy
         against the live hub, and the last one died between its two phases
         (2026-08-23, #1348). Running prod to collect a baseline inverts the risk:
         the number is diagnostic, the deploy is not. Record it on the **next
         legitimate deploy** — [#1209](https://github.com/mlorentedev/kubelab/issues/1209)
         (the hub's Argo CD chart is two majors behind) forces one.
-      - *`fio` IOPS* — the comparison is weaker than the table implies. The AWS
-        column reads `3,000 (gp3 spec)`: a **spec sheet**, not a measurement.
-        Measuring GCP live against AWS-on-paper cannot show a regression, only a
-        difference between a number and a datasheet, and the AWS disk no longer
-        exists to measure. Worth doing as a *ceiling* rather than a comparison,
-        and through a codified path (playbook or make target) — ad-hoc SSH `fio`
-        is the manual operation the standing orders forbid.
 - [x] **[AC8]** **Measure egress** over a representative window and add the row to
       the derivation in ADR-063 and `verification.md` — `$0` with its allowance
       named if it is inside the tier's free band (ADR-063 D8).

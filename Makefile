@@ -818,6 +818,35 @@ maintain-notify-test:
 		$(TOOLKIT) infra ansible run -p maintenance-notify-test -e $(_ENV) -l $(NODE) $(_EXTRA); \
 	fi
 
+# Reclaim a node's canonical name from a dead record (#1369). The reasoning lives
+# in `toolkit/features/headscale_nodes.py`; this exists because an operator
+# reaching for a repair should not have to know it is spelled `toolkit infra`.
+#
+# APPLY=1 is required to change anything, mirroring the command's own default:
+# it prints the plan otherwise. The asymmetry with CHECK=1 elsewhere is
+# deliberate — CHECK opts INTO safety on a target that mutates by default, and
+# this one is safe by default, so the opt-in is on the mutating side.
+.PHONY: headscale-recycle-stale
+headscale-recycle-stale:
+	@test -n "$(NODE)" || (echo "Usage: make headscale-recycle-stale NODE=gcp1 [APPLY=1]" && exit 1)
+	$(eval _APPLY := $(if $(APPLY),--apply,))
+	@$(TOOLKIT) infra headscale recycle-stale --name $(NODE) $(_APPLY)
+
+# Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded
+# file, unconditional cleanup — the reasoning is in the playbook's header, where
+# it stays next to the flags it justifies.
+#
+# NODE is required with no default and `all` is deliberately NOT supported: this
+# writes to a live filesystem and reads IOPS, and a fleet-wide sweep is a
+# decision to run it on production nodes you did not name.
+.PHONY: benchmark-disk
+benchmark-disk:
+	@test -n "$(NODE)" || (echo "Usage: make benchmark-disk NODE=gcp1|vps|ace1|bee|rpi3|rpi4 [ENV=staging|prod|hub] [CHECK=1] [EXTRA='bench_size_mb=1024']" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
+	@$(TOOLKIT) infra ansible run -p benchmark-disk -e $(_ENV) -l $(NODE) $(_CHECK) $(_EXTRA)
+
 .PHONY: deploy
 deploy:
 	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
