@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-13 lessons, newest first. Back to [all categories](../_index.md).
+14 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 386 | [A channel with a permanent false positive is not a channel anyone reads](lesson-386-the-alert-that-was-never-true-and-the-one-nobody-read.md) | 2026-08-24 |
 | 373 | [Internal telemetry requires VPN-gated ingress and token-aware traceback deduplication](lesson-373-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication.md) | 2026-08-23 |
 | 326 | [`max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`](lesson-326-max-over-time-remembers-a-spike-long-after-th.md) | 2026-08-14 |
 | 329 | [An unpinned `:latest` image took down the dashboard the same day upstream shipped a major version](lesson-329-an-unpinned-latest-image-took-down-the-dashbo.md) | 2026-08-14 |

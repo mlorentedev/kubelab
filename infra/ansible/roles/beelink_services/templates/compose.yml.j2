@@ -38,6 +38,25 @@ services:
       # no SSH_LISTEN_PORT: that configures the built-in server, which is off.
       GITEA__server__SSH_PORT: "{{ gitea_ssh_port }}"
       GITEA__service__DISABLE_REGISTRATION: "true"
+      # SEC-GITEA-001 (#1389). Gitea's default is `false`, and `gitea.kubelab.live`
+      # has a public Cloudflare A record whose IngressRoute carries no network
+      # restriction — so without this, everything a repository marks public is
+      # world-readable, and `/explore/users` enumerates accounts anonymously.
+      # Measured 2026-08-24 before this line: /api/swagger 200, /api/v1/version
+      # 200 ({"version":"1.25.5"}), /explore/repos 200, /explore/users 200.
+      #
+      # Nothing leaked, for one reason only: the forge was empty. That is safety
+      # by absence of content, not by configuration, and TOOL-035 (#1076) is the
+      # step that ends it. Set BEFORE the first repository, deliberately.
+      #
+      # Does NOT close the paths the migration needs: git-over-HTTP authenticates
+      # separately, and the login page stays reachable so the OIDC flow works.
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
+      # REQUIRE_SIGNIN_VIEW does NOT cover the Swagger UI — measured 2026-08-24,
+      # /api/swagger still returned 200 with signin required, because the page is
+      # served as a static asset rather than through the gated API router. This
+      # was filed as an optional third step and the measurement made it required.
+      GITEA__api__ENABLE_SWAGGER: "false"
       GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
       GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
       GITEA__log__MODE: "console"
@@ -45,6 +64,7 @@ services:
       GITEA__security__SECRET_KEY: "{{ gitea_secret_key }}"
       GITEA__security__INSTALL_LOCK: "true"
       # Consumed by gitea-bootstrap.sh, not by Gitea itself.
+      GITEA_HEALTH_PATH: "{{ gitea_health_path }}"
       GITEA_ADMIN_USER: "{{ gitea_admin_user }}"
       GITEA_ADMIN_PASSWORD: "{{ gitea_admin_password }}"
       GITEA_ADMIN_EMAIL: "{{ gitea_admin_email }}"
@@ -54,7 +74,13 @@ services:
       - {{ beelink_gitea_data_dir }}:/data
       - {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/v1/version"]
+      # `health_path` from common.yaml, not a hardcoded path. It was declared
+      # there and read by nothing while this line named /api/v1/version — a
+      # divergence that was invisible until SEC-GITEA-001 closed the API and
+      # the container went unhealthy. /api/healthz is exempt from
+      # REQUIRE_SIGNIN_VIEW (measured 2026-08-24: 200 with signin required,
+      # against 403 for /api/v1/version).
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000{{ gitea_health_path }}"]
       interval: 10s
       timeout: 5s
       retries: 5

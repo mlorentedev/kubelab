@@ -19,6 +19,18 @@ from typing import Any
 from toolkit.core.logging import logger
 
 
+class ObservabilityUnavailableError(RuntimeError):
+    """A backend could not be asked. NEVER the same as 'it answered, and the answer was empty'."""
+
+
+class AlertsUnavailableError(ObservabilityUnavailableError):
+    """Grafana could not be asked. Distinct from 'nothing is firing'."""
+
+
+class LogsUnavailableError(ObservabilityUnavailableError):
+    """Loki could not be asked. Distinct from 'no lines matched'."""
+
+
 def _parse_time_offset(offset: str) -> datetime.timedelta:
     """Parse time offset strings like '5m', '1h', '24h', '30s'."""
     match = re.match(r"^(\d+)([smhd])$", offset.strip().lower())
@@ -105,8 +117,18 @@ class LokiClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except Exception as e:
-            logger.warning(f"Loki query failed: {e}")
-            return []
+            # The same swallow as `get_alerts` below, in the sibling client.
+            #
+            # Unlike that one it was NOT caught lying: Loki answered on
+            # 127.0.0.1:3100 with `status: success` and an empty result, so
+            # "No logs found in the last 5m" was true. I went looking for a
+            # second instance of the defect, and the honest finding is that the
+            # SHAPE is here and the symptom was not.
+            #
+            # Fixed anyway, because the shape is what fails later: an unreachable
+            # Loki and a quiet one are indistinguishable from an empty list, and
+            # the CLI renders that list as a calm sentence about the time window.
+            raise LogsUnavailableError(f"Loki query failed: {e}") from e
 
         entries = []
         if data.get("status") == "success" and "data" in data:
@@ -161,8 +183,19 @@ class GrafanaAlertClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except Exception as e:
-            logger.warning(f"Grafana alert fetch failed: {e}")
-            return []
+            # RAISED, never swallowed into an empty list. This returned `[]` on
+            # any failure and the CLI rendered `[]` as "✓ All healthy" — so on
+            # 2026-08-24 the command answered "All healthy" immediately after a
+            # `401 Unauthorized`, while two Grafanas were firing an alert that
+            # had been up for a day and a half (#1377).
+            #
+            # An unreachable Grafana and a Grafana with nothing firing are
+            # indistinguishable from an empty list, and only one of them is safe
+            # to ignore — the same reasoning `secret_expiry.py` states for
+            # `headscale_apikeys`. This is the fifth instance of that shape found
+            # in a single session; the failure is always in the reassuring
+            # direction, which is why it survives.
+            raise AlertsUnavailableError(f"Grafana alert fetch failed: {e}") from e
 
         alerts = []
         if isinstance(data, list):

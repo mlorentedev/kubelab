@@ -219,6 +219,14 @@
         gitea_http_port: "{{ gitea_config.apps.services.core.gitea.default_port }}"
         gitea_ssh_port: "{{ gitea_config.apps.services.core.gitea.ssh_port }}"
         gitea_ssh_host: "{{ gitea_config.apps.services.core.gitea.ssh_host }}"
+        # SEC-GITEA-001 (#1389). `health_path` has been declared in common.yaml
+        # since the move and was read by NOTHING: the compose healthcheck
+        # hardcoded /api/v1/version instead. That divergence was invisible while
+        # both endpoints answered anonymously, and became a container-down the
+        # moment REQUIRE_SIGNIN_VIEW closed the API — the probe was authenticating
+        # by not needing to. Measured: /api/healthz still returns 200 with signin
+        # required, /api/v1/version returns 403.
+        gitea_health_path: "{{ gitea_config.apps.services.core.gitea.health_path }}"
         gitea_cpu_limit: "{{ gitea_config.apps.services.core.gitea.resources.cpu_limit }}"
         gitea_memory_limit: "{{ gitea_config.apps.services.core.gitea.resources.memory_limit }}"
         # ADR-062 D3 / AUTH-004 AC1. Was `gitea_secrets.basic_auth.user` — the

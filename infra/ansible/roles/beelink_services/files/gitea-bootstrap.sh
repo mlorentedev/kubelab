@@ -23,17 +23,28 @@ set -eu
 
 log() { echo "[gitea-bootstrap] $1"; }
 
-# --- Wait for Gitea to answer its own API ---
+# --- Wait for Gitea to answer ---
+# SEC-GITEA-001 (#1389). This probed /api/v1/version, which REQUIRE_SIGNIN_VIEW
+# now refuses with 403 to an anonymous caller — and this script is anonymous, it
+# runs before any credential exists. The endpoint comes from `health_path` in
+# common.yaml, injected as GITEA_HEALTH_PATH by the compose template.
+#
+# This file is `files/`, not `templates/`, so the value arrives as an env var
+# rather than being interpolated. The default below is a fallback for a
+# re-imaged node whose compose predates the variable, NOT a second declaration:
+# if it ever disagrees with common.yaml, common.yaml is right.
+HEALTH_PATH="${GITEA_HEALTH_PATH:-/api/healthz}"
+
 i=0
 while [ "$i" -lt 15 ]; do
-  if wget -qO- http://localhost:3000/api/v1/version >/dev/null 2>&1; then
+  if wget -qO- "http://localhost:3000${HEALTH_PATH}" >/dev/null 2>&1; then
     break
   fi
   i=$((i + 1))
   sleep 2
 done
-if ! wget -qO- http://localhost:3000/api/v1/version >/dev/null 2>&1; then
-  log "ERROR: Gitea not ready after 30s"
+if ! wget -qO- "http://localhost:3000${HEALTH_PATH}" >/dev/null 2>&1; then
+  log "ERROR: Gitea not ready after 30s (probed ${HEALTH_PATH})"
   exit 1
 fi
 

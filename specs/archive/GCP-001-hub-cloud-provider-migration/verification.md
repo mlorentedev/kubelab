@@ -125,6 +125,17 @@ created: "2026-08-20"
       > dig +short gcp1.kubelab.internal -> 100.64.0.16
       > ```
       >
+      > **What "zero human steps" bounds, stated here because the next paragraph
+      > appears to contradict it.** The claim is AC4's: the hub self-heals — the
+      > MIG recreates the VM, cloud-init reclaims the canonical name, and the
+      > spokes go back to Synced with nobody acting. It does **not** claim the
+      > inbound UI route or an operator's SSH trust recover on their own; those
+      > are outside AC4 per `tasks.md` Phase 2, and they are enumerated two
+      > paragraphs down. Raised by the adversarial review as a Minor, and it was
+      > right that a strict reader could not tell from this file which of the two
+      > sentences bounds the criterion — the file spends a thousand words hunting
+      > exactly that ambiguity elsewhere.
+      >
       > Zero human steps between the stop and the reclaim. The line the old
       > predicate could never print is the whole difference: on 2026-08-24 under
       > the same precondition it printed `no stale Headscale node to recycle`.
@@ -368,13 +379,46 @@ created: "2026-08-20"
       §3.1 now carries a supersession marker at the section itself, not only in
       its Status block, because the stale `~$3.60/mo` is what a grep or a deep
       link lands on. The egress row is measured (2026-08-24) rather than deferred.
-- [~] AC8 ceilings measured -> **two of three done, the third deferred as a
-      stated decision.** Egress and disk IOPS are measured (2026-08-24, tables
-      below). The `make deploy-argocd` wall time is **not**: obtaining it means
-      running a real deploy against the live hub, and the last one died between
-      its two phases (#1348). Running production to collect a diagnostic number
-      inverts the risk, so it is recorded on the next legitimate deploy — #1209
-      (the hub's chart is two majors behind) forces one.
+- [x] AC8 ceilings measured -> **all three.** Egress and disk IOPS 2026-08-24
+      (tables below); the `make deploy-argocd` wall time measured the same night,
+      once one fact removed the reason it had been deferred.
+
+      **What changed the decision.** The deferral rested on "the chart is two
+      majors behind, so this is an upgrade rather than a stopwatch". It is not:
+
+          argocd.chart_version (common.yaml)   9.5.13
+          installed on the hub                 argo-cd-9.5.13, app v3.4.1
+
+      Pinned equals installed, so the target is a **converged re-apply**, not the
+      #1209 upgrade. And the failure mode behind the other half of the deferral —
+      the run that died between its two phases — was the scale-to-zero guard,
+      fixed and merged in #1348.
+
+      **~51 seconds, hub-side**, reconstructed from cluster timestamps rather
+      than a stopwatch (the timestamping pipe buffered and stamped every line
+      with the same second — recorded because a measurement method that silently
+      collapses is worth more as a warning than the number it lost):
+
+      | UTC | Event |
+      |---|---|
+      | 03:22:51 | Authelia rollout on prod — phase 1 |
+      | 03:23:08 | `helm upgrade` complete, revision 2 |
+      | 03:23:39-42 | all six Argo CD pods Running |
+
+      **Read it as a floor, not a budget.** It is the cost of re-applying the
+      version already installed, with images cached on the node; a genuine
+      version upgrade pulls new images and is a different number. There is no AWS
+      figure to compare against, so the baseline column stays empty rather than
+      inventing one.
+
+      **One side effect worth recording, because it is the whole reason this was
+      deferred.** Phase 1 applies the prod overlay from the WORKING TREE, so it
+      pushed prod to `OutOfSync` on eight IngressRoutes — an out-of-band apply
+      against a `selfHeal: true` cluster, which is lesson-377's exact shape.
+      `selfHeal` converged it back to git (`4df8401`, Synced/Healthy) inside a
+      minute, unattended, which is the mechanism working rather than a near miss.
+      But it means `make deploy-argocd` cannot be run casually from a feature
+      branch: whatever the tree holds is briefly what prod runs.
 
       The IOPS number is measured through `make benchmark-disk` (#1371) rather
       than an ad-hoc `fio` over SSH, because ANSIBLE-035's adversarial review
@@ -439,7 +483,7 @@ and documentation is where the migration leaked.
 |---|---|---|---|
 | Disk IOPS, random 4K read | 3,000 (gp3 **spec sheet**) | **3,209** (12.5 MiB/s) | no, +7% |
 | Disk IOPS, random 4K write | 3,000 (gp3 **spec sheet**) | **3,233** (12.6 MiB/s) | no, +8% |
-| `make deploy-argocd` wall time | — | deferred, see AC8 above | — |
+| `make deploy-argocd` wall time | — (no AWS figure exists) | **~51 s** (converged re-apply) | n/a |
 | Preemption events observed | ≥2 (2026-05-06, #1066) | **1** (2026-08-24, #1369) | see below |
 
 `make benchmark-disk NODE=gcp1 ENV=hub`, 2026-08-24, `--direct=1 --bs=4k
