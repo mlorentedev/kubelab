@@ -196,7 +196,7 @@ and syncs two spokes continuously and that traffic leaves GCP.
 | Tier | Free allowance | Rate after |
 |---|---|---|
 | **Premium** (API default) | 1 GiB per destination SKU | **$0.12/GiB to Europe** (0–1,024 GiB) |
-| **Standard** | *"First 200 GiB per month free (per account, across all regions)"* | $0.085/GiB |
+| **Standard** | *"200 GB of free Standard Tier usage per month in each region that you use across all of your projects, on a per SKU basis"* | $0.085/GiB (to 10 TiB) |
 
 Standard is regional-only (no global load balancing — unused here) and rides the
 public internet rather than Google's backbone (irrelevant: Tailscale encrypts the
@@ -218,13 +218,38 @@ machine for orphaning reserved addresses, at **4x** the attached rate. IPv6
 assigned to a VM is free, but IPv4-only reachability requirements (Headscale at a
 public IPv4, GitHub, Google APIs) must be checked before treating that as a lever.
 
-> **UNVERIFIED, and it must stay flagged until confirmed.** The Standard Tier
-> allowance and the per-GiB rates above come from a research pass that could not
-> be confirmed first-hand: Google's network pricing page renders per-region
-> figures via XHR and truncates for a plain fetch. `gcp-hub-bootstrap.md` §6
-> requires confirming rates in the console at plan review; this is the one that
-> matters most, because the two tiers differ by roughly two orders of magnitude
-> in free allowance and the hub has $0.43/mo of headroom.
+> **CONFIRMED 2026-08-24, from the primary source, and the flag is cleared.** The
+> block this replaces said the Standard Tier allowance was unverified and that it
+> was the figure that mattered most. It is now quoted verbatim from
+> [Network Service Tiers overview](https://docs.cloud.google.com/network-tiers/docs/overview):
+> *"Standard Tier includes a Free Tier, providing 200 GB of free Standard Tier
+> usage per month in each region that you use across all of your projects, on a
+> per SKU basis."* The allowance has applied to all customers since 2023-10-01
+> ([announcement](https://cloud.google.com/blog/products/networking/standard-tier-network-now-includes-200-gb-data-transfer-per-month)).
+>
+> **Two corrections to what this document previously recorded**, both in the safe
+> direction:
+>
+> - The scope is **per region, per SKU, shared across every project in the billing
+>   account** — not "per account, across all regions". Consequence for anyone
+>   adding a project: the 200 GB is shared, so check combined `europe-west4` usage,
+>   which is exactly what the docs advise. Today it is moot — `gcloud billing
+>   projects list` returns **`kubelab-hub` alone** on billing account
+>   `0118CE-4468ED-CED2F4`, so nothing else draws on it.
+> - The Compute Engine *Always Free* 1 GB egress allowance is a **different**
+>   allowance (North America origin only, and it does not stack with Standard
+>   Tier). It is not the number that governs this hub, and treating it as such
+>   would have understated the ceiling two-hundred-fold.
+>
+> **The hub is on Standard Tier and it is measured, not assumed.**
+> `gcloud compute instances list` reports `NETWORK_TIER: STANDARD` for `gcp1-bxjh`
+> (`e2-small`, SPOT, `europe-west4-b`), matching `var.network_tier`. Cloud
+> Monitoring `instance/network/sent_bytes_count` over the two complete days the
+> current VM has existed (the MIG recreated it on 2026-08-23) gives **187.6 MB and
+> 131.7 MB** — about **4.5 GiB/mo**, which is **2.2% of the allowance**. That is a
+> ceiling, not the bill: the metric counts everything leaving the NIC, including
+> traffic that is not billable internet egress. The egress row is therefore
+> **$0.00**, with roughly 44x headroom before the first cent.
 
 ## How to use this document
 
@@ -260,3 +285,7 @@ All fetched 2026-08-20:
 [Network pricing](https://cloud.google.com/vpc/network-pricing) ·
 [Disk pricing](https://cloud.google.com/compute/disks-image-pricing) ·
 [Uptime checks](https://docs.cloud.google.com/monitoring/uptime-checks/introduction)
+
+Added 2026-08-24, for the egress row that the 2026-08-20 pass could not confirm:
+[Network Service Tiers overview](https://docs.cloud.google.com/network-tiers/docs/overview) ·
+[200 GB Standard Tier announcement](https://cloud.google.com/blog/products/networking/standard-tier-network-now-includes-200-gb-data-transfer-per-month)

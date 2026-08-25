@@ -76,13 +76,38 @@ jobs:
     #   `toolkit/features/review_attestation.py` — one definition of "belongs to
     #   this repository", used by both the gate and the reviewer.
     #
-    #   Related, acknowledged rather than engineered for: a PR from a FORK gets no
-    #   secrets on `pull_request`, so this job fails there and the attestation gate
-    #   then reports the PR unreviewed. Correct behaviour, and currently
-    #   hypothetical — the last 20 merged PRs have a single author.
+    #   Related, and NO LONGER hypothetical: a PR that gets no secrets on
+    #   `pull_request` cannot be reviewed here, because the model call needs
+    #   `NAN_API_KEY`. That was written about forks; DEPENDABOT is the same shape
+    #   and it arrived first. Measured 2026-08-24 on #1358-#1362, all five red:
+    #
+    #     Secret source: Dependabot        <- the run log says it outright
+    #       OPENAI__KEY:                   <- empty; the Actions store is not read
+    #
+    #   versus `OPENAI__KEY: ***` on #1357, a human PR the same night. The
+    #   Dependabot secret store is a SEPARATE store and this repository never
+    #   filled it, so every `secrets.*` resolves to the empty string. The token is
+    #   not the obstacle — the same log reports `PullRequests: write`, so the
+    #   `permissions:` block above does elevate it for Dependabot events.
+    #
+    #   So the job is skipped rather than left to fail: a reviewer that CANNOT run
+    #   is not a reviewer that found nothing, and failing here would only teach
+    #   people that red is normal on dependency bumps. The disclosure moves to
+    #   `dependabot-declare-unreviewed.yml`, which labels the PR and writes the
+    #   rationale into its body — because proceeding unreviewed is allowed and
+    #   proceeding SILENTLY is not (harness/review-attestation.json, `escape`).
+    #
+    #   `github.actor` rather than `github.event.pull_request.user.login`: the
+    #   actor is who triggered the run, which is what decides the secret store,
+    #   and it is therefore the same value the failure depends on.
+    #
+    #   The `issue_comment` path is deliberately NOT excluded. A human typing
+    #   `/review` on a bump gets one, and that run carries the real secrets
+    #   because it is triggered by the human, not by the bot.
     if: >
       (github.event_name == 'pull_request'
         && github.event.pull_request.draft == false
+        && github.actor != 'dependabot[bot]'
         && !startsWith(github.head_ref, 'release-please--'))
       || (github.event_name == 'issue_comment'
             && github.event.issue.pull_request
@@ -198,7 +223,7 @@ jobs:
         # Resolved 2026-08-19 from `repos/The-PR-Agent/pr-agent/git/ref/tags/v0.42.0`.
         # Bump it deliberately, by re-resolving the tag you intend — never by
         # editing the comment.
-        uses: The-PR-Agent/pr-agent@f6af7d77554ff8d26adffded077e6461329e92fa  # v0.42.0
+        uses: The-PR-Agent/pr-agent@4ebd5c5333c6ef21509e7304d27969eb825e6f22  # v0.43.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # NaN is OpenAI-compatible, so LiteLLM reaches it through the OpenAI

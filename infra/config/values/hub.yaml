@@ -1,7 +1,10 @@
 ---
 # Hub overrides — Argo CD management plane (ADR-023).
-# Currently single hub on AWS (aws1, t4g.small Spot, 2GB RAM).
-# Same overrides apply to any future hub (GCP, Azure) — cloud-agnostic.
+# Currently single hub on GCP (gcp1, e2-small Spot, 2GB RAM) — moved from AWS
+# t4g.small by ADR-063. This file was reused across that migration WITHOUT A
+# SINGLE EXECUTABLE EDIT, which is the evidence behind GCP-001's AC5; only these
+# comments went stale, and that is the one thing the scorecard could not measure.
+# Same overrides apply to any future hub (Azure, Hetzner) — cloud-agnostic.
 #
 # Composition: common.yaml ← hub.yaml (env_overrides wins, recursive merge).
 
@@ -11,12 +14,12 @@ k3s:
   # cascade. 100 keeps recent diagnostic context without etcd bloat.
   terminated_pod_gc_threshold: 100
   # Hub does not serve user traffic; Argo CD UI is exposed via prod VPS Traefik
-  # over Tailscale (EndpointSlice → aws1:30443). No bundled Traefik on the hub.
+  # over Tailscale (EndpointSlice → gcp1:30080). No bundled Traefik on the hub.
   configure_traefik: false
   # Match cloud-init ExecStart (--write-kubeconfig-mode=644). The CLI flag
   # always wins, but keeping config.yaml consistent avoids documentation drift.
   kubeconfig_mode: "0644"
-  # 8 GB EBS root: keep only 2 etcd snapshots (~60-80MB each). RELIAB-009
+  # 12 GB pd-balanced root: keep only 2 etcd snapshots (~60-80MB each). RELIAB-009
   # 2026-05-10 incident: §9.3 bulk-delete log spike pushed disk past 85% =
   # kubelet disk-pressure → NotReady. Fewer snapshots = more headroom.
   etcd_snapshot_retention: 2

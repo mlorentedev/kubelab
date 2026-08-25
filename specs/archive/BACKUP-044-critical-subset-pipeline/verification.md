@@ -971,3 +971,48 @@ read returned `NEXT Sun 2026-08-23 12:02:01 UTC`. Always-on nodes carry
 catch-up run immediately, and systemd computes no next elapse while the unit
 it activates is still running. The playbook says so at the point of the
 report, because the instinct on seeing `NEXT -` is to run it again.
+
+---
+
+### 2026-08-24 — AC5's first half, printed rather than inferred
+
+Raised by the adversarial review as its only `Question`: AC5 says *"a snapshot
+exists from before the shutdown and another from shortly after the next boot"*,
+and `verification.md` quoted only the post-boot side. The pre-cut half rested on
+the cadence being what it was believed to be — an inference, and the criterion
+asks for a snapshot.
+
+Listed beelink's repository directly, through the runbook's documented path
+(`docs/runbooks/offsite-backup-restore.md` step 3), from the workstation:
+
+```
+total snapshots: 6
+2026-08-21T03:22:36  9abbe0b4  beelink
+2026-08-21T09:43:57  d4b1573b  beelink
+2026-08-22T10:15:22  9261ae4a  beelink   <- newest snapshot predating the 04:47Z cut
+2026-08-23T10:56:25  798002eb  beelink
+2026-08-24T05:39:42  dd7fee22  beelink
+2026-08-25T02:44:38  1bb55e46  beelink
+```
+
+**AC5's first half is closed on evidence**: `9261ae4a` predates the 2026-08-23
+04:47Z smart-plug cut, so a snapshot demonstrably existed before the shutdown.
+Paired with the post-boot capture already recorded above, the criterion reads as
+written rather than as inferred.
+
+**Two things this listing corrects, and neither is a defect.** First, the boot
+snapshot recorded at 06:51Z on 2026-08-23 is *not in the repository any more*,
+and its absence is the retention policy working: every ship runs
+`restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`
+(`node-backup-ship.sh.j2:88`), and `--keep-daily` keeps the **last** snapshot of
+each day — so 06:51Z was superseded by 10:56:25Z the same day. Second, and
+following from it, **a same-day pre-cut snapshot can no longer be produced for
+this event and never will be again**: the evidence AC5 asks for had a shelf life
+of hours, and what survives is the previous day's. That is the honest reading, and
+it still satisfies the criterion, which says "before the shutdown" and not "on the
+same day as".
+
+Worth carrying forward: an acceptance criterion whose evidence is a *retained
+artifact* is racing that artifact's retention policy. Capture the listing when the
+demonstration happens, not when someone asks for it — the run itself is
+reproducible, the snapshot that proved it is not.

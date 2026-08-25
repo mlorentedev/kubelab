@@ -25,6 +25,7 @@ cannot report what it forgot.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -122,6 +123,37 @@ class TestBackupSources:
                 if "pvc" in entry and set(entry["pvc"]) != {"namespace", "claim"}:
                     bad.append(f"{node}.{name} pvc needs exactly namespace+claim: {entry['pvc']!r}")
         assert not bad, f"malformed sources: {bad}"
+
+    def test_service_keys_are_shell_identifiers(self, sources: dict[str, Any]) -> None:
+        """A service key becomes a bash VARIABLE NAME, so its charset is not cosmetic.
+
+        `node-backup-capture.sh.j2` interpolates the key straight into
+        `SRC_DIR_{{ service }}` (lines 65, 81, 84, 89, 99, 112). A key that is
+        not a valid shell identifier — `uptime-kuma`, or anything with a space —
+        renders a script that Jinja accepts and bash rejects, so the failure
+        moves from apply time to run time on the node.
+
+        Found by the BACKUP-044 adversarial review, which rendered the template
+        with a key containing a space and got no StrictUndefined error: the
+        schema had no charset invariant, and every current key happened to be
+        clean. "Happens to be correct" is the state this file exists to convert
+        into "cannot be otherwise".
+
+        The failure is loud when it comes (`set -e`), which is why this is a
+        guard against a future edit rather than a fix for a live defect.
+        """
+        bad = [
+            f"{node}.{name}"
+            for node, entries in sources.items()
+            for name in entries
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(name))
+        ]
+        assert not bad, (
+            f"backup.sources service keys must be valid shell identifiers: {bad}. "
+            "The key is interpolated into a bash variable name (SRC_DIR_<key>), so a "
+            "hyphen or a space renders a capture script that only fails on the node. "
+            "Rename the key — the declared name is ours to choose, unlike the path."
+        )
 
     def test_rpi3_names_the_live_volume_not_the_orphan(self, sources: dict[str, Any]) -> None:
         """#1092 instance 1 — the orphan is the larger, more canonical-looking one."""

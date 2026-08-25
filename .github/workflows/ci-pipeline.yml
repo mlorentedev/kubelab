@@ -252,7 +252,23 @@ jobs:
   call-publish:
     name: Build and Push Docker Image for ${{ inputs.app }}
     needs: app-pipeline
-    if: needs.app-pipeline.outputs.should_build == 'true' && needs.app-pipeline.outputs.docker_version != 'skip'
+    # Not for Dependabot, and the reason is the same one that stops the reviewer
+    # running on its PRs (CI-GATE-015, #1364): a `pull_request` it raises reads
+    # the Dependabot secret store, so `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`
+    # resolve to empty strings and `docker/login-action` fails with `Username and
+    # password required` before a single layer is built. Measured on #1358, the
+    # golang base-image bump.
+    #
+    # Nothing is lost by skipping: the app's own `CI + Build` job already builds
+    # the image on every PR and passed on that same #1358 — this job exists to
+    # PUBLISH, and a bump's image is published from master after it merges.
+    # Mirroring the secrets into the Dependabot store was the alternative, and it
+    # would put a registry push credential within reach of a branch no human
+    # wrote.
+    if: >
+      needs.app-pipeline.outputs.should_build == 'true'
+      && needs.app-pipeline.outputs.docker_version != 'skip'
+      && github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/ci-publish.yml
     with:
       app: ${{ inputs.app }}
