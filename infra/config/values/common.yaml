@@ -1189,10 +1189,16 @@ backup:
         # is not losing data, it is losing the VPN control plane's identity.
         volume: headscale_headscale_data
         sqlite: db.sqlite
-      # DEFERRED, deliberately, not forgotten: authelia and postgres on this node
-      # are K3s PVCs (`kubelab/authelia-data`, `kubelab/postgres-data`). They need
-      # the `pvc` source type, whose RESTORE differs in kind — the claim has to
-      # exist before anything can be written into it — so that design belongs
-      # with the restore work rather than with this declaration. Both currently
-      # have a copy via the PVC CronJob; it is in-cluster, so it is not offsite,
-      # which is the gap this spec exists to close for them next.
+      # STILL DEFERRED on this node: postgres (`kubelab/postgres-data`), for the
+      # reason given in the "NOT here" block above — measured empty, no consumer
+      # yet, and `pg_dump` is a different capture mechanism. The PVC consumer
+      # class is BACKUP-046 (#1111).
+      #
+      # authelia is NO LONGER deferred and must not be read as such: it is
+      # declared above with the `pvc` source type (#1236) and was restored from
+      # R2 on 2026-08-22 with `integrity=ok` on the restored copy. This comment
+      # said the opposite until 2026-08-24 — it predated #1236 and was never
+      # updated, so the SSOT told its reader that the fleet's most valuable
+      # state had no offsite copy while it demonstrably did. Found by the
+      # BACKUP-044 adversarial review, which is the only thing that checked the
+      # prose against the declaration twelve lines above it.
