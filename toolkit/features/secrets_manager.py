@@ -152,15 +152,21 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     # Authelia — User Password Hashes
     # =========================================================================
-    # Tracks `apps.auth.admin_username` SSOT (SSOT-014b). Static key here —
-    # when admin_username is renamed (e.g. Phase B "manu" → "operator" on
-    # 2026-05-25), this catalog entry MUST be updated in lockstep with the
-    # SOPS key rename, or audit/init/rotation workflows will silently target
-    # the wrong path. Future refactor: derive this `key_path` dynamically
-    # from the SSOT at catalog-build time so the manual lockstep is removed.
+    # Tracks the identity SSOT `apps.auth.identities.operator` (AUTH-004 C1,
+    # ADR-062 D3; was `apps.auth.admin_username` under SSOT-014b). The key stays
+    # STATIC on purpose: SECRET_CATALOG is a module-level constant, and deriving
+    # this path at import time would make importing the secrets module read and
+    # merge `common.yaml` — a config read on every `toolkit` invocation, and an
+    # import that fails when the config does.
+    #
+    # The lockstep the old comment asked someone to remember is now enforced
+    # instead: `tests/test_admin_identity_ssot.py` asserts this key matches the
+    # identity the SSOT resolves, so a rename that forgets this line fails in
+    # CI rather than silently pointing audit/init/rotation at a path nobody
+    # writes. A written reminder is not a mechanism (lesson-365).
     SecretSpec(
         key_path=f"{_AUTH}.users_operator_password_hash",
-        description="Argon2 hash of admin user password (username from apps.auth.admin_username SSOT)",
+        description="Argon2 hash of admin user password (username from apps.auth.identities.operator)",
         kind=SecretKind.ARGON2_HASH,
         services=("authelia",),
         derived_from="(interactive password prompt)",

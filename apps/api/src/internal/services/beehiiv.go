@@ -8,10 +8,10 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mlorentedev/mlorente-backend/internal/constants"
-	"github.com/mlorentedev/mlorente-backend/internal/models"
-	"github.com/mlorentedev/mlorente-backend/pkg/config"
-	"github.com/mlorentedev/mlorente-backend/pkg/logger"
+	"github.com/mlorentedev/kubelab/apps/api/internal/constants"
+	"github.com/mlorentedev/kubelab/apps/api/internal/models"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
 var conf *config.Config

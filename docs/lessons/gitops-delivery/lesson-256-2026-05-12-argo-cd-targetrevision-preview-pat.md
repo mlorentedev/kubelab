@@ -10,7 +10,17 @@ tags: [kubelab, gitops-delivery]
 
 # 2026-05-12 — Argo CD `targetRevision` preview pattern for visual PR validation
 
-> **Superseded for staging by ADR-037 (2026-05-23).** Staging now runs with `selfHeal: false` (ARGO-015 / PR #211), so `make deploy-k8s ENV=staging` from a feature worktree is again the natural test-before-merge path — no targetRevision repointing needed. The technique below remains useful for **prod** (where `selfHeal: true` is preserved by design) and for any future Application with auto-sync; keep this lesson for that narrower use case.
+> **UN-SUPERSEDED for staging (2026-08-25). This technique is live again — read this note before the old one below it.**
+>
+> ADR-037 (2026-05-23) set staging to `selfHeal: false` and this lesson was marked superseded on the belief that a worktree deploy would then persist. **That belief was measured false**: `selfHeal` suppresses drift correction only, and `automated` still syncs on every new revision of `targetRevision`, reapplying the tracked manifests wholesale. A worktree deploy therefore survives only until the next commit lands on master, from any parallel lane. Measured twice, both ~30 seconds — see [lesson-330](lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd.md) and [#1083](https://github.com/mlorentedev/kubelab/issues/1083), which holds the open decision on how to fix it properly.
+>
+> So the `targetRevision` repoint below is once again the working way to validate a branch on staging, **plus** its original prod/auto-sync use case. Its stated limitations all still apply, and the second one is the trap that matters: **forgetting the patch-back to `master` leaves staging anchored to a branch that gets deleted on merge, after which it silently stops receiving master.**
+>
+> <details><summary>The original supersession note, kept because the reversal is the lesson</summary>
+>
+> *Superseded for staging by ADR-037 (2026-05-23). Staging now runs with `selfHeal: false` (ARGO-015 / PR #211), so `make deploy-k8s ENV=staging` from a feature worktree is again the natural test-before-merge path — no targetRevision repointing needed. The technique below remains useful for prod (where `selfHeal: true` is preserved by design) and for any future Application with auto-sync; keep this lesson for that narrower use case.*
+>
+> </details>
 
 **Problem.** Staging on Argo CD GitOps (auto-sync + selfHeal) reverts any `kubectl apply` that doesn't match the configured `targetRevision` (master). The old loop "feature branch → `make deploy-k8s ENV=staging` → validate → PR" is dead. Trunk-based rule + visual-test-before-merge requirement become mutually exclusive without a preview mechanism.
 

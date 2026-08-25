@@ -18,9 +18,19 @@ groups:
         noDataState: Alerting
         execErrState: Alerting
         annotations:
+          # TWO CAUSES, and the text must not assert one of them. `noDataState`
+          # below is `Alerting`, which is the right default for a metric that
+          # must never go quiet — but it means this rule fires both when a PVC
+          # is genuinely unbound AND when the watcher stops reporting. Reading
+          # only the first into the summary is what let #1377 run for a day and
+          # a half: the alert said "a storage backend outage is preventing
+          # provisioning" while every PVC in both clusters was Bound and the
+          # real fault was a query that could not parse its own input.
           summary: >-
-            A PersistentVolumeClaim in namespace kubelab is not in 'Bound' state.
-            A storage backend outage or capacity ceiling is preventing stateful workloads from provisioning.
+            Either a PersistentVolumeClaim in namespace kubelab is not 'Bound',
+            or the disk-watcher stopped reporting — this rule alerts on no data too.
+            Check `kubectl get pvc -n kubelab` first: if every claim is Bound, the fault
+            is in the watcher or the query, not in storage.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/backup-restore.md
         data:
           - refId: A

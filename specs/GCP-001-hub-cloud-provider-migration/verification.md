@@ -95,6 +95,45 @@ created: "2026-08-20"
       > exercised. Recorded here rather than only in the fix, because the lesson
       > belongs to the acceptance criterion: **"a real simulated preemption, not a
       > MIG config screenshot" was satisfied and still measured the wrong path.**
+      >
+      > **CLOSED 2026-08-24 by a drill with matching stimulus.** The adversarial
+      > review graded the earlier demonstration on fidelity and was right to. This
+      > one reproduces the production path at the layer that decides the outcome,
+      > and GCP's own operation log shows the two are indistinguishable there:
+      >
+      > | | Reason string logged by the MIG |
+      > |---|---|
+      > | Real preemption, 17:13:47 | `Instance eligible for repair: instance should be RUNNING, but is STOPPING.` |
+      > | Drill, 18:54:46 | `Instance eligible for repair: instance should be RUNNING, but is STOPPING.` |
+      >
+      > A preemption on this instance manifests as the VM entering STOPPING
+      > (`instance_termination_action = STOP`), so `gcloud compute instances stop`
+      > presents the MIG with the same condition. `simulate-maintenance-event` was
+      > tried first and **did nothing** — DONE returned, instance still RUNNING,
+      > `creationTimestamp` unchanged. Recorded rather than retried: a drill
+      > command that reports success without acting is the same false green this
+      > spec keeps finding.
+      >
+      > ```
+      > 18:54:40  stop
+      > 18:54:46  repair.recreateInstance      <- unprompted
+      > 18:55:16  insert                        <- creationTimestamp moves
+      >
+      > headscale  41:gcp1=100.64.0.15  ->  deleted
+      >            42:gcp1=100.64.0.16  <-  registered under the CANONICAL name
+      > cloud-init  "deleted stale Headscale node 41 (gcp1)"
+      > dig +short gcp1.kubelab.internal -> 100.64.0.16
+      > ```
+      >
+      > Zero human steps between the stop and the reclaim. The line the old
+      > predicate could never print is the whole difference: on 2026-08-24 under
+      > the same precondition it printed `no stale Headscale node to recycle`.
+      >
+      > Two facts the drill settled as a side effect. The MIG **recreates** rather
+      > than restarts — `creationTimestamp` moves, the boot disk is fresh, which is
+      > why cloud-init re-runs and why the recycle path is reached on every repair.
+      > And recovery is still **not** hands-free: `argocd-repoint`, a re-trusted
+      > SSH host key (#1380) and a fresh cluster CA were all needed afterwards.
 
       | Property | Before | After |
       |---|---|---|

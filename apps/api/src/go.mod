@@ -1,4 +1,4 @@
-module github.com/mlorentedev/mlorente-backend
+module github.com/mlorentedev/kubelab/apps/api
 
 go 1.25.0
 
@@ -35,6 +35,6 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
