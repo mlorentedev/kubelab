@@ -4,9 +4,9 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mlorentedev/mlorente-backend/internal/api"
-	"github.com/mlorentedev/mlorente-backend/pkg/config"
-	"github.com/mlorentedev/mlorente-backend/pkg/logger"
+	"github.com/mlorentedev/kubelab/apps/api/internal/api"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
 func main() {
