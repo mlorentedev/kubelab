@@ -295,10 +295,19 @@ class CredentialsManager:
 
         # 1. Prompt for common username and password
         logger.info("Setting up common username and password for Authelia and Basic Auth...")
-        # Read default username from SSOT (common.yaml apps.auth.admin_username)
+        # Default from the identity SSOT (AUTH-004 C1, ADR-062 D3). Was
+        # `apps.auth.admin_username`, which this replaces.
+        #
+        # Note what this prompt still conflates, because it is a live defect and
+        # not this change's to fix: one answer becomes BOTH the Authelia login
+        # and `basic_auth.user`, a Traefik machine credential. That coupling is
+        # what turned a rotation into a rename on 2026-08-23 (#1352). It is now
+        # harmless for Grafana and MinIO — neither reads basic_auth any more —
+        # but the prompt should be split, tracked with #1355.
         cm = ConfigurationManager(env, self.project_root)
         merged_config = cm.get_merged_config()
-        default_username = merged_config.get("apps", {}).get("auth", {}).get("admin_username", "admin")
+        identities = merged_config.get("apps", {}).get("auth", {}).get("identities", {}) or {}
+        default_username = identities.get("operator") or "admin"
         common_username = typer.prompt(
             f"Enter common username (default: {default_username})", default=default_username
         ).strip()

@@ -33,7 +33,7 @@
 # human, the next role — reads a transient failure as the real answer.
 - name: Wait for gitea to answer after restart
   uri:
-    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/version"
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}{{ gitea_health_path }}"
     method: GET
     status_code: 200
     timeout: 10

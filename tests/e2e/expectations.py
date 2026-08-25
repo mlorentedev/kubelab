@@ -182,7 +182,12 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         skip_in_envs=("dev",),  # Dashboard exposed via IngressRoute in staging + prod with Authelia
     ),
     "gitea": ServiceExpectation(
-        api_json_keys={"/api/v1/version": ["version"]},
+        # SEC-GITEA-001 (#1389): /api/v1/version now returns 403 to anonymous
+        # callers, and this suite is anonymous. /api/healthz is exempt from
+        # REQUIRE_SIGNIN_VIEW and is the endpoint common.yaml declares as
+        # `health_path` — so the probe now reads what the SSOT says instead of
+        # a fifth literal copy of a path.
+        api_json_keys={"/api/healthz": ["status"]},
         # staging: retired. Gitea is a singleton (ADR-061) — one instance, on the
         # prod apex name, backed by the Beelink.
         skip_in_envs=("staging",),
