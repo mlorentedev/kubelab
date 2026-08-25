@@ -97,7 +97,20 @@ spec:
                     pvc: .metadata.name,
                     phase: .status.phase,
                     capacity: (.status.capacity.storage // "0"),
-                    healthy: (.status.phase == "Bound")
+                    # A NUMBER, never `(.status.phase == "Bound")`. jq's `==`
+                    # yields a JSON boolean, LogQL's `unwrap` needs a float, and
+                    # `true` is not one: the sample is dropped, the query returns
+                    # NO DATA, and `noDataState: Alerting` turns that into a
+                    # permanent "a PVC is not Bound" while all of them are.
+                    #
+                    # It shipped that way on 2026-08-23 and fired in both
+                    # environments for a day and a half before anyone read it
+                    # (#1377). The sibling metric below was always correct
+                    # because bash `$(( ))` returns 0/1 — so the one emitter
+                    # written with a proper JSON tool is the one that broke, and
+                    # each half looked reasonable on its own, which is why review
+                    # did not catch it.
+                    healthy: (if .status.phase == "Bound" then 1 else 0 end)
                   }'
 
                   # Local node scratch space check

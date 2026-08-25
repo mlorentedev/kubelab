@@ -179,33 +179,52 @@ class TestFlattenDict:
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
 class TestSSOTAdminUsername:
-    """Verify admin username is read from common.yaml SSOT (both envs)."""
+    """Verify the admin username is read from the identity SSOT (both envs).
 
-    def test_common_yaml_has_admin_username(self, env: str) -> None:
+    Rewritten for AUTH-004 C1 (ADR-062 D3). These assertions previously encoded
+    SSOT-014b's design — `apps.auth.admin_username` plus an `is_admin: true`
+    flag — and they passed right up until that design was replaced. Worth
+    noting rather than quietly editing: a test that asserts *the current
+    mechanism* rather than *the required property* has to be rewritten whenever
+    the mechanism changes, and cannot warn you that the mechanism was wrong.
+    The property here is unchanged: one identity, one declaration.
+    """
+
+    def test_common_yaml_declares_the_identity_map(self, env: str) -> None:
         from toolkit.features.configuration import ConfigurationManager
 
         cm = ConfigurationManager(env)
         config = cm.get_merged_config()
-        username = config.get("apps", {}).get("auth", {}).get("admin_username")
-        assert username == "operator"
+        identities = config.get("apps", {}).get("auth", {}).get("identities", {})
+        assert identities.get("operator") == "operator"
+        assert identities.get("superadmin"), "apps.auth.identities.superadmin must be declared"
+        assert "admin_username" not in config.get("apps", {}).get("auth", {}), (
+            "apps.auth.admin_username was removed by AUTH-004 C1 — two declarations of one "
+            "identity is the defect, even when one of them is unused"
+        )
 
     def test_authelia_admin_user_derives_from_ssot(self, env: str) -> None:
-        """SSOT-014b: admin entry is flagged with `is_admin: true` and has no
-        duplicated `username` field. Generators resolve username from
-        `apps.auth.admin_username` at generation time, so the admin identity
-        lives in exactly one place."""
-        from toolkit.features.configuration import ConfigurationManager
+        """The admin entry names a declared identity and carries no literal username.
+
+        `identity:` holds a KEY of `apps.auth.identities`, so renaming the person
+        is one edit in that map. The entry must NOT also carry `username:` — that
+        would be the second declaration this design exists to remove.
+        """
+        from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 
         cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         users = config["apps"]["services"]["security"]["authelia"]["users"]
-        admin_entries = [u for u in users if u.get("is_admin")]
-        assert len(admin_entries) == 1, "Exactly one user must be flagged is_admin"
-        assert "username" not in admin_entries[0], (
-            "Admin user must NOT have a `username` field — it derives from apps.auth.admin_username (SSOT)"
+        declared = [u for u in users if u.get("identity")]
+        assert len(declared) == 1, "Exactly one user must name a declared identity"
+        assert "username" not in declared[0], (
+            "A user that names an identity must NOT also carry `username` — it resolves "
+            "through apps.auth.identities (SSOT)"
         )
-        # SSOT itself must be set for the generator to resolve successfully
-        assert config["apps"]["auth"]["admin_username"], "apps.auth.admin_username SSOT must be non-empty"
+        assert resolve_user_identity(declared[0], config), (
+            f"`identity: {declared[0]['identity']!r}` resolves to nothing — it must name a key "
+            "of apps.auth.identities, and an unresolvable entry is silently skipped by both generators"
+        )
 
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
@@ -275,7 +294,7 @@ class TestSSOTContactEmail:
         admin_entries = [
             u
             for u in config["apps"]["services"]["security"]["authelia"]["users"]
-            if u.get("is_admin")
+            if u.get("identity")
         ]
         assert len(admin_entries) == 1
         assert admin_entries[0]["email"] == contact, (

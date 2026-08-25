@@ -54,12 +54,15 @@ all:
           public_ip: 162.55.57.175
 
     # Hub — AWS ArgoCD management plane (ADR-023 Phase 3)
+    # The hub is DELIBERATELY ABSENT from this committed file. `networking.aws`
+    # is retired (the machine was destroyed by GCP-001 AC6) and `gcp1`, which
+    # replaced it, has never been listed here — so the live suite has been
+    # testing a host that does not exist and not testing the one that does.
+    # Removing the corpse is this change; adding gcp1 needs the hub threshold in
+    # tests/infra/test_nodes.py to stop naming aws1, and belongs with #1228,
+    # which owns this file drifting from the generator in the first place.
     hub:
-      hosts:
-        kubelab-aws1:
-          # MagicDNS (ADR-025) — survives Spot replacement; Tailscale IP rotates.
-          ansible_host: aws1.kubelab.internal  # networking.aws.tailscale_dns
-          ansible_user: deployer
+      hosts: {}
 
     # Logical groups (for conditional tasks like docker prune, crictl prune)
     docker_hosts:
