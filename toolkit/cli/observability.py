@@ -7,6 +7,7 @@ import typer
 
 from toolkit.core.logging import logger
 from toolkit.features.observability import (
+    AlertsUnavailableError,
     GrafanaAlertClient,
     LokiClient,
     SlackSreClient,
@@ -82,14 +83,26 @@ def alerts_cmd(
 ) -> None:
     """List active Grafana alerts and their firing states."""
     client = GrafanaAlertClient()
-    alerts = client.get_alerts()
+    try:
+        alerts = client.get_alerts()
+    except AlertsUnavailableError as exc:
+        # A blind check must not read as a healthy one, in either output mode.
+        # `--json` gets an OBJECT rather than `[]` for the same reason: a machine
+        # consumer parsing an empty array concludes "no alerts", which is exactly
+        # the wrong conclusion and the one this command used to print.
+        if json_output:
+            typer.echo(json.dumps({"error": str(exc), "alerts": None}, indent=2))
+        else:
+            typer.echo(f"✗ Could not ask Grafana: {exc}", err=True)
+            typer.echo("  This is NOT 'no alerts' — the question went unanswered.", err=True)
+        raise typer.Exit(1) from exc
 
     if json_output:
         typer.echo(json.dumps(alerts, indent=2))
         return
 
     if not alerts:
-        typer.echo("✓ No firing or pending alerts in Grafana (All healthy).")
+        typer.echo("✓ No firing or pending alerts in Grafana (asked and answered).")
         return
 
     typer.echo("--- Active Grafana Alerts ---")

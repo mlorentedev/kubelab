@@ -145,6 +145,10 @@ class LokiClient:
         return deduplicate_tracebacks(raw_lines)
 
 
+class AlertsUnavailableError(RuntimeError):
+    """Grafana could not be asked. Distinct from 'nothing is firing'."""
+
+
 @dataclass
 class GrafanaAlertClient:
     """Client for checking Grafana Alertmanager firing state."""
@@ -161,8 +165,19 @@ class GrafanaAlertClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except Exception as e:
-            logger.warning(f"Grafana alert fetch failed: {e}")
-            return []
+            # RAISED, never swallowed into an empty list. This returned `[]` on
+            # any failure and the CLI rendered `[]` as "✓ All healthy" — so on
+            # 2026-08-24 the command answered "All healthy" immediately after a
+            # `401 Unauthorized`, while two Grafanas were firing an alert that
+            # had been up for a day and a half (#1377).
+            #
+            # An unreachable Grafana and a Grafana with nothing firing are
+            # indistinguishable from an empty list, and only one of them is safe
+            # to ignore — the same reasoning `secret_expiry.py` states for
+            # `headscale_apikeys`. This is the fifth instance of that shape found
+            # in a single session; the failure is always in the reassuring
+            # direction, which is why it survives.
+            raise AlertsUnavailableError(f"Grafana alert fetch failed: {e}") from e
 
         alerts = []
         if isinstance(data, list):

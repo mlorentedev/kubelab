@@ -3,11 +3,14 @@
 import datetime
 import json
 import urllib.error
+
+import pytest
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
 from toolkit.features.observability import (
+    AlertsUnavailableError,
     GrafanaAlertClient,
     LokiClient,
     SlackSreClient,
@@ -156,6 +159,64 @@ class TestGrafanaAlertClient:
         assert alerts[0]["name"] == "obs015-slo-fast-burn-rate"
         assert alerts[0]["state"] == "alerting"
         assert alerts[0]["severity"] == "critical"
+
+    @patch("urllib.request.urlopen")
+    def test_a_failed_fetch_raises_instead_of_returning_no_alerts(self, mock_urlopen):
+        """The defect this replaces, measured on 2026-08-24.
+
+        `get_alerts` swallowed every exception into `[]`, and the CLI renders
+        `[]` as "All healthy". So the command answered "All healthy" straight
+        after a 401, while two Grafanas were firing an alert that had been up for
+        a day and a half. An unreachable Grafana and a quiet one are
+        indistinguishable from an empty list, and only one is safe to ignore.
+        """
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://grafana.kubelab.live/api/v1/alerts", code=401, msg="Unauthorized", hdrs=None, fp=None
+        )
+
+        with pytest.raises(AlertsUnavailableError, match="401"):
+            GrafanaAlertClient().get_alerts()
+
+    @patch("urllib.request.urlopen")
+    def test_an_empty_answer_is_still_an_answer(self, mock_urlopen):
+        """The other half: a Grafana that replies "nothing firing" must NOT be
+        turned into an error by the fix above."""
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"[]"
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        assert GrafanaAlertClient().get_alerts() == []
+
+
+class TestAlertsCommandFailsLoudly:
+    """A blind check must not exit 0, in either output mode."""
+
+    @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
+    def test_the_cli_exits_non_zero_when_grafana_cannot_be_asked(self, mock_get):
+        from typer.testing import CliRunner
+
+        from toolkit.cli.observability import app
+
+        mock_get.side_effect = AlertsUnavailableError("Grafana alert fetch failed: HTTP Error 401: Unauthorized")
+        result = CliRunner().invoke(app, ["alerts"])
+
+        assert result.exit_code == 1
+
+    @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
+    def test_json_mode_emits_an_error_object_never_an_empty_array(self, mock_get):
+        """`[]` is what a machine consumer reads as "no alerts firing"."""
+        from typer.testing import CliRunner
+
+        from toolkit.cli.observability import app
+
+        mock_get.side_effect = AlertsUnavailableError("boom")
+        result = CliRunner().invoke(app, ["alerts", "--json"])
+
+        assert result.exit_code == 1
+        payload = json.loads(result.stdout)
+        assert payload["alerts"] is None
+        assert "boom" in payload["error"]
 
 
 class TestSlackSreClient:
