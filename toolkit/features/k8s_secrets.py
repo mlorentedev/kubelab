@@ -178,6 +178,30 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # 3. Build dynamic secrets that need config + SOPS merging
     dynamic_literals = _build_dynamic_literals(cm)
 
+    # 3b. Pre-deploy guard, same posture as the placeholder check above. Raised
+    # in review of #1390: with the identity SSOT undeclared, `_resolve_superadmin`
+    # returns "" and the Grafana and MinIO literals are simply omitted — so
+    # `apply-secrets` would report success while writing a `grafana-admin`
+    # Secret with no `admin-user` key.
+    #
+    # The failure is loud but LATE and in the wrong place: `secretKeyRef` without
+    # `optional: true` leaves the pod in CreateContainerConfigError, so the
+    # operator debugs Grafana rather than the config that broke it. A guard that
+    # already exists two lines up for placeholders belongs here for the same
+    # reason — refuse to hand the cluster something that cannot start.
+    _IDENTITY_BACKED = {"grafana-admin": "admin-user", "minio-secrets": "MINIO_ROOT_USER"}
+    missing_identity = sorted(
+        f"{secret}.{key}" for secret, key in _IDENTITY_BACKED.items() if not dynamic_literals.get(secret, {}).get(key)
+    )
+    if missing_identity:
+        logger.error(
+            "Refusing to apply — these keys resolve from the identity SSOT and it is not "
+            "declared: " + ", ".join(missing_identity) + ". Set `apps.auth.identities.superadmin` "
+            "in common.yaml (ADR-062 D3). Applying without it writes Secrets whose workloads "
+            "cannot start."
+        )
+        return False
+
     # 4. Apply each secret
     all_ok = True
     for mapping in SECRET_DEFINITIONS:

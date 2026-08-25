@@ -278,3 +278,52 @@ class TestTheOldSSOTIsGone:
             f"these Authelia user entries resolve to no username: {unresolved}. An `identity:` "
             "naming a key absent from apps.auth.identities resolves to '' and is silently skipped."
         )
+
+
+class TestApplyRefusesWithoutTheIdentity:
+    """`apply-secrets` must not hand the cluster a Secret whose workload cannot start."""
+
+    def test_apply_refuses_when_the_superadmin_is_undeclared(self, monkeypatch) -> None:
+        """Raised in review of #1390, and the reviewer was right about the shape.
+
+        With the map undeclared, `_resolve_superadmin` returns "" and
+        `_build_dynamic_literals` simply omits the Grafana and MinIO literals.
+        Nothing fails: `apply-secrets` reports success and writes a
+        `grafana-admin` Secret with no `admin-user` key.
+
+        The consequence is loud but LATE and in the wrong place — `secretKeyRef`
+        without `optional: true` leaves the pod in CreateContainerConfigError, so
+        the operator debugs Grafana instead of the config that broke it. The
+        placeholder guard two lines above in `apply_secrets` exists for exactly
+        this reason, and this is the same class of hazard.
+
+        Asserted on the RETURN VALUE, not on the log line: a warning that
+        something still proceeds past is what this replaces.
+        """
+        from toolkit.features import k8s_secrets
+
+        class CMWithoutIdentities:
+            def get_merged_config(self):
+                return {"apps": {"auth": {}, "services": {"security": {"authelia": {}}}}}
+
+            def get_env_vars(self):
+                return {"SOMETHING": "value"}
+
+        monkeypatch.setattr(k8s_secrets, "ConfigurationManager", lambda *a, **k: CMWithoutIdentities())
+        applied: list[str] = []
+        monkeypatch.setattr(
+            k8s_secrets,
+            "_apply_single_secret",
+            lambda mapping, *a, **k: applied.append(mapping.name) or True,
+        )
+
+        ok = k8s_secrets.apply_secrets("staging", Path("/nonexistent"), dry_run=True)
+
+        assert ok is False, (
+            "apply_secrets returned True with the identity SSOT undeclared — it would have "
+            "written a grafana-admin Secret with no admin-user key and reported success"
+        )
+        assert not applied, (
+            f"apply_secrets applied {applied} before refusing; the guard must run BEFORE "
+            "anything reaches the cluster, not partway through"
+        )
