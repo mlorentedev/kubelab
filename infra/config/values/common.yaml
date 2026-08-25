@@ -617,8 +617,6 @@ edge:
 apps:
   # SSOT admin identity — used by credentials.py as default for all services
   auth:
-    admin_username: operator
-
     # ADR-062 D3 / AUTH-004 AC1. Identity names are declared ONCE, here, and
     # every consumer resolves a name through a KEY of this map rather than as a
     # literal. A map rather than flat keys because the set is expected to grow
@@ -640,9 +638,19 @@ apps:
     # is not rotation, it is a rename; the alias is what let one masquerade as
     # the other.
     #
-    # `admin_username` above stays for one commit so nothing breaks mid-change
-    # (tasks.md Part 1). Its removal, and the Grafana and MinIO legs, are the
-    # rest of AC1 and are NOT in this change.
+    # `admin_username` is GONE (removed 2026-08-24, AC1 complete). It sat here
+    # alongside this map for one day, and during that day the map was read by
+    # nothing while the alias kept resolving — which is the whole reason the
+    # removal is part of the same sweep as the readers. Two declarations of one
+    # identity, even when one is unused, is an invitation for the next consumer
+    # to pick whichever it finds first.
+    #
+    # Every consumer now resolves through `configuration.resolve_user_identity`.
+    # A user entry naming a declared person carries `identity: <key below>`;
+    # a fixture carries `username:`. Guarded by tests/test_admin_identity_ssot.py,
+    # which also pins SECRET_CATALOG's password-hash key to `operator` — so
+    # renaming a row here fails in CI rather than silently pointing audit and
+    # rotation at a path nothing writes.
     identities:
       superadmin: manu
       operator: operator
@@ -1014,12 +1022,23 @@ apps:
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
-          # SSOT-014b: admin entry derives its username key from
-          # `apps.auth.admin_username` at generation time. Both generators
-          # (generator_authelia.py + k8s_secrets._build_users_database) resolve
-          # `is_admin=true` → admin_username. Renaming "manu" later (Phase B /
-          # SEC-PRIVACY-001) becomes a 1-line change in apps.auth.
-        - is_admin: true
+          # AUTH-004 C1 (ADR-062 D3): an entry that IS a declared identity names
+          # which one, with `identity:` holding a KEY of `apps.auth.identities`
+          # — not a username. Both generators (generator_authelia.py and
+          # k8s_secrets._build_users_database) resolve it through that map, so
+          # renaming a person is a one-line edit in `apps.auth.identities` and
+          # nowhere else.
+          #
+          # This replaces `is_admin: true`, which resolved to
+          # `apps.auth.admin_username`. The flag conflated two questions —
+          # *which person is this* and *is this person an admin* — and only the
+          # first is what the generators needed. Admin-ness is what `groups:`
+          # below already says, which is why nothing is lost by dropping it.
+          #
+          # Entries that are NOT declared identities keep `username:` (see
+          # testuser). The two are mutually exclusive by design: a user is
+          # either a person the platform declares, or a fixture.
+        - identity: operator
           displayname: Administrator
             # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
           disabled: false

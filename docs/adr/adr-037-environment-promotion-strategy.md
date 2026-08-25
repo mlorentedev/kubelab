@@ -65,6 +65,16 @@ Pattern D is **blocked on ARGO-014** and lands as a follow-up to this ADR — no
 Argo CD `syncPolicy.automated.selfHeal` flag determines whether Argo CD reverts manual drift back to git state. The flag's correct value differs by environment:
 
 - **staging** (`kubelab-staging` Application): `selfHeal: false`. Staging is a *test bed*. A developer doing `make deploy-k8s ENV=staging` from a feature-branch worktree wants their changes to PERSIST long enough to run e2e against them. Argo CD still auto-syncs from master on master commits (`automated: true` remains), so drift from intentional manual deploys eventually corrects naturally on the next master change. No background revert race.
+
+  > **Correction — 2026-08-25. This bullet's mechanism is right and its conclusion is wrong.**
+  >
+  > *"Argo CD still auto-syncs from master on master commits"* is exactly what happens, and *"no background revert race"* does not follow from it. The sentence treats correction-on-next-master-commit as a tidy eventual convergence; in practice it is the revert race, because **the developer does not control when the next master commit lands.** In a repo whose normal working mode is several worktree lanes merging in parallel, the validation window closes at an arbitrary moment — a docs-only PR from an unrelated lane is enough — and it closes **silently**, with no error from the deploy and none from Argo CD.
+  >
+  > Measured twice, both ~30 seconds from apply to revert: [lesson-330](../lessons/gitops-delivery/lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd.md) (2026-08-15, SEC-004 drill) and [#1083](https://github.com/mlorentedev/kubelab/issues/1083) (2026-08-25, the #1377 AC2 drill — during this very flow). Both diagnosed the same way: `kubectl get <res> -n kubelab --show-managed-fields` shows `kubelab-toolkit Apply` followed by `argocd-controller Update`.
+  >
+  > **What this does and does not invalidate.** The *goal* — a mutable staging test bed that validates a branch before merge — stands, and so does conditional `selfHeal` per environment. What does not stand is the claim that `selfHeal: false` **delivers** that goal: it removes one of the two revert triggers, and the surviving one is not governed by any flag. Until #1083 settles the fix, the working technique is to repoint `spec.source.targetRevision` at the feature branch ([lesson-256](../lessons/gitops-delivery/lesson-256-2026-05-12-argo-cd-targetrevision-preview-pat.md)) so Argo CD deploys the branch rather than fighting it — pointing it back at `master` after merge, without fail.
+  >
+  > Left as an amendment rather than an edit: the original wording is the more useful artefact, because the failure was not ignorance of the mechanism but a misjudged consequence, and that is the harder mistake to notice.
 - **prod** (`kubelab-prod` Application): `selfHeal: true`. Prod is the *system of record*. Any drift from master HEAD is a bug or an intrusion; Argo CD must correct it immediately and automatically. The merge-then-smoke pattern continues to apply for prod.
 - **hub** (Argo CD itself on aws1): `selfHeal: true`. Same rationale as prod — the hub is critical infrastructure.
 

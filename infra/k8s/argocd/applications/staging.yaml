@@ -10,6 +10,26 @@
 # enabled, Argo CD would revert those manual applies within seconds — making
 # staging effectively read-only and defeating its purpose.
 #
+# THAT IS ONLY HALF THE STORY, AND THE MISSING HALF HAS BITTEN TWICE.
+# `selfHeal` governs syncs triggered by the CLUSTER drifting from git. It does
+# not govern syncs triggered by GIT ITSELF MOVING: `automated` fires on every
+# new revision of `targetRevision` and reapplies the tracked manifests
+# wholesale, manual applies included. So a worktree deploy survives only until
+# the next commit lands on master — from ANY parallel lane, including a
+# docs-only PR. Measured twice, both times ~30 seconds:
+#   2026-08-15  SEC-004 rate-limit drill      (lesson-330)
+#   2026-08-25  #1377 AC2 PVC-alert drill     (#1083, second occurrence)
+# Diagnose with `kubectl get <res> -n kubelab --show-managed-fields`: a
+# `kubelab-toolkit Apply` followed by an `argocd-controller Update` is this.
+#
+# Read before relying on the window:
+#   docs/lessons/gitops-delivery/lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd.md
+#   https://github.com/mlorentedev/kubelab/issues/1083   (OPS-023 — open, holds the fix)
+# The working technique meanwhile is to repoint `targetRevision` at the feature
+# branch (lesson-256) so Argo CD deploys the branch instead of fighting it.
+# It MUST be pointed back at `master` after merge, or staging silently stops
+# receiving master.
+#
 # The companion `applications/prod.yaml` keeps `selfHeal: true` because prod
 # must self-correct any drift from master HEAD. See ADR-037 for the full
 # rationale and the Pattern B + Pattern D + conditional-selfHeal combination
@@ -37,7 +57,10 @@ spec:
   syncPolicy:
     automated:
       prune: true
-      selfHeal: false  # ADR-037 — staging is a mutable test bed; see header.
+      # ADR-037 — mutable test bed. NOT a guarantee that a worktree deploy
+      # persists: this stops drift correction only, never the sync that fires
+      # when master moves. See the header, lesson-330 and #1083.
+      selfHeal: false
     syncOptions:
       - CreateNamespace=false
       - ApplyOutOfSyncOnly=true
