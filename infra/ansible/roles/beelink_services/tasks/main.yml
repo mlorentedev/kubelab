@@ -195,7 +195,7 @@
 # as long as it existed there.
 - name: Verify Gitea answers on its Tailscale address
   uri:
-    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/version"
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}{{ gitea_health_path }}"
     method: GET
     status_code: 200
     timeout: 10
