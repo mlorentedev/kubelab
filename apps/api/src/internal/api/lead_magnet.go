@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mlorentedev/mlorente-backend/internal/constants"
-	"github.com/mlorentedev/mlorente-backend/internal/models"
-	"github.com/mlorentedev/mlorente-backend/internal/services"
-	"github.com/mlorentedev/mlorente-backend/pkg/logger"
+	"github.com/mlorentedev/kubelab/apps/api/internal/constants"
+	"github.com/mlorentedev/kubelab/apps/api/internal/models"
+	"github.com/mlorentedev/kubelab/apps/api/internal/services"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
 // LeadMagnetHandler handles requests to process lead magnets (subscription + resource delivery)

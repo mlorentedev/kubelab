@@ -47,10 +47,12 @@ ace2 is **not** a K8s cluster; ace1 is the K3s staging node. "Developing on ace2
 | Loop | Where | What it validates | Stance |
 |------|-------|-------------------|--------|
 | **Inner (fast)** | ace2, no cluster | unit + integration + `docker compose` stacks | Keep. This is "local", relocated — it does not lose meaning. ~80% of feedback. |
-| **Cluster (fidelity)** | ace1 shared staging, `make deploy-k8s ENV=staging` | real manifests, Traefik, OIDC, e2e | The pre-merge gate. [ADR-037](adr-037-environment-promotion-strategy.md) (`selfHeal: false` on staging) already lets a feature-branch deploy persist. |
+| **Cluster (fidelity)** | ace1 shared staging, `make deploy-k8s ENV=staging` | real manifests, Traefik, OIDC, e2e | The pre-merge gate. [ADR-037](adr-037-environment-promotion-strategy.md) sets `selfHeal: false` on staging so a feature-branch deploy can persist — **but see ADR-037's 2026-08-25 correction: it persists only until the next commit lands on master, silently.** Repoint `targetRevision` at the branch for a window you control ([#1083](https://github.com/mlorentedev/kubelab/issues/1083)). |
 | **Throwaway (isolation)** | — | destructive / cluster-scoped / parallel | **Not built.** See reopen triggers. |
 
 Shared staging is the default because it has **maximum fidelity** (it *is* the real edge path). No per-feature namespaces, no vcluster, no k3d now — for a solo operator the shared `kubelab` namespace + `selfHeal: false` is sufficient, and per-feature isolation would require overlay templating + per-namespace DNS (the manifests hardcode `*.staging.kubelab.live`) for value that does not yet exist.
+
+> **Amendment 2026-08-25 — "sufficient" was measured insufficient, though not fatally.** The sentence above rests on `selfHeal: false` holding the deploy in place; twice now it has not (ADR-037's correction, [#1083](https://github.com/mlorentedev/kubelab/issues/1083)). This does not reverse the choice of shared staging — the fidelity argument is untouched and per-feature isolation is still unbuilt work. What it changes is the *reason to reconsider*: a per-PR ephemeral preview (Argo CD ApplicationSet PR generator, deferred in [ADR-053](adr-053-platform-product-repos.md) "until they hurt") also removes this revert race and the two-lanes-one-staging collision, so a decision that looked like pure cost now buys something concrete. Weigh it in #1083 rather than here.
 
 ### D3 — Security posture: proportional to agent autonomy; blast radius contained by construction
 
