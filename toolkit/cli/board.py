@@ -116,6 +116,8 @@ def parts_cmd(
         typer.echo(f"  conflict: #{child} already under #{current}, registry wants #{desired} — skipped")
     for number in plan.missing:
         typer.echo(f"  missing: #{number} not found in {registry.repo}")
+    for number in plan.closed_parents:
+        typer.echo(f"  closed parent: #{number} is not OPEN — its parts were left alone")
 
     if not apply:
         typer.echo("\ndry run — nothing linked (use --apply)")
@@ -126,5 +128,5 @@ def parts_cmd(
         logger.error(str(exc))
         raise typer.Exit(code=2) from exc
     typer.echo(f"linked: {added}")
-    if plan.conflicts or plan.missing:
+    if plan.conflicts or plan.missing or plan.closed_parents:
         raise typer.Exit(code=1)

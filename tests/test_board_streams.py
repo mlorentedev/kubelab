@@ -166,6 +166,37 @@ def test_plan_parts_links_only_orphans_and_reports_conflicts() -> None:
     assert plan.missing == (4,)
 
 
+def test_plan_parts_refuses_a_closed_parent() -> None:
+    reg = bs.Registry(
+        owner="o",
+        number=1,
+        repo="o/r",
+        field="Stream",
+        streams=("A",),
+        prefix_to_stream={},
+        overrides={},
+        parts={200: (5,)},
+    )
+    refs = {
+        200: bs.IssueRef(200, "n200", "CLOSED", None),
+        5: bs.IssueRef(5, "n5", "OPEN", None),
+    }
+    plan = bs.plan_parts(reg, refs)
+    assert plan.links == ()
+    assert plan.closed_parents == (200,)
+
+
+def test_loader_refuses_a_repo_that_is_not_owner_slash_name(tmp_path: Path) -> None:
+    path = tmp_path / "r.yaml"
+    path.write_text(
+        'project: {owner: o, number: 1, repo: "o/r\\") { evil }"}\nfield: Stream\n'
+        "streams:\n  - {name: A, prefixes: [X]}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(bs.RegistryError, match="owner/name"):
+        bs.load_registry(path)
+
+
 def test_refs_query_aliases_each_number() -> None:
     text = bs._refs_query("o/r", [5, 6])
     assert 'repository(owner: "o", name: "r")' in text

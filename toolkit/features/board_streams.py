@@ -47,6 +47,8 @@ DEFAULT_REGISTRY = Path("harness/board-streams.yaml")
 _PREFIX = re.compile(r"^\s*([A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*?)-(?:D?\d{1,4}[a-z]?|EPIC)\b")
 #: `DOCS: ...`, `CI: ...` — a bare family word used as a label, no number.
 _WORD = re.compile(r"^\s*([A-Z][A-Z0-9]{1,12}):")
+#: `owner/name` — the only shape `_refs_query` will interpolate into a query.
+_REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 
 #: Options are created with these; GitHub requires a colour per option.
 _OPTION_COLOR = "GRAY"
@@ -88,6 +90,9 @@ def load_registry(path: Path = DEFAULT_REGISTRY) -> Registry:
     for key in ("owner", "number", "repo"):
         if key not in project:
             raise RegistryError(f"registry: project.{key} is required")
+    repo = str(project["repo"])
+    if not _REPO.fullmatch(repo):
+        raise RegistryError(f"registry: project.repo must be owner/name, got {repo!r}")
     field = raw.get("field")
     if not isinstance(field, str) or not field.strip():
         raise RegistryError("registry: field must be a non-empty string")
@@ -137,7 +142,7 @@ def load_registry(path: Path = DEFAULT_REGISTRY) -> Registry:
     return Registry(
         owner=str(project["owner"]),
         number=int(project["number"]),
-        repo=str(project["repo"]),
+        repo=repo,
         field=field.strip(),
         streams=tuple(streams),
         prefix_to_stream=prefix_to_stream,
@@ -460,6 +465,9 @@ class PartsPlan:
     #: (child, its current parent, the parent the registry wants) — never overwritten.
     conflicts: tuple[tuple[int, int, int], ...]
     missing: tuple[int, ...]
+    #: Parents that are not OPEN. A closed sequencing ticket cannot own open work;
+    #: its children are left alone rather than filed under something nobody reads.
+    closed_parents: tuple[int, ...] = ()
 
 
 def plan_parts(registry: Registry, refs: dict[int, IssueRef]) -> PartsPlan:
@@ -467,10 +475,14 @@ def plan_parts(registry: Registry, refs: dict[int, IssueRef]) -> PartsPlan:
     links: list[Link] = []
     conflicts: list[tuple[int, int, int]] = []
     missing: list[int] = []
+    closed_parents: list[int] = []
     linked = 0
     for parent, children in registry.parts.items():
         if parent not in refs:
             missing.append(parent)
+            continue
+        if refs[parent].state != "OPEN":
+            closed_parents.append(parent)
             continue
         for child in children:
             ref = refs.get(child)
@@ -482,7 +494,13 @@ def plan_parts(registry: Registry, refs: dict[int, IssueRef]) -> PartsPlan:
                 links.append(Link(parent=parent, child=child))
             else:
                 conflicts.append((child, ref.parent, parent))
-    return PartsPlan(links=tuple(links), linked=linked, conflicts=tuple(conflicts), missing=tuple(missing))
+    return PartsPlan(
+        links=tuple(links),
+        linked=linked,
+        conflicts=tuple(conflicts),
+        missing=tuple(missing),
+        closed_parents=tuple(closed_parents),
+    )
 
 
 _ADD_SUB_ISSUE = """
