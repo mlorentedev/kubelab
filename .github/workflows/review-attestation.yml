@@ -140,7 +140,7 @@ jobs:
       # and would benefit, but it runs a fraction as often — not changed here, to
       # keep this diff about the workflow that actually pays the cost.
       - name: Cache Poetry's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pypoetry
           key: poetry-${{ runner.os }}-py3.12-${{ hashFiles('poetry.lock') }}
