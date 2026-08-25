@@ -1,4 +1,4 @@
-module github.com/mlorentedev/mlorente-backend
+module github.com/mlorentedev/kubelab/apps/api
 
 go 1.25.0
 
