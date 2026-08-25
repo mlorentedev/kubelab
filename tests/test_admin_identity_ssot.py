@@ -33,11 +33,15 @@ must hold in every environment including one nobody can decrypt.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
+from toolkit.features.configuration import resolve_user_identity
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, _build_dynamic_literals
+from toolkit.features.secrets_manager import SECRET_CATALOG
 
 #: The declared superadmin. What every service's admin identity must resolve to.
 SUPERADMIN = "declared-superadmin"
@@ -174,4 +178,103 @@ class TestTheAliasIsGoneFromTheStaticMapping:
             f"SECRET_DEFINITIONS still resolves an identity from the basic-auth account: "
             f"{offenders}. Remove the mapping — the value now comes from "
             "apps.auth.identities via _build_dynamic_literals."
+        )
+
+
+class TestTheCatalogKeyFollowsTheIdentity:
+    """The lockstep `secrets_manager.py` used to ask a human to remember."""
+
+    def test_the_admin_password_hash_key_matches_the_resolved_identity(self) -> None:
+        """A rename that forgets SECRET_CATALOG must fail here, not in production.
+
+        The catalog's key is static (`users_operator_password_hash`) because
+        `SECRET_CATALOG` is a module-level constant, and deriving it at import
+        time would make importing the secrets module read and merge
+        `common.yaml`. That is a defensible trade — but it leaves a coupling
+        between a literal string and the SSOT, and the old comment handled that
+        coupling by asking whoever renames the identity to update the catalog
+        "in lockstep".
+
+        A written reminder is not a mechanism, and this repository has measured
+        that twice: lesson-365 records the same instruction being broken three
+        times in one session by the person who wrote it. So the lockstep is an
+        assertion now. If it fails, the fix is to update the catalog key and the
+        SOPS path together — not to relax this test.
+
+        The consequence of the drift it prevents is quiet: `secrets audit`,
+        `secrets init` and rotation would all target a path nothing writes,
+        report on it, and find it missing — reading as "the secret was never
+        set" rather than "the catalog is looking in the wrong place".
+        """
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
+        )
+        operator = common["apps"]["auth"]["identities"]["operator"]
+        expected = f"apps.services.security.authelia.users_{operator}_password_hash"
+
+        paths = {spec.key_path for spec in SECRET_CATALOG}
+        assert expected in paths, (
+            f"apps.auth.identities.operator is {operator!r}, so SECRET_CATALOG must register "
+            f"{expected!r}. It does not. Update the catalog key and the SOPS key together — "
+            "audit, init and rotation all resolve the hash through this path."
+        )
+
+
+class TestTheOldSSOTIsGone:
+    """`apps.auth.admin_username` must not come back, in config or in code."""
+
+    def test_common_yaml_no_longer_declares_admin_username(self) -> None:
+        """Two declarations of one identity is the whole defect class.
+
+        `apps.auth.identities` and `apps.auth.admin_username` coexisted for a
+        day, and during that day the map was read by nothing while the alias
+        kept resolving. Leaving the old key present — even unread — invites a
+        future consumer to pick whichever it finds first, which is how one
+        identity acquires two resolution paths again.
+        """
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
+        )
+        auth = common["apps"]["auth"]
+        assert "admin_username" not in auth, (
+            "apps.auth.admin_username is back. The identity is declared once, in "
+            "apps.auth.identities — resolve through configuration.resolve_user_identity."
+        )
+        assert auth.get("identities", {}).get("superadmin"), "apps.auth.identities.superadmin must be declared"
+        assert auth.get("identities", {}).get("operator"), "apps.auth.identities.operator must be declared"
+
+    def test_no_authelia_user_entry_still_uses_the_is_admin_flag(self) -> None:
+        """`is_admin` conflated *which person* with *is this person an admin*.
+
+        Only the first was ever needed by the generators; the second is what
+        `groups:` already says. An entry that reintroduces the flag would
+        resolve to no identity and be skipped with a warning — a user silently
+        absent from Authelia, which fails as a login nobody can explain.
+        """
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
+        )
+        users = common["apps"]["services"]["security"]["authelia"]["users"]
+        offenders = [u for u in users if "is_admin" in u]
+        assert not offenders, (
+            f"these Authelia user entries still carry is_admin: {offenders}. Use "
+            "`identity: <key of apps.auth.identities>` — admin-ness is what `groups:` says."
+        )
+
+    def test_every_authelia_user_resolves_to_a_name(self) -> None:
+        """The end-to-end property, asserted against the real config.
+
+        Each entry must resolve through the one resolver — via `identity:` for a
+        declared person, via `username:` for a fixture. An entry resolving to ""
+        is skipped by both generators, so it disappears from the users database
+        without failing anything.
+        """
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
+        )
+        users = common["apps"]["services"]["security"]["authelia"]["users"]
+        unresolved = [u for u in users if not resolve_user_identity(u, common)]
+        assert not unresolved, (
+            f"these Authelia user entries resolve to no username: {unresolved}. An `identity:` "
+            "naming a key absent from apps.auth.identities resolves to '' and is silently skipped."
         )

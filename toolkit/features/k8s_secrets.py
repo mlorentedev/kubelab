@@ -11,7 +11,7 @@ import yaml
 
 from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
-from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.k8s_kubeconfig import output_path
 
 
@@ -337,8 +337,6 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     merged = cm.get_merged_config()
     authelia = merged.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {})
     users = authelia.get("users", [])
-    # SSOT-014b: admin entry derives username from apps.auth.admin_username.
-    admin_username = merged.get("apps", {}).get("auth", {}).get("admin_username", "")
 
     if not users or not isinstance(users, list):
         logger.warning("No Authelia users found in config")
@@ -349,7 +347,12 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     # an invalid users_database.yml locks everyone out of Authelia.
     db: dict[str, dict[str, object]] = {}
     for user in users:
-        username = admin_username if user.get("is_admin") else user.get("username", "")
+        # AUTH-004 C1: one resolver, shared with generator_authelia. See
+        # configuration.resolve_user_identity for why it is not inlined here.
+        username = resolve_user_identity(user, merged)
+        if not username:
+            logger.warning(f"  Skipping user entry that resolves to no identity: {user!r}")
+            continue
         hash_key = f"users_{username}_password_hash"
         password_hash = authelia.get(hash_key, "")
 

@@ -6,6 +6,33 @@ import yaml
 
 from toolkit.core.sops import age_key_env
 
+
+def resolve_user_identity(user: Dict[str, Any], merged_config: Dict[str, Any]) -> str:
+    """The username for one Authelia user entry — AUTH-004 C1, ADR-062 D3.
+
+    An entry either names a declared identity (`identity:` holding a KEY of
+    `apps.auth.identities`) or is a fixture that carries its own `username:`.
+    Both cases resolve here, and only here.
+
+    **The single resolver is the point, not a convenience.** SSOT-014b left two
+    generators reading one SSOT by two mechanisms, and its own catalog comment
+    called that out as drift waiting to happen. It was right: the same class of
+    split — one identity, two resolution paths — is what let a credential
+    rotation rename Gitea's only admin on 2026-08-23 (#1352, lessons 378/379).
+    A third caller must import this function rather than re-read the map.
+
+    An `identity:` naming a key that does not exist returns "" rather than
+    falling back to the raw key. Falling back would silently create a user
+    named after a typo, with no password hash, and Authelia would then refuse a
+    login for a reason that points nowhere near the config.
+    """
+    identity_key = user.get("identity")
+    if identity_key:
+        identities = merged_config.get("apps", {}).get("auth", {}).get("identities", {}) or {}
+        return str(identities.get(identity_key, "") or "")
+    return str(user.get("username", "") or "")
+
+
 # Removed top-level logger import to avoid circular dependency
 # from toolkit.core.logging import logger
 
@@ -178,12 +205,14 @@ class ConfigurationManager:
         if not gitea.get("admin_email"):
             gitea["admin_email"] = contact_email
 
-        # Authelia admin users (is_admin: true) with no explicit email
+        # Declared identities (AUTH-004 C1) with no explicit email. Was keyed on
+        # `is_admin: true`; an entry that names an identity is the same set, and
+        # the flag no longer exists.
         authelia_users = (
             config.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {}).get("users", [])
         )
         for user in authelia_users:
-            if user.get("is_admin") and not user.get("email"):
+            if user.get("identity") and not user.get("email"):
                 user["email"] = contact_email
 
     def get_env_vars(self) -> Dict[str, str]:
