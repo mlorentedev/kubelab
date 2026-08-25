@@ -1,7 +1,7 @@
 """Tests for k8s_secrets._build_users_database — Authelia users_database YAML generator.
 
 Verifies the OUTPUT of the generator is coherent with SSOT inputs:
-  - SSOT-014b: admin username derives from apps.auth.admin_username
+  - AUTH-004 C1: admin username derives from apps.auth.identities (ADR-062 D3)
   - SSOT-014c: admin email derives from apps.contact.email (loader-injected)
 
 Companion to `test_credentials_reconcile.py::TestSSOTAdminUsername` /
@@ -41,15 +41,15 @@ class TestUsersDatabaseGenerator:
 
     def test_admin_username_from_ssot_is_present(self, env: str) -> None:
         parsed, merged = self._build(env)
-        admin_username = merged["apps"]["auth"]["admin_username"]
+        admin_username = merged["apps"]["auth"]["identities"]["operator"]
         assert admin_username in parsed["users"], (
             f"users_database for {env} must contain admin user '{admin_username}' "
-            f"(derived from apps.auth.admin_username SSOT)"
+            f"(derived from apps.auth.identities.operator)"
         )
 
     def test_admin_email_matches_contact_ssot(self, env: str) -> None:
         parsed, merged = self._build(env)
-        admin_username = merged["apps"]["auth"]["admin_username"]
+        admin_username = merged["apps"]["auth"]["identities"]["operator"]
         contact_email = merged["apps"]["contact"]["email"]
         admin_entry = parsed["users"][admin_username]
         assert admin_entry["email"] == contact_email, (
@@ -59,7 +59,7 @@ class TestUsersDatabaseGenerator:
 
     def test_admin_has_admins_group(self, env: str) -> None:
         parsed, merged = self._build(env)
-        admin_username = merged["apps"]["auth"]["admin_username"]
+        admin_username = merged["apps"]["auth"]["identities"]["operator"]
         admin_entry = parsed["users"][admin_username]
         assert "admins" in admin_entry.get("groups", []), (
             f"Admin '{admin_username}' in {env} must have 'admins' group"
@@ -67,7 +67,7 @@ class TestUsersDatabaseGenerator:
 
     def test_admin_has_password_hash(self, env: str) -> None:
         parsed, merged = self._build(env)
-        admin_username = merged["apps"]["auth"]["admin_username"]
+        admin_username = merged["apps"]["auth"]["identities"]["operator"]
         admin_entry = parsed["users"][admin_username]
         password = admin_entry.get("password", "")
         assert password.startswith("$argon2"), (

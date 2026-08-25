@@ -71,8 +71,22 @@ networking:
       exclude_volumes:
       - "jekyll-staging-data"
       - "jekyll-staging-site-data"
-  # AWS management plane (ADR-023 Phase 3)
+  # AWS management plane (ADR-023 Phase 3) — RETIRED, kept as a rebuild recipe
   aws:
+    # THE MACHINE DOES NOT EXIST. GCP-001's AC6 destroyed it on 2026-08-23 and
+    # this block stayed, because #1333 decided deliberately to keep what rebuilds
+    # AWS: `infra/terraform/aws/` and `provision-aws1.yml` are a one-command
+    # restoration, and they need these values.
+    #
+    # The two are different things and nothing said so, which cost a red test
+    # suite: every consumer that enumerates nodes kept enumerating a destroyed
+    # host, and `make test-infra` spent six SSH timeouts finding that out
+    # (#1365). `retired` is the distinction, stated once — a declaration that is
+    # a RECIPE, not an inventory of what is running.
+    #
+    # To bring AWS back: set this to false, regenerate the inventory, apply the
+    # terraform. Nothing else here changes.
+    retired: true
     # ADR-028 tier. Machine-readable projection of the topology the ADR
     # narrates; consumed by the backup trigger model (BACKUP-044).
     location: "always-on"
@@ -603,8 +617,6 @@ edge:
 apps:
   # SSOT admin identity — used by credentials.py as default for all services
   auth:
-    admin_username: operator
-
     # ADR-062 D3 / AUTH-004 AC1. Identity names are declared ONCE, here, and
     # every consumer resolves a name through a KEY of this map rather than as a
     # literal. A map rather than flat keys because the set is expected to grow
@@ -626,9 +638,19 @@ apps:
     # is not rotation, it is a rename; the alias is what let one masquerade as
     # the other.
     #
-    # `admin_username` above stays for one commit so nothing breaks mid-change
-    # (tasks.md Part 1). Its removal, and the Grafana and MinIO legs, are the
-    # rest of AC1 and are NOT in this change.
+    # `admin_username` is GONE (removed 2026-08-24, AC1 complete). It sat here
+    # alongside this map for one day, and during that day the map was read by
+    # nothing while the alias kept resolving — which is the whole reason the
+    # removal is part of the same sweep as the readers. Two declarations of one
+    # identity, even when one is unused, is an invitation for the next consumer
+    # to pick whichever it finds first.
+    #
+    # Every consumer now resolves through `configuration.resolve_user_identity`.
+    # A user entry naming a declared person carries `identity: <key below>`;
+    # a fixture carries `username:`. Guarded by tests/test_admin_identity_ssot.py,
+    # which also pins SECRET_CATALOG's password-hash key to `operator` — so
+    # renaming a row here fails in CI rather than silently pointing audit and
+    # rotation at a path nothing writes.
     identities:
       superadmin: manu
       operator: operator
@@ -995,12 +1017,23 @@ apps:
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
-          # SSOT-014b: admin entry derives its username key from
-          # `apps.auth.admin_username` at generation time. Both generators
-          # (generator_authelia.py + k8s_secrets._build_users_database) resolve
-          # `is_admin=true` → admin_username. Renaming "manu" later (Phase B /
-          # SEC-PRIVACY-001) becomes a 1-line change in apps.auth.
-        - is_admin: true
+          # AUTH-004 C1 (ADR-062 D3): an entry that IS a declared identity names
+          # which one, with `identity:` holding a KEY of `apps.auth.identities`
+          # — not a username. Both generators (generator_authelia.py and
+          # k8s_secrets._build_users_database) resolve it through that map, so
+          # renaming a person is a one-line edit in `apps.auth.identities` and
+          # nowhere else.
+          #
+          # This replaces `is_admin: true`, which resolved to
+          # `apps.auth.admin_username`. The flag conflated two questions —
+          # *which person is this* and *is this person an admin* — and only the
+          # first is what the generators needed. Admin-ness is what `groups:`
+          # below already says, which is why nothing is lost by dropping it.
+          #
+          # Entries that are NOT declared identities keep `username:` (see
+          # testuser). The two are mutually exclusive by design: a user is
+          # either a person the platform declares, or a fixture.
+        - identity: operator
           displayname: Administrator
             # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
           disabled: false
@@ -1189,10 +1222,16 @@ backup:
         # is not losing data, it is losing the VPN control plane's identity.
         volume: headscale_headscale_data
         sqlite: db.sqlite
-      # DEFERRED, deliberately, not forgotten: authelia and postgres on this node
-      # are K3s PVCs (`kubelab/authelia-data`, `kubelab/postgres-data`). They need
-      # the `pvc` source type, whose RESTORE differs in kind — the claim has to
-      # exist before anything can be written into it — so that design belongs
-      # with the restore work rather than with this declaration. Both currently
-      # have a copy via the PVC CronJob; it is in-cluster, so it is not offsite,
-      # which is the gap this spec exists to close for them next.
+      # STILL DEFERRED on this node: postgres (`kubelab/postgres-data`), for the
+      # reason given in the "NOT here" block above — measured empty, no consumer
+      # yet, and `pg_dump` is a different capture mechanism. The PVC consumer
+      # class is BACKUP-046 (#1111).
+      #
+      # authelia is NO LONGER deferred and must not be read as such: it is
+      # declared above with the `pvc` source type (#1236) and was restored from
+      # R2 on 2026-08-22 with `integrity=ok` on the restored copy. This comment
+      # said the opposite until 2026-08-24 — it predated #1236 and was never
+      # updated, so the SSOT told its reader that the fleet's most valuable
+      # state had no offsite copy while it demonstrably did. Found by the
+      # BACKUP-044 adversarial review, which is the only thing that checked the
+      # prose against the declaration twelve lines above it.
