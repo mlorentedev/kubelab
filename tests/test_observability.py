@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from toolkit.features.observability import (
     AlertsUnavailableError,
+    LogsUnavailableError,
     GrafanaAlertClient,
     LokiClient,
     SlackSreClient,
@@ -103,9 +104,19 @@ class TestLokiClient:
 
     @patch("urllib.request.urlopen", side_effect=urllib.error.URLError("Connection refused"))
     def test_query_range_connection_error(self, _mock_urlopen):
+        """INVERTED 2026-08-24, and the original is why the defect survived.
+
+        This asserted `entries == []` on a connection error — it pinned the
+        swallow as the contract, so the CLI's "No logs found in the last 15m"
+        was the documented behaviour for an unreachable Loki rather than an
+        oversight. A test can hold a bug in place as firmly as it holds a
+        feature; this one did, in the sibling of the client that was caught
+        answering "All healthy" to a 401.
+        """
         client = LokiClient(base_url="http://unreachable:3100")
-        entries = client.query_range('{container="authelia"}')
-        assert entries == []
+
+        with pytest.raises(LogsUnavailableError, match="Connection refused"):
+            client.query_range('{container="authelia"}')
 
     @patch("urllib.request.urlopen")
     def test_query_service_logs_with_level(self, mock_urlopen):
@@ -187,6 +198,34 @@ class TestGrafanaAlertClient:
         mock_urlopen.return_value = mock_response
 
         assert GrafanaAlertClient().get_alerts() == []
+
+
+class TestLokiFailsLoudlyToo:
+    """The same swallow lived in the sibling client.
+
+    Unlike the alerts one it was never caught lying — Loki answered
+    `status: success` with an empty result, so "No logs found" was true. The
+    SHAPE was there and the symptom was not, which is the whole reason to fix it
+    now rather than after it costs something.
+    """
+
+    @patch("urllib.request.urlopen")
+    def test_an_unreachable_loki_raises(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+
+        with pytest.raises(LogsUnavailableError, match="Connection refused"):
+            LokiClient().query_range(query='{container="authelia"}')
+
+    @patch("urllib.request.urlopen")
+    def test_a_successful_empty_window_is_not_an_error(self, mock_urlopen):
+        """A quiet service must still read as quiet, or the fix trades one wrong
+        answer for another."""
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"status":"success","data":{"result":[]}}'
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        assert LokiClient().query_range(query='{container="authelia"}') == []
 
 
 class TestAlertsCommandFailsLoudly:

@@ -19,6 +19,18 @@ from typing import Any
 from toolkit.core.logging import logger
 
 
+class ObservabilityUnavailableError(RuntimeError):
+    """A backend could not be asked. NEVER the same as 'it answered, and the answer was empty'."""
+
+
+class AlertsUnavailableError(ObservabilityUnavailableError):
+    """Grafana could not be asked. Distinct from 'nothing is firing'."""
+
+
+class LogsUnavailableError(ObservabilityUnavailableError):
+    """Loki could not be asked. Distinct from 'no lines matched'."""
+
+
 def _parse_time_offset(offset: str) -> datetime.timedelta:
     """Parse time offset strings like '5m', '1h', '24h', '30s'."""
     match = re.match(r"^(\d+)([smhd])$", offset.strip().lower())
@@ -105,8 +117,18 @@ class LokiClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except Exception as e:
-            logger.warning(f"Loki query failed: {e}")
-            return []
+            # The same swallow as `get_alerts` below, in the sibling client.
+            #
+            # Unlike that one it was NOT caught lying: Loki answered on
+            # 127.0.0.1:3100 with `status: success` and an empty result, so
+            # "No logs found in the last 5m" was true. I went looking for a
+            # second instance of the defect, and the honest finding is that the
+            # SHAPE is here and the symptom was not.
+            #
+            # Fixed anyway, because the shape is what fails later: an unreachable
+            # Loki and a quiet one are indistinguishable from an empty list, and
+            # the CLI renders that list as a calm sentence about the time window.
+            raise LogsUnavailableError(f"Loki query failed: {e}") from e
 
         entries = []
         if data.get("status") == "success" and "data" in data:
@@ -143,10 +165,6 @@ class LokiClient:
         entries = self.query_range(query=selector, since=since, limit=limit)
         raw_lines = [f"[{e['timestamp']}] {e['line']}" for e in entries]
         return deduplicate_tracebacks(raw_lines)
-
-
-class AlertsUnavailableError(RuntimeError):
-    """Grafana could not be asked. Distinct from 'nothing is firing'."""
 
 
 @dataclass

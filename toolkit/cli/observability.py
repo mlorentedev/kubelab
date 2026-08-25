@@ -1,5 +1,7 @@
 """Observability & SRE triage CLI commands (ADR-064)."""
 
+from __future__ import annotations
+
 import json
 from typing import Annotated, Optional
 
@@ -9,6 +11,7 @@ from toolkit.core.logging import logger
 from toolkit.features.observability import (
     AlertsUnavailableError,
     GrafanaAlertClient,
+    LogsUnavailableError,
     LokiClient,
     SlackSreClient,
     SreTriageEngine,
@@ -50,6 +53,35 @@ def logs_cmd(
 ) -> None:
     """Query Loki logs with LogQL filtering and traceback deduplication."""
     client = LokiClient()
+    try:
+        _query_loki(client, query, service, since, level, limit, json_output)
+    except LogsUnavailableError as exc:
+        # "No logs found in the last 15m" is a statement about Loki's answer.
+        # This is the absence of one, and the two must not read alike.
+        if json_output:
+            typer.echo(json.dumps({"error": str(exc), "lines": None}, indent=2))
+        else:
+            typer.echo(f"✗ Could not ask Loki: {exc}", err=True)
+            typer.echo("  This is NOT 'no logs' — the query never landed.", err=True)
+        raise typer.Exit(1) from exc
+
+
+def _query_loki(
+    client: LokiClient,
+    query: str | None,
+    service: str | None,
+    since: str,
+    level: str | None,
+    limit: int,
+    json_output: bool,
+) -> None:
+    """The body of `logs`, extracted so the caller can wrap it in one try.
+
+    Kept as a private helper rather than inlined: the failure being caught is
+    Loki being unreachable, and that can happen on either branch below. Wrapping
+    the whole body is the only shape where a new branch cannot silently escape
+    the guard.
+    """
     if query:
         entries = client.query_range(query=query, since=since, limit=limit)
         if json_output:
