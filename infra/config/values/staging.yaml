@@ -52,7 +52,7 @@ apps:
       enable_homelabs: false
       enable_contact: false
   # Third-party services
-      version: sha-045c80f
+      version: sha-c8d4d7e
   services:
     automation:
       n8n:
