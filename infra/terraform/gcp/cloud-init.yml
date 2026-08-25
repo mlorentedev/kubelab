@@ -133,8 +133,33 @@ write_files:
       # EndpointSlice at once — silently, because the old records keep resolving
       # until they do not. Under a MIG this path runs on every preemption, so it
       # is load-bearing rather than incidental.
+      #
+      # THE PREDICATE BELOW USED TO READ `select(.givenName==$n and .online==false)`
+      # and it never matched anything. Measured 2026-08-24 (#1369) on a real
+      # preemption: the MIG rebuilt the hub in 18 seconds, this line printed
+      # "no stale Headscale node to recycle" while the predecessor sat in the
+      # very response it had just parsed, the replacement registered as
+      # `gcp1-mj5bsge9`, and `argo.kubelab.live` went down.
+      #
+      # Two independent reasons, either of which alone is fatal:
+      #
+      #   - `.online == false` compares against a field that IS NOT THERE.
+      #     proto3 JSON omits false booleans, so an offline node carries no
+      #     `online` key at all and the comparison is `null == false` -> false.
+      #     The condition does not select offline nodes; it selects none.
+      #   - the field spelling differs by marshaller. Headscale's CLI emits
+      #     `given_name`; the REST gateway is documented as camelCase but was not
+      #     verified from this path, and a wrong guess here fails silently in
+      #     exactly the same way. Both spellings are accepted rather than picked.
+      #
+      # `.online` is gone entirely, not corrected. At this point in boot THIS
+      # node has not registered yet, so any node already carrying this hostname
+      # is by definition a predecessor — its liveness is not information we need,
+      # and asking for it is what broke this. The equivalent repair from a
+      # workstation is `toolkit infra headscale recycle-stale`, which does check
+      # liveness because it runs where a healthy node COULD hold the name.
       node_id=$(curl "$${curl_opts[@]}" "$${curl_retry[@]}" "$${hs_auth[@]}" "${headscale_url}/api/v1/node" \
-        | jq -r --arg n "${hostname}" '.nodes[] | select(.givenName==$n and .online==false) | .id' | head -1)
+        | jq -r --arg n "${hostname}" '.nodes[] | select((.givenName // .given_name) == $n) | .id' | head -1)
       if [ -n "$node_id" ]; then
         curl "$${curl_opts[@]}" -X DELETE "$${hs_auth[@]}" "${headscale_url}/api/v1/node/$node_id"
         echo "deleted stale Headscale node $node_id (${hostname})"
