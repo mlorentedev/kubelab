@@ -374,9 +374,31 @@ Requires Phase 0 (a real project) and Phase 1's Makefile targets.
       (`fio`) and wall time of one full `make deploy-argocd` under the
       best-effort burst model. **A regression against the AWS baseline is a
       finding to report, not a number to file away.**
-- [ ] **[AC8]** **Measure egress** over a representative window and add the row to
+
+      **DEFERRED 2026-08-24, as a decision rather than an omission**, and each
+      half for its own reason:
+
+      - *`deploy-argocd` wall time* — obtaining it means running a real deploy
+        against the live hub, and the last one died between its two phases
+        (2026-08-23, #1348). Running prod to collect a baseline inverts the risk:
+        the number is diagnostic, the deploy is not. Record it on the **next
+        legitimate deploy** — [#1209](https://github.com/mlorentedev/kubelab/issues/1209)
+        (the hub's Argo CD chart is two majors behind) forces one.
+      - *`fio` IOPS* — the comparison is weaker than the table implies. The AWS
+        column reads `3,000 (gp3 spec)`: a **spec sheet**, not a measurement.
+        Measuring GCP live against AWS-on-paper cannot show a regression, only a
+        difference between a number and a datasheet, and the AWS disk no longer
+        exists to measure. Worth doing as a *ceiling* rather than a comparison,
+        and through a codified path (playbook or make target) — ad-hoc SSH `fio`
+        is the manual operation the standing orders forbid.
+- [x] **[AC8]** **Measure egress** over a representative window and add the row to
       the derivation in ADR-063 and `verification.md` — `$0` with its allowance
       named if it is inside the tier's free band (ADR-063 D8).
+      Done 2026-08-24: Cloud Monitoring `instance/network/sent_bytes_count`,
+      **~4.5 GiB/mo** against a Standard Tier allowance of **200 GB per region**
+      (quoted from the primary source, which also cleared the `UNVERIFIED` flag in
+      `gcp-cost-envelope.md`). Row is `$0.00`; the derivation's net `$0.43/mo`
+      stands.
 
 # Phase 4 — preemption evidence · the design's load-bearing claim
 
