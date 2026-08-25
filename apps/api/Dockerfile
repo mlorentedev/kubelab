@@ -1,5 +1,5 @@
 # Build Stage — CI v2 (build-args from YAML config)
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 
 WORKDIR /app
 
@@ -33,8 +33,20 @@ FROM alpine:3.24 AS runtime
 
 WORKDIR /app
 
-# Install certificates and timezone data
-RUN apk --no-cache add ca-certificates tzdata curl && \
+# THIS STAGE IS WHAT TRIVY SCANS, and the builder above is not. The gate judges
+# the shipped artifact: this base, the packages added here, and the Go binary
+# copied in. A Dependabot bump of `golang:*-alpine` therefore cannot change the
+# scan result — measured 2026-08-24, when exactly that bump (#1358) was blamed
+# for a CVE it could not have introduced (#1385).
+#
+# `apk upgrade` before `add`, matching edge/errors: the base image tag is
+# rebuilt upstream on its own schedule, so pulling from Alpine's live index at
+# build time is what closes the window between a package fix shipping and a new
+# base appearing. It does NOT close the other window — nothing rebuilds this
+# image unless its source changes, so a package set freezes at build time
+# regardless (#1385 AC3).
+RUN apk --no-cache upgrade && \
+    apk --no-cache add ca-certificates tzdata curl && \
     update-ca-certificates
 
 # Copy the compiled executable from the build stage
@@ -45,7 +57,11 @@ RUN addgroup -g 1001 -S app && \
     adduser -S appuser -u 1001 -G app && \
     chown -R appuser:app /app
 
-USER appuser
+# Numeric, not `appuser`: a name is resolved inside the image, and a Kubernetes
+# `runAsNonRoot` check is made outside it — with a name the kubelet cannot tell
+# whether the user is root and refuses to start the pod. Same uid the adduser
+# above creates (hadolint DL3066).
+USER 1001
 
 # Port exposed by the application
 EXPOSE 8080

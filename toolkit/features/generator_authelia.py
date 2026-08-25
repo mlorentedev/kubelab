@@ -5,7 +5,7 @@ from typing import Any
 from toolkit.config.constants import AUTHELIA_CONFIG, COMPONENTS
 from toolkit.core.logging import logger
 from toolkit.core.templating import create_renderer
-from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.generator_base import BaseGenerator
 
 
@@ -168,11 +168,16 @@ class AutheliaGenerator(BaseGenerator):
             # Build users list for template
             authelia_users = []
             users_config = authelia_config.get("users", [])
-            # SSOT-014b: admin entry derives username from apps.auth.admin_username.
-            admin_username = get_nested(merged_config, ["apps", "auth", "admin_username"], "")
 
             for user in users_config:
-                username = admin_username if user.get("is_admin") else user.get("username", "")
+                # AUTH-004 C1: one resolver, shared with
+                # k8s_secrets._build_users_database. SSOT-014b had these two
+                # generators reading one SSOT by two mechanisms; that is the
+                # drift being removed here, not merely tidied.
+                username = resolve_user_identity(user, merged_config)
+                if not username:
+                    logger.warning(f"Skipping user entry that resolves to no identity: {user!r}")
+                    continue
                 # Look for password hash in flattened env vars using the LONG prefix
                 password_hash_key = f"APPS_SERVICES_SECURITY_AUTHELIA_USERS_{username.upper()}_PASSWORD_HASH"
                 password_hash = env_vars.get(password_hash_key)

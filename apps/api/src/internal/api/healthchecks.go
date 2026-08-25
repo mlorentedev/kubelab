@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mlorentedev/mlorente-backend/pkg/config"
-	"github.com/mlorentedev/mlorente-backend/pkg/logger"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
 // HealthCheckResult represents the result of a health check for a specific component
