@@ -260,3 +260,18 @@ class TestRetiredCloudNodes:
         hosts = _hosts(AnsibleGenerator()._build_inventory(net))
 
         assert [h for h in hosts if "gcp" in h], "the running hub must still be in the inventory"
+
+
+    def test_skipping_a_retired_node_is_announced(self, capsys) -> None:
+        """Raised by the reviewer on #1391: the flag removes a host with nothing
+        saying so, and an inventory quietly missing a node is the shape of every
+        failure this session catalogued.
+
+        Asserted against stdout rather than `caplog`: the toolkit's logger writes
+        directly, so a caplog-based assertion passes vacuously — it observes a
+        channel nothing is emitted on, which would be its own instance of the
+        defect being guarded.
+        """
+        AnsibleGenerator()._build_inventory(_networking())
+
+        assert "networking.aws is retired" in capsys.readouterr().out, "a retired node left the inventory silently"

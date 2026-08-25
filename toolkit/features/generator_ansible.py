@@ -80,6 +80,20 @@ class AnsibleGenerator(BaseGenerator):
         """SSOT-014a: per-node `ssh_user` wins as override, else category default."""
         return node.get("ssh_user") or networking["ssh_users"][category]
 
+    @staticmethod
+    def _warn_if_retired(key: str, node: dict[str, Any]) -> None:
+        """Say out loud that a declared node was skipped.
+
+        Raised by the reviewer on #1391: `retired` removes a host from the
+        inventory with nothing announcing it, so the same flag landing on the
+        LIVE hub would take it out silently — and an inventory missing a node is
+        the shape of every failure this session catalogued, where the wrong state
+        looks exactly like the right one. A test pins that `gcp` is not retired;
+        this pins that you would hear about it either way.
+        """
+        if node and node.get("retired"):
+            logger.warning(f"networking.{key} is retired — skipped, no inventory host emitted")
+
     def _bastion_ssh_args(self, networking: dict[str, Any]) -> str:
         """Per-host `ansible_ssh_common_args` that jumps a mesh-only node through the
         VPS public bastion (TOOL-016/#818).
@@ -159,6 +173,7 @@ class AnsibleGenerator(BaseGenerator):
         # a retired node keeps its `tailscale_dns` precisely so restoring it is
         # one flag, and an address is not evidence that anything answers on it.
         aws = networking.get("aws", {})
+        self._warn_if_retired("aws", aws)
         if aws and not aws.get("retired") and (aws.get("tailscale_dns") or aws.get("tailscale_ip")):
             all_nodes.append(
                 {
@@ -181,6 +196,7 @@ class AnsibleGenerator(BaseGenerator):
         # targets the group as a whole — every hub playbook names its own host —
         # so two members is a coexistence, not a broadcast.
         gcp = networking.get("gcp", {})
+        self._warn_if_retired("gcp", gcp)
         if gcp and not gcp.get("retired") and (gcp.get("tailscale_dns") or gcp.get("tailscale_ip")):
             all_nodes.append(
                 {
