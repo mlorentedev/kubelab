@@ -5,9 +5,9 @@ import (
 	"net/smtp"
 	"time"
 
-	"github.com/mlorentedev/mlorente-backend/internal/constants"
-	"github.com/mlorentedev/mlorente-backend/internal/models"
-	"github.com/mlorentedev/mlorente-backend/pkg/logger"
+	"github.com/mlorentedev/kubelab/apps/api/internal/constants"
+	"github.com/mlorentedev/kubelab/apps/api/internal/models"
+	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
 // SendResourceEmail sends an email with a resource

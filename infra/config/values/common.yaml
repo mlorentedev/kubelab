@@ -674,8 +674,13 @@ apps:
       # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
       # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,
       # `INFRA_SMTP_HOST`, `INFRA_SMTP_PORT`, `INFRA_SMTP_FROM`. Authelia
-      # template reads the same names. Stream C will extract the API
-      # without touching SMTP because SMTP lives in shared infra namespace.
+      # template reads the same names.
+      #
+      # This block used to end "Stream C will extract the API without touching
+      # SMTP". The API is NOT being extracted: ADR-048 rejected extracting it
+      # (it is the platform gateway, not web's backend) and ADR-057 D5 restated
+      # that it is evolved in place — no move, no second API, no rewrite.
+      # Stream C extracted the products (`web`, ADR-053); the API stayed.
       beehiiv:
         # SSOT-012 phase 1: publication ID is a PUBLIC identifier (visible in
         # every Beehiiv embed URL). Was historically in SOPS but bypasses the
