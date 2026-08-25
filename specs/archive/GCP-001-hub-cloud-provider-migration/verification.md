@@ -125,6 +125,17 @@ created: "2026-08-20"
       > dig +short gcp1.kubelab.internal -> 100.64.0.16
       > ```
       >
+      > **What "zero human steps" bounds, stated here because the next paragraph
+      > appears to contradict it.** The claim is AC4's: the hub self-heals — the
+      > MIG recreates the VM, cloud-init reclaims the canonical name, and the
+      > spokes go back to Synced with nobody acting. It does **not** claim the
+      > inbound UI route or an operator's SSH trust recover on their own; those
+      > are outside AC4 per `tasks.md` Phase 2, and they are enumerated two
+      > paragraphs down. Raised by the adversarial review as a Minor, and it was
+      > right that a strict reader could not tell from this file which of the two
+      > sentences bounds the criterion — the file spends a thousand words hunting
+      > exactly that ambiguity elsewhere.
+      >
       > Zero human steps between the stop and the reclaim. The line the old
       > predicate could never print is the whole difference: on 2026-08-24 under
       > the same precondition it printed `no stale Headscale node to recycle`.
