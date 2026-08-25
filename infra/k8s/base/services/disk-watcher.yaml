@@ -74,6 +74,28 @@ spec:
           serviceAccountName: disk-watcher
           automountServiceAccountToken: true
           restartPolicy: OnFailure
+          # WHY `healthy` IS A NUMBER, AND WHY THIS NOTE IS OUT HERE.
+          #
+          # The emitter below must yield 1/0, never a jq `==` comparison. That
+          # comparison returns a JSON boolean, the LogQL `unwrap` stage needs a
+          # float, and `true` is not one: the sample is dropped, the query
+          # returns NO DATA, and `noDataState: Alerting` turns that into a
+          # permanent "a PVC is not Bound" while all of them are. It shipped
+          # that way on 2026-08-23 and fired in both environments for a day and
+          # a half before anyone read it (#1377). The sibling metric further
+          # down was always correct because the shell's `$(( ))` returns 0/1 —
+          # so the one emitter written with a proper JSON tool is the one that
+          # broke, and each half looked reasonable alone.
+          #
+          # This note sits HERE, in YAML, rather than inside the jq program,
+          # because the program is passed as `jq -c '...'` — single-quoted BY
+          # THE SHELL. #1378 put this same prose in there and it contained the
+          # words "jq's" and "LogQL's"; each apostrophe closed that string and
+          # the whole script stopped parsing. The CronJob then failed on every
+          # run, which — via the same `noDataState: Alerting` described above —
+          # made the alert fire while looking correct. YAML comments cannot do
+          # that. `tests/test_embedded_shell_syntax.py` now catches the class,
+          # but placement removes it. Keep prose out of the quoted program.
           containers:
             - name: disk-watcher
               image: alpine:3.21
@@ -97,19 +119,8 @@ spec:
                     pvc: .metadata.name,
                     phase: .status.phase,
                     capacity: (.status.capacity.storage // "0"),
-                    # A NUMBER, never `(.status.phase == "Bound")`. jq's `==`
-                    # yields a JSON boolean, LogQL's `unwrap` needs a float, and
-                    # `true` is not one: the sample is dropped, the query returns
-                    # NO DATA, and `noDataState: Alerting` turns that into a
-                    # permanent "a PVC is not Bound" while all of them are.
-                    #
-                    # It shipped that way on 2026-08-23 and fired in both
-                    # environments for a day and a half before anyone read it
-                    # (#1377). The sibling metric below was always correct
-                    # because bash `$(( ))` returns 0/1 — so the one emitter
-                    # written with a proper JSON tool is the one that broke, and
-                    # each half looked reasonable on its own, which is why review
-                    # did not catch it.
+                    # A NUMBER — see the note above this container, which is
+                    # where the rationale lives now and why.
                     healthy: (if .status.phase == "Bound" then 1 else 0 end)
                   }'
 
