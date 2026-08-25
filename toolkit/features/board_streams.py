@@ -256,11 +256,12 @@ class ProjectInfo:
 
 
 _PROJECT_QUERY = """
-query($owner: String!, $number: Int!) {
+query($owner: String!, $number: Int!, $after: String) {
   user(login: $owner) {
     projectV2(number: $number) {
       id
-      fields(first: 40) {
+      fields(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           ... on ProjectV2SingleSelectField { id name options { id name } }
         }
@@ -272,18 +273,34 @@ query($owner: String!, $number: Int!) {
 
 
 def fetch_project(registry: Registry) -> ProjectInfo:
-    data = _gh_graphql(_PROJECT_QUERY, {"owner": registry.owner, "number": registry.number})
-    project = (data.get("user") or {}).get("projectV2")
-    if not project:
-        raise GitHubError(f"project {registry.owner}/{registry.number} not found")
-    for node in project["fields"]["nodes"]:
-        if node and node.get("name") == registry.field:
-            return ProjectInfo(
-                project_id=project["id"],
-                field_id=node["id"],
-                options={opt["name"]: opt["id"] for opt in node["options"]},
-            )
-    return ProjectInfo(project_id=project["id"], field_id=None, options={})
+    """The project id and, if it exists, the Stream field with its options.
+
+    Walks every page of fields. Missing the field because it sat past the first
+    page would make `ensure_field` create a second one, and two fields with the
+    same name is a board nobody can filter.
+    """
+    after: str | None = None
+    project_id: str | None = None
+    while True:
+        data = _gh_graphql(
+            _PROJECT_QUERY,
+            {"owner": registry.owner, "number": registry.number, "after": after},
+        )
+        project = (data.get("user") or {}).get("projectV2")
+        if not project:
+            raise GitHubError(f"project {registry.owner}/{registry.number} not found")
+        project_id = project["id"]
+        for node in project["fields"]["nodes"]:
+            if node and node.get("name") == registry.field:
+                return ProjectInfo(
+                    project_id=project_id,
+                    field_id=node["id"],
+                    options={opt["name"]: opt["id"] for opt in node["options"]},
+                )
+        page = project["fields"]["pageInfo"]
+        if not page["hasNextPage"]:
+            return ProjectInfo(project_id=project_id, field_id=None, options={})
+        after = page["endCursor"]
 
 
 _ITEMS_QUERY = """

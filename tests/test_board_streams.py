@@ -197,6 +197,43 @@ def test_loader_refuses_a_repo_that_is_not_owner_slash_name(tmp_path: Path) -> N
         bs.load_registry(path)
 
 
+def test_fetch_project_walks_every_page_of_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    pages = [
+        {
+            "user": {
+                "projectV2": {
+                    "id": "p",
+                    "fields": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        "nodes": [{}, {"id": "f0", "name": "Status", "options": []}],
+                    },
+                }
+            }
+        },
+        {
+            "user": {
+                "projectV2": {
+                    "id": "p",
+                    "fields": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        "nodes": [{"id": "f1", "name": "Stream", "options": [{"id": "o1", "name": "A"}]}],
+                    },
+                }
+            }
+        },
+    ]
+    seen: list[str | None] = []
+
+    def fake(query: str, variables: dict[str, object] | None = None) -> dict[str, object]:
+        seen.append((variables or {}).get("after"))  # type: ignore[arg-type]
+        return pages[len(seen) - 1]
+
+    monkeypatch.setattr(bs, "_gh_graphql", fake)
+    info = bs.fetch_project(_registry())
+    assert seen == [None, "c1"]
+    assert info == bs.ProjectInfo(project_id="p", field_id="f1", options={"A": "o1"})
+
+
 def test_refs_query_aliases_each_number() -> None:
     text = bs._refs_query("o/r", [5, 6])
     assert 'repository(owner: "o", name: "r")' in text
