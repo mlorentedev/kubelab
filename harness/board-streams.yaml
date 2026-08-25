@@ -1,0 +1,134 @@
+# Stream registry for the bitácora board (GOV-002, #823).
+#
+# `toolkit board streams` derives the board's single-select `Stream` field from
+# this file: an issue's title prefix (`OBS-018`, `IDP-005b`, `OPS-D004`,
+# `BACKUP-EPIC`, `DOCS:`) names its family, and each family belongs to exactly
+# one stream. `overrides` places issues whose title carries no prefix or a
+# misleading one; an override wins over the prefix.
+#
+# Titles are never rewritten — the prefix is the ticket's identifier, not its
+# category. Two families that were dissolved issue by issue are deliberately
+# absent from `streams`: OPS (a grab-bag of 23 unrelated chores) and ADR028
+# (three issues on three topics). Their issues live only in `overrides`, and
+# `tests/test_board_streams.py` refuses their return as a prefix.
+#
+# Counts measured 2026-08-24 on 492 open issues; sizes drift, the mapping does
+# not. Stream names are the board's option names, verbatim.
+
+project:
+  owner: mlorentedev
+  number: 1
+  repo: mlorentedev/kubelab
+
+field: Stream
+
+streams:
+  - name: Toolkit & CLI
+    prefixes: [TOOL, TOOLKIT, PLAT, PUB]
+
+  - name: Observability
+    prefixes: [OBS, MET, ALERT, SLO, TRACE, NOTIFY, MON]
+
+  - name: Provisioning & Fleet
+    prefixes: [ANSIBLE, MOB]
+
+  - name: Networking & Edge
+    prefixes: [VPN, VPN-ACL, VPNACL, NET, DNS, MAIL, CF-PROXY, CERT, TF, EDGE, ERROR]
+
+  - name: IDP & Knowledge Plane
+    # WEB here is the RAG chatbot on the Go API (ADR-057 D1), not the web repo.
+    prefixes: [IDP, HERMES, SDD, IDEAS, WEB, AI]
+
+  - name: CI & Delivery
+    # GCP is the Argo CD hub's home; the hub is the delivery plane.
+    prefixes: [CI-GATE, CI, CI-RUNNER, RELIAB, QUAL, PERF, TEST, VER, ARGO, GITOPS, DELIVERY, GCP]
+
+  - name: Portfolio & Business
+    # Not L0 work. Classified honestly here so the board says so; relocation is a separate ticket.
+    prefixes: [CONTENT, BLOG, PIVOT, NAN, SEO, CRUSH, CAL]
+
+  - name: SSOT, Debt & Docs
+    prefixes: [SSOT, DEBT, DOCS, DOC, DOC-MAINT, GOV]
+
+  - name: Backup & DR
+    prefixes: [BACKUP, PREP]
+
+  - name: Cockpit
+    prefixes: [DASH, DASH-DT, DASH-BUG, DASH-AUDIT, CONSOLE]
+
+  - name: Security & Identity
+    prefixes: [SEC, SEC-GITEA, SEC-SOPS, SEC-ROTATE, AUTH, SEAL, SSH-RENAME, OIDC-E2E, OIDC-SYNC, PROVIDER-GEN, SECRET-RELOAD]
+
+  - name: Platform Services
+    prefixes: [HELM, APP-CONFIG, DATA, MANIFEST, PROD-K3S]
+
+  - name: Products (non-L0)
+    # Standalone products parked in this repo: SensorDB (SENSOR-008 extracts it), personal cloud.
+    prefixes: [SENSOR, CLOUD]
+
+overrides:
+  # --- title carries a prefix that misleads ---
+  309: Networking & Edge        # AI-005 is a CoreDNS record, not AI work
+  597: Portfolio & Business     # IDEAS-001 is a lead-magnet demo
+
+  # --- no prefix: the 2026-08-23 feat(...) batch ---
+  1321: Networking & Edge       # VPN-only ingress + service-token auth for Loki/telemetry
+  1322: IDP & Knowledge Plane   # native Loki/Grafana MCP servers for agents
+  1342: Observability           # OTel GenAI collector + Grafana LLM dashboard
+  1343: IDP & Knowledge Plane   # token-bucket proxy for LLM APIs (gateway)
+  1344: Backup & DR             # Velero operator — overlaps BACKUP-020/021, reconcile there
+  1345: Backup & DR             # automated restore-drill pipeline
+  1346: Backup & DR             # Velero R2 offsite BSL — same overlap note as 1344
+  1347: Cockpit                 # public services/topology manifest from common.yaml
+  1350: IDP & Knowledge Plane   # prompt caching / capability routing (gateway)
+
+  # --- no prefix: older ---
+  675: Security & Identity      # pre-release exposure/auth audit (hardening gate)
+  796: CI & Delivery            # guard against stale-sha staging-deploy PRs
+  809: Provisioning & Fleet     # repurpose ace2 as dev-node
+  819: CI & Delivery            # self-hosted runners for private repos
+  1029: Cockpit                 # committed custom.js vs sync_homepage_config.py output
+  1038: CI & Delivery           # kuma integration fixture races across worktrees
+  1066: CI & Delivery           # aws1 hub Spot reclaimed (hub availability)
+
+  # --- OPS family dissolved (23 unrelated chores), placed by what each touches ---
+  433: Networking & Edge        # OPS-003 Headscale Docker Compose lifecycle
+  457: Observability            # OPS-006 capacity alerting thresholds
+  460: Platform Services        # OPS-007 K3s housekeeping CronJob
+  463: Provisioning & Fleet     # OPS-008 NUT UPS monitoring on RPi4
+  466: Toolkit & CLI            # OPS-009 toolkit logs CLI (body also carries UPS drain)
+  491: CI & Delivery            # OPS-D004 image rename in the pipeline
+  494: Networking & Edge        # OPS-D014 VPS Docker network migration
+  498: CI & Delivery            # OPS-D005 staging image-tag automation
+  500: Networking & Edge        # OPS-D016 errors catch-all routing
+  502: Networking & Edge        # OPS-D013 Traefik dashboard IngressRoute
+  504: CI & Delivery            # OPS-D015 Gitea Actions vs GitHub Actions
+  701: Platform Services        # OPS-010 K8s API-deprecation gate
+  722: Platform Services        # OPS-011 K3s upgrade runbook validation
+  822: SSOT, Debt & Docs        # OPS-012 succession runbook + cost ledger
+  834: SSOT, Debt & Docs        # OPS-013 second-pass audit
+  929: CI & Delivery            # OPS-014 Argo CD Image Updater
+  959: Provisioning & Fleet     # OPS-016 ufw DNAT rules after live-restore
+  964: Networking & Edge        # OPS-019 vpn_extra_records never resolved
+  968: Observability            # OPS-021 Uptime Kuma reached by two names
+  972: Platform Services        # OPS-023 MinIO deployed twice
+  1083: CI & Delivery           # OPS-023 staging Argo CD auto-sync vs worktree deploys
+  1150: CI & Delivery           # OPS-025 stale ApplicationSet controller pods on the hub
+  1355: Security & Identity     # OPS-026 rotation never reached non-K8s consumers
+
+  # --- ADR028 family: three issues, three topics ---
+  508: Observability            # ADR028-002 observability stack on prod K3s
+  509: IDP & Knowledge Plane    # ADR028-003 embedding pipeline (pgvector RAG)
+  988: Platform Services        # ADR028-004 stateful service placement classification
+
+# Sequencing tickets become parents of the issues they order (one parent per
+# issue). Where two sequencers claimed the same ticket, it went to the parent
+# of its own family: BACKUP-044 (#1056) under the backup epic, TOOL-035 (#1076)
+# under the Gitea forge sequence. Closed children stay listed — that is the
+# progress the board shows. `toolkit board parts` never re-parents; a child
+# already under another parent is reported, not moved.
+parts:
+  1090: [449, 452, 1056]                       # BACKUP-EPIC
+  1077: [1013, 1075, 972, 1076]                # IDP-034: Gitea as the private forge
+  1401: [299, 606, 375, 395, 379, 396, 607]    # IDP-037: knowledge plane and LLM gateway
+  977: [973, 964, 966, 967, 968]               # DASH-004: dashboard and DNS cleanup
