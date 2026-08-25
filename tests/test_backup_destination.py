@@ -11,11 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from toolkit.features.backup_destination import (
+    DestinationConfig,
     DestinationError,
     load_credentials,
     load_destination,
+    repo_url,
     verify_destination,
 )
 
@@ -160,3 +163,35 @@ def test_probe_object_is_namespaced_and_removed():
     assert any("_smoketest/" in c for c in uploads), "probe must be namespaced under _smoketest/"
     removed = [c for c in runner.calls if "s3 rm" in c]
     assert len(removed) == 1, "the probe object must be cleaned up exactly once"
+
+
+def test_repo_prefix_agrees_with_the_derived_repository_url():
+    """The repository URL is expressed twice in the SSOT, and nothing pinned them equal.
+
+    The Ansible role writes `backup.r2.repo_prefix/<inventory_hostname>`
+    (`roles/node_backup/defaults/main.yml`); every reader — coverage,
+    `verify-restic` — derives `s3:{endpoint}/{bucket}/<node>` through
+    `repo_url()`. Two expressions of one address, edited independently: a
+    bucket or endpoint change that misses `repo_prefix` makes the writer and
+    the reader disagree about where the backups are.
+
+    Both failure directions are loud — coverage reports UNCOVERED rather than
+    reporting success against an empty repository — which is why this was a
+    Minor finding in the BACKUP-044 adversarial review and not a Blocker. Loud
+    is not the same as guarded, though, and the guard is one assertion.
+    """
+    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+    r2 = common["backup"]["r2"]
+
+    derived = repo_url(
+        DestinationConfig(
+            account_id=r2["account_id"], bucket=r2["bucket"], endpoint=r2["endpoint"]
+        ),
+        node="",
+    ).rstrip("/")
+
+    assert r2["repo_prefix"] == derived, (
+        f"backup.r2.repo_prefix is {r2['repo_prefix']!r} but the readers derive {derived!r}. "
+        "The role writes backups to the first and every check looks in the second, so they "
+        "must be equal. Fix the SSOT — do not relax this assertion."
+    )
