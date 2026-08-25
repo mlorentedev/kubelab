@@ -1,0 +1,106 @@
+---
+# The other half of skipping the reviewer on Dependabot PRs (CI-GATE-015, #1364).
+#
+# `pr-agent.yml` no longer reviews them, because it CANNOT: a `pull_request`
+# raised by Dependabot reads the DEPENDABOT secret store, this repository never
+# filled it, and `NAN_API_KEY` therefore resolves to an empty string. Measured
+# 2026-08-24 on #1358-#1362 — the run log prints `Secret source: Dependabot` and
+# `OPENAI__KEY:` with nothing after it, against `OPENAI__KEY: ***` on a human PR
+# the same night.
+#
+# Skipping the reviewer alone would leave every bot PR red at the attestation
+# gate, which is the gate working correctly: no review happened. So this declares
+# that plainly, using the escape the gate already defines — a label AND a body
+# section, never one alone, because proceeding unreviewed is allowed and
+# proceeding SILENTLY is not.
+#
+# WHY AUTOMATING A DISCLOSURE IS NOT HOLLOWING IT OUT. The escape exists to force
+# a human to write down why a PR merged unread. Here the reason is identical
+# every time and is a property of the platform rather than a judgement about the
+# diff: the reviewer had no credential. Making a person retype that weekly buys
+# nothing and decays into a rubber stamp. What must not be automated is the
+# LABEL's meaning — the PR still says "merged unreviewed" in the durable record,
+# and it says it truthfully.
+#
+# It follows that this must never widen beyond the bot. The `if` below is the
+# whole safety property.
+name: dependabot-declare-unreviewed
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write   # the label and the body edit are the product
+
+jobs:
+  declare:
+    # `github.actor` rather than `pull_request.user.login`: the actor is who
+    # triggered the run, which is what decides the secret store, so it is the
+    # same value the missing credential depends on.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The label and the section come from the registry the GATE reads, never
+      # from strings pasted here. A second declaration of either would drift, and
+      # it would drift silently in the direction of a PR that reads unreviewed
+      # forever while this workflow reports success.
+      - name: Read the escape from the reviewer registry
+        id: escape
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          registry=$(gh api "repos/${GITHUB_REPOSITORY}/contents/harness/review-attestation.json?ref=${BASE_REF}" \
+            --jq '.content' | base64 -d)
+          label=$(printf '%s' "$registry" | jq -r '.escape.label')
+          section=$(printf '%s' "$registry" | jq -r '.escape.section')
+          if [ -z "$label" ] || [ "$label" = "null" ] || [ -z "$section" ] || [ "$section" = "null" ]; then
+            echo "::error::harness/review-attestation.json declares no escape.label/escape.section"
+            exit 1
+          fi
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+          echo "section=$section" >> "$GITHUB_OUTPUT"
+
+      - name: Declare the unreviewed merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LABEL: ${{ steps.escape.outputs.label }}
+          SECTION: ${{ steps.escape.outputs.section }}
+        run: |
+          set -euo pipefail
+
+          # The body is read into a FILE and never interpolated into this script.
+          # It is attacker-influenced in principle and bot-generated in practice,
+          # and the difference does not matter at the point where it would be
+          # expanded by a shell.
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""' > body.md
+
+          # Idempotent on `synchronize`: a rebased Dependabot PR re-runs this, and
+          # appending a second copy of the section would make the gate read the
+          # rationale from the first one and the humans from the last.
+          if grep -qxF "$SECTION" body.md; then
+            echo "already declared"
+          else
+            {
+              printf '\n\n%s\n\n' "$SECTION"
+              printf 'Reviewed by nobody, and that is a platform limit rather than a decision about this diff.\n'
+              printf 'A `pull_request` raised by Dependabot reads the Dependabot secret store, so the model\n'
+              printf 'credential the reviewer needs resolves to an empty string and the review cannot run\n'
+              printf '(CI-GATE-015, #1364). The change is still gated on everything that does not need a\n'
+              printf 'secret: the full test suite, lint, type checks and the config-drift checks.\n\n'
+              printf 'Ask for a human read the same way as on any other PR — comment `/review`, which runs\n'
+              printf 'in this repository'"'"'s own context and does carry the credential.\n'
+            } >> body.md
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -F body=@body.md --silent
+            echo "rationale written"
+          fi
+
+          # Adding the label emits `labeled`, and editing the body emits `edited`.
+          # review-attestation.yml listens for both, so the verdict is recomputed
+          # rather than left at the red it correctly reported when the PR opened.
+          gh pr edit "$PR_NUMBER" --add-label "$LABEL"
