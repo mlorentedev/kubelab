@@ -19,15 +19,27 @@
   # run teaches the operator to skim past red output, which is the same habit
   # this role's sibling warns about in roles/glances/defaults/main.yml: "a check
   # that fails on a working deploy is worse than no check". The probe's non-zero
-  # rc is still the signal — it is consumed by `when: _ollama_check.rc == 0`.
+  # rc is still the signal — it is consumed by the `when` on the tasks below.
   failed_when: false
+  # `systemctl cat` only reads unit files, so running it during a dry run changes
+  # nothing and is what makes the dry run able to answer. Without this, Ansible
+  # skips every `command:` in check mode, `_ollama_check` comes back with no `rc`
+  # at all, and the `when` below raises instead of gating — `make provision
+  # NODE=bee CHECK=1` reported a failure on a node where the real run is clean.
+  check_mode: false
 
 - name: Stop Ollama systemd service
   systemd:
     name: ollama
     state: stopped
     enabled: false
-  when: _ollama_check.rc == 0
+  # `default(1)` = "assume Ollama is absent unless the probe said otherwise".
+  # The probe carries no `cleanup` tag, so `--tags cleanup` runs these tasks
+  # without it and `_ollama_check` is undefined — a second path to the same
+  # crash that `check_mode: false` above closes for dry runs. Defaulting to the
+  # absent case is the safe direction: it skips a cleanup rather than acting on
+  # an unmeasured node.
+  when: (_ollama_check.rc | default(1)) == 0
   tags: [cleanup]
 
 - name: Remove Ollama binary and service files
@@ -43,7 +55,7 @@
 - name: Reload systemd after Ollama removal
   systemd:
     daemon_reload: true
-  when: _ollama_check.rc == 0
+  when: (_ollama_check.rc | default(1)) == 0
   tags: [cleanup]
 
 # --- Create directories ---
@@ -81,6 +93,19 @@
     owner: root
     group: root
     mode: "0755"
+  # ANSIBLE-054 (#1400). compose mounts this FILE, not its directory, and a
+  # single-file bind mount pins the inode. `copy` replaces through a tempfile and
+  # a rename, so the host gets a new inode and the running container keeps the
+  # old one until it restarts — a replaced script reports success and does not
+  # run. Measured while landing #1400: run 1 installed the new script and then
+  # executed the previous one; the marker only appeared during run 2, after run
+  # 1's handler had re-resolved the mount.
+  #
+  # This was invisible before, because the old script announced `Updated` on
+  # every provision and so restarted the container every time by accident. That
+  # accident is exactly what #1400 removes, which is what makes this notify
+  # load-bearing rather than tidy.
+  notify: Restart gitea
   tags: [gitea]
 
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
@@ -129,6 +154,12 @@
   command: docker buildx inspect multiarch
   register: _buildx_check
   changed_when: false
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   ignore_errors: true
 
 - name: Clean stale buildx builder state
@@ -157,6 +188,12 @@
 - name: Wait for MinIO container to be running
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' minio
   register: _minio_state
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   until: _minio_state.stdout == "running"
   retries: 12
   delay: 5
@@ -174,6 +211,12 @@
 - name: Verify GitHub Runner container is running
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
   register: _runner_state
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   retries: 3
   delay: 10
   until: _runner_state.stdout == "running"
@@ -183,6 +226,12 @@
 - name: Wait for Gitea to report healthy
   command: docker inspect --format '{% raw %}{{.State.Health.Status}}{% endraw %}' gitea
   register: _gitea_health
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   until: _gitea_health.stdout == "healthy"
   retries: 18
   delay: 5
