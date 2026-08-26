@@ -80,10 +80,17 @@ jobs:
         run: poetry install --only main
 
       - name: Check ${{ matrix.env }} for generator drift
+        id: drift
         run: make config-check-drift ENV="$TARGET_ENV"
 
+      # Conditioned on the drift step's own outcome, never on `failure()`.
+      # A bare `failure()` fires for ANY earlier step, so this hint named a
+      # cause it had not observed: on PR #1421 `poetry install` took a
+      # truncated download from PyPI (`IncompleteRead`), the drift step never
+      # ran, and the job still told the reader their generator output had
+      # drifted and to go regenerate it. It had not, and they did.
       - name: Hint on failure
-        if: failure()
+        if: steps.drift.outcome == 'failure'
         run: |
           echo "::error::Generator output drifted from committed files. Locally run:"
           echo "::error::  make config-generate ENV=$TARGET_ENV"
