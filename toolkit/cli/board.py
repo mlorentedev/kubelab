@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features import board_streams, board_sweep
+from toolkit.features import board_ids, board_priority, board_streams, board_sweep
 
 app = typer.Typer(
     name="board",
@@ -183,3 +183,68 @@ def sweep_cmd(
         logger.error(str(exc))
         raise typer.Exit(code=2) from exc
     typer.echo(f"written: {written}")
+
+
+@app.command("ids")
+def ids_cmd(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Exit 1 if any open issue shares its id with another."),
+    ] = False,
+    repo: Annotated[
+        str | None,
+        typer.Option("--repo", help="owner/name to scan. Defaults to the Stream registry's project.repo."),
+    ] = None,
+) -> None:
+    """Report (default) or check for open issues that share a ticket id."""
+    repo_name = repo
+    if repo_name is None:
+        try:
+            repo_name = board_streams.load_registry().repo
+        except board_streams.RegistryError as exc:
+            logger.error(str(exc))
+            raise typer.Exit(code=2) from exc
+
+    try:
+        issues = board_ids.fetch_open_issues(repo_name)
+    except board_ids.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    dupes = board_ids.duplicates(issues)
+    for fid in sorted(dupes):
+        numbers = " ".join(f"#{i.number}" for i in dupes[fid])
+        typer.echo(f"{fid}: {numbers}")
+    typer.echo(f"\nopen issues scanned: {len(issues)}  duplicate ids: {len(dupes)}")
+
+    if check and dupes:
+        raise typer.Exit(code=1)
+
+
+@app.command("priority")
+def priority_cmd(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Exit 1 if any open issue carries no Priority."),
+    ] = False,
+) -> None:
+    """Report (default) or check for open issues with no Priority set. See harness/priority-scale.md."""
+    try:
+        registry = board_streams.load_registry()
+    except board_streams.RegistryError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    try:
+        items = board_priority.fetch_open_items(registry.owner, registry.number, registry.repo)
+    except board_priority.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    missing = board_priority.missing_priority(items)
+    for item in missing:
+        typer.echo(f"  #{item.number} {item.title[:90]}")
+    typer.echo(f"\nopen issues scanned: {len(items)}  missing priority: {len(missing)}")
+
+    if check and missing:
+        raise typer.Exit(code=1)

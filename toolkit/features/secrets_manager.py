@@ -273,6 +273,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("grafana",),
         rotate_note="Login with new password after restart.",
     ),
+    SecretSpec(
+        key_path="apps.services.observability.grafana.alerts_ro_token",
+        description="Grafana Viewer service-account token for `toolkit obs alerts` (OBS-019)",
+        kind=SecretKind.EXTERNAL,
+        services=("grafana",),
+        rotate_note=(
+            "Minted via Grafana's service-account API (Viewer role, SA 'obs-alerts-ro'), "
+            "not user-provided. Rotate: delete the token in Grafana, mint a new one, "
+            "`secrets set` here, then `make apply-secrets`."
+        ),
+        # Minted with no `secondsToLive`, so Grafana itself never expires it —
+        # unlike `gcp.headscale_api_key` (Expiry.PROVIDER), this one has no
+        # remote lifetime to ask about; only a manual revoke ends it.
+        expiry=Expiry.NEVER,
+        # Prod token minting is blocked by #951 (prod admin credential rejected).
+        # Staging carries a real value; prod will not until #951 closes, and
+        # `make secrets-audit` will correctly report that as a gap until then.
+        envs=("staging", "prod"),
+    ),
     # =========================================================================
     # Uptime Kuma push monitors — BACKUP-044 AC9 coverage heartbeat
     # =========================================================================
