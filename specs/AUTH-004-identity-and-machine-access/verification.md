@@ -552,3 +552,73 @@ lesson already exists:
    the caller.
 
 Neither was a fact about the system. Both looked like one.
+
+---
+
+## R4 addendum — the settled answer is incomplete, measured 2026-08-26
+
+R4 settled **how** to prohibit login (`PATCH /api/v1/admin/users/{username}`
+with `prohibit_login: true`, since the field is in `EditUserOption` and not in
+`CreateUserOption`). It never asked whether a token survives it. It does not.
+
+`hefesto` provisioned, token minted with the intended scopes — confirmed through
+the admin API, not inferred:
+
+```
+id=3 name='kubelab-provisioning' scopes=['write:repository', 'write:user']
+```
+
+Toggling the flag, with the control run in **both** directions and the state
+restored afterwards:
+
+| `prohibit_login` | `GET /api/v1/user` with the token |
+|---|---|
+| `true`  | **403** |
+| `false` | **200** |
+| `true` (restored) | **403** |
+
+**`prohibit_login: true` disables API token authentication, not only the
+interactive login.** The account is either loginable *and* its token works, or
+blocked *and* its token is dead. AC5 asks for both at once, so as written it is
+not achievable on Gitea 1.25.5.
+
+### The alternative, tested and rejected as *enforcement*
+
+Binding the account to the Authelia auth source keeps the token alive:
+
+```
+BEFORE: prohibit_login=True  login_name='hefesto' source_id=0  token=403
+PATCH -> 200
+AFTER : prohibit_login=False login_name='hefesto' source_id=1  token=200
+```
+
+Authelia has no `hefesto`, so the SSO path can never complete. But Gitea still
+accepts a **local** password on a source-bound account:
+
+```
+$ gitea admin user change-password --username hefesto --password <random, discarded>
+hefesto's password has been successfully updated!
+rc=0
+```
+
+So the binding does not make interactive login impossible; it only leaves the
+account without a credential anyone holds. That is **omission, not enforcement**
+— the distinction R4's own note drew when it rejected "never declaring the bot
+in Authelia", and it applies equally here.
+
+### A correction to evidence gathered earlier in the same session
+
+The first attempt at AC5's scope evidence recorded `403` for the operations the
+token's scopes *forbid* and read it as the refusal half of the criterion. **That
+reading was void**: every request returned `403`, including the ones the scopes
+allow, because the account was blocked. An account-level rejection and a
+scope-level rejection are the same status code, so that run distinguished
+nothing — lesson-382's shape exactly. The refusal half must be re-demonstrated
+in a state where the allowed operations return `200`.
+
+### Residual, unmeasured
+
+`source_id` stayed at `1` after a PATCH sending `0`; Gitea appears not to unbind
+that way. Not pursued. Whether Gitea's forgot-password flow could mint a
+credential to `hefesto@gitea.kubelab.live` was not tested — it matters only if
+the decision lands on credential-absence as the block.
