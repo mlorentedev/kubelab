@@ -19,15 +19,27 @@
   # run teaches the operator to skim past red output, which is the same habit
   # this role's sibling warns about in roles/glances/defaults/main.yml: "a check
   # that fails on a working deploy is worse than no check". The probe's non-zero
-  # rc is still the signal — it is consumed by `when: _ollama_check.rc == 0`.
+  # rc is still the signal — it is consumed by the `when` on the tasks below.
   failed_when: false
+  # `systemctl cat` only reads unit files, so running it during a dry run changes
+  # nothing and is what makes the dry run able to answer. Without this, Ansible
+  # skips every `command:` in check mode, `_ollama_check` comes back with no `rc`
+  # at all, and the `when` below raises instead of gating — `make provision
+  # NODE=bee CHECK=1` reported a failure on a node where the real run is clean.
+  check_mode: false
 
 - name: Stop Ollama systemd service
   systemd:
     name: ollama
     state: stopped
     enabled: false
-  when: _ollama_check.rc == 0
+  # `default(1)` = "assume Ollama is absent unless the probe said otherwise".
+  # The probe carries no `cleanup` tag, so `--tags cleanup` runs these tasks
+  # without it and `_ollama_check` is undefined — a second path to the same
+  # crash that `check_mode: false` above closes for dry runs. Defaulting to the
+  # absent case is the safe direction: it skips a cleanup rather than acting on
+  # an unmeasured node.
+  when: (_ollama_check.rc | default(1)) == 0
   tags: [cleanup]
 
 - name: Remove Ollama binary and service files
@@ -43,7 +55,7 @@
 - name: Reload systemd after Ollama removal
   systemd:
     daemon_reload: true
-  when: _ollama_check.rc == 0
+  when: (_ollama_check.rc | default(1)) == 0
   tags: [cleanup]
 
 # --- Create directories ---
