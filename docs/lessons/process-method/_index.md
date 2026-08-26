@@ -1,6 +1,6 @@
 # How the work is run: specs, reviews, knowledge
 
-57 lessons, newest first. Back to [all categories](../_index.md).
+58 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -61,3 +61,4 @@
 | 371 | [A truncated listing reads exactly like a complete one](lesson-371-a-truncated-listing-reads-exactly-like-a-complete-one.md) | 2026-08-23 |
 | 374 | [Grepping an output that was never produced](lesson-374-grepping-an-output-that-was-never-produced.md) | 2026-08-23 |
 | 394 | [The ticket body is the contract; the prompt that names it is not](lesson-394-the-ticket-body-is-the-contract-not-the-prompt-that-names-it.md) | 2026-08-25 |
+| 401 | [A second commit on a branch someone else can merge is a bet you lose silently](lesson-401-a-second-commit-on-a-branch-someone-else-can-merge-is-a-bet-you-lose-silently.md) | 2026-08-25 |
