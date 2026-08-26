@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features import board_ids, board_streams, board_sweep
+from toolkit.features import board_ids, board_priority, board_streams, board_sweep
 
 app = typer.Typer(
     name="board",
@@ -218,4 +218,33 @@ def ids_cmd(
     typer.echo(f"\nopen issues scanned: {len(issues)}  duplicate ids: {len(dupes)}")
 
     if check and dupes:
+        raise typer.Exit(code=1)
+
+
+@app.command("priority")
+def priority_cmd(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Exit 1 if any open issue carries no Priority."),
+    ] = False,
+) -> None:
+    """Report (default) or check for open issues with no Priority set. See harness/priority-scale.md."""
+    try:
+        registry = board_streams.load_registry()
+    except board_streams.RegistryError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    try:
+        items = board_priority.fetch_open_items(registry.owner, registry.number, registry.repo)
+    except board_priority.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    missing = board_priority.missing_priority(items)
+    for item in missing:
+        typer.echo(f"  #{item.number} {item.title[:90]}")
+    typer.echo(f"\nopen issues scanned: {len(items)}  missing priority: {len(missing)}")
+
+    if check and missing:
         raise typer.Exit(code=1)
