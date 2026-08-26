@@ -1,6 +1,6 @@
 # Metrics, logs, dashboards and alerting
 
-14 lessons, newest first. Back to [all categories](../_index.md).
+15 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -18,3 +18,4 @@
 | 198 | [Glances v4 API path is /api/4/](lesson-198-glances-v4-api-path-is-api-4.md) | 2026-03-23 |
 | 204 | [Glances Docker image tag 4-full doesn't exist](lesson-204-glances-docker-image-tag-4-full-doesn-t-exist.md) | 2026-03-23 |
 | 070 | [n8n Container Has No curl or wget for Healthchecks](lesson-070-n8n-container-has-no-curl-or-wget-for-healthc.md) | 2026-02-25 |
+| 395 | [A rule keyed by a per-run label flaps by construction](lesson-395-a-rule-keyed-by-a-per-run-label-flaps-by-construction.md) | 2026-08-25 |
