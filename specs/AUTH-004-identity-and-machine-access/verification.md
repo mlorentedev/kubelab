@@ -552,3 +552,128 @@ lesson already exists:
    the caller.
 
 Neither was a fact about the system. Both looked like one.
+
+---
+
+## R4 addendum — the settled answer is incomplete, measured 2026-08-26
+
+R4 settled **how** to prohibit login (`PATCH /api/v1/admin/users/{username}`
+with `prohibit_login: true`, since the field is in `EditUserOption` and not in
+`CreateUserOption`). It never asked whether a token survives it. It does not.
+
+`hefesto` provisioned, token minted with the intended scopes — confirmed through
+the admin API, not inferred:
+
+```
+id=3 name='kubelab-provisioning' scopes=['write:repository', 'write:user']
+```
+
+Toggling the flag, with the control run in **both** directions and the state
+restored afterwards:
+
+| `prohibit_login` | `GET /api/v1/user` with the token |
+|---|---|
+| `true`  | **403** |
+| `false` | **200** |
+| `true` (restored) | **403** |
+
+**`prohibit_login: true` disables API token authentication, not only the
+interactive login.** The account is either loginable *and* its token works, or
+blocked *and* its token is dead. AC5 asks for both at once, so as written it is
+not achievable on Gitea 1.25.5.
+
+### The alternative, tested and rejected as *enforcement*
+
+Binding the account to the Authelia auth source keeps the token alive:
+
+```
+BEFORE: prohibit_login=True  login_name='hefesto' source_id=0  token=403
+PATCH -> 200
+AFTER : prohibit_login=False login_name='hefesto' source_id=1  token=200
+```
+
+Authelia has no `hefesto`, so the SSO path can never complete. But Gitea still
+accepts a **local** password on a source-bound account:
+
+```
+$ gitea admin user change-password --username hefesto --password <random, discarded>
+hefesto's password has been successfully updated!
+rc=0
+```
+
+So the binding does not make interactive login impossible; it only leaves the
+account without a credential anyone holds. That is **omission, not enforcement**
+— the distinction R4's own note drew when it rejected "never declaring the bot
+in Authelia", and it applies equally here.
+
+### A correction to evidence gathered earlier in the same session
+
+The first attempt at AC5's scope evidence recorded `403` for the operations the
+token's scopes *forbid* and read it as the refusal half of the criterion. **That
+reading was void**: every request returned `403`, including the ones the scopes
+allow, because the account was blocked. An account-level rejection and a
+scope-level rejection are the same status code, so that run distinguished
+nothing — lesson-382's shape exactly. The refusal half must be re-demonstrated
+in a state where the allowed operations return `200`.
+
+### Residual, unmeasured
+
+`source_id` stayed at `1` after a PATCH sending `0`; Gitea appears not to unbind
+that way. Not pursued. Whether Gitea's forgot-password flow could mint a
+credential to `hefesto@gitea.kubelab.live` was not tested — it matters only if
+the decision lands on credential-absence as the block.
+
+### Re-verified on a clean account, and a self-inflicted detour worth recording
+
+The toggle above was re-run after the account was returned to a known state, so
+the finding does not rest on a contaminated instance:
+
+| `prohibit_login` | `must_change_password` | `GET /api/v1/user` with the token |
+|---|---|---|
+| 0 | 0 | **200** |
+| 1 | 0 | **403** |
+| 0 | 0 | **200** (restored) |
+
+**The detour, because it cost an hour and the shape recurs.** Between the first
+toggle and the AC5 evidence run, every request began returning `403` — including
+a freshly minted token and a hand-minted one, which ruled out the recording path.
+The account read as healthy through the API: `active: true`,
+`prohibit_login: false`, `restricted: false`. The API's user record simply does
+not expose the field that was set:
+
+```
+sqlite> select name, must_change_password, prohibit_login, is_active from user where name='hefesto';
+hefesto|1|0|1
+```
+
+`must_change_password` was `1`, and Gitea refuses **API token** authentication
+for a user in that state, not only the login form. It was set by my own
+diagnostic: `gitea admin user change-password` defaults it to true, while the
+provisioning path uses `--must-change-password=false` and never had the problem.
+
+Two things to carry:
+
+- **A diagnostic command mutated the thing it was measuring**, and the mutation
+  was invisible in the channel used to check for it. Two hypotheses were rejected
+  on evidence that could not distinguish them, because the API answered "healthy"
+  about a database that was not.
+- **`must_change_password` blocks tokens, exactly as `prohibit_login` does.** If
+  anything ever resets this account's password without `--must-change-password=false`,
+  the stored token dies silently and the next provision reports `changed=0` over it.
+
+### AC5, both halves, on the clean account
+
+The refusal is only interpretable because the allowed calls succeed — the earlier
+run where everything returned `403` distinguished nothing.
+
+```
+ALLOWED by the granted scopes (write:repository, write:user)
+  GET    /user                          -> 200
+  POST   /user/repos       (create)     -> 201
+  GET    /repos/hefesto/ac5-scope-probe -> 200
+REFUSED — requires write:admin, which was not granted
+  GET    /admin/users                   -> 403
+  POST   /admin/users      (create)     -> 403
+cleanup
+  DELETE /repos/hefesto/ac5-scope-probe -> 204
+```

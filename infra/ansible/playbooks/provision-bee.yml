@@ -254,6 +254,18 @@
         # would hand out tokens the prod client registration cannot validate.
         gitea_oidc_discovery_url: >-
           https://{{ gitea_config.apps.services.security.authelia.domain }}/.well-known/openid-configuration
+        # AUTH-004 C5 — machine identity. The NAME resolves through the identity
+        # map like the humans'; a literal here would be the alias shape that
+        # renamed Gitea's only admin on 2026-08-23.
+        gitea_bot_user: "{{ gitea_config.apps.auth.identities.machine }}"
+        gitea_bot_email: "{{ gitea_config.apps.auth.identities.machine }}@{{ gitea_config.apps.services.core.gitea.domain }}"
+        # Least privilege for the first real consumer (#1076, getting repositories
+        # into the forge) plus the account's own profile. Deliberately NOT
+        # write:admin — the refusal of an admin call is half of AC5's evidence.
+        gitea_bot_scopes: "write:repository,write:user"
+        # Empty on the run that mints it; present on every run after. The mint and
+        # record tasks are gated on this, so provisioning converges to no-op.
+        gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
         # MinIO
         minio_image: "{{ config.apps.services.data.minio.image }}"
         minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"

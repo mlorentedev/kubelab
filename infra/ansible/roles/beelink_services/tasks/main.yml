@@ -273,6 +273,64 @@
   notify: Restart gitea
   tags: [gitea]
 
+# --- Machine identity: the token (AUTH-004 C5, ADR-062 D1) --------------------
+# The ACCOUNT and its login block live in gitea-bootstrap.sh, next to the admin
+# user, for two reasons. The script is a real shell, so the quoting survives
+# (an equivalent pipeline embedded in a `command:` here was mangled by YAML
+# folding plus argv splitting before it ever reached the container); and the
+# task that installs it already notifies `Restart gitea`, so lesson-396's
+# single-file bind-mount trap is already closed for it.
+#
+# Only the minting stays here, because it is the one step whose output has to
+# come back to the controller: the age key is here, not in the container.
+
+- name: Mint the machine account's scoped token
+  # NOT idempotent: generate-access-token always succeeds and always returns a
+  # NEW token, orphaning the previous one inside Gitea with no record of which
+  # consumer holds which. Gated on the recorded secret being absent, so a
+  # re-provision with a token already in SOPS does nothing at all.
+  # `argv`, not a string. The string form goes through YAML folding and then
+  # argv splitting, and this command does not survive the round trip: measured,
+  # the inner `su git -c "..."` lost its quoting, so `su` read `gitea` as the
+  # command and `admin user generate-access-token ...` as positional arguments.
+  # It failed, and a partial invocation had already minted a token under
+  # `generate-access-token`'s DEFAULT name and DEFAULT scopes ("all") - the worst
+  # possible outcome, because an over-scoped credential was created while the
+  # task reported failure. `argv` passes the list verbatim.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_bot_user }}
+        --token-name kubelab-provisioning
+        --scopes {{ gitea_bot_scopes }}
+        --raw
+  register: _gitea_bot_token
+  when: not gitea_bot_token
+  changed_when: _gitea_bot_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the machine token in SOPS
+  # Delegated to the controller, which is where the age key is. The value goes in
+  # through STDIN, never through argv: an argument list is world-readable in
+  # /proc for the lifetime of the process.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.bot_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_bot_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: not gitea_bot_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
 - name: Report service status
   debug:
     msg: >-

@@ -70,6 +70,12 @@ services:
       GITEA_ADMIN_EMAIL: "{{ gitea_admin_email }}"
       GITEA_OIDC_CLIENT_SECRET: "{{ gitea_oidc_client_secret }}"
       GITEA_OIDC_DISCOVERY_URL: "{{ gitea_oidc_discovery_url }}"
+      # AUTH-004 C5. The machine identity's NAME, resolved from
+      # apps.auth.identities.machine — never a literal, which is the alias shape
+      # that renamed Gitea's only admin on 2026-08-23. Consumed by
+      # gitea-bootstrap.sh, not by Gitea itself.
+      GITEA_BOT_USER: "{{ gitea_bot_user }}"
+      GITEA_BOT_EMAIL: "{{ gitea_bot_email }}"
     volumes:
       - {{ beelink_gitea_data_dir }}:/data
       - {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro
