@@ -18,6 +18,23 @@
 #      easy to miss; a failed Ansible task stops the play.
 #
 # Idempotent by design: safe to re-run on every provision, which is how it runs.
+#
+# ANSIBLE-054 (#1400): idempotent in EFFECT is not idempotent in REPORT, and the
+# difference leaks. `update-oauth` was called unconditionally and its `Updated`
+# line logged unconditionally, so the Ansible guard below
+#
+#     changed_when: "'Created' in stdout or 'Updated' in stdout"
+#     notify: Restart gitea
+#
+# fired on every provision and bounced the forge under whoever was using it.
+# The write stays unconditional — it still reconciles anything changed in Gitea
+# directly — and only the announcement is conditional now, keyed on a marker
+# recording the hash of the configuration last written successfully.
+#
+# Removing the restart instead would be the defect #1352 repaired: `update-oauth`
+# writes SQLite while the running web process keeps the auth source it parsed at
+# startup, so a provision without the restart leaves Gitea serving the OLD
+# secret while reporting success. Fix the report, never the restart.
 
 set -eu
 
@@ -73,6 +90,36 @@ if [ -z "${GITEA_OIDC_CLIENT_SECRET:-}" ] || [ -z "${GITEA_OIDC_DISCOVERY_URL:-}
   exit 1
 fi
 
+OIDC_SCOPES="openid,profile,email,groups"
+
+# Where the last successfully-written configuration is fingerprinted. On /data,
+# so it survives container recreation the way the database it describes does.
+# Overridable for tests, same shape as GITEA_HEALTH_PATH above: if the default
+# ever disagrees with the compose volume, the volume is right.
+OIDC_STATE="${GITEA_BOOTSTRAP_STATE:-/data/gitea/.kubelab-oidc-bootstrap.sha256}"
+
+# The client secret cannot be read back out of Gitea, so "has anything changed"
+# is not answerable from the live instance — only from what this script last
+# wrote. Everything that goes into the call goes into the hash, so a change to
+# the discovery URL or the scopes counts as much as a rotated secret.
+#
+# Known limitation, stated rather than discovered later: a secret changed in
+# Gitea directly is invisible here. The unconditional write below is what covers
+# that case, which is the reason it stays unconditional.
+OIDC_DESIRED=$(printf '%s|%s|%s|%s|%s|%s' \
+  "authelia" "openidConnect" "gitea" \
+  "$GITEA_OIDC_CLIENT_SECRET" "$GITEA_OIDC_DISCOVERY_URL" "$OIDC_SCOPES" \
+  | sha256sum | awk '{print $1}')
+OIDC_RECORDED=$(cat "$OIDC_STATE" 2>/dev/null || true)
+
+# Written only after the call it describes returns 0. Recording first would make
+# every later run report converged over a configuration Gitea never received —
+# a false green that outlives the run that created it.
+record_oidc_state() {
+  printf '%s\n' "$OIDC_DESIRED" > "$OIDC_STATE"
+  chmod 600 "$OIDC_STATE"
+}
+
 # `gitea admin auth update-oauth`, never delete+add: deleting an auth source with
 # linked users breaks those linkages (see configure_oidc.py, which hit this).
 AUTH_ID=$(su git -c "gitea admin auth list" 2>/dev/null \
@@ -85,8 +132,14 @@ if [ -n "$AUTH_ID" ]; then
     --key gitea \
     --secret $GITEA_OIDC_CLIENT_SECRET \
     --auto-discover-url $GITEA_OIDC_DISCOVERY_URL \
-    --scopes openid,profile,email,groups"
-  log "Updated OIDC provider (ID=$AUTH_ID)"
+    --scopes $OIDC_SCOPES"
+  if [ "$OIDC_DESIRED" = "$OIDC_RECORDED" ]; then
+    # Neither "Created" nor "Updated": the words the Ansible guard matches on.
+    log "OIDC provider already matches recorded state (ID=$AUTH_ID)"
+  else
+    record_oidc_state
+    log "Updated OIDC provider (ID=$AUTH_ID)"
+  fi
 else
   su git -c "gitea admin auth add-oauth \
     --name authelia \
@@ -94,6 +147,7 @@ else
     --key gitea \
     --secret $GITEA_OIDC_CLIENT_SECRET \
     --auto-discover-url $GITEA_OIDC_DISCOVERY_URL \
-    --scopes openid,profile,email,groups"
+    --scopes $OIDC_SCOPES"
+  record_oidc_state
   log "Created OIDC provider"
 fi
