@@ -228,31 +228,43 @@ def test_an_existing_machine_account_is_not_recreated(bot_harness):
     assert "admin user create" not in bot_harness.calls.read_text()
 
 
-def test_login_is_prohibited_after_creation(bot_harness):
-    """R4's ordering: the account cannot be created blocked, so the block follows."""
-    bot_harness.build(bot_exists=False, prohibited=False)
+def test_a_blocked_account_is_unblocked_so_its_token_can_authenticate(bot_harness):
+    """The named gap, pinned so it cannot be "tidied" back into a dead token.
+
+    `prohibit_login: true` disables API token authentication as well as the
+    login form — measured in both directions with the state restored. So the
+    flag and a working token are mutually exclusive, and AC5 asks for both.
+    ADR-062 D5's instruction for a tier a service cannot enforce is to record it
+    as a named gap, which is what the script does.
+
+    A future reader who sets this back to `true` gets a dead credential and a
+    provisioning run that still reports success. This test is the thing that
+    stops them.
+    """
+    bot_harness.build(bot_exists=False, prohibited=True)
     result = bot_harness.run()
     calls = bot_harness.calls.read_text()
-    assert "interactive login prohibited" in result.stdout
+    assert "Updated machine account login state" in result.stdout
     assert "PATCH" in calls
+    assert '"prohibit_login\\": false' in calls or "prohibit_login" in calls
     assert calls.index("admin user create") < calls.index("PATCH"), (
-        "the login block must follow creation — prohibit_login is in EditUserOption, "
-        "not CreateUserOption (R4)"
+        "the login-state PATCH must follow creation — the field is in EditUserOption "
+        "and not in CreateUserOption (R4)"
     )
 
 
-def test_an_already_prohibited_account_is_not_patched_again(bot_harness):
+def test_an_account_already_in_the_right_state_is_not_patched_again(bot_harness):
     """`prohibit_login` reads back, so this converges by comparison, not by a marker.
 
     An unconditional PATCH is a no-op write announced as a change on every
     provision — ANSIBLE-054 (#1400) in a new place, in the role that just
     finished removing it.
     """
-    bot_harness.build(bot_exists=True, prohibited=True)
+    bot_harness.build(bot_exists=True, prohibited=False)
     result = bot_harness.run()
-    assert "already prohibited" in result.stdout
+    assert "already correct" in result.stdout
     assert "Updated machine account" not in result.stdout, (
-        "the script announced a change over an account that was already blocked; "
+        "the script announced a change over an account already in the right state; "
         "`changed_when` matches on 'Updated', so this restarts Gitea every provision"
     )
     assert "PATCH" not in bot_harness.calls.read_text()

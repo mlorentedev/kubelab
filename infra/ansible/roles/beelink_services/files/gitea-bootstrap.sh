@@ -187,21 +187,45 @@ if [ -n "${GITEA_BOT_USER:-}" ]; then
     log "Created machine account '$GITEA_BOT_USER'"
   fi
 
-  # Unlike the OIDC client secret, `prohibit_login` READS BACK, so this converges
-  # by comparison instead of by a marker file. An unconditional PATCH would be
-  # ANSIBLE-054 in a new place — a no-op write announced as a change, forever.
+  # --- The tier this service cannot enforce, recorded rather than faked ---
+  # R4 settled HOW to prohibit login and never asked whether the token survives
+  # it. It does not: measured 2026-08-26, `prohibit_login: true` disables API
+  # token authentication as well, in both directions with the state restored.
+  #
+  #     prohibit_login=true   GET /api/v1/user with the token -> 403
+  #     prohibit_login=false  GET /api/v1/user with the token -> 200
+  #
+  # So "blocked account" and "working token" are mutually exclusive here, and
+  # AC5 asks for both. Binding the account to the Authelia source was tested as
+  # an alternative: it keeps the token alive, but Gitea still accepts a LOCAL
+  # password on a source-bound account (`change-password` returns rc=0), so it
+  # is omission rather than enforcement — the distinction R4 itself drew.
+  #
+  # Per ADR-062 D5 this is therefore a NAMED GAP, not a silent pass. What
+  # actually stands between a person and this account:
+  #   - its password is random, generated above, never rendered by Ansible,
+  #     never stored, and discarded when this process exits;
+  #   - it is absent from Authelia, so the SSO path cannot resolve it;
+  #   - it holds no administrative scope, so a compromise is bounded by
+  #     write:repository and write:user.
+  # None of those is Gitea refusing a login. An admin can set a password on this
+  # account at any time, exactly as on any other.
+  #
+  # The PATCH below therefore drives the flag to FALSE, and does so by
+  # comparison so a converged run reports nothing — an unconditional write would
+  # be ANSIBLE-054 in a new place, in the role that just finished removing it.
   BOT_STATE=$(curl -sf -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
     "http://localhost:3000/api/v1/users/$GITEA_BOT_USER" 2>/dev/null || true)
   case "$BOT_STATE" in
-    *'"prohibit_login":true'*)
-      log "Machine account login already prohibited"
+    *'"prohibit_login":false'*)
+      log "Machine account login state already correct"
       ;;
     *)
       curl -sf -X PATCH -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
         -H "Content-Type: application/json" \
-        -d "{\"prohibit_login\": true, \"login_name\": \"$GITEA_BOT_USER\", \"source_id\": 0}" \
+        -d "{\"prohibit_login\": false, \"login_name\": \"$GITEA_BOT_USER\", \"source_id\": 0}" \
         "http://localhost:3000/api/v1/admin/users/$GITEA_BOT_USER" >/dev/null
-      log "Updated machine account: interactive login prohibited"
+      log "Updated machine account login state"
       ;;
   esac
 fi

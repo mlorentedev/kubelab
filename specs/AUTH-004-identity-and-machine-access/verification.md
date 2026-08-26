@@ -622,3 +622,58 @@ in a state where the allowed operations return `200`.
 that way. Not pursued. Whether Gitea's forgot-password flow could mint a
 credential to `hefesto@gitea.kubelab.live` was not tested — it matters only if
 the decision lands on credential-absence as the block.
+
+### Re-verified on a clean account, and a self-inflicted detour worth recording
+
+The toggle above was re-run after the account was returned to a known state, so
+the finding does not rest on a contaminated instance:
+
+| `prohibit_login` | `must_change_password` | `GET /api/v1/user` with the token |
+|---|---|---|
+| 0 | 0 | **200** |
+| 1 | 0 | **403** |
+| 0 | 0 | **200** (restored) |
+
+**The detour, because it cost an hour and the shape recurs.** Between the first
+toggle and the AC5 evidence run, every request began returning `403` — including
+a freshly minted token and a hand-minted one, which ruled out the recording path.
+The account read as healthy through the API: `active: true`,
+`prohibit_login: false`, `restricted: false`. The API's user record simply does
+not expose the field that was set:
+
+```
+sqlite> select name, must_change_password, prohibit_login, is_active from user where name='hefesto';
+hefesto|1|0|1
+```
+
+`must_change_password` was `1`, and Gitea refuses **API token** authentication
+for a user in that state, not only the login form. It was set by my own
+diagnostic: `gitea admin user change-password` defaults it to true, while the
+provisioning path uses `--must-change-password=false` and never had the problem.
+
+Two things to carry:
+
+- **A diagnostic command mutated the thing it was measuring**, and the mutation
+  was invisible in the channel used to check for it. Two hypotheses were rejected
+  on evidence that could not distinguish them, because the API answered "healthy"
+  about a database that was not.
+- **`must_change_password` blocks tokens, exactly as `prohibit_login` does.** If
+  anything ever resets this account's password without `--must-change-password=false`,
+  the stored token dies silently and the next provision reports `changed=0` over it.
+
+### AC5, both halves, on the clean account
+
+The refusal is only interpretable because the allowed calls succeed — the earlier
+run where everything returned `403` distinguished nothing.
+
+```
+ALLOWED by the granted scopes (write:repository, write:user)
+  GET    /user                          -> 200
+  POST   /user/repos       (create)     -> 201
+  GET    /repos/hefesto/ac5-scope-probe -> 200
+REFUSED — requires write:admin, which was not granted
+  GET    /admin/users                   -> 403
+  POST   /admin/users      (create)     -> 403
+cleanup
+  DELETE /repos/hefesto/ac5-scope-probe -> 204
+```
