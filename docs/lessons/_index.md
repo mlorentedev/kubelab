@@ -1,14 +1,14 @@
 # Lessons
 
-396 lessons, one file each. Newest: 2026-08-26 Open a category for its list.
+399 lessons, one file each. Newest: 2026-08-26 Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
-| [identity-secrets](identity-secrets/_index.md) | 51 | Authelia, OIDC, SOPS, credentials |
+| [identity-secrets](identity-secrets/_index.md) | 53 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 51 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 45 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 49 | Roles, playbooks, IaC, node setup |
-| [process-method](process-method/_index.md) | 56 | Specs, reviews, how work is run |
+| [process-method](process-method/_index.md) | 57 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 26 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 31 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 24 | Argo CD, releases, promotion |
