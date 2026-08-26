@@ -7,16 +7,27 @@ and Slack incident channels for both human engineers and AI agents.
 
 from __future__ import annotations
 
+import base64
 import datetime
 import json
 import os
 import re
+import socket
+import subprocess
+import time
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Generator
 
 from toolkit.core.logging import logger
+from toolkit.features.k8s_connect import find_free_port
+from toolkit.features.k8s_kubeconfig import output_path as _kubeconfig_path
+
+# How long a `kubectl port-forward` gets to start answering before giving up.
+_PORT_FORWARD_TIMEOUT_S = 15.0
+_PORT_FORWARD_POLL_S = 0.3
 
 
 class ObservabilityUnavailableError(RuntimeError):
@@ -167,17 +178,117 @@ class LokiClient:
         return deduplicate_tracebacks(raw_lines)
 
 
+def _port_listening(port: int, host: str = "127.0.0.1", timeout: float = 1.0) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        return sock.connect_ex((host, port)) == 0
+
+
+@contextmanager
+def kubectl_service_port_forward(
+    env: str, service: str, remote_port: int, namespace: str = "kubelab"
+) -> Generator[int, None, None]:
+    """Transient ``kubectl port-forward`` to a Service, torn down on exit.
+
+    OBS-019: the public hostname sits behind Authelia, and the toolkit has no
+    browser session to present. This reaches the Service directly through the
+    apiserver instead — gated by kubeconfig access (mesh/in-cluster), the same
+    trust boundary #1409's fix uses for the Traefik-only NetworkPolicy, rather
+    than by the edge. Mirrors ``k8s_connect.ts_bridge_tunnel``'s shape.
+    """
+    kubeconfig = _kubeconfig_path(env)
+    if not kubeconfig.exists():
+        raise RuntimeError(f"no kubeconfig for env={env!r} at {kubeconfig} — run `make fetch-kubeconfig ENV={env}`")
+
+    local_port = find_free_port()
+    argv = [
+        "kubectl",
+        "--kubeconfig",
+        str(kubeconfig),
+        "-n",
+        namespace,
+        "port-forward",
+        f"svc/{service}",
+        f"{local_port}:{remote_port}",
+    ]
+    proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + _PORT_FORWARD_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if _port_listening(local_port):
+                break
+            if proc.poll() is not None:
+                raise RuntimeError(
+                    f"kubectl port-forward svc/{service} (env={env}) exited early (code {proc.returncode})"
+                )
+            time.sleep(_PORT_FORWARD_POLL_S)
+        else:
+            raise TimeoutError(
+                f"port-forward to svc/{service} (env={env}) did not come up in {_PORT_FORWARD_TIMEOUT_S:.0f}s"
+            )
+        yield local_port
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def read_cluster_secret_key(env: str, secret: str, key: str, namespace: str = "kubelab") -> str | None:
+    """Read one base64 field of a live K8s Secret via kubectl, decoded in-process.
+
+    Returns None on any failure (missing kubeconfig, missing secret, missing
+    key) rather than raising — the caller decides whether a missing token is
+    fatal (it is not, for `alerts_ro_token`: an empty token just means the
+    request goes out unauthenticated, and Grafana answers 401 same as before).
+    """
+    kubeconfig = _kubeconfig_path(env)
+    if not kubeconfig.exists():
+        return None
+    result = subprocess.run(
+        [
+            "kubectl",
+            "--kubeconfig",
+            str(kubeconfig),
+            "-n",
+            namespace,
+            "get",
+            "secret",
+            secret,
+            "-o",
+            f"jsonpath={{.data.{key}}}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0 or not result.stdout:
+        return None
+    return base64.b64decode(result.stdout).decode()
+
+
 @dataclass
 class GrafanaAlertClient:
     """Client for checking Grafana Alertmanager firing state."""
 
     base_url: str = field(default_factory=lambda: os.environ.get("GRAFANA_URL", "https://grafana.kubelab.live"))
+    token: str = field(default_factory=lambda: os.environ.get("GRAFANA_TOKEN", ""))
     timeout: int = 10
 
     def get_alerts(self) -> list[dict[str, Any]]:
-        """Fetch all active alerts from Grafana."""
-        url = f"{self.base_url.rstrip('/')}/api/v1/alerts"
-        req = urllib.request.Request(url, headers={"User-Agent": "KubeLab-Toolkit-Observability"})
+        """Fetch all active alerts from Grafana.
+
+        OBS-019: `/api/v1/alerts` does not exist on this Grafana version (404,
+        measured) — the client had never successfully parsed a real response,
+        independent of the 401 #1393 fixed. The Alertmanager-compatible
+        `/api/.../v2/alerts` is the endpoint that actually answers.
+        """
+        url = f"{self.base_url.rstrip('/')}/api/alertmanager/grafana/api/v2/alerts"
+        headers = {"User-Agent": "KubeLab-Toolkit-Observability"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        req = urllib.request.Request(url, headers=headers)
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -200,14 +311,20 @@ class GrafanaAlertClient:
         alerts = []
         if isinstance(data, list):
             for item in data:
+                labels = item.get("labels", {})
+                annotations = item.get("annotations", {})
+                # v2 nests state under `status.state` and uses "active", not
+                # "alerting" — translated so the CLI's `[FIRING]` badge and
+                # existing callers keep the vocabulary #1393 established.
+                raw_state = item.get("status", {}).get("state") or item.get("state", "unknown")
                 alerts.append(
                     {
-                        "name": item.get("name") or item.get("labels", {}).get("alertname", "unknown"),
-                        "state": item.get("state", "unknown"),
-                        "severity": item.get("labels", {}).get("severity", "info"),
-                        "summary": item.get("annotations", {}).get("summary", ""),
-                        "runbook_url": item.get("annotations", {}).get("runbook_url", ""),
-                        "active_at": item.get("activeAt", ""),
+                        "name": item.get("name") or labels.get("alertname", "unknown"),
+                        "state": "alerting" if raw_state == "active" else raw_state,
+                        "severity": labels.get("severity", "info"),
+                        "summary": annotations.get("summary", ""),
+                        "runbook_url": annotations.get("runbook_url", ""),
+                        "active_at": item.get("startsAt") or item.get("activeAt", ""),
                     }
                 )
         return alerts

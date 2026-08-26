@@ -56,6 +56,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # in _build_dynamic_literals for what that alias cost.
             "password": "APPS_SERVICES_OBSERVABILITY_GRAFANA_ADMIN_PASSWORD",
             "oidc-client-secret": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_GRAFANA",
+            # OBS-019: read by `toolkit obs alerts` via `kubectl get secret`,
+            # never mounted into the Grafana pod itself.
+            "alerts-ro-token": "APPS_SERVICES_OBSERVABILITY_GRAFANA_ALERTS_RO_TOKEN",
         },
     ),
     SecretMapping(
