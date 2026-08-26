@@ -1,7 +1,9 @@
 """Unit and integration tests for Agentic Observability & SRE triage (ADR-064)."""
 
+import base64
 import datetime
 import json
+import subprocess
 import urllib.error
 
 import pytest
@@ -9,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
+import toolkit.features.observability as obs
 from toolkit.features.observability import (
     AlertsUnavailableError,
     LogsUnavailableError,
@@ -18,6 +21,8 @@ from toolkit.features.observability import (
     SreTriageEngine,
     _parse_time_offset,
     deduplicate_tracebacks,
+    kubectl_service_port_forward,
+    read_cluster_secret_key,
 )
 from toolkit.main import app
 
@@ -228,27 +233,161 @@ class TestLokiFailsLoudlyToo:
         assert LokiClient().query_range(query='{container="authelia"}') == []
 
 
+class TestKubectlServicePortForward:
+    """OBS-019 transport: mirrors k8s_connect.ts_bridge_tunnel's own test shape.
+
+    Never spawns a real kubectl — CI runners have no kubeconfig, and a "unit"
+    test that happens to succeed locally because a real one exists on the
+    developer's machine is exactly the non-hermetic trap this guards against.
+    """
+
+    def _mock_proc(self) -> MagicMock:
+        proc = MagicMock()
+        proc.poll.return_value = None
+        return proc
+
+    def test_missing_kubeconfig_raises_before_spawning_anything(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: __import__("pathlib").Path("/nonexistent"))
+        with pytest.raises(RuntimeError, match="no kubeconfig"):
+            with kubectl_service_port_forward("staging", "grafana", 3000):
+                pass
+
+    def test_yields_local_port_and_terminates_on_exit(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_kubeconfig = tmp_path / "kubelab-staging-config"
+        fake_kubeconfig.write_text("")
+        monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
+        mock_proc = self._mock_proc()
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
+        monkeypatch.setattr(obs, "_port_listening", lambda *a, **kw: True)
+        monkeypatch.setattr(obs, "find_free_port", lambda: 54321)
+
+        with kubectl_service_port_forward("staging", "grafana", 3000) as port:
+            assert port == 54321
+
+        mock_proc.terminate.assert_called_once()
+
+    def test_process_exiting_early_raises_before_yielding(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_kubeconfig = tmp_path / "kubelab-staging-config"
+        fake_kubeconfig.write_text("")
+        monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
+        mock_proc = self._mock_proc()
+        mock_proc.poll.return_value = 1  # exited immediately, e.g. "svc/grafana" not found
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
+        monkeypatch.setattr(obs, "_port_listening", lambda *a, **kw: False)
+
+        with pytest.raises(RuntimeError, match="exited early"):
+            with kubectl_service_port_forward("staging", "grafana", 3000):
+                pytest.fail("body must not run when the tunnel never came up")
+
+        mock_proc.terminate.assert_called_once()
+
+
+class TestReadClusterSecretKey:
+    def test_missing_kubeconfig_returns_none_without_spawning_kubectl(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: __import__("pathlib").Path("/nonexistent"))
+        called = []
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: called.append(1))
+        assert read_cluster_secret_key("staging", "grafana-admin", "alerts-ro-token") is None
+        assert called == []
+
+    def test_decodes_the_base64_value_on_success(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_kubeconfig = tmp_path / "kubelab-staging-config"
+        fake_kubeconfig.write_text("")
+        monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
+        encoded = base64.b64encode(b"glsa_secrettoken").decode()
+        monkeypatch.setattr(
+            subprocess, "run", lambda *a, **kw: MagicMock(returncode=0, stdout=encoded)
+        )
+        assert read_cluster_secret_key("staging", "grafana-admin", "alerts-ro-token") == "glsa_secrettoken"
+
+    def test_nonzero_exit_returns_none(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_kubeconfig = tmp_path / "kubelab-staging-config"
+        fake_kubeconfig.write_text("")
+        monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=1, stdout=""))
+        assert read_cluster_secret_key("staging", "grafana-admin", "alerts-ro-token") is None
+
+
+class TestGrafanaClientTransportSelection:
+    """`_grafana_client` picks the direct-URL escape hatch or the port-forward transport."""
+
+    def test_grafana_url_set_skips_the_transport_entirely(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from toolkit.cli import observability as cli_obs
+
+        monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
+
+        def _boom(*a, **kw):
+            raise AssertionError("port-forward must not be attempted when GRAFANA_URL is set")
+
+        monkeypatch.setattr(cli_obs, "kubectl_service_port_forward", _boom)
+
+        with cli_obs._grafana_client("prod") as client:
+            assert client.base_url == "http://mock-grafana:3000"
+
+    def test_without_grafana_url_wraps_port_forward_and_reads_the_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from contextlib import contextmanager
+
+        from toolkit.cli import observability as cli_obs
+
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+
+        @contextmanager
+        def fake_port_forward(env, service, remote_port):
+            assert (env, service, remote_port) == ("staging", "grafana", 3000)
+            yield 44444
+
+        monkeypatch.setattr(cli_obs, "kubectl_service_port_forward", fake_port_forward)
+        monkeypatch.setattr(cli_obs, "read_cluster_secret_key", lambda *a, **kw: "glsa_token")
+
+        with cli_obs._grafana_client("staging") as client:
+            assert client.base_url == "http://127.0.0.1:44444"
+            assert client.token == "glsa_token"
+
+    def test_transport_failure_becomes_alerts_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from toolkit.cli import observability as cli_obs
+
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+
+        def _raise(*a, **kw):
+            raise TimeoutError("port-forward to svc/grafana (env=prod) did not come up in 15s")
+
+        monkeypatch.setattr(cli_obs, "kubectl_service_port_forward", _raise)
+
+        with pytest.raises(AlertsUnavailableError, match="could not reach Grafana"):
+            with cli_obs._grafana_client("prod"):
+                pytest.fail("body must not run when the transport never came up")
+
+
 class TestAlertsCommandFailsLoudly:
     """A blind check must not exit 0, in either output mode."""
 
     @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
-    def test_the_cli_exits_non_zero_when_grafana_cannot_be_asked(self, mock_get):
+    def test_the_cli_exits_non_zero_when_grafana_cannot_be_asked(self, mock_get, monkeypatch):
         from typer.testing import CliRunner
 
         from toolkit.cli.observability import app
 
+        # GRAFANA_URL takes the direct-URL escape hatch in `_grafana_client`,
+        # skipping the `kubectl port-forward` transport — this test is about
+        # `get_alerts()` failing, not about reaching a real cluster from CI.
+        monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
         mock_get.side_effect = AlertsUnavailableError("Grafana alert fetch failed: HTTP Error 401: Unauthorized")
         result = CliRunner().invoke(app, ["alerts"])
 
         assert result.exit_code == 1
 
     @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
-    def test_json_mode_emits_an_error_object_never_an_empty_array(self, mock_get):
+    def test_json_mode_emits_an_error_object_never_an_empty_array(self, mock_get, monkeypatch):
         """`[]` is what a machine consumer reads as "no alerts firing"."""
         from typer.testing import CliRunner
 
         from toolkit.cli.observability import app
 
+        monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
         mock_get.side_effect = AlertsUnavailableError("boom")
         result = CliRunner().invoke(app, ["alerts", "--json"])
 
@@ -324,7 +463,8 @@ class TestCliCommands:
         assert "auth failed" in result.output
 
     @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
-    def test_cli_obs_alerts(self, mock_alerts):
+    def test_cli_obs_alerts(self, mock_alerts, monkeypatch):
+        monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
         mock_alerts.return_value = [
             {
                 "name": "obs007-acme-failure",
@@ -354,7 +494,8 @@ class TestCliCommands:
         assert len(parsed["lines"]) == 1
 
     @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
-    def test_cli_obs_alerts_json(self, mock_alerts):
+    def test_cli_obs_alerts_json(self, mock_alerts, monkeypatch):
+        monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
         mock_alerts.return_value = [{"name": "obs007-acme-failure", "state": "alerting", "severity": "critical"}]
         result = runner.invoke(app, ["obs", "alerts", "--json"])
         assert result.exit_code == 0

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Optional
+import os
+from contextlib import contextmanager
+from typing import Annotated, Generator, Optional
 
 import typer
 
@@ -15,6 +17,8 @@ from toolkit.features.observability import (
     LokiClient,
     SlackSreClient,
     SreTriageEngine,
+    kubectl_service_port_forward,
+    read_cluster_secret_key,
 )
 
 app = typer.Typer(
@@ -106,17 +110,44 @@ def _query_loki(
         typer.echo(line)
 
 
+@contextmanager
+def _grafana_client(env: str) -> Generator[GrafanaAlertClient, None, None]:
+    """Yield a client already pointed at a reachable, authenticated Grafana.
+
+    OBS-019: the public hostname sits behind Authelia, and the toolkit has no
+    browser session — so unless `GRAFANA_URL` is set as a direct-URL escape
+    hatch (manual override, or a future in-mesh address), this reaches Grafana
+    through a transient `kubectl port-forward`, using kubeconfig access as the
+    trust boundary instead of the edge. Any transport failure surfaces as
+    `AlertsUnavailableError`, same as an HTTP failure — a blind check must fail
+    loudly regardless of which half of the path went blind.
+    """
+    if os.environ.get("GRAFANA_URL"):
+        yield GrafanaAlertClient()
+        return
+    try:
+        with kubectl_service_port_forward(env, "grafana", 3000) as port:
+            token = read_cluster_secret_key(env, "grafana-admin", "alerts-ro-token") or ""
+            yield GrafanaAlertClient(base_url=f"http://127.0.0.1:{port}", token=token)
+    except (RuntimeError, TimeoutError) as exc:
+        raise AlertsUnavailableError(f"could not reach Grafana in {env}: {exc}") from exc
+
+
 @app.command("alerts")
 def alerts_cmd(
+    env: Annotated[
+        str,
+        typer.Option("--env", "-e", help="Cluster to query (staging|prod) — ADR-028: prod is the monitoring of record"),
+    ] = "prod",
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output results in JSON format"),
     ] = False,
 ) -> None:
     """List active Grafana alerts and their firing states."""
-    client = GrafanaAlertClient()
     try:
-        alerts = client.get_alerts()
+        with _grafana_client(env) as client:
+            alerts = client.get_alerts()
     except AlertsUnavailableError as exc:
         # A blind check must not read as a healthy one, in either output mode.
         # `--json` gets an OBJECT rather than `[]` for the same reason: a machine
