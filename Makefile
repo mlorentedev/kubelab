@@ -109,6 +109,10 @@ help:
 	@echo "  make board-streams-check  Exit 1 if any open issue is unplaced or out of date"
 	@echo "  make board-parts          Dry-run: parent links the registry's parts: section implies"
 	@echo "  make board-parts-apply    Add the missing parent/sub-issue links"
+	@echo "  make board-sweep          Dry-run: harness/board-inprogress-sweep.yaml's Status/Priority decisions"
+	@echo "  make board-sweep-apply    Write the sweep's Status/Priority changes"
+	@echo "  make board-ids            Report any open issue that shares its ticket id with another"
+	@echo "  make board-ids-check      Exit 1 while any open issue shares an id"
 	@echo ""
 	@echo "Toolkit CLI (use directly for most operations):"
 	@echo "  toolkit services up gitea        Start Gitea"
@@ -941,6 +945,23 @@ board-parts:
 
 board-parts-apply:
 	@$(TOOLKIT) board parts --apply
+
+# In Progress sweep — one-time Status/Priority decision, harness/board-inprogress-sweep.yaml (GOV-005)
+.PHONY: board-sweep board-sweep-apply
+board-sweep:
+	@$(TOOLKIT) board sweep
+
+board-sweep-apply:
+	@$(TOOLKIT) board sweep --apply
+
+# Duplicate ticket ids among open issues (GOV-004). Not wired into CI: parallel
+# sessions create issues, same reasoning as board-streams-check staying out.
+.PHONY: board-ids board-ids-check
+board-ids:
+	@$(TOOLKIT) board ids
+
+board-ids-check:
+	@$(TOOLKIT) board ids --check
 
 # K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
