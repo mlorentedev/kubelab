@@ -177,8 +177,8 @@ networking:
     # hub's cost drifted unnoticed for two years (ADR-063 D4). Guarded by the
     # MIRRORED drift test, which is what makes this a mirror rather than a copy.
     managed_spokes:
-      - "staging"
-      - "prod"
+    - "staging"
+    - "prod"
     # Homepage cockpit tile (SSOT-005). widget=ping mirrors aws1's (ADR-033).
     dashboard:
       display_name: "gcp1"
@@ -518,7 +518,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.1.5"
+    version: "1.1.6"
     port: 8080
     health_path: /health
     resources:
@@ -923,7 +923,7 @@ apps:
         # homelab is off (ADR-028) — alerting on that trains the operator to
         # ignore the dashboard.
         muted_notification_tags:
-          - staging
+        - staging
           # BACKUP-044 AC9. An on-demand node is powered off most of the week,
           # so its backup heartbeat stops arriving and its monitor goes DOWN —
           # correctly. That state is the coverage view working, not an
@@ -936,7 +936,7 @@ apps:
           # own `notificationIDList` is ignored by the apply path. Removing this
           # entry starts paging at 3 AM the first night the homelab sleeps —
           # asserted in tests/test_backup_heartbeat_monitors.py.
-          - on-demand
+        - on-demand
 
       glances:
         name: glances
@@ -1065,7 +1065,7 @@ apps:
         auth_level: one_factor
         default_port: 8080
         health_path: /health
-        bouncer_api_key:
+        bouncer_api_key: 
           secrets://apps.services.security.crowdsec.bouncer_api_key
 
     # Network services (bare-metal, external to K3s)
