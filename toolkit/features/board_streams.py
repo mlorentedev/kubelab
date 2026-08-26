@@ -33,13 +33,14 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from toolkit.core import gh_graphql
 
 DEFAULT_REGISTRY = Path("harness/board-streams.yaml")
 
@@ -225,27 +226,11 @@ def desired_counts(items: list[Item], registry: Registry) -> dict[str, int]:
 
 
 def _gh_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Run one GraphQL request through `gh`. Raises on transport or GraphQL errors."""
-    body = json.dumps({"query": query, "variables": variables or {}})
+    """Run one GraphQL request through `gh`. Raises `GitHubError` on transport or query errors."""
     try:
-        proc = subprocess.run(
-            ["gh", "api", "graphql", "-H", "GraphQL-Features: sub_issues", "--input", "-"],
-            input=body,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise GitHubError("gh CLI not found") from exc
-    if proc.returncode != 0:
-        raise GitHubError(proc.stderr.strip() or proc.stdout.strip() or "gh api graphql failed")
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
-        raise GitHubError(f"gh returned non-JSON: {proc.stdout[:200]}") from exc
-    if data.get("errors"):
-        raise GitHubError(json.dumps(data["errors"])[:500])
-    return data["data"]
+        return gh_graphql.run(query, variables)
+    except gh_graphql.GraphQLError as exc:
+        raise GitHubError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
