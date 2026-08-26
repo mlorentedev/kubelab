@@ -160,3 +160,48 @@ else
   record_oidc_state
   log "Created OIDC provider"
 fi
+
+# --- Machine identity (AUTH-004 C5, ADR-062 D1) ---
+# The third identity class: an agent that acts on the forge without being a
+# person. It lives here rather than in an Ansible task because the account check
+# is a pipeline of nested quotes, and YAML folding plus argv splitting mangled it
+# before it ever reached the container. A real shell keeps it readable.
+#
+# R4 settled the ORDER and it is not arbitrary: `prohibit_login` is in Gitea's
+# EditUserOption and NOT in CreateUserOption, so the account cannot be created
+# already blocked. It exists briefly loginable, which is why the block is applied
+# immediately after creation and before any token is minted.
+if [ -n "${GITEA_BOT_USER:-}" ]; then
+  if su git -c "gitea admin user list" 2>/dev/null \
+    | awk 'NR > 1 {print $2}' | grep -qx "$GITEA_BOT_USER"; then
+    log "Machine account '$GITEA_BOT_USER' exists"
+  else
+    # A password is required at creation and this account will never use one: its
+    # login is prohibited below and its credential is a scoped API token. So one
+    # is generated here, never rendered by Ansible, never stored, and nobody —
+    # including this script — retains it after the process exits.
+    su git -c "gitea admin user create --username $GITEA_BOT_USER \
+      --password $(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9') \
+      --email $GITEA_BOT_EMAIL \
+      --must-change-password=false"
+    log "Created machine account '$GITEA_BOT_USER'"
+  fi
+
+  # Unlike the OIDC client secret, `prohibit_login` READS BACK, so this converges
+  # by comparison instead of by a marker file. An unconditional PATCH would be
+  # ANSIBLE-054 in a new place — a no-op write announced as a change, forever.
+  BOT_STATE=$(curl -sf -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
+    "http://localhost:3000/api/v1/users/$GITEA_BOT_USER" 2>/dev/null || true)
+  case "$BOT_STATE" in
+    *'"prohibit_login":true'*)
+      log "Machine account login already prohibited"
+      ;;
+    *)
+      curl -sf -X PATCH -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
+        -H "Content-Type: application/json" \
+        -d "{\"prohibit_login\": true, \"login_name\": \"$GITEA_BOT_USER\", \"source_id\": 0}" \
+        "http://localhost:3000/api/v1/admin/users/$GITEA_BOT_USER" >/dev/null
+      log "Updated machine account: interactive login prohibited"
+      ;;
+  esac
+fi

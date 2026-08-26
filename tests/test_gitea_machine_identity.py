@@ -33,8 +33,11 @@ converges by observation and needs no marker file.
 
 from __future__ import annotations
 
+import os
 import pathlib
+import subprocess
 
+import pytest
 import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -45,8 +48,6 @@ BOT_TOKEN_KEY = "apps.services.core.gitea.bot_token"
 
 MINT_TASK = "Mint the machine account's scoped token"
 RECORD_TASK = "Record the machine token in SOPS"
-PROHIBIT_TASK = "Prohibit interactive login for the machine account"
-CREATE_TASK = "Ensure the Gitea machine account exists"
 
 
 def _tasks() -> list[dict]:
@@ -144,28 +145,139 @@ def test_the_token_is_minted_only_when_there_is_none() -> None:
     )
 
 
-def test_login_is_prohibited_by_comparison_rather_than_unconditionally() -> None:
-    """`prohibit_login` reads back, so this must converge by observation.
+# --- Script-level behaviour ---------------------------------------------------
+# The account and its login block live in gitea-bootstrap.sh rather than in an
+# Ansible task: the check is a pipeline of nested quotes, and YAML folding plus
+# argv splitting mangled it before it reached the container. Measured, not
+# predicted — the equivalent `command:` failed on the live node while the same
+# pipeline typed by hand returned `manu`, exit 0.
+#
+# These run the real script with `su`, `curl` and `wget` stubbed on PATH, so they
+# assert behaviour rather than text.
 
-    An unconditional PATCH is the #1400 defect one service over: the write is a
-    no-op in effect and a change in the report, so the guard fires forever.
-    """
-    task = _task(PROHIBIT_TASK)
-    condition = str(task.get("when") or "")
-    assert condition, (
-        "the prohibit-login task has no `when`. Unlike the OIDC client secret, "
-        "`prohibit_login` is readable via `GET /api/v1/admin/users`, so this converges by "
-        "comparison — patch only when the live value disagrees. An unconditional PATCH "
-        "reports a change on every provision, which is ANSIBLE-054 in a new place."
+SCRIPT = ROLE / "files/gitea-bootstrap.sh"
+BOT = "hefesto"
+
+
+@pytest.fixture
+def bot_harness(tmp_path: pathlib.Path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls.log"
+
+    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n")
+
+    def build(*, bot_exists: bool, prohibited: bool) -> None:
+        rows = f"1\t{BOT}\tbot@example.test\n" if bot_exists else ""
+        (bin_dir / "su").write_text(
+            f"""#!/bin/sh
+cmd="$3"
+echo "su: $cmd" >> {calls}
+case "$cmd" in
+  *"admin user list"*) printf 'ID\\tUsername\\tEmail\\n1\\toperator\\tops@example.test\\n{rows}' ;;
+  *"admin auth list"*) printf 'ID\\tName\\n7\\tauthelia\\n' ;;
+  *) exit 0 ;;
+esac
+"""
+        )
+        (bin_dir / "curl").write_text(
+            f"""#!/bin/sh
+echo "curl: $*" >> {calls}
+case "$*" in
+  *PATCH*) exit 0 ;;
+  *) printf '{{"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
+esac
+"""
+        )
+        for stub in ("wget", "su", "curl"):
+            (bin_dir / stub).chmod(0o755)
+
+    marker = tmp_path / "state"
+    marker.write_text("")
+
+    def run():
+        env = {
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "GITEA_ADMIN_USER": "operator",
+            "GITEA_ADMIN_PASSWORD": "pw",
+            "GITEA_ADMIN_EMAIL": "ops@example.test",
+            "GITEA_OIDC_CLIENT_SECRET": "s",
+            "GITEA_OIDC_DISCOVERY_URL": "https://idp.example.test/.well-known/x",
+            "GITEA_BOOTSTRAP_STATE": str(marker),
+            "GITEA_BOT_USER": BOT,
+            "GITEA_BOT_EMAIL": f"{BOT}@example.test",
+        }
+        return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
+
+    return type("H", (), {"build": staticmethod(build), "run": staticmethod(run), "calls": calls})
+
+
+def test_the_machine_account_is_created_when_absent(bot_harness):
+    bot_harness.build(bot_exists=False, prohibited=False)
+    result = bot_harness.run()
+    assert result.returncode == 0, result.stderr
+    assert f"Created machine account '{BOT}'" in result.stdout
+    assert "admin user create --username hefesto" in bot_harness.calls.read_text()
+
+
+def test_an_existing_machine_account_is_not_recreated(bot_harness):
+    bot_harness.build(bot_exists=True, prohibited=True)
+    result = bot_harness.run()
+    assert f"Machine account '{BOT}' exists" in result.stdout
+    assert "admin user create" not in bot_harness.calls.read_text()
+
+
+def test_login_is_prohibited_after_creation(bot_harness):
+    """R4's ordering: the account cannot be created blocked, so the block follows."""
+    bot_harness.build(bot_exists=False, prohibited=False)
+    result = bot_harness.run()
+    calls = bot_harness.calls.read_text()
+    assert "interactive login prohibited" in result.stdout
+    assert "PATCH" in calls
+    assert calls.index("admin user create") < calls.index("PATCH"), (
+        "the login block must follow creation — prohibit_login is in EditUserOption, "
+        "not CreateUserOption (R4)"
     )
 
 
-def test_the_account_is_created_only_when_absent() -> None:
-    """R4's ordering: create, then PATCH, then mint — the account exists briefly loginable."""
-    tasks = [t.get("name") for t in _tasks()]
-    for earlier, later in ((CREATE_TASK, PROHIBIT_TASK), (PROHIBIT_TASK, MINT_TASK)):
-        assert tasks.index(earlier) < tasks.index(later), (
-            f"{earlier!r} must run before {later!r}. `prohibit_login` is in EditUserOption and "
-            "not in CreateUserOption, so the account cannot be created already blocked (R4); "
-            "the token must not be minted before the block is applied."
-        )
+def test_an_already_prohibited_account_is_not_patched_again(bot_harness):
+    """`prohibit_login` reads back, so this converges by comparison, not by a marker.
+
+    An unconditional PATCH is a no-op write announced as a change on every
+    provision — ANSIBLE-054 (#1400) in a new place, in the role that just
+    finished removing it.
+    """
+    bot_harness.build(bot_exists=True, prohibited=True)
+    result = bot_harness.run()
+    assert "already prohibited" in result.stdout
+    assert "Updated machine account" not in result.stdout, (
+        "the script announced a change over an account that was already blocked; "
+        "`changed_when` matches on 'Updated', so this restarts Gitea every provision"
+    )
+    assert "PATCH" not in bot_harness.calls.read_text()
+
+
+def test_the_bot_section_is_skipped_when_no_machine_identity_is_declared(bot_harness):
+    """A node provisioned before the identity row exists must not break."""
+    bot_harness.build(bot_exists=False, prohibited=False)
+    env = dict(os.environ)
+    env.pop("GITEA_BOT_USER", None)
+    result = subprocess.run(
+        ["sh", str(SCRIPT)],
+        env={
+            **env,
+            "PATH": f"{bot_harness.calls.parent / 'bin'}:{os.environ['PATH']}",
+            "GITEA_ADMIN_USER": "operator",
+            "GITEA_ADMIN_PASSWORD": "pw",
+            "GITEA_ADMIN_EMAIL": "ops@example.test",
+            "GITEA_OIDC_CLIENT_SECRET": "s",
+            "GITEA_OIDC_DISCOVERY_URL": "https://idp.example.test/.well-known/x",
+            "GITEA_BOOTSTRAP_STATE": str(bot_harness.calls.parent / "state"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "machine account" not in result.stdout.lower()
