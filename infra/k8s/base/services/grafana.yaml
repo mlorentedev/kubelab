@@ -73,7 +73,10 @@ data:
   GF_AUTH_PROXY_ENABLED: "true"
   GF_AUTH_PROXY_HEADER_NAME: "Remote-User"
   GF_AUTH_PROXY_HEADER_PROPERTY: "username"
-  GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+  # SEC-014: false because the proxy header's source is not restricted to
+  # Traefik by anything Grafana itself enforces (see the NetworkPolicy below) —
+  # auto-provisioning an account for whatever username arrives compounds that.
+  GF_AUTH_PROXY_AUTO_SIGN_UP: "false"
   GF_AUTH_PROXY_HEADERS: "Email:Remote-Email Name:Remote-Name Groups:Remote-Groups"
   # Authelia OIDC (direct login — enables "Sign in with Authelia" button)
   GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
@@ -243,3 +246,35 @@ spec:
           port: 3000
   tls:
     certResolver: letsencrypt
+---
+# SEC-014: GF_AUTH_PROXY_ENABLED trusts whatever presents the Remote-User
+# header — Authelia's ForwardAuth is supposed to be the only thing that can,
+# but the Service is ClusterIP with no restriction of its own, so any pod (or
+# anyone with services/proxy RBAC) can forge it and become any Grafana user.
+# Label-based, not IP-based: Traefik's pod IP is not stable across a rebuild.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-ingress-from-traefik-only
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 3000
