@@ -61,8 +61,16 @@ FIELDS = ("authelia", "openidConnect", "gitea", SECRET, DISCOVERY, "openid,profi
 
 
 def _expected_hash(secret: str = SECRET, discovery: str = DISCOVERY) -> str:
+    """Length-prefixed, not merely separated — see the script's own comment.
+
+    A bare delimiter is ambiguous for any field that can contain it, and two
+    different configurations hashing alike would mean a rotated secret reporting
+    no change: the lying report this whole ticket removes, reintroduced through
+    the encoding. Raised in review of #1421.
+    """
     fields = ("authelia", "openidConnect", "gitea", secret, discovery, "openid,profile,email,groups")
-    return hashlib.sha256("|".join(fields).encode()).hexdigest()
+    encoded = "".join(f"{len(f)}:{f}|" for f in fields)
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 @pytest.fixture
@@ -272,3 +280,24 @@ def test_replacing_the_script_restarts_the_container_that_mounts_it():
         "executing the previous version until it restarts — a script change would "
         "report success and take no effect."
     )
+
+
+def test_the_state_encoding_cannot_confuse_two_configurations(harness):
+    """Two configurations that a bare separator would flatten must differ.
+
+    With `"|".join(...)`, a secret ending in `|` and a discovery URL are
+    indistinguishable from a secret and a discovery URL beginning with `|` —
+    the marker matches, the script stays silent, and the rotation is lost. The
+    length prefix makes that unrepresentable, so this asserts on the property
+    rather than on the current alphabet of the secret generator.
+    """
+    a = harness.run(secret="rotated|", discovery="https://idp.example.test/x")
+    assert "Updated" in a.stdout
+    first = harness.marker.read_text().strip()
+
+    b = harness.run(secret="rotated", discovery="|https://idp.example.test/x")
+    assert "Updated" in b.stdout, (
+        "the second configuration was read as identical to the first, so a real "
+        "change would have been announced as none"
+    )
+    assert harness.marker.read_text().strip() != first

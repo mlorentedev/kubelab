@@ -106,10 +106,19 @@ OIDC_STATE="${GITEA_BOOTSTRAP_STATE:-/data/gitea/.kubelab-oidc-bootstrap.sha256}
 # Known limitation, stated rather than discovered later: a secret changed in
 # Gitea directly is invisible here. The unconditional write below is what covers
 # that case, which is the reason it stays unconditional.
-OIDC_DESIRED=$(printf '%s|%s|%s|%s|%s|%s' \
-  "authelia" "openidConnect" "gitea" \
-  "$GITEA_OIDC_CLIENT_SECRET" "$GITEA_OIDC_DISCOVERY_URL" "$OIDC_SCOPES" \
-  | sha256sum | awk '{print $1}')
+# Each field is length-prefixed rather than merely separated. A bare separator
+# is ambiguous: any character chosen as the delimiter can in principle occur
+# inside a field, and two different configurations would then hash the same —
+# which in this script means a rotated secret announcing no change, the exact
+# lying report the whole ticket exists to remove. Length-prefixing is injective
+# whatever the fields contain, so the question stops depending on the alphabet
+# the secret generator happens to use. Raised in review of #1421.
+OIDC_DESIRED=$(
+  for _field in "authelia" "openidConnect" "gitea" \
+    "$GITEA_OIDC_CLIENT_SECRET" "$GITEA_OIDC_DISCOVERY_URL" "$OIDC_SCOPES"; do
+    printf '%s:%s|' "${#_field}" "$_field"
+  done | sha256sum | awk '{print $1}'
+)
 OIDC_RECORDED=$(cat "$OIDC_STATE" 2>/dev/null || true)
 
 # Written only after the call it describes returns 0. Recording first would make
