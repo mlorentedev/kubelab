@@ -318,3 +318,39 @@ def test_the_mint_command_is_passed_as_argv() -> None:
     joined = " ".join(command["argv"])
     for flag in ("--token-name", "--scopes", "--raw"):
         assert flag in joined, f"the mint command lost {flag}; defaults are name=gitea-admin, scopes=all"
+
+
+def test_a_failed_login_state_patch_stops_the_run(bot_harness, tmp_path):
+    """The PATCH must fail the play rather than be announced as done.
+
+    Raised in review of #1437 as a swallowed error: `curl -sf ... >/dev/null`
+    with no exit check, followed unconditionally by `log "Updated ..."`. The
+    reviewer's reasoning was wrong — `set -eu` aborts on the failing curl, so the
+    log line never runs and the play stops — but the property is worth pinning
+    rather than left resting on a `set -e` two hundred lines above.
+
+    The shape it guards against is concrete and one edit away: the GET beside it
+    ends in `|| true`, deliberately, because a missing account is a legitimate
+    answer. Copying that onto the PATCH would produce exactly the defect the
+    review described — a token minted against an account whose login state was
+    never actually changed, with the run reporting success.
+    """
+    bin_dir = bot_harness.calls.parent / "bin"
+    bot_harness.build(bot_exists=True, prohibited=True)
+    # GET answers; PATCH fails with curl's HTTP-error status.
+    (bin_dir / "curl").write_text(
+        '#!/bin/sh\ncase "$*" in\n  *PATCH*) exit 22 ;;\n'
+        '  *) printf \'{"login":"hefesto","prohibit_login":true}\' ;;\nesac\n'
+    )
+    (bin_dir / "curl").chmod(0o755)
+
+    result = bot_harness.run()
+
+    assert result.returncode != 0, (
+        "a failing login-state PATCH left the script exiting 0, so the play would "
+        "carry on and mint a token against an account in an unknown state"
+    )
+    assert "Updated machine account login state" not in result.stdout, (
+        "the script announced the change it had just failed to make; `changed_when` "
+        "matches on 'Updated', so the run would report success"
+    )

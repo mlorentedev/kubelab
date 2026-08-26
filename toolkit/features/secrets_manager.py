@@ -442,6 +442,15 @@ SECRET_CATALOG: list[SecretSpec] = [
             "minting a second token: the account would hold two live credentials and "
             "nothing records which consumer holds which."
         ),
+        # NEVER, and measured rather than assumed. `EXTERNAL` means somebody else
+        # issued it, which is usually a reason to classify it PROVIDER and go ask
+        # — but Gitea grants access tokens no lifetime at all. Its token API
+        # returns `created_at`, `last_used_at`, `scopes`, `token_last_eight` and
+        # no expiry field of any kind, so there is nothing to ask and nothing to
+        # renew; the token lives until it is revoked. Declaring PROVIDER would
+        # oblige a checker that could only ever answer "no expiry", which is a
+        # control that reports nothing.
+        expiry=Expiry.NEVER,
         # prod, not dev: Gitea's identity environment is prod (`gitea_identity_env`),
         # which is why the play loads a separate `gitea_secrets` tree. `envs` is the
         # audit dimension — which environments must HAVE this — not the file it lives
