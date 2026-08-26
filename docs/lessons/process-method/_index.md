@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-54 lessons, newest first. Back to [all categories](../_index.md).
+56 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 388 | [A decision reaches only as far as the artefact someone opens at the point of use — three re-derivations in one session](lesson-388-a-decision-reaches-only-as-far-as-the-artefact-at-the-point-of-use.md) | 2026-08-25 |
 | 391 | [A probe that sabotages itself reports on the probe](lesson-391-a-probe-that-sabotages-itself-reports-on-the-probe.md) | 2026-08-24 |
 | 390 | [A control cannot discriminate where both inputs are equal](lesson-390-a-control-cannot-discriminate-where-both-inputs-are-equal.md) | 2026-08-24 |
 | 385 | [A drill gentler than the event it stands for exercises the branch that works](lesson-385-a-drill-gentler-than-the-event-tests-the-wrong-branch.md) | 2026-08-24 |
@@ -58,3 +59,4 @@
 | 370 | [Nine green signals described a broken hub, and running it found all nine](lesson-370-nine-green-signals-described-a-broken-hub.md) | 2026-08-22 |
 | 371 | [A truncated listing reads exactly like a complete one](lesson-371-a-truncated-listing-reads-exactly-like-a-complete-one.md) | 2026-08-23 |
 | 374 | [Grepping an output that was never produced](lesson-374-grepping-an-output-that-was-never-produced.md) | 2026-08-23 |
+| 394 | [The ticket body is the contract; the prompt that names it is not](lesson-394-the-ticket-body-is-the-contract-not-the-prompt-that-names-it.md) | 2026-08-25 |
