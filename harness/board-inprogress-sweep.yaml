@@ -1,0 +1,68 @@
+# In Progress sweep for the bitácora board (GOV-005, #1417).
+#
+# Measured 2026-08-25: 28 open issues carried Status "In Progress"; 21 of them
+# no Priority; #678 had carried it for 68 days without a single comment or edit
+# since filing. "In Progress" had stopped meaning anything was in flight.
+#
+# `toolkit board sweep` makes each of the 28 decisions below true on the board.
+# The decision, not the mechanism, is what took the judgment: an issue whose
+# `updatedAt` never moved past its `createdAt` — no comment, no edit — carried
+# no evidence of work and moves to `Backlog`. An issue with a current, named
+# thread behind it (an open incident, a decision made this session, an active
+# sub-issue) keeps `In Progress` and gets the `Priority` it was missing. None of
+# the 28 had an explicit "blocked by #N" in its body, so `Blocked` is unused
+# here — the field exists on the board for the next issue that names one.
+#
+# This is a one-time, reviewed list, not an ongoing classifier like
+# board-streams.yaml's prefix map: the next sweep re-measures the column fresh
+# rather than replaying this file.
+
+project:
+  owner: mlorentedev
+  number: 1
+  repo: mlorentedev/kubelab
+
+status_field: Status
+priority_field: Priority
+
+# stays: In Progress is accurate; priority is written if the issue lacks one.
+stays:
+  823:
+    priority: P1   # GOV-002 — this sweep is itself the active work
+  988:
+    priority: P1   # ADR028-004 — umbrella for the active #1013/#1056 work below
+  1013:
+    priority: P2   # AUTH-004 — identity sweep, Part 3 pending
+  1056:
+    priority: P1   # BACKUP-044 — ADR028-004 PR 4, touched today
+  1369:
+    priority: P1   # GCP-004 — live incident, AC4 pending
+  1377:
+    priority: P1   # OBS-018 — PVC alert drill, capture pending
+  1389:
+    priority: P2   # SEC-GITEA-001 — AC3 decided today, Part 3 (C5) pending
+
+# parked: no comment or edit past creation (or, for #678/#680, none in months).
+# Status moves to Backlog; Priority is left as the sweep found it.
+parked:
+  - 678    # ARGO-016 — 68 days idle, the flagship example that opened GOV-005
+  - 680    # TOOL-009 follow-up — 10 days idle, no PR
+  - 711    # CONSOLE-002 — 16 days idle
+  - 722    # OPS-011 — 16 days idle
+  - 749    # GOV-001 — 16 days idle
+  - 799    # OBS-007 — 16 days idle
+  - 918    # OBS-010 — 12 days idle
+  - 924    # OBS-009 — 16 days idle
+  - 959    # OPS-016 — 14 days idle
+  - 1102   # ANSIBLE-041 — 9 days idle
+  - 1140   # CI-GATE-011 — updated once, day after filing; nothing since
+  - 1168   # TOOL-022 — updated once, day after filing; nothing since
+  - 1171   # BACKUP-049 — never touched past creation
+  - 1184   # CI review-attestation handoff bug — updated once, day after filing
+  - 1198   # ANSIBLE-044 — never touched past creation
+  - 1203   # TOOL-030 — never touched past creation
+  - 1204   # BACKUP-047 (restic cap) — never touched past creation
+  - 1205   # TOOL-031 — never touched past creation
+  - 1210   # BACKUP-050 — never touched past creation
+  - 1211   # BACKUP-051 — never touched past creation
+  - 1275   # BACKUP-047 (shutdown receipt) — never touched past creation
