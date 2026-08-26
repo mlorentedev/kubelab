@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-47 lessons, newest first. Back to [all categories](../_index.md).
+48 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 392 | [`--check` skips `command:`, so a guard reading its rc does not gate](lesson-392-check-mode-skips-command-so-a-guard-reading-its-rc-does-not-gate.md) | 2026-08-24 |
 | 381 | [Handlers chain only by explicit notify, and only forward](lesson-381-handlers-chain-only-by-explicit-notify-and-only-forward.md) | 2026-08-23 |
 | 367 | [A task that acquires state must survive the task that uses it](lesson-367-a-task-that-acquires-state-must-survive-the-task-that-uses-it.md) | 2026-08-22 |
 | 360 | [A shell creates the redirect target before it resolves the command](lesson-360-a-shell-creates-the-redirect-target-before-it-resolves-the-command.md) | 2026-08-21 |

@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-30 lessons, newest first. Back to [all categories](../_index.md).
+31 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 389 | [A declaration with no readers pays its whole cost at once](lesson-389-a-declaration-with-no-readers-pays-its-whole-cost-at-once.md) | 2026-08-24 |
 | 380 | [The catalog names every consumer and nothing acts on it](lesson-380-the-catalog-names-every-consumer-and-nothing-acts-on-it.md) | 2026-08-23 |
 | 378 | [When two commands reach the same value, the guard on one is not a guard](lesson-378-two-paths-to-one-value-and-only-one-guarded.md) | 2026-08-23 |
 | 364 | [`make` has no unknown-variable error, so a flag one target ignores is a real run](lesson-364-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run.md) | 2026-08-21 |

@@ -97,6 +97,61 @@ def test_every_lesson_appears_in_its_category_index() -> None:
     )
 
 
+def test_every_category_count_matches_its_files_in_both_places() -> None:
+    """The corpus total is guarded; the per-category counts were not, and drifted.
+
+    Each category is counted twice — once in its own `_index.md` header ("N
+    lessons, newest first") and once in the row the top-level `_index.md` gives
+    it. Only the grand total was ever asserted, and the total is a separate
+    scalar rather than a sum of the rows, so a category could be wrong in either
+    place while the guarded number stayed right.
+
+    Measured 2026-08-26 on `ec60bf5`, the merge of #1410: `networking-dns` held
+    45 files, its own header said 45, and the top-level row said 44. The total
+    (390) was correct throughout, so every existing check passed. The drift
+    entered through a hand-resolved merge conflict in those same index files —
+    the resolver updated one of the two places.
+
+    Both surfaces are asserted here because they failed independently. Fixing
+    only the row would leave the next resolver a header to forget instead.
+    """
+    top = (LESSONS / "_index.md").read_text(encoding="utf-8")
+    wrong = []
+    for directory in sorted(p for p in LESSONS.iterdir() if p.is_dir()):
+        files = list(directory.glob("lesson-*.md"))
+        if not files:
+            continue
+
+        header = re.search(
+            r"^(\d+) lessons, newest first",
+            (directory / "_index.md").read_text(encoding="utf-8"),
+            re.M,
+        )
+        row = re.search(
+            rf"\[{re.escape(directory.name)}\]\({re.escape(directory.name)}/_index\.md\) \| (\d+) \|",
+            top,
+        )
+        if not header:
+            wrong.append(f"{directory.name}: category `_index.md` has no `N lessons, newest first`")
+            continue
+        if not row:
+            wrong.append(f"{directory.name}: no row in the top-level `_index.md` table")
+            continue
+        if not int(header.group(1)) == int(row.group(1)) == len(files):
+            wrong.append(
+                f"{directory.name}: {len(files)} files, category header says "
+                f"{header.group(1)}, top-level row says {row.group(1)}"
+            )
+
+    assert not wrong, (
+        "per-category counts disagree with the files on disk:\n  "
+        + "\n  ".join(wrong)
+        + "\n\nA category is counted in two places and both must equal the file count. "
+        "This drifts through merge-conflict resolutions in the index files, where "
+        "updating one of the two is easy to do and nothing noticed until now."
+    )
+
+
 def test_the_declared_corpus_count_matches_the_files_on_disk() -> None:
     """`_index.md` opens with "N lessons, one file each" — and N must be true.
 

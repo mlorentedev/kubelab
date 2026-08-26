@@ -1,9 +1,12 @@
 # How the work is run: specs, reviews, knowledge
 
-52 lessons, newest first. Back to [all categories](../_index.md).
+55 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 388 | [A decision reaches only as far as the artefact someone opens at the point of use — three re-derivations in one session](lesson-388-a-decision-reaches-only-as-far-as-the-artefact-at-the-point-of-use.md) | 2026-08-25 |
+| 391 | [A probe that sabotages itself reports on the probe](lesson-391-a-probe-that-sabotages-itself-reports-on-the-probe.md) | 2026-08-24 |
+| 390 | [A control cannot discriminate where both inputs are equal](lesson-390-a-control-cannot-discriminate-where-both-inputs-are-equal.md) | 2026-08-24 |
 | 385 | [A drill gentler than the event it stands for exercises the branch that works](lesson-385-a-drill-gentler-than-the-event-tests-the-wrong-branch.md) | 2026-08-24 |
 | 382 | [A control returning the same code as the real attempt measured nothing](lesson-382-a-control-returning-the-same-code-as-the-real-attempt-measured-nothing.md) | 2026-08-23 |
 | 366 | [A green test can pin a configuration the provider refuses](lesson-366-a-green-test-can-pin-a-configuration-the-api-refuses.md) | 2026-08-22 |
