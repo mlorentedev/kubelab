@@ -43,9 +43,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-SCRIPT = REPO / "infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh"
+ROLE = REPO / "infra/ansible/roles/beelink_services"
+SCRIPT = ROLE / "files/gitea-bootstrap.sh"
 
 ADMIN = "operator"
 SECRET = "s3cr3t-client-secret"
@@ -218,4 +220,55 @@ def test_a_failed_write_does_not_record_success(harness):
     assert harness.marker.read_text() == stale, (
         "the marker was updated despite the write failing; the next run would "
         "report converged over configuration Gitea never received"
+    )
+
+
+def _task(name: str) -> dict:
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    for task in tasks:
+        if task.get("name") == name:
+            return task
+    raise AssertionError(f"no task named {name!r} in beelink_services/tasks/main.yml")
+
+
+def test_replacing_the_script_restarts_the_container_that_mounts_it():
+    """A new script on the host is not a new script in the container.
+
+    `compose.yml.j2` mounts the file itself, not its directory:
+
+        {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro
+
+    A single-file bind mount pins the **inode**. Ansible's `copy` replaces the
+    file through a tempfile and a rename, so the host gets a new inode while the
+    running container keeps the old one, and mounts are re-resolved only when the
+    container starts. The container therefore keeps executing the previous script
+    until something restarts it.
+
+    Measured while landing this ticket, three consecutive provisions:
+
+        run 1  finished 01:51:36Z   bootstrap reported changed
+        marker written 01:53:16Z    <- during run 2, not run 1
+        run 2  finished 01:53:41Z   bootstrap reported changed
+        run 3  changed=0
+
+    Run 1 installed the new script and then ran the **old** one; run 1's
+    `Restart gitea` handler re-resolved the mount; run 2 was the first to execute
+    the new script. Neither run was dishonest — each really did write state for
+    the first time — but the transition cost one provision per restart, and
+    nothing bounded how many that would be.
+
+    Until this ticket, the old script's unconditional `Updated` refreshed the
+    mount on every provision by accident. Removing that accident is what makes
+    this notify load-bearing: without it, the next edit to the script would run
+    stale indefinitely, and the report would say the deploy succeeded.
+    """
+    task = _task("Install Gitea bootstrap script")
+    notify = task.get("notify")
+    notify = [notify] if isinstance(notify, str) else (notify or [])
+
+    assert "Restart gitea" in notify, (
+        "the task that replaces gitea-bootstrap.sh does not notify `Restart gitea`. "
+        "The script is bind-mounted as a single file, so the running container keeps "
+        "executing the previous version until it restarts — a script change would "
+        "report success and take no effect."
     )

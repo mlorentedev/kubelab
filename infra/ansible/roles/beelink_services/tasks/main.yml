@@ -93,6 +93,19 @@
     owner: root
     group: root
     mode: "0755"
+  # ANSIBLE-054 (#1400). compose mounts this FILE, not its directory, and a
+  # single-file bind mount pins the inode. `copy` replaces through a tempfile and
+  # a rename, so the host gets a new inode and the running container keeps the
+  # old one until it restarts — a replaced script reports success and does not
+  # run. Measured while landing #1400: run 1 installed the new script and then
+  # executed the previous one; the marker only appeared during run 2, after run
+  # 1's handler had re-resolved the mount.
+  #
+  # This was invisible before, because the old script announced `Updated` on
+  # every provision and so restarted the container every time by accident. That
+  # accident is exactly what #1400 removes, which is what makes this notify
+  # load-bearing rather than tidy.
+  notify: Restart gitea
   tags: [gitea]
 
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
