@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-11 lessons, newest first. Back to [all categories](../_index.md).
+12 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 396 | [Replacing a bind-mounted file does not replace what the container runs](lesson-396-replacing-a-bind-mounted-file-does-not-replace-what-the-container-runs.md) | 2026-08-26 |
 | 308 | [Containers keep running with no published ports, and every restart reports success](lesson-308-containers-keep-running-with-no-published-por.md) | 2026-08-10 |
 | 290 | [A base-image CVE fixed upstream doesn't need a new base image tag — `apk upgrade` at build time gets it sooner](lesson-290-a-base-image-cve-fixed-upstream-doesn-t-need-.md) | 2026-07-08 |
 | 016 | [A mutable image tag needs an explicit `imagePullPolicy: Always` or it never re-pulls](lesson-016-a-mutable-image-tag-needs-an-explicit-imagepu.md) | 2026-06-15 |
