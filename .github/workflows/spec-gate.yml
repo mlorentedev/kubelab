@@ -67,10 +67,15 @@ jobs:
         run: python -c 'import os,pathlib; pathlib.Path("pr-body.txt").write_text(os.environ.get("PR_BODY") or "")'
 
       - name: Check the PR does not close a spec it leaves active
+        id: gate
         run: poetry run toolkit tools spec-gate --body-file pr-body.txt
 
+      # Conditioned on the gate's own outcome — a bare `failure()` would make a
+      # checkout or dependency-install failure announce that the PR closes a
+      # spec without archiving it, which is a specific and wrong accusation.
+      # Same defect as the one measured in check-config-drift.yml.
       - name: Hint on failure
-        if: failure()
+        if: steps.gate.outcome == 'failure'
         run: |
           echo "::error::This PR closes a spec's issue without archiving the spec."
           echo "::error::Archive it in this PR: dotf spec archive <feature-id>"
