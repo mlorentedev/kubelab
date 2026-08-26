@@ -223,12 +223,16 @@ def ids_cmd(
 
 @app.command("priority")
 def priority_cmd(
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Write P1 (bug/security) or P2 (default) to every issue missing one."),
+    ] = False,
     check: Annotated[
         bool,
         typer.Option("--check", help="Exit 1 if any open issue carries no Priority."),
     ] = False,
 ) -> None:
-    """Report (default) or check for open issues with no Priority set. See harness/priority-scale.md."""
+    """Report (default), apply, or check open issues with no Priority set. See harness/priority-scale.md."""
     try:
         registry = board_streams.load_registry()
     except board_streams.RegistryError as exc:
@@ -241,10 +245,29 @@ def priority_cmd(
         logger.error(str(exc))
         raise typer.Exit(code=2) from exc
 
-    missing = board_priority.missing_priority(items)
-    for item in missing:
-        typer.echo(f"  #{item.number} {item.title[:90]}")
-    typer.echo(f"\nopen issues scanned: {len(items)}  missing priority: {len(missing)}")
+    assignments = board_priority.plan(items)
+    for a in assignments:
+        typer.echo(f"  #{a.item.number} -> {a.priority}  {a.item.title[:80]}")
+    counts: dict[str, int] = {}
+    for a in assignments:
+        counts[a.priority] = counts.get(a.priority, 0) + 1
+    typer.echo(f"\nopen issues scanned: {len(items)}  missing priority: {len(assignments)}  {counts}")
 
-    if check and missing:
-        raise typer.Exit(code=1)
+    if check:
+        if assignments:
+            raise typer.Exit(code=1)
+        return
+
+    if not apply:
+        typer.echo("\ndry run — nothing written (use --apply)")
+        return
+    if not assignments:
+        return
+
+    try:
+        project_id, field = board_priority.fetch_priority_field(registry.owner, registry.number)
+        written = board_priority.apply(project_id, field, assignments)
+    except board_priority.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    typer.echo(f"written: {written}")
