@@ -312,6 +312,12 @@
      "http://localhost:3000/api/v1/users/{{ gitea_bot_user }}"'
   register: _gitea_bot_state
   changed_when: false
+  # Read-only probe consumed by the `when` below, so check mode must not skip it
+  # (lesson-397, written from this same role two hours ago). A missing account is
+  # a legitimate answer rather than a failure: in check mode the create task IS
+  # skipped, so the user may genuinely not exist yet.
+  check_mode: false
+  failed_when: false
   no_log: true
   tags: [gitea]
 
@@ -325,7 +331,11 @@
   # Patch only when the live value disagrees. An unconditional PATCH is a no-op
   # in effect and a change in the report, which is ANSIBLE-054 (#1400) in a new
   # place — the defect this role just finished removing.
-  when: not (_gitea_bot_state.stdout | from_json).prohibit_login
+  # `rc == 0` first, and `and` short-circuits — without it a dry run against a
+  # node where the account does not exist yet would parse an empty string.
+  when:
+    - _gitea_bot_state.rc == 0
+    - not (_gitea_bot_state.stdout | from_json).prohibit_login
   no_log: true
   tags: [gitea]
 
