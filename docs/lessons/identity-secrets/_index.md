@@ -1,9 +1,11 @@
 # Identity, auth and secret material
 
-51 lessons, newest first. Back to [all categories](../_index.md).
+53 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 398 | [A quoting bug that breaks a command announces itself; one that widens a scope does not](lesson-398-a-quoting-bug-that-widens-a-scope-does-not-announce-itself.md) | 2026-08-26 |
+| 400 | [A settled question can answer "how" without asking "at what cost"](lesson-400-a-settled-question-can-answer-how-without-asking-at-what-cost.md) | 2026-08-26 |
 | 379 | [Rotating a username is not rotation, it is a rename](lesson-379-rotating-a-username-is-not-rotation-it-is-a-rename.md) | 2026-08-23 |
 | 376 | [A SOPS diff answers "did this key change" without decrypting anything](lesson-376-auditing-a-rotation-without-decrypting-it.md) | 2026-08-23 |
 | 335 | [Refuting a finding does not vaccinate the line it was about](lesson-335-refuting-a-finding-does-not-vaccinate-the-lin.md) | 2026-08-15 |

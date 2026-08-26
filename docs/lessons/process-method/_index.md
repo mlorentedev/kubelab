@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-56 lessons, newest first. Back to [all categories](../_index.md).
+57 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 399 | [A diagnostic can mutate the thing it is measuring](lesson-399-a-diagnostic-can-mutate-the-thing-it-is-measuring.md) | 2026-08-26 |
 | 388 | [A decision reaches only as far as the artefact someone opens at the point of use — three re-derivations in one session](lesson-388-a-decision-reaches-only-as-far-as-the-artefact-at-the-point-of-use.md) | 2026-08-25 |
 | 391 | [A probe that sabotages itself reports on the probe](lesson-391-a-probe-that-sabotages-itself-reports-on-the-probe.md) | 2026-08-24 |
 | 390 | [A control cannot discriminate where both inputs are equal](lesson-390-a-control-cannot-discriminate-where-both-inputs-are-equal.md) | 2026-08-24 |
