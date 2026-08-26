@@ -289,10 +289,28 @@
   # NEW token, orphaning the previous one inside Gitea with no record of which
   # consumer holds which. Gated on the recorded secret being absent, so a
   # re-provision with a token already in SOPS does nothing at all.
-  command: >-
-    docker exec gitea su git -c
-    "gitea admin user generate-access-token --username {{ gitea_bot_user }}
-     --token-name kubelab-provisioning --scopes {{ gitea_bot_scopes }} --raw"
+  # `argv`, not a string. The string form goes through YAML folding and then
+  # argv splitting, and this command does not survive the round trip: measured,
+  # the inner `su git -c "..."` lost its quoting, so `su` read `gitea` as the
+  # command and `admin user generate-access-token ...` as positional arguments.
+  # It failed, and a partial invocation had already minted a token under
+  # `generate-access-token`'s DEFAULT name and DEFAULT scopes ("all") - the worst
+  # possible outcome, because an over-scoped credential was created while the
+  # task reported failure. `argv` passes the list verbatim.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_bot_user }}
+        --token-name kubelab-provisioning
+        --scopes {{ gitea_bot_scopes }}
+        --raw
   register: _gitea_bot_token
   when: not gitea_bot_token
   changed_when: _gitea_bot_token.rc == 0

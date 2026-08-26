@@ -281,3 +281,28 @@ def test_the_bot_section_is_skipped_when_no_machine_identity_is_declared(bot_har
     )
     assert result.returncode == 0, result.stderr
     assert "machine account" not in result.stdout.lower()
+
+
+def test_the_mint_command_is_passed_as_argv() -> None:
+    """A string command would be re-parsed, and this one does not survive it.
+
+    Measured on the live node: the string form's inner `su git -c "..."` lost its
+    quoting through YAML folding plus argv splitting, so `su` took `gitea` as the
+    command and the rest as positional arguments. The task failed — and a partial
+    invocation had already minted a token under `generate-access-token`'s DEFAULT
+    name and DEFAULT scopes, which are `all`.
+
+    That is the worst available outcome and the reason this is guarded rather
+    than merely fixed: an over-scoped credential was created on an account whose
+    whole purpose is least privilege, while the play reported failure and the
+    operator had no token. A quoting bug that only broke the command would have
+    been visible; one that silently widens a scope is not.
+    """
+    command = _task(MINT_TASK).get("command")
+    assert isinstance(command, dict) and "argv" in command, (
+        "the mint task passes its command as a string. Use the `argv:` list form so the "
+        "nested `su git -c` quoting is passed verbatim instead of being re-parsed."
+    )
+    joined = " ".join(command["argv"])
+    for flag in ("--token-name", "--scopes", "--raw"):
+        assert flag in joined, f"the mint command lost {flag}; defaults are name=gitea-admin, scopes=all"
