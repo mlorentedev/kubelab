@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features import board_streams
+from toolkit.features import board_streams, board_sweep
 
 app = typer.Typer(
     name="board",
@@ -130,3 +130,56 @@ def parts_cmd(
     typer.echo(f"linked: {added}")
     if plan.conflicts or plan.missing or plan.closed_parents:
         raise typer.Exit(code=1)
+
+
+@app.command("sweep")
+def sweep_cmd(
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Write the Status/Priority changes."),
+    ] = False,
+    registry_path: Annotated[
+        Path,
+        typer.Option("--registry", help="In Progress sweep registry YAML."),
+    ] = board_sweep.DEFAULT_REGISTRY,
+) -> None:
+    """Plan (default) or apply the one-time In Progress sweep in harness/board-inprogress-sweep.yaml."""
+    try:
+        registry = board_sweep.load_registry(registry_path)
+    except board_sweep.RegistryError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    numbers = sorted(set(registry.stays) | set(registry.parked))
+    try:
+        items = board_sweep.fetch_items(registry, numbers)
+    except board_sweep.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    plan = board_sweep.plan(items, registry)
+    for change in plan.changes:
+        parts = []
+        if change.status is not None:
+            parts.append(f"status -> {change.status}")
+        if change.priority is not None:
+            parts.append(f"priority -> {change.priority}")
+        typer.echo(f"  #{change.item.number}: {', '.join(parts)}")
+    for number in plan.missing:
+        typer.echo(f"  missing: #{number} not found on the board")
+    typer.echo(f"\nunchanged: {plan.unchanged}  to write: {len(plan.changes)}  missing: {len(plan.missing)}")
+
+    if not apply:
+        typer.echo("\ndry run — nothing written (use --apply)")
+        return
+    if plan.missing:
+        logger.error("refusing to apply: some registry issues were not found on the board")
+        raise typer.Exit(code=2)
+
+    try:
+        project_id, fields = board_sweep.fetch_fields(registry)
+        written = board_sweep.apply(project_id, fields, registry, plan.changes)
+    except board_sweep.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    typer.echo(f"written: {written}")
