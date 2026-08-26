@@ -651,9 +651,26 @@ apps:
     # which also pins SECRET_CATALOG's password-hash key to `operator` — so
     # renaming a row here fails in CI rather than silently pointing audit and
     # rotation at a path nothing writes.
+    # `machine` is the third class ADR-062 D1 names and the comment above
+    # anticipated: an agent that acts on the forge without being a person. It is
+    # a row here for the same reason the humans are — the alternative is a name
+    # living in an Ansible variable, which is exactly the alias shape that let a
+    # credential rotation redefine Gitea's only admin on 2026-08-23.
+    #
+    # It has no password hash and never will. The account is provisioned with
+    # `prohibit_login: true` and holds a scoped API token instead, so there is no
+    # interactive credential to store, rotate or leak. That asymmetry is the
+    # point of the class, not an omission: AUTH-004 C5 asks for enforcement, and
+    # simply never declaring the bot in Authelia would be omission.
+    #
+    # Hefesto — the forge. Gitea is the private forge (#1077), so the name says
+    # which system the identity belongs to rather than what it happens to do
+    # first; the same token is expected to serve the repository migration
+    # (#1076) and the dev node (#1075).
     identities:
       superadmin: manu
       operator: operator
+      machine: hefesto
 
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
@@ -1065,7 +1082,7 @@ apps:
         auth_level: one_factor
         default_port: 8080
         health_path: /health
-        bouncer_api_key: 
+        bouncer_api_key:
           secrets://apps.services.security.crowdsec.bouncer_api_key
 
     # Network services (bare-metal, external to K3s)

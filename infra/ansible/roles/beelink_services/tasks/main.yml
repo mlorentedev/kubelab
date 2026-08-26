@@ -273,6 +273,91 @@
   notify: Restart gitea
   tags: [gitea]
 
+# --- Machine identity (AUTH-004 C5, ADR-062 D1) --------------------------------
+# The third identity class: an agent that acts on the forge without being a
+# person. Everything below runs through `docker exec` against localhost inside
+# the container, so the admin credential used to drive the API never leaves it
+# and never reaches an argument list on this host.
+#
+# R4 settled the ORDER and it is not arbitrary: `prohibit_login` lives in
+# Gitea's EditUserOption and NOT in CreateUserOption, so the account cannot be
+# created already blocked. It exists briefly loginable — which is why the token
+# is minted only after the block is in place, never before.
+
+- name: Ensure the Gitea machine account exists
+  # Column 2 is the username. Matching the column rather than grepping the whole
+  # line avoids a false "exists" when the name appears in another user's email.
+  command: >-
+    docker exec gitea sh -c
+    'su git -c "gitea admin user list" 2>/dev/null | awk "NR > 1 {print \$2}"
+     | grep -qx "{{ gitea_bot_user }}"
+     || su git -c "gitea admin user create --username {{ gitea_bot_user }}
+        --password $(head -c 32 /dev/urandom | base64 | tr -d /+= )
+        --email {{ gitea_bot_email }} --must-change-password=false"'
+  register: _gitea_bot_account
+  changed_when: "'New user' in _gitea_bot_account.stdout or 'has been successfully created' in _gitea_bot_account.stdout"
+  # The password is generated inside the container, never rendered by Ansible and
+  # never stored: this account's login is prohibited on the next task and its
+  # credential is the scoped token. A password is required at creation, so one is
+  # supplied that nothing can use and nobody holds.
+  no_log: true
+  tags: [gitea]
+
+- name: Read the machine account's login state
+  # `prohibit_login` READS BACK, unlike the OIDC client secret, so this converges
+  # by observation and needs no marker file. Verified against the live API.
+  command: >-
+    docker exec gitea sh -c
+    'curl -sf -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD"
+     "http://localhost:3000/api/v1/users/{{ gitea_bot_user }}"'
+  register: _gitea_bot_state
+  changed_when: false
+  no_log: true
+  tags: [gitea]
+
+- name: Prohibit interactive login for the machine account
+  command: >-
+    docker exec gitea sh -c
+    'curl -sf -X PATCH -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD"
+     -H "Content-Type: application/json"
+     -d "{\"prohibit_login\": true, \"login_name\": \"{{ gitea_bot_user }}\", \"source_id\": 0}"
+     "http://localhost:3000/api/v1/admin/users/{{ gitea_bot_user }}"'
+  # Patch only when the live value disagrees. An unconditional PATCH is a no-op
+  # in effect and a change in the report, which is ANSIBLE-054 (#1400) in a new
+  # place — the defect this role just finished removing.
+  when: not (_gitea_bot_state.stdout | from_json).prohibit_login
+  no_log: true
+  tags: [gitea]
+
+- name: Mint the machine account's scoped token
+  # `generate-access-token` is NOT idempotent: it always succeeds and always
+  # returns a NEW token, orphaning the previous one inside Gitea with no record
+  # of which consumer holds which. Gated on the recorded secret being absent, so
+  # a re-provision with a token already in SOPS does nothing at all.
+  command: >-
+    docker exec gitea su git -c
+    'gitea admin user generate-access-token --username {{ gitea_bot_user }}
+     --token-name kubelab-provisioning --scopes {{ gitea_bot_scopes }} --raw'
+  register: _gitea_bot_token
+  when: not gitea_bot_token
+  no_log: true
+  changed_when: _gitea_bot_token.rc == 0
+  tags: [gitea]
+
+- name: Record the machine token in SOPS
+  # Delegated to the controller, which is where the age key is. The value goes
+  # in through STDIN, never through argv: an argument list is world-readable in
+  # /proc for the lifetime of the process.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.bot_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_bot_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: not gitea_bot_token
+  no_log: true
+  changed_when: true
+  tags: [gitea]
+
 - name: Report service status
   debug:
     msg: >-
