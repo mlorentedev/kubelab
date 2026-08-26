@@ -154,6 +154,12 @@
   command: docker buildx inspect multiarch
   register: _buildx_check
   changed_when: false
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   ignore_errors: true
 
 - name: Clean stale buildx builder state
@@ -182,6 +188,12 @@
 - name: Wait for MinIO container to be running
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' minio
   register: _minio_state
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   until: _minio_state.stdout == "running"
   retries: 12
   delay: 5
@@ -199,6 +211,12 @@
 - name: Verify GitHub Runner container is running
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
   register: _runner_state
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   retries: 3
   delay: 10
   until: _runner_state.stdout == "running"
@@ -208,6 +226,12 @@
 - name: Wait for Gitea to report healthy
   command: docker inspect --format '{% raw %}{{.State.Health.Status}}{% endraw %}' gitea
   register: _gitea_health
+  # Read-only probe whose result is consumed by a condition, so check mode must
+  # not skip it: a skipped `command:` registers no stdout, and the condition then
+  # reads a value nothing measured. Same defect as the Ollama probe above
+  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
+  # fails a dry run on a node where the real run is clean.
+  check_mode: false
   until: _gitea_health.stdout == "healthy"
   retries: 18
   delay: 5
