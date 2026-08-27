@@ -114,6 +114,7 @@ help:
 	@echo "  make board-ids            Report any open issue that shares its ticket id with another"
 	@echo "  make board-ids-check      Exit 1 while any open issue shares an id"
 	@echo "  make board-priority       Report open issues with no Priority set (harness/priority-scale.md)"
+	@echo "  make board-set ISSUE=N     Set one issue's Status/Priority/Stream by name (APPLY=1 to write)"
 	@echo "  make board-priority-check Exit 1 while any open issue carries no Priority"
 	@echo "  make board-deps           Report open issues named by a dependency keyword in another's body"
 	@echo ""
@@ -971,6 +972,18 @@ board-ids-check:
 board-priority:
 	@$(TOOLKIT) board priority
 
+# Single-issue field set (TOOL-046). The bulk passes above cover many issues from
+# a registry; this covers the one that happens most: a ticket was just filed.
+# Names only -- no node ids in this file, which is the point of the ticket.
+.PHONY: board-set
+board-set:
+	@test -n "$(ISSUE)" || (echo "Usage: make board-set ISSUE=N [STATUS=x] [PRIORITY=x] [STREAM=x] [APPLY=1]" && exit 1)
+	@$(TOOLKIT) board set --issue $(ISSUE) \
+		$(if $(STATUS),--status "$(STATUS)") \
+		$(if $(PRIORITY),--priority "$(PRIORITY)") \
+		$(if $(STREAM),--stream "$(STREAM)") \
+		$(if $(APPLY),--apply)
+
 board-priority-check:
 	@$(TOOLKIT) board priority --check
 
@@ -1381,6 +1394,21 @@ logs:
 	$(eval _TAIL := $(or $(TAIL),50))
 	$(eval _FOLLOW := $(if $(FOLLOW),-f,))
 	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n $(_NS) $(SVC) --tail=$(_TAIL) $(_FOLLOW)
+
+# GCP-004 AC4: an agent or operator starting fleet work should be able to see
+# active alerts without opening a chat client. Prod is the monitoring of
+# record (ADR-028), so that is the default here, matching `toolkit obs alerts`
+# itself. `$(or $(ENV),prod)` would not do it -- ENV defaults to `dev` globally
+# (below), so an unset ENV never reaches `or` empty. Same `$(filter)` idiom as
+# `logs` above, needed for the same reason.
+#
+# Deliberately NOT `|| true`'d: an unanswered question (Grafana unreachable)
+# must fail the same way a real alert would, or this becomes the next silent
+# false-green.
+.PHONY: alerts
+alerts:
+	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
+	@$(TOOLKIT) obs alerts --env $(_ENV)
 
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
