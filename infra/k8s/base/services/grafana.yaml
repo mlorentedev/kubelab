@@ -63,7 +63,6 @@ data:
 # and rolls the Deployment. Env vars are read once at container start, so an
 # unhashed ConfigMap would change while the running pod kept the old value and
 # Argo CD reported Synced (#1446). The env file carries the full rationale.
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
