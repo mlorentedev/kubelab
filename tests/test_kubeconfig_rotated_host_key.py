@@ -121,6 +121,36 @@ class TestHostnameResolution:
         assert resolve_ssh_hostname("gcp1") == "gcp1"
 
 
+class TestTheErrorSaysSomethingUseful:
+    """#1380's title has two halves; the purge only closes the first.
+
+    A node NOT marked ephemeral still fails on a changed key — correctly, that
+    is the warning the mechanism exists to produce — but it must not fail mutely.
+    """
+
+    def _stub_hostname(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(kc, "resolve_ssh_hostname", lambda alias: f"{alias}.kubelab.internal")
+
+    def test_a_changed_host_key_names_the_cause_and_the_remedy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_hostname(monkeypatch)
+        hint = kc.host_key_hint("vps", "@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@\n")
+        assert hint is not None
+        assert "vps.kubelab.internal" in hint
+        assert "ssh-keygen -R vps.kubelab.internal" in hint, "the remedy must be runnable as written"
+        assert "rebuilt" in hint and "impersonating" in hint, "both readings, so the operator decides"
+
+    def test_it_matches_the_other_wording_ssh_uses(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ssh prints two different lines for this; both exit 255."""
+        self._stub_hostname(monkeypatch)
+        assert kc.host_key_hint("vps", "Host key verification failed.\n") is not None
+
+    def test_an_unrelated_failure_is_left_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A wrong-hint is worse than none: it sends the operator to delete a
+        key when the real problem was their agent."""
+        self._stub_hostname(monkeypatch)
+        assert kc.host_key_hint("vps", "Permission denied (publickey).\n") is None
+
+
 class TestPurgeUsesSshKeygen:
     def test_the_entry_is_removed_with_ssh_keygen_not_by_editing_the_file(
         self, monkeypatch: pytest.MonkeyPatch

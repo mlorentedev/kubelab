@@ -206,6 +206,44 @@ def resolve_ssh_hostname(ssh_alias: str) -> str:
     return ssh_alias
 
 
+# What ssh prints when the presented key does not match the recorded one. Matched
+# on stderr because ssh gives this the same exit code (255) as every other
+# connection-layer failure, so the code cannot tell them apart.
+_HOST_KEY_CHANGED_MARKERS = (
+    "host key verification failed",
+    "remote host identification has changed",
+)
+
+
+def host_key_hint(ssh_alias: str, stderr: str) -> str | None:
+    """A message naming the cause and the remedy, or None if this is not that failure.
+
+    The other half of #1380, whose title is "dies on the host key a rebuild just
+    rotated, **and says nothing useful**". The purge above stops the death for
+    nodes the SSOT marks ephemeral; this covers everything else — a stable node
+    whose key rotated for a legitimate reason (a reinstall) still fails, and
+    should, but it should not fail mutely.
+
+    Deliberately does NOT tell the operator to purge unconditionally. On a node
+    that is not supposed to be replaced, a changed host key is the warning the
+    mechanism exists to produce, so the message states both readings and leaves
+    the decision where it belongs.
+    """
+    lowered = stderr.lower()
+    if not any(marker in lowered for marker in _HOST_KEY_CHANGED_MARKERS):
+        return None
+    hostname = resolve_ssh_hostname(ssh_alias)
+    return (
+        f"SSH host key for {hostname!r} does not match the one in known_hosts.\n"
+        f"  Either the machine was rebuilt — and its key legitimately rotated — or "
+        f"something is impersonating it.\n"
+        f"  This node is NOT marked as recreated-in-place in the SSOT "
+        f"(`tailscale_dns` with no `tailscale_ip`), so the key was not purged "
+        f"automatically and this may be a real warning.\n"
+        f"  If you have confirmed the rebuild out of band: ssh-keygen -R {hostname}"
+    )
+
+
 def forget_host_key(hostname: str) -> bool:
     """Drop ``hostname`` from known_hosts. Idempotent: absent means no-op.
 
@@ -312,7 +350,10 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
         )
         raw = _fetch_via_tunnel(env, access)
     else:
-        raise RuntimeError(f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}")
+        raise RuntimeError(
+            host_key_hint(access.ssh_alias, result.stderr)
+            or f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}"
+        )
 
     if direct:
         transport = resolve_transport(env)
