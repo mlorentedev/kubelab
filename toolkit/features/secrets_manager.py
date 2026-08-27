@@ -97,6 +97,58 @@ class SecretSpec:
 _AUTH = "apps.services.security.authelia"
 
 SECRET_CATALOG: list[SecretSpec] = [
+    # Registered on 2026-08-26 by the reverse audit (#833), which is what showed
+    # these were live and unowned. `secrets_manager.py` already argued for one of
+    # them in prose — "Companion `api_key` stays in SOPS as a true secret" — and
+    # then never registered it, which is the exact gap the reverse direction
+    # exists to close: a decision recorded in a comment is not a registry entry.
+    SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.admin_password",
+        description="Uptime Kuma admin password",
+        kind=SecretKind.PASSWORD,
+        services=("uptime_kuma",),
+        rotate_note="Reconciled by `credentials generate` via _reconcile_external_credentials.",
+    ),
+    SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.api_key",
+        expiry=Expiry.NEVER,
+        description="Uptime Kuma API key, for programmatic monitor management",
+        kind=SecretKind.EXTERNAL,
+        services=("uptime_kuma",),
+        rotate_note="Re-issue in the Uptime Kuma UI; consumed by `toolkit monitoring`.",
+    ),
+    SecretSpec(
+        key_path="apps.testing.authelia_test_password",
+        description="Password for the e2e `testuser` Authelia account",
+        kind=SecretKind.PASSWORD,
+        services=("authelia",),
+        format_hint="Plain text; the argon2 hash of it is a separate catalog entry",
+        rotate_note="Re-hash into users_testuser_password_hash, then apply-secrets. Used by tests/e2e/conftest.py.",
+    ),
+    SecretSpec(
+        key_path="hetzner.api_key",
+        expiry=Expiry.NEVER,
+        description="Hetzner Cloud API token — Terraform and the DR runbook",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        rotate_note="Re-issue in the Hetzner console. See docs/runbooks/runbook-disaster-recovery.md.",
+    ),
+    SecretSpec(
+        key_path="dockerhub.username",
+        expiry=Expiry.NEVER,
+        description="Docker Hub account for CI image push",
+        kind=SecretKind.EXTERNAL,
+        services=("ci",),
+        rotate_note="Mirrored to GitHub Actions as DOCKERHUB_USERNAME.",
+    ),
+    SecretSpec(
+        key_path="dockerhub.token",
+        expiry=Expiry.NEVER,
+        description="Docker Hub access token for CI image push",
+        kind=SecretKind.EXTERNAL,
+        services=("ci",),
+        rotate_note="Re-issue in Docker Hub, then mirror to GitHub Actions as DOCKERHUB_TOKEN.",
+    ),
     # =========================================================================
     # Basic Auth (Traefik)
     # =========================================================================
@@ -740,6 +792,61 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("apprise",),
         format_hint="<bot_id>:<auth_token> from @BotFather",
         rotate_note="Re-issue via @BotFather, then `secrets apply` (re-renders kubelab.yml). No pod restart needed.",
+        envs=("staging", "prod"),
+    ),
+    # Slack side of the Apprise routing table. Read by `k8s_secrets.py:294` and
+    # asserted by `tests/test_k8s_secrets_apprise.py:68`, and registered here only
+    # on 2026-08-26 — the reverse audit (#833) is what surfaced that five live
+    # secrets had no catalog entry at all. `envs` matches where the values
+    # actually are, per ANSIBLE-033: staging and prod, not dev.
+    SecretSpec(
+        key_path="apps.services.automation.apprise.slack.webhook_alerts",
+        expiry=Expiry.NEVER,
+        description="Slack incoming webhook, ALERT tier — the Slack half of the notification fabric — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise",),
+        format_hint="https://hooks.slack.com/services/…",
+        rotate_note="Re-issue in Slack, then `secrets apply` (re-renders kubelab.yml).",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.apprise.slack.webhook_agent",
+        expiry=Expiry.NEVER,
+        description="Slack incoming webhook, AGENT tier — agent-originated notifications — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise",),
+        format_hint="https://hooks.slack.com/services/…",
+        rotate_note="Re-issue in Slack, then `secrets apply` (re-renders kubelab.yml).",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.apprise.slack.webhook_deployments",
+        expiry=Expiry.NEVER,
+        description="Slack incoming webhook, DEPLOYMENT tier — deploy notifications — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise",),
+        format_hint="https://hooks.slack.com/services/…",
+        rotate_note="Re-issue in Slack, then `secrets apply` (re-renders kubelab.yml).",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.apprise.slack.webhook_log",
+        expiry=Expiry.NEVER,
+        description="Slack incoming webhook, LOG tier — archive, no push — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise",),
+        format_hint="https://hooks.slack.com/services/…",
+        rotate_note="Re-issue in Slack, then `secrets apply` (re-renders kubelab.yml).",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.apprise.slack.webhook_vault",
+        expiry=Expiry.NEVER,
+        description="Slack incoming webhook, VAULT tier — knowledge-plane notifications — Apprise gateway",
+        kind=SecretKind.EXTERNAL,
+        services=("apprise",),
+        format_hint="https://hooks.slack.com/services/…",
+        rotate_note="Re-issue in Slack, then `secrets apply` (re-renders kubelab.yml).",
         envs=("staging", "prod"),
     ),
     SecretSpec(
