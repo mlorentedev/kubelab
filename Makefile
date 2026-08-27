@@ -1382,6 +1382,21 @@ logs:
 	$(eval _FOLLOW := $(if $(FOLLOW),-f,))
 	@kubectl --kubeconfig ~/.kube/kubelab-$(_ENV)-config logs -n $(_NS) $(SVC) --tail=$(_TAIL) $(_FOLLOW)
 
+# GCP-004 AC4: an agent or operator starting fleet work should be able to see
+# active alerts without opening a chat client. Prod is the monitoring of
+# record (ADR-028), so that is the default here, matching `toolkit obs alerts`
+# itself. `$(or $(ENV),prod)` would not do it -- ENV defaults to `dev` globally
+# (below), so an unset ENV never reaches `or` empty. Same `$(filter)` idiom as
+# `logs` above, needed for the same reason.
+#
+# Deliberately NOT `|| true`'d: an unanswered question (Grafana unreachable)
+# must fail the same way a real alert would, or this becomes the next silent
+# false-green.
+.PHONY: alerts
+alerts:
+	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
+	@$(TOOLKIT) obs alerts --env $(_ENV)
+
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
