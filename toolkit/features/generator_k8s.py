@@ -30,6 +30,12 @@ class K8sGenerator(BaseGenerator):
             "ENABLE_AUTH",
             "AUTH_LEVEL",
             "ENABLE_COMPRESS",
+            # Routing topology, not runtime config. It is also the only entry
+            # here whose value is a list rather than a string: `_flatten_dict`
+            # keeps lists intact, so without this exclusion it would land in the
+            # ConfigMap as a Python repr, changing the configMapGenerator hash
+            # and rolling the pod on every deploy.
+            "EXTRA_ROUTES",
         }
     )
 
@@ -259,6 +265,7 @@ class K8sGenerator(BaseGenerator):
                     "env_vars": app_env_vars,
                     "resources": app_resources,
                     "middlewares": middlewares,
+                    "extra_routes": self._build_extra_routes(env_vars, component),
                 }
             )
 
@@ -361,6 +368,55 @@ class K8sGenerator(BaseGenerator):
             result[name] = str(value)
 
         return result
+
+    def _build_extra_routes(self, env_vars: dict[str, Any], component: str) -> list[dict[str, Any]]:
+        """Same-origin reverse-proxy routes on this app's own host (ADR-054).
+
+        An app whose frontend calls an API at a *relative* path needs a second
+        rule on the **same** host, matching that path prefix and pointing at a
+        different service. Without it the request reaches the app itself — for a
+        static site that means its own 404, which is exactly how the newsletter
+        form broke (kubelab#774).
+
+        Modelled in the SSOT rather than in the template on purpose. The
+        alternative, `{% if app.name == 'web' %}`, has to be reopened for every
+        future same-origin proxy and puts routing facts somewhere nobody greps.
+
+        The target port is resolved from the target app's own `default_port`
+        instead of being restated in the route entry: two places holding one
+        port is how they drift.
+
+        A route naming a service with no resolvable port is dropped with a
+        warning rather than rendered half-formed — an IngressRoute pointing at
+        port `None` fails at apply time, far from the typo that caused it.
+        """
+        raw: Any = self._find_var(env_vars, component, "EXTRA_ROUTES")
+        if not raw:
+            return []
+
+        routes: list[dict[str, Any]] = []
+        for entry in raw:
+            service = entry["service"]
+            port = self._find_var(env_vars, service, "DEFAULT_PORT")
+            if not port:
+                logger.warning(
+                    f"Skipping extra_route {entry['path_prefix']} on {component}: "
+                    f"no DEFAULT_PORT resolvable for target service '{service}'"
+                )
+                continue
+            routes.append(
+                {
+                    "path_prefix": entry["path_prefix"],
+                    "service": service,
+                    "port": int(port),
+                    # Traefik orders equal-priority rules by rule length, so
+                    # `Host && PathPrefix` already out-ranks the bare `Host`
+                    # catch-all. Setting it explicitly keeps that true when a
+                    # longer rule is added later.
+                    "priority": int(entry.get("priority", 10)),
+                }
+            )
+        return routes
 
     def _has_secret_vars(self, component: str) -> bool:
         """Whether a K8s Secret is defined for this component (→ mount it via envFrom).

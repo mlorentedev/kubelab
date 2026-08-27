@@ -726,6 +726,14 @@ apps:
       health_path: /
       backend_url: "https://api.kubelab.live"
       allowed_hosts: "localhost,web,127.0.0.1"
+      # Same-origin API on the web host (ADR-054). The frontend posts to a
+      # relative `/api/subscribe` with no host baked in, so without this route
+      # the request reaches the static site and gets the site's own 404 — which
+      # is what the newsletter form has been doing. The target port is NOT
+      # restated here; the generator reads it from the target app.
+      extra_routes:
+        - path_prefix: /api
+          service: api
       # Site Info
       site_title: "Manu Lorente"
       site_description: "Cloud Native Automation in Spanish"

@@ -37,6 +37,18 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Same-origin proxy (ADR-054). Declared before the host catch-all and with an
+    # explicit priority so a relative path reaches its own service, not this app.
+    - match: Host(`mlorente.dev`) && PathPrefix(`/api`)
+      kind: Rule
+      priority: 10
+      services:
+        - name: api
+          port: 8080
+      middlewares:
+        - name: secure-headers
+        - name: rate-limit
+        - name: error-pages
     - match: Host(`mlorente.dev`)
       kind: Rule
       services:
