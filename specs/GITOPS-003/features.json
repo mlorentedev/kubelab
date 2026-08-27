@@ -1,0 +1,51 @@
+[
+  {
+    "id": "GITOPS-003-f1",
+    "behavior": "A merge touching infra/k8s/overlays/<env>/** carries a commit status argocd/kubelab-<env> (success|failure) within N minutes",
+    "verification": "gh api repos/mlorentedev/kubelab/commits/$(git rev-parse origin/master)/status --jq '.statuses[] | select(.context==\"argocd/kubelab-staging\") | .state' | grep -Eq '^(success|failure)$'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "GITOPS-003-f2",
+    "behavior": "deploy-verify.yml ends red on failure or on no status after N minutes, green only on success",
+    "verification": "poetry run pytest tests/test_argo_wait_status.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "GITOPS-003-f3",
+    "behavior": "The PostSync hook fails the sync when a malformed POST /api/subscribe on the web host answers text/html (nginx) and succeeds on 400 text/plain (API); the Job is cleaned up after success",
+    "verification": "poetry run pytest tests/test_k8s_generator_postsync_probe.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "GITOPS-003-f4",
+    "behavior": "make verify-web ENV=staging exits 0 only when the Application is Synced at origin/master HEAD, Succeeded, and a malformed POST /api/subscribe answers 400 text/plain",
+    "verification": "make verify-web ENV=staging",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "GITOPS-003-f5",
+    "behavior": "trigger.on-sync-* expressions do not raise with operationState == nil or an empty syncResult",
+    "verification": "poetry run pytest tests/test_argocd_notification_triggers.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "GITOPS-003-f6",
+    "behavior": "The token behind service.webhook.github is verified by consequence (authenticated GET returns 200)",
+    "verification": "poetry run pytest tests/infra/test_argocd_notifications_token.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "GITOPS-003-f7",
+    "behavior": "docs/runbooks carries a 'deploy-verify is red' section linked from lesson-407 and from the workflow failure message",
+    "verification": "grep -rq 'deploy-verify is red' docs/runbooks/ && grep -q 'deploy-verify is red' docs/lessons/gitops-delivery/lesson-407-*.md && grep -q 'deploy-verify is red' .github/workflows/deploy-verify.yml",
+    "state": "pending",
+    "evidence": ""
+  }
+]
