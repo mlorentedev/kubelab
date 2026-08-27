@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-53 lessons, newest first. Back to [all categories](../_index.md).
+54 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 403 | [`known_hosts` has two independent ways to make a host-key purge a silent no-op](lesson-403-known-hosts-has-two-ways-to-make-a-purge-a-silent-no-op.md) | 2026-08-26 |
 | 398 | [A quoting bug that breaks a command announces itself; one that widens a scope does not](lesson-398-a-quoting-bug-that-widens-a-scope-does-not-announce-itself.md) | 2026-08-26 |
 | 400 | [A settled question can answer "how" without asking "at what cost"](lesson-400-a-settled-question-can-answer-how-without-asking-at-what-cost.md) | 2026-08-26 |
 | 379 | [Rotating a username is not rotation, it is a rename](lesson-379-rotating-a-username-is-not-rotation-it-is-a-rename.md) | 2026-08-23 |
