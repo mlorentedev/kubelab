@@ -29,6 +29,10 @@ import yaml
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
 from toolkit.features.k8s_connect import (
+    _load_config as _load_kubeconfig_config,
+)
+from toolkit.features.k8s_connect import (
+    _node_block,
     find_free_port,
     resolve_ssh_tunnel_params,
     resolve_transport,
@@ -150,9 +154,82 @@ def rewrite_server_direct(kubeconfig_text: str, target_host: str, apiserver_port
     return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://{target_host}:{apiserver_port}")
 
 
-def fetch_argv(ssh_alias: str) -> list[str]:
-    """SSH argv that prints the remote k3s admin kubeconfig to stdout."""
-    return ["ssh", ssh_alias, "sudo", "cat", _K3S_KUBECONFIG_PATH]
+def fetch_argv(ssh_alias: str, accept_new: bool = False) -> list[str]:
+    """SSH argv that prints the remote k3s admin kubeconfig to stdout.
+
+    ``accept_new`` adds ``StrictHostKeyChecking=accept-new``, and is set only
+    for a node whose identity the SSOT marks ephemeral — see
+    ``node_identity_is_ephemeral``. It records an unknown key instead of
+    prompting; it still REFUSES a changed one, which is why the purge below has
+    to happen first and why this flag alone would not fix anything.
+    """
+    opts = ["-o", "StrictHostKeyChecking=accept-new"] if accept_new else []
+    return ["ssh", *opts, ssh_alias, "sudo", "cat", _K3S_KUBECONFIG_PATH]
+
+
+def node_identity_is_ephemeral(env: str, common_path: Path | None = None) -> bool:
+    """True iff the SSOT marks this cluster's node as recreated rather than restarted.
+
+    The marker is the one `wait-node-ready.yml` already uses: ``tailscale_dns``
+    with **no** ``tailscale_ip``. `networking.gcp` records the hub that way
+    deliberately — it is a Spot VM in a MIG, so a preemption self-heals by
+    creating a new machine, and every stable node in the fleet declares an IP.
+
+    Scoped on purpose. A host key is a real protection, and a node whose machine
+    outlives its key rotation should keep failing loudly when that key changes.
+    """
+    config = _load_kubeconfig_config(common_path)
+    clusters = config.get("clusters") or {}
+    cluster = clusters.get(env)
+    if not cluster:
+        return False
+    block = _node_block(config.get("networking") or {}, str(cluster["node"]))
+    return bool(block.get("tailscale_dns")) and not block.get("tailscale_ip")
+
+
+def resolve_ssh_hostname(ssh_alias: str) -> str:
+    """The hostname SSH will actually connect to for ``ssh_alias``.
+
+    Asked of ssh itself (``ssh -G``) rather than assumed, because
+    ``known_hosts`` is keyed by the resolved hostname and not by the alias:
+    measured, alias ``gcp1`` resolves to ``gcp1.kubelab.internal``, so purging
+    the alias would be a no-op that looks like it worked. Falls back to the
+    alias if ssh cannot be asked — the purge then no-ops, which is the same
+    place we were before.
+    """
+    result = subprocess.run(["ssh", "-G", ssh_alias], capture_output=True, text=True)
+    if result.returncode != 0:
+        return ssh_alias
+    for line in result.stdout.splitlines():
+        if line.startswith("hostname "):
+            return line.split(" ", 1)[1].strip()
+    return ssh_alias
+
+
+def forget_host_key(hostname: str) -> bool:
+    """Drop ``hostname`` from known_hosts. Idempotent: absent means no-op.
+
+    Uses ``ssh-keygen -R`` rather than editing the file, and that is not a
+    stylistic choice: with ``HashKnownHosts`` on — the default on this
+    workstation, measured — hostnames are stored hashed, so no text search can
+    find the entry. ``ssh-keygen`` hashes the candidate and compares.
+
+    **This is a mitigation, not the fix**, and it should not be read as one.
+    Purging means trusting whatever key the host now presents — TOFU, every
+    time. The exposure is bounded only because every path to these nodes rides
+    Tailscale and WireGuard has already authenticated the peer, which makes the
+    SSH host key a weaker second check of the same fact. It is not nothing: a
+    compromised node holding valid Tailscale credentials would still be caught
+    by a host key, and this gives that up.
+
+    The real fix is SSH host certificates — trust a CA instead of a list of
+    machines. Tracked as #1261, WHICH ALSO REQUIRES DELETING THIS FUNCTION:
+    leaving both means the purge silently covers for a broken CA. Deliberately
+    the same wording as `wait-node-ready.yml:98`, which made this decision first
+    for the Ansible path; two mechanisms with one policy, not two policies.
+    """
+    result = subprocess.run(["ssh-keygen", "-R", hostname], capture_output=True, text=True)
+    return result.returncode == 0
 
 
 def output_path(env: str) -> Path:
@@ -207,7 +284,23 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
     access = load_cluster_access(env)
     logger.section(f"Fetch kubeconfig — {env} (node {access.node}, ssh {access.ssh_alias})")
 
-    argv = fetch_argv(access.ssh_alias)
+    # A node the SSOT marks ephemeral presents a new host key after every
+    # recreate, and a CHANGED key stops ssh dead — on the recovery path of the
+    # thing most likely to need recovering (#1380). Purge first, then let
+    # `accept-new` record what the new machine presents.
+    #
+    # This also fixes the failure that looks unrelated: `x509: certificate
+    # signed by unknown authority` against the hub is a STALE CACHED
+    # kubeconfig, because the recreate rotated the k3s CA too and that CA
+    # travels inside the file this function fetches. One cause, two symptoms,
+    # and the host key blocked the remedy for the other.
+    ephemeral = node_identity_is_ephemeral(env)
+    if ephemeral:
+        hostname = resolve_ssh_hostname(access.ssh_alias)
+        forget_host_key(hostname)
+        logger.info(f"{access.node} is recreated rather than restarted; forgot any stale host key for {hostname}.")
+
+    argv = fetch_argv(access.ssh_alias, accept_new=ephemeral)
     result = subprocess.run(argv, capture_output=True, text=True)
 
     if result.returncode == 0:
