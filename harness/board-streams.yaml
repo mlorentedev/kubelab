@@ -121,6 +121,12 @@ overrides:
   509: IDP & Knowledge Plane    # ADR028-003 embedding pipeline (pgvector RAG)
   988: Platform Services        # ADR028-004 stateful service placement classification
 
+  # --- no prefix: 2026-08-26 apps/api findings ---
+  1423: Security & Identity     # newsletter consent field bound then discarded (privacy/compliance)
+  1431: Networking & Edge       # self-host analytics — decides kubelab's own Cloudflare posture (ADR-049)
+  1434: SSOT, Debt & Docs       # security-headers CSP duplicated, stale SSOT pointer
+  1440: Security & Identity     # CORS wildcard origin + Allow-Credentials: true
+
 # Sequencing tickets become parents of the issues they order (one parent per
 # issue). Where two sequencers claimed the same ticket, it went to the parent
 # of its own family: BACKUP-044 (#1056) under the backup epic, TOOL-035 (#1076)
