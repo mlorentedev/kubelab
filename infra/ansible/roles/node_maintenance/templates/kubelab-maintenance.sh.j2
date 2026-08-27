@@ -127,6 +127,18 @@ snap list --all 2>/dev/null | awk '/disabled/{system("snap remove " $1 " --revis
 if command -v docker &>/dev/null; then
     docker image prune -af || echo "WARN: docker image prune failed"
     docker builder prune -af || echo "WARN: docker builder prune failed"
+    docker container prune -f || echo "WARN: docker container prune failed"
+
+    # Ad-hoc buildx builder containers (docker/setup-buildx-action, per CI job)
+    # outlive the ephemeral runner that created them and are invisible to
+    # `docker buildx ls` / `docker builder prune` above — see #1456. Reported,
+    # not removed: this timer cannot tell an orphan from a build in progress.
+    ORPHAN_BUILDX="$(docker ps --filter 'name=buildx_buildkit_builder-' --format '{% raw %}{{.Names}} ({{.Status}}){% endraw %}' 2>/dev/null || true)"
+    if [ -n "$ORPHAN_BUILDX" ]; then
+        echo "WARNING: ad-hoc buildx builder container(s) still running (not the managed \"multiarch\" builder):"
+        echo "$ORPHAN_BUILDX"
+        echo "  Verify none is mid-build, then: docker rm -f <name>"
+    fi
 fi
 
 # K3s cleanup (skip if not installed)
