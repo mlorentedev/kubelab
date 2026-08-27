@@ -82,7 +82,6 @@ class TestAffectedServiceResolution:
             "apps.services.observability.grafana.admin_password",
             "apps.services.security.authelia.oidc_client_secret_grafana",
             "apps.services.security.authelia.oidc_client_secret_grafana_hash",
-            "apps.services.data.minio.root_user",
             "apps.services.data.minio.root_password",
             "apps.services.data.minio.oidc_client_secret",
             "apps.services.security.authelia.oidc_client_secret_minio_hash",

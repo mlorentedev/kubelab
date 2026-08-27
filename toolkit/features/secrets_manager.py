@@ -472,13 +472,13 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     # MinIO
     # =========================================================================
-    SecretSpec(
-        key_path="apps.services.data.minio.root_user",
-        description="MinIO root (admin) username",
-        kind=SecretKind.PASSWORD,
-        services=("minio",),
-        rotate_note="Restart minio. Re-login with new credentials.",
-    ),
+    # No `root_user` entry: MinIO's root account NAME is configuration, not a
+    # credential. It resolves from `apps.auth.identities.superadmin` on both
+    # delivery paths — `k8s_secrets._build_dynamic_literals` for the cluster and
+    # `provision-bee.yml` for the Beelink Compose stack, which is the one that
+    # actually runs. Registering a name here made it a thing `credentials
+    # generate` rewrites (ADR-062 D3, AUTH-004 AC1). A value for the old key may
+    # still sit in the `.enc.yaml` files; nothing reads it.
     SecretSpec(
         key_path="apps.services.data.minio.root_password",
         description="MinIO root (admin) password",
@@ -1404,7 +1404,7 @@ class SecretsManager:
 
         The module docstring has promised `rotate (regenerate + propagate)` since
         it was written and nothing implemented it, so the only way to change one
-        credential was `credentials generate`, which rewrites 25 prod secrets and
+        credential was `credentials generate`, which rewrites 24 prod secrets and
         2 hub secrets at once. That is why `rotate_note` entries describe
         procedures in prose: with no verb to carry them, a note is all there is,
         and `aws.headscale_preauth_key` sat unrotated from March to August.
