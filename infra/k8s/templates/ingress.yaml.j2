@@ -13,6 +13,22 @@ spec:
   entryPoints:
     - websecure
   routes:
+{% for route in app.extra_routes %}
+    # Same-origin proxy (ADR-054). Declared before the host catch-all and with an
+    # explicit priority so a relative path reaches its own service, not this app.
+    - match: Host(`{{ app.domain }}`) && PathPrefix(`{{ route.path_prefix }}`)
+      kind: Rule
+      priority: {{ route.priority }}
+      services:
+        - name: {{ route.service }}
+          port: {{ route.port }}
+{% if app.middlewares %}
+      middlewares:
+{% for mw in app.middlewares %}
+        - name: {{ mw }}
+{% endfor %}
+{% endif %}
+{% endfor %}
     - match: Host(`{{ app.domain }}`)
       kind: Rule
       services:

@@ -29,6 +29,10 @@ import yaml
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
 from toolkit.features.k8s_connect import (
+    _load_config as _load_kubeconfig_config,
+)
+from toolkit.features.k8s_connect import (
+    _node_block,
     find_free_port,
     resolve_ssh_tunnel_params,
     resolve_transport,
@@ -150,9 +154,137 @@ def rewrite_server_direct(kubeconfig_text: str, target_host: str, apiserver_port
     return kubeconfig_text.replace(_K3S_DEFAULT_SERVER, f"https://{target_host}:{apiserver_port}")
 
 
-def fetch_argv(ssh_alias: str) -> list[str]:
-    """SSH argv that prints the remote k3s admin kubeconfig to stdout."""
-    return ["ssh", ssh_alias, "sudo", "cat", _K3S_KUBECONFIG_PATH]
+def fetch_argv(ssh_alias: str, accept_new: bool = False) -> list[str]:
+    """SSH argv that prints the remote k3s admin kubeconfig to stdout.
+
+    ``accept_new`` adds ``StrictHostKeyChecking=accept-new``, and is set only
+    for a node whose identity the SSOT marks ephemeral — see
+    ``node_identity_is_ephemeral``. It records an unknown key instead of
+    prompting; it still REFUSES a changed one, which is why the purge below has
+    to happen first and why this flag alone would not fix anything.
+    """
+    opts = ["-o", "StrictHostKeyChecking=accept-new"] if accept_new else []
+    return ["ssh", *opts, ssh_alias, "sudo", "cat", _K3S_KUBECONFIG_PATH]
+
+
+def node_identity_is_ephemeral(env: str, common_path: Path | None = None) -> bool:
+    """True iff the SSOT marks this cluster's node as recreated rather than restarted.
+
+    The marker is the one `wait-node-ready.yml` already uses: ``tailscale_dns``
+    with **no** ``tailscale_ip``. `networking.gcp` records the hub that way
+    deliberately — it is a Spot VM in a MIG, so a preemption self-heals by
+    creating a new machine, and every stable node in the fleet declares an IP.
+
+    Scoped on purpose. A host key is a real protection, and a node whose machine
+    outlives its key rotation should keep failing loudly when that key changes.
+    """
+    config = _load_kubeconfig_config(common_path)
+    clusters = config.get("clusters") or {}
+    cluster = clusters.get(env)
+    if not cluster:
+        return False
+    block = _node_block(config.get("networking") or {}, str(cluster["node"]))
+    return bool(block.get("tailscale_dns")) and not block.get("tailscale_ip")
+
+
+def resolve_ssh_hostname(ssh_alias: str) -> str:
+    """The hostname SSH will actually connect to for ``ssh_alias``.
+
+    Asked of ssh itself (``ssh -G``) rather than assumed, because
+    ``known_hosts`` is keyed by the resolved hostname and not by the alias:
+    measured, alias ``gcp1`` resolves to ``gcp1.kubelab.internal``, so purging
+    the alias would be a no-op that looks like it worked. Falls back to the
+    alias if ssh cannot be asked — the purge then no-ops, which is the same
+    place we were before.
+    """
+    result = subprocess.run(["ssh", "-G", ssh_alias], capture_output=True, text=True)
+    if result.returncode != 0:
+        return ssh_alias
+    for line in result.stdout.splitlines():
+        if line.startswith("hostname "):
+            return line.split(" ", 1)[1].strip()
+    return ssh_alias
+
+
+# What ssh prints when the presented key does not match the recorded one. Matched
+# on stderr because ssh gives this the same exit code (255) as every other
+# connection-layer failure, so the code cannot tell them apart.
+_HOST_KEY_CHANGED_MARKERS = (
+    "host key verification failed",
+    "remote host identification has changed",
+)
+
+
+def host_key_hint(ssh_alias: str, stderr: str, purge_attempted: bool = False) -> str | None:
+    """A message naming the cause and the remedy, or None if this is not that failure.
+
+    The other half of #1380, whose title is "dies on the host key a rebuild just
+    rotated, **and says nothing useful**". The purge above stops the death for
+    nodes the SSOT marks ephemeral; this covers everything else — a stable node
+    whose key rotated for a legitimate reason (a reinstall) still fails, and
+    should, but it should not fail mutely.
+
+    Deliberately does NOT tell the operator to purge unconditionally. On a node
+    that is not supposed to be replaced, a changed host key is the warning the
+    mechanism exists to produce, so the message states both readings and leaves
+    the decision where it belongs.
+    """
+    lowered = stderr.lower()
+    if not any(marker in lowered for marker in _HOST_KEY_CHANGED_MARKERS):
+        return None
+    hostname = resolve_ssh_hostname(ssh_alias)
+    if purge_attempted:
+        # The node IS marked ephemeral and the purge ran, yet the key still did
+        # not match — so `ssh-keygen -R` did not take (a read-only known_hosts,
+        # a non-standard path, an entry under a different name). Saying "not
+        # marked in the SSOT" here would be a lie about SSOT state, printed
+        # during a post-preemption recovery, which is the worst moment to send
+        # someone looking in the wrong place.
+        middle = (
+            "  This node IS marked as recreated-in-place, so the stale key was "
+            "purged automatically — and it did not take.\n"
+            "  Check that known_hosts is writable and that ssh-keygen -R names "
+            "the same host ssh connects to.\n"
+        )
+    else:
+        middle = (
+            "  This node is NOT marked as recreated-in-place in the SSOT "
+            "(`tailscale_dns` with no `tailscale_ip`), so the key was not purged "
+            "automatically and this may be a real warning.\n"
+        )
+    return (
+        f"SSH host key for {hostname!r} does not match the one in known_hosts.\n"
+        f"  Either the machine was rebuilt — and its key legitimately rotated — or "
+        f"something is impersonating it.\n"
+        f"{middle}"
+        f"  If you have confirmed the rebuild out of band: ssh-keygen -R {hostname}"
+    )
+
+
+def forget_host_key(hostname: str) -> bool:
+    """Drop ``hostname`` from known_hosts. Idempotent: absent means no-op.
+
+    Uses ``ssh-keygen -R`` rather than editing the file, and that is not a
+    stylistic choice: with ``HashKnownHosts`` on — the default on this
+    workstation, measured — hostnames are stored hashed, so no text search can
+    find the entry. ``ssh-keygen`` hashes the candidate and compares.
+
+    **This is a mitigation, not the fix**, and it should not be read as one.
+    Purging means trusting whatever key the host now presents — TOFU, every
+    time. The exposure is bounded only because every path to these nodes rides
+    Tailscale and WireGuard has already authenticated the peer, which makes the
+    SSH host key a weaker second check of the same fact. It is not nothing: a
+    compromised node holding valid Tailscale credentials would still be caught
+    by a host key, and this gives that up.
+
+    The real fix is SSH host certificates — trust a CA instead of a list of
+    machines. Tracked as #1261, WHICH ALSO REQUIRES DELETING THIS FUNCTION:
+    leaving both means the purge silently covers for a broken CA. Deliberately
+    the same wording as `wait-node-ready.yml:98`, which made this decision first
+    for the Ansible path; two mechanisms with one policy, not two policies.
+    """
+    result = subprocess.run(["ssh-keygen", "-R", hostname], capture_output=True, text=True)
+    return result.returncode == 0
 
 
 def output_path(env: str) -> Path:
@@ -207,7 +339,32 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
     access = load_cluster_access(env)
     logger.section(f"Fetch kubeconfig — {env} (node {access.node}, ssh {access.ssh_alias})")
 
-    argv = fetch_argv(access.ssh_alias)
+    # A node the SSOT marks ephemeral presents a new host key after every
+    # recreate, and a CHANGED key stops ssh dead — on the recovery path of the
+    # thing most likely to need recovering (#1380). Purge first, then let
+    # `accept-new` record what the new machine presents.
+    #
+    # This also fixes the failure that looks unrelated: `x509: certificate
+    # signed by unknown authority` against the hub is a STALE CACHED
+    # kubeconfig, because the recreate rotated the k3s CA too and that CA
+    # travels inside the file this function fetches. One cause, two symptoms,
+    # and the host key blocked the remedy for the other.
+    ephemeral = node_identity_is_ephemeral(env)
+    if ephemeral:
+        hostname = resolve_ssh_hostname(access.ssh_alias)
+        if forget_host_key(hostname):
+            logger.info(f"{access.node} is recreated rather than restarted; forgot any stale host key for {hostname}.")
+        else:
+            # Not fatal: the fetch still succeeds when no stale key was in the
+            # way. But it must be said, because the alternative is believing the
+            # purge happened — and if a stale key IS present, the failure below
+            # would otherwise read as an unexplained host-key error.
+            logger.warning(
+                f"Could not purge the host key for {hostname} (ssh-keygen -R failed). "
+                "Continuing; if the fetch now fails on a changed host key, this is why."
+            )
+
+    argv = fetch_argv(access.ssh_alias, accept_new=ephemeral)
     result = subprocess.run(argv, capture_output=True, text=True)
 
     if result.returncode == 0:
@@ -219,7 +376,10 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
         )
         raw = _fetch_via_tunnel(env, access)
     else:
-        raise RuntimeError(f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}")
+        raise RuntimeError(
+            host_key_hint(access.ssh_alias, result.stderr, purge_attempted=ephemeral)
+            or f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}"
+        )
 
     if direct:
         transport = resolve_transport(env)
