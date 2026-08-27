@@ -215,7 +215,7 @@ _HOST_KEY_CHANGED_MARKERS = (
 )
 
 
-def host_key_hint(ssh_alias: str, stderr: str) -> str | None:
+def host_key_hint(ssh_alias: str, stderr: str, purge_attempted: bool = False) -> str | None:
     """A message naming the cause and the remedy, or None if this is not that failure.
 
     The other half of #1380, whose title is "dies on the host key a rebuild just
@@ -233,13 +233,30 @@ def host_key_hint(ssh_alias: str, stderr: str) -> str | None:
     if not any(marker in lowered for marker in _HOST_KEY_CHANGED_MARKERS):
         return None
     hostname = resolve_ssh_hostname(ssh_alias)
+    if purge_attempted:
+        # The node IS marked ephemeral and the purge ran, yet the key still did
+        # not match — so `ssh-keygen -R` did not take (a read-only known_hosts,
+        # a non-standard path, an entry under a different name). Saying "not
+        # marked in the SSOT" here would be a lie about SSOT state, printed
+        # during a post-preemption recovery, which is the worst moment to send
+        # someone looking in the wrong place.
+        middle = (
+            "  This node IS marked as recreated-in-place, so the stale key was "
+            "purged automatically — and it did not take.\n"
+            "  Check that known_hosts is writable and that ssh-keygen -R names "
+            "the same host ssh connects to.\n"
+        )
+    else:
+        middle = (
+            "  This node is NOT marked as recreated-in-place in the SSOT "
+            "(`tailscale_dns` with no `tailscale_ip`), so the key was not purged "
+            "automatically and this may be a real warning.\n"
+        )
     return (
         f"SSH host key for {hostname!r} does not match the one in known_hosts.\n"
         f"  Either the machine was rebuilt — and its key legitimately rotated — or "
         f"something is impersonating it.\n"
-        f"  This node is NOT marked as recreated-in-place in the SSOT "
-        f"(`tailscale_dns` with no `tailscale_ip`), so the key was not purged "
-        f"automatically and this may be a real warning.\n"
+        f"{middle}"
         f"  If you have confirmed the rebuild out of band: ssh-keygen -R {hostname}"
     )
 
@@ -335,8 +352,17 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
     ephemeral = node_identity_is_ephemeral(env)
     if ephemeral:
         hostname = resolve_ssh_hostname(access.ssh_alias)
-        forget_host_key(hostname)
-        logger.info(f"{access.node} is recreated rather than restarted; forgot any stale host key for {hostname}.")
+        if forget_host_key(hostname):
+            logger.info(f"{access.node} is recreated rather than restarted; forgot any stale host key for {hostname}.")
+        else:
+            # Not fatal: the fetch still succeeds when no stale key was in the
+            # way. But it must be said, because the alternative is believing the
+            # purge happened — and if a stale key IS present, the failure below
+            # would otherwise read as an unexplained host-key error.
+            logger.warning(
+                f"Could not purge the host key for {hostname} (ssh-keygen -R failed). "
+                "Continuing; if the fetch now fails on a changed host key, this is why."
+            )
 
     argv = fetch_argv(access.ssh_alias, accept_new=ephemeral)
     result = subprocess.run(argv, capture_output=True, text=True)
@@ -351,7 +377,7 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
         raw = _fetch_via_tunnel(env, access)
     else:
         raise RuntimeError(
-            host_key_hint(access.ssh_alias, result.stderr)
+            host_key_hint(access.ssh_alias, result.stderr, purge_attempted=ephemeral)
             or f"SSH fetch failed (code {result.returncode}): {result.stderr.strip()}"
         )
 

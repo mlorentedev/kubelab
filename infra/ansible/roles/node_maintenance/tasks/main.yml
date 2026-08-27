@@ -302,6 +302,50 @@
   changed_when: "'Total reclaimed space' in _docker_builder.stdout"
   ignore_errors: true
 
+- name: Remove stopped Docker containers
+  command: docker container prune -f
+  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
+  register: _docker_container_prune
+  changed_when: "'Total reclaimed space' in _docker_container_prune.stdout"
+  ignore_errors: true
+
+- name: Find running ad-hoc buildx builder containers
+  # docker/setup-buildx-action creates a randomly-named
+  # "buildx_buildkit_builder-<uuid>" container per CI job via the
+  # docker-container driver. The ephemeral self-hosted GH runner that created
+  # it (EPHEMERAL: 1) is destroyed after every job; the BuildKit container it
+  # left on the host's shared Docker daemon is not, and `docker buildx ls`
+  # cannot see it — that command only reads the CLI's own local state under
+  # ~/.docker/buildx/instances, not the host's containers, so `docker builder
+  # prune` above never reaches it either.
+  #
+  # A buildx node container is supposed to stop itself when idle — multiarch0,
+  # the one this fleet does manage (beelink_services), shows "inactive"
+  # between builds. One that has been running for the host's entire uptime is
+  # orphaned, not mid-build. Measured on beelink 2026-08-27: four such
+  # containers, all predating ADR-030's 2026-06-26 hosted-primary amendment.
+  # #1456.
+  command: docker ps --filter "name=buildx_buildkit_builder-" --format "{% raw %}{{.Names}} ({{.Status}}){% endraw %}"
+  register: _orphan_buildx
+  changed_when: false
+  ignore_errors: true
+  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
+
+- name: Warn about orphaned buildx builder containers
+  # Not auto-removed: this timer cannot tell an orphan apart from a build
+  # genuinely in progress, and killing a live build unattended is worse than
+  # leaving a stray container running. Same posture as the reboot-required
+  # check above — report, and an operator clears it with `docker rm -f`.
+  debug:
+    msg: >-
+      WARNING: {{ inventory_hostname }} has {{ _orphan_buildx.stdout_lines | default([]) | length }}
+      ad-hoc buildx builder container(s) still running (not the managed
+      "multiarch" builder): {{ _orphan_buildx.stdout_lines | default([]) | join(', ') }}.
+      Verify none is mid-build, then `docker rm -f <name>`.
+  when: >-
+    maintenance_run_cleanup | bool and 'docker_hosts' in group_names and
+    (_orphan_buildx.stdout_lines | default([]) | length) > 0
+
 # --- K3s cleanup (k3s_servers or hub nodes) ---
 - name: Prune unused container images (crictl)
   command: crictl rmi --prune
