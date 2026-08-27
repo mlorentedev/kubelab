@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features import board_deps, board_ids, board_priority, board_streams, board_sweep
+from toolkit.features import board_deps, board_ids, board_priority, board_set, board_streams, board_sweep
 
 app = typer.Typer(
     name="board",
@@ -301,3 +301,65 @@ def deps_cmd(
         referrers = " ".join(f"#{n}" for n in guard[target])
         typer.echo(f"#{target} {titles[target][:70]}\n  named by: {referrers}")
     typer.echo(f"\nopen issues scanned: {len(issues)}  named in the guard: {len(guard)}")
+
+
+@app.command("set")
+def set_cmd(
+    issue: Annotated[int, typer.Option("--issue", help="Issue number to set fields on.")],
+    status: Annotated[str | None, typer.Option("--status", help='e.g. "Backlog", "In Progress".')] = None,
+    priority: Annotated[str | None, typer.Option("--priority", help='e.g. "P1", "P2".')] = None,
+    stream: Annotated[str | None, typer.Option("--stream", help='e.g. "Security & Identity".')] = None,
+    apply: Annotated[bool, typer.Option("--apply", help="Write the changes. Default is a dry run.")] = False,
+) -> None:
+    """Set one issue's Status / Priority / Stream by NAME (TOOL-046, #1468).
+
+    Idempotent: a field already holding the requested value produces no
+    mutation, and the command says so. Option names are resolved against the
+    project itself, so a renamed option is an error listing the valid ones
+    rather than a silently wrong write.
+    """
+    desired = {k: v for k, v in (("Status", status), ("Priority", priority), ("Stream", stream)) if v is not None}
+    if not desired:
+        logger.error("nothing to set — pass at least one of --status / --priority / --stream")
+        raise typer.Exit(code=2)
+
+    try:
+        registry = board_streams.load_registry()
+    except board_streams.RegistryError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    try:
+        project_id, fields = board_set.fetch_fields(registry.owner, registry.number, tuple(desired))
+        state = board_set.fetch_item(registry.owner, registry.repo.split("/")[-1], registry.number, issue)
+        # Resolve every name before writing anything, so an unknown option fails
+        # the whole command rather than half of it.
+        for name, value in desired.items():
+            board_set.resolve_option(name, fields[name], value)
+    except board_set.UnknownOptionError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    except board_set.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    changes = board_set.plan(state, desired)
+    if not changes:
+        logger.success(
+            f"#{issue} already matches — nothing to do ({', '.join(f'{k}={v}' for k, v in desired.items())})"
+        )
+        return
+
+    for change in changes:
+        typer.echo(f"  #{issue}  {change}")
+
+    if not apply:
+        typer.echo("\ndry run — nothing written (use --apply)")
+        return
+
+    try:
+        written = board_set.apply(project_id, state.item_id, fields, changes)
+    except board_set.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    logger.success(f"#{issue}: {written} field(s) written")
