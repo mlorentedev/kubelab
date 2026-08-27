@@ -12,6 +12,11 @@ from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
 from toolkit.features.credentials import credentials_manager
 from toolkit.features.github_secrets import github_secrets_manager
+from toolkit.features.grafana_admin_identity import (
+    GrafanaIdentityUnavailableError,
+    check_admin_identity,
+    reconcile_admin_identity,
+)
 
 app = typer.Typer(
     name="credentials",
@@ -264,3 +269,50 @@ def delete_gh_secret(
     else:
         logger.error(MESSAGES.ERROR_CREDENTIALS_SECRET_DELETE_FAILED.format(secret_name))
         raise typer.Exit() from None
+
+
+@app.command("reconcile-grafana-admin")
+def reconcile_grafana_admin(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    check_only: Annotated[
+        bool,
+        typer.Option("--check-only", help="Report drift and exit non-zero; never mutates Grafana"),
+    ] = False,
+) -> None:
+    """Detect (and optionally fix) Grafana's admin login drifting from apps.auth.identities.superadmin.
+
+    AUTH-002 (#951): Grafana only honours GF_SECURITY_ADMIN_USER on first
+    database creation, so a later identity change never reaches an existing
+    installation. `--check-only` is the permanent detector; without it, the
+    command renames the login to match — credential-independent, since it
+    resets the password via `grafana cli admin reset-admin-password` first.
+    """
+    logger.section(f"Grafana admin identity — {env}")
+    try:
+        if check_only:
+            result = check_admin_identity(env, PROJECT_ROOT)
+        else:
+            result = reconcile_admin_identity(env, PROJECT_ROOT)
+    except GrafanaIdentityUnavailableError as exc:
+        logger.error(f"Could not ask Grafana: {exc}")
+        raise typer.Exit(1) from exc
+
+    if result.reconciled:
+        if result.changed:
+            logger.success(f"Reset the password and renamed the admin login to '{result.declared_login}'.")
+        else:
+            logger.success(f"Admin identity is '{result.declared_login}', matching the SSOT — nothing to do.")
+        return
+
+    if check_only:
+        actual = repr(result.actual_login) if result.actual_login else "unknown"
+        logger.warning(
+            f"Drift: declared identity '{result.declared_login}' cannot log in; the working login is {actual}."
+        )
+        raise typer.Exit(1)
+
+    # reconcile_admin_identity() itself raises on failure to fix — reaching
+    # here with reconciled=False would mean it silently gave up, which it
+    # does not do. Kept as a guard, not a real branch.
+    logger.error("Reconciliation returned without confirming the declared identity works.")
+    raise typer.Exit(1)
