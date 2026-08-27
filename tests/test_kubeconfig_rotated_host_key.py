@@ -144,6 +144,25 @@ class TestTheErrorSaysSomethingUseful:
         self._stub_hostname(monkeypatch)
         assert kc.host_key_hint("vps", "Host key verification failed.\n") is not None
 
+    def test_after_a_failed_purge_the_hint_does_not_lie_about_the_ssot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The node IS marked ephemeral and the purge ran anyway — say that.
+
+        Found by review on #1455. `forget_host_key`'s return was discarded, so a
+        purge that did not take (read-only known_hosts, non-standard path) left
+        the hint asserting the node is "NOT marked as recreated-in-place" — a
+        false statement about SSOT state, printed during a post-preemption
+        recovery, sending the operator to look in the wrong place at the worst
+        possible moment.
+        """
+        self._stub_hostname(monkeypatch)
+        hint = kc.host_key_hint("gcp1", "Host key verification failed.\n", purge_attempted=True)
+        assert hint is not None
+        assert "NOT marked" not in hint, "the node IS marked; saying otherwise misdirects the operator"
+        assert "did not take" in hint
+        assert "writable" in hint, "name the likely cause, not just the fact"
+
     def test_an_unrelated_failure_is_left_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A wrong-hint is worse than none: it sends the operator to delete a
         key when the real problem was their agent."""
