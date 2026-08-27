@@ -332,8 +332,13 @@ def set_cmd(
     try:
         project_id, fields = board_set.fetch_fields(registry.owner, registry.number, tuple(desired))
         state = board_set.fetch_item(registry.owner, registry.repo.split("/")[-1], registry.number, issue)
-        # Resolve every name before writing anything, so an unknown option fails
-        # the whole command rather than half of it.
+        # Fail-fast: validate EVERY name before planning anything, so an unknown
+        # option rejects the whole command rather than half of it.
+        #
+        # `apply()` resolves again, and that duplication is deliberate rather
+        # than leftover. This loop is a precondition of the command; `apply()`
+        # is self-contained and must not depend on a caller having checked
+        # first, or the next caller inherits a trap. Both are dict lookups.
         for name, value in desired.items():
             board_set.resolve_option(name, fields[name], value)
     except board_set.UnknownOptionError as exc:
