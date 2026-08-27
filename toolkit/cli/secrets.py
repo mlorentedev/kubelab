@@ -449,7 +449,7 @@ def rotate_secret(
     """Rotate ONE credential, and stop before the cluster.
 
     Until this existed the only way to change a single credential was
-    `credentials generate`, which rewrites 25 prod secrets and 2 hub secrets in
+    `credentials generate`, which rewrites 24 prod secrets and 2 hub secrets in
     one shot -- so rotating an exposed Argo CD password also rotated Grafana,
     MinIO, Uptime Kuma and every OIDC client secret.
 

@@ -2,7 +2,7 @@
 
 `secrets_manager`'s module docstring has promised `rotate (regenerate +
 propagate)` since it was written, and nothing implemented it. The only way to
-change a single credential was `credentials generate`, which rewrites 25 prod
+change a single credential was `credentials generate`, which rewrites 24 prod
 secrets and 2 hub secrets in one shot -- so rotating an exposed Argo CD password
 also rotated Grafana, MinIO, Uptime Kuma and every OIDC client secret. With no
 verb to carry them, `rotate_note` entries stayed prose, and
