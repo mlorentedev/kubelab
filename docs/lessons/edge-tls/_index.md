@@ -1,9 +1,10 @@
 # Traefik, TLS and the request path
 
-26 lessons, newest first. Back to [all categories](../_index.md).
+27 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 406 | [An explicit Traefik priority can rank below one that is absent](lesson-406-an-explicit-traefik-priority-can-rank-below-one-that-is-absent.md) | 2026-08-27 |
 | 304 | [`tls: {}` is not "no TLS config" — an empty map in a strategic-merge patch changes nothing](lesson-304-tls-is-not-no-tls-config-an-empty-map-in-a-st.md) | 2026-08-09 |
 | 238 | [2026-03-29: Generated IngressRoutes were missing secure-headers middleware](lesson-238-2026-03-29-generated-ingressroutes-were-missi.md) | 2026-05-01 |
 | 216 | [NET-003: CrowdSec Bouncer Plugin Loss is Recurrent](lesson-216-net-003-crowdsec-bouncer-plugin-loss-is-recur.md) | 2026-03-27 |
