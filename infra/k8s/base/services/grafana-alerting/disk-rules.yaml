@@ -45,6 +45,18 @@ groups:
                 uid: loki
               editorMode: code
               queryType: range
+              # `by (namespace, pvc)` is load-bearing, not tidying (OBS-018).
+              # disk-watcher is a CronJob: every 15m run is a NEW pod, and
+              # Vector labels every Loki stream with `pod`. Without the
+              # grouping, `unwrap` keys each series by (pod, pvc), so every
+              # run starts a fresh series for the same PVC — the alert
+              # instance for a genuinely unbound PVC goes stale and
+              # false-Resolves after the 30m window, then a new instance
+              # starts one step behind, forever. Grouping by identity the
+              # PVC actually has survives the pod churn, so `for: 15m` means
+              # what it says. Measured live in staging 2026-08-27: the
+              # `ac2-drill-unbound` drill produced 4 simultaneous alerting
+              # instances, one per CronJob pod, none older than 30 minutes.
               expr: >-
                 last_over_time(
                   {container="disk-watcher"}
@@ -52,7 +64,7 @@ groups:
                     | metric=`disk_pvc_health`
                     | unwrap healthy
                   [30m]
-                )
+                ) by (namespace, pvc)
           - refId: B
             relativeTimeRange:
               from: 1800
@@ -106,6 +118,9 @@ groups:
                 uid: loki
               editorMode: code
               queryType: range
+              # Same per-pod-churn class as obs015-pvc-unbound-failure above,
+              # grouped by the identity this metric actually carries: `node`,
+              # not `pod` (OBS-018 AC5).
               expr: >-
                 last_over_time(
                   {container="disk-watcher"}
@@ -113,7 +128,7 @@ groups:
                     | metric=`disk_root_usage`
                     | unwrap used_pct
                   [30m]
-                )
+                ) by (node)
           - refId: B
             relativeTimeRange:
               from: 1800
