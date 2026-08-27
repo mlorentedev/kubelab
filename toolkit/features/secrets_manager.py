@@ -929,6 +929,50 @@ def secrets_synced_to_secret_manager() -> tuple[SecretSpec, ...]:
 # =============================================================================
 
 
+#: SOPS writes its own metadata into every encrypted file. It is not a secret
+#: anyone declares, so it must never be reported as an orphan.
+_SOPS_METADATA_KEY = "sops"
+
+
+def orphan_key_paths(decrypted: dict[str, Any]) -> list[str]:
+    """Leaf key paths present in the vault that no `SECRET_CATALOG` entry owns.
+
+    The reverse of what `audit` has always done. `audit` iterates the catalog
+    and asks whether each entry has a value; nothing asked whether a value has
+    an entry, so a secret whose catalog entry was removed — or that was never
+    registered — stayed in the vault permanently and invisibly. `credentials
+    generate` keeps rewriting whatever it seeds, so an orphan is not inert: it
+    is a value something may still overwrite and nothing reads.
+
+    Deliberately NOT filtered by `envs`. A key registered for prod only is not
+    an orphan when auditing staging — it has an owner, just not here — and
+    conflating "no entry at all" with "not expected in this environment" would
+    recreate the ANSIBLE-033 failure mode from the other side.
+
+    **Returns key paths and never values.** The transcript is a durable artifact
+    and nothing scans it; a function that walks a decrypted vault must be
+    incapable of emitting what it walked, not merely careful about it.
+    """
+    owned = set(_CATALOG_BY_KEY)
+    orphans: list[str] = []
+
+    def walk(node: Any, prefix: str) -> None:
+        if not isinstance(node, dict):
+            if prefix and prefix not in owned:
+                orphans.append(prefix)
+            return
+        for key, value in node.items():
+            if not prefix and key == _SOPS_METADATA_KEY:
+                continue
+            path = f"{prefix}.{key}" if prefix else key
+            if path in owned:
+                continue  # an owned subtree is owned whole; do not descend into it
+            walk(value, path)
+
+    walk(decrypted, "")
+    return sorted(orphans)
+
+
 @dataclass
 class AuditResult:
     """Result of auditing secrets for an environment."""
@@ -1058,6 +1102,11 @@ class SecretsManager:
                 result.present.append(spec.key_path)
             else:
                 result.missing.append(spec.key_path)
+
+        # The reverse direction, which `AuditResult.unexpected` has declared
+        # since it was written and nothing ever populated — and which
+        # `cli/secrets.py` promises to the operator in its own help text.
+        result.unexpected = orphan_key_paths(decrypted)
 
         return result
 

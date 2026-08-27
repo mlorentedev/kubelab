@@ -340,8 +340,20 @@ def _print_audit_result(result: AuditResult) -> None:
             kind = f" [{spec.kind.value}]" if spec else ""
             logger.info(f"  {key}{kind}{desc}")
 
-    if result.present and not result.missing:
+    if result.unexpected:
+        # The reverse direction (#833). Key paths only, never values: this walks
+        # a decrypted vault, and the transcript is a durable artifact nothing
+        # scans. An orphan is not inert -- `credentials generate` rewrites what
+        # it seeds, so this is a value something may still overwrite while
+        # nothing reads it.
+        logger.warning(f"Orphaned ({len(result.unexpected)}) — in the vault, owned by no SECRET_CATALOG entry:")
+        for key in result.unexpected:
+            logger.info(f"  {key}")
+
+    if result.present and not result.missing and not result.unexpected:
         logger.success("All secrets present")
+    elif result.present and not result.missing:
+        logger.success("All catalogued secrets present")
 
 
 # =============================================================================
