@@ -270,7 +270,18 @@
         minio_image: "{{ config.apps.services.data.minio.image }}"
         minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
         minio_console_port: "{{ config.apps.services.data.minio.default_port_console }}"
-        minio_root_user: "{{ secrets.apps.services.data.minio.root_user }}"
+        # ADR-062 D3 / AUTH-004 AC1, and the same fix as `gitea_admin_user`
+        # above — this is the second of the two delivery paths that leg named.
+        # Was `secrets.apps.services.data.minio.root_user`, a SOPS key that
+        # `credentials generate` seeded from the same `common_username` that
+        # feeds `basic_auth.user`. Its live value equalled the declared
+        # superadmin by COINCIDENCE, not by resolution, so nothing looked
+        # broken while the next rotation was entitled to rename MinIO's root
+        # account — the shape that took prod SSO down on 2026-08-23 via Gitea.
+        #
+        # `config` is `common.yaml` merged with the env overrides (set_fact
+        # above), so the plaintext identity map resolves here.
+        minio_root_user: "{{ config.apps.auth.identities.superadmin }}"
         minio_root_password: "{{ secrets.apps.services.data.minio.root_password }}"
         minio_cpu_limit: "{{ config.apps.services.data.minio.resources.cpu_limit }}"
         minio_memory_limit: "{{ config.apps.services.data.minio.resources.memory_limit }}"

@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features import board_ids, board_priority, board_streams, board_sweep
+from toolkit.features import board_deps, board_ids, board_priority, board_streams, board_sweep
 
 app = typer.Typer(
     name="board",
@@ -271,3 +271,33 @@ def priority_cmd(
         logger.error(str(exc))
         raise typer.Exit(code=2) from exc
     typer.echo(f"written: {written}")
+
+
+@app.command("deps")
+def deps_cmd(
+    repo: Annotated[
+        str | None,
+        typer.Option("--repo", help="owner/name to scan. Defaults to the Stream registry's project.repo."),
+    ] = None,
+) -> None:
+    """Report open issues named by a dependency keyword in another open issue's body (GOV-005 AC3 guard)."""
+    repo_name = repo
+    if repo_name is None:
+        try:
+            repo_name = board_streams.load_registry().repo
+        except board_streams.RegistryError as exc:
+            logger.error(str(exc))
+            raise typer.Exit(code=2) from exc
+
+    try:
+        issues = board_deps.fetch_open_issues(repo_name)
+    except board_deps.GitHubError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+
+    titles = {issue.number: issue.title for issue in issues}
+    guard = board_deps.build_guard(issues, repo_name)
+    for target in sorted(guard):
+        referrers = " ".join(f"#{n}" for n in guard[target])
+        typer.echo(f"#{target} {titles[target][:70]}\n  named by: {referrers}")
+    typer.echo(f"\nopen issues scanned: {len(issues)}  named in the guard: {len(guard)}")
