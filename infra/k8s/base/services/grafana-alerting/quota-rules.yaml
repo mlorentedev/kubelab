@@ -62,6 +62,10 @@ groups:
                 uid: loki
               editorMode: code
               queryType: range
+              # `by (dimension)` (OBS-018 AC5): same per-pod-churn class as
+              # disk-rules.yaml — quota-watcher is a CronJob, every 5m run is
+              # a new pod, and without grouping each run starts a fresh
+              # series that goes stale inside this 10m window.
               expr: >-
                 last_over_time(
                   {container="quota-watcher"}
@@ -69,7 +73,7 @@ groups:
                     | dimension=`requests.memory`
                     | unwrap pct
                   [10m]
-                )
+                ) by (dimension)
           - refId: B
             relativeTimeRange:
               from: 600
@@ -127,6 +131,7 @@ groups:
                 uid: loki
               editorMode: code
               queryType: range
+              # Same class as the requests.memory rule above (OBS-018 AC5).
               expr: >-
                 last_over_time(
                   {container="quota-watcher"}
@@ -134,7 +139,7 @@ groups:
                     | dimension=`limits.memory`
                     | unwrap pct
                   [10m]
-                )
+                ) by (dimension)
           - refId: B
             relativeTimeRange:
               from: 600
