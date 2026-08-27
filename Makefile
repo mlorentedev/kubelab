@@ -115,6 +115,7 @@ help:
 	@echo "  make board-ids-check      Exit 1 while any open issue shares an id"
 	@echo "  make board-priority       Report open issues with no Priority set (harness/priority-scale.md)"
 	@echo "  make board-priority-check Exit 1 while any open issue carries no Priority"
+	@echo "  make board-deps           Report open issues named by a dependency keyword in another's body"
 	@echo ""
 	@echo "Toolkit CLI (use directly for most operations):"
 	@echo "  toolkit services up gitea        Start Gitea"
@@ -965,14 +966,19 @@ board-ids:
 board-ids-check:
 	@$(TOOLKIT) board ids --check
 
-# Priority scale is harness/priority-scale.md (GOV-005). Detection only, no
-# --apply: assigning a priority is a judged, reviewed pass, not this check's job.
+# Priority scale is harness/priority-scale.md (GOV-005).
 .PHONY: board-priority board-priority-check
 board-priority:
 	@$(TOOLKIT) board priority
 
 board-priority-check:
 	@$(TOOLKIT) board priority --check
+
+# Batch-close guard (GOV-005 AC3): report-only, no --apply — this only reads
+# issue bodies, it never proposes or executes a close.
+.PHONY: board-deps
+board-deps:
+	@$(TOOLKIT) board deps
 
 # K8s deploy — Kustomize for custom apps, Helm for third-party (ADR-021 Rev2)
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior

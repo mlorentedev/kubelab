@@ -84,6 +84,26 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
 
+  # Grafana's environment. Keeps the name hash for the same reason
+  # grafana-alerting below does, and the stronger version of it: env vars are
+  # injected once at container start and Grafana re-reads none of them, so an
+  # unhashed ConfigMap changes while the running pod keeps the old value and
+  # Argo CD reports Synced/Healthy — a silent no-op, not a visible failure.
+  # Found by review on #1446, where a new OAuth role-mapping variable would
+  # have landed in prod's ConfigMap and never reached the process.
+  #
+  # `envs:` (not `files:`) so each line becomes its own ConfigMap key, matching
+  # the `envFrom: configMapRef` the Deployment already uses.
+  - name: grafana-config
+    namespace: kubelab
+    envs:
+      - services/grafana-config/grafana.env
+    options:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/component: observability
+        app.kubernetes.io/part-of: kubelab
+
   # Grafana alerting provisioning (OBS-007). NOTE the deliberate difference from
   # its grafana-dashboards sibling directly above: that one disables the name
   # hash, this one keeps it. Dashboards are re-read on a timer
