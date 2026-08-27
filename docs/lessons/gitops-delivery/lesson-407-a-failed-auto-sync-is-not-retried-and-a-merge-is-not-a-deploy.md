@@ -24,7 +24,7 @@ watch failures on `traefik.io/v1alpha1` at 04:47Z). That is upstream
 argoproj/argo-cd#27659, fixed in v3.5.0+; the hub runs chart `9.5.13`, v3.4.1
 (#1209). What made it an outage rather than a blip is what Argo did next:
 
-```
+```text
 Skipping auto-sync: failed previous sync attempt to [1489265] and will not retry
 ```
 
@@ -39,7 +39,7 @@ mesh needs no `ts-bridge` hop), then `make sync-app APP=kubelab-staging` →
 `Succeeded` at the first attempt; no `restart-argocd` needed. Verified by
 consequence, without mutating anything:
 
-```
+```text
 GET  https://staging.mlorente.dev/api/health     -> 404 text/plain   (Gin, not nginx)
 POST https://staging.mlorente.dev/api/subscribe  -> 400 text/plain   (malformed body)
 ```
