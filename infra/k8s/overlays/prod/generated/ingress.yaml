@@ -41,7 +41,7 @@ spec:
     # explicit priority so a relative path reaches its own service, not this app.
     - match: Host(`mlorente.dev`) && PathPrefix(`/api`)
       kind: Rule
-      priority: 10
+      priority: 100
       services:
         - name: api
           port: 8080

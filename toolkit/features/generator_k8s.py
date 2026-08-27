@@ -409,11 +409,17 @@ class K8sGenerator(BaseGenerator):
                     "path_prefix": entry["path_prefix"],
                     "service": service,
                     "port": int(port),
-                    # Traefik orders equal-priority rules by rule length, so
-                    # `Host && PathPrefix` already out-ranks the bare `Host`
-                    # catch-all. Setting it explicitly keeps that true when a
-                    # longer rule is added later.
-                    "priority": int(entry.get("priority", 10)),
+                    # Must out-rank the host catch-all, and the number is not
+                    # arbitrary. Traefik gives a router WITHOUT an explicit
+                    # priority the LENGTH OF ITS RULE — so the bare
+                    # `Host(`staging.mlorente.dev`)` catch-all sits at ~31, and
+                    # an explicit `priority: 10` here put this route BELOW it.
+                    # The route was generated, applied, and never matched.
+                    #
+                    # Anything comfortably above a realistic rule length works;
+                    # 100 is that with room to spare. Lowering this below the
+                    # catch-all's rule length silently disables the route.
+                    "priority": int(entry.get("priority", 100)),
                 }
             )
         return routes
