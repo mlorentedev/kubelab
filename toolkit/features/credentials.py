@@ -493,8 +493,12 @@ class CredentialsManager:
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
-            # MinIO secrets
-            "apps.services.data.minio.root_user": common_username,
+            # MinIO secrets. No `root_user` here: the root account's NAME
+            # resolves from `apps.auth.identities.superadmin` on both delivery
+            # paths (`k8s_secrets._build_dynamic_literals` and
+            # `provision-bee.yml`), so seeding it from `common_username` would
+            # make an identity something this command is entitled to rename —
+            # ADR-062 D3, and the shape that took prod SSO down on 2026-08-23.
             "apps.services.data.minio.root_password": common_password,
             "apps.services.data.minio.oidc_client_secret": minio_oidc_client_secret,
             # Gitea secrets
@@ -654,7 +658,6 @@ class CredentialsManager:
         print("    services:")
         print("        data:")
         print("            minio:")
-        print(f'                root_user: "{secrets_dict["apps.services.data.minio.root_user"]}"')
         print(f'                root_password: "{secrets_dict["apps.services.data.minio.root_password"]}"')
         print(f'                oidc_client_secret: "{secrets_dict["apps.services.data.minio.oidc_client_secret"]}"')
         print("        observability:")
