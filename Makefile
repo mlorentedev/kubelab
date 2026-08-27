@@ -114,6 +114,7 @@ help:
 	@echo "  make board-ids            Report any open issue that shares its ticket id with another"
 	@echo "  make board-ids-check      Exit 1 while any open issue shares an id"
 	@echo "  make board-priority       Report open issues with no Priority set (harness/priority-scale.md)"
+	@echo "  make board-set ISSUE=N     Set one issue's Status/Priority/Stream by name (APPLY=1 to write)"
 	@echo "  make board-priority-check Exit 1 while any open issue carries no Priority"
 	@echo "  make board-deps           Report open issues named by a dependency keyword in another's body"
 	@echo ""
@@ -970,6 +971,18 @@ board-ids-check:
 .PHONY: board-priority board-priority-check
 board-priority:
 	@$(TOOLKIT) board priority
+
+# Single-issue field set (TOOL-046). The bulk passes above cover many issues from
+# a registry; this covers the one that happens most: a ticket was just filed.
+# Names only -- no node ids in this file, which is the point of the ticket.
+.PHONY: board-set
+board-set:
+	@test -n "$(ISSUE)" || (echo "Usage: make board-set ISSUE=N [STATUS=x] [PRIORITY=x] [STREAM=x] [APPLY=1]" && exit 1)
+	@$(TOOLKIT) board set --issue $(ISSUE) \
+		$(if $(STATUS),--status "$(STATUS)") \
+		$(if $(PRIORITY),--priority "$(PRIORITY)") \
+		$(if $(STREAM),--stream "$(STREAM)") \
+		$(if $(APPLY),--apply)
 
 board-priority-check:
 	@$(TOOLKIT) board priority --check

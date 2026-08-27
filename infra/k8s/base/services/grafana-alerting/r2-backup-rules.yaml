@@ -36,6 +36,10 @@ groups:
                 uid: loki
               editorMode: code
               queryType: range
+              # `by (namespace)` (OBS-018 AC5): r2-backup-watcher is a CronJob
+              # too, so the same per-pod series churn applies — lower stakes
+              # here since the 24h window dwarfs `for: 10m`, but duplicate
+              # instances (one per run) is still the wrong shape.
               expr: >-
                 last_over_time(
                   {container="r2-backup-watcher"}
@@ -43,7 +47,7 @@ groups:
                     | metric=`r2_backup_health`
                     | unwrap healthy
                   [24h]
-                )
+                ) by (namespace)
           - refId: B
             relativeTimeRange:
               from: 86400

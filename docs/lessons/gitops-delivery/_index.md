@@ -1,9 +1,10 @@
 # Argo CD, releases and image promotion
 
-24 lessons, newest first. Back to [all categories](../_index.md).
+25 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 404 | [A ConfigMap of env vars without a hash suffix is a silent no-op, and Argo CD reports Synced](lesson-404-a-configmap-of-env-vars-without-a-hash-suffix-is-a-silent-no-op.md) | 2026-08-26 |
 | 377 | [Under selfHeal, a rotation that is not committed is a scheduled outage](lesson-377-rotating-is-not-landing-under-selfheal.md) | 2026-08-23 |
 | 375 | [A comment claiming another target does it is not a chain](lesson-375-a-comment-claiming-another-target-does-it-is-not-a-chain.md) | 2026-08-23 |
 | 368 | ["Closed in code" is not closed, and the gap is invisible until something runs](lesson-368-a-finding-closed-in-code-was-never-executed.md) | 2026-08-22 |
