@@ -35,6 +35,13 @@ _BOOTSTRAP_LOGIN = "admin"
 # inventing a second convention.
 _BOOTSTRAP_ADMIN_ID = 1
 
+# The only statuses that mean "Grafana judged this credential and said no".
+# Everything else — 5xx, 429, a proxy's 502 — means the credential was never
+# judged at all, which is unavailability, not drift. Collapsing the two makes
+# a server hiccup indistinguishable from a wrong password, and this module's
+# whole contract rests on telling them apart.
+_CREDENTIAL_REJECTED = frozenset({401, 403})
+
 
 class GrafanaIdentityUnavailableError(RuntimeError):
     """Grafana could not be asked at all — distinct from 'asked, and drifted'."""
@@ -73,8 +80,10 @@ def _http_get_user(port: int, login: str, password: str) -> dict[str, Any] | Non
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return json.loads(resp.read().decode())
-    except urllib.error.HTTPError:
-        return None
+    except urllib.error.HTTPError as e:
+        if e.code in _CREDENTIAL_REJECTED:
+            return None
+        raise GrafanaIdentityUnavailableError(f"could not ask Grafana: HTTP {e.code} {e.reason}") from e
     except urllib.error.URLError as e:
         raise GrafanaIdentityUnavailableError(f"could not ask Grafana: {e}") from e
 

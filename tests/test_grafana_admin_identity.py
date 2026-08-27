@@ -108,6 +108,73 @@ class TestCheckAdminIdentity:
         assert result.reconciled is False
         assert result.actual_login is None
 
+    def test_rejected_credential_is_drift_not_unavailability(
+        self, project_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """403 is Grafana answering 'no', same as 401 — the drift path, not the raise path.
+
+        Pins the boundary the test below depends on: without this, narrowing
+        the handler to 401 alone would pass its own test and silently turn a
+        real rejection into an "unavailable".
+        """
+        monkeypatch.setattr(gai, "kubectl_service_port_forward", _fake_port_forward)
+        monkeypatch.setattr(
+            "toolkit.features.secrets_manager.SecretsManager.show_secret", lambda self, env, key: "s3cret"
+        )
+
+        def fake_urlopen(req, timeout=5):
+            if _basic_auth_login(req) == "manu":
+                raise urllib.error.HTTPError(url="", code=403, msg="", hdrs=None, fp=None)
+            resp = MagicMock()
+            resp.read.return_value = json.dumps({"id": 1, "login": "admin"}).encode()
+            resp.__enter__.return_value = resp
+            return resp
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = check_admin_identity("prod", project_root)
+
+        assert result.reconciled is False
+        assert result.actual_login == "admin"
+
+    def test_server_error_is_unavailable_never_drift(
+        self, project_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A 5xx means Grafana could not be asked — reporting drift would be a lie.
+
+        The distinction this module is built on ("asked, and drifted" vs
+        "could not be asked") collapses if every HTTP status reads as a
+        rejected credential: a 503 would render as `reconciled=False`, so
+        `--check-only` reports drift that does not exist and `reconcile`
+        resets a password because the server hiccuped.
+        """
+        monkeypatch.setattr(gai, "kubectl_service_port_forward", _fake_port_forward)
+        monkeypatch.setattr(
+            "toolkit.features.secrets_manager.SecretsManager.show_secret", lambda self, env, key: "s3cret"
+        )
+
+        def fake_urlopen(req, timeout=5):
+            raise urllib.error.HTTPError(url="", code=503, msg="Service Unavailable", hdrs=None, fp=None)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            with pytest.raises(GrafanaIdentityUnavailableError, match="503"):
+                check_admin_identity("prod", project_root)
+
+    def test_rate_limit_is_unavailable_never_drift(
+        self, project_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """429 is the same category as 5xx: the credential was never judged."""
+        monkeypatch.setattr(gai, "kubectl_service_port_forward", _fake_port_forward)
+        monkeypatch.setattr(
+            "toolkit.features.secrets_manager.SecretsManager.show_secret", lambda self, env, key: "s3cret"
+        )
+
+        def fake_urlopen(req, timeout=5):
+            raise urllib.error.HTTPError(url="", code=429, msg="Too Many Requests", hdrs=None, fp=None)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            with pytest.raises(GrafanaIdentityUnavailableError, match="429"):
+                check_admin_identity("prod", project_root)
+
     def test_no_declared_password_raises(self, project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gai, "kubectl_service_port_forward", _fake_port_forward)
         monkeypatch.setattr("toolkit.features.secrets_manager.SecretsManager.show_secret", lambda self, env, key: None)
