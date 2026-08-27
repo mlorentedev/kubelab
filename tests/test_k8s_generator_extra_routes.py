@@ -26,7 +26,7 @@ class TestBuildExtraRoutes:
         routes = K8sGenerator()._build_extra_routes(WEB_ENV, "web")
 
         assert routes == [
-            {"path_prefix": "/api", "service": "api", "port": 8080, "priority": 10}
+            {"path_prefix": "/api", "service": "api", "port": 8080, "priority": 100}
         ]
 
     def test_app_without_extra_routes_gets_an_empty_list(self) -> None:
@@ -41,6 +41,17 @@ class TestBuildExtraRoutes:
         env = {"APPS_PLATFORM_WEB_EXTRA_ROUTES": [{"path_prefix": "/api", "service": "typo"}]}
 
         assert K8sGenerator()._build_extra_routes(env, "web") == []
+
+    def test_default_priority_outranks_a_host_catch_all_rule_length(self) -> None:
+        """Traefik gives a router with no explicit priority the LENGTH of its rule.
+
+        The web host catch-all `Host(`staging.mlorente.dev`)` is ~31 characters,
+        so it sits at ~31. A route priority below that is generated, applied and
+        never matched — which is exactly what shipped first.
+        """
+        routes = K8sGenerator()._build_extra_routes(WEB_ENV, "web")
+
+        assert routes[0]["priority"] > len("Host(`staging.mlorente.dev`)")
 
     def test_explicit_priority_overrides_the_default(self) -> None:
         env = {
