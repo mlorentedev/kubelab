@@ -1,9 +1,11 @@
 # How the work is run: specs, reviews, knowledge
 
-58 lessons, newest first. Back to [all categories](../_index.md).
+60 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 402 | [A push to a merged PR's branch recreates the branch and exits 0](lesson-402-a-push-to-a-merged-prs-branch-recreates-it-and-exits-zero.md) | 2026-08-26 |
+| 405 | [The `gh` CLI reports success it did not achieve, in two unrelated places](lesson-405-the-gh-cli-reports-success-it-did-not-achieve-in-two-places.md) | 2026-08-26 |
 | 399 | [A diagnostic can mutate the thing it is measuring](lesson-399-a-diagnostic-can-mutate-the-thing-it-is-measuring.md) | 2026-08-26 |
 | 388 | [A decision reaches only as far as the artefact someone opens at the point of use — three re-derivations in one session](lesson-388-a-decision-reaches-only-as-far-as-the-artefact-at-the-point-of-use.md) | 2026-08-25 |
 | 391 | [A probe that sabotages itself reports on the probe](lesson-391-a-probe-that-sabotages-itself-reports-on-the-probe.md) | 2026-08-24 |
