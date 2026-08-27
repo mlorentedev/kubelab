@@ -104,3 +104,8 @@ def test_fetch_open_issues_refuses_unknown_repo(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(bd, "_gh_graphql", lambda query, variables=None: {"repository": None})
     with pytest.raises(bd.GitHubError, match=f"{_REPO} not found"):
         bd.fetch_open_issues(_REPO)
+
+
+def test_fetch_open_issues_refuses_malformed_repo() -> None:
+    with pytest.raises(bd.GitHubError, match="invalid repo"):
+        bd.fetch_open_issues("not-a-repo")
