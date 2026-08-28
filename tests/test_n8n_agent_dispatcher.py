@@ -60,3 +60,9 @@ def test_agent_dispatcher_workflow_json_exists_and_is_valid() -> None:
     assert data.get("name") == "agent-dispatcher"
     assert len(data.get("nodes", [])) >= 4
     assert "connections" in data
+
+    code_node = next((n for n in data["nodes"] if n["name"] == "Extract Agent Payload"), None)
+    assert code_node is not None
+    js = code_node["parameters"]["jsCode"]
+    assert "agent:delegable" in js
+    assert "isDelegable" in js

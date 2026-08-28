@@ -84,3 +84,11 @@ def test_multi_forge_workflow_json_exists_and_is_valid_n8n() -> None:
     assert data.get("name") == "multi-forge-sync"
     assert len(data.get("nodes", [])) >= 4
     assert "connections" in data
+
+    # Verify semantic logic embedded in Parse Forge Event node
+    parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Forge Event"), None)
+    assert parse_node is not None, "Parse Forge Event node must exist"
+    js = parse_node["parameters"]["jsCode"]
+    assert "targetBucket = 'Done'" in js
+    assert "targetBucket = 'In Review'" in js
+    assert "([A-Z]{2,10}-\\d+)" in js

@@ -101,3 +101,9 @@ def test_slack_task_capture_workflow_json_exists_and_is_valid() -> None:
     assert data.get("name") == "slack-task-capture"
     assert len(data.get("nodes", [])) >= 4
     assert "connections" in data
+
+    parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Slack Command"), None)
+    assert parse_node is not None
+    js = parse_node["parameters"]["jsCode"]
+    assert "ackMessage" in js
+    assert "responseUrl" in js
