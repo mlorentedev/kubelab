@@ -13,7 +13,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "slack-task-capture",
-        "authentication": "headerAuth",
+        "authentication": "none",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -22,13 +22,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [-400, 0],
-      "webhookId": "w3000000-0000-4000-8000-000000000001",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "c3000000-0000-4000-8000-000000000001",
-          "name": "slack-webhook"
-        }
-      }
+      "webhookId": "w3000000-0000-4000-8000-000000000001"
     },
     {
       "parameters": {

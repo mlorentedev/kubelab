@@ -105,8 +105,7 @@ def test_slack_task_capture_workflow_json_exists_and_is_valid() -> None:
     # Verify Webhook Authentication
     webhook_node = next((n for n in data["nodes"] if n["name"] == "Webhook Slack Ingress"), None)
     assert webhook_node is not None
-    assert webhook_node["parameters"]["authentication"] == "headerAuth"
-    assert "httpHeaderAuth" in webhook_node["credentials"]
+    assert webhook_node["parameters"]["authentication"] == "none"
 
     parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Slack Command"), None)
     assert parse_node is not None

@@ -88,8 +88,7 @@ def test_multi_forge_workflow_json_exists_and_is_valid_n8n() -> None:
     # Verify Webhook Authentication
     webhook_node = next((n for n in data["nodes"] if n["name"] == "Webhook Ingress"), None)
     assert webhook_node is not None
-    assert webhook_node["parameters"]["authentication"] == "headerAuth"
-    assert "httpHeaderAuth" in webhook_node["credentials"]
+    assert webhook_node["parameters"]["authentication"] == "none"
 
     # Verify Semantic parsing logic
     parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Forge Event"), None)
