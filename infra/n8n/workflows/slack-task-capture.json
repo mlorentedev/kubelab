@@ -6,7 +6,7 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Ingest Slack /task slash commands with HMAC-SHA256 signature verification (fail-closed), instant ack (<500ms), async Vikunja creation, and response URL direct link."
+    "description": "IDP-035: Ingest Slack /task slash commands with HMAC-SHA256 signature verification (fail-closed), instant ack (<500ms), dynamic project lookup, async Vikunja creation, and response URL direct link."
   },
   "nodes": [
     {
@@ -67,8 +67,41 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "http://vikunja:3456/api/v1/projects",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "c3000000-0000-4000-8000-000000000008",
+      "name": "Lookup Vikunja Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 50]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resolve target project ID from search or default to 1\nconst projects = Array.isArray($json) ? $json : ($json.data || []);\nconst command = $('Parse Slack Command').first().json;\nlet projectId = 1;\n\nconst match = projects.find(p => p.title?.toLowerCase() === command.project?.toLowerCase() || p.identifier?.toLowerCase() === command.project?.toLowerCase());\nif (match && match.id) {\n  projectId = match.id;\n}\n\nreturn [{\n  json: {\n    ...command,\n    projectId: projectId\n  }\n}];"
+      },
+      "id": "c3000000-0000-4000-8000-000000000009",
+      "name": "Extract Project ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 50]
+    },
+    {
+      "parameters": {
         "method": "PUT",
-        "url": "http://vikunja:3456/api/v1/projects/1/tasks",
+        "url": "=http://vikunja:3456/api/v1/projects/{{ $json.projectId }}/tasks",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -89,7 +122,7 @@
       "name": "Create Task in Vikunja",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [260, 50]
+      "position": [640, 50]
     },
     {
       "parameters": {
@@ -106,7 +139,7 @@
       "name": "Update Slack via Response URL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 50]
+      "position": [840, 50]
     },
     {
       "parameters": {
@@ -121,7 +154,7 @@
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 50]
+      "position": [1040, 50]
     }
   ],
   "connections": {
@@ -153,6 +186,28 @@
       ]
     },
     "Is Slack Valid?": {
+      "main": [
+        [
+          {
+            "node": "Lookup Vikunja Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Vikunja Projects": {
+      "main": [
+        [
+          {
+            "node": "Extract Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Project ID": {
       "main": [
         [
           {

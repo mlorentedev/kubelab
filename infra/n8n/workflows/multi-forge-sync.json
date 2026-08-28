@@ -76,13 +76,30 @@
     },
     {
       "parameters": {
-        "jsCode": "// Resolve matched task ID from search results or fallback to numeric index\nconst searchResults = Array.isArray($json) ? $json : ($json.data || []);\nconst event = $('Parse Forge Event').first().json;\nlet resolvedTaskId = event.taskId;\n\nif (searchResults.length > 0 && searchResults[0].id) {\n  resolvedTaskId = searchResults[0].id;\n}\n\nreturn [{\n  json: {\n    ...event,\n    taskId: resolvedTaskId\n  }\n}];"
+        "jsCode": "// Resolve matched task ID from search results; do not guess random IDs\nconst searchResults = Array.isArray($json) ? $json : ($json.data || []);\nconst event = $('Parse Forge Event').first().json;\nlet resolvedTaskId = null;\n\nif (searchResults.length > 0 && searchResults[0].id) {\n  resolvedTaskId = searchResults[0].id;\n}\n\nreturn [{\n  json: {\n    ...event,\n    taskId: resolvedTaskId,\n    hasMatchedTask: Boolean(resolvedTaskId)\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000009",
       "name": "Extract Matched Task ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [440, -100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasMatchedTask }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000010",
+      "name": "Found Matched Task in Vikunja?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, -100]
     },
     {
       "parameters": {
@@ -108,7 +125,7 @@
       "name": "Update Vikunja Task State",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [640, -100]
+      "position": [840, -100]
     },
     {
       "parameters": {
@@ -134,7 +151,7 @@
       "name": "Append PR URL Comment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [840, -100]
+      "position": [1040, -100]
     },
     {
       "parameters": {
@@ -149,7 +166,7 @@
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1040, 0]
+      "position": [1240, 0]
     },
     {
       "parameters": {
@@ -163,7 +180,7 @@
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1240, 0]
+      "position": [1440, 0]
     }
   ],
   "connections": {
@@ -222,7 +239,25 @@
       "main": [
         [
           {
+            "node": "Found Matched Task in Vikunja?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found Matched Task in Vikunja?": {
+      "main": [
+        [
+          {
             "node": "Update Vikunja Task State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 200",
             "type": "main",
             "index": 0
           }
