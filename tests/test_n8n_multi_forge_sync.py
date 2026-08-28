@@ -5,8 +5,32 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import re
+import subprocess
 from pathlib import Path
+
+WORKFLOW_PATH = Path(__file__).resolve().parent.parent / "infra/n8n/workflows/multi-forge-sync.json"
+
+
+def get_forge_parser_js() -> str:
+    with open(WORKFLOW_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    node = next(n for n in data["nodes"] if n["name"] == "Parse Forge Event")
+    return node["parameters"]["jsCode"]
+
+
+def eval_forge_node(body: dict, headers: dict, env: dict) -> dict:
+    """Execute the exact workflow JS code in Node.js."""
+    js_code = get_forge_parser_js()
+    script = f"""
+    const $json = {json.dumps({"body": body, "headers": headers})};
+    const $env = {json.dumps(env)};
+    const result = (() => {{
+        {js_code}
+    }})();
+    console.log(JSON.stringify(result[0].json));
+    """
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(proc.stdout.strip())
 
 
 def generate_hmac_sha256(payload: bytes, secret: str) -> str:
@@ -15,95 +39,95 @@ def generate_hmac_sha256(payload: bytes, secret: str) -> str:
     return f"sha256={mac.hexdigest()}"
 
 
-def verify_hmac(payload: bytes, secret: str, signature: str) -> bool:
-    """Verify HMAC signature securely with constant-time comparison."""
-    if not signature.startswith("sha256="):
-        return False
-    expected = generate_hmac_sha256(payload, secret)
-    return hmac.compare_digest(expected, signature)
+def test_workflow_node_valid_hmac_and_open_pr() -> None:
+    body = {
+        "action": "opened",
+        "pull_request": {
+            "title": "feat: IDP-035 add sync",
+            "html_url": "https://github.com/org/repo/pull/1",
+            "merged": False,
+            "head": {"ref": "feature/idp-035-sync"},
+        },
+    }
+    secret = "my-secret-key"
+    payload_str = json.dumps(body, separators=(",", ":"))
+    sig = generate_hmac_sha256(payload_str.encode(), secret)
+    headers = {"x-hub-signature-256": sig}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
+
+    result = eval_forge_node(body, headers, env)
+    assert result["isValidSig"] is True
+    assert result["hasTask"] is True
+    assert result["taskKey"] == "IDP-035"
+    assert result["taskId"] == 35
+    assert result["targetBucket"] == "In Review"
+    assert result["isDone"] is False
 
 
-def extract_task_key(text: str) -> str | None:
-    """Extract standard task key (e.g. IDP-035, GITOPS-003, AREA-123) from branch/title."""
-    m = re.search(r"\b([A-Z]{2,10}-\d+)\b", text)
-    return m.group(1) if m else None
+def test_workflow_node_valid_hmac_and_merged_pr() -> None:
+    body = {
+        "action": "closed",
+        "pull_request": {
+            "title": "fix: GITOPS-007 resolve sync",
+            "html_url": "https://github.com/org/repo/pull/2",
+            "merged": True,
+            "head": {"ref": "master"},
+        },
+    }
+    secret = "my-secret-key"
+    payload_str = json.dumps(body, separators=(",", ":"))
+    sig = generate_hmac_sha256(payload_str.encode(), secret)
+    headers = {"x-gitea-signature": sig}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
+
+    result = eval_forge_node(body, headers, env)
+    assert result["isValidSig"] is True
+    assert result["hasTask"] is True
+    assert result["taskKey"] == "GITOPS-007"
+    assert result["taskId"] == 7
+    assert result["targetBucket"] == "Done"
+    assert result["isDone"] is True
 
 
-def resolve_task_transition(event_action: str, is_merged: bool, current_state: str) -> str:
-    """Monotonic state machine: Done is terminal, ignore out-of-order opens."""
-    if current_state == "Done":
-        return "Done"
+def test_workflow_node_invalid_hmac_fails_closed() -> None:
+    body = {
+        "action": "opened",
+        "pull_request": {"title": "feat: IDP-035 add sync"},
+    }
+    secret = "my-secret-key"
+    headers = {"x-hub-signature-256": "sha256=invalid"}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
 
-    if event_action == "closed" and is_merged:
-        return "Done"
-    elif event_action in ("opened", "synchronize", "reopened"):
-        return "In Review"
-
-    return current_state
-
-
-def test_hmac_verification_valid_signature() -> None:
-    payload = b'{"action": "opened", "pull_request": {"title": "feat: IDP-035 add sync"}}'
-    secret = "super-secret-webhook-key"
-    sig = generate_hmac_sha256(payload, secret)
-
-    assert verify_hmac(payload, secret, sig) is True
+    result = eval_forge_node(body, headers, env)
+    assert result["isValidSig"] is False
+    assert result["hasTask"] is False
 
 
-def test_hmac_verification_invalid_signature() -> None:
-    payload = b'{"action": "opened"}'
-    secret = "super-secret-webhook-key"
-    assert verify_hmac(payload, secret, "sha256=invalid123456") is False
-    assert verify_hmac(payload, secret, "invalid_prefix") is False
+def test_workflow_node_missing_signature_fails_closed() -> None:
+    body = {
+        "action": "opened",
+        "pull_request": {"title": "feat: IDP-035 add sync"},
+    }
+    secret = "my-secret-key"
+    headers = {}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
+
+    result = eval_forge_node(body, headers, env)
+    assert result["isValidSig"] is False
+    assert result["hasTask"] is False
 
 
-def test_extract_task_key_from_branch_and_title() -> None:
-    assert extract_task_key("feat/idp-035-vikunja-task-platform".upper()) == "IDP-035"
-    assert extract_task_key("fix(auth): AUTH-004 resolve oidc callback") == "AUTH-004"
-    assert extract_task_key("chore: standard cleanup without key") is None
-
-
-def test_monotonic_state_transition() -> None:
-    # Open PR moves to In Review
-    assert resolve_task_transition(event_action="opened", is_merged=False, current_state="In Progress") == "In Review"
-
-    # Merged PR moves to Done
-    assert resolve_task_transition(event_action="closed", is_merged=True, current_state="In Review") == "Done"
-
-    # Late arrival of 'opened' event when task is already Done is ignored (monotonic)
-    assert resolve_task_transition(event_action="opened", is_merged=False, current_state="Done") == "Done"
-
-
-def test_multi_forge_workflow_json_exists_and_is_valid_n8n() -> None:
-    workflow_path = Path(__file__).resolve().parent.parent / "infra/n8n/workflows/multi-forge-sync.json"
-    assert workflow_path.is_file(), "multi-forge-sync.json workflow must exist in infra/n8n/workflows/"
-
-    with open(workflow_path, encoding="utf-8") as f:
+def test_multi_forge_workflow_json_structure() -> None:
+    assert WORKFLOW_PATH.is_file()
+    with open(WORKFLOW_PATH, encoding="utf-8") as f:
         data = json.load(f)
 
     assert data.get("name") == "multi-forge-sync"
-    assert len(data.get("nodes", [])) >= 5
-    assert "connections" in data
-
-    # Verify Webhook Authentication
-    webhook_node = next((n for n in data["nodes"] if n["name"] == "Webhook Ingress"), None)
-    assert webhook_node is not None
+    webhook_node = next(n for n in data["nodes"] if n["name"] == "Webhook Ingress")
     assert webhook_node["parameters"]["authentication"] == "none"
 
-    # Verify Semantic parsing logic and HMAC crypto verification
-    parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Forge Event"), None)
-    assert parse_node is not None
-    js = parse_node["parameters"]["jsCode"]
-    assert "targetBucket = 'Done'" in js
-    assert "targetBucket = 'In Review'" in js
-    assert "crypto.createHmac" in js
-    assert "([A-Z]{2,10})-(\\d+)" in js
-
-    # Verify Vikunja HTTP API mutation nodes exist in the workflow graph
-    update_node = next((n for n in data["nodes"] if n["name"] == "Update Vikunja Task State"), None)
-    assert update_node is not None
+    update_node = next(n for n in data["nodes"] if n["name"] == "Update Vikunja Task State")
     assert "http://vikunja:3456/api/v1/tasks/" in update_node["parameters"]["url"]
 
-    comment_node = next((n for n in data["nodes"] if n["name"] == "Append PR URL Comment"), None)
-    assert comment_node is not None
+    comment_node = next(n for n in data["nodes"] if n["name"] == "Append PR URL Comment")
     assert "/comments" in comment_node["parameters"]["url"]
