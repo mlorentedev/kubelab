@@ -76,6 +76,24 @@ spec:
                 secretKeyRef:
                   name: n8n-secrets
                   key: N8N_ENCRYPTION_KEY
+            - name: VIKUNJA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-secrets
+                  key: VIKUNJA_SERVICE_JWTSECRET
+                  optional: true
+            - name: FORGE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-secrets
+                  key: VIKUNJA_SERVICE_JWTSECRET
+                  optional: true
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-secrets
+                  key: VIKUNJA_SERVICE_JWTSECRET
+                  optional: true
           volumeMounts:
             - name: data
               mountPath: /home/node/.n8n
