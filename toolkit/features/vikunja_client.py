@@ -49,6 +49,11 @@ class VikunjaClient:
         """Create a new namespace."""
         return self._request("PUT", "/namespaces", json={"title": title, "description": description})
 
+    def get_projects(self) -> list[dict[str, Any]]:
+        """Fetch all projects."""
+        data = self._request("GET", "/projects")
+        return data if isinstance(data, list) else []
+
     def get_labels(self) -> list[dict[str, Any]]:
         """Fetch all task labels."""
         data = self._request("GET", "/labels")
