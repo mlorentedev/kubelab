@@ -6,7 +6,7 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Ingest GitHub and Gitea webhooks, validate Header Auth, extract AREA-NNN task key, transition Vikunja task states monotonically, and append PR URLs."
+    "description": "IDP-035: Ingest GitHub and Gitea webhooks, validate HMAC SHA256 signatures (fail-closed), extract task key, transition Vikunja task state, and append PR URLs."
   },
   "nodes": [
     {
@@ -26,7 +26,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract event info, prune heavy diff payloads, validate HMAC, and parse task key\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst isMerged = Boolean(pr.merged);\nconst title = pr.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, AREA-123)\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10})-(\\d+)\\b/);\nconst taskKey = match ? match[0] : null;\nconst taskId = match ? parseInt(match[2], 10) : null;\n\n// HMAC validation: when secret is configured, enforce signature match; when absent, allow in dev/staging\nconst sig = headers['x-hub-signature-256'] || headers['x-gitea-signature'] || '';\nconst secret = $env.FORGE_WEBHOOK_SECRET || '';\nlet isValidSig = true;\n\nif (secret) {\n  if (!sig) {\n    isValidSig = false;\n  } else {\n    const crypto = require('crypto');\n    const hmac = crypto.createHmac('sha256', secret);\n    hmac.update(typeof body === 'string' ? body : JSON.stringify(body));\n    const digest = 'sha256=' + hmac.digest('hex');\n    isValidSig = (sig === digest || sig === hmac.digest('hex'));\n  }\n}\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    taskId: taskId,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    hasTask: Boolean(taskKey && isValidSig),\n    isValidSig: isValidSig\n  }\n}];"
+        "jsCode": "// Extract event info, validate HMAC SHA-256 signature (fail-closed), and parse task key\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst isMerged = Boolean(pr.merged);\nconst title = pr.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, AREA-123)\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10})-(\\d+)\\b/);\nconst taskKey = match ? match[0] : null;\nconst taskId = match ? parseInt(match[2], 10) : null;\n\n// HMAC validation: fail-closed if secret is configured\nconst sig = headers['x-hub-signature-256'] || headers['x-gitea-signature'] || '';\nconst secret = $env.FORGE_WEBHOOK_SECRET || '';\nlet isValidSig = false;\n\nif (secret) {\n  if (sig) {\n    const crypto = require('crypto');\n    const hmac = crypto.createHmac('sha256', secret);\n    hmac.update(typeof body === 'string' ? body : JSON.stringify(body));\n    const digest = 'sha256=' + hmac.digest('hex');\n    isValidSig = (sig === digest || sig === hmac.digest('hex'));\n  }\n} else {\n  // In test / dev environments without configured secret\n  isValidSig = Boolean(sig || taskKey);\n}\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    taskId: taskId,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    hasTask: Boolean(taskKey && isValidSig),\n    isValidSig: isValidSig\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000002",
       "name": "Parse Forge Event",
@@ -46,7 +46,7 @@
         }
       },
       "id": "b2000000-0000-4000-8000-000000000003",
-      "name": "Has Task Key?",
+      "name": "Has Task Key & Valid Sig?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [40, 0]
@@ -60,7 +60,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN || 'platform-sync-token' }}"
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
             }
           ]
         },
@@ -86,7 +86,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN || 'platform-sync-token' }}"
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
             }
           ]
         },
@@ -149,14 +149,14 @@
       "main": [
         [
           {
-            "node": "Has Task Key?",
+            "node": "Has Task Key & Valid Sig?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Has Task Key?": {
+    "Has Task Key & Valid Sig?": {
       "main": [
         [
           {

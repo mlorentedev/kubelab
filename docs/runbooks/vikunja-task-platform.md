@@ -13,8 +13,8 @@ Vikunja is KubeLab's self-hosted, forge-agnostic task management platform. It re
 ```mermaid
 flowchart TD
     User([Operator / Slack / Web UI]) -->|Browser / SSO| Ingress[Traefik TLS Ingress\ntasks.kubelab.live]
-    Slack[Slack Slash Command] -->|POST /webhook/slack| n8n[n8n Automation Engine]
-    Forges[GitHub / Gitea PR Events] -->|POST /webhook/multi-forge| n8n
+    Slack[Slack Slash Command] -->|POST /webhook/slack-task-capture| n8n[n8n Automation Engine]
+    Forges[GitHub / Gitea PR Events] -->|POST /webhook/multi-forge-sync| n8n
     
     Ingress -->|No ForwardAuth| Vikunja[Vikunja Pod\nStateless ~50MB RAM]
     n8n -->|REST API Bearer Token| Vikunja

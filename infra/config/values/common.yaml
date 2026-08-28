@@ -826,6 +826,17 @@ apps:
           memory_limit: "256M"
           cpu_reservation: "0.1"
           memory_reservation: "128M"
+        database:
+          host: postgres
+          port: 5432
+          user: vikunja
+          database: vikunja
+          max_open: 20
+          max_idle: 5
+        storage:
+          s3_endpoint: https://r2.cloudflarestorage.com
+          s3_bucket: kubelab-vikunja
+          s3_region: auto
 
       headscale:
         name: headscale

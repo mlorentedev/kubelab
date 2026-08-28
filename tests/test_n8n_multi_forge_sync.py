@@ -90,13 +90,14 @@ def test_multi_forge_workflow_json_exists_and_is_valid_n8n() -> None:
     assert webhook_node is not None
     assert webhook_node["parameters"]["authentication"] == "none"
 
-    # Verify Semantic parsing logic
+    # Verify Semantic parsing logic and HMAC crypto verification
     parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Forge Event"), None)
     assert parse_node is not None
     js = parse_node["parameters"]["jsCode"]
     assert "targetBucket = 'Done'" in js
     assert "targetBucket = 'In Review'" in js
-    assert "([A-Z]{2,10}-\\d+)" in js
+    assert "crypto.createHmac" in js
+    assert "([A-Z]{2,10})-(\\d+)" in js
 
     # Verify Vikunja HTTP API mutation nodes exist in the workflow graph
     update_node = next((n for n in data["nodes"] if n["name"] == "Update Vikunja Task State"), None)

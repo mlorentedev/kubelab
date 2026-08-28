@@ -62,7 +62,7 @@ Deploy **Vikunja** on K3s VPS (Always-On) backed by [`infra.postgres`](docs/adr/
    - *Resolution*: Direct OIDC against Authelia with Traefik TLS termination. Webhooks and API tokens bypass cookie-based SSO cleanly.
 2. **Gitea Webhook Egress from Beelink**:
    - *Risk*: Gitea runs on Beelink (on-demand node). Webhooks must reach n8n on VPS reliably.
-   - *Resolution*: Webhooks target `https://n8n.kubelab.live/webhook/gitea` over public/Tailscale ingress with HMAC header authentication.
+   - *Resolution*: Webhooks target `https://n8n.kubelab.live/webhook/multi-forge-sync` over public/Tailscale ingress with HMAC SHA-256 validation.
 3. **Database Migration & User Isolation**:
    - *Risk*: Running Vikunja migrations on shared `infra.postgres` could fail if DB is missing or touch other schemas.
    - *Resolution*: Dedicated Postgres role `vikunja` granted privileges strictly on database `vikunja` (`POSTGRES_DB: vikunja`), provisioned ahead of pod boot.

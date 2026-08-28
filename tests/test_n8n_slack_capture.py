@@ -112,6 +112,8 @@ def test_slack_task_capture_workflow_json_exists_and_is_valid() -> None:
     js = parse_node["parameters"]["jsCode"]
     assert "ackMessage" in js
     assert "responseUrl" in js
+    assert "crypto.createHmac" in js
+    assert "v0=" in js
 
     create_node = next((n for n in data["nodes"] if n["name"] == "Create Task in Vikunja"), None)
     assert create_node is not None
