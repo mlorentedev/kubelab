@@ -47,9 +47,9 @@ created: "2026-08-27"
 
 ### PR4 — n8n Slack ChatOps & Notification Routing (AC5)
 
-- [ ] [P] [AC5] Write unit tests for Slack slash command parser (`/task create [title] #[project] [priority]`) and HMAC signature check (`X-Slack-Signature`)
-- [ ] [AC5] Implement `infra/n8n/workflows/slack-task-capture.json` (immediate <500ms ack to Slack $\rightarrow$ async Vikunja API mutation $\rightarrow$ response URL update)
-- [ ] [AC5] Wire lifecycle events to emit structured Slack notifications to `#dev-activity`
+- [x] [P] [AC5] Write unit tests for Slack slash command parser (`/task create [title] #[project] [priority]`) and HMAC signature check (`X-Slack-Signature`)
+- [x] [AC5] Implement `infra/n8n/workflows/slack-task-capture.json` (immediate <500ms ack to Slack $\rightarrow$ async Vikunja API mutation $\rightarrow$ response URL update)
+- [x] [AC5] Wire lifecycle events to emit structured Slack notifications to `#dev-activity`
 
 ### PR5 — Agent Delegation Workflow with Queue Resilience (AC6)
 

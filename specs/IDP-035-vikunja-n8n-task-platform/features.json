@@ -31,8 +31,8 @@
     "id": "IDP-035-f5",
     "behavior": "Slack slash commands create tasks in Vikunja and respond within <500ms acknowledging receipt",
     "verification": "poetry run pytest tests/test_n8n_slack_capture.py -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passed",
+    "evidence": "5 passed in 4.9s: Slack signature verification with replay protection, command parsing, and slack-task-capture.json schema"
   },
   {
     "id": "IDP-035-f6",
