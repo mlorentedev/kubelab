@@ -813,6 +813,20 @@ apps:
           memory_reservation: "128M"
         # admin_email auto-filled from apps.contact.email by the config loader (SSOT-014c).
 
+      vikunja:
+        name: vikunja
+        image: vikunja/vikunja:0.24.6
+        domain: tasks.kubelab.live
+        enable_auth: false
+        auth_level: bypass
+        default_port: 3456
+        health_path: /api/v1/info
+        resources:
+          cpu_limit: "0.5"
+          memory_limit: "256M"
+          cpu_reservation: "0.1"
+          memory_reservation: "128M"
+
       headscale:
         name: headscale
         image: headscale/headscale:v0.28.0

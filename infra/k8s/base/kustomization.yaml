@@ -20,6 +20,7 @@ resources:
   - services/authelia.yaml
   - services/crowdsec.yaml
   - services/n8n.yaml
+  - services/vikunja.yaml
   - services/apprise.yaml
   - services/minio.yaml
   - services/homepage.yaml

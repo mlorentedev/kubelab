@@ -1,0 +1,51 @@
+[
+  {
+    "id": "IDP-035-f1",
+    "behavior": "Vikunja runs as a stateless Deployment in K3s without local PVCs, connecting to infra.postgres and Cloudflare R2",
+    "verification": "kubectl kustomize infra/k8s/overlays/staging | grep -A 10 'name: vikunja'",
+    "state": "passed",
+    "evidence": "kustomize manifests rendered for staging and prod with Deployment(replicas:1), no persistentVolumeClaims, and ClusterIP service"
+  },
+  {
+    "id": "IDP-035-f2",
+    "behavior": "All non-secret configuration lives in common.yaml and secrets are mapped in vikunja-secrets via SOPS",
+    "verification": "poetry run pytest tests/test_stateful_service_classification.py tests/test_postgres_provisioner.py -q",
+    "state": "passed",
+    "evidence": "15 passed in 6.2s: configuration in common.yaml, staging.yaml, prod.yaml, and SecretMapping in k8s_secrets.py"
+  },
+  {
+    "id": "IDP-035-f3",
+    "behavior": "toolkit/features/vikunja_reconciler.py reconciles namespaces (kubelab, personal, teledyne), labels, and webhooks idempotently",
+    "verification": "poetry run pytest tests/test_vikunja_reconciler.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-035-f4",
+    "behavior": "GitHub and Gitea PR events with AREA-NNN map to monotonic Vikunja state transitions with HMAC validation",
+    "verification": "poetry run pytest tests/test_n8n_multi_forge_sync.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-035-f5",
+    "behavior": "Slack slash commands create tasks in Vikunja and respond within <500ms acknowledging receipt",
+    "verification": "poetry run pytest tests/test_n8n_slack_capture.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-035-f6",
+    "behavior": "Tasks marked agent:delegable trigger the agent-dispatcher workflow resilient to on-demand node states",
+    "verification": "poetry run pytest tests/test_n8n_agent_dispatcher.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-035-f7",
+    "behavior": "docs/runbooks/vikunja-task-platform.md documents operations, and ADR-066 records the architecture pivot",
+    "verification": "test -f docs/runbooks/vikunja-task-platform.md && test -f docs/adr/adr-066-self-hosted-task-platform.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]

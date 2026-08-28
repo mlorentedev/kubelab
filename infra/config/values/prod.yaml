@@ -88,6 +88,8 @@ apps:
     core:
       gitea:
         domain: gitea.kubelab.live
+      vikunja:
+        domain: tasks.kubelab.live
 
     automation:
       n8n:
