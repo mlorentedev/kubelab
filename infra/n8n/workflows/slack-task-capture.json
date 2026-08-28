@@ -6,7 +6,7 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Ingest Slack /task slash commands with instant ack (<500ms), async Vikunja creation, and response URL direct link."
+    "description": "IDP-035: Ingest Slack /task slash commands with signature verification, instant ack (<500ms), async Vikunja creation, and response URL direct link."
   },
   "nodes": [
     {
@@ -26,7 +26,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse Slack slash command: /task create [title] #[project] [P0..P3]\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\nconst rawText = (body.text || '').trim();\nconst responseUrl = body.response_url || '';\nconst userName = body.user_name || 'slack-user';\n\n// Slack signature verification with timestamp drift check\nconst slackSig = headers['x-slack-signature'] || '';\nconst slackTs = headers['x-slack-request-timestamp'] || '';\nconst slackSecret = $env.SLACK_SIGNING_SECRET || '';\nlet isValidSlack = true;\nif (slackSecret && slackSig && slackTs) {\n  const timeDiff = Math.abs(Math.floor(Date.now() / 1000) - Number(slackTs));\n  if (timeDiff > 300) {\n    isValidSlack = false;\n  }\n}\n\nconst parts = rawText.split(/\\s+/);\nlet action = parts[0]?.toLowerCase() || 'create';\nlet remaining = action === 'create' ? parts.slice(1) : parts;\n\nlet project = 'kubelab';\nlet priority = 'P2';\nconst titleWords = [];\n\nfor (const word of remaining) {\n  if (word.startsWith('#')) {\n    project = word.substring(1);\n  } else if (['P0', 'P1', 'P2', 'P3'].includes(word.toUpperCase())) {\n    priority = word.toUpperCase();\n  } else {\n    titleWords.push(word);\n  }\n}\n\nconst title = titleWords.join(' ') || 'Untitled Task';\nconst priorityMap = { 'P0': 4, 'P1': 3, 'P2': 2, 'P3': 1 };\n\nreturn [{\n  json: {\n    title: title,\n    project: project,\n    priority: priority,\n    priorityNum: priorityMap[priority] || 2,\n    responseUrl: responseUrl,\n    userName: userName,\n    isValidSlack: isValidSlack,\n    ackMessage: `⏳ Creating task *${title}* in project _#${project}_ (priority: ${priority})...`\n  }\n}];"
+        "jsCode": "// Parse Slack slash command: /task create [title] #[project] [P0..P3]\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\nconst rawText = (body.text || '').trim();\nconst responseUrl = body.response_url || '';\nconst userName = body.user_name || 'slack-user';\n\n// Slack signature verification with timestamp drift check (<300s)\nconst slackSig = headers['x-slack-signature'] || '';\nconst slackTs = headers['x-slack-request-timestamp'] || '';\nconst slackSecret = $env.SLACK_SIGNING_SECRET || '';\nlet isValidSlack = true;\nif (slackSecret && slackSig && slackTs) {\n  const timeDiff = Math.abs(Math.floor(Date.now() / 1000) - Number(slackTs));\n  if (timeDiff > 300) {\n    isValidSlack = false;\n  }\n}\n\nconst parts = rawText.split(/\\s+/);\nlet action = parts[0]?.toLowerCase() || 'create';\nlet remaining = action === 'create' ? parts.slice(1) : parts;\n\nlet project = 'kubelab';\nlet priority = 'P2';\nconst titleWords = [];\n\nfor (const word of remaining) {\n  if (word.startsWith('#')) {\n    project = word.substring(1);\n  } else if (['P0', 'P1', 'P2', 'P3'].includes(word.toUpperCase())) {\n    priority = word.toUpperCase();\n  } else {\n    titleWords.push(word);\n  }\n}\n\nconst title = titleWords.join(' ') || 'Untitled Task';\nconst priorityMap = { 'P0': 4, 'P1': 3, 'P2': 2, 'P3': 1 };\n\nreturn [{\n  json: {\n    title: title,\n    project: project,\n    priority: priority,\n    priorityNum: priorityMap[priority] || 2,\n    responseUrl: responseUrl,\n    userName: userName,\n    isValidSlack: isValidSlack,\n    ackMessage: isValidSlack ? `⏳ Creating task *${title}* in project _#${project}_ (priority: ${priority})...` : '❌ Invalid or expired Slack request signature.'\n  }\n}];"
       },
       "id": "c3000000-0000-4000-8000-000000000002",
       "name": "Parse Slack Command",
@@ -47,6 +47,23 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [40, -100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValidSlack }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "c3000000-0000-4000-8000-000000000007",
+      "name": "Is Slack Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [40, 50]
     },
     {
       "parameters": {
@@ -127,6 +144,17 @@
             "type": "main",
             "index": 0
           },
+          {
+            "node": "Is Slack Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Slack Valid?": {
+      "main": [
+        [
           {
             "node": "Create Task in Vikunja",
             "type": "main",
