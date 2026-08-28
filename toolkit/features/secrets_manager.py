@@ -578,7 +578,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="apps.services.automation.n8n.vikunja_api_token",
         description="Vikunja API token for n8n automation workflows",
-        kind=SecretKind.RANDOM_TOKEN,
+        kind=SecretKind.EXTERNAL,
         services=("n8n", "vikunja"),
         rotate_note="Update API token in Vikunja and redeploy n8n.",
     ),
@@ -593,8 +593,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="apps.services.automation.n8n.slack_signing_secret",
         description="Slack app signing secret for ChatOps slash commands",
-        kind=SecretKind.RANDOM_HEX,
-        length=32,
+        kind=SecretKind.EXTERNAL,
         services=("n8n",),
         rotate_note="Update signing secret in Slack App settings.",
     ),
