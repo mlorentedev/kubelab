@@ -1260,6 +1260,11 @@ sync-oidc-hashes:
 	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync oidc --env $(ENV)
 
+.PHONY: sync-vikunja
+sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
+	@test -n "$(ENV)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) sync vikunja --env $(ENV)
+
 .PHONY: validate-sync
 validate-sync:
 	@$(TOOLKIT) sync all --check --env $(or $(filter staging prod,$(ENV)),staging)

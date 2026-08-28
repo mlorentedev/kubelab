@@ -30,14 +30,14 @@ created: "2026-08-27"
 
 ### PR2a — Vikunja REST API Client & Mocks in Toolkit (AC3)
 
-- [ ] [P] [AC3] Write unit tests with mock HTTP responses for `toolkit/features/vikunja_client.py` (namespaces, labels, webhooks endpoints)
-- [ ] [AC3] Implement typed Python `VikunjaClient` in `toolkit/features/vikunja_client.py` (granular `PATCH`, error handling, token auth)
+- [x] [P] [AC3] Write unit tests with mock HTTP responses for `toolkit/features/vikunja_client.py` (namespaces, labels, webhooks endpoints)
+- [x] [AC3] Implement typed Python `VikunjaClient` in `toolkit/features/vikunja_client.py` (granular `PATCH`, error handling, token auth)
 
 ### PR2b — Idempotent Platform Reconciler (AC3)
 
-- [ ] [P] [AC3] Write unit test for `toolkit/features/vikunja_reconciler.py`: assert `sync()` creates namespaces (`kubelab`, `personal`, `teledyne`), standard labels (`type:spec`, `priority:P0..P3`, `agent:delegable`), and outgoing n8n webhooks; assert `changed=0` on re-run
-- [ ] [AC3] Implement `toolkit/features/vikunja_reconciler.py`
-- [ ] [AC3] Add CLI command `tk task sync` and Makefile target `make sync-vikunja ENV=staging|prod`
+- [x] [P] [AC3] Write unit test for `toolkit/features/vikunja_reconciler.py`: assert `sync()` creates namespaces (`kubelab`, `personal`, `teledyne`), standard labels (`type:spec`, `priority:P0..P3`, `agent:delegable`), and outgoing n8n webhooks; assert `changed=0` on re-run
+- [x] [AC3] Implement `toolkit/features/vikunja_reconciler.py`
+- [x] [AC3] Add CLI command `tk task sync` and Makefile target `make sync-vikunja ENV=staging|prod`
 
 ### PR3 — n8n Multi-Forge Sync Workflow with HMAC Verification (AC4)
 
