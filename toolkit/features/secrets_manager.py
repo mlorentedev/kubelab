@@ -308,6 +308,22 @@ SECRET_CATALOG: list[SecretSpec] = [
         # cue to MINT a new client secret rather than to stop.
         envs=("dev", "prod"),
     ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_vikunja",
+        description="Vikunja OIDC client secret (plaintext)",
+        kind=SecretKind.OIDC_CLIENT_SECRET,
+        services=("authelia", "vikunja"),
+        rotate_note="Must also regenerate the vikunja hash.",
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_vikunja_hash",
+        description="Argon2 hash of Vikunja OIDC client secret",
+        kind=SecretKind.ARGON2_HASH,
+        services=("authelia",),
+        derived_from=f"{_AUTH}.oidc_client_secret_vikunja",
+        format_hint="$argon2id$v=19$...",
+        rotate_note="Auto-derived from oidc_client_secret_vikunja.",
+    ),
     # =========================================================================
     # Grafana
     # =========================================================================
@@ -516,7 +532,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="apps.services.core.vikunja.db_password",
         description="PostgreSQL password for vikunja tenant role",
-        kind=SecretKind.PASSWORD,
+        kind=SecretKind.RANDOM_TOKEN,
         services=("vikunja", "postgres"),
         rotate_note="Update role password in postgres, restart vikunja",
     ),

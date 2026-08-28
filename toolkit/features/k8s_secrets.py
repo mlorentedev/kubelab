@@ -142,11 +142,12 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     ),
     SecretMapping(
         name="vikunja-secrets",
-        keys={},
-        optional_keys={
+        keys={
             "VIKUNJA_DATABASE_PASSWORD": "APPS_SERVICES_CORE_VIKUNJA_DB_PASSWORD",
             "VIKUNJA_AUTH_OPENID_CLIENTSECRET": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA",
             "VIKUNJA_SERVICE_JWTSECRET": "APPS_SERVICES_CORE_VIKUNJA_JWT_SECRET",
+        },
+        optional_keys={
             "VIKUNJA_FILES_S3_SECRETACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_S3_SECRET_KEY",
         },
     ),

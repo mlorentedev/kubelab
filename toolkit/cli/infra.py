@@ -757,10 +757,10 @@ def k8s_provision_postgres_tenant(
     cfg = ConfigurationManager(env=env)
     password = cfg.get_secret_by_path(f"apps.services.core.{tenant}.db_password")
     if not password:
-        logger.warning(
-            f"Missing secret apps.services.core.{tenant}.db_password in SOPS for {env} — skipping tenant provisioning"
+        logger.error(
+            f"Missing secret apps.services.core.{tenant}.db_password in SOPS for {env} — cannot provision tenant"
         )
-        return
+        raise typer.Exit(1)
 
     sql = build_provision_sql(username=tenant, password=password, database=tenant)
 

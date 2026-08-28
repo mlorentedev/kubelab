@@ -81,3 +81,21 @@ tests/test_n8n_agent_dispatcher.py::test_agent_payload_ignored_without_label PAS
 tests/test_n8n_agent_dispatcher.py::test_agent_dispatcher_workflow_json_exists_and_is_valid PASSED [100%]
 ============================== 8 passed in 5.12s ===============================
 ```
+
+## 6. Machine Secrets Initialization & K8s Secrets Verification (Staging / Prod)
+
+```bash
+$ poetry run python -m toolkit.main secrets init --env staging
+[SUCCESS] Generated 5 machine secrets for staging (vikunja db_password, jwt_secret, oidc_client_secret, n8n webhook secrets)
+
+$ poetry run python -m toolkit.main secrets hash --env staging
+[SUCCESS] Generated 4 hashes for staging (including vikunja oidc_client_secret_vikunja_hash)
+
+$ poetry run python -m toolkit.main secrets apply --dry-run --env staging
+[SUCCESS] Loaded 598 env vars from config + SOPS
+[INFO] Processing secret: vikunja-secrets
+[INFO]   [DRY-RUN] Would apply secret 'vikunja-secrets' with keys: ['VIKUNJA_DATABASE_PASSWORD', 'VIKUNJA_AUTH_OPENID_CLIENTSECRET', 'VIKUNJA_SERVICE_JWTSECRET']
+[INFO] Processing secret: n8n-secrets
+[INFO]   [DRY-RUN] Would apply secret 'n8n-secrets' with keys: ['N8N_ENCRYPTION_KEY', 'VIKUNJA_API_TOKEN', 'FORGE_WEBHOOK_SECRET', 'SLACK_SIGNING_SECRET']
+[SUCCESS] All K8s secrets applied successfully
+```

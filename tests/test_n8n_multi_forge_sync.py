@@ -150,6 +150,7 @@ def test_multi_forge_workflow_json_structure() -> None:
     assert data.get("name") == "multi-forge-sync"
     webhook_node = next(n for n in data["nodes"] if n["name"] == "Webhook Ingress")
     assert webhook_node["parameters"]["authentication"] == "none"
+    assert webhook_node["parameters"]["options"]["rawBody"] is True
 
     update_node = next(n for n in data["nodes"] if n["name"] == "Update Vikunja Task State")
     assert "http://vikunja:3456/api/v1/tasks/" in update_node["parameters"]["url"]

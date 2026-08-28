@@ -141,6 +141,7 @@ def test_slack_workflow_json_structure() -> None:
     assert data.get("name") == "slack-task-capture"
     webhook_node = next(n for n in data["nodes"] if n["name"] == "Webhook Slack Ingress")
     assert webhook_node["parameters"]["authentication"] == "none"
+    assert webhook_node["parameters"]["options"]["rawBody"] is True
 
     create_node = next(n for n in data["nodes"] if n["name"] == "Create Task in Vikunja")
     assert "http://vikunja:3456/api/v1/projects/" in create_node["parameters"]["url"]
