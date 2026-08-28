@@ -6,7 +6,7 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Ingest GitHub and Gitea webhooks, validate HMAC SHA256 signatures (fail-closed), extract task key, transition Vikunja task state, and append PR URLs."
+    "description": "IDP-035: Ingest GitHub and Gitea webhooks, validate HMAC SHA256 signatures (fail-closed), search task by key, transition Vikunja task state, and append PR URLs."
   },
   "nodes": [
     {
@@ -53,8 +53,41 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "=http://vikunja:3456/api/v1/tasks/all?s={{ $json.taskKey }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000008",
+      "name": "Find Vikunja Task by Key",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resolve matched task ID from search results or fallback to numeric index\nconst searchResults = Array.isArray($json) ? $json : ($json.data || []);\nconst event = $('Parse Forge Event').first().json;\nlet resolvedTaskId = event.taskId;\n\nif (searchResults.length > 0 && searchResults[0].id) {\n  resolvedTaskId = searchResults[0].id;\n}\n\nreturn [{\n  json: {\n    ...event,\n    taskId: resolvedTaskId\n  }\n}];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000009",
+      "name": "Extract Matched Task ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, -100]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskId || $json.taskKey }}",
+        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -75,12 +108,12 @@
       "name": "Update Vikunja Task State",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [260, -100]
+      "position": [640, -100]
     },
     {
       "parameters": {
         "method": "PUT",
-        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskId || $json.taskKey }}/comments",
+        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskId }}/comments",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -101,7 +134,7 @@
       "name": "Append PR URL Comment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, -100]
+      "position": [840, -100]
     },
     {
       "parameters": {
@@ -116,7 +149,7 @@
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 0]
+      "position": [1040, 0]
     },
     {
       "parameters": {
@@ -130,7 +163,7 @@
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [920, 0]
+      "position": [1240, 0]
     }
   ],
   "connections": {
@@ -160,7 +193,7 @@
       "main": [
         [
           {
-            "node": "Update Vikunja Task State",
+            "node": "Find Vikunja Task by Key",
             "type": "main",
             "index": 0
           }
@@ -168,6 +201,28 @@
         [
           {
             "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Vikunja Task by Key": {
+      "main": [
+        [
+          {
+            "node": "Extract Matched Task ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Matched Task ID": {
+      "main": [
+        [
+          {
+            "node": "Update Vikunja Task State",
             "type": "main",
             "index": 0
           }
