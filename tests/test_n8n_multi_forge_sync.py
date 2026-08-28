@@ -64,6 +64,31 @@ def test_workflow_node_valid_hmac_and_open_pr() -> None:
     assert result["isDone"] is False
 
 
+def test_workflow_node_raw_body_string_and_valid_hmac() -> None:
+    raw_payload = '{"action":"opened","pull_request":{"title":"feat: IDP-035 add sync","html_url":"https://github.com/org/repo/pull/1","merged":false,"head":{"ref":"feature/idp-035-sync"}}}'
+    secret = "my-secret-key"
+    sig = generate_hmac_sha256(raw_payload.encode(), secret)
+    headers = {"x-hub-signature-256": sig}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
+
+    js_code = get_forge_parser_js()
+    script = f"""
+    const $json = {{body: {raw_payload}, rawBody: {json.dumps(raw_payload)}, headers: {json.dumps(headers)}}};
+    const $env = {json.dumps(env)};
+    const result = (() => {{
+        {js_code}
+    }})();
+    console.log(JSON.stringify(result[0].json));
+    """
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    result = json.loads(proc.stdout.strip())
+    assert result["isValidSig"] is True
+    assert result["hasTask"] is True
+    assert result["taskKey"] == "IDP-035"
+    assert result["taskId"] == 35
+    assert result["targetBucket"] == "In Review"
+
+
 def test_workflow_node_valid_hmac_and_merged_pr() -> None:
     body = {
         "action": "closed",

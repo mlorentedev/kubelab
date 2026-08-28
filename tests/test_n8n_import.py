@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from toolkit.features.n8n_import import (
     N8N_IMPORT_CATALOG,
     import_n8n_workflow,

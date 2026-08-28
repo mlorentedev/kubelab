@@ -79,20 +79,20 @@ spec:
             - name: VIKUNJA_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: vikunja-secrets
-                  key: VIKUNJA_SERVICE_JWTSECRET
+                  name: n8n-secrets
+                  key: VIKUNJA_API_TOKEN
                   optional: true
             - name: FORGE_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: vikunja-secrets
-                  key: VIKUNJA_SERVICE_JWTSECRET
+                  name: n8n-secrets
+                  key: FORGE_WEBHOOK_SECRET
                   optional: true
             - name: SLACK_SIGNING_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: vikunja-secrets
-                  key: VIKUNJA_SERVICE_JWTSECRET
+                  name: n8n-secrets
+                  key: SLACK_SIGNING_SECRET
                   optional: true
           volumeMounts:
             - name: data

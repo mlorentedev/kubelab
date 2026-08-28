@@ -559,6 +559,29 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("n8n",),
         rotate_note="DANGEROUS: existing saved credentials become unreadable.",
     ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.vikunja_api_token",
+        description="Vikunja API token for n8n automation workflows",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("n8n", "vikunja"),
+        rotate_note="Update API token in Vikunja and redeploy n8n.",
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.forge_webhook_secret",
+        description="Shared HMAC secret for GitHub and Gitea webhooks to n8n",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("n8n",),
+        rotate_note="Update webhook secret in GitHub/Gitea repositories.",
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.slack_signing_secret",
+        description="Slack app signing secret for ChatOps slash commands",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("n8n",),
+        rotate_note="Update signing secret in Slack App settings.",
+    ),
     # =========================================================================
     # MinIO
     # =========================================================================

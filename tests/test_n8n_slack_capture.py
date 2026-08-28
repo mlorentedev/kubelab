@@ -64,6 +64,45 @@ def test_slack_workflow_node_valid_signature_and_command() -> None:
     assert result["priorityNum"] == 3
 
 
+def test_slack_workflow_node_raw_form_urlencoded_signature() -> None:
+    raw_form = (
+        "command=%2Ftask&text=create+Production+fix+%23teledyne+P0"
+        "&response_url=https%3A%2F%2Fhooks.slack.com%2Fcommands%2F123&user_name=admin"
+    )
+    secret = "slack-signing-secret"
+    ts = int(time.time())
+    sig = generate_slack_signature(raw_form, secret, ts)
+    headers = {
+        "x-slack-signature": sig,
+        "x-slack-request-timestamp": str(ts),
+        "content-type": "application/x-www-form-urlencoded",
+    }
+    env = {"SLACK_SIGNING_SECRET": secret}
+    parsed_body = {
+        "command": "/task",
+        "text": "create Production fix #teledyne P0",
+        "response_url": "https://hooks.slack.com/commands/123",
+        "user_name": "admin",
+    }
+
+    js_code = get_slack_parser_js()
+    script = f"""
+    const $json = {{body: {json.dumps(parsed_body)}, rawBody: {json.dumps(raw_form)}, headers: {json.dumps(headers)}}};
+    const $env = {json.dumps(env)};
+    const result = (() => {{
+        {js_code}
+    }})();
+    console.log(JSON.stringify(result[0].json));
+    """
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    result = json.loads(proc.stdout.strip())
+    assert result["isValidSlack"] is True
+    assert result["title"] == "Production fix"
+    assert result["project"] == "teledyne"
+    assert result["priority"] == "P0"
+    assert result["priorityNum"] == 4
+
+
 def test_slack_workflow_node_invalid_signature_fails_closed() -> None:
     body = {"text": "create Task without auth"}
     secret = "slack-signing-secret"
