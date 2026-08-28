@@ -58,13 +58,13 @@ created: "2026-08-27"
 
 ### PR6 — Operational Runbook & ADR-066 (AC7)
 
-- [ ] [P] [AC7] Author `docs/runbooks/vikunja-task-platform.md` (daily operations, Slack ChatOps syntax, CLI commands, backup & DR restore procedure)
-- [ ] [AC7] Author `docs/adr/adr-066-self-hosted-task-platform.md` formally recording the pivot from custom Go console to Vikunja + n8n
+- [x] [P] [AC7] Author `docs/runbooks/vikunja-task-platform.md` (daily operations, Slack ChatOps syntax, CLI commands, backup & DR restore procedure)
+- [x] [AC7] Author `docs/adr/adr-066-self-hosted-task-platform.md` formally recording the pivot from custom Go console to Vikunja + n8n
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by tests
-- [ ] Type checks pass (`mypy toolkit`)
-- [ ] Lint passes (`ruff check .`)
-- [ ] `verification.md` filled with real command outputs
+- [x] Every acceptance criterion from `proposal.md` is covered by tests
+- [x] Type checks pass (`mypy toolkit`)
+- [x] Lint passes (`ruff check .`)
+- [x] `verification.md` filled with real command outputs
 - [ ] PRs merged deliberately under trunk-based workflow

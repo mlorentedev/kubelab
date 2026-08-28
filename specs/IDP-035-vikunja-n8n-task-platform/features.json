@@ -45,7 +45,7 @@
     "id": "IDP-035-f7",
     "behavior": "docs/runbooks/vikunja-task-platform.md documents operations, and ADR-066 records the architecture pivot",
     "verification": "test -f docs/runbooks/vikunja-task-platform.md && test -f docs/adr/adr-066-self-hosted-task-platform.md",
-    "state": "pending",
-    "evidence": ""
+    "state": "passed",
+    "evidence": "docs/runbooks/vikunja-task-platform.md and docs/adr/adr-066-self-hosted-task-platform.md verified present and formatted"
   }
 ]
