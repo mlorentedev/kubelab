@@ -82,6 +82,24 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
         credential_name="notify-webhook",
         envs=frozenset({"staging", "prod"}),
     ),
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/multi-forge-sync.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="multi-forge-webhook",
+        envs=frozenset({"staging", "prod"}),
+    ),
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/slack-task-capture.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="slack-webhook",
+        envs=frozenset({"staging", "prod"}),
+    ),
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/agent-dispatcher.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="agent-dispatcher-webhook",
+        envs=frozenset({"staging", "prod"}),
+    ),
 ]
 
 
@@ -107,12 +125,12 @@ def render_credential(credential_id: str, credential_name: str, secret: str) -> 
     return json.dumps(payload, indent=2)
 
 
-def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str]:
+def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str | None]:
     """Return `(workflow_id, credential_id)` read from the workflow JSON.
 
     Both ids are the single source of truth — fixed in the committed JSON so
-    import is an idempotent upsert. Raises ValueError if either is absent (a
-    missing id would make import non-idempotent → silent duplicates).
+    import is an idempotent upsert. If no node carries httpHeaderAuth credentials,
+    returns (workflow_id, None) for workflows verifying signatures internally.
     """
     workflow_id = workflow.get("id")
     if not workflow_id:
@@ -123,7 +141,7 @@ def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str]:
         if cred and cred.get("id"):
             return str(workflow_id), str(cred["id"])
 
-    raise ValueError(f"no node carries a {_CREDENTIAL_TYPE} credential id — cannot link credential")
+    return str(workflow_id), None
 
 
 def _kubeconfig_for(env: str) -> str:
@@ -188,11 +206,6 @@ def _process_spec(
     """Import + activate a single workflow. Returns True on success."""
     logger.info(f"Processing workflow: {spec.workflow_path.name} (credential={spec.credential_name})")
 
-    secret = cm.get_secret_by_path(spec.secret_key_path)
-    if not secret:
-        logger.error(f"  Missing SOPS value at '{spec.secret_key_path}' — cannot import credential")
-        return False
-
     workflow_full = project_root / spec.workflow_path
     if not workflow_full.is_file():
         logger.error(f"  Workflow not found at '{workflow_full}' — aborting")
@@ -211,7 +224,13 @@ def _process_spec(
         logger.error(f"  {exc}")
         return False
 
-    credential_json = render_credential(credential_id, spec.credential_name, secret)
+    credential_json = None
+    if credential_id and spec.secret_key_path:
+        secret = cm.get_secret_by_path(spec.secret_key_path)
+        if not secret:
+            logger.error(f"  Missing SOPS value at '{spec.secret_key_path}' — cannot import credential")
+            return False
+        credential_json = render_credential(credential_id, spec.credential_name, secret)
 
     if dry_run:
         logger.info(
@@ -221,9 +240,10 @@ def _process_spec(
         return True
 
     # 1. Credential — carries the secret; stdin → /dev/shm → import → shred.
-    if not _exec_stdin_import(env, spec, "import:credentials", "n8n-cred", credential_json):
-        logger.error("  Credential import failed — workflow not imported")
-        return False
+    if credential_json:
+        if not _exec_stdin_import(env, spec, "import:credentials", "n8n-cred", credential_json):
+            logger.error("  Credential import failed — workflow not imported")
+            return False
 
     # 2. Workflow — not secret, but absent from the PVC; pipe via stdin too.
     if not _exec_stdin_import(env, spec, "import:workflow", "n8n-wf", workflow_text):

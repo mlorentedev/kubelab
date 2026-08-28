@@ -54,6 +54,10 @@ apps:
   # Third-party services
       version: sha-fd8e128
   services:
+    core:
+      vikunja:
+        domain: tasks.staging.kubelab.live
+
     automation:
       n8n:
         domain: n8n.staging.kubelab.live

@@ -21,6 +21,7 @@ class SecretMapping:
 
     name: str
     keys: dict[str, str]  # k8s_key → flattened_env_var
+    optional_keys: dict[str, str] = field(default_factory=dict)  # k8s_key → flattened_env_var (optional)
     literals: dict[str, str] = field(default_factory=dict)  # k8s_key → pre-rendered value
     namespace: str = "kubelab"  # target K8s namespace
 
@@ -86,6 +87,11 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # n8n moved core -> automation (#670); env var prefix follows the new path
             "N8N_ENCRYPTION_KEY": "APPS_SERVICES_AUTOMATION_N8N_ENCRYPTION_KEY",
         },
+        optional_keys={
+            "VIKUNJA_API_TOKEN": "APPS_SERVICES_AUTOMATION_N8N_VIKUNJA_API_TOKEN",
+            "FORGE_WEBHOOK_SECRET": "APPS_SERVICES_AUTOMATION_N8N_FORGE_WEBHOOK_SECRET",
+            "SLACK_SIGNING_SECRET": "APPS_SERVICES_AUTOMATION_N8N_SLACK_SIGNING_SECRET",
+        },
     ),
     SecretMapping(
         name="apprise-secrets",
@@ -132,6 +138,17 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "BEEHIIV_API_KEY": "APPS_PLATFORM_API_BEEHIIV_API_KEY",
             "ZOHO_CLIENT_ID": "APPS_PLATFORM_API_ZOHO_CLIENT_ID",
             "ZOHO_CLIENT_SECRET": "APPS_PLATFORM_API_ZOHO_CLIENT_SECRET",
+        },
+    ),
+    SecretMapping(
+        name="vikunja-secrets",
+        keys={
+            "VIKUNJA_DATABASE_PASSWORD": "APPS_SERVICES_CORE_VIKUNJA_DB_PASSWORD",
+            "VIKUNJA_AUTH_OPENID_CLIENTSECRET": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA",
+            "VIKUNJA_SERVICE_JWTSECRET": "APPS_SERVICES_CORE_VIKUNJA_JWT_SECRET",
+        },
+        optional_keys={
+            "VIKUNJA_FILES_S3_SECRETACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_S3_SECRET_KEY",
         },
     ),
 ]
@@ -418,6 +435,11 @@ def _apply_single_secret(
             missing.append(f"{k8s_key} (from {env_var})")
             continue
         data[k8s_key] = value
+
+    for k8s_key, env_var in mapping.optional_keys.items():
+        value = env_vars.get(env_var)
+        if value:
+            data[k8s_key] = value
 
     for k8s_key, value in extra_literals.items():
         data[k8s_key] = value
