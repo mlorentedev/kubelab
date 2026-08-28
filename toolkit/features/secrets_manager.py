@@ -511,6 +511,44 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     # =========================================================================
+    # Vikunja (IDP-035)
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.services.core.vikunja.db_password",
+        description="PostgreSQL password for vikunja tenant role",
+        kind=SecretKind.PASSWORD,
+        services=("vikunja", "postgres"),
+        rotate_note="Update role password in postgres, restart vikunja",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.jwt_secret",
+        description="Vikunja JWT signing secret for sessions and API tokens",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("vikunja",),
+        rotate_note="Invalidates active JWT sessions. Users must re-login.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.oidc_client_secret",
+        description="Vikunja OIDC client secret for Authelia SSO",
+        kind=SecretKind.OIDC_CLIENT_SECRET,
+        services=("vikunja", "authelia"),
+        rotate_note="Regenerate secret in Authelia and update vikunja deployment.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.r2_access_key",
+        description="Cloudflare R2 Access Key ID for Vikunja attachments",
+        kind=SecretKind.PASSWORD,
+        services=("vikunja",),
+        rotate_note="Update R2 bucket token in Cloudflare, reapply secrets.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.r2_secret_key",
+        description="Cloudflare R2 Secret Access Key for Vikunja attachments",
+        kind=SecretKind.PASSWORD,
+        services=("vikunja",),
+        rotate_note="Update R2 bucket token in Cloudflare, reapply secrets.",
+    ),
+    # =========================================================================
     # N8N
     # =========================================================================
     SecretSpec(
