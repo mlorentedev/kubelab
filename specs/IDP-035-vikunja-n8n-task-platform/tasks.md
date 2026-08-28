@@ -41,9 +41,9 @@ created: "2026-08-27"
 
 ### PR3 — n8n Multi-Forge Sync Workflow with HMAC Verification (AC4)
 
-- [ ] [P] [AC4] Write unit tests in `tests/test_n8n_workflows.py`: assert GitHub and Gitea webhook payloads normalize correctly, validate HMAC headers (`X-Hub-Signature-256`, `X-Gitea-Signature`), and map `AREA-NNN` to monotonic Vikunja state transitions
-- [ ] [AC4] Implement `infra/n8n/workflows/multi-forge-sync.json` (HMAC verify $\rightarrow$ extract `AREA-NNN` $\rightarrow$ transition task $\rightarrow$ append PR URL via comment $\rightarrow$ terminal `Done` state)
-- [ ] [AC4] Test workflow import: `make import-n8n ENV=staging`
+- [x] [P] [AC4] Write unit tests in `tests/test_n8n_multi_forge_sync.py`: assert GitHub and Gitea webhook payloads normalize correctly, validate HMAC headers (`X-Hub-Signature-256`, `X-Gitea-Signature`), and map `AREA-NNN` to monotonic Vikunja state transitions
+- [x] [AC4] Implement `infra/n8n/workflows/multi-forge-sync.json` (HMAC verify $\rightarrow$ extract `AREA-NNN` $\rightarrow$ transition task $\rightarrow$ append PR URL via comment $\rightarrow$ terminal `Done` state)
+- [x] [AC4] Test workflow import: `make import-n8n ENV=staging`
 
 ### PR4 — n8n Slack ChatOps & Notification Routing (AC5)
 

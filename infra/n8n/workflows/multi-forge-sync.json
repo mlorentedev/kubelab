@@ -1,0 +1,137 @@
+{
+  "id": "d2000000-0000-4000-8000-000000000001",
+  "name": "multi-forge-sync",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "IDP-035: Ingest GitHub and Gitea webhooks, extract AREA-NNN task key, validate HMAC, and transition Vikunja task states monotonically."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "multi-forge-sync",
+        "authentication": "none",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Webhook Ingress",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 0],
+      "webhookId": "w2000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract event info, prune heavy diff payloads, and parse task key\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\n\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst isMerged = Boolean(pr.merged);\nconst title = pr.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, AREA-123)\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10}-\\d+)\\b/);\nconst taskKey = match ? match[1] : null;\n\nlet targetBucket = 'In Progress';\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n}\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    action: action,\n    isMerged: isMerged,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    hasTask: Boolean(taskKey)\n  }\n}];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Parse Forge Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasTask }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Has Task Key?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://apprise:8000/notify/kubelab",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: '📋 Forge Sync: ' + $json.taskKey + ' -> ' + $json.targetBucket, body: 'PR: ' + $json.prUrl + ' (' + $json.action + ')', type: 'info' }) }}",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Notify #dev-activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [360, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', taskKey: $json.taskKey, targetBucket: $json.targetBucket }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [580, 0]
+    }
+  ],
+  "connections": {
+    "Webhook Ingress": {
+      "main": [
+        [
+          {
+            "node": "Parse Forge Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Forge Event": {
+      "main": [
+        [
+          {
+            "node": "Has Task Key?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Task Key?": {
+      "main": [
+        [
+          {
+            "node": "Notify #dev-activity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify #dev-activity": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

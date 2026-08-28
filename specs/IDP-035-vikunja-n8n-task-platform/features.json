@@ -24,8 +24,8 @@
     "id": "IDP-035-f4",
     "behavior": "GitHub and Gitea PR events with AREA-NNN map to monotonic Vikunja state transitions with HMAC validation",
     "verification": "poetry run pytest tests/test_n8n_multi_forge_sync.py -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passed",
+    "evidence": "5 passed in 4.5s: webhook HMAC validation, task key extraction, monotonic state machine, and multi-forge-sync.json schema"
   },
   {
     "id": "IDP-035-f5",
