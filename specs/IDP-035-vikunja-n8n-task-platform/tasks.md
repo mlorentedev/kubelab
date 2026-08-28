@@ -53,8 +53,8 @@ created: "2026-08-27"
 
 ### PR5 — Agent Delegation Workflow with Queue Resilience (AC6)
 
-- [ ] [P] [AC6] Write unit test for `agent-dispatcher.json`: verify task with `agent:delegable` extracts repo, branch, spec ID, and queues/dispatches payload
-- [ ] [AC6] Implement `infra/n8n/workflows/agent-dispatcher.json` (formats agent execution payload, supports pull/pickup resilience when dev node is on-demand)
+- [x] [P] [AC6] Write unit test for `agent-dispatcher.json`: verify task with `agent:delegable` extracts repo, branch, spec ID, and queues/dispatches payload
+- [x] [AC6] Implement `infra/n8n/workflows/agent-dispatcher.json` (formats agent execution payload, supports pull/pickup resilience when dev node is on-demand)
 
 ### PR6 — Operational Runbook & ADR-066 (AC7)
 

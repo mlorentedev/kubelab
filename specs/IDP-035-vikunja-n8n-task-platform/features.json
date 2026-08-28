@@ -38,8 +38,8 @@
     "id": "IDP-035-f6",
     "behavior": "Tasks marked agent:delegable trigger the agent-dispatcher workflow resilient to on-demand node states",
     "verification": "poetry run pytest tests/test_n8n_agent_dispatcher.py -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passed",
+    "evidence": "3 passed in 5.0s: spec extraction, branch naming convention, and agent-dispatcher.json workflow validation"
   },
   {
     "id": "IDP-035-f7",

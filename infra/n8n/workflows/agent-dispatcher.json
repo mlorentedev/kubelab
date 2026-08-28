@@ -1,0 +1,137 @@
+{
+  "id": "d4000000-0000-4000-8000-000000000001",
+  "name": "agent-dispatcher",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "IDP-035: Autonomous agent delegation trigger for Orca ADE / CLI agents in isolated worktrees."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-dispatcher",
+        "authentication": "none",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e4000000-0000-4000-8000-000000000001",
+      "name": "Webhook Ingress",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 0],
+      "webhookId": "w4000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Vikunja task update event and extract agent dispatch parameters\nconst body = $json.body || $json;\nconst task = body.task || body;\n\nconst title = task.title || '';\nconst desc = task.description || '';\nconst labels = (task.labels || []).map(l => typeof l === 'string' ? l : l.title);\n\nconst isDelegable = labels.includes('agent:delegable');\nconst match = (title + ' ' + desc).toUpperCase().match(/\\b([A-Z]{2,10}-\\d+)\\b/);\nconst featureId = match ? match[1] : '';\nconst branchName = featureId ? `feat/${featureId.toLowerCase()}-task` : 'feat/agent-task';\n\nreturn [{\n  json: {\n    isDelegable: isDelegable,\n    taskId: task.id || 0,\n    title: title,\n    featureId: featureId,\n    branchName: branchName,\n    labels: labels\n  }\n}];"
+      },
+      "id": "e4000000-0000-4000-8000-000000000002",
+      "name": "Extract Agent Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isDelegable }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "e4000000-0000-4000-8000-000000000003",
+      "name": "Is Delegable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://apprise:8000/notify/kubelab",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tag: 'agent', title: '🤖 Agent Task Dispatched: ' + $json.title, body: 'Spec: ' + ($json.featureId || 'N/A') + ' | Branch: ' + $json.branchName, type: 'info' }) }}",
+        "options": {}
+      },
+      "id": "e4000000-0000-4000-8000-000000000004",
+      "name": "Notify #dev-activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [360, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'dispatched', featureId: $json.featureId, branchName: $json.branchName }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e4000000-0000-4000-8000-000000000005",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [580, 0]
+    }
+  ],
+  "connections": {
+    "Webhook Ingress": {
+      "main": [
+        [
+          {
+            "node": "Extract Agent Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Agent Payload": {
+      "main": [
+        [
+          {
+            "node": "Is Delegable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Delegable?": {
+      "main": [
+        [
+          {
+            "node": "Notify #dev-activity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify #dev-activity": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
