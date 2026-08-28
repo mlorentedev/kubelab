@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from toolkit.features.n8n_import import (
     N8N_IMPORT_CATALOG,
@@ -54,5 +55,8 @@ def test_render_credential_shape() -> None:
 
 
 def test_import_n8n_workflow_dry_run() -> None:
-    result = import_n8n_workflow("staging", REPO_ROOT, dry_run=True)
-    assert result is True
+    mock_cm = MagicMock()
+    mock_cm.get_secret_by_path.return_value = "dummy-secret-token"
+    with patch("toolkit.features.n8n_import.ConfigurationManager", return_value=mock_cm):
+        result = import_n8n_workflow("staging", REPO_ROOT, dry_run=True)
+        assert result is True
