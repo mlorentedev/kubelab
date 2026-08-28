@@ -15,7 +15,7 @@ created: "2026-08-27"
 
 - [x] Branch created: `feat/idp-035-vikunja-task-platform` (worktree `kubelab-vikunja-wt`)
 - [x] `proposal.md` is complete and grounded with Adversarial & SRE audits
-- [ ] Database role & database `vikunja` declared for `infra.postgres` in SOPS catalog
+- [x] Database role & database `vikunja` declared for `infra.postgres` in SOPS catalog
 
 ## Implementation Roadmap
 

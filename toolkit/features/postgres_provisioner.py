@@ -34,4 +34,5 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{database}')\\gexec
 
 REVOKE ALL ON DATABASE {database} FROM PUBLIC;
 GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};
+REVOKE CONNECT ON DATABASE kubelab FROM {username};
 """

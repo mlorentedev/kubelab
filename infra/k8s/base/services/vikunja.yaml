@@ -23,10 +23,10 @@ data:
   VIKUNJA_FILES_S3_REGION: "auto"
   VIKUNJA_FILES_S3_ACCESSKEYID: "vikunja"
   VIKUNJA_AUTH_OPENID_ENABLE: "true"
-  VIKUNJA_AUTH_OPENID_REDIRECTURL: "https://tasks.staging.kubelab.live/auth/openid/callback"
+  VIKUNJA_AUTH_OPENID_REDIRECTURL: "https://tasks.staging.kubelab.live/auth/openid/authelia"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_NAME: "Authelia"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL: "https://auth.staging.kubelab.live"
-  VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTID: "vikunja"
+  VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTID: "vikunja-oidc"
 ---
 apiVersion: apps/v1
 kind: Deployment

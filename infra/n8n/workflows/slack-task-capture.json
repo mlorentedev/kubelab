@@ -6,14 +6,14 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Ingest Slack /task slash commands with instant ack (<500ms) and async Vikunja creation."
+    "description": "IDP-035: Ingest Slack /task slash commands with instant ack (<500ms), async Vikunja creation, and response URL direct link."
   },
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "slack-task-capture",
-        "authentication": "none",
+        "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -21,18 +21,24 @@
       "name": "Webhook Slack Ingress",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-300, 0],
-      "webhookId": "w3000000-0000-4000-8000-000000000001"
+      "position": [-400, 0],
+      "webhookId": "w3000000-0000-4000-8000-000000000001",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c3000000-0000-4000-8000-000000000001",
+          "name": "slack-webhook"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Parse Slack slash command: /task create [title] #[project] [P0..P3]\nconst body = $json.body || $json;\nconst rawText = (body.text || '').trim();\nconst responseUrl = body.response_url || '';\nconst userName = body.user_name || 'slack-user';\n\nconst parts = rawText.split(/\\s+/);\nlet action = parts[0]?.toLowerCase() || 'create';\nlet remaining = action === 'create' ? parts.slice(1) : parts;\n\nlet project = 'kubelab';\nlet priority = 'P2';\nconst titleWords = [];\n\nfor (const word of remaining) {\n  if (word.startsWith('#')) {\n    project = word.substring(1);\n  } else if (['P0', 'P1', 'P2', 'P3'].includes(word.toUpperCase())) {\n    priority = word.toUpperCase();\n  } else {\n    titleWords.push(word);\n  }\n}\n\nconst title = titleWords.join(' ') || 'Untitled Task';\n\nreturn [{\n  json: {\n    title: title,\n    project: project,\n    priority: priority,\n    responseUrl: responseUrl,\n    userName: userName,\n    ackMessage: `⏳ Creating task *${title}* in project _#${project}_ (priority: ${priority})...`\n  }\n}];"
+        "jsCode": "// Parse Slack slash command: /task create [title] #[project] [P0..P3]\nconst body = $json.body || $json;\nconst rawText = (body.text || '').trim();\nconst responseUrl = body.response_url || '';\nconst userName = body.user_name || 'slack-user';\n\nconst parts = rawText.split(/\\s+/);\nlet action = parts[0]?.toLowerCase() || 'create';\nlet remaining = action === 'create' ? parts.slice(1) : parts;\n\nlet project = 'kubelab';\nlet priority = 'P2';\nconst titleWords = [];\n\nfor (const word of remaining) {\n  if (word.startsWith('#')) {\n    project = word.substring(1);\n  } else if (['P0', 'P1', 'P2', 'P3'].includes(word.toUpperCase())) {\n    priority = word.toUpperCase();\n  } else {\n    titleWords.push(word);\n  }\n}\n\nconst title = titleWords.join(' ') || 'Untitled Task';\nconst priorityMap = { 'P0': 4, 'P1': 3, 'P2': 2, 'P3': 1 };\n\nreturn [{\n  json: {\n    title: title,\n    project: project,\n    priority: priority,\n    priorityNum: priorityMap[priority] || 2,\n    responseUrl: responseUrl,\n    userName: userName,\n    ackMessage: `⏳ Creating task *${title}* in project _#${project}_ (priority: ${priority})...`\n  }\n}];"
       },
       "id": "c3000000-0000-4000-8000-000000000002",
       "name": "Parse Slack Command",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-80, 0]
+      "position": [-180, 0]
     },
     {
       "parameters": {
@@ -46,7 +52,50 @@
       "name": "Instant Slack Ack (<500ms)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [140, -80]
+      "position": [40, -100]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://vikunja:3456/api/v1/projects/1/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN || 'platform-sync-token' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, priority: $json.priorityNum, description: 'Created via Slack by @' + $json.userName }) }}",
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "c3000000-0000-4000-8000-000000000004",
+      "name": "Create Task in Vikunja",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 50]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.responseUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '✅ Task created: *' + $json.title + '*\\n👉 <https://tasks.kubelab.live|Open in Vikunja>' }) }}",
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "c3000000-0000-4000-8000-000000000005",
+      "name": "Update Slack via Response URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 50]
     },
     {
       "parameters": {
@@ -57,11 +106,11 @@
         "jsonBody": "={{ JSON.stringify({ tag: 'log', title: '📋 Slack Task Captured: ' + $json.title, body: 'Project: #' + $json.project + ' | Priority: ' + $json.priority + ' | By: @' + $json.userName, type: 'info' }) }}",
         "options": {}
       },
-      "id": "c3000000-0000-4000-8000-000000000004",
+      "id": "c3000000-0000-4000-8000-000000000006",
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [140, 100]
+      "position": [700, 50]
     }
   ],
   "connections": {
@@ -84,6 +133,28 @@
             "type": "main",
             "index": 0
           },
+          {
+            "node": "Create Task in Vikunja",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Task in Vikunja": {
+      "main": [
+        [
+          {
+            "node": "Update Slack via Response URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Slack via Response URL": {
+      "main": [
+        [
           {
             "node": "Notify #dev-activity",
             "type": "main",

@@ -742,6 +742,48 @@ def k8s_apply_secrets(
         raise typer.Exit(1)
 
 
+@k8s_app.command("provision-postgres-tenant")
+def k8s_provision_postgres_tenant(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
+    tenant: Annotated[str, typer.Option("--tenant", "-t", help="Tenant name (e.g. vikunja)")] = "vikunja",
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Render SQL only")] = False,
+) -> None:
+    """Idempotently provision a tenant role and database in PostgreSQL (infra.postgres)."""
+    import subprocess
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.postgres_provisioner import build_provision_sql
+
+    cfg = ConfigurationManager(env=env)
+    password = cfg.get_secret_by_path(f"apps.services.core.{tenant}.db_password") or f"{tenant}_pass"
+    sql = build_provision_sql(username=tenant, password=password, database=tenant)
+
+    if dry_run:
+        logger.info(f"Generated SQL for tenant {tenant}:\n{sql}")
+        return
+
+    logger.info(f"Applying tenant provisioning for {tenant} in postgres ({env})...")
+    cmd = [
+        "kubectl",
+        "-n",
+        "kubelab",
+        "exec",
+        "-i",
+        "deployment/postgres",
+        "--",
+        "psql",
+        "-U",
+        "kubelab",
+        "-d",
+        "kubelab",
+    ]
+    res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
+    if res.returncode != 0:
+        logger.warning(f"Provisioning returned non-zero (cluster may be offline): {res.stderr}")
+    else:
+        logger.success(f"PostgreSQL tenant {tenant} provisioned successfully.")
+
+
 @k8s_app.command("apply-middleware-secrets")
 def k8s_apply_middleware_secrets(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],

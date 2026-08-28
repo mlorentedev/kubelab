@@ -6,14 +6,14 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Ingest GitHub and Gitea webhooks, extract AREA-NNN task key, validate HMAC, and transition Vikunja task states monotonically."
+    "description": "IDP-035: Ingest GitHub and Gitea webhooks, validate Header Auth, extract AREA-NNN task key, transition Vikunja task states monotonically, and append PR URLs."
   },
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "multi-forge-sync",
-        "authentication": "none",
+        "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -21,18 +21,24 @@
       "name": "Webhook Ingress",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-300, 0],
-      "webhookId": "w2000000-0000-4000-8000-000000000001"
+      "position": [-400, 0],
+      "webhookId": "w2000000-0000-4000-8000-000000000001",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c2000000-0000-4000-8000-000000000001",
+          "name": "multi-forge-webhook"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Extract event info, prune heavy diff payloads, and parse task key\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\n\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst isMerged = Boolean(pr.merged);\nconst title = pr.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, AREA-123)\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10}-\\d+)\\b/);\nconst taskKey = match ? match[1] : null;\n\nlet targetBucket = 'In Progress';\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n}\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    action: action,\n    isMerged: isMerged,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    hasTask: Boolean(taskKey)\n  }\n}];"
+        "jsCode": "// Extract event info, prune heavy diff payloads, and parse task key\nconst body = $json.body || $json;\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst isMerged = Boolean(pr.merged);\nconst title = pr.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, AREA-123)\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10}-\\d+)\\b/);\nconst taskKey = match ? match[1] : null;\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    hasTask: Boolean(taskKey)\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000002",
       "name": "Parse Forge Event",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-80, 0]
+      "position": [-180, 0]
     },
     {
       "parameters": {
@@ -49,7 +55,59 @@
       "name": "Has Task Key?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [140, 0]
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskKey }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN || 'platform-sync-token' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ done: $json.isDone }) }}",
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Update Vikunja Task State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, -100]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskKey }}/comments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN || 'platform-sync-token' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ comment: '🔗 Linked PR: ' + $json.prUrl + ' (' + $json.action + ')' }) }}",
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Append PR URL Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, -100]
     },
     {
       "parameters": {
@@ -60,11 +118,11 @@
         "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: '📋 Forge Sync: ' + $json.taskKey + ' -> ' + $json.targetBucket, body: 'PR: ' + $json.prUrl + ' (' + $json.action + ')', type: 'info' }) }}",
         "options": {}
       },
-      "id": "b2000000-0000-4000-8000-000000000004",
+      "id": "b2000000-0000-4000-8000-000000000006",
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [360, -80]
+      "position": [700, 0]
     },
     {
       "parameters": {
@@ -74,11 +132,11 @@
           "responseCode": 200
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000005",
+      "id": "b2000000-0000-4000-8000-000000000007",
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [580, 0]
+      "position": [920, 0]
     }
   ],
   "connections": {
@@ -108,7 +166,7 @@
       "main": [
         [
           {
-            "node": "Notify #dev-activity",
+            "node": "Update Vikunja Task State",
             "type": "main",
             "index": 0
           }
@@ -116,6 +174,28 @@
         [
           {
             "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Vikunja Task State": {
+      "main": [
+        [
+          {
+            "node": "Append PR URL Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append PR URL Comment": {
+      "main": [
+        [
+          {
+            "node": "Notify #dev-activity",
             "type": "main",
             "index": 0
           }

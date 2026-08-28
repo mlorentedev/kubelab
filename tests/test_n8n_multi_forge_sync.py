@@ -82,13 +82,28 @@ def test_multi_forge_workflow_json_exists_and_is_valid_n8n() -> None:
         data = json.load(f)
 
     assert data.get("name") == "multi-forge-sync"
-    assert len(data.get("nodes", [])) >= 4
+    assert len(data.get("nodes", [])) >= 5
     assert "connections" in data
 
-    # Verify semantic logic embedded in Parse Forge Event node
+    # Verify Webhook Authentication
+    webhook_node = next((n for n in data["nodes"] if n["name"] == "Webhook Ingress"), None)
+    assert webhook_node is not None
+    assert webhook_node["parameters"]["authentication"] == "headerAuth"
+    assert "httpHeaderAuth" in webhook_node["credentials"]
+
+    # Verify Semantic parsing logic
     parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Forge Event"), None)
-    assert parse_node is not None, "Parse Forge Event node must exist"
+    assert parse_node is not None
     js = parse_node["parameters"]["jsCode"]
     assert "targetBucket = 'Done'" in js
     assert "targetBucket = 'In Review'" in js
     assert "([A-Z]{2,10}-\\d+)" in js
+
+    # Verify Vikunja HTTP API mutation nodes exist in the workflow graph
+    update_node = next((n for n in data["nodes"] if n["name"] == "Update Vikunja Task State"), None)
+    assert update_node is not None
+    assert "http://vikunja:3456/api/v1/tasks/" in update_node["parameters"]["url"]
+
+    comment_node = next((n for n in data["nodes"] if n["name"] == "Append PR URL Comment"), None)
+    assert comment_node is not None
+    assert "/comments" in comment_node["parameters"]["url"]

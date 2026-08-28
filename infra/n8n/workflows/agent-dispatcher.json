@@ -6,14 +6,14 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "IDP-035: Autonomous agent delegation trigger for Orca ADE / CLI agents in isolated worktrees."
+    "description": "IDP-035: Autonomous agent delegation trigger for Orca ADE / CLI agents in isolated worktrees with Header Auth protection."
   },
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "agent-dispatcher",
-        "authentication": "none",
+        "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -21,8 +21,14 @@
       "name": "Webhook Ingress",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-300, 0],
-      "webhookId": "w4000000-0000-4000-8000-000000000001"
+      "position": [-400, 0],
+      "webhookId": "w4000000-0000-4000-8000-000000000001",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c4000000-0000-4000-8000-000000000001",
+          "name": "agent-dispatcher-webhook"
+        }
+      }
     },
     {
       "parameters": {
@@ -32,7 +38,7 @@
       "name": "Extract Agent Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-80, 0]
+      "position": [-180, 0]
     },
     {
       "parameters": {
@@ -49,7 +55,7 @@
       "name": "Is Delegable?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [140, 0]
+      "position": [40, 0]
     },
     {
       "parameters": {
@@ -64,7 +70,7 @@
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [360, -80]
+      "position": [260, -80]
     },
     {
       "parameters": {
@@ -78,7 +84,7 @@
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [580, 0]
+      "position": [480, 0]
     }
   ],
   "connections": {

@@ -1265,6 +1265,11 @@ sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
 	@test -n "$(ENV)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync vikunja --env $(ENV)
 
+.PHONY: provision-postgres-tenant
+provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
+	@test -n "$(ENV)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
+	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) --tenant $(or $(TENANT),vikunja)
+
 .PHONY: validate-sync
 validate-sync:
 	@$(TOOLKIT) sync all --check --env $(or $(filter staging prod,$(ENV)),staging)

@@ -82,6 +82,24 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
         credential_name="notify-webhook",
         envs=frozenset({"staging", "prod"}),
     ),
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/multi-forge-sync.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="multi-forge-webhook",
+        envs=frozenset({"staging", "prod"}),
+    ),
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/slack-task-capture.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="slack-webhook",
+        envs=frozenset({"staging", "prod"}),
+    ),
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/agent-dispatcher.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="agent-dispatcher-webhook",
+        envs=frozenset({"staging", "prod"}),
+    ),
 ]
 
 

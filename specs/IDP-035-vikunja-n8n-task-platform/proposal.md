@@ -1,7 +1,7 @@
 ---
 id: "IDP-035-vikunja-n8n-task-platform"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-08-27"
 issue: "mlorentedev/kubelab#1077"
 tags: [spec, proposal, task-management, vikunja, n8n, slack, multi-forge, gitops]

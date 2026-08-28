@@ -1058,6 +1058,15 @@ apps:
           - profile
           - email
           - groups
+        - client_id: vikunja-oidc
+          client_name: Vikunja Task Platform
+          redirect_uris:
+          - https://tasks.staging.kubelab.live/auth/openid/authelia
+          - https://tasks.kubelab.live/auth/openid/authelia
+          scopes:
+          - openid
+          - profile
+          - email
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:

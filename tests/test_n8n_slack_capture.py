@@ -99,11 +99,25 @@ def test_slack_task_capture_workflow_json_exists_and_is_valid() -> None:
         data = json.load(f)
 
     assert data.get("name") == "slack-task-capture"
-    assert len(data.get("nodes", [])) >= 4
+    assert len(data.get("nodes", [])) >= 5
     assert "connections" in data
+
+    # Verify Webhook Authentication
+    webhook_node = next((n for n in data["nodes"] if n["name"] == "Webhook Slack Ingress"), None)
+    assert webhook_node is not None
+    assert webhook_node["parameters"]["authentication"] == "headerAuth"
+    assert "httpHeaderAuth" in webhook_node["credentials"]
 
     parse_node = next((n for n in data["nodes"] if n["name"] == "Parse Slack Command"), None)
     assert parse_node is not None
     js = parse_node["parameters"]["jsCode"]
     assert "ackMessage" in js
     assert "responseUrl" in js
+
+    create_node = next((n for n in data["nodes"] if n["name"] == "Create Task in Vikunja"), None)
+    assert create_node is not None
+    assert "http://vikunja:3456/api/v1/projects/" in create_node["parameters"]["url"]
+
+    response_node = next((n for n in data["nodes"] if n["name"] == "Update Slack via Response URL"), None)
+    assert response_node is not None
+    assert "responseUrl" in response_node["parameters"]["url"]
