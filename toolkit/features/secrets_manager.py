@@ -308,6 +308,22 @@ SECRET_CATALOG: list[SecretSpec] = [
         # cue to MINT a new client secret rather than to stop.
         envs=("dev", "prod"),
     ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_vikunja",
+        description="Vikunja OIDC client secret (plaintext)",
+        kind=SecretKind.OIDC_CLIENT_SECRET,
+        services=("authelia", "vikunja"),
+        rotate_note="Must also regenerate the vikunja hash.",
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_vikunja_hash",
+        description="Argon2 hash of Vikunja OIDC client secret",
+        kind=SecretKind.ARGON2_HASH,
+        services=("authelia",),
+        derived_from=f"{_AUTH}.oidc_client_secret_vikunja",
+        format_hint="$argon2id$v=19$...",
+        rotate_note="Auto-derived from oidc_client_secret_vikunja.",
+    ),
     # =========================================================================
     # Grafana
     # =========================================================================
@@ -511,6 +527,44 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     # =========================================================================
+    # Vikunja (IDP-035)
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.services.core.vikunja.db_password",
+        description="PostgreSQL password for vikunja tenant role",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("vikunja", "postgres"),
+        rotate_note="Update role password in postgres, restart vikunja",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.jwt_secret",
+        description="Vikunja JWT signing secret for sessions and API tokens",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("vikunja",),
+        rotate_note="Invalidates active JWT sessions. Users must re-login.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.oidc_client_secret",
+        description="Vikunja OIDC client secret for Authelia SSO",
+        kind=SecretKind.OIDC_CLIENT_SECRET,
+        services=("vikunja", "authelia"),
+        rotate_note="Regenerate secret in Authelia and update vikunja deployment.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.r2_access_key",
+        description="Cloudflare R2 Access Key ID for Vikunja attachments",
+        kind=SecretKind.PASSWORD,
+        services=("vikunja",),
+        rotate_note="Update R2 bucket token in Cloudflare, reapply secrets.",
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.r2_secret_key",
+        description="Cloudflare R2 Secret Access Key for Vikunja attachments",
+        kind=SecretKind.PASSWORD,
+        services=("vikunja",),
+        rotate_note="Update R2 bucket token in Cloudflare, reapply secrets.",
+    ),
+    # =========================================================================
     # N8N
     # =========================================================================
     SecretSpec(
@@ -520,6 +574,30 @@ SECRET_CATALOG: list[SecretSpec] = [
         length=32,
         services=("n8n",),
         rotate_note="DANGEROUS: existing saved credentials become unreadable.",
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.vikunja_api_token",
+        description="Vikunja API token for n8n automation workflows",
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.NEVER,
+        services=("n8n", "vikunja"),
+        rotate_note="Update API token in Vikunja and redeploy n8n.",
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.forge_webhook_secret",
+        description="Shared HMAC secret for GitHub and Gitea webhooks to n8n",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("n8n",),
+        rotate_note="Update webhook secret in GitHub/Gitea repositories.",
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.slack_signing_secret",
+        description="Slack app signing secret for ChatOps slash commands",
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.NEVER,
+        services=("n8n",),
+        rotate_note="Update signing secret in Slack App settings.",
     ),
     # =========================================================================
     # MinIO
