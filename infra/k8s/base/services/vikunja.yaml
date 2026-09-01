@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/component: core
     app.kubernetes.io/part-of: kubelab
 data:
-  VIKUNJA_SERVICE_FRONTENDURL: "https://tasks.staging.kubelab.live/"
+  VIKUNJA_SERVICE_PUBLICURL: "https://tasks.staging.kubelab.live/"
   VIKUNJA_DATABASE_TYPE: "postgres"
   VIKUNJA_DATABASE_HOST: "postgres"
   VIKUNJA_DATABASE_PORT: "5432"
@@ -17,13 +17,15 @@ data:
   VIKUNJA_DATABASE_DATABASE: "vikunja"
   VIKUNJA_DATABASE_MAXOPENCONNECTIONS: "20"
   VIKUNJA_DATABASE_MAXIDLECONNECTIONS: "5"
-  VIKUNJA_FILES_S3_ENABLED: "true"
+  # Disabled until real R2 credentials exist in SOPS (TOOL-050 item 2, #1492) --
+  # 1.0.0 validates file-storage connectivity at startup and crash-loops on a
+  # misconfigured/unreachable backend, so enabling this without real keys is
+  # worse than the 0.24.6 behavior of silently failing individual uploads.
+  VIKUNJA_FILES_S3_ENABLED: "false"
   VIKUNJA_FILES_S3_ENDPOINT: "https://r2.cloudflarestorage.com"
   VIKUNJA_FILES_S3_BUCKET: "kubelab-vikunja"
   VIKUNJA_FILES_S3_REGION: "auto"
-  VIKUNJA_FILES_S3_ACCESSKEYID: "vikunja"
-  VIKUNJA_AUTH_OPENID_ENABLE: "true"
-  VIKUNJA_AUTH_OPENID_REDIRECTURL: "https://tasks.staging.kubelab.live/auth/openid/authelia"
+  VIKUNJA_AUTH_OPENID_ENABLED: "true"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_NAME: "Authelia"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL: "https://auth.staging.kubelab.live"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTID: "vikunja-oidc"
@@ -56,9 +58,13 @@ spec:
         - name: wait-for-postgres
           image: busybox:1.36
           command: ['sh', '-c', 'until nc -z -w 2 postgres 5432; do echo "waiting for postgres..."; sleep 2; done;']
+      volumes:
+        - name: openid-config
+          configMap:
+            name: vikunja-openid-config
       containers:
         - name: vikunja
-          image: vikunja/vikunja:0.24.6
+          image: vikunja/vikunja:1.0.0
           ports:
             - name: http
               containerPort: 3456
@@ -68,6 +74,11 @@ spec:
                 name: vikunja-config
             - secretRef:
                 name: vikunja-secrets
+          volumeMounts:
+            - name: openid-config
+              mountPath: /etc/vikunja/config.yml
+              subPath: config.yml
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /api/v1/info

@@ -843,7 +843,7 @@ apps:
 
       vikunja:
         name: vikunja
-        image: vikunja/vikunja:0.24.6
+        image: vikunja/vikunja:1.0.0
         domain: tasks.kubelab.live
         enable_auth: false
         auth_level: bypass

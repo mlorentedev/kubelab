@@ -70,6 +70,16 @@ configMapGenerator:
     files:
       - services/authelia-config/configuration.yml
 
+  # Vikunja reads config.yml only at startup (no hot-reload) and, per upstream,
+  # will not discover an OIDC provider from env vars alone -- it must first see
+  # the provider key declared in a config file; VIKUNJA_AUTH_OPENID_PROVIDERS_*
+  # env vars then fill in its fields. Hash suffix triggers a restart on change,
+  # same rationale as authelia-config above.
+  - name: vikunja-openid-config
+    namespace: kubelab
+    files:
+      - services/vikunja-config/config.yml
+
   - name: authelia-assets
     namespace: kubelab
     files:
