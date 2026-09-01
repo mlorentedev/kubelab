@@ -1,9 +1,34 @@
 """Root conftest — shared pytest configuration and fixtures."""
 
 import functools
+import os
 import shutil
 
 import pytest
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Strip colour-forcing variables so CLI assertions do not depend on the shell.
+
+    Rich renders an option name as several styled runs, so with colour ON the
+    literal `--check` is emitted as `-`, an escape sequence, then `-check`. Every
+    `assert "--check" in result.output` in the CLI tests then fails — while
+    passing in CI, which has no TTY and no forced colour. Five tests in
+    `test_sync.py` failed exactly this way on 2026-08-31 against unmodified
+    master, which reads as a regression in whatever branch you happen to be on.
+
+    `NO_COLOR` does NOT fix it: Rich gives `FORCE_COLOR` precedence, so removing
+    the variables is the only reliable move.
+
+    A HOOK AND NOT A FIXTURE, which the first attempt got wrong. Rich decides
+    whether to emit colour when its Console is constructed, and the CLI modules
+    build theirs at import — which happens during collection, before any fixture
+    runs. Even an autouse session fixture is too late; `pytest_configure` runs
+    before collection, which is the only window that works.
+    """
+    del config  # the hook's signature, not something this needs
+    for var in ("FORCE_COLOR", "CLICOLOR_FORCE"):
+        os.environ.pop(var, None)
 
 
 @functools.lru_cache(maxsize=1)

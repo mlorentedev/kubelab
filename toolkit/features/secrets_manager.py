@@ -20,6 +20,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES, is_placeholder
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
@@ -224,6 +226,30 @@ SECRET_CATALOG: list[SecretSpec] = [
         derived_from="(interactive password prompt)",
         format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
         rotate_note="User must know the new password to login.",
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.users_manu_password_hash",
+        description=(
+            "Argon2 hash of the superadmin's first-factor password (username from apps.auth.identities.superadmin)"
+        ),
+        kind=SecretKind.ARGON2_HASH,
+        services=("authelia",),
+        derived_from="(interactive password prompt)",
+        format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
+        # PROD ONLY, and the narrowness is the point. `envs` is the AUDIT
+        # dimension (ANSIBLE-033): declaring all three would make dev and staging
+        # report a gap for a key that was never written there, which is the noise
+        # that trains an operator to stop reading the audit.
+        envs=("prod",),
+        rotate_note=(
+            "The superadmin must know the new password to log in. NOTE: `manu` is "
+            "not yet a declared Authelia user (apps.services.security.authelia.users "
+            "holds `identity: operator` and `testuser`), so this hash has NO consumer "
+            "today -- it is AUTH-004 Part 1 preparation, deliberate rather than "
+            "forgotten. Declaring the user is coupled to R1b, which stays parked: "
+            "`manu` has no OIDC linkage, so its first SSO login is one-shot on the "
+            "sole admin account."
+        ),
     ),
     SecretSpec(
         key_path=f"{_AUTH}.users_testuser_password_hash",
@@ -1179,6 +1205,43 @@ def secrets_synced_to_secret_manager() -> tuple[SecretSpec, ...]:
 #: SOPS writes its own metadata into every encrypted file. It is not a secret
 #: anyone declares, so it must never be reported as an orphan.
 _SOPS_METADATA_KEY = "sops"
+
+
+#: Where the frozen orphan list lives. Its own header explains the ratchet; the
+#: short version is that `orphan_key_paths` has always detected these and the
+#: audit has always exited 0, so seventeen standing warnings hid the eighteenth.
+ORPHAN_BASELINE_PATH = Path(__file__).resolve().parents[2] / "infra/config/orphan-secrets-baseline.yaml"
+
+
+def baselined_orphans() -> dict[str, str]:
+    """The accepted orphans, as `key_path -> reason`.
+
+    A MISSING OR UNREADABLE FILE IS NOT AN EMPTY BASELINE. Returning `{}` on
+    error would turn every frozen orphan into a fresh failure and, far worse, a
+    typo in the path would make the whole ratchet silently permissive the day
+    someone moved the file. It raises instead: a broken baseline is a broken
+    guard, and a guard that cannot be read must not report success (lesson-306).
+    """
+    if not ORPHAN_BASELINE_PATH.exists():
+        raise FileNotFoundError(
+            f"orphan baseline missing at {ORPHAN_BASELINE_PATH}. It is not optional: "
+            "without it the audit cannot tell frozen debt from a new orphan."
+        )
+    data = yaml.safe_load(ORPHAN_BASELINE_PATH.read_text(encoding="utf-8")) or {}
+    entries = data.get("orphans") or {}
+    if not isinstance(entries, dict):
+        raise ValueError(f"{ORPHAN_BASELINE_PATH}: `orphans` must be a mapping of key_path -> reason")
+    return {str(k): str(v) for k, v in entries.items()}
+
+
+def unbaselined_orphans(decrypted: dict[str, Any]) -> list[str]:
+    """Orphans that are NOT frozen in the baseline — the ones that fail the audit.
+
+    This is the whole enforcement surface. Everything else about orphans is a
+    report; this is the part that says no.
+    """
+    accepted = baselined_orphans()
+    return [k for k in orphan_key_paths(decrypted) if k not in accepted]
 
 
 def orphan_key_paths(decrypted: dict[str, Any]) -> list[str]:
