@@ -68,6 +68,16 @@ Pragmatic evaluation showed that adopting **Vikunja** (~50MB RAM footprint) deli
 - Requires maintaining n8n webhook workflows as code in `infra/n8n/workflows/`.
 - Postgres tenant DB `vikunja` must be backed up alongside `kubelab` database during automated backup jobs.
 
+## Amendments
+
+### 2026-08-31 — R2 fail-closed decision (TOOL-050, #1492)
+
+D2's Cloudflare R2 attachment storage is **deliberately optional, not required**, as of the 1.0.0 OIDC/upgrade fix (kubelab#1506): `VIKUNJA_FILES_S3_ENABLED: "false"` in the base manifest, and `VIKUNJA_FILES_S3_SECRETACCESSKEY`/`ACCESSKEYID` stay in `k8s_secrets.py`'s `optional_keys` rather than being promoted to required.
+
+Real R2 credentials do not exist in SOPS yet (confirmed via `make secrets-audit`, both envs). Vikunja 1.0.0 validates file-storage connectivity at boot and crash-loops on a misconfigured or unreachable backend, so shipping the service with fake or absent credentials would be strictly worse than disabling S3 and falling back to local (ephemeral `emptyDir`) storage. Uploads are not durable in this state — they are lost on every pod restart.
+
+This is an interim state, not a closure of D2. Re-enabling requires: creating an R2 API token scoped to the `kubelab-vikunja` bucket (separate from `kubelab-backups`, for credential-blast-radius isolation), storing the keys in SOPS at `apps.services.core.vikunja.r2_{access,secret}_key`, and flipping `VIKUNJA_FILES_S3_ENABLED` back to `"true"`.
+
 ## References
 
 - [ADR-016](adr-016-oidc-centralized-auth.md) (OIDC Centralized Auth)
