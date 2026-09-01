@@ -28,6 +28,7 @@ manifest inspection reaches it. Only the running instance knows.
 from __future__ import annotations
 
 import os
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import pytest
@@ -117,8 +118,18 @@ def test_an_anonymous_caller_is_refused(forge_is_up: None, base_url: str, path: 
 
     if response.status_code in REDIRECT_STATUSES:
         location = response.headers.get("location", "")
-        assert "/user/login" in location, (
-            f"anonymous GET {path} redirected to {location!r}, which is not the login page. "
+        # Resolved and compared by origin AND exact path, not by substring. A
+        # substring check accepts `https://attacker.example/user/login`,
+        # `/user/login-evil` and `/foo/user/login` -- none of which is Gitea's
+        # login page, all of which would let an anonymous-access regression pass.
+        # `urljoin` first because Gitea sends a relative Location.
+        target = urlsplit(urljoin(f"{base_url}{path}", location))
+        expected = urlsplit(base_url)
+        # The query is deliberately excluded from the comparison: Gitea appends
+        # `?redirect_to=<path>`, so demanding an exact URL would fail against the
+        # real forge for a reason that has nothing to do with the refusal.
+        assert (target.scheme, target.netloc, target.path) == (expected.scheme, expected.netloc, "/user/login"), (
+            f"anonymous GET {path} redirected to {location!r}, which is not Gitea's login page. "
             "A redirect somewhere else is not a refusal."
         )
         return
