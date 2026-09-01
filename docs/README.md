@@ -15,6 +15,7 @@ Project-bound knowledge (docs-as-code). The *build/operate* layer lives here, ve
 | Bootstrap or rotate the AWS ArgoCD hub | [`runbooks/aws1-destroy-replace.md`](runbooks/aws1-destroy-replace.md), [`runbooks/aws1-ebs-resize.md`](runbooks/aws1-ebs-resize.md) |
 | Set up K3s on a node | [`runbooks/k3s-setup.md`](runbooks/k3s-setup.md), [`runbooks/k3s-upgrade.md`](runbooks/k3s-upgrade.md) |
 | Diagnose a symptom (something's broken) | [`troubleshooting/quick-diagnostics.md`](troubleshooting/quick-diagnostics.md) — router into the rest of `troubleshooting/` |
+| A workflow job or a `gh` call inside CI failed | [`troubleshooting/ci-github-actions.md`](troubleshooting/ci-github-actions.md) — `not a git repository`, `gh pr edit` no-ops, red `review-attestation` on Dependabot PRs |
 | Read a past architecture decision | [`adr/`](adr/) — filename is `adr-NNN-slug.md`, no generated index yet ([D58](audits/docs-audit-2026-07-07.md)) |
 | See what's actually deployed where | [`architecture/service-catalog.md`](architecture/service-catalog.md) — accuracy not re-verified since the 2026-07-07 audit ([D4](audits/docs-audit-2026-07-07.md)) |
 | Check hardware/node topology | [`architecture/hardware/`](architecture/hardware/), [`architecture/infra/networking-topology.md`](architecture/infra/networking-topology.md) |

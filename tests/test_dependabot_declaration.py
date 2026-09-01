@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import yaml
+
+from tests.gh_scan import job_calls
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
@@ -52,7 +55,9 @@ def test_a_human_can_still_ask_for_a_review_on_a_bot_pr() -> None:
     pull_request_branch, _, comment_branch = condition.partition("|| (github.event_name == 'issue_comment'")
 
     assert f"github.actor != '{_BOT}'" in pull_request_branch
-    assert f"github.actor != '{_BOT}'" not in comment_branch, "a human typing /review must not be blocked by the bot exclusion"
+    assert f"github.actor != '{_BOT}'" not in comment_branch, (
+        "a human typing /review must not be blocked by the bot exclusion"
+    )
 
 
 def test_the_declaration_workflow_only_ever_runs_for_the_bot() -> None:
@@ -96,6 +101,68 @@ def test_the_untrusted_body_is_never_interpolated_into_a_shell() -> None:
 
     assert "${{ github.event.pull_request.body" not in body
     assert "${{ github.event.pull_request.title" not in body
+
+
+def test_the_declaration_verifies_the_label_actually_landed() -> None:
+    """A zero exit code from the write is not evidence the label is on the PR.
+
+    Measured on #1486-#1490 (CI-GATE-016): the step that adds the escape label
+    had never succeeded since the workflow shipped, and nothing in this job
+    noticed. The job's own verdict was irrelevant to that — what a reader saw
+    was the *gate* going red on every dependency bump and blaming the pull
+    request, because the escape is a label AND a section and only one of them
+    arrived.
+
+    This is the shape `pr-agent.yml` already uses for the same contradiction
+    ("Fail if no review was published", #1180): the step that produces a
+    durable artefact reads the artefact back, so a write that did not land
+    turns this job red and names its own cause instead of leaving a green job
+    beside a permanently red gate.
+    """
+    steps = _load(DECLARER)["jobs"]["declare"]["steps"]
+    script = "\n".join(str(step.get("run") or "") for step in steps if isinstance(step, dict))
+
+    writes = re.findall(r"gh api -X POST \"repos/\$\{GITHUB_REPOSITORY\}/issues/\$\{PR_NUMBER\}/labels\"", script)
+    reads = re.findall(r"gh api \"repos/\$\{GITHUB_REPOSITORY\}/issues/\$\{PR_NUMBER\}/labels\"", script)
+    assert writes and reads, (
+        "the escape label is written and never read back: the job can report "
+        "success on a declaration GitHub never applied"
+    )
+    # Keyed to the label it just added, read from the registry, not to a name
+    # copied into this file — and non-zero when it is absent.
+    assert re.search(r"grep -qxF \"\$LABEL\"", script), "the read-back must test for the registry's own escape label"
+    assert "::error" in script and re.search(r"\bexit 1\b", script), (
+        "a label that did not land must fail the job with a message, not print and pass"
+    )
+
+
+def test_the_declaration_writes_pr_fields_through_rest_not_the_porcelain() -> None:
+    """`gh pr edit` cannot write a PR field on this repository (lesson-002).
+
+    It reads the PR before mutating it with a GraphQL query that asks for
+    `repository.pullRequest.projectCards`; the API has refused that field since
+    the Projects-classic sunset, so the command dies on its own read and the
+    edit never happens — while printing an error about a board nobody is using.
+    Measured on gh 2.46.0, the version lesson-002 was written against.
+
+    CI-GATE-016 is why this is asserted rather than assumed: the label step
+    failed one stage earlier, on repository resolution, so the known-broken
+    command was never reached in CI. Fix only the context and the job keeps
+    failing, quietly differently.
+    """
+    steps = _load(DECLARER)["jobs"]["declare"]["steps"]
+    script = "\n".join(str(step.get("run") or "") for step in steps if isinstance(step, dict))
+    # Line-anchored matching is not enough: `prepare && gh pr edit …` is the same
+    # call and the same failure. tests/gh_scan.py knows where a command starts.
+    calls = job_calls(_load(DECLARER)["jobs"]["declare"])
+
+    assert [c for c in calls if re.search(r"\bgh\s+pr\s+edit\b", c.line)] == [], (
+        "lesson-002: gh pr edit applies nothing on this repository; use "
+        "gh api -X POST repos/OWNER/REPO/issues/<n>/labels -f 'labels[]=<label>'"
+    )
+    assert "gh api" in script, (
+        "the job is expected to write through gh api; if that changed, this guard needs the new shape"
+    )
 
 
 def test_the_publish_job_does_not_run_for_the_bot() -> None:

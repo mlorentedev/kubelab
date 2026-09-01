@@ -448,6 +448,12 @@ secrets-show:
 secrets-audit:
 	@$(TOOLKIT) secrets audit
 
+# Plan only. `APPLY=1` is what creates organizations and repositories for real —
+# opt-in because the first run mutates a live forge (TOOL-035, #1076).
+.PHONY: gitea-reconcile
+gitea-reconcile:
+	@$(TOOLKIT) services gitea reconcile --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
+
 .PHONY: sync-secret-manager
 sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
 	@$(TOOLKIT) secrets sync-secret-manager

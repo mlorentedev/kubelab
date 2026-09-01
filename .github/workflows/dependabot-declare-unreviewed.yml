@@ -103,4 +103,30 @@ jobs:
           # Adding the label emits `labeled`, and editing the body emits `edited`.
           # review-attestation.yml listens for both, so the verdict is recomputed
           # rather than left at the red it correctly reported when the PR opened.
-          gh pr edit "$PR_NUMBER" --add-label "$LABEL"
+          #
+          # REST, not `gh pr edit --add-label`. Two separate reasons, both measured
+          # here, and the second outlives the first: this job has no checkout, so
+          # the porcelain call dies resolving a repository (CI-GATE-016), AND
+          # `gh pr edit` is broken on this repository independently of that — it
+          # reads the PR with a GraphQL query that asks for `projectCards`, the API
+          # refuses it since the Projects-classic sunset, and the edit never
+          # happens (lesson-002, lesson-338). Adding labels through the issue
+          # endpoint is additive; `PUT` would replace the set and drop the
+          # ecosystem labels Dependabot applied.
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            -F "labels[]=${LABEL}" --silent
+
+          # A zero exit code is not evidence the label is on the PR. The escape the
+          # gate classifies is a label AND a body section, never one alone, so a
+          # half-written declaration leaves this job green, the gate red, and the
+          # PR reading "not reviewed, and not declared as such" for as long as it
+          # lives — which is exactly the state CI-GATE-016 sat in for a week. Read
+          # the consequence back, with the same idiom the section check above uses.
+          have=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
+          if printf '%s\n' "$have" | grep -qxF "$LABEL"; then
+            echo "declared: '$LABEL' is on PR #${PR_NUMBER}"
+          else
+            echo "labels on the PR after the write: $(printf '%s' "$have" | tr '\n' ' ')"
+            echo "::error::escape label '$LABEL' absent after the write; the gate reads this PR as undeclared"
+            exit 1
+          fi

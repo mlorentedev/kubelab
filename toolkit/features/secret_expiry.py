@@ -355,4 +355,10 @@ PROVIDER_CHECKS = {
     "cloudflare.api_token": cloudflare_token_expiry,
     "apps.services.automation.github_runner.token": github_pat_expiry,
     "apps.services.automation.dev_node.github_token": github_pat_expiry,
+    # TOOL-035 (#1076). A fine-grained PAT with only repository permissions still
+    # answers `GET /user` and still carries the expiration header — verified
+    # 2026-08-28 against the live token rather than assumed from the docs, because
+    # a checker that silently cannot read its own credential is the failure this
+    # whole module exists to prevent.
+    "apps.services.core.gitea.github_migration_token": github_pat_expiry,
 }
