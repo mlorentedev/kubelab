@@ -42,6 +42,15 @@ configMapGenerator:
     files:
       - grafana-alerting/policies.yaml
 
+  # Prod's domain + bucket overrides for vikunja-config. `merge` — only these
+  # three keys change, the rest (DB connection, OIDC client ID, S3 endpoint)
+  # carry through from the base untouched.
+  - name: vikunja-config
+    namespace: kubelab
+    behavior: merge
+    envs:
+      - vikunja-config/vikunja.env
+
 # Override base resources with prod-specific domains and config
 patches:
   - path: patches.yaml

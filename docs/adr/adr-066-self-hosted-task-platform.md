@@ -68,6 +68,20 @@ Pragmatic evaluation showed that adopting **Vikunja** (~50MB RAM footprint) deli
 - Requires maintaining n8n webhook workflows as code in `infra/n8n/workflows/`.
 - Postgres tenant DB `vikunja` must be backed up alongside `kubelab` database during automated backup jobs.
 
+## Amendments
+
+### 2026-08-31 — R2 fail-closed decision, then real credentials, then per-env bucket split (TOOL-050, #1492)
+
+D2's Cloudflare R2 attachment storage was **deliberately made optional, not required**, as of the 1.0.0 OIDC/upgrade fix (kubelab#1506): a `VIKUNJA_FILES_S3_ENABLED: "false"` key in the base manifest, and `VIKUNJA_FILES_S3_SECRETACCESSKEY`/`ACCESSKEYID` in `k8s_secrets.py`'s `optional_keys`.
+
+**All three of those names were wrong, and had been since IDP-035 first shipped D2.** Vikunja's actual config schema (confirmed against `pkg/config/config.go` in the 1.0.0 source) has no `files.s3.enabled` key at all — the storage backend toggle is `files.type` (`"local"`/`"s3"`), and the credential fields are `files.s3.accesskey` / `files.s3.secretkey`, not `accesskeyid` / `secretaccesskey`. Viper silently ignores config keys it doesn't recognize, so none of this ever errored — it just never did anything. Every deploy up to and including the first "re-enable R2" fix stayed on local (ephemeral `emptyDir`) storage regardless of the `ENABLED` value, which is why an uploaded attachment was downloadable (Vikunja was serving it from local disk) but never appeared in the R2 bucket. Corrected to `VIKUNJA_FILES_TYPE: "s3"` / `VIKUNJA_FILES_S3_ACCESSKEY` / `VIKUNJA_FILES_S3_SECRETKEY`, with a bucket-listing check (not just a healthy pod) as the acceptance test going forward — Vikunja's boot-time validation, observed this session, is for local storage, not S3; a healthy pod proves nothing about R2 connectivity.
+
+Separately, once real credentials existed: an R2 API token was created for the `kubelab-vikunja` bucket, shared across staging and prod. That sharing was corrected: staging and prod now each get a **separate bucket with a separate bucket-scoped R2 token** (`kubelab-vikunja-staging` / `kubelab-vikunja`), for the same credential-blast-radius reason `kubelab-vikunja` was kept separate from the `kubelab-backups` bucket in the first place — a compromised or buggy staging deployment cannot read or write prod's attachments. R2 tokens scope to a whole bucket (no path-prefix scoping), so per-environment isolation requires per-environment buckets; there is no cheaper way to get it.
+
+D2 closes with this fix, not the earlier ones. The `optional_keys` wiring in `k8s_secrets.py` stays as-is deliberately (fail-open on absence rather than fail-closed on a future credential rotation gap) rather than being promoted to required.
+
+A general-purpose "staging bucket" combining file storage and backups was considered and rejected: staging has no backup mechanism today (`infra/k8s/overlays/prod/backup.yaml` is prod-only by design, "staging data is disposable"), so a shared bucket would provision for a requirement that does not exist, and would recreate the same credential-scope problem this amendment exists to fix.
+
 ## References
 
 - [ADR-016](adr-016-oidc-centralized-auth.md) (OIDC Centralized Auth)

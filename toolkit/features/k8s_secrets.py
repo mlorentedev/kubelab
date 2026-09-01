@@ -156,8 +156,12 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # Catalog key paths are apps.services.core.vikunja.r2_{access,secret}_key
             # (R2, not S3 -- the env var *names* below are VIKUNJA_FILES_S3_* because
             # that's Vikunja's own config schema for its S3-compatible client).
-            "VIKUNJA_FILES_S3_ACCESSKEYID": "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY",
-            "VIKUNJA_FILES_S3_SECRETACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY",
+            # ACCESSKEY / SECRETKEY, not ACCESSKEYID / SECRETACCESSKEY -- those
+            # don't exist in Vikunja's config (files.s3.accesskey /
+            # files.s3.secretkey per pkg/config/config.go); the wrong names
+            # here were a silent no-op from IDP-035 onward (ADR-066 amendment).
+            "VIKUNJA_FILES_S3_ACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY",
+            "VIKUNJA_FILES_S3_SECRETKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY",
         },
     ),
 ]
