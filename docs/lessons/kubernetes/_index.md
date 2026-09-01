@@ -1,9 +1,10 @@
 # Cluster, workloads and manifests
 
-51 lessons, newest first. Back to [all categories](../_index.md).
+52 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 410 | [A healthy pod does not prove an app read its config — an unrecognized env var can fail silently](lesson-410-a-healthy-pod-does-not-prove-an-app-read-its-config.md) | 2026-08-31 |
 | 387 | [A shell program embedded in a manifest is a second language, and nothing in the delivery path reads it as one](lesson-387-a-shell-program-inside-a-manifest-is-a-second-language-nothing-validates.md) | 2026-08-25 |
 | 351 | [A manual `kubectl apply` annexes the fields it touches, and the bill arrives months later](lesson-351-a-manual-kubectl-apply-annexes-the-fields-it-touches.md) | 2026-08-19 |
 | 003 | [`Burstable` QoS proved the wrong container had a request (IDP-031)](lesson-003-burstable-qos-proved-the-wrong-container-had-.md) | 2026-08-17 |
