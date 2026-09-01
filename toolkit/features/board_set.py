@@ -78,6 +78,14 @@ class Change:
         return f"{self.field}: {self.before or '(unset)'} -> {self.after}"
 
 
+#: The board field carrying workflow state. Named rather than inlined because the
+#: guard below is worthless if it looks at the wrong field: a rename to "State"
+#: would make `desired.get(...)` return None, every check would pass, and the
+#: protection would vanish with no test failing and no error anywhere. One
+#: constant, one place to change, and `board streams`/`sweep` already treat these
+#: field names as project-defined rather than universal.
+STATUS_FIELD = "Status"
+
 #: The one write that must not land on a closed issue. Every other field --
 #: Priority, Stream, even Status -> Done -- stays legitimate after closure,
 #: because a board you cannot repair once a ticket closes is worse than one that
@@ -132,11 +140,11 @@ def guard_closed(state: ItemState, desired: dict[str, str], on_closed: str) -> G
     if state.issue_state == "OPEN":
         return Guard(action="proceed")
 
-    if desired.get("Status") != GUARDED_STATUS:
+    if desired.get(STATUS_FIELD) != GUARDED_STATUS:
         return Guard(action="proceed")
 
     closed = f" (closed {state.closed_at})" if state.closed_at else ""
-    reason = f"issue #{state.number} is {state.issue_state}{closed}; refusing to set Status to {GUARDED_STATUS}"
+    reason = f"issue #{state.number} is {state.issue_state}{closed}; refusing to set {STATUS_FIELD} to {GUARDED_STATUS}"
 
     if on_closed == "skip":
         return Guard(action="skip", message=f"{reason} — nothing to do")
