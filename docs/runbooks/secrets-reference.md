@@ -109,17 +109,32 @@ infra/config/secrets/
 
 | Key | Kind | Format | Envs |
 |-----|------|--------|------|
-| `apps.services.security.authelia.users_admin_password_hash` | argon2_hash | `$argon2id$v=19$m=65536,t=3,p=4$...` | all |
-| `apps.services.security.authelia.users_testuser_password_hash` | argon2_hash | `$argon2id$v=19$m=65536,t=3,p=4$...` | dev, staging |
+| `apps.services.security.authelia.users_operator_password_hash` | argon2_hash | `$argon2id$v=19$m=65536,t=3,p=4$...` | dev, staging, prod |
+| `apps.services.security.authelia.users_testuser_password_hash` | argon2_hash | `$argon2id$v=19$m=65536,t=3,p=4$...` | dev, staging, prod |
+
+> The first row named `users_admin_password_hash` until 2026-09-01. **That key does
+> not exist and has not since #1390** removed `apps.auth.admin_username`; the
+> username now resolves from `apps.auth.identities`, and the key follows it. Copying
+> the old line produced a `sops set` against a path nothing reads.
 
 **How to change**:
 ```bash
-# Interactive prompt for admin password
-toolkit credentials hash-password apps.services.security.authelia.users_admin_password_hash --env <env>
-# Or use the full generate command
-toolkit credentials generate --env <env>
+toolkit credentials hash-password apps.services.security.authelia.users_operator_password_hash --env <env>
+git add infra/config/secrets/<env>.enc.yaml && git commit    # SOPS is modified, not committed
+make apply-secrets ENV=<env>
 ```
-**What breaks**: User must know the new password to login.
+
+The command **writes the hash into SOPS itself** and never prints it (#934, fixed
+2026-09-01). Before that it printed the value and asked for a manual edit, which is
+how an argon2 hash reached a session transcript on 2026-08-31 — the exact outcome
+#934 predicted when it was filed three weeks earlier. If you are reading an older
+runbook or an older scrollback that shows a `Value: $argon2id$...` line, the
+credential in it is exposed and should be replaced rather than used.
+
+No pod restart is needed: Authelia watches the users file directory. That is not
+true of `configuration.yml`, which does need one.
+
+**What breaks**: the user must know the new password to log in.
 
 ### 4. Authelia — OIDC Provider
 
