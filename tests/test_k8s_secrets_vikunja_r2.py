@@ -1,12 +1,12 @@
 """Regression test for the vikunja-secrets R2 key wiring (TOOL-050 follow-up).
 
-Found live: `VIKUNJA_FILES_S3_ACCESSKEYID` was hardcoded to the literal string
-"vikunja" in the ConfigMap (never sourced from SOPS at all), and
-`VIKUNJA_FILES_S3_SECRETACCESSKEY`'s optional_keys entry pointed at
-APPS_SERVICES_CORE_VIKUNJA_S3_SECRET_KEY — but SECRET_CATALOG's
-apps.services.core.vikunja.r2_secret_key flattens to
-APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY (R2, not S3), so the optional key
-could never resolve even with real credentials in SOPS.
+Found live: the ConfigMap/Secret used `VIKUNJA_FILES_S3_ACCESSKEYID` and
+`VIKUNJA_FILES_S3_SECRETACCESSKEY` -- neither is a real Vikunja config key.
+Its actual schema is `files.s3.accesskey` / `files.s3.secretkey`
+(`VIKUNJA_FILES_S3_ACCESSKEY` / `VIKUNJA_FILES_S3_SECRETKEY` as env vars),
+confirmed against pkg/config/config.go. Viper silently ignores unrecognized
+keys, so the wrong names never errored -- they just never worked, from
+IDP-035 onward (ADR-066 amendment, 2026-08-31).
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ class TestVikunjaR2Wiring:
 
         assert ok is True
         manifest = run.call_args.kwargs["input"]
-        assert "VIKUNJA_FILES_S3_ACCESSKEYID" in manifest
-        assert "VIKUNJA_FILES_S3_SECRETACCESSKEY" in manifest
+        assert "VIKUNJA_FILES_S3_ACCESSKEY" in manifest
+        assert "VIKUNJA_FILES_S3_SECRETKEY" in manifest
 
     def test_r2_keys_stay_optional_when_absent(self, mocker) -> None:
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
@@ -50,5 +50,5 @@ class TestVikunjaR2Wiring:
 
         assert ok is True, "R2 keys are optional — their absence must not block the required keys"
         manifest = run.call_args.kwargs["input"]
-        assert "VIKUNJA_FILES_S3_ACCESSKEYID" not in manifest
-        assert "VIKUNJA_FILES_S3_SECRETACCESSKEY" not in manifest
+        assert "VIKUNJA_FILES_S3_ACCESSKEY" not in manifest
+        assert "VIKUNJA_FILES_S3_SECRETKEY" not in manifest
