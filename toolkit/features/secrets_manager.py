@@ -20,6 +20,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES, is_placeholder
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
@@ -224,6 +226,30 @@ SECRET_CATALOG: list[SecretSpec] = [
         derived_from="(interactive password prompt)",
         format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
         rotate_note="User must know the new password to login.",
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.users_manu_password_hash",
+        description=(
+            "Argon2 hash of the superadmin's first-factor password (username from apps.auth.identities.superadmin)"
+        ),
+        kind=SecretKind.ARGON2_HASH,
+        services=("authelia",),
+        derived_from="(interactive password prompt)",
+        format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
+        # PROD ONLY, and the narrowness is the point. `envs` is the AUDIT
+        # dimension (ANSIBLE-033): declaring all three would make dev and staging
+        # report a gap for a key that was never written there, which is the noise
+        # that trains an operator to stop reading the audit.
+        envs=("prod",),
+        rotate_note=(
+            "The superadmin must know the new password to log in. NOTE: `manu` is "
+            "not yet a declared Authelia user (apps.services.security.authelia.users "
+            "holds `identity: operator` and `testuser`), so this hash has NO consumer "
+            "today -- it is AUTH-004 Part 1 preparation, deliberate rather than "
+            "forgotten. Declaring the user is coupled to R1b, which stays parked: "
+            "`manu` has no OIDC linkage, so its first SSO login is one-shot on the "
+            "sole admin account."
+        ),
     ),
     SecretSpec(
         key_path=f"{_AUTH}.users_testuser_password_hash",
@@ -524,6 +550,68 @@ SECRET_CATALOG: list[SecretSpec] = [
         # audit dimension — which environments must HAVE this — not the file it lives
         # in, and a tuple matching no real env drops it from every audit silently
         # (ANSIBLE-033).
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.core.gitea.admin_token",
+        description=(
+            "Gitea API token for the superadmin (apps.auth.identities.superadmin); "
+            "creates organizations and reads whole-forge state for the reconciler"
+        ),
+        # EXTERNAL for the same reason as `bot_token`: Gitea mints it, only Gitea
+        # honours it, and a generated string would pass every audit while
+        # authenticating nothing.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        rotate_note=(
+            "Mint at Settings > Applications with `write:organization` and `read:repository`. "
+            "TWO reasons this is the superadmin's and not the bot's, and only the first is "
+            "obvious: Gitea puts the creating account in a new organization's `Owners` team, so "
+            "ADR-065 D1 (the bot owns nothing) forbids the bot creating them; and the RECONCILER'S "
+            "READS need it too, because the bot cannot see an organization it is not a member of "
+            "and would report an existing private org as absent. Revoke the old token before "
+            "storing a new one — two live credentials with nothing recording which consumer holds "
+            "which is the shape `bot_token`'s note already warns about."
+        ),
+        # NEVER, for the reason measured on `bot_token` above: Gitea's token API
+        # carries no expiry field at all, so PROVIDER would oblige a checker that
+        # could only ever answer "no expiry".
+        expiry=Expiry.NEVER,
+        # prod, matching `bot_token` — Gitea's identity environment is prod, and
+        # `envs` is the audit dimension rather than the file (ANSIBLE-033).
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.core.gitea.github_migration_token",
+        description=(
+            "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
+            "issues, pull requests and contents from the repositories ADR-065 moves"
+        ),
+        # EXTERNAL for the same reason as `bot_token`: GitHub issues it, only
+        # GitHub honours it, and a locally generated string would pass every audit
+        # while authenticating nothing. Unlike `bot_token` it is used by the
+        # RECONCILER calling Gitea, not by Gitea calling us — it is passed per
+        # migration request and (with `mirror: false`, which is what ADR-065's
+        # "move" means) Gitea has nothing to re-sync and so nothing to store.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        rotate_note=(
+            "Read-only by construction — Contents/Metadata/Issues/Pull requests, no write "
+            "anywhere, because the migration only reads from GitHub and Gitea writes on its "
+            "own side. Regenerate at github.com/settings/personal-access-tokens, then "
+            "`toolkit secrets set <key> --env prod --stdin`. Verify by consequence before "
+            "trusting it: a granted private repo answers 200 and one outside the grant "
+            "answers 404 (NOT 403 — GitHub does not confirm existence to an unauthorised "
+            "caller, and reading that 404 as 'the repo is gone' is the wrong lesson)."
+        ),
+        # PROVIDER, and it genuinely resolves: `github_pat_expiry` reads the
+        # `github-authentication-token-expiration` header GitHub returns on any
+        # authenticated call. Measured 2026-08-28 against this very token —
+        # 2026-10-27, 59 days left. This is the module's "asked, not remembered"
+        # rule paying off: no date is recorded here to drift.
+        expiry=Expiry.PROVIDER,
+        # prod, matching `bot_token` above: the forge's identity environment is
+        # prod, and `envs` is the audit dimension rather than the file (ANSIBLE-033).
         envs=("prod",),
     ),
     # =========================================================================
@@ -1117,6 +1205,43 @@ def secrets_synced_to_secret_manager() -> tuple[SecretSpec, ...]:
 #: SOPS writes its own metadata into every encrypted file. It is not a secret
 #: anyone declares, so it must never be reported as an orphan.
 _SOPS_METADATA_KEY = "sops"
+
+
+#: Where the frozen orphan list lives. Its own header explains the ratchet; the
+#: short version is that `orphan_key_paths` has always detected these and the
+#: audit has always exited 0, so seventeen standing warnings hid the eighteenth.
+ORPHAN_BASELINE_PATH = Path(__file__).resolve().parents[2] / "infra/config/orphan-secrets-baseline.yaml"
+
+
+def baselined_orphans() -> dict[str, str]:
+    """The accepted orphans, as `key_path -> reason`.
+
+    A MISSING OR UNREADABLE FILE IS NOT AN EMPTY BASELINE. Returning `{}` on
+    error would turn every frozen orphan into a fresh failure and, far worse, a
+    typo in the path would make the whole ratchet silently permissive the day
+    someone moved the file. It raises instead: a broken baseline is a broken
+    guard, and a guard that cannot be read must not report success (lesson-306).
+    """
+    if not ORPHAN_BASELINE_PATH.exists():
+        raise FileNotFoundError(
+            f"orphan baseline missing at {ORPHAN_BASELINE_PATH}. It is not optional: "
+            "without it the audit cannot tell frozen debt from a new orphan."
+        )
+    data = yaml.safe_load(ORPHAN_BASELINE_PATH.read_text(encoding="utf-8")) or {}
+    entries = data.get("orphans") or {}
+    if not isinstance(entries, dict):
+        raise ValueError(f"{ORPHAN_BASELINE_PATH}: `orphans` must be a mapping of key_path -> reason")
+    return {str(k): str(v) for k, v in entries.items()}
+
+
+def unbaselined_orphans(decrypted: dict[str, Any]) -> list[str]:
+    """Orphans that are NOT frozen in the baseline — the ones that fail the audit.
+
+    This is the whole enforcement surface. Everything else about orphans is a
+    report; this is the part that says no.
+    """
+    accepted = baselined_orphans()
+    return [k for k in orphan_key_paths(decrypted) if k not in accepted]
 
 
 def orphan_key_paths(decrypted: dict[str, Any]) -> list[str]:

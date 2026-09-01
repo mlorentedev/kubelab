@@ -331,6 +331,120 @@
   no_log: true
   tags: [gitea]
 
+- name: Probe whether the recorded admin password still authenticates
+  # THE FLOOR OF THE RECOVERY CHAIN, and the reason it is a probe and not a
+  # blind reset.
+  #
+  # `GITEA_ADMIN_PASSWORD` is consumed by the container's first-boot setup ONLY
+  # (compose.yml.j2). Once the account exists the variable is inert, so a change
+  # in SOPS silently does not reach Gitea and the two drift apart with nothing
+  # reporting it. That drift is not cosmetic: every token operation below needs
+  # this password, because Gitea refuses bearer tokens on the token endpoints.
+  # A drifted password therefore takes down the whole rotation path, and the
+  # symptom is a 401 from an unrelated-looking command.
+  #
+  # Verify by consequence: ask the API whether the credential works. A 200 means
+  # SOPS and reality agree and there is nothing to do -- which is what keeps this
+  # pair `changed=0` on a converged host rather than resetting on every run.
+  # The node-local address, not the public domain, matching the health check
+  # above. A credential-recovery task must not depend on Traefik, DNS or a valid
+  # certificate being up: those are the things that break at the same time, and
+  # a probe that fails for a routing reason would trigger a password reset that
+  # was never needed.
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/user"
+    method: GET
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [200, 401, 403]
+  register: _gitea_admin_probe
+  changed_when: false
+  failed_when: false
+  no_log: true
+  tags: [gitea]
+
+- name: Reassert the admin password from SOPS when it has drifted
+  # Runs ONLY when the probe failed, so SOPS is authoritative without this being
+  # a reset-on-every-run. The container CLI needs no authentication at all -- it
+  # has direct database access -- which is what makes SSH to the node the real
+  # root of trust and means a lost password never requires rebuilding Gitea.
+  #
+  # `--must-change-password=false` IS LOAD-BEARING, not tidiness. The flag
+  # DEFAULTS TO TRUE (verified against 1.25.5 on 2026-08-31, `gitea admin user
+  # change-password --help`), and a true value puts the account behind a forced
+  # interactive password change -- which would break the Basic Auth this task
+  # exists to restore. Without it, the repair bricks the credential it repairs.
+  #
+  # THE PASSWORD GOES THROUGH ARGV HERE, and the mint tasks above deliberately
+  # do not. Stated rather than quietly inconsistent: `change-password` offers no
+  # stdin form (`--password` is its only input), so the value is visible in `ps`
+  # and /proc on the Beelink for the duration of one exec. Accepted because the
+  # exposure is local to a node that already holds the Gitea database in plain
+  # files, it is bounded to a single short-lived process, and it only runs when
+  # the probe above found real drift -- never on a converged host. If Gitea ever
+  # grows a stdin form for this command, take it.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user change-password
+        --username {{ gitea_admin_user }}
+        --password {{ gitea_admin_password }}
+        --must-change-password=false
+  when: _gitea_admin_probe.status is defined and _gitea_admin_probe.status != 200
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+- name: Mint the superadmin's scoped token
+  # Same mechanism, same non-idempotence, same gate as the machine token above:
+  # generate-access-token always mints a NEW token, so this is gated on the
+  # recorded secret being absent and a re-provision does nothing at all.
+  #
+  # `argv` for the reason measured on the task above — the string form loses its
+  # quoting through YAML folding plus argv splitting, and a partial invocation
+  # already minted a token with generate-access-token's DEFAULT scopes ("all")
+  # while reporting failure. An over-scoped superadmin credential is a worse
+  # outcome here than it was there.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_admin_user }}
+        --token-name kubelab-reconciler
+        --scopes {{ gitea_admin_scopes }}
+        --raw
+  register: _gitea_admin_token
+  when: not gitea_admin_token
+  changed_when: _gitea_admin_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the superadmin token in SOPS
+  # Delegated to the controller, which is where the age key is. STDIN, never
+  # argv: an argument list is world-readable in /proc for the process lifetime.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.admin_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_admin_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: not gitea_admin_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
 - name: Report service status
   debug:
     msg: >-

@@ -183,8 +183,26 @@ class CredentialsManager:
 
     def update_hashed_secret(self, key_path: str, env: str) -> None:
         """
-        Interactively prompts for a password, generates its Argon2 hash,
-        and prints it for manual update in the SOPS-encrypted secrets file.
+        Interactively prompts for a password, generates its Argon2 hash, and
+        writes it into the SOPS-encrypted secrets file.
+
+        THE HASH IS NEVER PRINTED, and that is the point of this function rather
+        than a detail of it. Until 2026-09-01 it printed the value with "Please
+        manually update the secret", which made a copy-paste through the operator's
+        terminal the *only* way to use the command — so the tool's own design put
+        an Authelia credential into a session transcript, which is durable, may be
+        synced, and which nothing scans and nothing can un-print. Measured: that is
+        exactly how it reached one.
+
+        The hash is the stored credential, not a derivative of it: Authelia keeps
+        no password, only this, so anyone holding it can attack it offline. The
+        rest of this repo already knew the shape — every Ansible task that mints a
+        token pipes it through `toolkit secrets set --stdin`, never argv, never
+        stdout. This brings the interactive path in line.
+
+        A failure reports the key and the file, never the value. There is no
+        `--print` escape hatch on purpose: it would reintroduce the hazard for the
+        convenience of a path that no longer needs to exist.
 
         Args:
             key_path: The dot-separated path to the key in the secrets file
@@ -211,15 +229,39 @@ class CredentialsManager:
             logger.error(f"Failed to generate password hash: {e}")
             raise typer.Exit(1) from e
 
-        # 3. Print for manual update
+        # 3. Write it into SOPS. The value goes from the hasher to the file
+        #    without passing through stdout or an argument list.
+        #
+        #    `set_secret` (a `sops set`) rather than `batch_update_secrets`, and
+        #    the difference is not stylistic. `batch_update_secrets` decrypts and
+        #    re-encrypts the WHOLE file, so every ciphertext changes with a fresh
+        #    nonce -- measured here as 63 insertions and 62 deletions for a
+        #    one-key change. That destroys the property lesson-376 established:
+        #    SOPS preserves the ciphertext of values it does not edit, so
+        #    `git diff --numstat` answers "did this key change" WITHOUT anything
+        #    being decrypted. For a command whose entire purpose is keeping a
+        #    credential out of stdout, taking away the only way to audit it
+        #    without decrypting would be a poor trade.
+        from toolkit.features.secrets_manager import secrets_manager
+
+        # `get_sops_file_path` rather than rebuilding `{env}.enc.yaml` here: the
+        # naming convention has one home and this line only needs to name the
+        # file for the operator, not to know how it is spelled.
+        sops_file = secrets_manager.get_sops_file_path(env)
+        logger.info(f"Writing the hash to {sops_file}...")
+        if not secrets_manager.set_secret(env, key_path, password_hash):
+            # Name the key and the file so the failure is actionable; never the
+            # value, which is the whole reason this function was rewritten.
+            logger.error(f"Failed to write '{key_path}' to {sops_file}. The password was NOT stored.")
+            raise typer.Exit(1)
+
+        logger.success(f"'{key_path}' updated in {env}.enc.yaml")
         logger.info("")
-        logger.warning(f"Please manually update the secret '{key_path}' in:")
-        logger.warning(f"  {self.config_manager.secrets_path / f'{env}.enc.yaml'}")
+        logger.warning("SOPS is modified but not committed — the change reaches nothing until it lands.")
+        logger.info(f"  git add {sops_file} && git commit")
+        logger.info(f"  make apply-secrets ENV={env}    # deliver it to the cluster")
         logger.info("")
-        print(f"Key:   {key_path}")
-        print(f"Value: {password_hash}")
-        logger.info("")
-        logger.info("Then run 'toolkit config generate' to apply changes to templated files.")
+        logger.info("Authelia reloads its users file from a watched directory, so no pod restart is needed.")
 
     def _read_existing_secrets(self, env: str) -> dict[str, Any]:
         """Read existing secrets from the SOPS file for the given environment.
