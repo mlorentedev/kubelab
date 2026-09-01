@@ -192,7 +192,7 @@ therefore compatible, which is what ADR-065 asserts without demonstrating.
 ```
 ALLOWED
   /repos/mlorentedev/resume                    200
-  /repos/mlorentedev/resume/issues?state=open  200   33 items
+  /repos/mlorentedev/resume/issues?state=open  200   33 items  = 28 issues + 5 PRs
   /repos/mlorentedev/resume/pulls?state=open   200    5 items
   /repos/mlorentedev/resume/contents/README.md 200
   /repos/mlorentedev/fae-brain                 200   second granted repo

@@ -40,7 +40,7 @@ its checks and they pass — which is what the migration was always for.
    and missing, and **reports** what exists and is undeclared. Deletion is never implicit. Idempotent
    by construction — a second run changes nothing.
 3. **Migration carries issues, pull requests, labels, milestones and releases**, not only git
-   objects, via Gitea's migration endpoint against GitHub. `resume` carries 20 open issues and 5 open
+   objects, via Gitea's migration endpoint against GitHub. `resume` carries 28 open issues and 5 open
    pull requests; a migration that dropped them would move the repository and leave the work behind.
 4. **A Gitea Actions runner (`act_runner`) on the Beelink**, registered declaratively from Ansible,
    so a push to a migrated repository runs its workflows on hardware whose minutes nobody meters.
@@ -129,9 +129,13 @@ its checks and they pass — which is what the migration was always for.
       reconcile transcript, not a config diff.
 - [ ] **AC2** — A repository present in Gitea but absent from the declaration is **reported and not
       deleted**. Demonstrated against a repository created for the purpose, then removed by hand.
-- [ ] **AC3** — After migrating `resume`, its 20 open issues and 5 open pull requests are present in
+- [ ] **AC3** — After migrating `resume`, its 28 open issues and 5 open pull requests are present in
       Gitea with their titles and numbers, and every pull request's head branch resolves. Verified by
       counting through Gitea's API against the GitHub counts recorded here, not by opening the UI.
+      **The issue figure read `20` until 2026-08-31 and was wrong** — it came from `gh issue list
+      --limit 20`, so it measured the flag rather than the repository (lesson-408). Recounted by
+      paginating to exhaustion and excluding `pull_request` entries, which the REST issues endpoint
+      returns alongside issues.
 - [ ] **AC4** — After a full reconcile, `hefesto` owns no repository and no organization, per ADR-065
       D1. Verified by the API listing what the account owns and finding it empty.
 - [ ] **AC5** — The GitHub credential used by the migration is scoped, stored in SOPS, registered in

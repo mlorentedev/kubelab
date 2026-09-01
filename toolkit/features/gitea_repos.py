@@ -44,8 +44,11 @@ wrong -- the silent shape this repo keeps writing lessons about.
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
+
+if TYPE_CHECKING:
+    from toolkit.features.gitea_client import GiteaClient
 
 
 class Actor(enum.Enum):
@@ -185,3 +188,158 @@ def format_plan(plan: ReconcilePlan) -> str:
     if not lines:
         return "  (nothing to do — forge matches the declaration)"
     return "\n".join(lines)
+
+
+# =============================================================================
+# The I/O half. Everything above is pure; everything below talks to Gitea.
+# =============================================================================
+
+#: The team the bot is added to in every declared organization. It exists because
+#: ADR-065 D1 keeps the bot out of `Owners`: without a write team the bot is a
+#: non-member and cannot create repositories in an organization it does not own.
+TEAM_NAME = "reconcilers"
+TEAM_PERMISSION = "write"
+
+
+class TeamPermissionError(Exception):
+    """A team exists but does not grant what it was asked to grant.
+
+    Its own category rather than a generic error because the failure is silent by
+    nature: the request succeeds, the team appears, and every later repository
+    creation is refused for a reason that points somewhere else.
+    """
+
+
+@dataclass
+class ExecutionReport:
+    """What `execute` actually did, as opposed to what the plan proposed.
+
+    Separate from `ReconcilePlan` on purpose. The plan is a prediction and the
+    report is an observation, and collapsing the two is how "we planned to create
+    three organizations" becomes indistinguishable from "we created three".
+    """
+
+    orgs_created: list[str] = field(default_factory=list)
+    repos_created: list[str] = field(default_factory=list)
+    teams_ensured: list[str] = field(default_factory=list)
+    failures: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.failures
+
+
+def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict[str, Any]:
+    """Ensure `org` has the write team, and that it genuinely grants write.
+
+    READS THE TEAM BACK RATHER THAN TRUSTING THE RESPONSE, and this is the whole
+    point of the function. Measured 2026-08-27: a team created with an explicit
+    `units` list and `permission: "write"` came back reporting `permission: none`.
+    A reconciler that trusted the request body would ship a team granting nothing,
+    and the resulting 403 on repository creation is the same status code as a
+    missing token scope -- the trap AUTH-004 AC5 already recorded once.
+
+    So a wrong permission raises here, where the cause is still visible, instead
+    of surfacing later as an unexplained refusal.
+    """
+    team = admin.get_team(org, TEAM_NAME)
+    if team is None:
+        admin.create_team(org, TEAM_NAME, TEAM_PERMISSION)
+        # Deliberately re-fetched rather than using the create response: the
+        # create response is exactly the artefact measured to be unreliable.
+        team = admin.get_team(org, TEAM_NAME)
+
+    if team is None:
+        raise TeamPermissionError(f"team {org}/{TEAM_NAME} was created but does not read back")
+
+    effective = team.get("permission")
+    if effective != TEAM_PERMISSION:
+        raise TeamPermissionError(
+            f"team {org}/{TEAM_NAME} reports permission {effective!r}, expected {TEAM_PERMISSION!r}. "
+            "Gitea returns 'none' when `units` overrides the coarse permission field; a repository "
+            "creation against this team would be refused with a 403 that looks like a token scope problem."
+        )
+
+    if member:
+        admin.add_team_member(int(team["id"]), member)
+    return team
+
+
+def _handle_failure(report: ExecutionReport, target: str, exc: Exception) -> None:
+    """Record a failed operation and let the run continue.
+
+    COLLECT, DO NOT ABORT, and the reason is that aborting buys nothing here.
+    Three things make continuing strictly better:
+
+    - **The cascade is already quarantined.** `execute` tracks `failed_orgs` and
+      skips the repositories inside them, so continuing cannot attempt work whose
+      precondition is missing. Aborting would only stop work that was going to
+      succeed.
+    - **A re-run is free.** The reconciler is idempotent by construction, so a
+      partially applied run is recovered by running it again -- there is no
+      half-state to clean up first.
+    - **The first run is the one that fails, and it fails by class.** A token
+      minted without `write:organization` refuses every organization, and a run
+      that stops at the first refusal reports one failure where there are five.
+      Seeing them together is what tells "this credential is wrong" apart from
+      "this one organization is odd".
+
+    `str(exc)` rather than the exception: `GiteaError` carries Gitea's own
+    diagnostics in its message, including the `required=[...] token scope=[...]`
+    text that told a scope problem apart from a permission problem in Risk 1.
+    """
+    report.failures.append((target, str(exc)))
+
+
+def execute(
+    plan: ReconcilePlan,
+    admin: GiteaClient,
+    bot: GiteaClient,
+    bot_username: str,
+) -> ExecutionReport:
+    """Carry out a plan, with each operation performed by the credential that may.
+
+    TWO CLIENTS, NOT ONE, and the split is the acceptance criterion rather than a
+    style choice: `admin` creates organizations because Gitea puts the creator in
+    `Owners` and ADR-065 D1 requires the bot to own nothing; `bot` creates
+    repositories inside them, which confers no ownership. `actor_for_org_creation`
+    and `actor_for_repo_creation` encode the same answer for the test suite.
+
+    Nothing here deletes. `plan.undeclared_*` is carried into the report by the
+    caller's formatting, never into a call.
+    """
+    report = ExecutionReport()
+    failed_orgs: set[str] = set()
+
+    for org in plan.orgs_to_create:
+        try:
+            admin.create_org(org)
+            report.orgs_created.append(org)
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            failed_orgs.add(org)
+            _handle_failure(report, f"org {org}", exc)
+
+    # Every organization that will receive a repository needs the bot in a write
+    # team -- including organizations that already existed, which is why this
+    # iterates the repositories' orgs rather than `orgs_created`.
+    for org in sorted({repo.org for repo in plan.repos_to_create} - failed_orgs):
+        try:
+            ensure_team(admin, org, member=bot_username)
+            report.teams_ensured.append(org)
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            failed_orgs.add(org)
+            _handle_failure(report, f"team {org}/{TEAM_NAME}", exc)
+
+    for repo in plan.repos_to_create:
+        if repo.org in failed_orgs:
+            # Not a failure of its own: a repository whose organization could not
+            # be prepared was never attempted, and reporting it as failed would
+            # inflate one root cause into many.
+            continue
+        try:
+            bot.create_repo(repo.org, repo.name, private=repo.private)
+            report.repos_created.append(f"{repo.org}/{repo.name}")
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            _handle_failure(report, f"repo {repo.org}/{repo.name}", exc)
+
+    return report

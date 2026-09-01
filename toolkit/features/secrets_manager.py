@@ -527,6 +527,35 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.admin_token",
+        description=(
+            "Gitea API token for the superadmin (apps.auth.identities.superadmin); "
+            "creates organizations and reads whole-forge state for the reconciler"
+        ),
+        # EXTERNAL for the same reason as `bot_token`: Gitea mints it, only Gitea
+        # honours it, and a generated string would pass every audit while
+        # authenticating nothing.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        rotate_note=(
+            "Mint at Settings > Applications with `write:organization` and `read:repository`. "
+            "TWO reasons this is the superadmin's and not the bot's, and only the first is "
+            "obvious: Gitea puts the creating account in a new organization's `Owners` team, so "
+            "ADR-065 D1 (the bot owns nothing) forbids the bot creating them; and the RECONCILER'S "
+            "READS need it too, because the bot cannot see an organization it is not a member of "
+            "and would report an existing private org as absent. Revoke the old token before "
+            "storing a new one — two live credentials with nothing recording which consumer holds "
+            "which is the shape `bot_token`'s note already warns about."
+        ),
+        # NEVER, for the reason measured on `bot_token` above: Gitea's token API
+        # carries no expiry field at all, so PROVIDER would oblige a checker that
+        # could only ever answer "no expiry".
+        expiry=Expiry.NEVER,
+        # prod, matching `bot_token` — Gitea's identity environment is prod, and
+        # `envs` is the audit dimension rather than the file (ANSIBLE-033).
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.github_migration_token",
         description=(
             "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
