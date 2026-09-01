@@ -19,9 +19,9 @@ def _vikunja_mapping():
 
 
 _REQUIRED_ENV = {
-    "APPS_SERVICES_CORE_VIKUNJA_DB_PASSWORD": "db-pass",
-    "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA": "oidc-secret",
-    "APPS_SERVICES_CORE_VIKUNJA_JWT_SECRET": "jwt-secret",
+    "APPS_SERVICES_CORE_VIKUNJA_DB_PASSWORD": "not-a-real-value-fixture-db",
+    "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA": "not-a-real-value-fixture-oidc",
+    "APPS_SERVICES_CORE_VIKUNJA_JWT_SECRET": "not-a-real-value-fixture-jwt",
 }
 
 
@@ -31,8 +31,8 @@ class TestVikunjaR2Wiring:
         run.return_value = mocker.Mock(stdout="secret/vikunja-secrets configured", returncode=0)
         env_vars = {
             **_REQUIRED_ENV,
-            "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY": "AKIA-R2-ACCESS",
-            "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY": "r2-secret-value",
+            "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY": "not-a-real-value-fixture-r2-access",
+            "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY": "not-a-real-value-fixture-r2-secret",
         }
 
         ok = _apply_single_secret(_vikunja_mapping(), env_vars, {}, dry_run=False, env="prod")
