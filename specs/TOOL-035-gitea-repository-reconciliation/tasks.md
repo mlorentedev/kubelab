@@ -52,7 +52,7 @@ created: "2026-08-27"
 - [ ] [P] [AC5] Write failing check: the GitHub migration credential answers an authenticated call with 200 **and** is refused one outside its scope. Both halves — a token that works proves only half the claim (AUTH-004 AC5's finding)
 - [ ] [AC5] Store it in SOPS, register it in `SECRET_CATALOG`, deliver it by the same path as every other secret. Never print it
 - [ ] [AC3] Extend the reconciler to drive Gitea's migration endpoint with `issues`, `pull_requests`, `labels`, `milestones` and `releases` enabled
-- [ ] [AC3] Migrate `resume`. Verify by counting through the API against the GitHub baseline recorded 2026-08-27 — **20 open issues, 5 open pull requests**, all five `isCrossRepository: false` so every head branch must resolve
+- [ ] [AC3] Migrate `resume`. Verify by counting through the API against the GitHub baseline — **28 open issues, 5 open pull requests**, all five with a same-repository head (`#253, #255, #256, #258, #259`) so every head branch must resolve. **The issue count was `20` here until 2026-08-31, and it was wrong**: it came from `gh issue list --limit 20`, a query structurally incapable of returning more, so the number measured the flag rather than the repository (lesson-408). Recounted by paginating to exhaustion via `gh api --paginate`, filtering out `pull_request` entries — the REST issues endpoint returns PRs as issues, so an unfiltered count would have overshot by five in the other direction. A baseline is inherited by every later check, so this one is recorded with the command that produced it
 - [ ] [AC3] Record in `verification.md` what did **not** carry over, if anything, rather than reporting only the counts that matched
 
 ### PR3 — CI runs on the forge (AC6, AC7)
