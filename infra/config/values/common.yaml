@@ -865,7 +865,10 @@ apps:
           # Account ID is not a secret (same account as `backup.r2` above) --
           # R2's S3 endpoint embeds it in the hostname, unlike AWS S3.
           s3_endpoint: https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com
-          s3_bucket: kubelab-vikunja
+          # Staging's bucket (base default). Prod overrides to `kubelab-vikunja`
+          # via overlays/prod/patches.yaml -- separate bucket, separate
+          # bucket-scoped R2 token per environment (credential isolation).
+          s3_bucket: kubelab-vikunja-staging
           s3_region: auto
 
       headscale:

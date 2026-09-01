@@ -17,15 +17,18 @@ data:
   VIKUNJA_DATABASE_DATABASE: "vikunja"
   VIKUNJA_DATABASE_MAXOPENCONNECTIONS: "20"
   VIKUNJA_DATABASE_MAXIDLECONNECTIONS: "5"
-  # Disabled until real R2 credentials exist in SOPS (TOOL-050 item 2, #1492) --
-  # 1.0.0 validates file-storage connectivity at startup and crash-loops on a
-  # misconfigured/unreachable backend, so enabling this without real keys is
-  # worse than the 0.24.6 behavior of silently failing individual uploads.
-  VIKUNJA_FILES_S3_ENABLED: "false"
+  # Real R2 credentials landed in SOPS 2026-08-31 (TOOL-050 item 2, #1492 /
+  # ADR-066 amendment).
+  VIKUNJA_FILES_S3_ENABLED: "true"
+  # Mirrors apps.services.core.vikunja.storage.s3_endpoint in common.yaml.
   # Account ID is not a secret (same account as the PVC-backup R2 bucket) --
   # R2's S3 endpoint embeds it in the hostname, unlike AWS S3.
   VIKUNJA_FILES_S3_ENDPOINT: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
-  VIKUNJA_FILES_S3_BUCKET: "kubelab-vikunja"
+  # Base = staging's bucket, per repo convention (base mirrors staging values,
+  # prod overrides via overlays/prod/patches.yaml). Separate bucket + separate
+  # bucket-scoped R2 token from prod's `kubelab-vikunja`, so a staging
+  # credential cannot read or write prod's data.
+  VIKUNJA_FILES_S3_BUCKET: "kubelab-vikunja-staging"
   VIKUNJA_FILES_S3_REGION: "auto"
   VIKUNJA_AUTH_OPENID_ENABLED: "true"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_NAME: "Authelia"

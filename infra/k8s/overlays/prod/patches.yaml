@@ -330,6 +330,10 @@ metadata:
 data:
   VIKUNJA_SERVICE_PUBLICURL: "https://tasks.kubelab.live/"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL: "https://auth.kubelab.live"
+  # Separate bucket + separate bucket-scoped R2 token from staging's
+  # `kubelab-vikunja-staging` (base default) -- credential-blast-radius
+  # isolation between environments.
+  VIKUNJA_FILES_S3_BUCKET: "kubelab-vikunja"
 ---
 # Override base vikunja IngressRoute with prod domain
 apiVersion: traefik.io/v1alpha1

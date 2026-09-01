@@ -68,6 +68,20 @@ Pragmatic evaluation showed that adopting **Vikunja** (~50MB RAM footprint) deli
 - Requires maintaining n8n webhook workflows as code in `infra/n8n/workflows/`.
 - Postgres tenant DB `vikunja` must be backed up alongside `kubelab` database during automated backup jobs.
 
+## Amendments
+
+### 2026-08-31 — R2 fail-closed decision, then real credentials, then per-env bucket split (TOOL-050, #1492)
+
+D2's Cloudflare R2 attachment storage was **deliberately made optional, not required**, as of the 1.0.0 OIDC/upgrade fix (kubelab#1506): `VIKUNJA_FILES_S3_ENABLED: "false"` in the base manifest, and `VIKUNJA_FILES_S3_SECRETACCESSKEY`/`ACCESSKEYID` stayed in `k8s_secrets.py`'s `optional_keys` rather than being promoted to required.
+
+Real R2 credentials did not exist in SOPS at that point (confirmed via `make secrets-audit`, both envs). Vikunja 1.0.0 validates file-storage connectivity at boot and crash-loops on a misconfigured or unreachable backend, so shipping the service with fake or absent credentials would have been strictly worse than disabling S3 and falling back to local (ephemeral `emptyDir`) storage.
+
+Later the same day: an R2 API token was created for the `kubelab-vikunja` bucket and `VIKUNJA_FILES_S3_ENABLED` flipped to `"true"` for both environments — sharing one bucket and one token across staging and prod. That sharing was then corrected: staging and prod now each get a **separate bucket with a separate bucket-scoped R2 token** (`kubelab-vikunja-staging` / `kubelab-vikunja`), for the same credential-blast-radius reason `kubelab-vikunja` was kept separate from the `kubelab-backups` bucket in the first place — a compromised or buggy staging deployment cannot read or write prod's attachments. R2 tokens scope to a whole bucket (no path-prefix scoping), so per-environment isolation requires per-environment buckets; there is no cheaper way to get it.
+
+D2 is closed as originally decided; the `optional_keys` wiring in `k8s_secrets.py` stays as-is deliberately (fail-open on absence rather than fail-closed on a future credential rotation gap) rather than being promoted to required.
+
+A general-purpose "staging bucket" combining file storage and backups was considered and rejected: staging has no backup mechanism today (`infra/k8s/overlays/prod/backup.yaml` is prod-only by design, "staging data is disposable"), so a shared bucket would provision for a requirement that does not exist, and would recreate the same credential-scope problem this amendment exists to fix.
+
 ## References
 
 - [ADR-016](adr-016-oidc-centralized-auth.md) (OIDC Centralized Auth)
