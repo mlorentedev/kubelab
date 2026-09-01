@@ -231,9 +231,22 @@ class CredentialsManager:
 
         # 3. Write it into SOPS. The value goes from the hasher to the file
         #    without passing through stdout or an argument list.
+        #
+        #    `set_secret` (a `sops set`) rather than `batch_update_secrets`, and
+        #    the difference is not stylistic. `batch_update_secrets` decrypts and
+        #    re-encrypts the WHOLE file, so every ciphertext changes with a fresh
+        #    nonce -- measured here as 63 insertions and 62 deletions for a
+        #    one-key change. That destroys the property lesson-376 established:
+        #    SOPS preserves the ciphertext of values it does not edit, so
+        #    `git diff --numstat` answers "did this key change" WITHOUT anything
+        #    being decrypted. For a command whose entire purpose is keeping a
+        #    credential out of stdout, taking away the only way to audit it
+        #    without decrypting would be a poor trade.
+        from toolkit.features.secrets_manager import secrets_manager
+
         sops_file = self.config_manager.secrets_path / f"{env}.enc.yaml"
         logger.info(f"Writing the hash to {sops_file}...")
-        if not self.config_manager.batch_update_secrets({key_path: password_hash}):
+        if not secrets_manager.set_secret(env, key_path, password_hash):
             # Name the key and the file so the failure is actionable; never the
             # value, which is the whole reason this function was rewritten.
             logger.error(f"Failed to write '{key_path}' to {sops_file}. The password was NOT stored.")

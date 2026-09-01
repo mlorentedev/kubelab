@@ -13,7 +13,7 @@ password, only this, so whoever holds it can attack it offline at their leisure.
 Two properties, both asserted on the observable output rather than on the shape of
 the code, so a refactor that reintroduces a print fails here:
 
-1. the value reaches `batch_update_secrets`, and
+1. the value reaches the SOPS write, and
 2. the value appears nowhere in stdout or stderr — including on the failure path,
    where the temptation to "at least show it so it isn't lost" is strongest and
    would be exactly wrong.
@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 import typer
 
+import toolkit.features.secrets_manager as secrets_manager_module
 from toolkit.features.credentials import CredentialsManager
 
 PASSWORD = "correct-horse-battery-staple"
@@ -33,36 +34,60 @@ KEY = "apps.services.security.authelia.users_manu_password_hash"
 
 
 class FakeConfigManager:
-    """Captures what would be written, and whether the write is allowed to succeed."""
+    """Only supplies the path used in log lines. It must NOT be the write path."""
 
-    def __init__(self, tmp_path: Any, succeed: bool = True) -> None:
+    def __init__(self, tmp_path: Any) -> None:
         self.secrets_path = tmp_path
         self.env = "prod"
-        self.succeed = succeed
-        self.written: dict[str, Any] = {}
 
-    def batch_update_secrets(self, secrets: dict[str, Any], secret_file_path: Any = None) -> bool:
-        self.written.update(secrets)
-        return self.succeed
+
+#: Captured writes, keyed by (env, key_path). Module-level so the failure-path
+#: test can assert on it without threading a fixture through.
+WRITES: dict[tuple[str, str], str] = {}
+
+
+def _install(monkeypatch: pytest.MonkeyPatch, succeed: bool, tmp_path: Any) -> CredentialsManager:
+    """Build a manager whose every write path is intercepted.
+
+    THE SINGLETON IS THE ONE THAT MATTERS. `update_hashed_secret` writes through
+    `toolkit.features.secrets_manager.secrets_manager`, imported inside the
+    function -- so faking `self.config_manager` alone leaves the real `sops set`
+    live. A first version of this file did exactly that, and running it would have
+    rewritten the real `prod.enc.yaml` with the argon2 of PASSWORD, silently, in
+    three of five tests, before any assertion had a chance to fail.
+
+    A test that mutates the real environment is worse than no test: it passes
+    while it destroys. Patch the singleton, and patch it in every test including
+    the failure path.
+    """
+    WRITES.clear()
+
+    def fake_set_secret(env: str, key_path: str, value: str) -> bool:
+        WRITES[(env, key_path)] = value
+        return succeed
+
+    monkeypatch.setattr(secrets_manager_module.secrets_manager, "set_secret", fake_set_secret)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **k: PASSWORD)
+
+    m = CredentialsManager()
+    m.config_manager = FakeConfigManager(tmp_path)  # type: ignore[assignment]
+    return m
 
 
 @pytest.fixture
 def manager(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> CredentialsManager:
-    m = CredentialsManager()
-    m.config_manager = FakeConfigManager(tmp_path)  # type: ignore[assignment]
-    monkeypatch.setattr(typer, "prompt", lambda *a, **k: PASSWORD)
-    return m
+    return _install(monkeypatch, succeed=True, tmp_path=tmp_path)
 
 
-def _written_hash(manager: CredentialsManager) -> str:
-    return str(manager.config_manager.written[KEY])  # type: ignore[attr-defined]
+def _written_hash(_manager: CredentialsManager) -> str:
+    return WRITES[("prod", KEY)]
 
 
 def test_the_hash_is_written_to_sops(manager: CredentialsManager) -> None:
     """The command's contract: the operator runs it and the secret is stored."""
     manager.update_hashed_secret(key_path=KEY, env="prod")
 
-    assert KEY in manager.config_manager.written  # type: ignore[attr-defined]
+    assert ("prod", KEY) in WRITES
     assert _written_hash(manager).startswith("$argon2id$")
 
 
@@ -104,9 +129,7 @@ def test_a_failed_write_reports_the_key_and_not_the_value(
     leaked hash is not recoverable, so the failure stays quiet about the value and
     loud about the key.
     """
-    m = CredentialsManager()
-    m.config_manager = FakeConfigManager(tmp_path, succeed=False)  # type: ignore[assignment]
-    monkeypatch.setattr(typer, "prompt", lambda *a, **k: PASSWORD)
+    m = _install(monkeypatch, succeed=False, tmp_path=tmp_path)
 
     with pytest.raises(typer.Exit):
         m.update_hashed_secret(key_path=KEY, env="prod")
@@ -122,11 +145,10 @@ def test_an_empty_password_is_refused_before_hashing(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pre-existing behaviour, pinned so the rewrite did not drop it."""
-    m = CredentialsManager()
-    m.config_manager = FakeConfigManager(tmp_path)  # type: ignore[assignment]
+    m = _install(monkeypatch, succeed=True, tmp_path=tmp_path)
     monkeypatch.setattr(typer, "prompt", lambda *a, **k: "")
 
     with pytest.raises(typer.Exit):
         m.update_hashed_secret(key_path=KEY, env="prod")
 
-    assert m.config_manager.written == {}  # type: ignore[attr-defined]
+    assert WRITES == {}
