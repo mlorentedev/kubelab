@@ -70,6 +70,17 @@ configMapGenerator:
     files:
       - services/authelia-config/configuration.yml
 
+  # Vikunja's env vars, same rationale as authelia-config above (lesson-404):
+  # nothing re-reads a plain ConfigMap after container start. This is also
+  # why VIKUNJA_FILES_S3_ENABLED silently no-op'd for as long as it did --
+  # the pod never restarted on its own to notice the value even mattered.
+  # Prod overlay merges its bucket/domain overrides via `behavior: merge` in
+  # overlays/prod/kustomization.yaml.
+  - name: vikunja-config
+    namespace: kubelab
+    envs:
+      - services/vikunja-config/vikunja.env
+
   - name: authelia-assets
     namespace: kubelab
     files:
