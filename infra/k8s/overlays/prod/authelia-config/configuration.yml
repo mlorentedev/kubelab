@@ -155,7 +155,7 @@ identity_providers:
     clients:
       - client_id: minio
         client_name: MinIO
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$p/BNIX9i6gqjnXBjfwinUQ$iGtV7Gguavf5n9rIY0yfZixFLU81q4xjET44HNg+G3E'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$RzgL5X46ZY+gY2sW0xYOvw$T0SZxqp93ES/R38sMWk/1ukM8XB5PZZRRj9M6rCJiPo'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
@@ -169,7 +169,7 @@ identity_providers:
       - client_id: grafana
         client_name: Grafana
         # synced via: make sync-oidc-hashes ENV=prod
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$0tvVo3us/vNbs+7RepHK1A$cX5TwgO0qdWiTMqqO+zwvyHREYkidP/HU7QwUsi9WGs'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$9Hr7NXRt4EL77u8VSqzgiA$0+BW8umL95pLIrehc2IDRfHS1cZJmTEAuBTlncXnK20'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
@@ -184,7 +184,7 @@ identity_providers:
       - client_id: gitea
         client_name: Gitea
         # synced via: make sync-oidc-hashes ENV=prod
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ZwRKaO1ucGbvOO9SD1Vu8w$EhmlRLZVuMeNdRhuF4C2aj3Uqc6HM35ziwA1/x8mm/k'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$Aa2aF7xZOHhZWNVbucX8XQ$ZXAL+hYSPiCf/ZBmNNCVekASsywFGQ7SfrKoTIvfT20'
         public: false
         authorization_policy: one_factor
         # Measured from Authelia's own token-endpoint error, 2026-08-23: gitea sends
@@ -213,4 +213,21 @@ identity_providers:
           - profile
           - email
           - groups
+        consent_mode: implicit
+      - client_id: vikunja-oidc
+        client_name: Vikunja Task Platform
+        # synced via: make sync-oidc-hashes ENV=prod
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$dk9VBuT44daGIiHhXblDsw$bzS5woYxAtolhl46iLYQpxG8V/PPPI1Q1bFGjJMa1Gg'
+        public: false
+        authorization_policy: one_factor
+        # Unverified default (3 of 4 existing clients use _basic); confirm via a
+        # live login and correct like the gitea entry above if the token
+        # exchange fails with the wrong method.
+        token_endpoint_auth_method: 'client_secret_basic'
+        redirect_uris:
+          - https://tasks.kubelab.live/auth/openid/authelia
+        scopes:
+          - openid
+          - profile
+          - email
         consent_mode: implicit
