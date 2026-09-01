@@ -62,6 +62,14 @@ spec:
         - name: openid-config
           configMap:
             name: vikunja-openid-config
+        # 1.0.0's image runs non-root and /app/vikunja is not writable by it, so
+        # local-storage fallback (VIKUNJA_FILES_S3_ENABLED=false, above) needs an
+        # explicit writable mount or the pod crash-loops on boot. Ephemeral by
+        # design: this only matters while S3 is disabled pending real R2
+        # credentials (TOOL-050 item 2, #1492) -- once R2 is enabled, uploads
+        # never touch local disk and this volume goes unused.
+        - name: vikunja-files
+          emptyDir: {}
       containers:
         - name: vikunja
           image: vikunja/vikunja:1.0.0
@@ -79,6 +87,8 @@ spec:
               mountPath: /etc/vikunja/config.yml
               subPath: config.yml
               readOnly: true
+            - name: vikunja-files
+              mountPath: /app/vikunja/files
           livenessProbe:
             httpGet:
               path: /api/v1/info
