@@ -262,10 +262,29 @@
         # Least privilege for the first real consumer (#1076, getting repositories
         # into the forge) plus the account's own profile. Deliberately NOT
         # write:admin — the refusal of an admin call is half of AC5's evidence.
-        gitea_bot_scopes: "write:repository,write:user"
+        #
+        # `write:organization` added for TOOL-035: without it the bot cannot create
+        # a repository INSIDE an organization it does not own. Measured 2026-08-27:
+        # `POST /orgs/<org>/repos` -> 403 `required=[write:organization]`. It is
+        # permission to ACT ON organizations, not to own them, so ADR-065 D1 (the
+        # bot owns nothing) still holds — the superadmin creates the organizations.
+        #
+        # NOTE: Gitea does not let a token's scopes be edited after minting, and
+        # the mint task below is gated on the SOPS key being ABSENT. So widening
+        # this string alone changes nothing on an instance that already has a
+        # token: the old one must be revoked and its SOPS key deleted first.
+        gitea_bot_scopes: "write:repository,write:user,write:organization"
         # Empty on the run that mints it; present on every run after. The mint and
         # record tasks are gated on this, so provisioning converges to no-op.
         gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
+        # The superadmin's API token (TOOL-035). Minted by the same mechanism and
+        # gated the same way. Two reasons it exists, and only the first is obvious:
+        # Gitea puts the creating account in a new organization's `Owners` team, so
+        # D1 forbids the bot creating them; and the reconciler's READS need it too,
+        # because the bot cannot see an organization it is not a member of and
+        # would report an existing private org as absent (lesson-408's corollary).
+        gitea_admin_scopes: "write:organization,read:repository"
+        gitea_admin_token: "{{ gitea_secrets.apps.services.core.gitea.admin_token | default('') }}"
         # MinIO
         minio_image: "{{ config.apps.services.data.minio.image }}"
         minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
