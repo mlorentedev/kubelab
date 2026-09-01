@@ -328,8 +328,7 @@ metadata:
   name: vikunja-config
   namespace: kubelab
 data:
-  VIKUNJA_SERVICE_FRONTENDURL: "https://tasks.kubelab.live/"
-  VIKUNJA_AUTH_OPENID_REDIRECTURL: "https://tasks.kubelab.live/auth/openid/authelia"
+  VIKUNJA_SERVICE_PUBLICURL: "https://tasks.kubelab.live/"
   VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL: "https://auth.kubelab.live"
 ---
 # Override base vikunja IngressRoute with prod domain

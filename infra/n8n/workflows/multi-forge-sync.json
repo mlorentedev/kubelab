@@ -56,7 +56,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=http://vikunja:3456/api/v1/tasks/all?s={{ $json.taskKey }}",
+        "url": "=http://vikunja:3456/api/v1/tasks?s={{ $json.taskKey }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
