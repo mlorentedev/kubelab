@@ -55,6 +55,10 @@ OIDC_CLIENTS = {
         "client_id": "argocd",
         "files": ["base", "prod"],
     },
+    "apps.services.security.authelia.oidc_client_secret_vikunja_hash": {
+        "client_id": "vikunja-oidc",
+        "files": ["base", "prod"],
+    },
 }
 
 # OIDC clients live in the Authelia configuration.yml ConfigMap (configMapGenerator).

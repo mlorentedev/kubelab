@@ -144,7 +144,7 @@ identity_providers:
     clients:
       - client_id: minio
         client_name: MinIO
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$wj5wl7QJ0kBjfoU14xHzsg$+zHidCseBsuXzhFQikc2YQCuCwccULc04PEvB/N+15I'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$3PfYn19oBeTXHQDEFGx7qg$TcB0a2yqM/g7QzG7/uHUj3BBKpr3AYq8/iV3iDndqlM'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
@@ -158,7 +158,7 @@ identity_providers:
       - client_id: grafana
         client_name: Grafana
         # synced via: make sync-oidc-hashes ENV=staging
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$hwMft6DGS9q0FeRZ1LEqHQ$Q3B4hHugcx3NJetiiarH0pmHBZgdE+/LgqtX/6JRXkk'
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$6fPbVdr85IvichQnqrWvSA$yGhbolI/xjAsKhQuYcMSIZZ0/ceOMnfReDP8k9qKV9s'
         public: false
         authorization_policy: one_factor
         token_endpoint_auth_method: 'client_secret_basic'
@@ -184,4 +184,21 @@ identity_providers:
           - profile
           - email
           - groups
+        consent_mode: implicit
+      - client_id: vikunja-oidc
+        client_name: Vikunja Task Platform
+        # synced via: make sync-oidc-hashes ENV=staging
+        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$QEvFAiioBOII0ZotMvBoGg$sIs++1fvPfvHiyV+OY5pbSPs3fCPyLu74PavhnGjx+s'
+        public: false
+        authorization_policy: one_factor
+        # Unverified default (3 of 4 existing clients use _basic); confirm via a
+        # live login and correct like the gitea entry above if the token
+        # exchange fails with the wrong method.
+        token_endpoint_auth_method: 'client_secret_basic'
+        redirect_uris:
+          - https://tasks.staging.kubelab.live/auth/openid/authelia
+        scopes:
+          - openid
+          - profile
+          - email
         consent_mode: implicit

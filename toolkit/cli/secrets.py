@@ -26,6 +26,8 @@ from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from toolkit.features.secrets_manager import AuditResult, SecretsManager
 
 app = typer.Typer(
@@ -281,11 +283,63 @@ def audit(
         logger.warning(f"expiry not checked: {exc}")
 
 
+def _provider_value_lookup() -> Callable[[str], str]:
+    """Resolve a PROVIDER secret's value from ANY SOPS file, not just `common`.
+
+    Both expiry reports used to read `ConfigurationManager("common")` alone, which
+    made them blind to every provider-issued credential stored per environment.
+    The failure was silent in one caller and actively wrong in the other: `audit`
+    skipped the secret with no output, and `check-expiry` announced
+    "declared PROVIDER but absent from SOPS" about a credential that was present
+    and working. Measured 2026-08-28 on `apps.services.core.gitea.github_migration_token`
+    (TOOL-035), which lives in `prod.enc.yaml` next to `bot_token`.
+
+    That is a false negative on a credential-expiry control -- the exact shape
+    `secret_expiry`'s own docstring exists to prevent, since a key nobody is
+    warned about is indistinguishable from one that cannot expire.
+
+    Searching every environment rather than threading one through is deliberate:
+    `SecretSpec.envs` is the AUDIT dimension, not the storage location (ANSIBLE-033),
+    so "which file holds it" is not something the catalog can be asked. It also
+    keeps `check-expiry`, which takes no `--env`, correct by construction.
+    """
+    from toolkit.config.settings import VALID_ENVIRONMENTS
+    from toolkit.features.configuration import ConfigurationManager
+
+    merged: list[dict[str, object]] = []
+    for env in ("common", *VALID_ENVIRONMENTS):
+        try:
+            merged.append(ConfigurationManager(env, settings.project_root).get_merged_config())
+        except Exception:  # noqa: BLE001 - a missing env file is not this check's problem
+            continue
+
+    return lambda path: dig_across(merged, path)
+
+
+def dig_across(configs: list[dict[str, object]], path: str) -> str:
+    """First non-empty value for `path` across several merged configs.
+
+    Split out from `_provider_value_lookup` so the search itself is pure and can
+    be tested without decrypting anything — the lookup's bug was in *where* it
+    looked, and a test that needs real SOPS to prove that would not have been
+    written.
+    """
+    for config in configs:
+        node: object = config
+        for part in path.split("."):
+            if not isinstance(node, dict) or part not in node:
+                node = None
+                break
+            node = node[part]
+        if node:
+            return str(node)
+    return ""
+
+
 def _report_expiry(warn_days: int) -> None:
     """Ask each issuer, report, and never raise. Shared with `check-expiry`."""
     from datetime import datetime, timezone
 
-    from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.secret_expiry import (
         PROVIDER_CHECKS,
         Expiry,
@@ -294,15 +348,7 @@ def _report_expiry(warn_days: int) -> None:
     )
     from toolkit.features.secrets_manager import SECRET_CATALOG
 
-    merged = ConfigurationManager("common", settings.project_root).get_merged_config()
-
-    def dig(path: str) -> str:
-        node: object = merged
-        for part in path.split("."):
-            if not isinstance(node, dict) or part not in node:
-                return ""
-            node = node[part]
-        return str(node or "")
+    dig = _provider_value_lookup()
 
     for spec in SECRET_CATALOG:
         if resolve_expiry(spec) is not Expiry.PROVIDER:
@@ -624,15 +670,9 @@ def check_expiry(
     expiring = []
 
     # --- Everything the issuer can be asked about directly -------------------
-    merged = ConfigurationManager("common", _settings.project_root).get_merged_config()
-
-    def _dig(path: str) -> str:
-        node: object = merged
-        for part in path.split("."):
-            if not isinstance(node, dict) or part not in node:
-                return ""
-            node = node[part]
-        return str(node or "")
+    # Every SOPS file, not just `common` — see `_provider_value_lookup`. This call
+    # site is the one that reported "absent from SOPS" about a present credential.
+    _dig = _provider_value_lookup()
 
     for spec in SECRET_CATALOG:
         if resolve_expiry(spec) is not Expiry.PROVIDER:
