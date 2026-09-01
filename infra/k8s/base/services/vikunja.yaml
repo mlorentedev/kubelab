@@ -22,7 +22,9 @@ data:
   # misconfigured/unreachable backend, so enabling this without real keys is
   # worse than the 0.24.6 behavior of silently failing individual uploads.
   VIKUNJA_FILES_S3_ENABLED: "false"
-  VIKUNJA_FILES_S3_ENDPOINT: "https://r2.cloudflarestorage.com"
+  # Account ID is not a secret (same account as the PVC-backup R2 bucket) --
+  # R2's S3 endpoint embeds it in the hostname, unlike AWS S3.
+  VIKUNJA_FILES_S3_ENDPOINT: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
   VIKUNJA_FILES_S3_BUCKET: "kubelab-vikunja"
   VIKUNJA_FILES_S3_REGION: "auto"
   VIKUNJA_AUTH_OPENID_ENABLED: "true"
