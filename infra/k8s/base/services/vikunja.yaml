@@ -83,10 +83,6 @@ spec:
             - secretRef:
                 name: vikunja-secrets
           volumeMounts:
-            - name: openid-config
-              mountPath: /etc/vikunja/config.yml
-              subPath: config.yml
-              readOnly: true
             - name: vikunja-files
               mountPath: /app/vikunja/files
           livenessProbe:
