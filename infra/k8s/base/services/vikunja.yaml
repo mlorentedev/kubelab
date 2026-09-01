@@ -17,11 +17,9 @@ data:
   VIKUNJA_DATABASE_DATABASE: "vikunja"
   VIKUNJA_DATABASE_MAXOPENCONNECTIONS: "20"
   VIKUNJA_DATABASE_MAXIDLECONNECTIONS: "5"
-  # Disabled until real R2 credentials exist in SOPS (TOOL-050 item 2, #1492) --
-  # 1.0.0 validates file-storage connectivity at startup and crash-loops on a
-  # misconfigured/unreachable backend, so enabling this without real keys is
-  # worse than the 0.24.6 behavior of silently failing individual uploads.
-  VIKUNJA_FILES_S3_ENABLED: "false"
+  # Real R2 credentials landed in SOPS 2026-08-31 (TOOL-050 item 2, #1492 /
+  # ADR-066 amendment) -- re-enabled.
+  VIKUNJA_FILES_S3_ENABLED: "true"
   # Mirrors apps.services.core.vikunja.storage.s3_endpoint in common.yaml.
   # Account ID is not a secret (same account as the PVC-backup R2 bucket) --
   # R2's S3 endpoint embeds it in the hostname, unlike AWS S3.
