@@ -104,8 +104,9 @@ docker exec gitea su git -c "gitea admin user change-password \
 **The alias, not the address.** `bee` resolves through `~/.ssh/config`, which also defines `bee-lan`
 (home LAN) and `bee-ext` (through the VPS bastion) — see `non-admin-workstation-access.md`. Writing
 the mesh IP here would pin a *recovery* runbook to the one path most likely to be down when it is
-being read, and would duplicate a value whose SSOT is `networking.nodes.bee.tailscale_ip` in
-`common.yaml`. If no alias is configured, take the address from there rather than from this page.
+being read, and would duplicate a value whose SSOT is `networking.nodes.beelink.tailscale_ip` in
+`common.yaml`. If no alias is configured, take the address from there rather than from this page —
+and note the two namespaces disagree: the SSH alias is **`bee`**, the config key is **`beelink`**.
 
 Then record it so SOPS stops being wrong — otherwise step 3 will "repair" it back:
 
