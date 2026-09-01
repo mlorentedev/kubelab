@@ -179,3 +179,80 @@ class GiteaClient:
     def add_team_member(self, team_id: int, username: str) -> dict[str, Any]:
         """Add an account to a team. Idempotent on Gitea's side -- re-adding answers 204."""
         return self._request("PUT", f"/teams/{team_id}/members/{username}")
+
+
+class GiteaBasicAuthClient(GiteaClient):
+    """The subset of the API that REFUSES tokens and requires a password.
+
+    A separate class rather than a flag, because the boundary is Gitea's and not
+    ours. `DELETE /users/{username}/tokens/{id}` and its sibling listing sit
+    behind `reqBasicOrRevProxyAuth()` in `routers/api/v1/api.go`, which rejects a
+    bearer token before the handler runs. Read from the source on 1.25.x, not
+    inferred from a 403.
+
+    WHY THIS IS NOT ADR-062'S BREAK-GLASS DRIFTING INTO DAILY USE. ADR-062 D-88
+    reserves the local password for "when Authelia is unavailable, and at no
+    other time", and that rule is about a HUMAN choosing a login path. This is
+    not a login: it is the only credential Gitea will accept for this endpoint,
+    by construction, and line 92 of the same ADR keeps machine credentials
+    "reversible in SOPS by design" precisely so automation can use them. Deleting
+    this class and routing through a token does not work -- it is not a style
+    preference that a later reader should tidy away.
+
+    The paired consequence, and the reason the Ansible reassert task exists: this
+    makes the admin password load-bearing for token rotation. A password that has
+    drifted from SOPS takes the whole rotation path down with it, which is why
+    reality is reconciled against SOPS rather than assumed to match it.
+    """
+
+    def __init__(self, base_url: str, username: str, password: str, timeout: int = 15) -> None:
+        # `token` is unused on this path; the parent's signature is satisfied with
+        # an empty one so the shared `_request`/`_paginate` machinery still works.
+        super().__init__(base_url, token="", timeout=timeout)
+        self.username = username
+        self._password = password
+
+    def _headers(self) -> dict[str, str]:
+        # No Authorization header: `requests` builds the basic-auth one from
+        # `auth=`. Overridden rather than inherited so a future edit to the parent
+        # cannot silently send a token this endpoint would reject with a 403 that
+        # reads like a permissions problem.
+        return {"Content-Type": "application/json", "Accept": "application/json"}
+
+    def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
+        # The credential travels WITH THE REQUEST rather than living on the
+        # session. Setting `session.auth` once in the constructor works until
+        # something replaces the session -- a test double, a retry wrapper, a
+        # pooled client -- after which every call goes out unauthenticated and
+        # Gitea answers 401, which on this endpoint is indistinguishable from a
+        # drifted admin password. Binding it here makes that failure impossible
+        # rather than unlikely.
+        kwargs.setdefault("auth", (self.username, self._password))
+        return super()._request(method, endpoint, **kwargs)
+
+    def list_tokens(self, username: str) -> list[dict[str, Any]]:
+        """Every access token on an account. Names and ids only -- Gitea never returns values."""
+        return list(self._paginate(f"/users/{username}/tokens"))
+
+    def revoke_token(self, username: str, token_name: str) -> bool:
+        """Delete a named token. True if it was there, False if it already was not.
+
+        IDEMPOTENT BY 404, which is the whole contract. Gitea answers 404 when the
+        name matches nothing, and that is indistinguishable from the desired end
+        state -- so it is reported as "already converged" rather than raised. A
+        rotation that fails on its second run is not a rotation, it is a script.
+
+        Gitea resolves a non-numeric `{id}` by name against the path user, so the
+        token name goes straight in. It answers 422 on multiple matches rather
+        than guessing, which is left to propagate: two tokens sharing a name is
+        exactly the state `bot_token`'s rotate_note warns about ("the account
+        would hold two live credentials and nothing records which consumer holds
+        which") and it needs a human, not a coin flip.
+        """
+        try:
+            self._request("DELETE", f"/users/{username}/tokens/{token_name}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return True
