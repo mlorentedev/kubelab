@@ -24,12 +24,19 @@ It was caught by reading `* [new branch]` and recognising it as impossible for a
 
 **Solution**: Recovered by cherry-picking the orphaned commit onto a fresh branch cut from the new `master` and opening #1460, then deleting the resurrected branch. The disposition was recorded on the merged #1455 rather than quietly, because a triage that arrives after the merge is still a triage and pretending otherwise is the actual failure.
 
-The mechanism is filed as [#1462](https://github.com/mlorentedev/kubelab/issues/1462): a pre-push guard that asks the forge whether the branch's PR is already merged and refuses the push if so, failing **open** when the forge cannot be reached — a guard that blocks pushes during a GitHub outage trades a rare silent loss for a frequent hard stop.
+The mechanism is filed as [#1462](https://github.com/mlorentedev/kubelab/issues/1462) and **built on 2026-09-01, after the trap was sprung twice more in a single session** — which is the strongest evidence the lesson alone was never going to be enough: a pre-push guard that asks the forge whether the branch's PR is already merged and refuses the push if so, failing **open** when the forge cannot be reached — a guard that blocks pushes during a GitHub outage trades a rare silent loss for a frequent hard stop.
 
 **Rule**: This is [lesson-401](lesson-401-a-second-commit-on-a-branch-someone-else-can-merge-is-a-bet-you-lose-silently.md)'s family but a different mechanism, and the distinction matters for the fix. 401 is *a second commit dropped by a squash-merge* — the branch exists, the commit is real, the merge ignores it. This one is *the branch no longer existing*, and git silently rebuilding it. A guard for one does not catch the other.
 
 What they share is the shape worth internalising: **a tool reporting success it did not achieve.** `git push` exits 0 having pushed to nowhere that matters. The absence of an error is not evidence of an effect, and on any operation whose success depends on state held somewhere else — a forge, a cluster, another machine — the only honest verification is to ask that other place what it now believes.
 
 And per [lesson-365](lesson-365-a-lesson-with-no-mechanism-is-a-reminder-and-i-broke-mine-three-times.md): this is the third occurrence in this family in two days. Writing a fourth lesson would be the wrong response. The ticket is the response.
+
+It lives in `.github/hooks/pre-push.sh`, inherited by every worktree through
+`core.hooksPath`, and it refuses a push that would recreate a branch whose PR is
+`MERGED` or `CLOSED`. Verified against real pull requests rather than fixtures,
+with the controls that make the refusal mean something: a brand-new branch, an
+ordinary update to an existing remote branch, and a branch *deletion* all still
+pass silently.
 
 **Tags**: `#git` `#review` `#pr-1455` `#pr-1460` `#issue-1462`
