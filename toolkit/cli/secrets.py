@@ -282,6 +282,33 @@ def audit(
     except Exception as exc:  # noqa: BLE001 - never let this fail the audit
         logger.warning(f"expiry not checked: {exc}")
 
+    # THE RATCHET. An orphan not frozen in the baseline fails the audit.
+    #
+    # Until 2026-09-01 orphans were a warning and this command exited 0 with
+    # seventeen of them standing in prod. That is not a signal, it is noise --
+    # and it duly hid the eighteenth, a real Authelia hash written that evening
+    # and registered by nobody. Freezing the known ones is what makes the next
+    # one visible; see infra/config/orphan-secrets-baseline.yaml.
+    #
+    # Deliberately AFTER the reports above, so a failing run still prints
+    # everything an operator needs to act. Exiting early would make the guard
+    # cost more information than it gives.
+    from toolkit.features.secrets_manager import ORPHAN_BASELINE_PATH, baselined_orphans
+
+    accepted = baselined_orphans()
+    new_orphans = sorted({k for r in results for k in r.unexpected} - set(accepted))
+    if new_orphans:
+        logger.error(f"{len(new_orphans)} orphaned secret(s) not accounted for in the baseline:")
+        for key in new_orphans:
+            logger.error(f"  {key}")
+        logger.info("")
+        logger.info("Each one is in a vault and owned by no SECRET_CATALOG entry. Resolve it:")
+        logger.info("  - register it in SECRET_CATALOG (toolkit/features/secrets_manager.py), or")
+        logger.info("  - delete it from the vault:  toolkit secrets unset <key> --env <env>, or")
+        logger.info(f"  - accept it deliberately by adding it with a reason to {ORPHAN_BASELINE_PATH.name}")
+        logger.info("    (which also requires raising ORPHAN_BASELINE_MAX — the list may only shrink)")
+        raise typer.Exit(1)
+
 
 def _provider_value_lookup() -> Callable[[str], str]:
     """Resolve a PROVIDER secret's value from ANY SOPS file, not just `common`.
