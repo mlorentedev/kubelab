@@ -244,7 +244,10 @@ class CredentialsManager:
         #    without decrypting would be a poor trade.
         from toolkit.features.secrets_manager import secrets_manager
 
-        sops_file = self.config_manager.secrets_path / f"{env}.enc.yaml"
+        # `get_sops_file_path` rather than rebuilding `{env}.enc.yaml` here: the
+        # naming convention has one home and this line only needs to name the
+        # file for the operator, not to know how it is spelled.
+        sops_file = secrets_manager.get_sops_file_path(env)
         logger.info(f"Writing the hash to {sops_file}...")
         if not secrets_manager.set_secret(env, key_path, password_hash):
             # Name the key and the file so the failure is actionable; never the
