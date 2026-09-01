@@ -1,0 +1,282 @@
+---
+tags: [spec, verification, templates]
+created: "2026-08-27"
+---
+
+# Verification - TOOL-035
+
+## Evidence
+
+Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+
+- [ ] AC1 (declare + reconcile is idempotent) -> commit `<hash>` / test `<name>` / live transcript below
+- [ ] AC2 (undeclared is reported, never deleted) -> commit `<hash>` / test `<name>`
+- [ ] AC3 (issues and pull requests carry over) -> live count against the baseline below
+- [ ] AC4 (`hefesto` owns nothing) -> API listing
+- [ ] AC5 (migration credential scoped and checked both ways) -> both transcripts
+- [ ] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> run URL
+- [ ] AC7 (`act_runner` registration idempotent) -> `changed=0` transcript
+
+## Baselines measured before any change (2026-08-27)
+
+Recorded now so AC3 and AC6 are checked against a number rather than a memory.
+
+**`mlorentedev/resume` on GitHub** — private, 2.97 MB, default branch `main`:
+
+| | count |
+|---|---|
+| issues, open | **28** |
+| issues, all states | **93** |
+| pull requests, open | **5** |
+| pull requests, all states | **165** |
+| open PRs with `isCrossRepository: true` | 0 — every head branch is in-repo and therefore fetchable |
+
+**This table was wrong on its first writing and the error is instructive.** It read
+"20 open issues", which was the value of `gh issue list --limit 20` — the page size, not the count.
+A baseline that is silently the page size is worse than no baseline, because AC3 would have
+"verified" the migration against it and passed. Recounted 2026-08-28 by paginating the REST API to
+exhaustion. Note also that `/issues` counts pull requests as issues, so the open figure is
+`33 - 5`; taking the endpoint's number at face value would have overstated it by exactly the PR
+count. The migration is 258 numbered objects, not the ~25 first sketched.
+
+**CI is dead, and its signature is not a test failure.** Most recent run `32700240170`, 2026-08-24T07:09Z:
+
+```
+job "lint"
+  started   2026-08-24T07:09:10Z
+  completed 2026-08-24T07:09:13Z
+  conclusion failure
+  steps     []
+```
+
+Three seconds, zero steps, and the same for all six jobs (`lint`, `test`, `audit`, `type`,
+`gitleaks`, `build-pdf`). A job rejected before execution, not one that ran and failed. Every CI run
+since 2026-08-11 has this shape — the condition PR #255 documented that day, still in force 17 days
+later.
+
+**Workflow portability**, read from all five workflow files rather than assumed:
+
+| workflow | portable | blocking dependency |
+|---|---|---|
+| `ci.yml` | yes | none — `checkout`, `hadolint`, `docker/*`, `setup-uv`, `setup-python`, `trivy`, `upload-artifact` |
+| `publish-drive.yml` | yes | Google secrets only |
+| `release.yml` | no | `googleapis/release-please-action` → `api.github.com` |
+| `add-to-project.yml` | no | `actions/add-to-project` + `gh api graphql` → GitHub Projects |
+| `bitacora-status.yml` | no | `actions/github-script` + `github.graphql` → GitHub Projects |
+
+**Gitea prod e2e, 2026-08-27**: `make test-e2e ENV=prod -k gitea` → 6 passed. Recorded with its
+limitation stated: the suite probes `/api/healthz`, which `REQUIRE_SIGNIN_VIEW` exempts by design, so
+this is evidence the forge is reachable and healthy and is **not** evidence for #1389 AC1. That gap
+is PR0.
+
+**Fleet state**: beelink, ace2 and ace1 all reachable over the tailnet; both Argo CD spokes answer
+HTTP 200 (`toolkit infra argo check-spokes`).
+
+## PR0 — the anonymous surface, measured (2026-08-27)
+
+Evidence for #1389 AC1/AC2. Recorded here because PR0 is this spec's precondition; the ticket it
+closes is #1389, and the same transcripts are posted there.
+
+**Anonymous.** `tests/infra/test_gitea_anonymous_surface_live.py`, 5 passed against prod, and the
+raw probe behind it:
+
+```
+path                 status  verdict                      kind
+/explore/repos          303  REFUSED (redirect to login)  closed
+/explore/users          303  REFUSED (redirect to login)  closed
+/api/swagger            303  REFUSED (redirect to login)  closed
+/api/v1/version         403  REFUSED                      closed
+/api/healthz            200  OPEN                         CONTROL — must be reachable
+
+version string '1.25.5' present in /api/v1/version body: False
+```
+
+All four were **200** on 2026-08-24. The control is the part that makes this more than a green tick:
+`/api/healthz` answers 200 and the guard's own assertion classifies it `OPEN`, so putting it in
+`CLOSED_PATHS` would fail the suite. The guard discriminates between "closed" and "merely
+unreachable" rather than passing vacuously — which matters because Traefik answers 502 through
+error-pages when the Beelink is off, and a bare `!= 200` assertion would go green against a forge
+that is not running at all. That is why the suite carries a liveness precondition and skips instead.
+
+**Authenticated.** Same endpoints with the machine identity's token (read in process from SOPS,
+never printed):
+
+```
+path                  anon  auth   reading
+/api/v1/version        403   200   API alive for authenticated callers, closed to anonymous
+/api/v1/user           403   200   the token authenticates as an account
+
+authenticated as: 'hefesto'  (admin=False)
+repositories owned by the bot: 0  (ADR-065 D1 requires 0)
+```
+
+The 403/200 contrast on one endpoint is the actual claim: the refusal is about **authentication**,
+not about the API having been switched off. A hardening that disabled the API outright would look
+identical from the anonymous side and would silently break the migration.
+
+Two findings that are not #1389's and belong to this spec:
+
+- **`hefesto` owns 0 repositories today** — ADR-065 D1's baseline, and what AC4 must still be true
+  after PR1 runs.
+- **`GET /api/v1/user/orgs` did not answer 200**, consistent with the token holding
+  `write:repository,write:user` and no organization scope. This is ADR-065's "the token must widen"
+  observed rather than read, and it is an input to Risk 1.
+
+An authenticated `git clone` — #1389 AC2's literal wording — **could not be demonstrated**: the forge
+holds no repository to clone. The API contrast above is the available half; the clone gets its
+evidence in PR2, when `resume` lands. Recorded as a stated gap rather than ticked.
+
+**Idempotence (#1389 AC4).** `make provision NODE=bee ENV=prod`, two consecutive runs:
+
+| run | result |
+|---|---|
+| 1 | `ok=128 changed=7` |
+| 2 | `ok=127 changed=0` |
+
+The role is idempotent. The seven changes on the first run were **accumulated drift on the node** —
+the Beelink had not been provisioned since some template changes landed, and one of them restarted
+the services. The anonymous guard was re-run after that restart: still 5/5.
+
+That drift is the whole argument for PR0 existing. The template in git was correct for days and the
+running container was not, and no static test could tell them apart. It is also a caution for PR3:
+`act_runner` will be added to this same role, so the first run after it lands will report changes and
+the *second* is the one that proves anything.
+
+## Risk 1 — settled 2026-08-27, against the live instance
+
+The apparent contradiction in ADR-065 (D1 "the bot owns nothing" vs Consequences "the token must
+widen to `write:organization`") dissolves, because **token scope and organization ownership are
+different layers and the scope gates first**. Measured with a throwaway organization, created and
+deleted in the same run:
+
+```
+Q1  bot POST /orgs                  -> 403
+    {"message":"token does not have at least one of required scope(s),
+     required=[write:organization], token scope=write:repo…"}
+
+Q2  admin POST /orgs                -> 201
+    teams in the new org: [('Owners', 'owner')]
+    members: ['manu']
+
+Q3  admin create team 'reconcilers' -> 201
+    add 'hefesto' to the team       -> 204
+    bot GET /user/orgs              -> 403   (required=[write:organization])
+    bot POST /orgs/…/repos          -> 403   (required=[write:organization])
+    team 'Owners' (owner):       ['manu']
+    team 'reconcilers' (none):   ['hefesto']
+
+cleanup: DELETE /orgs/zz-probe-risk1 -> 204 ; GET -> 404 (clean)
+```
+
+**Answer: the superadmin creates organizations, the bot creates repositories inside them.** The
+creator becomes the sole member of `Owners` (Q2), so a bot that creates an organization owns it and
+D1 is violated at the moment of creation — but `write:organization` on the token is *permission to
+act on* organizations, not ownership of them. Widening the token and keeping the bot ownerless are
+therefore compatible, which is what ADR-065 asserts without demonstrating.
+
+**Two things this did NOT settle, and neither should be assumed:**
+
+- **The team-permission half is unproven.** Both bot calls in Q3 were refused at the *scope* layer,
+  so the team's permission was never exercised. That the bot can create a repository in an
+  organization it does not own, once its token carries the scope, still has to be measured — re-run
+  this probe after widening. A 403 from a missing scope and a 403 from a missing permission are the
+  same status code, which is the trap AUTH-004 AC5 already recorded once.
+- **`permission: "write"` came back as `permission: none`.** The team was created with an explicit
+  `units` list, and the response reports `none`. Passing `units` appears to override the coarse
+  `permission` field rather than combine with it. PR1 must read the created team back and assert its
+  effective permission rather than trusting the request body — otherwise the reconciler ships a team
+  that grants nothing and nothing looks wrong.
+
+## AC5 — the migration credential, checked by consequence (2026-08-28)
+
+```
+ALLOWED
+  /repos/mlorentedev/resume                    200
+  /repos/mlorentedev/resume/issues?state=open  200   33 items  = 28 issues + 5 PRs
+  /repos/mlorentedev/resume/pulls?state=open   200    5 items
+  /repos/mlorentedev/resume/contents/README.md 200
+  /repos/mlorentedev/fae-brain                 200   second granted repo
+
+REFUSED
+  /repos/mlorentedev/knowledge                 404   private, outside the grant
+  PATCH /repos/mlorentedev/resume              403   write on a GRANTED repo
+
+  /user/repos  ->  64 visible, of which private: ['fae-brain', 'resume']
+  anonymous /users/mlorentedev/repos -> 22 public
+
+token expiration header: 2026-10-27 03:01:11 UTC  (59 days)
+```
+
+**The refusal is a 404, not a 403.** A fine-grained PAT does not confirm the existence of a
+repository outside its grant, so `knowledge` is indistinguishable from a repository that is not
+there. Reading that 404 as "absent" rather than "refused" would be the wrong lesson, and it is the
+same trap as AUTH-004 AC5's — where an account-level rejection and a scope-level one shared a status
+code and voided a whole verification run.
+
+**`/user/repos` returning 64 was a misread probe, not a broad grant.** Only **2** of them are
+private and they are exactly the two granted; the other 62 are public, which need no grant at all.
+The control that settles it is the direct read: `knowledge` (private, ungranted) → 404, `iris`
+(public) → 200, which is what ADR-065 says each should be.
+
+## A defect found in the credential-expiry control itself
+
+Registering the token surfaced a real bug in `toolkit secrets`, fixed on this branch with
+`tests/test_secret_expiry_lookup.py`. Both expiry reports resolved values from
+`ConfigurationManager("common")` alone, so any PROVIDER credential stored per environment was
+invisible to them:
+
+```
+before:  apps.services.core.gitea.github_migration_token  declared PROVIDER but absent from SOPS
+after:   apps.services.core.gitea.github_migration_token  expires 2026-10-27  (59d)
+```
+
+The two callers failed differently and both were wrong — `audit` skipped it with no output at all,
+`check-expiry` announced it absent — about a credential that authenticated against GitHub in the
+same session. A false negative on a credential control is precisely what `secret_expiry`'s own
+docstring is written against: a key nobody is warned about is indistinguishable from one that cannot
+expire.
+
+The fix searches every SOPS file rather than threading an env through, because `SecretSpec.envs` is
+the audit dimension and not the storage location (ANSIBLE-033) — the catalog cannot be asked which
+file holds a value — and because `check-expiry` takes no `--env` and must be correct without one.
+
+**Incidental finding, filed rather than fixed:** the same report shows an orphaned Headscale API key
+that expired 2026-08-23. The key this repository stores is the healthy one (verified by comparing
+prefixes, never values), so nothing is broken — but it reddens `check-expiry` permanently, and a
+control that always fails stops being read. Filed as #1485 (VPN-014).
+
+## Test status
+
+- Test suite: `<command> -> <output / coverage %>`
+- Manual smoke test: what was exercised, what was observed
+- No regressions in existing test suite: yes / no (if no, document)
+
+## Decisions made during implementation
+
+Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
+
+- **2026-08-27 — the migration carries metadata, not only git objects.** Operator decision. `resume`'s
+  20 open issues and 5 open pull requests are the reason the repository is worth moving; a
+  git-objects-only push would have moved the code and left the work.
+- **2026-08-27 — the Gitea Actions runner is inside this spec rather than a separate one under #504.**
+  Operator decision, and it follows from the Why: migrating a repository whose CI is dead into a forge
+  with no CI does not close the pain. #504's evaluation is answered by construction here.
+
+## Promotion candidates
+
+Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
+
+- [ ] Lesson for the repo's `docs/lessons/`? Likely yes — the portability line for Gitea Actions is
+      "does the action talk to the GitHub API as a platform, or only to the runner", which predicts
+      the outcome better than any compatibility list.
+- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? Possibly — ADR-065 left "what must be
+      true before the GitHub copy is retired" open, and Risk 3 (which forge accepts a merge during the
+      pilot) is the first half of that answer.
+- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. Probably no.
+
+## Archive checklist
+
+- [ ] `proposal.md` frontmatter set to `status: archived`
+- [ ] Folder moved: `specs/TOOL-035-gitea-repository-reconciliation/` -> `specs/archive/`
+- [ ] Bitácora board tickets moved to Done / closed with PR links (ADR-018): #1076, #1389, #504
+- [ ] Promotions above executed (if any)

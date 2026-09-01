@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-60 lessons, newest first. Back to [all categories](../_index.md).
+61 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 408 | [A bounded query answers about its bound, and its answer is indistinguishable from data](lesson-408-a-bounded-query-answers-about-its-bound-not-the-collection.md) | 2026-08-28 |
 | 402 | [A push to a merged PR's branch recreates the branch and exits 0](lesson-402-a-push-to-a-merged-prs-branch-recreates-it-and-exits-zero.md) | 2026-08-26 |
 | 405 | [The `gh` CLI reports success it did not achieve, in two unrelated places](lesson-405-the-gh-cli-reports-success-it-did-not-achieve-in-two-places.md) | 2026-08-26 |
 | 399 | [A diagnostic can mutate the thing it is measuring](lesson-399-a-diagnostic-can-mutate-the-thing-it-is-measuring.md) | 2026-08-26 |

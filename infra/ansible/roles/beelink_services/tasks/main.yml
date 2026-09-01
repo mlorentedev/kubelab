@@ -331,6 +331,49 @@
   no_log: true
   tags: [gitea]
 
+- name: Mint the superadmin's scoped token
+  # Same mechanism, same non-idempotence, same gate as the machine token above:
+  # generate-access-token always mints a NEW token, so this is gated on the
+  # recorded secret being absent and a re-provision does nothing at all.
+  #
+  # `argv` for the reason measured on the task above — the string form loses its
+  # quoting through YAML folding plus argv splitting, and a partial invocation
+  # already minted a token with generate-access-token's DEFAULT scopes ("all")
+  # while reporting failure. An over-scoped superadmin credential is a worse
+  # outcome here than it was there.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_admin_user }}
+        --token-name kubelab-reconciler
+        --scopes {{ gitea_admin_scopes }}
+        --raw
+  register: _gitea_admin_token
+  when: not gitea_admin_token
+  changed_when: _gitea_admin_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the superadmin token in SOPS
+  # Delegated to the controller, which is where the age key is. STDIN, never
+  # argv: an argument list is world-readable in /proc for the process lifetime.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.admin_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_admin_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: not gitea_admin_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
 - name: Report service status
   debug:
     msg: >-
