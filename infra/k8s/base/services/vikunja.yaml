@@ -59,9 +59,6 @@ spec:
           image: busybox:1.36
           command: ['sh', '-c', 'until nc -z -w 2 postgres 5432; do echo "waiting for postgres..."; sleep 2; done;']
       volumes:
-        - name: openid-config
-          configMap:
-            name: vikunja-openid-config
         # 1.0.0's image runs non-root and /app/vikunja is not writable by it, so
         # local-storage fallback (VIKUNJA_FILES_S3_ENABLED=false, above) needs an
         # explicit writable mount or the pod crash-loops on boot. Ephemeral by
