@@ -48,11 +48,24 @@ class FieldInfo:
 
 @dataclass(frozen=True)
 class ItemState:
-    """One issue's project item, and the single-select values it currently holds."""
+    """One issue's project item, its single-select values, and whether it is still open.
+
+    `issue_state` and `closed_at` are read LIVE from the API rather than taken
+    from a workflow's event payload, which is the whole of TOOL-053 (#1504). A
+    re-run replays the payload as it was when the event fired, so a gate written
+    as `if: github.event.issue.state == 'open'` judges the issue as it was, not
+    as it is -- and on 2026-08-31 that put #1494 back In Progress 38 minutes
+    after it closed.
+    """
 
     item_id: str
     number: int
     values: dict[str, str]  # field name -> current option name
+    #: "OPEN", "CLOSED", or whatever the API returns. Defaulted so existing
+    #: callers and fixtures keep working; anything not "OPEN" is treated as
+    #: closed by `guard_closed`, deliberately.
+    issue_state: str = "OPEN"
+    closed_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +76,79 @@ class Change:
 
     def __str__(self) -> str:
         return f"{self.field}: {self.before or '(unset)'} -> {self.after}"
+
+
+#: The board field carrying workflow state. Named rather than inlined because the
+#: guard below is worthless if it looks at the wrong field: a rename to "State"
+#: would make `desired.get(...)` return None, every check would pass, and the
+#: protection would vanish with no test failing and no error anywhere. One
+#: constant, one place to change, and `board streams`/`sweep` already treat these
+#: field names as project-defined rather than universal.
+STATUS_FIELD = "Status"
+
+#: The one write that must not land on a closed issue. Every other field --
+#: Priority, Stream, even Status -> Done -- stays legitimate after closure,
+#: because a board you cannot repair once a ticket closes is worse than one that
+#: occasionally lies. #1494's own correction was In Progress -> Done, and a guard
+#: refusing all writes would have blocked the fix as well as the mistake.
+GUARDED_STATUS = "In Progress"
+
+#: What to do when the guard fires. Two callers, two right answers, and the
+#: distinction is the reason this is an option rather than a constant.
+ON_CLOSED_CHOICES = ("fail", "skip")
+
+
+@dataclass(frozen=True)
+class Guard:
+    """A decision about whether a write may proceed, and the sentence explaining it."""
+
+    action: str  # "proceed" | "refuse" | "skip"
+    message: str = ""
+
+
+def guard_closed(state: ItemState, desired: dict[str, str], on_closed: str) -> Guard:
+    """Refuse to move a CLOSED issue back to In Progress (TOOL-053, #1504).
+
+    Observed 2026-08-31 on #1494: the workflow's only gate was
+    `if: github.event.issue.state == 'open'`, read from the **event payload**. A
+    re-run replays the payload as it was when the event fired, so the job at
+    02:28 believed an issue closed at 01:50:16Z was still open and wrote
+    `In Progress` onto a finished ticket. The board then claimed work that had
+    ended 38 minutes earlier.
+
+    Same class as dotfiles' BUG-066. The remedy is not a better guard clause on
+    the payload -- it is to read the state live and decide HERE, where a test can
+    execute the decision. A gate expressed in workflow YAML is not testable and
+    is exactly what failed.
+
+    IT READS THE REQUEST, NOT THE PLAN. `plan()` returns nothing when Status
+    already holds In Progress, so a guard derived from planned changes would let
+    a re-run sail through on an issue that was moved In Progress while open and
+    closed afterwards -- reporting success while doing the wrong thing for the
+    right reason.
+
+    FAILS CLOSED ON AN UNKNOWN STATE. Anything the API returns that is not
+    "OPEN" counts as closed. The cost of being wrong that way is a refused write
+    and a human reading a message; the other way it is a stale board nobody
+    trusts, which is the failure this exists to prevent.
+    """
+    if on_closed not in ON_CLOSED_CHOICES:
+        # Validated before anything else so `--on-closed maybe` cannot fall
+        # through to the permissive branch on an open issue and look supported.
+        raise ValueError(f"on_closed must be one of {', '.join(ON_CLOSED_CHOICES)}, got {on_closed!r}")
+
+    if state.issue_state == "OPEN":
+        return Guard(action="proceed")
+
+    if desired.get(STATUS_FIELD) != GUARDED_STATUS:
+        return Guard(action="proceed")
+
+    closed = f" (closed {state.closed_at})" if state.closed_at else ""
+    reason = f"issue #{state.number} is {state.issue_state}{closed}; refusing to set {STATUS_FIELD} to {GUARDED_STATUS}"
+
+    if on_closed == "skip":
+        return Guard(action="skip", message=f"{reason} — nothing to do")
+    return Guard(action="refuse", message=reason)
 
 
 def plan(state: ItemState, desired: dict[str, str]) -> tuple[Change, ...]:
@@ -115,6 +201,8 @@ query($owner: String!, $repo: String!, $issue: Int!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $issue) {
       number
+      state
+      closedAt
       projectItems(first: 10) {
         nodes {
           id
@@ -189,7 +277,14 @@ def fetch_item(owner: str, repo: str, project_number: int, issue: int) -> ItemSt
             for fv in item["fieldValues"]["nodes"]
             if fv and fv.get("field", {}).get("name") and fv.get("name")
         }
-        return ItemState(item_id=item["id"], number=node["number"], values=values)
+        return ItemState(
+            item_id=item["id"],
+            number=node["number"],
+            values=values,
+            # Live from the API, never from an event payload -- see ItemState.
+            issue_state=str(node.get("state") or "OPEN"),
+            closed_at=node.get("closedAt"),
+        )
 
     raise GitHubError(
         f"issue #{issue} is not on project {project_number} — the add-to-project workflow may not have run yet"
