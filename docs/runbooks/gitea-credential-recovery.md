@@ -121,21 +121,28 @@ same shell. Nothing here requires rebuilding the container or restoring a backup
 
 **Revoke alone bricks the bot.** SOPS still holds the dead value, and the mint task is gated on the
 key being **absent** — so nothing re-mints, and every consumer of `bot_token` fails until someone
-remembers to unset it. Rotation is one flow, not one step:
+remembers to unset it. That coupling is why revoke and unset are one command and not two steps to
+remember:
 
-1. **Revoke** — `GiteaBasicAuthClient.revoke_token("hefesto", "kubelab-provisioning")`. Idempotent
-   by 404: an already-absent token reports "no change" rather than raising, so a re-run converges.
-2. **Unset** — `toolkit secrets unset apps.services.core.gitea.bot_token --env prod`, which
-   re-opens the mint gate.
-3. **Re-mint** — `make provision NODE=bee ENV=prod`.
+```
+make gitea-rotate-token ENV=prod                 # plan: which token, on which account
+make gitea-rotate-token ENV=prod APPLY=1         # revoke + clear the SOPS key
+make provision NODE=bee ENV=prod                 # mint the replacement
+```
 
-Never mint a second token without revoking the first: the account would hold two live credentials
-with nothing recording which consumer holds which.
+`TOKEN=admin` rotates the superadmin's `kubelab-reconciler` instead of the bot's
+`kubelab-provisioning`. Plan-only without `APPLY=1`, because `--apply` opens the outage below.
 
-**There is an outage window.** Between (1) and (3) nothing holding `bot_token` can authenticate.
-Short, but real — run it deliberately, not as a side effect.
+**Order is revoke-then-unset, and it is not arbitrary.** The two failure modes are not symmetric:
+revoke-then-failed-unset leaves the bot down *loudly*, with the remedy printed on screen;
+unset-then-failed-revoke leaves the gate open while the old token is still live, so the next
+provision mints a **second** credential — silent, and the state `bot_token`'s `rotate_note`
+forbids. The command prefers the loud recoverable failure.
 
-**Two tokens sharing a name** makes Gitea answer 422 and `revoke_token` propagates it rather than
+**There is an outage window.** Between the revoke and the provision, nothing holding `bot_token` can
+authenticate. Short, but real — run it deliberately, not as a side effect.
+
+**Two tokens sharing a name** makes Gitea answer 422 and the rotation propagates it rather than
 guessing. That state needs a human.
 
 ## Verification
