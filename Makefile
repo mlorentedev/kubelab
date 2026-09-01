@@ -1260,6 +1260,16 @@ sync-oidc-hashes:
 	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync oidc --env $(ENV)
 
+.PHONY: sync-vikunja
+sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
+	@test -n "$(ENV)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) sync vikunja --env $(ENV)
+
+.PHONY: provision-postgres-tenant
+provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
+	@test -n "$(ENV)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
+	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) --tenant $(or $(TENANT),vikunja)
+
 .PHONY: validate-sync
 validate-sync:
 	@$(TOOLKIT) sync all --check --env $(or $(filter staging prod,$(ENV)),staging)
@@ -1411,7 +1421,7 @@ alerts:
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
 .PHONY: deploy-k8s
-deploy-k8s: apply-secrets apply-middleware-secrets validate-sync
+deploy-k8s: apply-secrets apply-middleware-secrets provision-postgres-tenant validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
 	@$(MAKE) import-n8n ENV=$(ENV) || echo "⚠️  n8n workflow import failed after a successful K8s deploy — the deploy itself is fine; re-run: make import-n8n ENV=$(ENV)"
