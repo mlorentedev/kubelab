@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-21 lessons, newest first. Back to [all categories](../_index.md).
+22 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 409 | [Fixing the error you got can leave the bug you did not reach](lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did.md) | 2026-08-31 |
 | 383 | [A reviewer fabricated a count and a CI failure — check the claim, not the confidence](lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence.md) | 2026-08-23 |
 | 359 | [A red check can be history rather than judgement — re-trigger before investigating](lesson-359-a-red-check-can-be-history-rather-than-jud.md) | 2026-08-20 |
 | 353 | [A reviewer reports its own status, and a skipped review is not a failed one](lesson-353-a-reviewer-reports-its-own-status-and-a-skip.md) | 2026-08-19 |
