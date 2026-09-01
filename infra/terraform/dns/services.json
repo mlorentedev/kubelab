@@ -77,5 +77,11 @@
     "zone": "kubelab",
     "proxied": false,
     "environments": ["prod"]
+  },
+  {
+    "name": "tasks",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
   }
 ]
