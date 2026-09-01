@@ -21,39 +21,38 @@ The same defect shipped once before, in dotfiles, where the preflight that was
 supposed to catch expired PATs was itself dead on arrival (`GH_REPO` is set there
 now, with a comment naming the incident: dotfiles lesson-134, ADR-031). Two
 repositories, two independent discoveries, one class — so this is a guard rather
-than a memo, following `tests/test_ci_hints_do_not_assert_a_cause.py`. Measured on
-the pre-fix tree: one violation, this job, and no false positives across the
-six other jobs here that call `gh pr`.
+than a memo, following `tests/test_ci_hints_do_not_assert_a_cause.py`.
 
-`gh api` is exempt on purpose: its endpoint is a repository path, so it carries
-its own context. The subcommands below do not, and silently fall back to git —
-which is what makes them a trap in a job with no checkout, and why this
-repository's remedy for the declaring job (lesson-002: PR-field writes go through
-REST, never the porcelain) leaves it clean here without a `GH_REPO` to declare.
-This guard exists so that the next porcelain step added to such a job is caught
-in CI rather than on a Dependabot PR a week later.
+## Why the granularity is per step, not per job
+
+Raised on PR #1496 by the reviewer that is not the author: the first revision of
+this guard concatenated every step's `run:` text before asking whether a
+repository was declared, so `--repo` (or `GH_REPO`) sitting on one step excused a
+bare porcelain call on a sibling step. That is the same failure the guard exists
+to prevent — a control that reads as covering the class while the step that
+actually needs it goes unguarded — and it is the failure mode `dotfiles
+tests/dependabot-ci.bats` names explicitly ("scoped PER JOB, not per file, and
+that distinction is the whole assertion"). The synthetic table below pins the
+per-step semantics, because no workflow in this repository exhibits the pattern
+and a scan alone could not tell the two revisions apart.
 """
 
 from __future__ import annotations
 
 import pathlib
-import re
-from collections.abc import Iterator
+from typing import Any
 
+import pytest
 import yaml
+
+from tests.gh_scan import checkout_step_index, job_calls, unexcused
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO / ".github/workflows"
 
-#: Subcommands that resolve a repository from the surrounding context rather
-#: than from an argument. Anything `gh api` reaches is exempt by construction.
-_NEEDS_REPO = re.compile(r"^\s*gh\s+(pr|issue|issues|label|labels|release|releases|repo|project|run|workflow)\b")
 
-_CHECKOUT = "actions/checkout"
-
-
-def _jobs() -> Iterator[tuple[pathlib.Path, str, dict]]:
-    """Yield (file, job name, job) for every parsed workflow job."""
+def _jobs() -> "list[tuple[pathlib.Path, str, dict[str, Any]]]":
+    found = []
     for path in sorted(WORKFLOWS.glob("*.y*ml")):
         try:
             workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -63,59 +62,144 @@ def _jobs() -> Iterator[tuple[pathlib.Path, str, dict]]:
             continue
         for job_name, job in (workflow.get("jobs") or {}).items():
             if isinstance(job, dict):
-                yield path, job_name, job
+                found.append((path, job_name, job))
+    return found
 
 
-def _repo_context_calls(job: dict) -> list[str]:
-    """Commands in this job that need a repository, comments excluded.
-
-    A `# gh pr edit …` in a shell comment is documentation, and counting it
-    would aim this guard at prose instead of at executed steps.
-    """
-    calls: list[str] = []
-    for step in job.get("steps") or []:
-        if not isinstance(step, dict):
-            continue
-        for line in str(step.get("run") or "").splitlines():
-            match = _NEEDS_REPO.match(line)
-            if match and not line.lstrip().startswith("#"):
-                calls.append(line.strip())
-    return calls
+def _job(**env: Any) -> dict[str, Any]:
+    return {"env": env.get("env"), "steps": env["steps"]}
 
 
-def test_the_scan_finds_workflow_jobs_with_run_steps():
-    """Without this, a moved directory turns the assertion below into a pass."""
-    scanned = sum(1 for _, _, job in _jobs() if _repo_context_calls(job))
-    assert scanned >= 5, (
-        f"only {scanned} jobs with repository-context gh calls under {WORKFLOWS}; "
+def _run(script: str, **env: Any) -> dict[str, str]:
+    step = {"name": "run", "run": script}
+    if env:
+        step["env"] = env
+    return step
+
+
+def test_the_scan_finds_workflow_jobs_with_repository_context_calls():
+    """Without this, a moved directory or a loosened matcher turns the assertion
+    below into a pass."""
+    with_calls = [(path, name) for path, name, job in _jobs() if job_calls(job)]
+    assert len(with_calls) >= 5, (
+        f"only {len(with_calls)} jobs call a porcelain gh subcommand under {WORKFLOWS}; "
         "the scan has drifted and the check below is asserting nothing"
     )
 
 
 def test_a_job_without_a_checkout_that_calls_gh_declares_its_repository():
-    """Either check the repository out, or tell `gh` what it is. Both are fine."""
-    offenders: list[str] = []
-    for path, job_name, job in _jobs():
-        calls = _repo_context_calls(job)
-        if not calls:
-            continue
-        steps = job.get("steps") or []
-        has_checkout = any(_CHECKOUT in str(step.get("uses") or "") for step in steps if isinstance(step, dict))
-        if has_checkout:
-            continue
+    """Either check the repository out, declare GH_REPO, or pass --repo.
 
-        envs = [job.get("env") or {}] + [step.get("env") or {} for step in steps if isinstance(step, dict)]
-        declares_repo = any(isinstance(env, dict) and env.get("GH_REPO") for env in envs)
-        runs = "\n".join(str(step.get("run") or "") for step in steps if isinstance(step, dict))
-        passes_repo = re.search(r"\bgh\s+\S[^\n]*\s--repo\b", runs) is not None
-        if not (declares_repo or passes_repo):
-            offenders.append(f"{path.name}::{job_name}\n      " + "\n      ".join(calls))
+    Each is scoped to the step that makes the call: see the module docstring.
+    """
+    offenders = []
+    for path, job_name, job in _jobs():
+        for call in unexcused(job):
+            offenders.append(f"{path.name}::{job_name}::{call.step_name}\n      {call.line}")
 
     assert not offenders, (
-        "these jobs call gh without a git remote and without GH_REPO:\n  "
-        + "\n  ".join(offenders)
-        + "\n\ngh resolves the repository from a git remote or GH_REPO, never "
-        "from GITHUB_REPOSITORY, so each call above dies with 'fatal: not a git "
-        "repository' before it reaches the API. Set GH_REPO at job level — per "
-        "command is today's command only — or run actions/checkout."
+        "these gh calls have no repository to resolve — no checkout at or before "
+        "their step, no GH_REPO in the job or their own step, no --repo on the "
+        "line:\n  " + "\n  ".join(offenders) + "\n\ngh resolves the repository "
+        "from a git remote or GH_REPO, never from GITHUB_REPOSITORY, so each one "
+        "dies with 'fatal: not a git repository' before it reaches the API. Set "
+        "GH_REPO on the job, or on the step, or use gh api, whose endpoint names "
+        "the repository itself."
     )
+
+
+# --- the per-step semantics, pinned on synthetic jobs ------------------------
+# (name, job, expected offenders)
+
+_TABLE: list[tuple[str, dict[str, Any], int]] = [
+    (
+        "bare porcelain call, no checkout, no context",
+        _job(steps=[_run("gh pr edit 1 --add-label x")]),
+        1,
+    ),
+    (
+        "GH_REPO on the job excuses every step",
+        _job(env={"GH_REPO": "o/r"}, steps=[_run("gh pr edit 1"), _run("gh issue close 2")]),
+        0,
+    ),
+    (
+        "GH_REPO on the calling step excuses that step",
+        _job(steps=[_run("gh pr edit 1", GH_REPO="o/r")]),
+        0,
+    ),
+    (
+        "GH_REPO on a sibling step does not excuse this one",
+        _job(steps=[_run("gh label list", GH_REPO="o/r"), _run("gh pr edit 1")]),
+        1,
+    ),
+    (
+        "--repo on the same line excuses the call",
+        _job(steps=[_run("gh pr edit 1 --repo o/r --add-label x")]),
+        0,
+    ),
+    (
+        "--repo on a different line of the same step does not",
+        _job(steps=[_run("gh pr view 1\ngh pr edit 2 --repo o/r")]),
+        1,
+    ),
+    (
+        "a checkout in an earlier step excuses later ones",
+        _job(steps=[{"name": "checkout", "uses": "actions/checkout@v5"}, _run("gh pr edit 1")]),
+        0,
+    ),
+    (
+        "a checkout in a LATER step excuses nothing",
+        _job(steps=[_run("gh pr edit 1"), {"name": "checkout", "uses": "actions/checkout@v5"}]),
+        1,
+    ),
+    (
+        "gh api carries its repository in the endpoint",
+        _job(steps=[_run('gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/1/labels" -F "labels[]=x"')]),
+        0,
+    ),
+    (
+        "a shell comment is not a call",
+        _job(steps=[_run("# gh pr edit 1 is broken here, see lesson-002\ngh api user")]),
+        0,
+    ),
+    (
+        "a call that is not the first token on its line still counts",
+        _job(steps=[_run("prepare && gh pr close 1 --delete-branch")]),
+        1,
+    ),
+    (
+        "a call inside a command substitution still counts",
+        _job(steps=[_run('sha="$(gh pr view 1 --json headRefOid)"')]),
+        1,
+    ),
+    (
+        "two unguarded calls in one step are two offenders",
+        _job(steps=[_run("gh pr edit 1\ngh issue close 2")]),
+        2,
+    ),
+]
+
+
+@pytest.mark.parametrize("name,job,expected", _TABLE, ids=[row[0] for row in _TABLE])
+def test_the_scoped_gh_repository(name: str, job: dict[str, Any], expected: int) -> None:
+    """The matcher counts what it claims to count, in both directions.
+
+    Asserting the offender count — not only "zero for the clean cases" — is what
+    keeps a loosened matcher from turning the safe cases into a green that means
+    nothing.
+    """
+    offenders = unexcused(job)
+    assert len(offenders) == expected, f"{name}: expected {expected}, got {[o.line for o in offenders]}"
+
+
+def test_the_matcher_ignores_subcommands_that_need_no_repository() -> None:
+    """`gh api`, `gh auth`, `gh gh-api` … are out of scope by design."""
+    job = _job(steps=[_run("gh api user\ngh auth status\ngh browse")])
+    assert unexcused(job) == []
+    assert job_calls(job) == []
+
+
+def test_a_checkout_step_is_found_by_its_action_name_regardless_of_pinning() -> None:
+    job = _job(steps=[{"name": "co", "uses": "actions/checkout@b4deff5 # v5"}])
+    assert checkout_step_index(job) == 0
+    assert checkout_step_index(_job(steps=[_run("gh pr edit 1")])) is None

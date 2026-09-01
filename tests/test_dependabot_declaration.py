@@ -20,6 +20,8 @@ import re
 
 import yaml
 
+from tests.gh_scan import job_calls
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
 DECLARER = REPO_ROOT / ".github/workflows/dependabot-declare-unreviewed.yml"
@@ -150,12 +152,16 @@ def test_the_declaration_writes_pr_fields_through_rest_not_the_porcelain() -> No
     """
     steps = _load(DECLARER)["jobs"]["declare"]["steps"]
     script = "\n".join(str(step.get("run") or "") for step in steps if isinstance(step, dict))
-    commands = [ln.strip() for ln in script.splitlines() if ln.strip().startswith("gh ")]
+    # Line-anchored matching is not enough: `prepare && gh pr edit …` is the same
+    # call and the same failure. tests/gh_scan.py knows where a command starts.
+    calls = job_calls(_load(DECLARER)["jobs"]["declare"])
 
-    assert commands, "no gh calls left in the declaring job, so the guards above assert nothing"
-    assert [c for c in commands if c.startswith("gh pr edit")] == [], (
+    assert [c for c in calls if re.search(r"\bgh\s+pr\s+edit\b", c.line)] == [], (
         "lesson-002: gh pr edit applies nothing on this repository; use "
         "gh api -X POST repos/OWNER/REPO/issues/<n>/labels -f 'labels[]=<label>'"
+    )
+    assert "gh api" in script, (
+        "the job is expected to write through gh api; if that changed, this guard needs the new shape"
     )
 
 
