@@ -526,6 +526,39 @@ SECRET_CATALOG: list[SecretSpec] = [
         # (ANSIBLE-033).
         envs=("prod",),
     ),
+    SecretSpec(
+        key_path="apps.services.core.gitea.github_migration_token",
+        description=(
+            "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
+            "issues, pull requests and contents from the repositories ADR-065 moves"
+        ),
+        # EXTERNAL for the same reason as `bot_token`: GitHub issues it, only
+        # GitHub honours it, and a locally generated string would pass every audit
+        # while authenticating nothing. Unlike `bot_token` it is used by the
+        # RECONCILER calling Gitea, not by Gitea calling us — it is passed per
+        # migration request and (with `mirror: false`, which is what ADR-065's
+        # "move" means) Gitea has nothing to re-sync and so nothing to store.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        rotate_note=(
+            "Read-only by construction — Contents/Metadata/Issues/Pull requests, no write "
+            "anywhere, because the migration only reads from GitHub and Gitea writes on its "
+            "own side. Regenerate at github.com/settings/personal-access-tokens, then "
+            "`toolkit secrets set <key> --env prod --stdin`. Verify by consequence before "
+            "trusting it: a granted private repo answers 200 and one outside the grant "
+            "answers 404 (NOT 403 — GitHub does not confirm existence to an unauthorised "
+            "caller, and reading that 404 as 'the repo is gone' is the wrong lesson)."
+        ),
+        # PROVIDER, and it genuinely resolves: `github_pat_expiry` reads the
+        # `github-authentication-token-expiration` header GitHub returns on any
+        # authenticated call. Measured 2026-08-28 against this very token —
+        # 2026-10-27, 59 days left. This is the module's "asked, not remembered"
+        # rule paying off: no date is recorded here to drift.
+        expiry=Expiry.PROVIDER,
+        # prod, matching `bot_token` above: the forge's identity environment is
+        # prod, and `envs` is the audit dimension rather than the file (ANSIBLE-033).
+        envs=("prod",),
+    ),
     # =========================================================================
     # Vikunja (IDP-035)
     # =========================================================================
