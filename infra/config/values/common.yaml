@@ -804,6 +804,34 @@ apps:
         # networking.nodes.beelink.tailscale_ip.
         ssh_host: beelink.kubelab.internal
         health_path: /api/healthz
+        # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
+        # `toolkit.features.gitea_repos`: declared-and-missing is created,
+        # existing-and-undeclared is REPORTED and never removed.
+        #
+        # Split by PROVENANCE, not by topic (D2) — who owns the content. That axis
+        # gives the organization a second job for free: it is also the backup and
+        # retention class, so "what gets copied to R2" is answered by reading the
+        # namespace instead of maintaining a list, and a third party's material
+        # never inherits a personal repository's retention policy by accident.
+        #
+        # Organizations, never a user account (D1): Gitea's CLI has no user
+        # `rename` and repository ownership is a foreign key to a user row, so
+        # hanging repositories off a person makes the next identity change a
+        # migration. `kubelab` is declared while holding nothing (D3) — an
+        # organization that exists only because someone made it in the UI is state
+        # with no consumer.
+        #
+        # Only three of 40 private repositories move; the reasoning for each
+        # exclusion is in ADR-065 (`knowledge` is the vault and its canonical
+        # remote must not depend on an on-demand node; the 36 archived repos are
+        # 81% of the bytes and cannot change, so their RPO is infinite).
+        organizations:
+          teledyne:
+            repositories: [fae-brain, openkm-brain]
+          personal:
+            repositories: [resume]
+          kubelab:
+            repositories: []
         # Mirrors the limits the K8s Deployment carried, so the move is not also a
         # silent resource change.
         resources:
