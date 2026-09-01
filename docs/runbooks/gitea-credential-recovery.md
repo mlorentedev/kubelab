@@ -96,10 +96,16 @@ make provision NODE=bee ENV=prod
 **4. Gitea is up but the API refuses everything.** Reset directly, from the node:
 
 ```
-ssh manu@100.64.0.3
+ssh bee
 docker exec gitea su git -c "gitea admin user change-password \
   --username manu --password '<new>' --must-change-password=false"
 ```
+
+**The alias, not the address.** `bee` resolves through `~/.ssh/config`, which also defines `bee-lan`
+(home LAN) and `bee-ext` (through the VPS bastion) — see `non-admin-workstation-access.md`. Writing
+the mesh IP here would pin a *recovery* runbook to the one path most likely to be down when it is
+being read, and would duplicate a value whose SSOT is `networking.nodes.bee.tailscale_ip` in
+`common.yaml`. If no alias is configured, take the address from there rather than from this page.
 
 Then record it so SOPS stops being wrong — otherwise step 3 will "repair" it back:
 
