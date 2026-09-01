@@ -769,8 +769,11 @@ def k8s_provision_postgres_tenant(
         return
 
     logger.info(f"Applying tenant provisioning for {tenant} in postgres ({env})...")
+    kubeconfig = _get_kubeconfig(env)
     cmd = [
         "kubectl",
+        "--kubeconfig",
+        kubeconfig,
         "-n",
         "kubelab",
         "exec",
@@ -785,9 +788,9 @@ def k8s_provision_postgres_tenant(
     ]
     res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
     if res.returncode != 0:
-        logger.warning(f"Provisioning returned non-zero (cluster may be offline): {res.stderr}")
-    else:
-        logger.success(f"PostgreSQL tenant {tenant} provisioned successfully.")
+        logger.error(f"Provisioning failed for tenant {tenant} in postgres ({env}): {res.stderr}")
+        raise typer.Exit(1)
+    logger.success(f"PostgreSQL tenant {tenant} provisioned successfully.")
 
 
 @k8s_app.command("apply-middleware-secrets")
