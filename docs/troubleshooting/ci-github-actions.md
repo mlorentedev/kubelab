@@ -71,6 +71,30 @@ two endpoints. `gh issue edit` is unaffected — only PR reads ask for
 Details in [`lesson-002`](../lessons/ci-automation/lesson-002-gh-pr-edit-fails-on-a-projects-classic-field-.md)
 and [`lesson-338`](../lessons/ci-automation/lesson-338-gh-pr-edit-aborts-on-this-repo-with-an-error-.md).
 
+## Which label declares an unreviewed merge?
+
+`merged-unreviewed`, with the `d`. That is the escape the gate reads
+(`harness/review-attestation.json` → `escape.label`), and it pairs with the
+`## Unreviewed merge rationale` body section: one without the other is not a
+declaration, which is the whole of CI-GATE-016.
+
+`merge-unreviewed`, without it, is **retired rather than unused**. Nothing in this
+tree references it and nothing mints it, but `gh api
+"search/issues?q=repo:mlorentedev/kubelab+label:merge-unreviewed"` returns three
+closed PRs — #1180, #1192, #1194 — that carry it as their disclosure of record,
+from the week the mechanism was named before it was renamed. Deleting the label
+deletes the assertion "this merged with nobody having read it" from those three
+pages and leaves nothing to explain the gap.
+
+| Label | What it means | Who writes it |
+|---|---|---|
+| `merged-unreviewed` | the escape the attestation gate classifies | `dependabot-declare-unreviewed.yml` |
+| `merge-unreviewed` | historical disclosure on three closed PRs | nothing — keep it, do not delete |
+
+Found while writing #1496, whose body first called the second one "an orphan label,
+worth deleting"; the search above is what reversed that, and this file is where the
+reason now lives.
+
 ## A Dependabot PR is red on `review-attestation`
 
 **Check which half of the escape is missing.** The gate requires the label
