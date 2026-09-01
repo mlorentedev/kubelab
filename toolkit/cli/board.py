@@ -310,6 +310,13 @@ def set_cmd(
     priority: Annotated[str | None, typer.Option("--priority", help='e.g. "P1", "P2".')] = None,
     stream: Annotated[str | None, typer.Option("--stream", help='e.g. "Security & Identity".')] = None,
     apply: Annotated[bool, typer.Option("--apply", help="Write the changes. Default is a dry run.")] = False,
+    on_closed: Annotated[
+        str,
+        typer.Option(
+            "--on-closed",
+            help="What to do if the issue is closed and Status would become In Progress: fail (default) or skip.",
+        ),
+    ] = "fail",
 ) -> None:
     """Set one issue's Status / Priority / Stream by NAME (TOOL-046, #1468).
 
@@ -347,6 +354,23 @@ def set_cmd(
     except board_set.GitHubError as exc:
         logger.error(str(exc))
         raise typer.Exit(code=2) from exc
+
+    # BEFORE `plan`, not after, and that ordering is the point (TOOL-053, #1504).
+    # `plan` returns nothing when Status already reads In Progress, so a guard
+    # placed after it would let a re-run pass on an issue moved In Progress while
+    # open and closed afterwards — reporting "already matches" while the board
+    # says work is in flight on a finished ticket.
+    try:
+        guard = board_set.guard_closed(state, desired, on_closed=on_closed)
+    except ValueError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    if guard.action == "refuse":
+        logger.error(guard.message)
+        raise typer.Exit(code=2)
+    if guard.action == "skip":
+        logger.info(guard.message)
+        return
 
     changes = board_set.plan(state, desired)
     if not changes:
