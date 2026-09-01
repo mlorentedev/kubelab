@@ -677,3 +677,80 @@ REFUSED — requires write:admin, which was not granted
 cleanup
   DELETE /repos/hefesto/ac5-scope-probe -> 204
 ```
+
+---
+
+## 2026-09-01 — AC1's live leg completed: Gitea, the service the 2026-08-24 transcript could not include
+
+### What was missing, and why it was missing rather than skipped
+
+The 2026-08-24 section above closes AC1 live for **Grafana, MinIO and Authelia**.
+Gitea is absent from it for a reason that was correct at the time: its leg had not
+shipped yet. `tasks.md` line 42 — *"Do the same for MinIO's root user and for
+Gitea's admin user"* — closed on **2026-08-26 (#1451)**, two days after that
+transcript was captured.
+
+So this is the remaining third of the same criterion, not a re-run. It matters
+because Gitea's delivery path is the one that differs: Grafana's and MinIO's admin
+identities are generated into K8s Secrets by `k8s_secrets.py`, while Gitea's is an
+Ansible variable rendered into the Beelink compose file by `roles/beelink_services`.
+One decision, two delivery paths — and only one of them had been demonstrated.
+
+### The measurement
+
+Controls first, per the bar the 2026-08-24 section sets: a probe that only shows
+the real credential succeeding proves the credential works, not that the *service*
+is what rejects a wrong one. A service whose authentication were misconfigured to
+accept anything would return the same `200`.
+
+```
+== Gitea staging, resolved superadmin = 'manu' ==
+  control A (right user, wrong password)   HTTP 401  login=None
+  control B (wrong user, right password)   HTTP 401  login=None
+  REAL     (SSOT superadmin)               HTTP 200  login='manu'  is_admin=True
+```
+
+Both controls differ from the real attempt, so the probe measures Gitea.
+
+The username is read from `apps.auth.identities.superadmin` at probe time and never
+typed as a literal — a probe hardcoding `manu` would pass even if the SSOT
+resolution it exists to prove were broken.
+
+### Alongside it, the other two re-confirmed on the same run
+
+```
+resolved superadmin from apps.auth.identities: 'manu'
+
+PASS  gitea    HTTP 200, login='manu', is_admin=True
+PASS  grafana  HTTP 200, login='manu', isGrafanaAdmin=True
+PASS  minio    HTTP 204, root_user='manu'
+
+3/3 services authenticated as the resolved superadmin 'manu'
+```
+
+Grafana and MinIO were reached through `kubectl port-forward`, not through Traefik.
+
+### lesson-382 recurred, and was caught by the same tell it names
+
+The first version of today's probe hit `grafana.staging.kubelab.live` directly and
+recorded a failure. It was **HTTP 302 to `auth.staging.kubelab.live`** — Authelia's
+ForwardAuth answering before Grafana saw the request. MinIO's public domain gave the
+matching shape: an S3 `BadRequest` XML body to a console login, because that domain
+is the S3 API and the console is on `:9001`.
+
+Neither was a fact about the credential. Both would have been recorded as a failing
+acceptance criterion by a reader who trusted the status code.
+
+The 2026-08-24 section already records this exact misreading, which is the point
+worth keeping: **the written lesson did not prevent the repeat — the control did.**
+The probe now carries the port-forward and the reason for it in its own docstring,
+where the next author of a probe will be standing.
+
+### What this does not close
+
+`tasks.md` line 49 remains open: the second human's argon2 hash
+(`users_manu_password_hash`) is still absent from SOPS and from `SECRET_CATALOG`.
+Verified today against prod — the only `*_password_hash` keys present are
+`users_operator_password_hash` and `users_testuser_password_hash`. Part 1 is not
+complete until that lands, and per BACKUP-EPIC #1090 it is the sole remaining gate
+on TOOL-035's forge population.

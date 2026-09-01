@@ -144,11 +144,20 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         name="vikunja-secrets",
         keys={
             "VIKUNJA_DATABASE_PASSWORD": "APPS_SERVICES_CORE_VIKUNJA_DB_PASSWORD",
-            "VIKUNJA_AUTH_OPENID_CLIENTSECRET": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA",
+            # Provider-scoped key (matches NAME/AUTHURL/CLIENTID on the "authelia"
+            # provider in vikunja-config) -- Vikunja's OIDC provider config is
+            # per-provider, there is no top-level VIKUNJA_AUTH_OPENID_CLIENTSECRET.
+            "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTSECRET": (
+                "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA"
+            ),
             "VIKUNJA_SERVICE_JWTSECRET": "APPS_SERVICES_CORE_VIKUNJA_JWT_SECRET",
         },
         optional_keys={
-            "VIKUNJA_FILES_S3_SECRETACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_S3_SECRET_KEY",
+            # Catalog key paths are apps.services.core.vikunja.r2_{access,secret}_key
+            # (R2, not S3 -- the env var *names* below are VIKUNJA_FILES_S3_* because
+            # that's Vikunja's own config schema for its S3-compatible client).
+            "VIKUNJA_FILES_S3_ACCESSKEYID": "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY",
+            "VIKUNJA_FILES_S3_SECRETACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY",
         },
     ),
 ]

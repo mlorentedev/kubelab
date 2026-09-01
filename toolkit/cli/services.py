@@ -453,3 +453,98 @@ def gitea_reconcile(
         logger.error(f"{target}: {reason}")
     if not report.ok:
         raise typer.Exit(1)
+
+
+@gitea_app.command("rotate-token")
+def gitea_rotate_token(
+    token: Annotated[str, typer.Option("--token", help="Which credential: bot or admin")] = "bot",
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
+    apply: Annotated[bool, typer.Option("--apply", help="Actually rotate. Without it, plan only.")] = False,
+) -> None:
+    """Revoke a Gitea machine token and clear its SOPS key so a re-provision re-mints it.
+
+    PLAN-ONLY BY DEFAULT, and the default matters more here than on `reconcile`:
+    `--apply` OPENS AN OUTAGE. Between the revoke and the next
+    `make provision NODE=bee ENV=prod`, nothing holding this credential can
+    authenticate. Short, but real -- so it is run deliberately, never as a side
+    effect of a mistyped target.
+
+    BOTH HALVES OR NEITHER, in that order. See `gitea_tokens` for why revoking
+    without clearing the key strands the account permanently, and why the reverse
+    order silently mints a second live credential instead.
+
+    Needs the admin PASSWORD, not a token: Gitea's token endpoints sit behind
+    `reqBasicOrRevProxyAuth()` and reject bearer tokens before the handler runs.
+    That is also why a drifted admin password takes this path down with it -- the
+    probe/reassert pair in `beelink_services` exists to keep SOPS authoritative.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
+    from toolkit.features.gitea_tokens import format_rotation_plan, plan_rotation
+    from toolkit.features.secrets_manager import secrets_manager
+
+    merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
+    gitea = merged["apps"]["services"]["core"]["gitea"]
+    identities = merged["apps"]["auth"]["identities"]
+
+    try:
+        plan = plan_rotation(token, identities, secret_present=bool(gitea.get(_secret_leaf(token))))
+    except KeyError as exc:
+        logger.error(str(exc).strip("'"))
+        raise typer.Exit(1) from exc
+
+    base_url = f"https://{gitea['domain']}"
+    console.print(f"\n[bold]Gitea token rotation[/bold] — {base_url} ({env})\n")
+    console.print(format_rotation_plan(plan))
+
+    if not apply:
+        console.print("\n[dim]plan only — re-run with --apply to rotate (this opens an outage window)[/dim]")
+        return
+
+    admin_password = gitea.get("admin_password")
+    if not admin_password:
+        # Fail BEFORE revoking, not after: without the password the revoke cannot
+        # happen, and discovering that between the two halves is the stranded
+        # state this command exists to prevent.
+        logger.error(f"missing apps.services.core.gitea.admin_password in {env} SOPS — cannot reach the token endpoint")
+        raise typer.Exit(1)
+
+    client = GiteaBasicAuthClient(base_url, identities["superadmin"], str(admin_password))
+    try:
+        revoked = client.revoke_token(plan.username, plan.token_name)
+    except GiteaError as exc:
+        hint = " (a 401 here usually means the SOPS admin password has drifted — re-provision the Beelink)"
+        logger.error(f"revoke failed{hint if exc.status_code == 401 else ''}: {exc}")
+        raise typer.Exit(1) from exc
+
+    if revoked:
+        logger.success(f"revoked {plan.token_name} on {plan.username} — the outage window is now OPEN")
+    else:
+        logger.info(f"{plan.token_name} was already absent on {plan.username} — nothing to revoke")
+
+    if not plan.secret_present:
+        logger.info(f"{plan.secret_key} already unset — the mint gate was open")
+    elif secrets_manager.unset_secret(env, plan.secret_key):
+        logger.success(f"cleared {plan.secret_key} — the mint gate is open")
+    else:
+        # The loud half of the asymmetry in `gitea_tokens`: the token is gone and
+        # the gate is still shut, so nothing will re-mint. Name the exact remedy
+        # rather than leaving it to be reconstructed under pressure.
+        logger.error(
+            f"REVOKED BUT NOT CLEARED — run: toolkit secrets unset {plan.secret_key} --env {env}\n"
+            "  until then the mint task stays gated and no replacement is issued."
+        )
+        raise typer.Exit(1)
+
+    console.print("\n[bold]Next:[/bold] make provision NODE=bee ENV=prod   [dim](closes the outage window)[/dim]")
+
+
+def _secret_leaf(token: str) -> str:
+    """The last segment of a rotatable token's SOPS key.
+
+    The merged config is already scoped to `apps.services.core.gitea`, so the
+    lookup needs the leaf rather than the full dotted path the registry records.
+    """
+    from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
+
+    spec = ROTATABLE_TOKENS.get(token)
+    return spec.secret_key.rsplit(".", 1)[-1] if spec else ""
