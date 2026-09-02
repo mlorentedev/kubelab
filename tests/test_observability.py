@@ -518,3 +518,71 @@ class TestCliCommands:
         parsed = json.loads(result.output)
         assert parsed["service"] == "api"
         assert parsed["severity"] == "CRITICAL"
+
+
+class TestLogsAsksTheEnvironmentYouNamed:
+    """OBS-019: `obs logs` had no `--env` while its sibling `obs alerts` did.
+
+    `LokiClient()` defaults to `127.0.0.1:3100`, so the command asked whatever
+    was listening there. Measured 2026-09-01: it printed "No logs found" for
+    `--service crowdsec --since 15m` while prod's Loki held 20 matching lines
+    in that window -- a dev Loki was bound to that port on the workstation.
+
+    This is a THIRD failure mode, distinct from the two the module already
+    separates. An unreachable Loki raises; a quiet one returns []. A *wrong*
+    one answers `status: success` with an empty result, so it is
+    indistinguishable from the quiet case and reports someone else's silence as
+    the answer. The guard is that the command must route through the named
+    environment rather than a default port.
+    """
+
+    def test_logs_port_forwards_to_the_named_env_rather_than_localhost(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        calls: list[tuple] = []
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            calls.append((env, service, port))
+            yield 55555
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+        monkeypatch.setattr(
+            obs_cli.LokiClient, "query_service_logs", lambda self, **kw: []
+        )
+
+        result = runner.invoke(app, ["obs", "logs", "--env", "prod", "--service", "crowdsec"])
+
+        assert result.exit_code == 0, result.output
+        assert calls == [("prod", "loki", 3100)], (
+            "logs must reach the named environment's Loki through a port-forward, "
+            "not whatever is bound to the default 127.0.0.1:3100"
+        )
+
+    def test_an_empty_window_names_the_loki_it_asked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """'No logs found' without a source reads as authoritative. It is not."""
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            yield 55555
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+        monkeypatch.setattr(
+            obs_cli.LokiClient, "query_service_logs", lambda self, **kw: []
+        )
+
+        result = runner.invoke(app, ["obs", "logs", "--env", "prod", "--service", "crowdsec"])
+
+        assert "No logs found" in result.output
+        assert "127.0.0.1:55555" in result.output, (
+            f"the empty-window message must name the Loki it asked; got: {result.output!r}"
+        )
