@@ -42,7 +42,16 @@ DASHBOARD_PORT = 9000
 #: Probed to prove the HOST is up before concluding anything about 9000. Without
 #: this the whole file passes vacuously whenever the VPS is unreachable, which
 #: is the failure mode a "the port does not answer" assertion invites.
-REACHABLE_PORT = 443
+#:
+#: SSH rather than 443, and the distinction is the point (pr-agent's finding on
+#: #1548): 443 is served by Traefik itself, so a Traefik outage would read here
+#: as "host unreachable" and skip -- and a broken, rolled-back or half-applied
+#: HelmChartConfig is exactly the state in which port 9000 comes back. Keying
+#: liveness on Traefik would make the guard go quiet at the only moment it
+#: matters. sshd is independent of the cluster, so it separates "host down"
+#: (skip, honestly) from "host up, Traefik unhealthy" -- where 9000 must still
+#: be closed and the assertion should still run.
+REACHABLE_PORT = 22
 
 CONNECT_TIMEOUT_S = 6.0
 
@@ -84,13 +93,15 @@ def host_is_reachable(vps_ip: str) -> None:
 
     A closed port and an unreachable host are the same observation from here --
     a failed TCP connect. So the closed-port assertion below is only meaningful
-    once something else on the same host has answered. If 443 is silent too, the
+    once something else on the same host has answered. If SSH is silent too, the
     honest report is CANNOT CHECK, which is not the same as OK.
+
+    The probe is sshd and NOT Traefik on purpose; see REACHABLE_PORT above.
     """
     if not _port_answers(vps_ip, REACHABLE_PORT):
         pytest.skip(
-            f"CANNOT CHECK: {vps_ip}:{REACHABLE_PORT} did not answer, so the host is "
-            f"unreachable from here and a silent :{DASHBOARD_PORT} proves nothing. "
+            f"CANNOT CHECK: {vps_ip}:{REACHABLE_PORT} (sshd) did not answer, so the host "
+            f"is unreachable from here and a silent :{DASHBOARD_PORT} proves nothing. "
             f"This is NOT a pass -- SEC-005 is unverified in this environment."
         )
 
