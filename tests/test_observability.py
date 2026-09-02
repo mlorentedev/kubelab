@@ -455,7 +455,13 @@ class TestSreTriageEngine:
 
 class TestCliCommands:
     @patch("toolkit.features.observability.LokiClient.query_service_logs")
-    def test_cli_obs_logs(self, mock_logs):
+    def test_cli_obs_logs(self, mock_logs, monkeypatch):
+        # LOKI_URL is the direct-URL escape hatch, set here for the same reason
+        # the alerts tests below set GRAFANA_URL: this asserts on OUTPUT, not on
+        # transport. Without it `logs` opens a real `kubectl port-forward` — which
+        # fails on a runner with no cluster, and on a workstation succeeds by
+        # reaching the live prod Loki. Neither is what this test is asking about.
+        monkeypatch.setenv("LOKI_URL", "http://mock-loki:3100")
         mock_logs.return_value = ["[2026-08-23 02:00:00] [authelia@vps] auth failed"]
         result = runner.invoke(app, ["obs", "logs", "--service", "authelia", "--since", "15m"])
         assert result.exit_code == 0
@@ -485,7 +491,8 @@ class TestCliCommands:
         assert "Message posted" in result.output
 
     @patch("toolkit.features.observability.LokiClient.query_service_logs")
-    def test_cli_obs_logs_json(self, mock_logs):
+    def test_cli_obs_logs_json(self, mock_logs, monkeypatch):
+        monkeypatch.setenv("LOKI_URL", "http://mock-loki:3100")  # see test_cli_obs_logs
         mock_logs.return_value = ["[2026-08-23 02:00:00] [authelia@vps] auth failed"]
         result = runner.invoke(app, ["obs", "logs", "--service", "authelia", "--json"])
         assert result.exit_code == 0
