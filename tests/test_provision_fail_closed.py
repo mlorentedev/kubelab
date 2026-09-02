@@ -67,21 +67,31 @@ def _extract_provision_branch() -> str:
     return shell.replace("\x00", "$")
 
 
-def _run_branch(tmp_path: pathlib.Path, *, generate_fails: bool) -> subprocess.CompletedProcess[str]:
-    """Execute the extracted branch with stubbed toolkit commands."""
+def _run_branch(
+    tmp_path: pathlib.Path, *, generate_fails: bool, branch: str = "bootstrap"
+) -> subprocess.CompletedProcess[str]:
+    """Execute one of the target's two branches with stubbed toolkit commands.
+
+    `branch` selects which side of the `if` runs. The else branch gained its own
+    generate on 2026-09-02 -- before that it ran the playbook against whatever
+    inventory happened to be on disk -- so it now has the same fail-closed
+    obligation and needs the same behavioural test rather than an assumption.
+    """
     shell = _extract_provision_branch()
 
-    # The four toolkit invocations, in the order they appear: generate, run and
-    # restore inside the branch under test, then the plain run in the `else`.
-    # Each becomes a stub that records that it happened. The `else` one is
-    # stubbed too, so that a mis-forced branch shows up as an unexpected call
-    # rather than as a real command escaping into the test.
+    # The five toolkit invocations, in the order they appear in the recipe:
+    # generate, run and restore inside the BOOTSTRAP/TRANSPORT branch, then
+    # generate and run in the `else`. Each becomes a stub that records that it
+    # happened. Every one is stubbed, including the branch not under test, so a
+    # mis-forced branch shows up as an unexpected call rather than as a real
+    # command escaping into the test.
     marker = tmp_path / "calls.log"
     generate_rc = 1 if generate_fails else 0
     stubs = [
         f'sh -c \'echo generate >> "{marker}"; exit {generate_rc}\'',
         f'sh -c \'echo run >> "{marker}"; exit 0\'',
         f'sh -c \'echo restore >> "{marker}"; exit 0\'',
+        f'sh -c \'echo else_generate >> "{marker}"; exit {generate_rc}\'',
         f'sh -c \'echo else_run >> "{marker}"; exit 0\'',
     ]
     # The trailing `&&` / `;` is the thing under test, so the substitution must
@@ -97,7 +107,8 @@ def _run_branch(tmp_path: pathlib.Path, *, generate_fails: bool) -> subprocess.C
         )
 
     # BOOTSTRAP/TRANSPORT are empty after expansion-stripping, so force the branch.
-    shell = shell.replace('if [ -n "" ] || [ -n "" ]; then', "if true; then")
+    condition = "if true; then" if branch == "bootstrap" else "if false; then"
+    shell = shell.replace('if [ -n "" ] || [ -n "" ]; then', condition)
 
     return subprocess.run(
         ["sh", "-c", shell], capture_output=True, text=True, cwd=tmp_path, timeout=30
@@ -146,7 +157,35 @@ def test_successful_generate_still_runs_the_playbook(tmp_path: pathlib.Path) -> 
     assert result.returncode == 0, f"happy path exited {result.returncode}"
 
 
-def test_extraction_found_all_three_toolkit_calls() -> None:
+def test_else_branch_failed_generate_does_not_run_the_playbook(tmp_path: pathlib.Path) -> None:
+    """The ordinary path has the same obligation as the bootstrap one.
+
+    Until 2026-09-02 the else branch generated nothing and ran the playbook
+    against whatever inventory was on disk -- stale or absent. Adding a generate
+    there also added a new way to fail, so it is joined with `&&` for the same
+    reason TOOL-036 joined the other one: a run against an inventory that failed
+    to generate is a run against the previous inventory, silently.
+    """
+    result = _run_branch(tmp_path, generate_fails=True, branch="else")
+    calls = _calls(tmp_path)
+
+    assert "else_generate" in calls, f"the else branch was not forced: {calls}"
+    assert "else_run" not in calls, (
+        f"inventory generation failed and the playbook ran anyway: {calls}. The "
+        "else branch's generate and run must be joined with `&&`, not `;`."
+    )
+    assert result.returncode != 0, "a failed generate in the else branch exited 0"
+
+
+def test_else_branch_successful_generate_still_runs_the_playbook(tmp_path: pathlib.Path) -> None:
+    """The control, without which the guard above passes for a branch that never runs."""
+    result = _run_branch(tmp_path, generate_fails=False, branch="else")
+
+    assert _calls(tmp_path) == ["else_generate", "else_run"]
+    assert result.returncode == 0, f"happy path exited {result.returncode}"
+
+
+def test_extraction_found_all_five_toolkit_calls() -> None:
     """Guard the guard: if the recipe is restructured, this test must not pass vacuously.
 
     Every assertion above depends on the stubs having replaced real commands. If
@@ -154,10 +193,11 @@ def test_extraction_found_all_three_toolkit_calls() -> None:
     the "no run happened" assertion would pass for the wrong reason.
     """
     shell = _extract_provision_branch()
-    assert len(re.findall(r"^\s*infra ansible (?:generate|run)", shell, flags=re.M)) == 4, (
-        "expected exactly four toolkit invocations in the provision recipe "
-        "(generate, run, restore, and the else-branch run) — the recipe changed "
-        "shape, so update this test"
+    assert len(re.findall(r"^\s*infra ansible (?:generate|run)", shell, flags=re.M)) == 5, (
+        "expected exactly five toolkit invocations in the provision recipe "
+        "(generate, run, restore, then the else branch's generate and run) — the "
+        "recipe changed shape, so update this test AND check whether the new "
+        "shape still fails closed"
     )
 
 

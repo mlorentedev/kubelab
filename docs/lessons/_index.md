@@ -1,10 +1,10 @@
 # Lessons
 
-411 lessons, one file each. Newest: 2026-09-01. Open a category for its list.
+412 lessons, one file each. Newest: 2026-09-01. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
-| [identity-secrets](identity-secrets/_index.md) | 54 | Authelia, OIDC, SOPS, credentials |
+| [identity-secrets](identity-secrets/_index.md) | 55 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 52 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 45 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 49 | Roles, playbooks, IaC, node setup |
