@@ -120,10 +120,16 @@ def test_the_forge_credential_comes_from_the_forges_own_vault() -> None:
     line and change the key path: that token IS a staging-vault secret, and the
     Gitea bot token is not.
     """
+    # Matched on credential-shaped suffixes, NOT on "key". Three of this role's
+    # Gitea variables contain that word and none of them is secret:
+    # `ssh_host_key` is a public host key (published on purpose), `key_path` is
+    # a filesystem path, `key_title` is a label. A filter that caught them would
+    # demand they come from a vault, which is the opposite of correct — and it
+    # did, on the first run of this test.
     forge_creds = {
         name: expr
         for name, expr in _dev_node_vars().items()
-        if "gitea" in name and ("token" in name or "key" in name)
+        if "gitea" in name and name.endswith(("_token", "_secret", "_password"))
     }
     assert forge_creds, (
         "ace2's dev_node role declares no Gitea credential variable, so nothing "
