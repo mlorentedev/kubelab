@@ -454,6 +454,15 @@ secrets-audit:
 gitea-reconcile:
 	@$(TOOLKIT) services gitea reconcile --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
 
+# Plan only. `APPLY=1` revokes the token and clears its SOPS key — which OPENS AN
+# OUTAGE until `make provision NODE=bee ENV=prod` mints the replacement. Both
+# halves run together on purpose: the SOPS key is the mint gate, so a revoke on
+# its own strands the account permanently (TOOL-035, #1076).
+# `TOKEN=admin` rotates the superadmin's reconciler token instead of the bot's.
+.PHONY: gitea-rotate-token
+gitea-rotate-token:
+	@$(TOOLKIT) services gitea rotate-token --token $(or $(TOKEN),bot) --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
+
 .PHONY: sync-secret-manager
 sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
 	@$(TOOLKIT) secrets sync-secret-manager

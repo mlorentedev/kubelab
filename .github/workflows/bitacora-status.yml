@@ -25,8 +25,17 @@ permissions: {}   # authenticates via the github-script token input (BITACORA_PA
 
 jobs:
   in-progress:
-    # Never resurrect a closed issue's status when it is (re)assigned.
-    if: github.event.issue.state == 'open'
+    # NO `if: github.event.issue.state == 'open'` HERE, deliberately (TOOL-053, #1504).
+    #
+    # That gate was the whole guard until 2026-08-31, and it is unsound for the
+    # one case that matters: a job RE-RUN replays the event payload exactly as it
+    # was when the event fired. #1494 closed at 01:50:16Z; a re-run at 02:28 read
+    # `state == 'open'` from the frozen payload and wrote In Progress onto a
+    # finished ticket, so the board claimed work that had ended 38 minutes
+    # earlier. A payload is a historical record, not current state.
+    #
+    # The state is now read LIVE inside the script, below, where it is true at
+    # the moment of the write.
     runs-on: ubuntu-latest
     steps:
       - name: Move assigned issue to In Progress
@@ -34,6 +43,36 @@ jobs:
         with:
           github-token: ${{ secrets.BITACORA_PAT }}   # needs project + repo scope
           script: |
+            // Live state, asked of the API rather than taken from the payload.
+            // Mirrors toolkit `board_set.guard_closed`, which is where the same
+            // decision is unit-tested; consolidating the two onto one call of
+            // `toolkit board set` is the follow-up, and it needs Python in this
+            // workflow, which an issue-assigned hook does not have today.
+            const live = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) { state closedAt }
+                }
+              }`,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: context.payload.issue.number,
+              },
+            );
+            const issue = live.repository.issue;
+            // Fails closed: anything that is not OPEN is treated as closed. The
+            // cost of being wrong that way is a board left untouched; the other
+            // way is a board asserting work that has finished.
+            if (issue.state !== 'OPEN') {
+              core.notice(
+                `#${context.payload.issue.number} is ${issue.state}` +
+                (issue.closedAt ? ` (closed ${issue.closedAt})` : '') +
+                ' — not setting In Progress.',
+              );
+              return;
+            }
+
             const projectId = 'PVT_kwHOAM7xJs4BZ6GY';
             const statusFieldId = 'PVTSSF_lAHOAM7xJs4BZ6GYzhU1dtI';
             const inProgressId = '6c133cc8';

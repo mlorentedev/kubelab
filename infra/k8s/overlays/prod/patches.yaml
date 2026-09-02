@@ -321,17 +321,6 @@ spec:
   tls:
     certResolver: letsencrypt
 ---
-# Override base vikunja ConfigMap with prod domain
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vikunja-config
-  namespace: kubelab
-data:
-  VIKUNJA_SERVICE_FRONTENDURL: "https://tasks.kubelab.live/"
-  VIKUNJA_AUTH_OPENID_REDIRECTURL: "https://tasks.kubelab.live/auth/openid/authelia"
-  VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL: "https://auth.kubelab.live"
----
 # Override base vikunja IngressRoute with prod domain
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

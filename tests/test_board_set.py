@@ -18,6 +18,7 @@ from toolkit.features.board_set import (
     FieldInfo,
     ItemState,
     UnknownOptionError,
+    guard_closed,
     plan,
     resolve_option,
 )
@@ -81,3 +82,88 @@ class TestOptionResolution:
         """Deliberately strict: a fuzzy match would pick a neighbour silently."""
         with pytest.raises(UnknownOptionError):
             resolve_option("Priority", PRIORITY, "p1")
+
+
+class TestClosedIssueGuard:
+    """TOOL-053 (#1504): a re-run must not put a closed issue back In Progress.
+
+    Observed 2026-08-31 on #1494. The workflow's only guard was
+    `if: github.event.issue.state == 'open'`, read from the **event payload**.
+    Re-running the job replays the payload as it was when the event fired, so
+    after the issue closed at 01:50:16Z, the re-run at 02:28 believed it was
+    open and wrote `In Progress` onto a finished ticket. The board then claimed
+    work that had ended 38 minutes earlier — the inverse of the standing order
+    the automation exists to serve.
+
+    Same class as BUG-066 in dotfiles' spec-gate ("a re-run replays the original
+    payload, so a payload-sourced gate judged the PR as it was before the
+    operator fixed it"). The remedy is the same and is not a guard clause on the
+    payload: read the state live, and decide here, where a test can execute it.
+    """
+
+    @staticmethod
+    def _item(*, issue_state: str, closed_at: str | None = None, values: dict[str, str] | None = None) -> ItemState:
+        return ItemState(item_id="I1", number=1494, values=values or {}, issue_state=issue_state, closed_at=closed_at)
+
+    def test_an_open_issue_moves_ahead(self) -> None:
+        guard = guard_closed(self._item(issue_state="OPEN"), {"Status": "In Progress"}, on_closed="fail")
+        assert guard.action == "proceed"
+
+    def test_a_closed_issue_refuses_In_Progress_and_names_when_it_closed(self) -> None:
+        """The human path: silence is the failure, so the message carries the date."""
+        guard = guard_closed(
+            self._item(issue_state="CLOSED", closed_at="2026-09-01T01:50:16Z"),
+            {"Status": "In Progress"},
+            on_closed="fail",
+        )
+        assert guard.action == "refuse"
+        assert "2026-09-01T01:50:16Z" in guard.message
+
+    def test_a_closed_issue_skips_for_automation_and_says_why(self) -> None:
+        """The workflow path: a re-run whose subject has closed is a no-op, not a red job.
+
+        The distinction from `refuse` is the whole option. Automation must be able
+        to report "nothing to do, and here is the reason" without turning a board
+        hygiene re-run into an incident; a human must not get that silence by
+        accident, because for them the request itself is the mistake.
+        """
+        guard = guard_closed(
+            self._item(issue_state="CLOSED", closed_at="2026-09-01T01:50:16Z"),
+            {"Status": "In Progress"},
+            on_closed="skip",
+        )
+        assert guard.action == "skip"
+        assert "In Progress" in guard.message and "1494" in guard.message
+
+    def test_only_the_move_to_In_Progress_is_guarded(self) -> None:
+        """Setting Priority, or correcting Status to Done, on a closed issue is legitimate.
+
+        A guard that refused every write would make the board unrepairable after
+        closure — and #1494's own correction (In Progress -> Done) is exactly the
+        write this would have blocked.
+        """
+        closed = self._item(issue_state="CLOSED", closed_at="2026-09-01T01:50:16Z")
+        assert guard_closed(closed, {"Priority": "P2"}, on_closed="fail").action == "proceed"
+        assert guard_closed(closed, {"Status": "Done"}, on_closed="fail").action == "proceed"
+
+    def test_a_write_already_holding_In_Progress_is_still_guarded(self) -> None:
+        """Idempotence does not save a rerun: the desired value is what it is.
+
+        `plan()` returns nothing when Status already reads In Progress, so if the
+        guard were derived from planned changes alone, re-running against an issue
+        that was moved In Progress *while open* and closed afterwards would
+        proceed silently and report success. The guard reads the request.
+        """
+        state = self._item(issue_state="CLOSED", closed_at="2026-09-01T01:50:16Z", values={"Status": "In Progress"})
+        assert plan(state, {"Status": "In Progress"}) == ()
+        assert guard_closed(state, {"Status": "In Progress"}, on_closed="fail").action == "refuse"
+
+    def test_an_unrecognised_on_closed_value_fails_rather_than_defaulting_open(self) -> None:
+        """`--closedmaybe` must not fall through to the permissive branch."""
+        with pytest.raises(ValueError):
+            guard_closed(self._item(issue_state="CLOSED"), {"Status": "In Progress"}, on_closed="maybe")
+
+    def test_a_state_the_api_has_never_returned_is_not_treated_as_open(self) -> None:
+        """Fail closed on an unknown value: the guard's cost of being wrong is a stale board."""
+        guard = guard_closed(self._item(issue_state="ARCHIVED"), {"Status": "In Progress"}, on_closed="fail")
+        assert guard.action == "refuse"
