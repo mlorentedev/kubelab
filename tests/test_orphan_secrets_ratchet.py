@@ -29,12 +29,14 @@ from toolkit.features.secrets_manager import (
     unbaselined_orphans,
 )
 
-#: The baseline held this many entries when the ratchet was installed
-#: (2026-09-01). **Lower it as orphans are resolved; raising it is the reviewable
+#: The baseline holds this many entries. It began at 19 when the ratchet was
+#: installed (2026-09-01) and came down to 16 the same day, when the three
+#: test-residue keys were deleted from the vaults -- the ratchet moving in the
+#: direction it exists for. **Lower it as orphans are resolved; raising it is the reviewable
 #: act.** If you are here because a test failed after adding a baseline entry:
 #: that is the mechanism working, not a broken test. Ask whether the key should be
 #: registered or deleted before raising this number.
-ORPHAN_BASELINE_MAX = 19
+ORPHAN_BASELINE_MAX = 16
 
 
 def test_the_baseline_may_only_shrink() -> None:
