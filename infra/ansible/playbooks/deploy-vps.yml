@@ -89,7 +89,7 @@
         docker_network: "{{ config.networking.vps.docker_network }}"
         base_domain: "{{ config.global.base_domain }}"
         restart_policy: "{{ config.global.restart_policy }}"
-        traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"
         traefik_dns_provider: "{{ config.edge.traefik.dns_provider }}"
         traefik_dns_delay_before_check: "{{ config.edge.traefik.dns_delay_before_check }}"
@@ -126,8 +126,16 @@
             domain: "{{ config.apps.services.observability.grafana.domain }}"
             backend_url: "http://grafana:{{ config.apps.services.observability.grafana.default_port }}"
             middlewares: [secure-headers@file, rate-limit@file, error-pages]
+          # Loki has NO prod domain, deliberately: #1530 deleted it because the
+          # prod overlay serves `Host(loki.internal.kubelab.local)` and ACME
+          # cannot certify a non-public TLD. This whole role is skipped in prod
+          # (the VPS is a k3s_server), so the route is only ever built for an
+          # environment where the domain exists -- but the reference would still
+          # fail to template if that ever stopped being true, silently taking the
+          # entire VPS deploy with it. The default makes the absence survivable
+          # and visible instead of fatal.
           - name: loki
-            domain: "{{ config.apps.services.observability.loki.domain }}"
+            domain: "{{ config.apps.services.observability.loki.domain | default('', true) }}"
             backend_url: "http://loki:{{ config.apps.services.observability.loki.default_port }}"
             middlewares: [secure-headers@file, rate-limit@file, error-pages]
           # Uptime Kuma lives on RPi3, proxied via Tailscale
