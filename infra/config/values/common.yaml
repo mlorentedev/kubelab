@@ -817,9 +817,54 @@ apps:
         # Rotates only when the forge's container is rebuilt with a new host
         # key. When that happens this line must be updated in the same change,
         # or every dev node refuses to connect — loudly, which is correct.
-        # Captured 2026-09-02: `ssh-keyscan -t ed25519 -p 2222 beelink.kubelab.internal`
+        # Captured 2026-09-02 with `ssh-keyscan -t ed25519 -p 2222
+        # beelink.kubelab.internal`, then CROSS-CHECKED against the forge's own
+        # copy of the file rather than against the network again:
+        #   docker exec gitea ssh-keygen -lf /data/ssh/ssh_host_ed25519_key.pub
+        #   -> SHA256:RameCEg0z14vtHICB99Ccj0zbpUk+qeC8i47cx7LcJU
+        # The cross-check is what makes this a declaration instead of TOFU
+        # wearing a declaration's clothes: a keyscan trusts whatever answered on
+        # the wire, which is exactly the thing pinning a host key defends
+        # against. Re-do BOTH steps if this line ever has to be updated.
         ssh_host_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHECoRmj6C9mt3eJI7NhMKf1xzrz4KJKPGmMDZiv9p9v"
         health_path: /api/healthz
+        # API scopes each minted token is granted. SSOT for the GRANT; the
+        # REQUIREMENT lives in the Python that makes the calls, and
+        # `tests/test_gitea_token_scopes.py` is what ties the two together.
+        #
+        # Declared here rather than in the playbook because the failure this
+        # prevents is silent. Measured 2026-09-01: the admin token was minted with
+        # `write:organization,read:repository`, the mint reported success, the
+        # secret landed in SOPS, `secrets-audit` counted it present — and
+        # `make gitea-reconcile ENV=prod` still died on
+        # `GET /admin/orgs -> 403 token does not have at least one of required
+        # scope(s)`. A grant declared in Ansible and a requirement declared in
+        # Python, with nothing checking they agree, produces a credential that
+        # exists and cannot do its job. Same class as lesson-404: the question is
+        # never "did this value change", it is "does anything verify it".
+        #
+        # Keys mirror `ROTATABLE_TOKENS` in `toolkit/features/gitea_tokens.py`
+        # deliberately, so `make gitea-rotate-token TOKEN=admin` and the scope it
+        # is re-minted with are addressed by the same word.
+        #
+        # WIDENING A SCOPE HERE IS NOT ENOUGH ON ITS OWN. Gitea cannot edit a
+        # token's scopes after minting, and the mint task is gated on the SOPS key
+        # being ABSENT — so an instance that already holds a token keeps the old
+        # scopes forever. The full path is
+        # `make gitea-rotate-token TOKEN=<x> ENV=prod APPLY=1` (revoke + unset)
+        # then `make provision NODE=bee ENV=prod TAGS=gitea` (re-mint).
+        token_scopes:
+          # `read:admin` is what `/admin/orgs` needs, and the reconciler needs
+          # `/admin/orgs` rather than `/user/orgs` because AC2's stray report is
+          # about organizations this account is NOT a member of — a per-account
+          # listing would report an existing private org as absent. Read-only:
+          # the admin token creates organizations (`write:organization`) but is
+          # never granted `write:admin`.
+          admin: "read:admin,write:organization,read:repository"
+          # `write:organization` is permission to ACT ON an organization, not to
+          # own one, so ADR-065 D1 (the bot owns nothing) still holds. Guarded
+          # against `REQUIRED_BOT_SCOPE` in `toolkit/features/gitea_client.py`.
+          bot: "write:repository,write:user,write:organization"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.

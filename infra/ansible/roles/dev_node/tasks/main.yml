@@ -441,10 +441,18 @@
     # `creates:`-guarded rather than `force: false` on openssh_keypair, because
     # the community collection is not a dependency of this role and adding one
     # for a single call is a heavier change than the call is worth.
+    # The comment carries the RESOLVED identity, which is the only place
+    # `dev_node_gitea_user` is consumed: Gitea's OpenSSH always authenticates the
+    # transport as `git@` and resolves the owning account from the key itself, so
+    # the identity can never appear in the SSH user field. Putting it in the
+    # comment is what makes `ssh-keygen -lf` on the node and the key's title in
+    # the account agree on whose key this is — without it, D1's machine-identity
+    # decision would be declared in the spec and invisible on the box.
     - name: Generate this node's own forge keypair (private half never leaves ace2)
       ansible.builtin.command:
         cmd: >-
-          ssh-keygen -t ed25519 -N '' -C 'ansible-037-{{ inventory_hostname }}'
+          ssh-keygen -t ed25519 -N ''
+          -C '{{ dev_node_gitea_user }}@{{ inventory_hostname }} (ANSIBLE-037)'
           -f {{ dev_node_gitea_key_path }}
         creates: "{{ dev_node_gitea_key_path }}"
       become: true
