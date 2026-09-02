@@ -33,7 +33,6 @@ from __future__ import annotations
 import json
 import pathlib
 
-import pytest
 import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -86,9 +85,17 @@ def _walk(node: object, found: dict[str, str], path: str = "apps") -> None:
             _walk(value, found, here)
 
 
-@pytest.mark.parametrize("env", ["prod"])
-def test_every_declared_public_domain_has_a_dns_record(env: str) -> None:
-    """A declared `domain` with no DNS record can never answer a health probe."""
+def test_every_declared_public_domain_has_a_dns_record() -> None:
+    """A declared `domain` with no DNS record can never answer a health probe.
+
+    Prod only, and not as a first step toward covering staging: `*.staging.
+    kubelab.live` resolves over the VPN through Headscale split DNS to RPi4
+    CoreDNS and is deliberately absent from Cloudflare, so `services.json` is
+    not the SSOT this invariant needs there and asserting it would fail on
+    every staging name. Parametrising over one environment would imply an
+    expansion that cannot exist.
+    """
+    env = "prod"
     dns = _declared_dns_names()
     undeclared = {
         key: domain
