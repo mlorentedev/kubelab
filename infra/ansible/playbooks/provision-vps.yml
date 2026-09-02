@@ -185,7 +185,7 @@
             base_domain: "{{ config.global.base_domain }}"
             restart_policy: "{{ config.global.restart_policy }}"
             traefik_dashboard_port: 9080
-            traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+            traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
             traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"
             traefik_dns_provider: "{{ config.edge.traefik.dns_provider }}"
             traefik_dns_delay_before_check: "{{ config.edge.traefik.dns_delay_before_check }}"
@@ -296,7 +296,7 @@
         k3s_traefik_http_port: "{{ config.k3s.traefik.http_port }}"
         k3s_traefik_https_port: "{{ config.k3s.traefik.https_port }}"
         k3s_traefik_acme_enabled: true
-        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
         k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
         k3s_traefik_acme_cloudflare_token: "{{ secrets.cloudflare.api_token }}"
