@@ -97,6 +97,20 @@ def test_security_rules_stay_retired_until_the_bouncer_can_see_client_ips() -> N
     positive assertion about an alert on `dropped requests`. Re-adding the file
     without doing so should fail here, deliberately.
     """
+    # Anchor the negative assertion before making it. `assert not is_file()`
+    # passes for every reason a path can be wrong -- a renamed directory, a
+    # moved test -- so on its own it is a guard that reports success precisely
+    # when it has stopped looking at anything. Proving the directory is there
+    # and still holds a sibling makes the absence below mean what it says.
+    assert GRAFANA_ALERTING_DIR.is_dir(), (
+        f"{GRAFANA_ALERTING_DIR} does not exist, so the assertion below would "
+        "pass vacuously. The alerting directory moved; fix this path."
+    )
+    assert (GRAFANA_ALERTING_DIR / "slo-rules.yaml").is_file(), (
+        "a known sibling rule file is missing, so this directory is not the one "
+        "this test means; the absence below would prove nothing."
+    )
+
     sec_path = GRAFANA_ALERTING_DIR / "security-rules.yaml"
     assert not sec_path.is_file(), (
         f"{sec_path} is back. Security alerting here needs an enforcement path "
