@@ -72,14 +72,13 @@
           slug: kubelab
     # SEC-005 (#1538): the `traefik` widget here queried
     # http://traefik.kube-system.svc:9000 -- the API of whichever cluster
-    # Homepage was running in. This file is in base/, so in PROD that meant the
-    # entry labelled "Stg" was reporting on prod's own proxy. It also depended
-    # on port 9000 being in the LoadBalancer Service, which is exactly what
-    # published the API to the internet; that port is gone now.
+    # Homepage was running in. This template renders into base/, so in PROD the
+    # entry labelled "Stg" was reporting on prod's own proxy. It also required
+    # port 9000 to be in the LoadBalancer Service, which is precisely what
+    # published the unauthenticated API to the internet; that port is gone.
     #
-    # Replaced with a ping, matching the "Traefik Prod" entry below. A widget
-    # would need a credential to pass Authelia, and the dashboard is one click
-    # away through `href` regardless.
+    # Replaced with a ping, matching "Traefik Prod" below. A widget would need a
+    # credential to pass Authelia, and `href` still opens the dashboard.
     - Traefik Stg:
         icon: si-traefikproxy
         href: https://traefik.staging.kubelab.live/dashboard/
