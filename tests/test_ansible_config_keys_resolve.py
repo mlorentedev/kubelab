@@ -32,6 +32,16 @@ deliberate statement that the key may be absent. Requiring *every* key to
 resolve would be satisfied by adding `| default('')` everywhere, which turns the
 guard into a no-op. So the invariant is: a reference with NO default must
 resolve against the RAW merged values -- the same data Ansible actually sees.
+
+KNOWN LIMIT, stated rather than discovered later (pr-agent, #1554): the scan is
+line-oriented, so a Jinja expression split across several lines -- a folded
+scalar, or a long `when:` broken over two -- is not matched and its keys go
+unchecked. That is a false negative: this guard can miss, but it does not lie
+about what it did check. Making it whole-file would need a YAML-aware pass over
+every scalar, which is a different tool; the line form covers the shape the
+codebase actually uses today and caught all five real cases. If a multi-line
+reference ever breaks a deploy, that is the trigger to upgrade this, not a
+reason to distrust the current assertions.
 """
 
 from __future__ import annotations

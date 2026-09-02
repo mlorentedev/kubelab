@@ -546,6 +546,14 @@ edge:
     use_local_certs: false
     cert_resolver: letsencrypt
     # acme_email auto-filled from apps.contact.email by the config loader (SSOT-014c).
+    # WHICH consumers see that fill, because it is not all of them (#1543):
+    #   toolkit (generators, k8s, secrets, health) -> ConfigLoader  -> YES
+    #   Ansible playbooks and roles                -> include_vars  -> NO
+    # include_vars reads this file raw and runs no loader, so for Ansible the key
+    # is simply absent and `config.edge.traefik.acme_email` raises. Every playbook
+    # reference therefore carries `| default(config.apps.contact.email, true)`,
+    # mirroring the loader's own falsy test. Enforced by
+    # tests/test_ansible_config_keys_resolve.py -- do not rely on this comment.
     # DNS
     dns_provider: cloudflare
     dns_resolver_1: 1.1.1.1:53
