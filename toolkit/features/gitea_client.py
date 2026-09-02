@@ -43,6 +43,40 @@ PAGE_SIZE = 50
 #: edited after minting -- widening means re-minting.
 REQUIRED_BOT_SCOPE = "write:organization"
 
+#: Scopes the superadmin's token needs for every admin-client call this module
+#: makes: `write:organization` (`create_org`), `read:repository` (`list_repos`),
+#: `read:admin` (`list_orgs`, via `/admin/orgs`).
+#:
+#: Measured 2026-09-01: minted without `read:admin`, the token authenticated,
+#: landed in SOPS and passed `secrets-audit` -- and `/admin/orgs` refused it with
+#: `403 token does not have at least one of required scope(s)`. Presence of the
+#: credential was never evidence that it worked.
+#:
+#: Read-only on the admin axis by design. `read:admin` buys the whole-forge
+#: LISTING that `/user/orgs` cannot give (an organization this account is not a
+#: member of would read as absent, and reporting those is the point); it is not
+#: `write:admin`, which nothing here needs.
+#:
+#: Like `REQUIRED_BOT_SCOPE`, this is only half a contract on its own -- the
+#: grant is declared in `common.yaml` and minted by Ansible, which cannot import
+#: Python. `tests/test_gitea_token_scopes.py` is what makes the two agree.
+REQUIRED_ADMIN_SCOPES = frozenset({"read:admin", "write:organization", "read:repository"})
+
+#: The units a reconciler team is granted, each at the team's coarse permission.
+#: Gitea 1.25 refuses a team with no per-unit modes (`units permission should not
+#: be empty`), so this list is not optional decoration -- it is the grant.
+#: `repo.code` is the one that matters for pushing; the rest are included so a
+#: migrated repository's issues and releases are not read-only by accident.
+TEAM_UNITS: tuple[str, ...] = (
+    "repo.code",
+    "repo.issues",
+    "repo.pulls",
+    "repo.releases",
+    "repo.wiki",
+    "repo.projects",
+    "repo.packages",
+)
+
 
 class GiteaError(Exception):
     """A Gitea API call that did not succeed.
@@ -166,15 +200,41 @@ class GiteaClient:
         return None
 
     def create_team(self, org: str, name: str, permission: str) -> dict[str, Any]:
-        """Create a team with a coarse permission.
+        """Create a team that can actually create repositories in `org`.
 
-        `units` is deliberately NOT passed. Measured 2026-08-27: creating a team
-        with an explicit `units` list AND `permission: "write"` came back as
-        `permission: none` -- passing `units` appears to override the coarse field
-        rather than combine with it. Callers verify the result regardless; see
-        `gitea_repos.ensure_team`.
+        THREE MEASUREMENTS GOT US HERE, and each looked like a complete answer:
+
+        - 2026-08-27: `units` list + `permission: "write"` -> created, read back
+          as `permission: none`. Concluded that `units` overrides the coarse
+          field, so `units` was dropped.
+        - 2026-09-02: no `units` at all -> HTTP 500, `units permission should not
+          be empty`. Gitea 1.25 requires per-unit modes; dropping them is fatal.
+        - 2026-09-02: `units_map` (a permission PER unit) -> created, still reads
+          back `permission: none`, and the bot STILL could not create a
+          repository -- but with a different refusal: `Given user is not allowed
+          to create repository in organization`, not a scope error.
+
+        That last one is the whole answer. Creating a repository inside an
+        organization is not governed by `repo.code`; it is governed by
+        `can_create_org_repo`, a separate boolean that defaults to false. With it
+        set and `units_map` supplied, the bot's `POST /orgs/<org>/repos` returns
+        201 -- measured, not inferred.
+
+        `permission` still reads back as `none` and THAT IS CORRECT. It is the
+        team's COARSE access mode, which Gitea sets to none precisely because the
+        grant now lives per unit. Do not "fix" it; `gitea_repos.ensure_team`
+        checks the fields that actually govern instead.
         """
-        return self._request("POST", f"/orgs/{org}/teams", json={"name": name, "permission": permission})
+        return self._request(
+            "POST",
+            f"/orgs/{org}/teams",
+            json={
+                "name": name,
+                "permission": permission,
+                "can_create_org_repo": True,
+                "units_map": {unit: permission for unit in TEAM_UNITS},
+            },
+        )
 
     def add_team_member(self, team_id: int, username: str) -> dict[str, Any]:
         """Add an account to a team. Idempotent on Gitea's side -- re-adding answers 204."""

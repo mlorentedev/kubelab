@@ -232,15 +232,27 @@ class ExecutionReport:
 def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict[str, Any]:
     """Ensure `org` has the write team, and that it genuinely grants write.
 
-    READS THE TEAM BACK RATHER THAN TRUSTING THE RESPONSE, and this is the whole
-    point of the function. Measured 2026-08-27: a team created with an explicit
-    `units` list and `permission: "write"` came back reporting `permission: none`.
-    A reconciler that trusted the request body would ship a team granting nothing,
-    and the resulting 403 on repository creation is the same status code as a
-    missing token scope -- the trap AUTH-004 AC5 already recorded once.
+    READS THE TEAM BACK RATHER THAN TRUSTING THE RESPONSE, and this is still the
+    whole point of the function. What changed on 2026-09-02 is WHICH FIELD it
+    reads back, because the original one answered a different question than the
+    one being asked.
 
-    So a wrong permission raises here, where the cause is still visible, instead
-    of surfacing later as an unexplained refusal.
+    The old check asserted `team["permission"] == "write"` and raised on `none`.
+    That reading was wrong: `permission` is the team's COARSE access mode, and
+    Gitea sets it to `none` exactly when the grant moves per-unit via `units_map`
+    -- which is the only shape Gitea 1.25 accepts. So the check refused correct
+    teams, and would have gone on refusing them however the payload was rewritten.
+
+    Settled by consequence rather than by field: a team with `units_map` set and
+    `can_create_org_repo: true` reads back `permission: none` AND lets the bot
+    create a repository (201, measured). A team with `units_map` alone reads back
+    identically and is refused with `Given user is not allowed to create
+    repository in organization`. The coarse field cannot tell those two apart;
+    `can_create_org_repo` is the field that decides, so that is what is asserted.
+
+    Still a field check, not a live one: asserting by consequence here would mean
+    creating a probe repository on every reconcile. The fields checked are now
+    the ones that actually govern, which is the property the old check lacked.
     """
     team = admin.get_team(org, TEAM_NAME)
     if team is None:
@@ -252,12 +264,22 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     if team is None:
         raise TeamPermissionError(f"team {org}/{TEAM_NAME} was created but does not read back")
 
-    effective = team.get("permission")
-    if effective != TEAM_PERMISSION:
+    if not team.get("can_create_org_repo"):
         raise TeamPermissionError(
-            f"team {org}/{TEAM_NAME} reports permission {effective!r}, expected {TEAM_PERMISSION!r}. "
-            "Gitea returns 'none' when `units` overrides the coarse permission field; a repository "
-            "creation against this team would be refused with a 403 that looks like a token scope problem."
+            f"team {org}/{TEAM_NAME} has can_create_org_repo unset. Repository creation inside an "
+            "organization is governed by that boolean, NOT by the repo.code unit: measured 2026-09-02, "
+            "a team with units_map at write and the flag unset refused the bot with 'Given user is not "
+            "allowed to create repository in organization'. Note the coarse `permission` field reads "
+            f"{team.get('permission')!r} on a correct team too, so it cannot be used to tell them apart."
+        )
+
+    units = team.get("units_map") or {}
+    if units.get("repo.code") != TEAM_PERMISSION:
+        raise TeamPermissionError(
+            f"team {org}/{TEAM_NAME} grants repo.code {units.get('repo.code')!r}, expected "
+            f"{TEAM_PERMISSION!r}. The team can create repositories but could not push to them, and "
+            "the resulting refusal is the same 403 as a missing token scope -- the trap AUTH-004 AC5 "
+            "already recorded once."
         )
 
     if member:
