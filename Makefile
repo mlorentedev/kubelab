@@ -797,6 +797,16 @@ provision:
 	# left on disk. It also makes _exit capture generate's failure, because $$?
 	# of `a && b` is a's status when a fails. The restore line stays `;` — it
 	# has to run either way. See TOOL-036.
+	#
+	# BOTH branches generate first, and the else branch used to not. Two things
+	# were wrong with that. The inventory is gitignored, so in a fresh worktree
+	# the run simply failed — telling the operator to go run `toolkit infra
+	# ansible generate` by hand, which is the raw-command habit these targets
+	# exist to remove. Worse when the file DID exist: it could have been
+	# generated days earlier from a different `common.yaml`, so a normal
+	# provision would silently target stale inventory while the bootstrap path
+	# next to it was always current. Generating is idempotent and takes under a
+	# second, so there is no reason for the cheap path to be the incorrect one.
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Generating inventory ($(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),)) ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT) && \
@@ -806,6 +816,7 @@ provision:
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
+		$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 	fi
 
