@@ -214,7 +214,100 @@ jobs:
           # longer is storage held for nobody.
           retention-days: 1
 
+      # CI-GATE-017 (#1527). PR-Agent's OWN diff-fetch (`get_pr_diff`) computes
+      # a real diff for token accounting, but a separate pass inside
+      # `_prepare_prediction` re-derives the reviewable set after applying
+      # `.pr_agent.toml`'s `[ignore] glob` and can find it EMPTY -- no
+      # exception, no comment, nothing published. Measured identically on
+      # #1514 and #1523, both single-file PRs entirely inside
+      # `infra/config/secrets/**`:
+      #
+      #   "Filtered out [ignore] files for pull request:"
+      #   "extra": {"files": ["infra/config/secrets/prod.enc.yaml"], "filtered_files": []}
+      #   "Empty diff for PR: ..."
+      #
+      # `Fail if no review was published` below then correctly reports "no
+      # review landed", but its own two documented causes (saturation,
+      # empty-body-on-a-200) are both the wrong diagnosis for this run --
+      # there was nothing left to review after the ignore filter, which is
+      # a structural property of the diff and not a reviewer failure. This
+      # step detects that case ahead of time so the job can skip PR-Agent
+      # and the guard, and declare unreviewed instead of failing red for a
+      # reason neither of the guard's own error messages name.
+      - name: Determine whether the diff has anything to review
+        id: reviewable
+        if: >
+          github.event_name == 'pull_request'
+            || (github.event_name == 'issue_comment'
+                && contains(github.event.comment.body, '/review'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # The repository's OWN default branch, same reasoning as
+          # `Fail if no review was published` below and never the PR head or
+          # `base.ref`: reading the ignore list from the PR itself would let
+          # an author add `"**"` to `.pr_agent.toml` in their own branch, make
+          # every file "excluded", and auto-skip straight to the escape below
+          # with a green gate and no review ever attempted.
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/contents/.pr_agent.toml?ref=${BASE_REF}" \
+            --jq '.content' | base64 -d > pr_agent_config.toml
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --paginate --jq '.[].filename' > changed_files.txt
+
+          # fnmatch, not a TOML-aware glob library: `.pr_agent.toml`'s own
+          # `**` entries (e.g. `infra/config/secrets/**`) only need "matches
+          # anything", which is what an unanchored regex from `fnmatch`
+          # already gives every `*` -- consistent with the same
+          # regex-over-raw-text approach `_fallback_model_names()` in
+          # tests/test_pr_agent_workflow.py already uses for this file,
+          # rather than a second parsing method disagreeing with the first.
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import fnmatch
+          import re
+
+          config = open("pr_agent_config.toml", encoding="utf-8").read()
+          files = [f for f in open("changed_files.txt", encoding="utf-8").read().splitlines() if f]
+
+          m = re.search(r"^\[ignore\].*?glob\s*=\s*\[(.*?)\]", config, re.S | re.M)
+          globs = re.findall(r'"([^"]+)"', m.group(1)) if m else []
+
+          reviewable = [f for f in files if not any(fnmatch.fnmatchcase(f, g) for g in globs)]
+          print(f"any={'true' if reviewable else 'false'}")
+          PY
+
+      # A PR that started secrets-only (declared unreviewed by the step
+      # below) and later gains a reviewable file on the SAME branch would
+      # otherwise carry both a real review marker AND a stale
+      # `merged-unreviewed` label + rationale forever -- nothing else clears
+      # either. Only the label is cleared here; the body section is left for
+      # a human, editing PR body text by script being a sharper edge than
+      # this fix needs.
+      - name: Clear a stale unreviewed-merge declaration, if this PR just became reviewable
+        if: >
+          always() && steps.reviewable.outputs.any == 'true'
+            && (github.event_name == 'pull_request'
+                || (github.event_name == 'issue_comment'
+                    && contains(github.event.comment.body, '/review')))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          label=$(gh api "repos/${GITHUB_REPOSITORY}/contents/harness/review-attestation.json?ref=${BASE_REF}" \
+            --jq '.content' | base64 -d | jq -r '.escape.label')
+          have=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
+          if printf '%s\n' "$have" | grep -qxF "$label"; then
+            echo "::warning::removing stale '${label}' label -- this PR is reviewable now."
+            echo "::warning::the rationale section in the PR body is left for a human to clean up."
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/${label}" --silent
+          fi
+
       - name: PR-Agent
+        if: steps.reviewable.outputs.any == 'true'
         # Pinned by COMMIT SHA, not by tag, and this deliberately exceeds the
         # upstream it ports from. A tag is mutable: whoever can move `v0.42.0`
         # can change what runs in a job that holds `NAN_API_KEY` on a public
@@ -277,7 +370,8 @@ jobs:
       # like. A hardcoded string here would be a second source of truth.
       - name: Fail if no review was published
         if: >
-          always() && (github.event_name == 'pull_request'
+          always() && steps.reviewable.outputs.any == 'true'
+            && (github.event_name == 'pull_request'
             || (github.event_name == 'issue_comment'
                 && contains(github.event.comment.body, '/review')))
         env:
@@ -316,3 +410,85 @@ jobs:
           echo "::error::Tell them apart in the run log: a fallback attempt names the second"
           echo "::error::model. Silence after \"Generating prediction with\" is case (2)."
           exit 1
+
+      # CI-GATE-017 (#1527). The other branch of the `reviewable` step above:
+      # every changed file matched `.pr_agent.toml`'s own `[ignore]` glob, so
+      # PR-Agent has nothing to review and never ran. That is a structural
+      # property of the diff, not a reviewer failure, so this declares it
+      # plainly instead of letting the job fail for a reason the guard above
+      # does not name. Same registry-driven escape as
+      # `dependabot-declare-unreviewed.yml` (CI-GATE-015, #1364) -- proceeding
+      # unreviewed is allowed, proceeding SILENTLY is not -- but the rationale
+      # text differs on purpose: dependabot's says "comment /review", which
+      # would carry the credential dependabot's run lacks. Here a `/review`
+      # retry hits the SAME ignore filter and produces the SAME empty diff,
+      # so pointing at it would be pointing at a dead end.
+      - name: Declare unreviewed — diff is entirely excluded from review by .pr_agent.toml
+        if: >
+          always() && steps.reviewable.outputs.any == 'false'
+            && (github.event_name == 'pull_request'
+                || (github.event_name == 'issue_comment'
+                    && contains(github.event.comment.body, '/review')))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          registry=$(gh api "repos/${GITHUB_REPOSITORY}/contents/harness/review-attestation.json?ref=${BASE_REF}" \
+            --jq '.content' | base64 -d)
+          label=$(printf '%s' "$registry" | jq -r '.escape.label')
+          section=$(printf '%s' "$registry" | jq -r '.escape.section')
+          if [ -z "$label" ] || [ "$label" = "null" ] || [ -z "$section" ] || [ "$section" = "null" ]; then
+            echo "::error::harness/review-attestation.json declares no escape.label/escape.section"
+            exit 1
+          fi
+
+          # Read into a FILE and never interpolated into this script, same
+          # reasoning as dependabot-declare-unreviewed.yml: the body is
+          # attacker-influenced in principle, and the difference does not
+          # matter at the point where a shell would expand it.
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""' > body.md
+
+          # Idempotent on `synchronize`: a re-pushed all-secrets PR re-runs
+          # this, and appending a second copy would make the gate read the
+          # rationale from the first one and a human from the last.
+          if grep -qxF "$section" body.md; then
+            echo "already declared"
+          else
+            {
+              printf '\n\n%s\n\n' "$section"
+              printf 'PR-Agent (github-actions) published no review, and this section exists so\n'
+              printf 'that fact is declared rather than implied. Proceeding unreviewed is allowed\n'
+              printf 'here; proceeding SILENTLY is not.\n\n'
+              printf 'Every changed file in this PR matches `.pr_agent.toml`'"'"'s own `[ignore]`\n'
+              printf 'glob (read from `%s`), so the diff PR-Agent has left to review, after its\n' "$BASE_REF"
+              printf 'own filter, is empty -- logged upstream as `Empty diff for PR` (CI-GATE-017,\n'
+              printf '#1527). That is a structural property of the diff, not a quota or\n'
+              printf 'saturation failure, and a `/review` retry on the same commit hits the\n'
+              printf 'identical empty diff -- asking for one here would not produce a review.\n\n'
+              printf 'Verify a change like this the way #1514/#1517/#1523 did: decrypt both\n'
+              printf 'sides and diff the key NAMES, never the values (lesson-376).\n'
+            } >> body.md
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -F body=@body.md --silent
+            echo "rationale written"
+          fi
+
+          # Additive POST, not a replacing PUT -- see dependabot-declare-
+          # unreviewed.yml's identical comment: a PUT would drop whatever
+          # ecosystem/triage labels are already on the PR.
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            -f "labels[]=${label}" --silent
+
+          # A zero exit is not evidence the label landed. Read it back, same
+          # as the dependabot version -- a half-written declaration leaves
+          # this job green, the gate red, and the PR reading "not reviewed,
+          # and not declared as such" for as long as it lives.
+          have=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
+          if printf '%s\n' "$have" | grep -qxF "$label"; then
+            echo "declared: '$label' is on PR #${PR_NUMBER}"
+          else
+            echo "labels on the PR after the write: $(printf '%s' "$have" | tr '\n' ' ')"
+            echo "::error::escape label '$label' absent after the write; the gate reads this PR as undeclared"
+            exit 1
+          fi

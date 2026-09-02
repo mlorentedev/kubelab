@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-22 lessons, newest first. Back to [all categories](../_index.md).
+23 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 411 | [A review guard's two documented failure causes were not exhaustive — a third, structural one hid behind an identical error](lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive.md) | 2026-09-01 |
 | 409 | [Fixing the error you got can leave the bug you did not reach](lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did.md) | 2026-08-31 |
 | 383 | [A reviewer fabricated a count and a CI failure — check the claim, not the confidence](lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence.md) | 2026-08-23 |
 | 359 | [A red check can be history rather than judgement — re-trigger before investigating](lesson-359-a-red-check-can-be-history-rather-than-jud.md) | 2026-08-20 |
