@@ -407,3 +407,144 @@
         success_msg: gh is git's credential helper — one credential serves both.
       when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
+
+# =============================================================================
+# Gitea — the private forge (ANSIBLE-037 / #1075)
+#
+# What the node ends up holding is a keypair it GENERATED ITSELF. The private
+# half is created on ace2 and never transits; the controller only ever handles
+# the public half and the bot's API token, which stays on the controller. That
+# is strictly better than either alternative the GitHub block above weighs:
+# nothing is shipped to the node, and the node holds no `write:user` credential.
+#
+# Identity is the machine account (ADR-062 D1). Blast radius on the node is
+# repositories only, and revoking it is deleting one key from one account —
+# `DELETE /user/keys/{id}`, measured to fail closed within a second (R3).
+#
+# Empty token ON PURPOSE, matching the GitHub block: a run without the secret
+# degrades to "not configured" and skips registration rather than authenticating
+# with an empty credential.
+# =============================================================================
+
+- name: Configure git access to the private forge
+  when: dev_node_gitea_bot_token | length > 0
+  tags: [dev_node, gitea, identity]
+  block:
+    - name: Ensure the developer user's .ssh directory exists
+      ansible.builtin.file:
+        path: "{{ dev_node_home }}/.ssh"
+        state: directory
+        owner: "{{ dev_node_user }}"
+        group: "{{ dev_node_user }}"
+        mode: "0700"
+
+    # `creates:`-guarded rather than `force: false` on openssh_keypair, because
+    # the community collection is not a dependency of this role and adding one
+    # for a single call is a heavier change than the call is worth.
+    - name: Generate this node's own forge keypair (private half never leaves ace2)
+      ansible.builtin.command:
+        cmd: >-
+          ssh-keygen -t ed25519 -N '' -C 'ansible-037-{{ inventory_hostname }}'
+          -f {{ dev_node_gitea_key_path }}
+        creates: "{{ dev_node_gitea_key_path }}"
+      become: true
+      become_user: "{{ dev_node_user }}"
+
+    - name: Fix ownership and mode on the generated keypair
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: "{{ dev_node_user }}"
+        group: "{{ dev_node_user }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ dev_node_gitea_key_path }}", mode: "0600" }
+        - { path: "{{ dev_node_gitea_key_path }}.pub", mode: "0644" }
+
+    # AC3. The host key is DECLARED in common.yaml, not scanned: a scan trusts
+    # whatever answers at provision time, which is trust-on-first-use with the
+    # prompt suppressed rather than the prompt answered. With the declared value
+    # the node refuses a substituted key instead of adopting it.
+    - name: Pin the forge's SSH host key (declared, never scanned)
+      ansible.builtin.known_hosts:
+        path: "{{ dev_node_home }}/.ssh/known_hosts"
+        name: "[{{ dev_node_gitea_ssh_host }}]:{{ dev_node_gitea_ssh_port }}"
+        key: "[{{ dev_node_gitea_ssh_host }}]:{{ dev_node_gitea_ssh_port }} {{ dev_node_gitea_ssh_host_key }}"
+        state: present
+      become: true
+      become_user: "{{ dev_node_user }}"
+
+    # `/etc/ssh/ssh_config.d/`, not `~/.ssh/config.d/`, and the difference was
+    # measured rather than assumed: ace2's `~/.ssh/config` (owned by the
+    # dotfiles bootstrap — one writer per file, the rule the GitHub block above
+    # states) carries NO `Include` directive, and OpenSSH has no implicit
+    # `.d` convention for the user file. A drop-in there would have been read by
+    # nothing while every task reported changed/ok — green, and inert.
+    # `/etc/ssh/ssh_config` ships `Include /etc/ssh/ssh_config.d/*.conf` on
+    # Ubuntu and belongs to no other writer, so a drop-in there is actually read.
+    - name: Point git at the forge with this node's key, without touching dotfiles' files
+      ansible.builtin.copy:
+        dest: /etc/ssh/ssh_config.d/60-kubelab-gitea.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # {{ ansible_managed }}
+          # ANSIBLE-037. System-wide because the developer user's own ssh config
+          # has a different owner; the IdentityFile below is readable only by
+          # that user, so this grants nothing to anyone else on the node.
+          Host {{ dev_node_gitea_ssh_host }}
+            Port {{ dev_node_gitea_ssh_port }}
+            User git
+            IdentityFile {{ dev_node_gitea_key_path }}
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+      become: true
+      register: _gitea_ssh_config
+
+    - name: Read back the public half (never the private one)
+      ansible.builtin.slurp:
+        src: "{{ dev_node_gitea_key_path }}.pub"
+      register: _gitea_pubkey
+
+    # Registration runs on the CONTROLLER: the bot token is the credential that
+    # can add a key to the account, and it has no business being on the node.
+    - name: List the keys already on the machine account
+      ansible.builtin.uri:
+        url: "{{ dev_node_gitea_api_url }}/user/keys"
+        headers:
+          Authorization: "token {{ dev_node_gitea_bot_token }}"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+      register: _gitea_keys
+
+    - name: Register this node's public key on the machine account
+      ansible.builtin.uri:
+        url: "{{ dev_node_gitea_api_url }}/user/keys"
+        method: POST
+        headers:
+          Authorization: "token {{ dev_node_gitea_bot_token }}"
+        body_format: json
+        body:
+          title: "{{ dev_node_gitea_key_title }}"
+          key: "{{ (_gitea_pubkey.content | b64decode) | trim }}"
+          read_only: false
+        status_code: [201]
+      delegate_to: localhost
+      become: false
+      no_log: true
+      # Idempotence is by KEY MATERIAL, not by title. A title match with
+      # different material would leave the node holding a key the forge does not
+      # know, and the play would still report changed=0 — green, and broken.
+      # `trim` before splitting, deliberately: ssh-keygen writes a trailing
+      # newline, and a key generated without a comment would put it inside the
+      # material field. The comparison would then never match an already-
+      # registered key, and every provision would POST a duplicate — the play
+      # reporting `changed` forever and the account accumulating one key per run,
+      # which is the opposite of what AC1's `changed=0` asserts.
+      when: >-
+        (((_gitea_pubkey.content | b64decode) | trim).split(' ')[1] | default('', true))
+        not in (_gitea_keys.json | default([]) | map(attribute='key')
+                | map('regex_replace', '^(\S+)\s+(\S+).*$', '\2') | list)
