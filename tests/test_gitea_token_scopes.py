@@ -41,24 +41,12 @@ from typing import Any
 import pytest
 import yaml
 
-from toolkit.features.gitea_client import REQUIRED_BOT_SCOPE
+from toolkit.features.gitea_client import REQUIRED_ADMIN_SCOPES, REQUIRED_BOT_SCOPE
 from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMON = REPO_ROOT / "infra/config/values/common.yaml"
 PLAYBOOK = REPO_ROOT / "infra/ansible/playbooks/provision-bee.yml"
-
-#: What `toolkit.features.gitea_client.GiteaClient` needs before the reconciler's
-#: READS work, one entry per endpoint that refused without it:
-#:   read:admin         -> GET /admin/orgs      (list_orgs; measured 403 above)
-#:   write:organization -> POST /orgs           (create_org)
-#:   read:repository    -> GET /repos/search    (list_repos)
-#: Not imported from the client the way `REQUIRED_BOT_SCOPE` is, because no such
-#: constant exists there yet — declaring one is the client owner's call, and this
-#: set is the interim home for the measurement rather than a second opinion about
-#: it. If `REQUIRED_ADMIN_SCOPES` ever lands in `gitea_client`, import it and
-#: delete this.
-REQUIRED_ADMIN_SCOPES = frozenset({"read:admin", "write:organization", "read:repository"})
 
 #: `gitea_bot_scopes: "write:repository,..."` — a literal, which is the state this
 #: whole file exists to prevent returning to. A Jinja lookup has no bare quote
@@ -77,6 +65,12 @@ def declared_scopes() -> dict[str, set[str]]:
 
 def test_admin_grant_covers_what_the_reconciler_reads(declared_scopes: dict[str, set[str]]) -> None:
     """Without `read:admin` the reconciler cannot list organizations, and says so only at runtime.
+
+    Imported, not copied — the same reasoning as the bot's scope below.
+    `REQUIRED_ADMIN_SCOPES` is the client's own statement of what its calls need
+    (`read:admin` for `list_orgs`, `write:organization` for `create_org`,
+    `read:repository` for `list_repos`); restating that set here would be the
+    second declaration the whole file exists to prevent.
 
     `/admin/orgs` is deliberate, not an oversight to route around: AC2's stray
     report is about organizations this account is NOT a member of, and
