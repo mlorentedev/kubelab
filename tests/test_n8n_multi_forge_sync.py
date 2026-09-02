@@ -152,6 +152,12 @@ def test_workflow_node_object_fallback_fails_closed_on_non_ascii_payload() -> No
     byte-matches the original signed payload. The genuinely-valid signature
     is rejected — safe (fail-closed), but a silent false rejection whenever
     `rawBody` capture is unavailable and the payload has non-ASCII content.
+
+    Isolated from a header/harness issue by contrast with
+    `test_workflow_node_valid_hmac_and_open_pr` above: identical fallback
+    path, identical `x-hub-signature-256` header, identical
+    `json.dumps(..., separators=(",", ":"))` construction — the only
+    difference is this payload's non-ASCII title, and only this one fails.
     """
     body = {
         "action": "opened",
