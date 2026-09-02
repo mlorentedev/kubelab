@@ -297,6 +297,240 @@ def test_the_upload_precedes_the_reviewer_so_a_cancelled_run_still_carries_it() 
     )
 
 
+_needs_bash = pytest.mark.skipif(
+    shutil.which("bash") is None, reason="these steps are bash scripts"
+)
+
+
+# --- CI-GATE-017 (#1527): a diff entirely inside .pr_agent.toml's [ignore] ---
+# glob has nothing for PR-Agent to review. Measured on #1514 and #1523, both
+# single-file PRs wholly inside infra/config/secrets/**: PR-Agent's own
+# _prepare_prediction found an empty reviewable set after the ignore filter,
+# published nothing, and the existing guard failed for a reason neither of
+# its own two documented causes (saturation, empty-body-on-200) names.
+
+
+def _reviewer_step(name_substr: str) -> dict:
+    """Found by a distinctive substring of `name:`, same convention as
+    `_gate_resolve_step`'s search-by-`id` below — a rename must not silently
+    skip these."""
+    return next(s for s in _review_steps() if name_substr in s.get("name", ""))
+
+
+def test_the_reviewable_check_does_not_read_an_attacker_influenced_ref() -> None:
+    """Same property `test_the_publish_check_does_not_read_an_attacker_influenced_ref`
+    asserts for the guard below it, applied to the new step: reading the
+    ignore list from the PR's own branch would let an author add `"**"` to
+    `.pr_agent.toml` there, make every file "excluded", and auto-skip straight
+    to the escape with a green gate and no review ever attempted."""
+    step = _reviewer_step("Determine whether the diff has anything to review")
+    assert "base.ref" not in str(step.get("env", {}))
+    assert "default_branch" in str(step["env"]["BASE_REF"])
+
+
+def test_the_reviewable_check_is_not_always_and_fails_closed() -> None:
+    """`always()` would run this even when an earlier step (like recording the
+    PR number) errored. Without it, a failure inside this step itself — the
+    `gh api` calls failing, say — fails the step and leaves
+    `steps.reviewable.outputs.any` unset, which is neither 'true' nor 'false'.
+    Both the PR-Agent step and the declare-unreviewed step below are gated on
+    an exact string match against that output, so an unset value skips both
+    and the job goes red instead of silently declaring or silently reviewing.
+    """
+    step = _reviewer_step("Determine whether the diff has anything to review")
+    assert "always()" not in str(step.get("if", ""))
+
+
+def test_pr_agent_only_runs_when_something_is_reviewable() -> None:
+    step = _reviewer_step("PR-Agent")
+    assert step.get("if") == "steps.reviewable.outputs.any == 'true'"
+
+
+def test_the_guard_skips_when_nothing_was_reviewable() -> None:
+    step = _reviewer_step("Fail if no review was published")
+    condition = " ".join(str(step["if"]).split())
+    assert "steps.reviewable.outputs.any == 'true'" in condition
+    assert "always()" in condition, "must still run to catch a REAL publish failure"
+
+
+def test_declare_unreviewed_step_only_fires_when_nothing_was_reviewable() -> None:
+    step = _reviewer_step("Declare unreviewed")
+    condition = " ".join(str(step["if"]).split())
+    assert "steps.reviewable.outputs.any == 'false'" in condition
+
+
+def test_declare_unreviewed_step_reads_the_escape_from_the_registry_not_a_literal() -> None:
+    """The reviewer and the gate must not disagree about what declares a PR
+    unreviewed, same reasoning as the review marker above: a hardcoded label
+    or section string here would be a second source of truth that could drift
+    from harness/review-attestation.json without either side erroring."""
+    step = _reviewer_step("Declare unreviewed")
+    assert "harness/review-attestation.json" in step["run"]
+    assert "escape.label" in step["run"]
+    assert "escape.section" in step["run"]
+    registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text())
+    assert registry["escape"]["label"] not in step["run"], (
+        "the escape label is hardcoded in the workflow; the registry is the SSOT"
+    )
+    assert registry["escape"]["section"] not in step["run"], (
+        "the escape section is hardcoded in the workflow; the registry is the SSOT"
+    )
+
+
+def test_declare_unreviewed_rationale_does_not_point_at_a_dead_end() -> None:
+    """dependabot-declare-unreviewed.yml's rationale ends with 'comment
+    /review', which works there because a human-triggered run carries the
+    credential dependabot's lacks. Here a /review retry hits the SAME ignore
+    filter and produces the SAME empty diff, so pointing at it would send the
+    reader looking for a review that cannot happen."""
+    step = _reviewer_step("Declare unreviewed")
+    # Not a bare `"/review" not in ...` check: the registry path itself
+    # ("harness/review-attestation.json") contains that substring, which
+    # would make the assertion fail on the step's own, unrelated, `gh api`
+    # call. The dependabot version's actual dead-end phrase is this one.
+    assert "comment `/review`" not in step["run"]
+    assert "decrypt" in step["run"] and "lesson-376" in step["run"], (
+        "the rationale should point at the verification method that actually "
+        "works here (decrypt both sides, diff key names), not at a re-review"
+    )
+
+
+def test_stale_declaration_is_cleared_only_once_reviewable_again() -> None:
+    step = _reviewer_step("Clear a stale unreviewed-merge declaration")
+    condition = " ".join(str(step["if"]).split())
+    assert "steps.reviewable.outputs.any == 'true'" in condition
+
+
+_REVIEWABLE_GH_STUB = """#!/usr/bin/env bash
+echo "$*" >> "$GH_CALLS"
+case "$*" in
+  *"contents/.pr_agent.toml"*) base64 -w0 "$STUB_TOML" ;;
+  *"pulls/"*"/files"*)         cat "$STUB_FILES" ;;
+  *) exit 1 ;;
+esac
+"""
+# The step pipes this stub's output through `base64 -d` for the first call
+# and consumes the second directly, exactly mirroring what `gh api ...
+# --jq '.content'` and `gh api ... --jq '.[].filename'` would each already
+# have produced — the stub replaces `gh` entirely, so it must answer as the
+# real API's `--jq`-filtered output would, not as the raw JSON would.
+
+
+def _run_reviewable_step(
+    tmp_path: pathlib.Path, toml_text: str, files: list[str]
+) -> tuple[str | None, list[str]]:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    stub = bindir / "gh"
+    stub.write_text(_REVIEWABLE_GH_STUB, encoding="utf-8")
+    stub.chmod(0o755)
+
+    toml_path = tmp_path / "stub_toml.txt"
+    toml_path.write_text(toml_text, encoding="utf-8")
+    files_path = tmp_path / "stub_files.txt"
+    files_path.write_text("".join(f"{f}\n" for f in files), encoding="utf-8")
+
+    output = tmp_path / "github_output"
+    output.touch()
+    calls = tmp_path / "gh_calls"
+    calls.touch()
+
+    step = _reviewer_step("Determine whether the diff has anything to review")
+    env = {
+        **os.environ,
+        "PATH": os.pathsep.join(
+            [str(bindir), str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]
+        ),
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_REPOSITORY": "mlorentedev/kubelab",
+        "GH_CALLS": str(calls),
+        "GH_TOKEN": "stub",
+        "PR_NUMBER": "1514",
+        "BASE_REF": "master",
+        "STUB_TOML": str(toml_path),
+        "STUB_FILES": str(files_path),
+    }
+    proc = subprocess.run(  # noqa: S603
+        ["bash", "-c", step["run"]],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, (
+        f"the reviewable step exited {proc.returncode}.\n"
+        f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+    )
+    parsed = dict(
+        line.split("=", 1) for line in output.read_text().splitlines() if "=" in line
+    )
+    calls_made = calls.read_text().splitlines()
+    return parsed.get("any"), calls_made
+
+
+_TOML_ONE_GLOB = '[ignore]\nglob = [\n  "infra/config/secrets/**",\n  "**/*.pem",\n]\n'
+
+
+@_needs_bash
+def test_reviewable_step_says_false_when_every_file_is_ignored(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The measured case: #1514 and #1523 each touched exactly
+    infra/config/secrets/prod.enc.yaml and nothing else."""
+    any_, _ = _run_reviewable_step(
+        tmp_path, _TOML_ONE_GLOB, ["infra/config/secrets/prod.enc.yaml"]
+    )
+    assert any_ == "false"
+
+
+@_needs_bash
+def test_reviewable_step_says_true_when_one_file_is_not_ignored(
+    tmp_path: pathlib.Path,
+) -> None:
+    """#1525's shape: a secrets file plus a real code change stays reviewable."""
+    any_, _ = _run_reviewable_step(
+        tmp_path,
+        _TOML_ONE_GLOB,
+        ["infra/config/secrets/prod.enc.yaml", "toolkit/features/k8s_secrets.py"],
+    )
+    assert any_ == "true"
+
+
+@_needs_bash
+def test_reviewable_step_says_true_for_a_mixed_secrets_and_docs_pr(
+    tmp_path: pathlib.Path,
+) -> None:
+    """#1517's shape: two secrets files plus a plaintext baseline and test
+    file. Mixed PRs must not be swept into the all-ignored case."""
+    any_, _ = _run_reviewable_step(
+        tmp_path,
+        _TOML_ONE_GLOB,
+        [
+            "infra/config/orphan-secrets-baseline.yaml",
+            "infra/config/secrets/common.enc.yaml",
+            "infra/config/secrets/staging.enc.yaml",
+            "tests/test_orphan_secrets_ratchet.py",
+        ],
+    )
+    assert any_ == "true"
+
+
+@_needs_bash
+def test_reviewable_step_fetches_the_ignore_list_from_base_ref(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Behavioural half of test_the_reviewable_check_does_not_read_an_attacker_influenced_ref:
+    proves the URL actually built at runtime carries BASE_REF, not merely that
+    the YAML env block claims it will."""
+    _, calls = _run_reviewable_step(
+        tmp_path, _TOML_ONE_GLOB, ["infra/config/secrets/prod.enc.yaml"]
+    )
+    assert any("contents/.pr_agent.toml?ref=master" in c for c in calls), (
+        f"the ignore list was not fetched from BASE_REF=master: {calls!r}"
+    )
+
+
 # --- the gate's half of the handoff (#1184) --------------------------------
 
 
@@ -387,9 +621,6 @@ esac
 # caught behaviourally — the gate silently resolves the wrong PR — and not only
 # by the string assertion above.
 
-_needs_bash = pytest.mark.skipif(
-    shutil.which("bash") is None, reason="the gate's resolve step is a bash script"
-)
 
 
 def _zip_holding(tmp_path: pathlib.Path, label: str, payload: str) -> str:
