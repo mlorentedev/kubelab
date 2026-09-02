@@ -42,13 +42,22 @@ class TestVikunjaR2Wiring:
         assert "VIKUNJA_FILES_S3_ACCESSKEY" in manifest
         assert "VIKUNJA_FILES_S3_SECRETKEY" in manifest
 
-    def test_r2_keys_stay_optional_when_absent(self, mocker) -> None:
+    def test_absent_r2_keys_refuse_the_apply_instead_of_shipping_a_broken_secret(self, mocker) -> None:
+        """The case this file previously asserted the opposite of.
+
+        It read `test_r2_keys_stay_optional_when_absent` and required the apply
+        to SUCCEED with the R2 keys missing. On 2026-09-01 that is exactly what
+        happened in prod: `apply-secrets ENV=prod` shipped a three-key Secret,
+        reported success, and Vikunja -- whose overlay sets
+        VIKUNJA_FILES_TYPE=s3 -- died on boot with "S3 access key is not
+        configured", CrashLoopBackOff for ~9h across 113 restarts.
+
+        Optional was never a property of the credential. It was a property of
+        the delivery step, asserted without ever asking the consumer.
+        """
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
-        run.return_value = mocker.Mock(stdout="secret/vikunja-secrets configured", returncode=0)
 
         ok = _apply_single_secret(_vikunja_mapping(), dict(_REQUIRED_ENV), {}, dry_run=False, env="prod")
 
-        assert ok is True, "R2 keys are optional — their absence must not block the required keys"
-        manifest = run.call_args.kwargs["input"]
-        assert "VIKUNJA_FILES_S3_ACCESSKEY" not in manifest
-        assert "VIKUNJA_FILES_S3_SECRETKEY" not in manifest
+        assert ok is False, "missing R2 credentials must fail closed, not ship a Secret Vikunja cannot boot on"
+        run.assert_not_called()
