@@ -151,8 +151,6 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
                 "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_VIKUNJA"
             ),
             "VIKUNJA_SERVICE_JWTSECRET": "APPS_SERVICES_CORE_VIKUNJA_JWT_SECRET",
-        },
-        optional_keys={
             # Catalog key paths are apps.services.core.vikunja.r2_{access,secret}_key
             # (R2, not S3 -- the env var *names* below are VIKUNJA_FILES_S3_* because
             # that's Vikunja's own config schema for its S3-compatible client).
@@ -160,6 +158,18 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # don't exist in Vikunja's config (files.s3.accesskey /
             # files.s3.secretkey per pkg/config/config.go); the wrong names
             # here were a silent no-op from IDP-035 onward (ADR-066 amendment).
+            #
+            # REQUIRED, not optional. These sat in `optional_keys` and took prod
+            # down for ~9h on 2026-09-01: the overlay hard-enables the backend
+            # (VIKUNJA_FILES_TYPE=s3, mandatory per ADR-066 D2's zero-PVC rule),
+            # so a Vikunja with no S3 credential does not degrade to local
+            # storage -- it refuses to boot. `optional` describes what the
+            # DELIVERER may skip; it said nothing about what the CONSUMER needs,
+            # and nothing cross-checked the two. Here the fail-closed guard below
+            # is the cross-check: absent values must refuse the apply, loudly,
+            # rather than ship a Secret that CrashLoopBackOffs on the next
+            # restart. Optional belongs to a key whose absence the consumer
+            # tolerates -- see n8n-secrets above, where it is correct.
             "VIKUNJA_FILES_S3_ACCESSKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY",
             "VIKUNJA_FILES_S3_SECRETKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY",
         },
