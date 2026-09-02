@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-15 lessons, newest first. Back to [all categories](../_index.md).
+16 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 412 | [An alert on a capability the system does not have fires always or never, and fixing its query only picks which](lesson-412-an-alert-on-a-capability-that-does-not-exist.md) | 2026-09-01 |
 | 386 | [A channel with a permanent false positive is not a channel anyone reads](lesson-386-the-alert-that-was-never-true-and-the-one-nobody-read.md) | 2026-08-24 |
 | 373 | [Internal telemetry requires VPN-gated ingress and token-aware traceback deduplication](lesson-373-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication.md) | 2026-08-23 |
 | 326 | [`max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`](lesson-326-max-over-time-remembers-a-spike-long-after-th.md) | 2026-08-14 |

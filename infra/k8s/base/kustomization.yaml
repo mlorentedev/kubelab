@@ -140,7 +140,25 @@ configMapGenerator:
       - services/grafana-alerting/sre-rules.yaml
       - services/grafana-alerting/disk-rules.yaml
       - services/grafana-alerting/slo-rules.yaml
-      - services/grafana-alerting/security-rules.yaml
+      # `security-rules.yaml` was here and is deliberately gone (OBS-015).
+      #
+      # It held one rule, "CrowdSec automated perimeter IP ban surge", which
+      # fired continuously from 2026-08-23 and was never once true. Its LogQL
+      # counted log LINES matching `(?i)(ban|decision|blocked|remediation)` --
+      # and the bouncer's own `GET /v1/decisions/stream` poll, once every 60s,
+      # matches `decision`. Measured: 20 lines per 10m window against a `> 5`
+      # threshold, forever, on an idle CrowdSec.
+      #
+      # Do NOT re-add a corrected version of it yet. The deeper finding is that
+      # the alert described a capability this deployment does not have: with
+      # klipper-lb masquerading every source IP (#1067), the bouncer compares
+      # `10.42.0.x` against a blocklist of public addresses and can never match
+      # -- 0 dropped requests in 7 days across 13 protected routes. A fixed
+      # query would simply never fire instead of always firing.
+      #
+      # Security alerting here becomes meaningful once #1067 lands and the
+      # bouncer sees real client IPs. See docs/lessons/observability/
+      # lesson-412-an-alert-on-a-capability-that-does-not-exist.md.
 
 # Image tags synced from infra/config/values/common.yaml (SSOT).
 # Run `make sync-k8s-images` to refresh after bumping versions.
