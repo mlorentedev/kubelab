@@ -42,10 +42,12 @@ VALUES = REPO_ROOT / "infra/config/values"
 #: Zone apexes the DNS module manages, by its `zone` key.
 ZONE_APEX = {"kubelab": "kubelab.live", "mlorente": "mlorente.dev"}
 
-#: Domains served by something outside the Terraform DNS module. Keep this
-#: explicit and small: an unrecognised domain must FAIL rather than be skipped,
-#: because a guard that skips what it does not know reports success on the very
-#: case it exists to catch.
+#: Domains served by something outside the Terraform DNS module -- a name
+#: resolved by split DNS, or an internal-only TLD a public record would be wrong
+#: for. Keep this explicit and small: an unrecognised domain must FAIL rather
+#: than be skipped, because a guard that skips what it does not know reports
+#: success on the very case it exists to catch. Empty today: every domain prod
+#: declares has a Cloudflare record, which is the state this test defends.
 EXTERNALLY_MANAGED: frozenset[str] = frozenset()
 
 
@@ -97,14 +99,19 @@ def test_every_declared_public_domain_has_a_dns_record() -> None:
     """
     env = "prod"
     dns = _declared_dns_names()
+    # No TLD filter here, deliberately. An earlier draft also required the
+    # domain to sit under a managed apex, which meant a declaration like
+    # `grafana.internal` or anything `*.local` was skipped rather than judged --
+    # contradicting EXTERNALLY_MANAGED's own rule directly above. The health
+    # probe does not care about the TLD: it fetches `https://{domain}` and fails
+    # the same way whatever the suffix. So anything without a record fails, and
+    # a genuinely internal name is exempted by NAME in EXTERNALLY_MANAGED, where
+    # the exemption is visible and reviewed. Measured when this was tightened:
+    # the skip set was empty, so nothing was relying on it.
     undeclared = {
         key: domain
         for key, domain in _declared_domains(env).items()
-        # Only names in a zone this module manages, and only public TLDs --
-        # `*.local` is deliberately unroutable and never gets a record.
-        if domain not in dns
-        and domain not in EXTERNALLY_MANAGED
-        and any(domain.endswith(apex) for apex in ZONE_APEX.values())
+        if domain not in dns and domain not in EXTERNALLY_MANAGED
     }
     assert not undeclared, (
         f"{env}: these services declare a public domain that no Cloudflare "
