@@ -1,6 +1,6 @@
 # Lessons
 
-410 lessons, one file each. Newest: 2026-09-01. Open a category for its list.
+411 lessons, one file each. Newest: 2026-09-01. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -13,7 +13,7 @@
 | [toolkit-tooling](toolkit-tooling/_index.md) | 31 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 26 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 23 | CI workflows, gates, GitHub |
-| [observability](observability/_index.md) | 15 | Metrics, logs, alerting |
+| [observability](observability/_index.md) | 16 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 12 | Docker, Compose, image builds |
 | [storage-backup](storage-backup/_index.md) | 8 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
