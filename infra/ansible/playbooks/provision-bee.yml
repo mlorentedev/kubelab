@@ -259,21 +259,16 @@
         # renamed Gitea's only admin on 2026-08-23.
         gitea_bot_user: "{{ gitea_config.apps.auth.identities.machine }}"
         gitea_bot_email: "{{ gitea_config.apps.auth.identities.machine }}@{{ gitea_config.apps.services.core.gitea.domain }}"
-        # Least privilege for the first real consumer (#1076, getting repositories
-        # into the forge) plus the account's own profile. Deliberately NOT
-        # write:admin — the refusal of an admin call is half of AC5's evidence.
-        #
-        # `write:organization` added for TOOL-035: without it the bot cannot create
-        # a repository INSIDE an organization it does not own. Measured 2026-08-27:
-        # `POST /orgs/<org>/repos` -> 403 `required=[write:organization]`. It is
-        # permission to ACT ON organizations, not to own them, so ADR-065 D1 (the
-        # bot owns nothing) still holds — the superadmin creates the organizations.
-        #
-        # NOTE: Gitea does not let a token's scopes be edited after minting, and
-        # the mint task below is gated on the SOPS key being ABSENT. So widening
-        # this string alone changes nothing on an instance that already has a
-        # token: the old one must be revoked and its SOPS key deleted first.
-        gitea_bot_scopes: "write:repository,write:user,write:organization"
+        # Scopes come from common.yaml, not from a literal here. Both grants used
+        # to be strings in this file, and the requirements that justify them live
+        # in the Python that makes the calls — two declarations with nothing
+        # checking they agree. That produced a real outage of a capability rather
+        # than of a service: the admin token minted fine with a scope that could
+        # not read `/admin/orgs`, so the mint reported success, `secrets-audit`
+        # counted the key present, and the reconciler 403'd. The grant is now
+        # declared once and `tests/test_gitea_token_scopes.py` ties it to the
+        # requirement. The rationale for each scope moved next to the declaration.
+        gitea_bot_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.bot }}"
         # Empty on the run that mints it; present on every run after. The mint and
         # record tasks are gated on this, so provisioning converges to no-op.
         gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
@@ -283,7 +278,11 @@
         # D1 forbids the bot creating them; and the reconciler's READS need it too,
         # because the bot cannot see an organization it is not a member of and
         # would report an existing private org as absent (lesson-408's corollary).
-        gitea_admin_scopes: "write:organization,read:repository"
+        # That second reason is exactly what the original grant could not do: the
+        # reads it names go through `/admin/orgs`, which needs `read:admin`. The
+        # comment was right and the string beside it was wrong, which is the whole
+        # argument for the grant living next to its rationale in common.yaml.
+        gitea_admin_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.admin }}"
         gitea_admin_token: "{{ gitea_secrets.apps.services.core.gitea.admin_token | default('') }}"
         # MinIO
         minio_image: "{{ config.apps.services.data.minio.image }}"
