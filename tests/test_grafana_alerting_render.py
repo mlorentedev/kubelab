@@ -47,7 +47,10 @@ REQUIRED_KEYS = {
     "sre-rules.yaml",
     "disk-rules.yaml",
     "slo-rules.yaml",
-    "security-rules.yaml",
+    # `security-rules.yaml` was here until 2026-09-01 and is deliberately gone.
+    # Its only rule fired permanently and was never true; see the rationale at
+    # its generator entry in infra/k8s/base/kustomization.yaml. The `merge`
+    # behaviour this test guards is still guarded by the ten keys above.
 }
 
 

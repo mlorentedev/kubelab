@@ -74,17 +74,33 @@ def test_slo_rules_structure_and_syntax() -> None:
     assert "obs015-slo-medium-burn-rate" in uids
 
 
-def test_security_rules_structure_and_syntax() -> None:
-    """Verify security-rules.yaml contains CrowdSec perimeter defense rules."""
+def test_security_rules_stay_retired_until_the_bouncer_can_see_client_ips() -> None:
+    """The inverse of what this asserted until 2026-09-01.
+
+    It required `security-rules.yaml` to exist and to contain
+    `obs015-crowdsec-ban-surge`. That rule fired continuously from 2026-08-23
+    and no ban ever caused it: its LogQL counted log LINES matching
+    `(?i)(ban|decision|blocked|remediation)`, and the bouncer's own
+    `GET /v1/decisions/stream` poll — every 60s — matches `decision`. Measured
+    from Loki's query log: 20 matching lines per 10m window against a `> 5`
+    threshold, forever, on an idle CrowdSec.
+
+    Kept as an assertion rather than deleted, because the reason not to re-add
+    a *corrected* version is the part worth enforcing. `cscli metrics` reports
+    `dropped requests = 0` across seven days while ~4,500 CAPI blocklist
+    decisions stand and 13 prod routes carry the bouncer middleware — the
+    bouncer compares `10.42.0.x` against public addresses because klipper-lb
+    masquerades every source IP (#1067), so it can never match. A fixed query
+    would never fire instead of always firing.
+
+    When #1067 lands and the bouncer sees real client IPs, replace this with a
+    positive assertion about an alert on `dropped requests`. Re-adding the file
+    without doing so should fail here, deliberately.
+    """
     sec_path = GRAFANA_ALERTING_DIR / "security-rules.yaml"
-    assert sec_path.is_file(), f"{sec_path} must exist"
-
-    data = yaml.safe_load(sec_path.read_text(encoding="utf-8"))
-    assert data.get("apiVersion") == 1
-    groups = data.get("groups", [])
-    assert len(groups) >= 1
-    assert groups[0]["name"] == "security"
-
-    rules = groups[0]["rules"]
-    uids = {r["uid"] for r in rules}
-    assert "obs015-crowdsec-ban-surge" in uids
+    assert not sec_path.is_file(), (
+        f"{sec_path} is back. Security alerting here needs an enforcement path "
+        "that can act: until #1067 gives the CrowdSec bouncer real client IPs, "
+        "any rule about bans has no true-positive path. If #1067 has landed, "
+        "update this test to assert the new rule instead of removing it."
+    )
