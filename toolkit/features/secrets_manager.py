@@ -564,7 +564,13 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.EXTERNAL,
         services=("gitea",),
         rotate_note=(
-            "Mint at Settings > Applications with `write:organization` and `read:repository`. "
+            "Minted BY PROVISIONING — `make provision NODE=bee ENV=prod`, whose "
+            "`beelink_services` role runs `gitea admin user generate-access-token` with "
+            "`gitea_admin_scopes` and records the value over stdin, gated on this key "
+            "being absent. Rotation is revoke-then-unset, then re-provision to mint; "
+            "`make gitea-rotate-token TOKEN=admin` drives it. Do NOT mint by hand in the "
+            "web UI: this note said to for months, which is how the automated path came "
+            "to be treated as a manual operator step. "
             "TWO reasons this is the superadmin's and not the bot's, and only the first is "
             "obvious: Gitea puts the creating account in a new organization's `Owners` team, so "
             "ADR-065 D1 (the bot owns nothing) forbids the bot creating them; and the RECONCILER'S "

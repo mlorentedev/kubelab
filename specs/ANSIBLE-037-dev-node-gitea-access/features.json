@@ -1,0 +1,44 @@
+[
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f1",
+    "behavior": "A fresh `make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step, and a second run reports changed=0",
+    "verification": "make provision NODE=ace2 ENV=staging 2>&1 | tee /tmp/ansible-037-run2.log | grep -E 'changed=0.*failed=0'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f2",
+    "behavior": "The credential resolves from apps.auth.identities.machine rather than a literal or the basic_auth alias, and anything secret is registered in SECRET_CATALOG with envs checked",
+    "verification": "poetry run pytest tests/test_ansible_identity_ssot.py -k dev_node -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f3",
+    "behavior": "The Gitea host key is pinned by the role, so a first connection from a node with cleared known_hosts produces no interactive prompt",
+    "verification": "ssh ace2 'ssh-keygen -F [beelink.kubelab.internal]:2222 -f ~/.ssh/known_hosts' >/dev/null && ssh ace2 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -T -p 2222 git@beelink.kubelab.internal 2>&1 | grep -qv \"Host key verification failed\"'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f4",
+    "behavior": "Removing the node's key from Gitea makes the access fail, and re-provisioning restores it — both halves captured, since a credential that works proves only half the claim",
+    "verification": "bash specs/ANSIBLE-037-dev-node-gitea-access/ac4_revocation_probe.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f5",
+    "behavior": "R1 is answered by a live probe from ace2 and the chosen transport recorded in verification.md with its transcript, before the role is written",
+    "verification": "bash specs/ANSIBLE-037-dev-node-gitea-access/r1_transport_probe.sh && grep -q '## Open questions, settled' specs/ANSIBLE-037-dev-node-gitea-access/verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f6",
+    "behavior": "The operator's interactive access from ace2 works through SSH agent forwarding with no key of theirs on the node, confirming D1's claim that the human half needs no provisioning",
+    "verification": "bash specs/ANSIBLE-037-dev-node-gitea-access/ac6_agent_forwarding_probe.sh",
+    "state": "pending",
+    "evidence": ""
+  }
+]

@@ -100,3 +100,26 @@ dev_node_apt_packages:
 # credential — which `gh` accepts syntactically and which then fails later, far
 # from the cause.
 dev_node_github_token: ""
+
+# --- private forge access (ANSIBLE-037 / #1075) ----------------------------
+# The node authenticates to Gitea as the MACHINE identity (ADR-062 D1), with a
+# keypair it generates itself: the private half is created on the node and never
+# transits, and the controller only ever handles the public half plus the bot
+# token — which stays on the controller and is never delivered here.
+#
+# Empty token by default, matching `dev_node_github_token` above and for the
+# same reason: a run without the secret must degrade to "not configured" and
+# skip registration, not authenticate with an empty credential.
+dev_node_gitea_bot_token: ""
+dev_node_gitea_user: ""
+dev_node_gitea_ssh_host: ""
+dev_node_gitea_ssh_port: 2222
+dev_node_gitea_api_url: ""
+# Declared, never scanned (AC3). See the SSOT note on
+# `apps.services.core.gitea.ssh_host_key` in common.yaml for why TOFU is a
+# manual step wearing a different hat.
+dev_node_gitea_ssh_host_key: ""
+dev_node_gitea_key_path: "{{ dev_node_home }}/.ssh/id_gitea_{{ inventory_hostname }}"
+# Titles the key PER NODE, so `DELETE /user/keys/{id}` revokes one node's access
+# and nothing else — the property D2 exists to buy.
+dev_node_gitea_key_title: "kubelab-{{ inventory_hostname }}-dev-node"
