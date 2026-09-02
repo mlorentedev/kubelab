@@ -142,6 +142,74 @@ def test_workflow_node_missing_signature_fails_closed() -> None:
     assert result["hasTask"] is False
 
 
+def test_workflow_node_object_fallback_fails_closed_on_non_ascii_payload() -> None:
+    """TOOL-050 AC4: the object-fallback path (no `rawBody`, only a pre-parsed
+    `body` object) reconstructs `rawPayload` via `JSON.stringify(body)` before
+    hashing it. A real forge signs the literal bytes it sent over the wire —
+    here, non-ASCII escaped the way `json.dumps` (Python, and most forge
+    server-side JSON encoders) does by default. Node's `JSON.stringify` does
+    NOT re-escape non-ASCII on the way back out, so the reconstruction never
+    byte-matches the original signed payload. The genuinely-valid signature
+    is rejected — safe (fail-closed), but a silent false rejection whenever
+    `rawBody` capture is unavailable and the payload has non-ASCII content.
+
+    Isolated from a header/harness issue by contrast with
+    `test_workflow_node_valid_hmac_and_open_pr` above: identical fallback
+    path, identical `x-hub-signature-256` header, identical
+    `json.dumps(..., separators=(",", ":"))` construction — the only
+    difference is this payload's non-ASCII title, and only this one fails.
+    """
+    body = {
+        "action": "opened",
+        "pull_request": {
+            "title": "feat: IDP-035 añadir sincronización 🚀",
+            "html_url": "https://github.com/org/repo/pull/9",
+            "merged": False,
+            "head": {"ref": "feature/idp-035-unicode"},
+        },
+    }
+    secret = "my-secret-key"
+    # The actual wire bytes a forge would sign: non-ASCII escaped, like a
+    # real server-side JSON encoder emits by default (json.dumps ensure_ascii=True).
+    raw_payload = json.dumps(body, separators=(",", ":"))
+    sig = generate_hmac_sha256(raw_payload.encode(), secret)
+    headers = {"x-hub-signature-256": sig}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
+
+    # Object-fallback shape: no `rawBody` key at all, only the pre-parsed `body`.
+    result = eval_forge_node(body, headers, env)
+    assert result["isValidSig"] is False
+    assert result["hasTask"] is False
+
+
+def test_workflow_node_object_fallback_fails_closed_on_differently_formatted_payload() -> None:
+    """Same gap as above, triggered by whitespace rather than encoding: a
+    forge that emits `", "` / `": "` separators (many JSON encoders' default)
+    signs bytes that Node's compact `JSON.stringify` reconstruction will not
+    reproduce. Fails closed, not a security hole — but documents that the
+    object-fallback path only validates a payload whose exact formatting
+    happens to match Node's compact serialization.
+    """
+    body = {
+        "action": "opened",
+        "pull_request": {
+            "title": "feat: GITOPS-003 reorder",
+            "html_url": "https://github.com/org/repo/pull/9",
+            "merged": False,
+            "head": {"ref": "feature/gitops-003-x"},
+        },
+    }
+    secret = "my-secret-key"
+    raw_payload = json.dumps(body, separators=(", ", ": "))
+    sig = generate_hmac_sha256(raw_payload.encode(), secret)
+    headers = {"x-hub-signature-256": sig}
+    env = {"FORGE_WEBHOOK_SECRET": secret}
+
+    result = eval_forge_node(body, headers, env)
+    assert result["isValidSig"] is False
+    assert result["hasTask"] is False
+
+
 def test_multi_forge_workflow_json_structure() -> None:
     assert WORKFLOW_PATH.is_file()
     with open(WORKFLOW_PATH, encoding="utf-8") as f:
