@@ -74,7 +74,18 @@
         k3s_traefik_http_port: "{{ config.k3s.traefik.http_port }}"
         k3s_traefik_https_port: "{{ config.k3s.traefik.https_port }}"
         k3s_traefik_acme_enabled: true
-        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email }}"
+        # SSOT-014c: `edge.traefik.acme_email` is DERIVED from
+        # `apps.contact.email`, and the derivation lives in the Python config
+        # loader (`configuration.py:_inject_contact_email_derivations`). Ansible
+        # reaches this file through `include_vars`, which reads the raw YAML and
+        # never runs that loader -- so the key is genuinely absent here and this
+        # play failed with "object of type 'dict' has no attribute 'acme_email'",
+        # making the whole k3s deploy path unusable in both environments.
+        #
+        # The fallback mirrors the loader exactly, including its falsy test
+        # (`if not traefik.get("acme_email")`), which is what `, true` buys: an
+        # empty string falls back too, not just an absent key.
+        k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
         k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
         k3s_fetch_kubeconfig: true
