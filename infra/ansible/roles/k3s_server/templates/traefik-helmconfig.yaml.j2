@@ -13,10 +13,26 @@ spec:
       websecure:
         port: {{ k3s_traefik_https_port }}
         exposedPort: {{ k3s_traefik_https_port }}
+      # SEC-005: `expose.default` MUST stay false. The Traefik chart ships it
+      # false; this template set it true, which put the dashboard port into a
+      # LoadBalancer Service -- and klipper-lb publishes EVERY port of a
+      # LoadBalancer Service as a hostPort with SRC_RANGES=0.0.0.0/0. Because a
+      # DNAT-published port is evaluated in PREROUTING, ufw never saw it, so
+      # `http://<vps>:9000/api/overview` answered 200 to the public internet,
+      # unauthenticated, exposing the whole routing topology (#1538).
+      #
+      # The container still LISTENS on 9000 -- `ports.traefik.port` below is the
+      # container port, and both probes target it directly rather than the
+      # Service, so removing it from the Service changes nothing for them. What
+      # goes away is the published host port and nothing else.
+      #
+      # The dashboard's supported path is the IngressRoute at traefik.<domain>,
+      # which reaches `api@internal` and sits behind Authelia. Do not re-expose
+      # this port to give something in-cluster an unauthenticated shortcut.
       traefik:
         port: 9000
         expose:
-          default: true
+          default: false
         exposedPort: 9000
     persistence:
       enabled: true
@@ -44,8 +60,18 @@ spec:
       kubernetesCRD:
         allowCrossNamespace: true
     additionalArguments:
+      # `api.dashboard` serves the dashboard through `api@internal`, which is
+      # reachable only via an IngressRoute -- so it inherits that route's
+      # middlewares, Authelia included.
+      #
+      # `api.insecure` is deliberately absent (SEC-005 / #1538). It served the
+      # full API on the `traefik` entrypoint with NO authentication of any kind.
+      # That was survivable only while nothing could reach port 9000 from
+      # outside, and nothing enforced that: see the `expose.default: false`
+      # comment above for why the port was in fact public. Re-adding this flag
+      # re-creates an unauthenticated API the moment any path to 9000 exists,
+      # so it is left out rather than paired with a second control.
       - "--api.dashboard=true"
-      - "--api.insecure=true"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider={{ k3s_traefik_acme_dns_provider }}"
       - "--certificatesresolvers.letsencrypt.acme.email={{ k3s_traefik_acme_email }}"
