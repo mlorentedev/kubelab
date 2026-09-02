@@ -30,6 +30,10 @@ app = typer.Typer(
 
 @app.command("logs")
 def logs_cmd(
+    env: Annotated[
+        str,
+        typer.Option("--env", "-e", help="Cluster to query (staging|prod) — ADR-028: prod is the monitoring of record"),
+    ] = "prod",
     service: Annotated[
         Optional[str],
         typer.Option("--service", "-s", help="Target service container (e.g. authelia, traefik, api)"),
@@ -56,9 +60,9 @@ def logs_cmd(
     ] = False,
 ) -> None:
     """Query Loki logs with LogQL filtering and traceback deduplication."""
-    client = LokiClient()
     try:
-        _query_loki(client, query, service, since, level, limit, json_output)
+        with _loki_client(env) as client:
+            _query_loki(client, query, service, since, level, limit, json_output)
     except LogsUnavailableError as exc:
         # "No logs found in the last 15m" is a statement about Loki's answer.
         # This is the absence of one, and the two must not read alike.
@@ -102,12 +106,52 @@ def _query_loki(
         raise typer.Exit(code=1)
 
     if not lines:
-        typer.echo(f"No logs found matching query in the last {since}.")
+        # Name the Loki that was asked. The two failure modes above are already
+        # kept apart -- "unreachable" vs "no logs" -- but a THIRD reads exactly
+        # like the second and was not covered: a reachable Loki that is not the
+        # one you meant answers `status: success` with an empty result, and this
+        # sentence then reports its silence as though it were prod's.
+        #
+        # Measured 2026-09-01: `--service crowdsec --since 15m` printed "No logs
+        # found" while prod's Loki held 20 matching lines in that window. There
+        # is no `--env` flag; `base_url` defaults to 127.0.0.1:3100, and a dev
+        # Loki was listening there. An hour went into re-measuring prod before
+        # the port was the suspect. Printing the URL makes that one glance.
+        typer.echo(f"No logs found matching query in the last {since} (asked {client.base_url}).")
         return
 
-    typer.echo(f"--- Telemetry Logs (Window: last {since}, Results: {len(lines)}) ---")
+    typer.echo(f"--- Telemetry Logs (Source: {client.base_url}, Window: last {since}, Results: {len(lines)}) ---")
     for line in lines:
         typer.echo(line)
+
+
+@contextmanager
+def _loki_client(env: str) -> Generator[LokiClient, None, None]:
+    """Yield a client pointed at the named environment's Loki.
+
+    Mirrors `_grafana_client` below, for the same reason and by the same route:
+    prod's Loki has no public hostname at all (its overlay serves
+    `loki.internal.kubelab.local`, a non-public TLD ACME cannot certify), so a
+    transient `kubectl port-forward` and kubeconfig access are the trust
+    boundary rather than the edge.
+
+    This command had no `--env` until 2026-09-01 while its sibling `alerts` did.
+    `LokiClient()` defaults to `127.0.0.1:3100`, so it asked whatever happened
+    to be listening there — a dev Loki, on the machine where this was measured —
+    and reported that instance's silence as the answer. Unlike an unreachable
+    Loki, which already raised, a *wrong* Loki answers `status: success` with an
+    empty result and is indistinguishable from a quiet service.
+
+    `LOKI_URL` stays the direct-URL escape hatch, matching `GRAFANA_URL`.
+    """
+    if os.environ.get("LOKI_URL"):
+        yield LokiClient()
+        return
+    try:
+        with kubectl_service_port_forward(env, "loki", 3100) as port:
+            yield LokiClient(base_url=f"http://127.0.0.1:{port}")
+    except (RuntimeError, TimeoutError) as exc:
+        raise LogsUnavailableError(f"could not reach Loki in {env}: {exc}") from exc
 
 
 @contextmanager

@@ -80,21 +80,36 @@ terraform apply -var-file=prod.tfvars
 
 ## Records managed
 
-### kubelab.live (17 records)
+**`services.json` is the list. This file does not restate it** — until 2026-09-01
+it did, as two hand-maintained tables, and every row of both was wrong: five
+services that no longer had a record (`blog`, `crowdsec`, `loki`, `portainer`,
+`wiki`), four real ones missing (`argo`, `home`, `pihole`, `tasks`), a `proxied`
+column naming three records when only `api` is proxied, and counts of 17 and 11
+against a true 16 and 1.
 
-| Record | Type | Proxied |
-|--------|------|---------|
-| @ | A | Yes |
-| www | CNAME | Yes |
-| api, blog, wiki | A | Yes |
-| status, auth, vpn, grafana, loki, portainer, gitea, n8n, minio, console.minio, crowdsec, traefik | A | No |
+That drift was not cosmetic. #1406 was opened to *add* a Loki DNS record, and the
+reason anyone believed one was owed is that this table listed `loki` among the
+managed records. A stale enumeration generates work in the wrong direction, which
+is the same failure the `domain:` declarations in `infra/config/values/` produced
+(see `tests/test_declared_domains_are_served.py`). Do not re-add a table here.
 
-### mlorente.dev (11 records)
+Each zone gets a root record plus one A record per `services.json` entry in that
+zone, declared as a single `for_each` resource — `records_kubelab.tf` also adds
+`www` as a CNAME. So:
 
-| Record | Type | Proxied |
-|--------|------|---------|
-| @ | A | No |
-| api, grafana, loki, minio, n8n, portainer, status, traefik, web, wiki | A | No |
+```bash
+# What is actually declared, per zone:
+python3 -c "import json;[print(r['zone'],r['name'],r['proxied']) for r in json.load(open('dns/services.json'))]"
+
+# What Terraform will manage, counted by the module itself:
+terraform output kubelab_record_count      # root + www + kubelab.live services
+terraform output mlorente_record_count     # root + mlorente.dev services
+terraform output kubelab_service_urls      # the resulting https:// names
+```
+
+`mlorente.dev` currently declares **no** service entries — the module manages its
+root record only. `staging.*` names are absent from both zones by design: they
+resolve over the VPN through Headscale split DNS to RPi4 CoreDNS, never publicly.
 
 **Not managed** by Terraform (manual/third-party): MX (Zoho), CNAME (SendGrid, Beehiiv, Cloudflare tunnels), TXT (SPF, DKIM, DMARC, domain verification).
 

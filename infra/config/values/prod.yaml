@@ -68,8 +68,11 @@ apps:
       site_url: https://kubelab.live
 
       version: 1.1.0
-    blog:
-      domain: blog.kubelab.live
+    # blog: removed here too, 2026-09-01. `common.yaml` has recorded it as
+    # killed since 2026-03-15 ("blog: removed — killed"), but this prod-only
+    # override outlived the deletion and kept `services health` probing a
+    # `blog.kubelab.live` that nothing has served for nearly six months.
+    # Found by tests/test_declared_domains_are_served.py on its first run.
 
     web:
       backend_url: "https://api.kubelab.live"
@@ -96,8 +99,17 @@ apps:
         domain: n8n.kubelab.live
 
     observability:
-      loki:
-        domain: loki.kubelab.live
+      # loki has NO `domain` in prod, deliberately. `domain` declares the public
+      # name a service answers on, and prod's Loki has none: the overlay patches
+      # its route to `Host(loki.internal.kubelab.local)` — a non-public TLD,
+      # because ACME cannot issue for one. The name it does answer on lives in
+      # the IngressRoute, which is where routing belongs.
+      #
+      # It declared `loki.kubelab.live` until 2026-09-01. Nothing served that
+      # name, so `toolkit services health --env prod` reported a FAIL forever,
+      # and #1406 (OBS-023) was filed reading the symptom as a missing DNS
+      # record — the fix there is this deletion, not a new Cloudflare entry.
+      # Guarded by tests/test_declared_domains_are_served.py.
 
       uptime_kuma:
         domain: status.kubelab.live
@@ -112,8 +124,14 @@ apps:
         default_domain_root: kubelab.live
         disable_require_tls: false
 
-      crowdsec:
-        domain: crowdsec.kubelab.live
+      # crowdsec has NO `domain` in prod, deliberately. It has no IngressRoute
+      # in any overlay — it is reached only in-cluster, at
+      # `crowdsec.kubelab.svc.cluster.local:8080`, by the Traefik bouncer
+      # plugin. Declaring a public name for an admin/security surface that is
+      # not served is worse than useless: it made `services health` report a
+      # FAIL forever, and it invites someone to "fix" that by publishing the
+      # very surface #1389 and #675 argue should stay unexposed.
+      # Guarded by tests/test_declared_domains_are_served.py.
 
     data:
       minio:
