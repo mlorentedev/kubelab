@@ -1,7 +1,13 @@
 ---
-# Traefik Dashboard IngressRoute — cross-namespace reference to kube-system
+# Traefik Dashboard IngressRoute.
 # Requires: api.dashboard=true + providers.kubernetesCRD.allowCrossNamespace=true
 # in HelmChartConfig (managed by Ansible k3s_server role)
+#
+# SEC-005 (#1538): routes to `api@internal` rather than to the `traefik` Service
+# on port 9000. See the prod copy of this file for the full reasoning -- in
+# short, a port in a LoadBalancer Service is published to the host by
+# klipper-lb, which gave the API an unauthenticated second door past every
+# middleware below. Keep the two overlays in step.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -23,8 +29,7 @@ spec:
         - name: authelia
           namespace: kubelab
       services:
-        - name: traefik
-          namespace: kube-system
-          port: 9000
+        - name: api@internal
+          kind: TraefikService
   tls:
     certResolver: letsencrypt

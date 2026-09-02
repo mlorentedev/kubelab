@@ -70,13 +70,21 @@
           type: uptimekuma
           url: http://100.64.0.6:3001
           slug: kubelab
+    # SEC-005 (#1538): the `traefik` widget here queried
+    # http://traefik.kube-system.svc:9000 -- the API of whichever cluster
+    # Homepage was running in. This file is in base/, so in PROD that meant the
+    # entry labelled "Stg" was reporting on prod's own proxy. It also depended
+    # on port 9000 being in the LoadBalancer Service, which is exactly what
+    # published the API to the internet; that port is gone now.
+    #
+    # Replaced with a ping, matching the "Traefik Prod" entry below. A widget
+    # would need a credential to pass Authelia, and the dashboard is one click
+    # away through `href` regardless.
     - Traefik Stg:
         icon: si-traefikproxy
         href: https://traefik.staging.kubelab.live/dashboard/
         description: Staging proxy
-        widget:
-          type: traefik
-          url: http://traefik.kube-system.svc:9000
+        ping: https://traefik.staging.kubelab.live/dashboard/
     - Traefik Prod:
         icon: si-traefikproxy
         href: https://traefik.kubelab.live/dashboard/
