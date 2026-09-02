@@ -58,6 +58,19 @@
   vars:
     deploy_env: staging
 
+    # ANSIBLE-037. The node is staging; the forge it authenticates to is not.
+    # ADR-061 makes prod an environment rather than a location, and Gitea's
+    # environment identity is prod even though it runs on an on-demand homelab
+    # box — `provision-bee.yml` encodes the same fact under the same name.
+    #
+    # This governs the vault specifically: `apps.services.core.gitea.bot_token`
+    # is registered with `envs=("prod",)`, so `secrets.…` (built from
+    # common + staging below) does not contain it. Combined with the
+    # `default('')` idiom this playbook already uses, reading the wrong vault
+    # does not fail — it provisions a node with an empty credential and reports
+    # failed=0. Guarded by tests/test_dev_node_gitea_identity.py.
+    gitea_identity_env: prod
+
   pre_tasks:
     - name: Load base config (SSOT)
       include_vars:
@@ -104,6 +117,42 @@
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+      tags: [always]
+
+    # Separate values tree AND vault for the one thing on this node whose
+    # environment identity is not deploy_env (ANSIBLE-037). Both built into
+    # their own facts rather than merged over `config`/`secrets`, so they cannot
+    # silently change what anything else on the node resolves — the same
+    # containment `provision-bee.yml` uses.
+    #
+    # The values half is the non-obvious one: `staging.yaml` overrides
+    # `gitea.domain`, so resolving it from `config` on this node would point the
+    # API calls below at gitea.staging.kubelab.live — a name the forge does not
+    # serve. Measured on the Beelink first; the same trap applies here.
+    - name: Load the forge's environment overrides (SSOT)
+      include_vars:
+        file: "{{ playbook_dir }}/../../config/values/{{ gitea_identity_env }}.yaml"
+        name: gitea_env_overrides
+      tags: [always]
+
+    - name: Merge forge config (its own env overrides common)
+      set_fact:
+        gitea_config: "{{ common | combine(gitea_env_overrides, recursive=True) }}"
+      tags: [always]
+    - name: Decrypt the forge's environment secrets (controller-side)
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ gitea_identity_env }}.enc.yaml
+      register: sops_gitea_env
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+      tags: [always]
+
+    - name: Merge forge secrets (its own env overrides common)
+      set_fact:
+        gitea_secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_gitea_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
       tags: [always]
 
@@ -174,6 +223,26 @@
         # without the secret gets a provisioned node with no identity, not a
         # failed play or an empty credential handed to `gh`.
         dev_node_github_token: "{{ secrets.apps.services.automation.dev_node.github_token | default('') }}"
+        # --- Gitea, the private forge (ANSIBLE-037) ---------------------------
+        # D1: the node authenticates as the MACHINE identity, never as a human.
+        # `apps.auth.identities` declares exactly three keys and #1075 forbids a
+        # fourth, and a named human's key must not sit at rest on an on-demand
+        # shared node — AUTH-004's R2 measured that `manu` is the forge's sole
+        # admin. Plaintext in common.yaml, so no vault is involved in deciding
+        # WHO; only in delivering the credential.
+        dev_node_gitea_user: "{{ gitea_config.apps.auth.identities.machine }}"
+        dev_node_gitea_ssh_host: "{{ gitea_config.apps.services.core.gitea.ssh_host }}"
+        dev_node_gitea_ssh_port: "{{ gitea_config.apps.services.core.gitea.ssh_port }}"
+        # Declared host key, so a substituted one is refused rather than adopted
+        # (AC3). Public by design — no vault involved.
+        dev_node_gitea_ssh_host_key: "{{ gitea_config.apps.services.core.gitea.ssh_host_key }}"
+        dev_node_gitea_api_url: "https://{{ gitea_config.apps.services.core.gitea.domain }}/api/v1"
+        # D2: the bot's API token is used ONLY on the controller, to register
+        # this node's public key. It is never delivered to the node — what lives
+        # on ace2 is a per-node keypair whose blast radius is repositories,
+        # not the token's `write:user`. `gitea_secrets`, not `secrets`: see
+        # `gitea_identity_env` above for why that distinction is load-bearing.
+        dev_node_gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
 
     # The fleet's failure-notification path, and the fleet webhook secret it
     # reads. Ordered BEFORE node_maintenance deliberately: that role's unit

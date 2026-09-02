@@ -385,7 +385,12 @@ def _gitea_clients(env: str) -> tuple[object, object, str, str]:
     if missing:
         logger.error(
             f"missing Gitea credential(s) in {env} SOPS: {', '.join(missing)}. "
-            "Mint at Settings > Applications; see SECRET_CATALOG for the required scopes."
+            "Both are minted BY PROVISIONING, not by hand: run `make provision NODE=bee "
+            "ENV=prod`. The `beelink_services` role mints each with "
+            "`gitea admin user generate-access-token` and records it to SOPS over stdin, "
+            "gated on the key being absent — so a re-provision with both present does "
+            "nothing. This message used to say 'Mint at Settings > Applications', which "
+            "sent operators to a browser to redo work the IaC already owns."
         )
         raise typer.Exit(1)
 

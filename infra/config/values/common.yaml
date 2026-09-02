@@ -803,6 +803,22 @@ apps:
         # to equal the `hostname` field. Verified to resolve to
         # networking.nodes.beelink.tailscale_ip.
         ssh_host: beelink.kubelab.internal
+        # The forge's SSH host key, DECLARED rather than discovered (ANSIBLE-037
+        # AC3). A host public key is not a secret — publishing it is the whole
+        # mechanism — so it belongs in plaintext SSOT next to the port it
+        # protects.
+        #
+        # Declared, because the alternative is trust-on-first-use, and TOFU is a
+        # manual step wearing a different hat: whoever provisions first decides
+        # what the fleet trusts, silently, and a substituted key at that moment
+        # is indistinguishable from the real one. With the value here, a node
+        # that meets a different key FAILS instead of accepting it.
+        #
+        # Rotates only when the forge's container is rebuilt with a new host
+        # key. When that happens this line must be updated in the same change,
+        # or every dev node refuses to connect — loudly, which is correct.
+        # Captured 2026-09-02: `ssh-keyscan -t ed25519 -p 2222 beelink.kubelab.internal`
+        ssh_host_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHECoRmj6C9mt3eJI7NhMKf1xzrz4KJKPGmMDZiv9p9v"
         health_path: /api/healthz
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
