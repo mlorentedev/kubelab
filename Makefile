@@ -90,6 +90,10 @@ help:
 	@echo "  make hub-resume HUB=<kubecfg>  Resume a paused hub — the rollback for hub-pause"
 	@echo "  make rotate-spoke-token ENV=x  Rotate spoke SA token and re-register"
 	@echo ""
+	@echo "Delivery (Docker Hub + gated prod promotion):"
+	@echo "  make promote-prod APP=x VERSION=y  Open the prod promotion PR (ADR-046; a human still merges it)"
+	@echo "  make registry-prune [DRY_RUN=1]    Prune stale sha-* image tags now, off the weekly schedule"
+	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
 	@echo "  make lint               Ruff linting (check only)"
@@ -778,6 +782,56 @@ rotate-spoke-token:
 	@echo "--- Waiting for new token..."
 	@sleep 3
 	@$(MAKE) register-spoke ENV=$(ENV)
+
+# -----------------------------------------------------------------------------
+# Delivery (Docker Hub + gated prod promotion)
+# -----------------------------------------------------------------------------
+# Both targets DISPATCH A WORKFLOW; neither does the work on this machine.
+#
+# That is the whole design. `toolkit deployment promote --env prod` run locally
+# edits the overlay in the working copy and stops — leaving a human to commit,
+# branch and push it by hand, which is the manual operation the standing orders
+# forbid and a production change with no PR. The workflow is what opens the
+# ADR-046 promotion PR that a human then reviews and merges. Argo CD syncs after
+# that merge, and never before it.
+#
+# They exist because the alternative is a `gh workflow run` line pasted into a
+# chat window whenever someone remembers. #1585 is what that looks like over a
+# quarter: prod ran kubelab-web:1.1.1 from 15 June through eleven consecutive
+# releases, with every release pipeline green throughout, because dispatching by
+# hand is a thing a person has to remember and eleven times nobody did.
+#
+# #1591 makes a web release open its own promotion PR. These targets are the
+# path that stays manual on purpose: a re-promote, a rollback, `api`, or an
+# unscheduled prune.
+#
+# GH is overridable so the tests can exercise the argument handling without
+# dispatching anything. The validation below is a fast local reject, NOT the
+# guard — promote-prod.yml validates authoritatively, because the dispatch can
+# also arrive from somewhere this Makefile never ran.
+GH ?= gh
+DELIVERY_REPO ?= mlorentedev/kubelab
+
+.PHONY: promote-prod
+promote-prod: ## Open the prod promotion PR for an app at a released semver tag (ADR-046)
+	@test -n "$(APP)" && test -n "$(VERSION)" || { \
+		echo "Usage: make promote-prod APP=web|api VERSION=1.12.0"; exit 2; }
+	@case "$(APP)" in \
+		web|api) ;; \
+		*) echo "Unknown APP '$(APP)' — expected web or api"; exit 2 ;; \
+	esac
+	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
+		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \
+		echo "Prod ships released semver only: no leading v, no mutable alias, no sha-* staging tag."; \
+		exit 2; }
+	@echo "=== Dispatching prod promotion: $(APP) -> $(VERSION) ==="
+	@echo "This opens a PR. Nothing deploys until a human merges it (ADR-046)."
+	@$(GH) workflow run promote-prod.yml --repo $(DELIVERY_REPO) -f app=$(APP) -f version=$(VERSION)
+
+.PHONY: registry-prune
+registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DRY_RUN=1 to list only)
+	@echo "=== Dispatching registry prune$(if $(DRY_RUN), (dry run),) ==="
+	@$(GH) workflow run ci-cleanup.yml --repo $(DELIVERY_REPO) -f dry_run=$(if $(DRY_RUN),true,false)
 
 # -----------------------------------------------------------------------------
 # Infrastructure (Ansible)
