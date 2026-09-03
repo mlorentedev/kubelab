@@ -148,3 +148,26 @@ def test_the_decision_carries_no_capability() -> None:
         f"DropDecision grew {sorted(fields - {'may_drop', 'reason'})}. It is a verdict, not an "
         f"actor -- giving it a client or a callable puts the delete back inside the planning half."
     )
+
+
+def test_the_declared_set_is_produced_by_one_function_not_by_each_caller() -> None:
+    """`declared_full_names` exists because two call sites drifted apart the first time.
+
+    `drop-empty` built its own `{f"{org}/{name}" for org, names in ...}` against the
+    declaration's OLD shape. When entries became `RepoSpec` records, that
+    comprehension produced strings like `"personal/RepoSpec(name='resume', ...)"`,
+    so a declared repository read as undeclared and the command refused it —
+    measured against prod on 2026-09-02.
+
+    It failed safe, because the membership test guards a deletion and garbage on
+    one side means refuse. That was luck about which direction the bug pointed, not
+    a property of the design, so the set now has a single producer.
+    """
+    from toolkit.features.gitea_repos import RepoSpec, declared_full_names
+
+    declaration = {
+        "personal": [RepoSpec("resume", migrate_from="github:mlorentedev/resume")],
+        "kubelab": [],
+    }
+    assert declared_full_names(declaration) == {"personal/resume"}
+    assert all("RepoSpec" not in name for name in declared_full_names(declaration))

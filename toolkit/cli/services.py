@@ -1,7 +1,7 @@
 "Service and application management commands."
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -13,6 +13,9 @@ from toolkit.core.logging import logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.docker_service import DockerService
+
+if TYPE_CHECKING:
+    from toolkit.features.gitea_client import GiteaClient
 
 console = Console()
 app = typer.Typer(help="Manage services and applications")
@@ -362,7 +365,7 @@ gitea_app = typer.Typer(help="Reconcile the Gitea forge against its declaration"
 app.add_typer(gitea_app, name="gitea")
 
 
-def _gitea_clients(env: str) -> tuple[object, object, str, str]:
+def _gitea_clients(env: str) -> tuple["GiteaClient", "GiteaClient", str, str]:
     """Build the admin and bot clients from SOPS, and resolve the bot's username.
 
     TWO CLIENTS BECAUSE TWO CREDENTIALS MAY DIFFERENT THINGS, per ADR-065 D1:
@@ -403,7 +406,7 @@ def _gitea_clients(env: str) -> tuple[object, object, str, str]:
     )
 
 
-def _report_machine_ownership(admin: object, bot_username: str) -> None:
+def _report_machine_ownership(admin: "GiteaClient", bot_username: str) -> None:
     """Print what the machine identity owns — ADR-065 D1 / TOOL-035 AC4, every run.
 
     ON THE RECONCILE PATH RATHER THAN IN A TEST, deliberately. The property is
@@ -422,7 +425,7 @@ def _report_machine_ownership(admin: object, bot_username: str) -> None:
     from toolkit.features.gitea_client import GiteaError
 
     try:
-        owned = sorted(admin.list_owned_repos(bot_username))  # type: ignore[attr-defined]
+        owned = sorted(admin.list_owned_repos(bot_username))
     except GiteaError as exc:
         console.print(
             f"\n[yellow]AC4 unchecked[/yellow] — could not read what {bot_username} owns: "
@@ -476,8 +479,8 @@ def gitea_reconcile(
         # Read with the admin credential: a listing taken with the bot's token
         # reports an organization it cannot see as absent, and the plan would
         # then propose creating something that already exists (lesson-408).
-        existing_orgs = admin.list_orgs()  # type: ignore[attr-defined]
-        existing_repos = admin.list_repos()  # type: ignore[attr-defined]
+        existing_orgs = admin.list_orgs()
+        existing_repos = admin.list_repos()
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
@@ -500,17 +503,41 @@ def gitea_reconcile(
     # for a run that needs it and a non-event for one that does not, so fetching it
     # unconditionally would make every ordinary reconcile depend on a credential it
     # never uses.
+    # Read only when a migration is actually planned, so an ordinary reconcile does
+    # not depend on credentials it never uses.
     migration_token = None
+    migrator = None
     if plan.repos_to_migrate:
-        migration_token = merged["apps"]["services"]["core"]["gitea"].get("github_migration_token")
+        from toolkit.features.gitea_client import GiteaBasicAuthClient
 
-    report = execute(plan, admin, bot, bot_username=bot_username, migration_token=migration_token)  # type: ignore[arg-type]
+        gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
+        migration_token = gitea_cfg.get("github_migration_token")
+        admin_password = gitea_cfg.get("admin_password")
+        if not admin_password:
+            logger.error(
+                f"missing apps.services.core.gitea.admin_password in {env} SOPS. Migration is the "
+                f"one operation no token may perform (bot: not an organization owner; admin token: "
+                f"lacks write:repository, which it must not be granted), so there is no fallback."
+            )
+            raise typer.Exit(1)
+        migrator = GiteaBasicAuthClient(
+            base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password)
+        )
+
+    report = execute(plan, admin, bot, bot_username=bot_username, migration_token=migration_token, migrator=migrator)
     for created in report.orgs_created:
         logger.success(f"org created: {created}")
     for created in report.repos_created:
         logger.success(f"repo created: {created}")
     for migrated in report.repos_migrated:
-        logger.success(f"repo migrated: {migrated}")
+        logger.success(f"repo migration accepted: {migrated}")
+    if report.repos_migrated:
+        console.print(
+            "\n[yellow]The import continues in the background.[/yellow] Gitea returns from "
+            "`/repos/migrate` before issues and pull requests have all arrived — counted minutes "
+            "apart on `resume`: 98 pull requests, then 147. Verify AC3 once the counts stop moving, "
+            "not when this command exits."
+        )
     for target, reason in report.failures:
         logger.error(f"{target}: {reason}")
 
@@ -550,19 +577,19 @@ def gitea_drop_empty(
     durable — see `gitea_client.GiteaBasicAuthClient.delete_repo`.
     """
     from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
-    from toolkit.features.gitea_repos import load_declaration, plan_drop, split_full_name
+    from toolkit.features.gitea_repos import declared_full_names, load_declaration, plan_drop, split_full_name
 
     admin, _bot, _bot_username, base_url = _gitea_clients(env)
     merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
     gitea = merged["apps"]["services"]["core"]["gitea"]
-    declared = {f"{org}/{name}" for org, names in load_declaration(merged).items() for name in names}
+    declared = declared_full_names(load_declaration(merged))
 
     try:
         # The SAME parser the planner uses. Splitting here independently is what
         # made a malformed target die on "not enough values to unpack" instead of
         # on the refusal written for it.
         owner, name = split_full_name(repo)
-        current = admin.get_repo(owner, name)  # type: ignore[attr-defined]
+        current = admin.get_repo(owner, name)
         decision = plan_drop(full_name=repo, repo=current, declared=declared)
     except ValueError as exc:
         logger.error(str(exc))

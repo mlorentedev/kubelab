@@ -37,6 +37,13 @@ import requests
 #: guarantees exhaustion.
 PAGE_SIZE = 50
 
+#: Seconds allowed for `POST /repos/migrate`, which is not a CRUD call. Measured
+#: 2026-09-02: migrating `resume` (3 MB, 93 issues, 165 pull requests) had not
+#: returned after the client's 15s default and `requests` raised `ReadTimeout`
+#: while the server carried on succeeding. An error that means "it may or may not
+#: have worked" is worse than a slow call, so this is generous on purpose.
+MIGRATION_TIMEOUT = 600
+
 #: The scope the bot's token needs before it can create a repository inside an
 #: organization it does not own. Measured 2026-08-27: without it the call is
 #: refused with `required=[write:organization]`, and a token's scopes cannot be
@@ -228,7 +235,15 @@ class GiteaClient:
         """
         page = 1
         while True:
-            payload = self._request("GET", f"{endpoint}?page={page}&limit={PAGE_SIZE}")
+            # `&` when the caller already brought a query string, `?` otherwise.
+            # It was unconditionally `?`, which produced
+            # `/repos/x/y/issues?state=open?page=1&limit=50` -- a second `?` that
+            # Gitea reads as part of the previous VALUE, so the filter silently
+            # became `type=issues?page=1`. Latent until the first caller passed a
+            # filter (AC3's issue count, 2026-09-02); the shape is a wrong answer
+            # rather than an error, which is why it gets a guard and not just a fix.
+            separator = "&" if "?" in endpoint else "?"
+            payload = self._request("GET", f"{endpoint}{separator}page={page}&limit={PAGE_SIZE}")
             items = payload.get(key, []) if key else payload
             if not isinstance(items, list):
                 raise GiteaError(f"Gitea API GET {endpoint} returned {type(items).__name__}, expected a list")
@@ -328,10 +343,27 @@ class GiteaClient:
         had already been given. `plan_reconcile` prevents that by never proposing a
         migration for a repository that is present; a 409 reaching here means that
         invariant broke and should be loud.
+
+        ITS OWN TIMEOUT, AND A LONG ONE. The client's 15s default is right for CRUD
+        and wrong here: measured 2026-09-02 migrating `resume`, the call had not
+        returned after 15 seconds and `requests` raised `ReadTimeout` -- while the
+        migration was proceeding perfectly well on the server. A timeout on this
+        call therefore does NOT mean the migration failed, which is the worst
+        possible thing for an error to mean, so the window is widened rather than
+        left to produce a false negative on every real repository.
+
+        AND THE IMPORT OUTLIVES THE RESPONSE. Even after this returns, Gitea keeps
+        importing issues and pull requests in the background. Counted minutes apart
+        on the same repository: 98 pull requests then 147, 93 issues throughout. So
+        a count taken when this returns measures the clock rather than the
+        repository -- lesson-408's mistake with a different disguise. Callers
+        verifying AC3 must wait for the import to settle, and `execute` says so
+        rather than implying the repository is complete.
         """
         return self._request(
             "POST",
             "/repos/migrate",
+            timeout=MIGRATION_TIMEOUT,
             json={
                 "clone_addr": clone_addr,
                 "repo_owner": org,

@@ -247,6 +247,24 @@ def load_declaration(common: Mapping[str, Any]) -> dict[str, list[RepoSpec]]:
     return declaration
 
 
+def declared_full_names(declaration: Mapping[str, Iterable[RepoSpec]]) -> set[str]:
+    """Every declared repository as `"org/name"` -- the shape the API listing normalises into.
+
+    A FUNCTION RATHER THAN A COMPREHENSION AT EACH CALL SITE, because there were two
+    and they drifted the moment the declaration's shape changed. `drop-empty` built
+    its own `{f"{org}/{name}" for org, names in load_declaration(...)}`, which after
+    `RepoSpec` landed produced strings like `"personal/RepoSpec(name='resume', ...)"`
+    -- so a declared repository read as undeclared and the command refused to touch
+    it. Measured 2026-09-02 against prod.
+
+    It failed SAFE, which is the only reason it cost minutes rather than data: the
+    membership test guards a deletion, so garbage on one side means refuse. A shape
+    change is not obliged to be that kind, and the fix is to have one producer of
+    this set rather than to have been lucky.
+    """
+    return {f"{org}/{spec.name}" for org, specs in declaration.items() for spec in specs}
+
+
 def format_plan(plan: ReconcilePlan) -> str:
     """Human-readable plan, including the strays.
 
@@ -545,6 +563,7 @@ def execute(
     bot: GiteaClient,
     bot_username: str,
     migration_token: str | None = None,
+    migrator: GiteaClient | None = None,
 ) -> ExecutionReport:
     """Carry out a plan, with each operation performed by the credential that may.
 
@@ -598,6 +617,20 @@ def execute(
     for repo in plan.repos_to_migrate:
         if repo.org in failed_orgs:
             continue
+        if migrator is None:
+            _handle_failure(
+                report,
+                f"repo {repo.org}/{repo.name}",
+                RuntimeError(
+                    "no migrator client was supplied. Migration is the ONE operation here that no "
+                    "token may perform -- measured 2026-09-02 against prod, asking each credential "
+                    "to migrate an already-existing repository (409 means 'may', 403 means 'may "
+                    "not'): bot token 403 'Given user is not owner of organization', admin token "
+                    "403 required=[write:repository], superadmin basic auth 409. So the caller must "
+                    "pass a GiteaBasicAuthClient."
+                ),
+            )
+            continue
         if not migration_token:
             # Reported per repository rather than raised once, for the same reason
             # `_handle_failure` collects: the run should say which repositories did
@@ -614,7 +647,7 @@ def execute(
             continue
         try:
             service, clone_addr = parse_migration_source(str(repo.migrate_from))
-            bot.migrate_repo(
+            migrator.migrate_repo(
                 repo.org,
                 repo.name,
                 clone_addr=clone_addr,
@@ -622,6 +655,10 @@ def execute(
                 auth_token=migration_token,
                 private=repo.private,
             )
+            # "Accepted", not "complete": Gitea keeps importing issues and pull
+            # requests after the call returns. The CLI says so, because a report
+            # that reads as done invites a verification count taken too early --
+            # measured on `resume`, 98 pull requests then 147 minutes later.
             report.repos_migrated.append(f"{repo.org}/{repo.name}")
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             _handle_failure(report, f"repo {repo.org}/{repo.name}", exc)
