@@ -9,7 +9,7 @@ not on anonymous reachability, which is load-bearing here in a way it is not for
 Nothing in the repository declares `VIKUNJA_SERVICE_ENABLEREGISTRATION`, so Vikunja's
 own default (`true`) applies and anyone who reaches the domain can mint an account.
 This is the same shape as SEC-GITEA-001 (#1389) -- "safe only because there is nothing
-inside yet" -- and the same expiry applies: ADR-066 makes this instance the bitacora
+inside yet" -- and the same expiry applies: ADR-066 makes this instance the task board
 that replaces GitHub Projects, so it is about to hold the task state of every project.
 
 Why an infra test and not a unit one: the failure mode is a pod running an older

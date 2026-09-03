@@ -7,15 +7,20 @@ checkable with the homelab powered off.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from toolkit.features.vikunja_users import (
+    EXEC_TIMEOUT,
     LOCAL,
     USER_AUDIT_SQL,
     VikunjaUser,
     local_accounts,
     parse_user_rows,
 )
+
+MAKEFILE = pathlib.Path(__file__).resolve().parents[1] / "Makefile"
 
 
 def test_an_empty_issuer_is_reported_as_a_local_account() -> None:
@@ -76,3 +81,49 @@ def test_the_audit_query_only_reads() -> None:
     assert lowered.startswith("select ")
     forbidden = ("insert", "update ", "delete", "drop", "alter", "truncate", "grant")
     assert not [word for word in forbidden if word in lowered], f"the audit query is not read-only: {USER_AUDIT_SQL!r}"
+
+
+def test_the_exec_call_is_bounded() -> None:
+    """An unbounded `kubectl exec` hangs rather than fails.
+
+    `exec` opens a stream and waits indefinitely on an unreachable API server, and
+    half this fleet is on-demand — so an unreachable cluster is an ordinary state.
+    A hang is worse than an error here because it produces no verdict at all.
+    """
+    assert isinstance(EXEC_TIMEOUT, int) and EXEC_TIMEOUT > 0, (
+        f"EXEC_TIMEOUT={EXEC_TIMEOUT!r} does not bound anything"
+    )
+
+
+def test_the_make_target_validates_the_env_value_not_its_presence() -> None:
+    """`test -n "$(ENV)"` can never fail, and shipped twice before (#1118/#1122).
+
+    `ENV ?= dev` is global regardless of where it appears in the Makefile, so a
+    presence check always passes and a bare `make vikunja-audit-users` would audit
+    `dev` — an environment with no Vikunja. The audit would then report an EMPTY
+    ACCOUNT LIST rather than an error, which is precisely the inversion the command
+    exists to prevent: "I could not look" rendered as "nobody is there".
+
+    Asserted against the recipe text because the failure is not that the guard is
+    absent — it is that a weaker guard looks entirely reasonable in review.
+    """
+    text = MAKEFILE.read_text()
+    recipe = text[text.index("vikunja-audit-users: ##") :]
+    recipe = recipe[: recipe.index("\n.PHONY")]
+
+    assert 'test -n "$(ENV)"' not in recipe, (
+        "the guard is back to checking that ENV is non-empty; `ENV ?= dev` makes "
+        "that unfailable, so `make vikunja-audit-users` would audit dev (#1118)"
+    )
+    assert "$(origin ENV)" not in recipe, (
+        "the guard is testing where ENV came from rather than what it is; both "
+        "`ENV=` and `ENV=dev` pass that test (#1122)"
+    )
+    assert "$(filter $(ENV),$(VIKUNJA_ENVS))" in recipe, (
+        "the guard no longer validates ENV against the VIKUNJA_ENVS allow-list — "
+        "an allow-list the recipe does not consult guards nothing"
+    )
+    assert "$(words $(ENV))" in recipe, (
+        'ENV="staging prod" passes `filter` alone and is then spliced unquoted '
+        "into the toolkit's argv"
+    )

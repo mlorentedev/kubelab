@@ -755,6 +755,7 @@ def vikunja_audit_users(
 
     from toolkit.cli.infra import _get_kubeconfig
     from toolkit.features.vikunja_users import (
+        EXEC_TIMEOUT,
         FIELD_SEPARATOR,
         USER_AUDIT_SQL,
         local_accounts,
@@ -781,11 +782,30 @@ def vikunja_audit_users(
         "-c",
         USER_AUDIT_SQL,
     ]
-    res = subprocess.run(cmd, text=True, capture_output=True)
+    # Every failure below lands on the same branch, and that is the point: an audit
+    # that cannot read the table must say so. Reporting zero accounts because the
+    # query never ran is the same inversion the ticket was filed for -- "I could not
+    # look" rendered as "nobody is there".
+    #
+    # The timeout is not defensive dressing. `kubectl exec` opens a stream and will
+    # wait forever on an unreachable API server or a pod stuck terminating, and the
+    # homelab is on-demand, so "unreachable" is a normal state here rather than an
+    # exceptional one. Without a bound the command hangs instead of failing.
+    try:
+        res = subprocess.run(cmd, text=True, capture_output=True, timeout=EXEC_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        logger.error(
+            f"timed out after {EXEC_TIMEOUT}s reading the Vikunja user table in {env} — "
+            "the cluster did not answer. This is NOT an empty account list."
+        )
+        raise typer.Exit(1) from None
+    except OSError as exc:
+        # Raised before `res` exists, so it cannot be handled by a returncode check:
+        # a missing `kubectl` binary is the common case.
+        logger.error(f"could not run kubectl: {exc}")
+        raise typer.Exit(1) from None
+
     if res.returncode != 0:
-        # Never fall back to "assume empty". An audit that cannot read the table
-        # has to say so -- reporting zero accounts because the query failed is
-        # the same class of error as the guard this ticket was filed for.
         logger.error(f"could not read the Vikunja user table in {env}: {res.stderr.strip()}")
         raise typer.Exit(1)
 

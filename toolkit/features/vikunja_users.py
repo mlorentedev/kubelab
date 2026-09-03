@@ -25,6 +25,13 @@ from dataclasses import dataclass
 #: split rather than a table-format reader.
 FIELD_SEPARATOR = "|"
 
+#: Upper bound on the `kubectl exec` that runs the query. `exec` opens a stream and
+#: waits indefinitely on an unreachable API server or a pod stuck terminating -- and
+#: on an on-demand cluster "unreachable" is an ordinary state, not an exceptional one.
+#: Generous relative to the query (a single indexed SELECT over a handful of rows),
+#: because the cost being bounded here is connection setup, not execution.
+EXEC_TIMEOUT = 60
+
 #: Four columns that are load-bearing in Vikunja's own auth code: `issuer` is what
 #: `getOrCreateUser` keys on to decide whether an account came from OIDC. Deliberately
 #: minimal -- every extra column is one more chance of a schema mismatch turning an
