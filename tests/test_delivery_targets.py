@@ -26,7 +26,6 @@ import subprocess
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-MAKEFILE = REPO_ROOT / "Makefile"
 
 # The stub that replaces every command these recipes can reach. `echo` prints
 # the arguments it was given, so a dispatch is observable as text and
@@ -130,12 +129,25 @@ def test_the_target_never_promotes_on_this_machine() -> None:
     working copy and stop, leaving a human to branch, commit and push a
     production change by hand — no PR, no required checks, and the ADR-046 gate
     bypassed by an operator who thought they were using the supported path.
+
+    Asserted against what the target RAN, not against the text of the Makefile.
+    An earlier version of this test sliced the recipe out with
+    `read_text().split("promote-prod:", 1)[1].split("\\n\\n", 1)[0]` and matched
+    strings in it, which PR-Agent flagged on `#1596` as brittle — and it was
+    worse than brittle. Reformatting the recipe, adding a blank line inside it,
+    or moving the local call one target down would all have left the assertion
+    passing while the behaviour it names had changed. Every command the recipe
+    can reach is stubbed, so its output IS the observation.
     """
-    recipe = MAKEFILE.read_text(encoding="utf-8").split("promote-prod:", 1)[1].split("\n\n", 1)[0]
-    assert "toolkit deployment promote" not in recipe, (
-        "promote-prod runs the promotion locally; it must dispatch the workflow"
+    proc = _make("promote-prod", "APP=web", "VERSION=1.12.0")
+    assert proc.returncode == 0, proc.stderr
+    assert "workflow run promote-prod.yml" in proc.stdout, (
+        f"promote-prod did not dispatch the workflow. It ran: {proc.stdout!r}"
     )
-    assert "workflow run promote-prod.yml" in recipe
+    assert "deployment promote" not in proc.stdout, (
+        f"promote-prod invoked the toolkit's local promotion, which edits the prod "
+        f"overlay in the working copy and opens no PR. It ran: {proc.stdout!r}"
+    )
 
 
 # --- registry-prune ---------------------------------------------------------
