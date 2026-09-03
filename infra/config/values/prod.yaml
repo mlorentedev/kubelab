@@ -116,8 +116,6 @@ apps:
 
       grafana:
         domain: grafana.kubelab.live
-      mutant:
-        domain: mutant.internal.kubelab.local
 
     security:
       authelia:
