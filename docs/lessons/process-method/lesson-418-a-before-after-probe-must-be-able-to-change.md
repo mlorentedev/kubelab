@@ -60,6 +60,47 @@ outbound, so it cannot restrict an outbound connection. **I attached a sound
 conclusion to the weakest evidence I had for it**, and the peer was right to say
 so.
 
+## And once at the level of control flow, not state
+
+Every instance above reports on **state** — a port, a container, a `changed`
+count. This one reports on whether a **guard can fire**, and it is the sharpest
+of the set.
+
+The Beelink holds two SOPS stores by design (ADR-061: Gitea's identity is prod
+while the node's `deploy_env` is staging). A role wrote a runner registration
+token into the *prod* store; the playbook read it from the *staging* one. **It
+does not fail** — every such read carries `| default('', true)`, so the wrong
+store resolves to `''`, which is a perfectly good value and raises nothing.
+
+The consequence: the mint's `when: not act_runner_token` gate is true on *every*
+provision, and Gitea's `generate-runner-token` invalidates all prior tokens for
+its scope — so each re-provision would revoke the token its own running runner
+had registered with. Playbook green, CI silently stops picking up jobs, and the
+cause is a task dozens of lines earlier that nobody would connect to a runner
+going offline.
+
+A guard for exactly this already existed and passed. It asserts the mint task
+*has* a `when:` — and **a gate that can never be satisfied is indistinguishable
+from a working one** to that assertion. Same reading in both worlds. The inert
+port, one level up: at the level of conditions rather than measurements.
+
+## Knowing the rule does not prevent the instance
+
+The engineer who found that had written the mechanical test above **thirty
+minutes earlier**, and shipped an instance of it anyway.
+
+That is the most useful fact in this lesson, because it decides what the fix is.
+If the failure were ignorance, writing it down would be enough. It is not: the
+principle is easy to hold and the moment of application is easy to miss, exactly
+as [[lesson-365]] found for mutation testing — *a written lesson with no
+mechanism is a reminder, and a reminder fails precisely when the situation
+arrives.*
+
+So the deliverable is never "remember to ask what the reading would be". It is to
+make the question run: an anti-vacuity assertion on the derived value, a
+before-state captured while the before-state still exists, a guard that asserts a
+condition can be **satisfied** rather than that it is present.
+
 ## Root cause
 
 All three are one mistake: **reaching for the salient instrument instead of the
