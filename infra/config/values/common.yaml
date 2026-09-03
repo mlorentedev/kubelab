@@ -1414,6 +1414,42 @@ backup:
     # workloads a Helm chart could reach — restic is node state, same layer
     # as the systemd timer that invokes it.
     restic_version: "0.19.1"  # tag is v0.19.1; release asset names drop the "v"
+  # Every named Docker volume on a covered node is either backed up above or
+  # excluded HERE, with its reason. Enforced by tests/test_backup_volume_coverage.py
+  # over the compose template, so a volume added in a future change fails a test
+  # instead of being silently uncovered.
+  #
+  # This is deliberately NOT the same thing as BACKUP-044 AC6, and does not close
+  # it: AC6 asks what exists ON DISK on a live node and is absent from the
+  # declaration, which needs the node. This asks the narrower, static question --
+  # what does the compose template create that nobody has ruled on. A comment
+  # would have done neither; `postgres` is excluded ten lines below on a rationale
+  # that expired when Vikunja shipped, and no test noticed.
+  excluded:
+    beelink:
+      act_runner_data:
+        reason: >-
+          Holds act_runner's `.runner` registration file and its actions/cache
+          directory. The registration is re-derivable -- deleting the SOPS key and
+          re-provisioning mints a fresh token and registers again -- and a build
+          cache that survives a node rebuild is a liability rather than an asset,
+          since it would carry state from a machine that no longer exists. Nothing
+          here is canonical.
+      # Keyed by the name the DAEMON holds (`docker volume ls`), not by the compose
+      # key -- `runner_data:` in the template declares `name: github_runner_data`,
+      # and the daemon's name is the one a restore would have to address. The guard
+      # reads the rendered `name:` for that reason, and caught this exact mismatch
+      # on its first run.
+      github_runner_data:
+        reason: >-
+          The GitHub runner's work directory. Ephemeral by declaration -- the
+          container runs with EPHEMERAL=1, so it is discarded between jobs anyway.
+      github_runner_toolcache:
+        reason: >-
+          Downloaded toolchains (`/opt/hostedtoolcache`). Rebuildable by
+          construction: every entry is re-fetched from its upstream on demand, and
+          restoring a stale copy would pin versions a fresh run would not choose.
+
   sources:
     beelink:
       gitea:
