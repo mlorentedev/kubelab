@@ -868,7 +868,18 @@ apps:
           # listing would report an existing private org as absent. Read-only:
           # the admin token creates organizations (`write:organization`) but is
           # never granted `write:admin`.
-          admin: "read:admin,write:organization,read:repository"
+          #
+          # `read:user` is what `/users/<name>/repos` needs, and that endpoint is
+          # how AC4 — "the machine identity owns nothing" — is checked by
+          # consequence rather than assumed. It was MISSING here until 2026-09-02
+          # while `whoami` and `list_owned_repos` sat in the client to perform
+          # exactly that check: measured against live prod, all three
+          # `/users/...` reads answered `403 required=[read:user]`. The scope
+          # guard was green throughout, because it compared a stale requirement
+          # against a grant that matched it. `REQUIRED_ADMIN_SCOPES` is now
+          # derived from `SCOPE_BY_METHOD`, so this line and the code cannot
+          # drift apart again without a test failing.
+          admin: "read:admin,write:organization,read:repository,read:user"
           # `write:organization` is permission to ACT ON an organization, not to
           # own one, so ADR-065 D1 (the bot owns nothing) still holds. Guarded
           # against `REQUIRED_BOT_SCOPE` in `toolkit/features/gitea_client.py`.

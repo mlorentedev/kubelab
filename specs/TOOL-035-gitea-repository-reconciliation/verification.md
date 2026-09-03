@@ -9,10 +9,10 @@ created: "2026-08-27"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] AC1 (declare + reconcile is idempotent) -> commit `<hash>` / test `<name>` / live transcript below
-- [ ] AC2 (undeclared is reported, never deleted) -> commit `<hash>` / test `<name>`
+- [x] AC1 (declare + reconcile is idempotent) -> `890f6f56` / `tests/test_gitea_repo_reconcile.py` / live transcript under *AC1/AC4 measured on prod*
+- [x] AC2 (undeclared is reported, never deleted) -> `890f6f56` / `test_the_plan_has_no_deletion_field` (structural, over `dataclasses.fields`)
 - [ ] AC3 (issues and pull requests carry over) -> live count against the baseline below
-- [ ] AC4 (`hefesto` owns nothing) -> API listing
+- [x] AC4 (`hefesto` owns nothing) -> live listing under *AC1/AC4 measured on prod*, printed by the reconcile itself
 - [ ] AC5 (migration credential scoped and checked both ways) -> both transcripts
 - [ ] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> run URL
 - [ ] AC7 (`act_runner` registration idempotent) -> `changed=0` transcript
@@ -141,6 +141,78 @@ That drift is the whole argument for PR0 existing. The template in git was corre
 running container was not, and no static test could tell them apart. It is also a caution for PR3:
 `act_runner` will be added to this same role, so the first run after it lands will report changes and
 the *second* is the one that proves anything.
+
+## AC1/AC4 measured on prod (2026-09-02)
+
+**The first-run half of AC1 is a stated gap.** The organizations and repositories were created on
+2026-09-01 and that transcript was not written down before the session ended — evidence produced and
+not made durable, which is the same failure this file exists to prevent, one level up from the code.
+What is recorded below is the convergence half, measured on 2026-09-02. First-run evidence returns for real
+in PR2: the migration path creates `personal/resume`, so its first `--apply` is a first run.
+
+**AC1 — a second run changes nothing.** `make gitea-reconcile ENV=prod`:
+
+```text
+Gitea reconcile — https://gitea.kubelab.live (prod)
+
+  (nothing to do — forge matches the declaration)
+
+AC4 ok — hefesto owns: (none)
+[SUCCESS] forge matches the declaration — nothing to create
+```
+
+**AC4 — the machine identity owns nothing.** Printed by the reconcile itself rather than by a
+separate command, so the run that proves AC1 produces AC4's evidence as a side effect. It is on the
+CLI path rather than in a pytest because the property is about the LIVE forge and this repo's live
+suites cannot decrypt SOPS (`tests/infra/fixtures.py` reads `common.yaml` only) — a credentialed test
+would be new machinery, not evidence.
+
+**AC4 could not be read at all until today, and every signal said otherwise.** The client carried
+`whoami` and `list_owned_repos` specifically "to assert AC4 by consequence"; both call `/users/...`;
+the admin grant did not include `read:user`. Measured before the fix:
+
+```text
+GET /users/hefesto        -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
+GET /users/hefesto/repos  -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
+GET /user                 -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
+```
+
+`tests/test_gitea_token_scopes.py` was green throughout, because it compared a hand-written
+`REQUIRED_ADMIN_SCOPES` against a grant that matched it — two declarations agreeing about the wrong
+set. **Lesson 413 one layer up**: last time a credential was present and powerless, this time a
+METHOD was, and presence passed for capability both times. The cure is derivation, not another
+literal: `REQUIRED_ADMIN_SCOPES` is now a union over `SCOPE_BY_METHOD`, and a test introspects
+`GiteaClient` so a method cannot enter the class without its scope entering the requirement.
+
+Guards verified by mutation, all four red with the intended diagnostic:
+
+| mutation | fails |
+|---|---|
+| drop `read:user` from the declared grant | `test_admin_grant_covers_what_the_reconciler_reads` |
+| add a public client method with no map entry | `test_every_client_method_declares_the_scope_it_needs` |
+| restate `REQUIRED_ADMIN_SCOPES` as a literal | `test_the_admin_requirement_is_derived_from_the_methods_it_performs` |
+| drop a method from the map while `ADMIN_METHODS` names it | `RuntimeError` at import, naming the method |
+
+**The rotation that closed it.** Gitea cannot edit a minted token's scopes, so widening
+`token_scopes.admin` alone changes nothing on an instance that already holds a token:
+
+```text
+make gitea-rotate-token TOKEN=admin ENV=prod APPLY=1
+  [SUCCESS] revoked kubelab-reconciler on manu — the outage window is now OPEN
+  [SUCCESS] cleared apps.services.core.gitea.admin_token — the mint gate is open
+
+make provision NODE=bee ENV=prod TAGS=gitea
+  run 1: ok=44 changed=2   (mint the superadmin's scoped token; record it in SOPS)
+  run 2: ok=42 changed=0
+```
+
+Idempotent, and the re-mint is gated on the SOPS key being absent — so the rotation is what opens the
+gate, and a provision with the key present does nothing.
+
+**AC2 is structural rather than observed, deliberately.** The forge currently holds no undeclared
+repository, so there is no stray to report. `test_the_plan_has_no_deletion_field` asserts over
+`dataclasses.fields(ReconcilePlan)` that no field a deletion could travel in exists at all, which
+holds for every future caller — a stronger claim than a fixture that happened not to delete anything.
 
 ## Risk 1 — settled 2026-08-27, against the live instance
 

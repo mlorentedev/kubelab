@@ -41,7 +41,14 @@ from typing import Any
 import pytest
 import yaml
 
-from toolkit.features.gitea_client import REQUIRED_ADMIN_SCOPES, REQUIRED_BOT_SCOPE
+from toolkit.features.gitea_client import (
+    ADMIN_METHODS,
+    REQUIRED_ADMIN_SCOPES,
+    REQUIRED_BOT_SCOPE,
+    SCOPE_BY_METHOD,
+    GiteaClient,
+    expand_grant,
+)
 from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -76,7 +83,7 @@ def test_admin_grant_covers_what_the_reconciler_reads(declared_scopes: dict[str,
     report is about organizations this account is NOT a member of, and
     `/user/orgs` would report an existing private org as absent.
     """
-    missing = REQUIRED_ADMIN_SCOPES - declared_scopes["admin"]
+    missing = REQUIRED_ADMIN_SCOPES - expand_grant(declared_scopes["admin"])
     assert not missing, (
         f"the admin token's grant is missing {sorted(missing)}. It will still mint, still land in "
         f"SOPS and still pass secrets-audit — and `make gitea-reconcile` will 403. Widening this "
@@ -95,6 +102,71 @@ def test_bot_grant_covers_the_scope_its_client_declares(declared_scopes: dict[st
         f"gitea_client.REQUIRED_BOT_SCOPE is {REQUIRED_BOT_SCOPE!r}, which the bot's grant does not "
         f"include ({sorted(declared_scopes['bot'])}). Measured 2026-08-27: without it, creating a "
         f"repository inside an organization the bot does not own returns 403."
+    )
+
+
+def test_every_client_method_declares_the_scope_it_needs() -> None:
+    """A method whose scope nobody declared is a capability nobody can grant.
+
+    WHY THIS IS NOT THE SAME TEST AS THE TWO ABOVE. Those compare a REQUIREMENT
+    against a GRANT, and they pass whenever the two agree — including when they
+    agree about the wrong set. `REQUIRED_ADMIN_SCOPES` was hand-written by reading
+    the code once, and the code moved: `whoami` and `list_owned_repos` were added
+    to assert AC4 "by consequence", both call `/users/...`, both need `read:user`,
+    and nothing anywhere said so. Measured 2026-09-02 against live prod:
+
+        GET /users/hefesto        -> 403 required=[read:user], token scope=read:admin,...
+        GET /users/hefesto/repos  -> 403 required=[read:user], token scope=read:admin,...
+        GET /user                 -> 403 required=[read:user], token scope=read:admin,...
+
+    So AC4 — "the bot owns nothing" — had a reader that could never read. Every
+    other signal was green, which is lesson 413 arriving one layer up: last time
+    the credential was present and powerless, this time the METHOD was present and
+    powerless, and presence was mistaken for capability both times.
+
+    The cure is to stop restating the requirement and start deriving it.
+    `REQUIRED_ADMIN_SCOPES` is now a union over `SCOPE_BY_METHOD`, so a method
+    cannot enter the client without its scope entering the grant's requirement.
+    This test is what makes the map exhaustive: introspection over the class, so
+    adding a method and forgetting the map fails here rather than at runtime in
+    front of a forge.
+    """
+    public = {
+        name
+        for name in vars(GiteaClient)
+        if not name.startswith("_") and callable(getattr(GiteaClient, name, None))
+    }
+    undeclared = public - set(SCOPE_BY_METHOD)
+    assert not undeclared, (
+        f"GiteaClient.{sorted(undeclared)} call the API with no entry in SCOPE_BY_METHOD. "
+        f"Add one naming the scope Gitea demands — a method whose scope is undeclared is one "
+        f"REQUIRED_ADMIN_SCOPES cannot cover, and it fails at runtime with a 403 that reads "
+        f"like a permissions problem rather than a missing grant."
+    )
+
+    stale = set(SCOPE_BY_METHOD) - public
+    assert not stale, (
+        f"SCOPE_BY_METHOD names {sorted(stale)}, which GiteaClient no longer defines. A grant "
+        f"kept alive for a deleted caller is scope granted for nothing."
+    )
+
+
+def test_the_admin_requirement_is_derived_from_the_methods_it_performs() -> None:
+    """`REQUIRED_ADMIN_SCOPES` must stay a union over `ADMIN_METHODS`, never a second list.
+
+    Re-inlining it as a literal frozenset is the shape this whole file exists to
+    prevent, one level in: the grant would then be checked against a set that no
+    longer tracks the code it describes — exactly how `read:user` went missing.
+    """
+    derived = frozenset().union(*(SCOPE_BY_METHOD[name] for name in ADMIN_METHODS))
+    assert REQUIRED_ADMIN_SCOPES == derived, (
+        f"REQUIRED_ADMIN_SCOPES is {sorted(REQUIRED_ADMIN_SCOPES)} but the methods the admin "
+        f"credential performs need {sorted(derived)}. It has been restated instead of derived."
+    )
+
+    assert set(ADMIN_METHODS) <= set(SCOPE_BY_METHOD), (
+        f"ADMIN_METHODS names {sorted(set(ADMIN_METHODS) - set(SCOPE_BY_METHOD))}, absent from "
+        f"SCOPE_BY_METHOD."
     )
 
 

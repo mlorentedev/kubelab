@@ -403,6 +403,46 @@ def _gitea_clients(env: str) -> tuple[object, object, str, str]:
     )
 
 
+def _report_machine_ownership(admin: object, bot_username: str) -> None:
+    """Print what the machine identity owns — ADR-065 D1 / TOOL-035 AC4, every run.
+
+    ON THE RECONCILE PATH RATHER THAN IN A TEST, deliberately. The property is
+    about the LIVE forge, and the repo's live suites cannot decrypt SOPS, so a
+    credentialed pytest would be new machinery rather than evidence. Printing it
+    where the operator already looks makes `make gitea-reconcile ENV=prod` produce
+    AC4's proof as a side effect of the run that proves AC1 — one transcript,
+    both criteria, no second command anyone has to remember.
+
+    NOT FATAL WHEN IT CANNOT BE READ, and the distinction is the point: a refusal
+    means "I could not look", which lesson-408 says must never be reported as "I
+    looked and it is empty". A reconcile that converged still converged; what is
+    lost is the check, and the message says so rather than printing `(none)` and
+    letting an unread state pass for a verified one.
+    """
+    from toolkit.features.gitea_client import GiteaError
+
+    try:
+        owned = sorted(admin.list_owned_repos(bot_username))  # type: ignore[attr-defined]
+    except GiteaError as exc:
+        console.print(
+            f"\n[yellow]AC4 unchecked[/yellow] — could not read what {bot_username} owns: "
+            f"{exc.status_code}. This is 'I did not look', not 'it owns nothing'. "
+            f"A 403 here means the admin token predates `read:user` in "
+            f"`apps.services.core.gitea.token_scopes.admin`; rotate and re-provision."
+        )
+        return
+
+    if owned:
+        console.print(
+            f"\n[red]AC4 VIOLATED[/red] — {bot_username} owns {owned}. ADR-065 D1 requires the "
+            f"machine identity to own nothing, so that retiring it is a membership deletion "
+            f"rather than a data migration."
+        )
+        return
+
+    console.print(f"\n[dim]AC4 ok — {bot_username} owns: (none)[/dim]")
+
+
 @gitea_app.command("reconcile")
 def gitea_reconcile(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
@@ -425,6 +465,11 @@ def gitea_reconcile(
     declared = load_declaration(merged)
     if not declared:
         logger.warning("no `gitea.organizations` declared in common.yaml — nothing to reconcile")
+        # Checked even here. AC4 is a property of the FORGE, not of the declaration:
+        # an empty declaration is exactly the state in which nobody would think to
+        # look, and a machine identity that has acquired a repository is worth
+        # hearing about whether or not this run had anything to reconcile.
+        _report_machine_ownership(admin, bot_username)
         raise typer.Exit(0)
 
     try:
@@ -442,11 +487,13 @@ def gitea_reconcile(
     console.print(format_plan(plan))
 
     if plan.is_noop:
+        _report_machine_ownership(admin, bot_username)
         logger.success("forge matches the declaration — nothing to create")
         return
 
     if not apply:
         console.print("\n[dim]plan only — re-run with --apply to create[/dim]")
+        _report_machine_ownership(admin, bot_username)
         return
 
     report = execute(plan, admin, bot, bot_username=bot_username)  # type: ignore[arg-type]
@@ -456,6 +503,14 @@ def gitea_reconcile(
         logger.success(f"repo created: {created}")
     for target, reason in report.failures:
         logger.error(f"{target}: {reason}")
+
+    # AFTER `execute`, not before. AC4 reads "the machine identity owns nothing
+    # AFTERWARDS", and this call used to run once before the plan was carried out
+    # -- so on `--apply` it reported PRE-reconcile state and an ownership violation
+    # created by the very run being reported could not appear in its own output.
+    # Reported by review on #1562.
+    _report_machine_ownership(admin, bot_username)
+
     if not report.ok:
         raise typer.Exit(1)
 
