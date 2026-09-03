@@ -43,24 +43,79 @@ PAGE_SIZE = 50
 #: edited after minting -- widening means re-minting.
 REQUIRED_BOT_SCOPE = "write:organization"
 
-#: Scopes the superadmin's token needs for every admin-client call this module
-#: makes: `write:organization` (`create_org`), `read:repository` (`list_repos`),
-#: `read:admin` (`list_orgs`, via `/admin/orgs`).
+#: The scope Gitea demands for each public method on `GiteaClient`, keyed by
+#: method name. THE MAP IS THE DECLARATION; nothing below restates it.
 #:
-#: Measured 2026-09-01: minted without `read:admin`, the token authenticated,
-#: landed in SOPS and passed `secrets-audit` -- and `/admin/orgs` refused it with
-#: `403 token does not have at least one of required scope(s)`. Presence of the
-#: credential was never evidence that it worked.
+#: WHY A MAP AND NOT A HAND-WRITTEN SET. `REQUIRED_ADMIN_SCOPES` used to be a
+#: literal, written once by reading the code. The code then moved and the literal
+#: did not: `whoami` and `list_owned_repos` were added to assert AC4 "the bot owns
+#: nothing" by consequence, both call `/users/...`, both need `read:user`, and no
+#: declaration anywhere mentioned it. Measured 2026-09-02 against live prod, all
+#: three refused:
 #:
-#: Read-only on the admin axis by design. `read:admin` buys the whole-forge
-#: LISTING that `/user/orgs` cannot give (an organization this account is not a
-#: member of would read as absent, and reporting those is the point); it is not
-#: `write:admin`, which nothing here needs.
+#:     GET /users/hefesto        -> 403 required=[read:user]
+#:     GET /users/hefesto/repos  -> 403 required=[read:user]
+#:     GET /user                 -> 403 required=[read:user]
 #:
-#: Like `REQUIRED_BOT_SCOPE`, this is only half a contract on its own -- the
-#: grant is declared in `common.yaml` and minted by Ansible, which cannot import
-#: Python. `tests/test_gitea_token_scopes.py` is what makes the two agree.
-REQUIRED_ADMIN_SCOPES = frozenset({"read:admin", "write:organization", "read:repository"})
+#: So the acceptance criterion had a reader that could never read, while the scope
+#: guard stayed green because it compared a stale requirement against a matching
+#: grant. Lesson 413 one layer up: last time a credential was present and
+#: powerless, this time a METHOD was. `tests/test_gitea_token_scopes.py` keeps
+#: this map exhaustive by introspecting the class, so a new method cannot arrive
+#: without its scope arriving too.
+SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
+    # Reads. `/admin/orgs` rather than `/user/orgs` is what `read:admin` buys --
+    # the whole-forge listing AC2's stray report needs. Read-only on that axis:
+    # `write:admin` is never granted because nothing here needs it.
+    "list_orgs": frozenset({"read:admin"}),
+    "list_repos": frozenset({"read:repository"}),
+    "whoami": frozenset({"read:user"}),
+    "list_owned_repos": frozenset({"read:user"}),
+    "get_team": frozenset({"read:organization"}),
+    # Writes.
+    "create_org": frozenset({"write:organization"}),
+    "create_repo": frozenset({"write:organization"}),
+    "create_team": frozenset({"write:organization"}),
+    "add_team_member": frozenset({"write:organization"}),
+}
+
+#: Which methods the SUPERADMIN credential performs. Not every method: `create_repo`
+#: is the bot's, because Gitea makes the creating account an organization's owner
+#: and ADR-065 D1 requires the machine identity to own nothing.
+ADMIN_METHODS: tuple[str, ...] = (
+    "list_orgs",
+    "list_repos",
+    "whoami",
+    "list_owned_repos",
+    "get_team",
+    "create_org",
+    "create_team",
+    "add_team_member",
+)
+
+#: DERIVED, never restated. A method entering `ADMIN_METHODS` drags its scope into
+#: the requirement automatically, which is the property the old literal lacked.
+#:
+#: Still only half a contract on its own: the grant is declared in `common.yaml`
+#: and minted by Ansible, which cannot import Python.
+#: `tests/test_gitea_token_scopes.py` is what makes the two agree.
+REQUIRED_ADMIN_SCOPES: frozenset[str] = frozenset().union(*(SCOPE_BY_METHOD[name] for name in ADMIN_METHODS))
+
+
+def expand_grant(granted: set[str]) -> set[str]:
+    """Add the read scope every write scope already implies.
+
+    Gitea's `write:organization` carries `read:organization` -- a token holding the
+    write scope is not refused a read. Modelling that here lets each method declare
+    the scope it HONESTLY needs (`get_team` reads, so it says `read:organization`)
+    without forcing the grant to spell out a scope it already covers.
+
+    Without this the choice would be between a dishonest map (`get_team` claiming
+    a write scope it does not use) and a bloated grant, and the first is how a map
+    stops describing the code it is supposed to describe.
+    """
+    return granted | {f"read:{scope.split(':', 1)[1]}" for scope in granted if scope.startswith("write:")}
+
 
 #: The units a reconciler team is granted, each at the team's coarse permission.
 #: Gitea 1.25 refuses a team with no per-unit modes (`units permission should not
