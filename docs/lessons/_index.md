@@ -11,7 +11,7 @@
 | [process-method](process-method/_index.md) | 61 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 31 | Toolkit CLI, Make, Python, tests |
-| [gitops-delivery](gitops-delivery/_index.md) | 26 | Argo CD, releases, promotion |
+| [gitops-delivery](gitops-delivery/_index.md) | 27 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 23 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 16 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 12 | Docker, Compose, image builds |

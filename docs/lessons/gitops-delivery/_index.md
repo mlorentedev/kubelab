@@ -1,9 +1,10 @@
 # Argo CD, releases and image promotion
 
-26 lessons, newest first. Back to [all categories](../_index.md).
+27 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 417 | [An IaC module that was never applied is read as a control, and the header saying otherwise does not stop it](lesson-417-an-unapplied-iac-module-is-read-as-a-control.md) | 2026-09-02 |
 | 407 | [A failed Argo CD auto-sync is not retried, and a merged manifest is not a deploy](lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy.md) | 2026-08-27 |
 | 404 | [A ConfigMap of env vars without a hash suffix is a silent no-op, and Argo CD reports Synced](lesson-404-a-configmap-of-env-vars-without-a-hash-suffix-is-a-silent-no-op.md) | 2026-08-26 |
 | 377 | [Under selfHeal, a rotation that is not committed is a scheduled outage](lesson-377-rotating-is-not-landing-under-selfheal.md) | 2026-08-23 |
