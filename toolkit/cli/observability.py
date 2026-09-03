@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Annotated, Generator, Optional
 
 import typer
@@ -148,23 +148,28 @@ def _loki_client(env: str) -> Generator[LokiClient, None, None]:
     if os.environ.get("LOKI_URL"):
         yield LokiClient()
         return
-    try:
-        with kubectl_service_port_forward(env, "loki", 3100) as port:
-            yield LokiClient(base_url=f"http://127.0.0.1:{port}")
-    except ObservabilityUnavailableError:
-        # Already precise about which backend failed -- re-wrapping would
-        # RE-ATTRIBUTE it. `ObservabilityUnavailableError` subclasses
-        # `RuntimeError`, so before this the broad clause below caught an
-        # AlertsUnavailableError raised inside the `with` body and relabelled it:
-        # `obs triage --env prod` reported "could not reach Loki in prod: could
-        # not reach Grafana in prod: 401" while Loki was working perfectly. An
-        # operator reads the first clause and goes to debug Loki.
-        #
-        # Invisible until something nested the two context managers, which
-        # TOOL-055 is the first thing to do.
-        raise
-    except (RuntimeError, TimeoutError) as exc:
-        raise LogsUnavailableError(f"could not reach Loki in {env}: {exc}") from exc
+    # The `try` covers the port-forward SETUP and nothing else, and the `yield`
+    # deliberately sits outside it. In a `@contextmanager`, an exception raised
+    # in the caller's `with` body is re-injected into this generator AT THE
+    # YIELD -- so a `try` spanning the yield catches the consumer's failures and
+    # relabels them as this backend's. That is not hypothetical: with the yield
+    # inside, a plain `RuntimeError` from `SreTriageEngine.diagnose_service`
+    # surfaced as "could not reach Loki in prod: ..." while Loki was fine, and
+    # an operator reading the first clause goes to debug a healthy backend --
+    # the exact misattribution TOOL-055 exists to remove, reproduced one level
+    # up. An earlier revision tried to fix this with `except
+    # ObservabilityUnavailableError: raise`, which only ever covered the
+    # subclass; every OTHER RuntimeError still went out mislabelled. The guard
+    # has to be structural: the body is not inside the `try` at all.
+    with ExitStack() as stack:
+        try:
+            port = stack.enter_context(kubectl_service_port_forward(env, "loki", 3100))
+        except ObservabilityUnavailableError:
+            # Already names its backend -- re-wrapping would RE-ATTRIBUTE it.
+            raise
+        except (RuntimeError, TimeoutError) as exc:
+            raise LogsUnavailableError(f"could not reach Loki in {env}: {exc}") from exc
+        yield LokiClient(base_url=f"http://127.0.0.1:{port}")
 
 
 @contextmanager
@@ -182,16 +187,18 @@ def _grafana_client(env: str) -> Generator[GrafanaAlertClient, None, None]:
     if os.environ.get("GRAFANA_URL"):
         yield GrafanaAlertClient()
         return
-    try:
-        with kubectl_service_port_forward(env, "grafana", 3000) as port:
+    # Setup inside the `try`, `yield` outside it -- see `_loki_client` for why
+    # a `try` spanning the yield converts a consumer's failure into this
+    # backend's.
+    with ExitStack() as stack:
+        try:
+            port = stack.enter_context(kubectl_service_port_forward(env, "grafana", 3000))
             token = read_cluster_secret_key(env, "grafana-admin", "alerts-ro-token") or ""
-            yield GrafanaAlertClient(base_url=f"http://127.0.0.1:{port}", token=token)
-    except ObservabilityUnavailableError:
-        # Symmetric to `_loki_client`: never re-attribute an error that already
-        # names its backend. See the comment there for the measurement.
-        raise
-    except (RuntimeError, TimeoutError) as exc:
-        raise AlertsUnavailableError(f"could not reach Grafana in {env}: {exc}") from exc
+        except ObservabilityUnavailableError:
+            raise
+        except (RuntimeError, TimeoutError) as exc:
+            raise AlertsUnavailableError(f"could not reach Grafana in {env}: {exc}") from exc
+        yield GrafanaAlertClient(base_url=f"http://127.0.0.1:{port}", token=token)
 
 
 @app.command("alerts")
