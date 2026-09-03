@@ -96,4 +96,20 @@ resource "hcloud_firewall" "vps" {
 resource "hcloud_firewall_attachment" "vps" {
   firewall_id = hcloud_firewall.vps.id
   server_ids  = [data.hcloud_server.vps.id]
+
+  # The name is the weaker identifier and we know it: the lookup was originally
+  # written against networking.vps.hostname ("kubelab-vps", the OS hostname) and
+  # found nothing, because the account calls this machine something else. A name
+  # can also be reused — rename the box, create another with the old name, and a
+  # name-only lookup silently attaches production's firewall to a different
+  # server. The IP is what identifies the machine this spec is about.
+  #
+  # A precondition fails the PLAN rather than the apply, so the mismatch is read
+  # by a human before anything is created.
+  lifecycle {
+    precondition {
+      condition     = data.hcloud_server.vps.ipv4_address == var.expected_public_ip
+      error_message = "Server '${var.server_name}' resolves to ${data.hcloud_server.vps.ipv4_address}, not the expected ${var.expected_public_ip}. Refusing to attach: either the server was renamed in the Hetzner console (update networking.vps.hetzner_server_name) or this would firewall the wrong machine."
+    }
+  }
 }

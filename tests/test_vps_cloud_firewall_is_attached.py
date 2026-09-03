@@ -203,12 +203,32 @@ class TestTheFirewallIsLive:
         import httpx
 
         data = yaml.safe_load(COMMON_VALUES.read_text(encoding="utf-8")) or {}
-        server_name = data.get("networking", {}).get("vps", {}).get("hostname", "kubelab-vps")
+        vps = data.get("networking", {}).get("vps", {})
+
+        # `hostname` is the OS hostname and is NOT what Hetzner calls this
+        # machine. Reading it here (as this fixture originally did, defaulted to
+        # "kubelab-vps") looks up a server that does not exist and reports the
+        # firewall as missing -- a false alarm indistinguishable from the real
+        # one this test exists to raise. Asserted, never defaulted.
+        server_name = vps.get("hetzner_server_name")
+        assert server_name, (
+            "networking.vps.hetzner_server_name is absent from common.yaml. It is the "
+            "name the HETZNER ACCOUNT uses, which differs from networking.vps.hostname "
+            "(the OS hostname). Without it this check cannot find the server, and a "
+            "lookup failure would read as an unprotected VPS."
+        )
+        expected_ip = vps.get("public_ip")
+        assert expected_ip, "networking.vps.public_ip is absent; the server cannot be confirmed."
 
         headers = {"Authorization": f"Bearer {token}"}
         with httpx.Client(base_url="https://api.hetzner.cloud/v1", headers=headers, timeout=20) as c:
             servers = c.get("/servers", params={"name": server_name}).raise_for_status().json()
-            assert servers.get("servers"), f"No Hetzner server named {server_name!r} in this account."
+            assert servers.get("servers"), (
+                f"No Hetzner server named {server_name!r} in this account. Either it was "
+                "renamed in the console (update networking.vps.hetzner_server_name) or "
+                "this is looking in the wrong project. Do NOT read this as 'the firewall "
+                "is fine' -- the check did not run."
+            )
             server = servers["servers"][0]
 
             assert "public_net" in server, (
@@ -216,6 +236,17 @@ class TestTheFirewallIsLive:
                 f"assumed by this test is wrong; the keys present are {sorted(server)}. "
                 "Fix the accessor to match the real API -- do NOT add a fallback."
             )
+            # Confirm the name resolved to the machine this spec is about. A
+            # name can be changed or reused; the IP is the identity that matters,
+            # and without this the test would happily report on the wrong server.
+            resolved_ip = server["public_net"].get("ipv4", {}).get("ip")
+            assert resolved_ip == expected_ip, (
+                f"Server {server_name!r} resolves to {resolved_ip}, not the expected "
+                f"{expected_ip} (networking.vps.public_ip). This is not the production "
+                "VPS. Do not adjust the expectation to match -- find out which machine "
+                "this is."
+            )
+
             attached = server["public_net"].get("firewalls")
             assert attached is not None, (
                 "`public_net` has no `firewalls` key. Shape assumption is wrong; keys "

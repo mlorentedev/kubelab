@@ -114,6 +114,20 @@ networking:
     # narrates; consumed by the backup trigger model (BACKUP-044).
     location: "always-on"
     hostname: "kubelab-vps"
+    # The name this server has IN THE HETZNER ACCOUNT, which is NOT `hostname`
+    # above: that is the OS hostname, set by us, and the two have never matched.
+    # Measured 2026-09-02 against the API: the project holds exactly one server,
+    # named "mlorente-01", at the public_ip below. SEC-006's Terraform lookup was
+    # written against `hostname` and returned "no Server found" — a declaration
+    # read as if it named something it does not. Consumed by
+    # infra/terraform/vps-firewall/ (via the generated tfvars) and by its live
+    # guard, so both resolve the same server from the same place.
+    #
+    # It is the WEAKER of the two identifiers: renaming the server in Hetzner's
+    # console silently invalidates it. That is why the module additionally
+    # asserts the resolved server's IP equals public_ip before attaching — a
+    # rename then fails the plan instead of attaching a firewall to the wrong box.
+    hetzner_server_name: "mlorente-01"
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers

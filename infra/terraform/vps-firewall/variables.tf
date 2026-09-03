@@ -5,9 +5,13 @@ variable "hetzner_api_token" {
 }
 
 variable "server_name" {
-  description = "Name of the ALREADY-RUNNING VPS in the Hetzner account. Looked up via a data source; this module never manages the server."
+  description = "Name of the ALREADY-RUNNING VPS as the HETZNER ACCOUNT knows it, which is not its OS hostname. Generated from networking.vps.hetzner_server_name; looked up via a data source, so this module never manages the server. No default: a wrong-but-plausible fallback is how this lookup was silently wrong to begin with."
   type        = string
-  default     = "kubelab-vps"
+}
+
+variable "expected_public_ip" {
+  description = "The public IPv4 the looked-up server must have. Generated from networking.vps.public_ip. Checked by a precondition on the attachment so a renamed or reused server name fails the plan instead of firewalling the wrong machine."
+  type        = string
 }
 
 variable "project_name" {
