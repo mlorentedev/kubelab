@@ -55,6 +55,15 @@ A new Terraform root module, `infra/terraform/vps-firewall/`, that manages **onl
 
   This matters far more here than for ufw: **a cloud firewall is enforced before DNAT, so unlike ufw it genuinely will block a published port.** Getting the list wrong is not a no-op — it is an outage. The port set must be derived from what is actually needed and published, and then declared once, in `common.yaml` under `networking.*`, per the repo's SSOT rule. Consuming it from two places afterwards is the point.
 
+  **Resolved 2026-09-02 — 3478/udp stays in the allow-list.** Two facts settle it:
+
+  1. **3478/udp is STUN, not the relay.** `config.yaml.j2:28` shows `stun_listen_addr: "0.0.0.0:3478"` as the block's only UDP listener; the embedded DERP relay itself is served over Headscale's HTTPS listener, which is 443 and already allowed. So blocking 3478 would not sever relaying — it would remove the NAT-discovery/latency probe for region 999, which in practice deprioritises the embedded region without breaking the public ones. `config.yaml.j2:32` also loads `controlplane.tailscale.com/derpmap/default`, so the public regions are available independently.
+  2. **Measured from msi (`tailscale netcheck`, 2026-09-02):** region `kubelab` is served and reachable at **167.5ms** — the slowest of every region offered — against Denver at 24.6ms, which is the nearest. From this client, connections are direct or public-relayed and the embedded region is never selected.
+
+  **Scope limit on that measurement, stated deliberately:** `tailscale status` on one client shows only *this* client's paths. It is not evidence about how ace1↔rpi4 or beelink↔vps reach each other, and the one `relay "fra"` visible belongs to aws1, which has been offline 10 days and destroyed — stale state, not current behaviour. So "no peer uses the embedded DERP" is **not** established and is not claimed here.
+
+  Therefore: SEC-006 preserves current behaviour. Making the perimeter real and changing what the perimeter allows are two changes, and coupling them would mean a VPN capability change shipping inside a security fix. Retiring the embedded DERP (`headscale_derp_enabled: false`, drop the compose publish, then drop 3478) is a separate ticket, for which the netcheck above is the evidence. Confirmed no existing DERP/STUN issue in the repo.
+
 - **[MUST RESOLVE BEFORE CODE] Lockout.** Port 22 is in every candidate list, but the failure mode deserves naming: an allow-list applied with a mistake in the SSH rule locks every operator out of a machine whose recovery path (Headscale, on the same host) may also be blocked by the same mistake. Hetzner's web console is the out-of-band path and it must be confirmed reachable *before* apply, not discovered afterwards.
 
 - **Name collision with the DR module.** `compute/` names its firewall `${var.project_name}-vps`. If this module uses the same name and the old firewall survives the disaster that triggers DR, the recreate collides on the name. Recording it now so it is not discovered during an actual recovery.
