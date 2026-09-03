@@ -38,6 +38,76 @@ networking:
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
 
+  # SEC-006: the VPS inbound allow-list, declared ONCE and read by two layers.
+  #
+  # Consumers:
+  #   - infra/terraform/vps-firewall/  → the Hetzner cloud firewall. This is the
+  #     layer that actually holds: it is enforced at Hetzner's edge, BEFORE the
+  #     host's DNAT, so it can restrict a Docker- or klipper-lb-published port.
+  #   - provision.yml → base_system's `firewall_allowed_ports` (ufw), for the vps
+  #     host only. Every other node keeps the role's fleet-wide default; the VPS
+  #     is the only node with a public IP and so the only one declared here.
+  #
+  # ufw is kept in step for defence in depth, but do NOT mistake it for the
+  # control: a ufw rule CANNOT restrict a published port (#959 — Docker's DNAT
+  # runs in PREROUTING, before ufw's filter chains, and DOCKER-USER is empty on
+  # every node in the fleet). That gap is precisely why SEC-005 happened.
+  #
+  # Editing this list changes what prod accepts from the internet. Removing an
+  # entry is enforced at the cloud edge and WILL drop live traffic — unlike the
+  # ufw side, where removing a published port's entry is a no-op. Read
+  # specs/SEC-006-cloud-firewall-for-running-vps/proposal.md before touching it.
+  firewall:
+    vps_inbound:
+    - { port: 22, proto: tcp, description: "SSH" }
+    - { port: 80, proto: tcp, description: "HTTP — Traefik, ACME http-01" }
+    - { port: 443, proto: tcp, description: "HTTPS — Traefik" }
+    # Headscale's embedded DERP STUN endpoint. NOT the relay: the relay is
+    # served over 443 (roles/headscale/templates/config.yaml.j2 — the derp block
+    # names 0.0.0.0:3478 as its only UDP listener).
+    #
+    # CORRECTED 2026-09-02, same day, by a better measurement. An earlier note
+    # here said `tailscale netcheck` showed the embedded region at 167.5ms
+    # against 24.6ms for the nearest public one and therefore "never selected".
+    # That inference was wrong: netcheck ranks regions by latency to pick THIS
+    # client's home region, but a relayed connection uses the PEER's home region.
+    # `tailscale status --json` for the VPS peer reports Relay "kubelab" with an
+    # empty CurAddr — no direct path, traffic relayed through the embedded region.
+    # It is in active use, not dormant. Keeping 3478 open is therefore load
+    # bearing rather than merely conservative, and retiring the embedded DERP
+    # (its own ticket) would move real traffic onto a public relay.
+    - { port: 3478, proto: udp, description: "Headscale DERP STUN" }
+    # K3s prod API server. Present because it is load-bearing TODAY, not because
+    # a public control plane is desirable: ~/.kube/kubelab-prod-config points at
+    # https://162.55.57.175:6443, and CLAUDE.md's "kubeconfig must use the public
+    # IP" rule is why. Measured 2026-09-02 from a verified non-tailnet path: open,
+    # answering 401 Unauthorized — auth holds, so this is reachability, not an
+    # exposure of SEC-005's kind. Argo CD does NOT need it (argocd.spokes reaches
+    # prod at 100.64.0.2:6443 over Tailscale). Moving the operator's kubeconfig to
+    # Tailscale and dropping this line is tracked separately; it is a capability
+    # change, and SEC-006 deliberately does not couple one to a security fix.
+    - { port: 6443, proto: tcp, description: "K3s prod API server" }
+    - { port: 41641, proto: udp, description: "Tailscale WireGuard" }
+
+    # DELIBERATELY ABSENT — read this before "fixing" an omission.
+    #
+    # An absent port is a decision here, not an oversight, because this list is
+    # default-deny at the cloud edge: whatever is not named is dropped.
+    #
+    #   8080/tcp — Headscale's control plane, published to the public IP by
+    #     roles/headscale/templates/docker-compose.yml.j2:10 and answering the
+    #     internet in PLAINTEXT HTTP (measured 2026-09-02: 200 OK, no TLS). It is
+    #     left out on purpose: K3s Traefik terminates TLS for vpn.kubelab.live and
+    #     reaches Headscale at the host's own public IP from the same host
+    #     (overlays/prod/headscale.yaml:53), which is delivered locally and never
+    #     traverses Hetzner's edge. This is the one entry whose omission changes
+    #     observable behaviour, which is why AC4 verifies vpn.kubelab.live right
+    #     after the apply rather than trusting the routing argument.
+    #
+    #   icmp — a Hetzner firewall drops inbound ICMP unless declared, so public
+    #     ping to the VPS stops. Intra-tailnet ping is unaffected: it rides inside
+    #     WireGuard on 41641/udp. Matches infra/terraform/compute/'s declaration.
+
   # SSOT-014a: SSH user per node category. Consumers infer category by YAML
   # position (vps + aws → cloud; nodes.* → homelab). Per-node `ssh_user` field
   # remains supported as an override (currently unused — no node deviates from
@@ -51,6 +121,20 @@ networking:
     # narrates; consumed by the backup trigger model (BACKUP-044).
     location: "always-on"
     hostname: "kubelab-vps"
+    # The name this server has IN THE HETZNER ACCOUNT, which is NOT `hostname`
+    # above: that is the OS hostname, set by us, and the two have never matched.
+    # Measured 2026-09-02 against the API: the project holds exactly one server,
+    # named "mlorente-01", at the public_ip below. SEC-006's Terraform lookup was
+    # written against `hostname` and returned "no Server found" — a declaration
+    # read as if it named something it does not. Consumed by
+    # infra/terraform/vps-firewall/ (via the generated tfvars) and by its live
+    # guard, so both resolve the same server from the same place.
+    #
+    # It is the WEAKER of the two identifiers: renaming the server in Hetzner's
+    # console silently invalidates it. That is why the module additionally
+    # asserts the resolved server's IP equals public_ip before attaching — a
+    # rename then fails the plan instead of attaching a firewall to the wrong box.
+    hetzner_server_name: "mlorente-01"
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers

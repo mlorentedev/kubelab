@@ -808,36 +808,6 @@
     "expiryNotification": true
   },
   {
-    "key": "staging-web-gitea-staging",
-    "name": "Staging · Web · Gitea Staging",
-    "type": "http",
-    "url": "https://gitea.staging.kubelab.live/api/healthz",
-    "hostname": null,
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": true,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": "Gitea Git server health (staging). VPN-only. SSOT: apps.services.core.gitea.health_path.",
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      "staging",
-      "data"
-    ],
-    "expiryNotification": true
-  },
-  {
     "key": "staging-web-n8n-staging",
     "name": "Staging · Web · n8n Staging",
     "type": "http",
@@ -1098,6 +1068,36 @@
     "tags": [
       "backup",
       "prod"
+    ]
+  },
+  {
+    "key": "infra-sec-vps-firewall-sentinel",
+    "name": "Infra · Sec · VPS firewall holds (8080 shut)",
+    "type": "port",
+    "url": "https://",
+    "hostname": "162.55.57.175",
+    "port": 8080,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": true,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "UPSIDE-DOWN: up when the check FAILS. Proves the Hetzner cloud firewall (SEC-006, #1557) is still attached. Headscale publishes 8080 on the public IP and keeps listening whether or not a firewall exists, so this port answers again within one interval if the firewall is detached or its rule edited in the console -- neither of which any other check in this repo can see (Terraform state is backend=local and gitignored). Chosen over 9000 deliberately: #1541 closed 9000 at the Traefik layer, so it stays shut with or without a firewall and would be green for the wrong reason. A canary must be a port whose LISTENER outlives the control being watched. SSOT: networking.firewall.vps_inbound -- 8080 is deliberately absent from it. If you intentionally add 8080 to the allow-list, delete this monitor in the same change.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "infra",
+      "prod",
+      "critical"
     ]
   }
 ]

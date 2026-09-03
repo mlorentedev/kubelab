@@ -90,6 +90,10 @@ help:
 	@echo "  make hub-resume HUB=<kubecfg>  Resume a paused hub — the rollback for hub-pause"
 	@echo "  make rotate-spoke-token ENV=x  Rotate spoke SA token and re-register"
 	@echo ""
+	@echo "Delivery (Docker Hub + gated prod promotion):"
+	@echo "  make promote-prod APP=x VERSION=y  Open the prod promotion PR (ADR-046; a human still merges it)"
+	@echo "  make registry-prune [DRY_RUN=1]    Prune stale sha-* image tags now, off the weekly schedule"
+	@echo ""
 	@echo "Quality:"
 	@echo "  make check              Run all checks (lint + type + test)"
 	@echo "  make lint               Ruff linting (check only)"
@@ -780,6 +784,56 @@ rotate-spoke-token:
 	@$(MAKE) register-spoke ENV=$(ENV)
 
 # -----------------------------------------------------------------------------
+# Delivery (Docker Hub + gated prod promotion)
+# -----------------------------------------------------------------------------
+# Both targets DISPATCH A WORKFLOW; neither does the work on this machine.
+#
+# That is the whole design. `toolkit deployment promote --env prod` run locally
+# edits the overlay in the working copy and stops — leaving a human to commit,
+# branch and push it by hand, which is the manual operation the standing orders
+# forbid and a production change with no PR. The workflow is what opens the
+# ADR-046 promotion PR that a human then reviews and merges. Argo CD syncs after
+# that merge, and never before it.
+#
+# They exist because the alternative is a `gh workflow run` line pasted into a
+# chat window whenever someone remembers. #1585 is what that looks like over a
+# quarter: prod ran kubelab-web:1.1.1 from 15 June through eleven consecutive
+# releases, with every release pipeline green throughout, because dispatching by
+# hand is a thing a person has to remember and eleven times nobody did.
+#
+# #1591 makes a web release open its own promotion PR. These targets are the
+# path that stays manual on purpose: a re-promote, a rollback, `api`, or an
+# unscheduled prune.
+#
+# GH is overridable so the tests can exercise the argument handling without
+# dispatching anything. The validation below is a fast local reject, NOT the
+# guard — promote-prod.yml validates authoritatively, because the dispatch can
+# also arrive from somewhere this Makefile never ran.
+GH ?= gh
+DELIVERY_REPO ?= mlorentedev/kubelab
+
+.PHONY: promote-prod
+promote-prod: ## Open the prod promotion PR for an app at a released semver tag (ADR-046)
+	@test -n "$(APP)" && test -n "$(VERSION)" || { \
+		echo "Usage: make promote-prod APP=web|api VERSION=1.12.0"; exit 2; }
+	@case "$(APP)" in \
+		web|api) ;; \
+		*) echo "Unknown APP '$(APP)' — expected web or api"; exit 2 ;; \
+	esac
+	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
+		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \
+		echo "Prod ships released semver only: no leading v, no mutable alias, no sha-* staging tag."; \
+		exit 2; }
+	@echo "=== Dispatching prod promotion: $(APP) -> $(VERSION) ==="
+	@echo "This opens a PR. Nothing deploys until a human merges it (ADR-046)."
+	@$(GH) workflow run promote-prod.yml --repo $(DELIVERY_REPO) -f app=$(APP) -f version=$(VERSION)
+
+.PHONY: registry-prune
+registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DRY_RUN=1 to list only)
+	@echo "=== Dispatching registry prune$(if $(DRY_RUN), (dry run),) ==="
+	@$(GH) workflow run ci-cleanup.yml --repo $(DELIVERY_REPO) -f dry_run=$(if $(DRY_RUN),true,false)
+
+# -----------------------------------------------------------------------------
 # Infrastructure (Ansible)
 # -----------------------------------------------------------------------------
 # Usage:
@@ -1262,6 +1316,39 @@ wait-node-ready:
 # Same rule the notification path already follows for the same reason
 # (ANSIBLE-038 f4): a credential belongs on stdin or in the environment of the
 # process that consumes it, never as an argument.
+# SEC-006. Plan is safe and reversible; apply CREATES a firewall and ATTACHES it
+# to the running production VPS. There is deliberately no -auto-approve on the
+# apply: an allow-list mistake here is not a degraded service, it is an operator
+# locked out of a host whose recovery path (Headscale) is on that same host.
+# Read the plan. Hetzner's web console is the only way back in.
+#
+# The token goes into the child process's environment, never an argument
+# (ANSIBLE-038 f4), matching tf-dns-* below. The allow-list is NOT a secret and
+# comes from common.yaml via the generator, so it shows up in the diff.
+.PHONY: tf-vps-firewall-plan tf-vps-firewall-apply
+tf-vps-firewall-plan:
+	@$(POETRY) run toolkit infra terraform vps-firewall-tfvars
+	@TF_VAR_hetzner_api_token=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_hetzner_api_token && \
+		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
+		terraform plan
+
+tf-vps-firewall-apply:
+	@$(POETRY) run toolkit infra terraform vps-firewall-tfvars
+	@TF_VAR_hetzner_api_token=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_hetzner_api_token && \
+		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
+		terraform apply
+
+# The only check that can tell an APPLIED firewall from a DECLARED one. The
+# token goes into pytest's environment and nowhere else -- never printed, never
+# an argument, so it stays out of shell history and out of transcripts.
+.PHONY: test-vps-firewall-live
+test-vps-firewall-live:
+	@HCLOUD_TOKEN=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
+		export HCLOUD_TOKEN && \
+		$(POETRY) run pytest tests/test_vps_cloud_firewall_is_attached.py -m infra -v --no-cov
+
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \

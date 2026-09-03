@@ -511,7 +511,7 @@ class TestCliCommands:
         assert parsed[0]["name"] == "obs007-acme-failure"
 
     @patch("toolkit.features.observability.SreTriageEngine.diagnose_service")
-    def test_cli_obs_triage_json(self, mock_triage):
+    def test_cli_obs_triage_json(self, mock_triage, monkeypatch):
         mock_triage.return_value = {
             "service": "api",
             "severity": "CRITICAL",
@@ -520,11 +520,177 @@ class TestCliCommands:
             "runbook_url": "https://example.com",
             "sample_errors": [],
         }
+        # TOOL-055 AC4. `triage` now opens both transports before diagnosing, so
+        # without these the test opens a real port-forward: it FAILS on a CI
+        # runner with no kubeconfig, and -- worse -- PASSES on a workstation by
+        # reaching live prod. Setting both makes the context managers take their
+        # documented escape-hatch branch and stay hermetic, matching the sibling
+        # commands' tests.
+        monkeypatch.setenv("LOKI_URL", "http://mock-loki:3100")
+        monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
+
         result = runner.invoke(app, ["obs", "triage", "--service", "api", "--json"])
-        assert result.exit_code == 0
+
+        assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
         assert parsed["service"] == "api"
         assert parsed["severity"] == "CRITICAL"
+
+
+class TestTriageNeverDiagnosesFromASourceItDidNotReach:
+    """TOOL-055 (#1534): `obs triage` built both clients from `default_factory`.
+
+    It asked `127.0.0.1:3100` for logs and the default URL for alerts, while its
+    siblings `logs` and `alerts` had already been given `--env` and a port-forward
+    transport (OBS-019, #1530).
+
+    Why this command is the one that mattered: `obs logs` against the wrong Loki
+    prints "No logs found", which is wrong but visibly a non-answer.
+    `diagnose_service` turns the same emptiness into `severity: INFO` and "No
+    active error signatures detected in telemetry window" -- an assertion of
+    HEALTH, sourced from a Loki it never contacted. The indistinguishable
+    emptiness is laundered into a diagnosis.
+
+    Measured 2026-09-01: `0.0.0.0:3100` on the workstation was held by an
+    unrelated local Loki, so the wrong answer was the machine's default state.
+    """
+
+    def test_triage_port_forwards_to_the_named_env_for_both_sources(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        calls: list[tuple] = []
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            calls.append((env, service, port))
+            yield 55555
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+        monkeypatch.setattr(obs_cli, "read_cluster_secret_key", lambda *a, **kw: "tok")
+        monkeypatch.setattr(obs_cli.LokiClient, "query_service_logs", lambda self, **kw: [])
+        monkeypatch.setattr(obs_cli.GrafanaAlertClient, "get_alerts", lambda self: [])
+
+        result = runner.invoke(app, ["obs", "triage", "--env", "prod", "--service", "api"])
+
+        assert result.exit_code == 0, result.output
+        assert calls == [("prod", "loki", 3100), ("prod", "grafana", 3000)], (
+            "triage must reach BOTH of the named environment's sources through a "
+            f"port-forward rather than a default URL; got {calls!r}"
+        )
+
+    def test_an_unreachable_loki_is_an_error_not_a_verdict_of_health(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The defect this ticket exists for, asserted directly.
+
+        Before the fix an unreached Loki produced `severity: INFO` and "no active
+        error signatures". A machine consumer reading that JSON concludes the
+        service is fine. It must get an error and a NULL severity instead --
+        `null` rather than a missing key, because an absent field reads as benign
+        to the same consumer.
+        """
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            raise RuntimeError("no kubeconfig for prod")
+            yield  # pragma: no cover
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+
+        result = runner.invoke(app, ["obs", "triage", "--env", "prod", "--service", "api", "--json"])
+
+        assert result.exit_code == 1, result.output
+        parsed = json.loads(result.output)
+        assert parsed["severity"] is None, (
+            f"an unreached source must not yield a severity; got {parsed.get('severity')!r}. "
+            "INFO here is the exact defect: a verdict of health from a source nobody asked."
+        )
+        assert parsed["report"] is None
+        assert "no kubeconfig for prod" in parsed["error"]
+
+    def test_a_grafana_failure_is_not_reported_as_a_loki_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Measured against prod 2026-09-02, on the first real run of the fix.
+
+        `ObservabilityUnavailableError` subclasses `RuntimeError`, and
+        `_loki_client` caught `(RuntimeError, TimeoutError)` to wrap transport
+        failures. So an `AlertsUnavailableError` raised INSIDE the nested `with`
+        body was caught on the way out and relabelled, producing:
+
+            could not reach Loki in prod: could not reach Grafana in prod: 401
+
+        Loki was working perfectly. An operator reads the first clause and goes
+        to debug the wrong backend -- the error message is an instrument, and it
+        reported the same thing under two different causes.
+
+        Pre-existing in `_loki_client`, and invisible until something nested the
+        two context managers. TOOL-055 is the first thing that does.
+        """
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            yield 55555
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+        monkeypatch.setattr(obs_cli, "read_cluster_secret_key", lambda *a, **kw: "")
+        monkeypatch.setattr(obs_cli.LokiClient, "query_service_logs", lambda self, **kw: [])
+
+        def unauthorised(self):
+            raise AlertsUnavailableError("Grafana alert fetch failed: HTTP Error 401: Unauthorized")
+
+        monkeypatch.setattr(obs_cli.GrafanaAlertClient, "get_alerts", unauthorised)
+
+        result = runner.invoke(app, ["obs", "triage", "--env", "prod", "--service", "api", "--json"])
+
+        assert result.exit_code == 1
+        error = json.loads(result.output)["error"]
+        assert "Grafana" in error, f"the failing backend must be named; got {error!r}"
+        assert "Loki" not in error, (
+            f"Loki answered, and must not be blamed for Grafana's failure; got {error!r}. "
+            "Re-wrapping an already-precise error re-attributes it, and the operator "
+            "debugs the wrong backend."
+        )
+
+    def test_the_human_output_says_it_is_not_a_clean_bill_of_health(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-JSON operator must not read the failure as 'nothing wrong'."""
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            raise RuntimeError("connection refused")
+            yield  # pragma: no cover
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+
+        result = runner.invoke(app, ["obs", "triage", "--env", "prod", "--service", "api"])
+
+        assert result.exit_code == 1
+        assert "NOT a clean bill of health" in result.output, (
+            f"the failure must say what it is not; got: {result.output!r}"
+        )
 
 
 class TestLogsAsksTheEnvironmentYouNamed:
