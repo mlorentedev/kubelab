@@ -44,12 +44,25 @@
 
 # Deliberately NOT "Restart beelink services", for the same blast-radius reason
 # the gitea handler above gives: a change to the runner's config must not bounce
-# Gitea, MinIO and the GitHub runner alongside it.
+# Gitea, MinIO and the GitHub runner alongside it. Hence the service argument.
 #
-# `docker restart` rather than `compose up -d`: the config is a single-file bind
-# mount, so a `template` rewrite hands the host a new inode while the running
-# container keeps the old one. A restart is what re-resolves the mount, and
-# without it a changed config reports success and is never read (ANSIBLE-054).
-- name: Restart act-runner
-  command: docker restart act-runner
+# `compose up -d --force-recreate <service>` rather than `docker restart`, and
+# the difference is load-bearing twice over:
+#
+#   1. A NEW CONTAINER, so the environment is re-read from compose.yml. The
+#      registration token is an env var that only exists after the mint, which
+#      needs a running Gitea, which this same file starts -- see the re-render
+#      task in tasks/main.yml. `docker restart` keeps the container it has, and
+#      would carry the empty token from the first render forever.
+#   2. It CREATES the container when it is absent instead of failing with
+#      `No such container`. A handler that can only ever run second is a handler
+#      whose ordering nobody may change.
+#
+# The inode trap this originally guarded (ANSIBLE-054, #1400) is covered a
+# fortiori: recreating resolves every bind mount fresh, where a plain restart
+# depends on Docker re-resolving a path whose inode `template` has replaced.
+- name: Recreate act-runner
+  command: >-
+    docker compose -f {{ beelink_deploy_dir }}/compose.yml
+    up -d --force-recreate {{ act_runner_name }}
   changed_when: true

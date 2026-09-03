@@ -150,7 +150,7 @@
   # No secret in this file, deliberately — it is mode 0644 and holds only
   # capacity, labels and container options. The registration token reaches the
   # runner through the environment, which is why the two are split.
-  notify: Restart act-runner
+  notify: Recreate act-runner
   tags: [gitea, runner]
 
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
@@ -416,6 +416,41 @@
   become: false
   when: not act_runner_token
   changed_when: true
+  no_log: true
+  tags: [gitea, runner]
+
+- name: Re-render the Compose stack now that the runner token exists
+  # THE SECOND RENDER, and it is not duplication -- do not "clean it up".
+  #
+  # The registration token can only be minted by a RUNNING Gitea, and Gitea is
+  # started by the very compose file that has to carry the token. That
+  # circularity is irreducible: no ordering of tasks resolves it, because the
+  # credential is issued by the service the credential configures. So on the run
+  # that mints, this file is rendered twice; on every run after, `act_runner_token`
+  # is already in SOPS and this task is skipped.
+  #
+  # Without it the first provision leaves a container holding an EMPTY token,
+  # looping on a rejected registration while reporting `Up` -- and the playbook
+  # goes green. The runner would silently start working on the SECOND provision.
+  # That is the exact shape this whole change exists to make impossible: a
+  # workflow whose `runs-on` matches no runner is QUEUED, never failed.
+  template:
+    src: compose.yml.j2
+    dest: "{{ beelink_deploy_dir }}/compose.yml"
+    owner: root
+    group: root
+    # Renders secrets. Same mode as the first render, restated rather than
+    # inherited so a change to one cannot silently widen the other.
+    mode: "0600"
+  vars:
+    # Scoped to this task. The play-level fact stays empty so the `when` guards
+    # on the mint and the SOPS write above keep reading the pre-mint state.
+    act_runner_token: "{{ _act_runner_token.stdout | trim }}"
+  when:
+    - act_runner_enabled | bool
+    - _act_runner_token is defined
+    - _act_runner_token is changed
+  notify: Recreate act-runner
   no_log: true
   tags: [gitea, runner]
 

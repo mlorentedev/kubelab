@@ -351,3 +351,100 @@ def test_the_gate_rejects_the_string_false() -> None:
         'the string "False" rendered the runner. The `| bool` filter is missing from '
         "the gate, and Ansible can deliver this var as a string."
     )
+
+
+def test_the_compose_file_is_rendered_again_after_the_token_is_minted() -> None:
+    """The circularity is irreducible, so the file has to be rendered twice.
+
+    The registration token can only be minted by a RUNNING Gitea, and Gitea is
+    started by the very compose file that must carry that token. No ordering of
+    tasks resolves this: the credential is issued by the service the credential
+    configures.
+
+    So on the run that mints, the compose file is rendered before the token exists
+    and again after. Delete the second render and the first provision of a fresh
+    node leaves a container holding an EMPTY token — looping on a rejected
+    registration while reporting `Up`, with the playbook green. The runner would
+    begin working on the SECOND provision, which is indistinguishable from the
+    first one having worked slowly.
+
+    This is asserted because the failure is invisible on every node that already
+    has the token in SOPS. It only ever reappears on a rebuild, which is once a
+    year and always under pressure.
+    """
+    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    renders = [
+        t
+        for t in tasks
+        if isinstance(t.get("template"), dict) and str(t["template"].get("dest", "")).endswith("compose.yml")
+    ]
+
+    assert len(renders) == 2, (
+        f"expected the compose stack to be rendered twice, found {len(renders)}: "
+        f"{[t.get('name') for t in renders]}.\n"
+        "The second render is what gives the runner its freshly minted registration "
+        "token in the SAME provision. Without it a fresh node needs two runs and the "
+        "first one reports success."
+    )
+
+    second = renders[1]
+    scoped = (second.get("vars") or {}).get("act_runner_token", "")
+
+    assert "_act_runner_token" in str(scoped), (
+        f"the second render does not scope `act_runner_token` to the mint's result "
+        f"(got {scoped!r}). Re-rendering with the play-level fact reproduces the "
+        "empty value, which is the bug rather than the fix."
+    )
+
+    guard = yaml.safe_dump(second.get("when"))
+
+    assert "is changed" in guard or "changed" in guard, (
+        f"the second render is not gated on the mint having run ({second.get('when')!r}). "
+        "Ungated it rewrites the file on every provision, and `_act_runner_token.stdout` "
+        "is undefined on the runs where the mint is skipped."
+    )
+
+
+def test_every_notify_names_a_handler_that_exists() -> None:
+    """A notify pointing at nothing is silently ignored by Ansible.
+
+    Not an error, not a warning — the handler simply never runs, and the play goes
+    green. So renaming a handler without updating its notify sites removes the
+    restart that made a config change take effect, and the only symptom is a
+    container quietly running the old configuration.
+
+    Scoped to this role rather than the fleet because this role is where the
+    consequence is worst: three of its handlers exist specifically to close the
+    bind-mount inode trap (ANSIBLE-054), and each one is load-bearing rather than
+    tidy.
+    """
+
+    def _notified(doc: object) -> set[str]:
+        found: set[str] = set()
+        if isinstance(doc, dict):
+            for key, value in doc.items():
+                if key == "notify":
+                    found |= {value} if isinstance(value, str) else set(value)
+                else:
+                    found |= _notified(value)
+        elif isinstance(doc, list):
+            for item in doc:
+                found |= _notified(item)
+        return found
+
+    handlers = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
+    defined = {h["name"] for h in handlers if isinstance(h, dict) and "name" in h}
+
+    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    wanted = _notified(tasks) | _notified(handlers)
+
+    assert wanted, "no task in this role notifies a handler — the parser is reading nothing"
+
+    orphans = sorted(wanted - defined)
+
+    assert not orphans, (
+        f"notified but not defined in handlers/main.yml: {orphans}.\n"
+        f"Defined handlers are {sorted(defined)}. Ansible ignores a notify that names "
+        "no handler — no error, no warning, the play still goes green and whatever the "
+        "handler was going to do simply does not happen."
+    )
