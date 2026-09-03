@@ -335,7 +335,29 @@ class TestTheFirewallIsLive:
             )
 
             port = r.get("port")
-            inbound.add((int(port) if port else None, str(r["protocol"]).lower()))
+            # Hetzner returns the port as a STRING ("22"), and also accepts a
+            # RANGE ("8000-9000"), which int() cannot parse. A bare cast would
+            # raise ValueError here and the operator would read a stack trace
+            # pointing at a test rather than a sentence naming the unsupported
+            # rule. The module renders single ports only, so a range is either
+            # an out-of-band edit or a change to main.tf -- both worth saying.
+            if port is None or port == "":
+                parsed: int | None = None
+            else:
+                try:
+                    parsed = int(port)
+                except (TypeError, ValueError):
+                    raise AssertionError(
+                        f"The live firewall has a rule with port {port!r}, which this guard "
+                        f"cannot compare against the SSOT: {r!r}. Hetzner accepts ranges like "
+                        "'8000-9000'; networking.firewall.vps_inbound declares single ports and "
+                        "main.tf renders one per rule. So either this was edited out of band, or "
+                        "ranges are now intended and both the SSOT and this comparison need to "
+                        "understand them. Do NOT skip the rule to make this pass -- an unparseable "
+                        "rule is an open port that no longer appears in the comparison at all."
+                    ) from None
+
+            inbound.add((parsed, str(r["protocol"]).lower()))
         return inbound
 
     def test_the_live_rules_match_the_ssot(self, attached_rules: set[tuple[int | None, str]]) -> None:
