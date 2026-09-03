@@ -9,10 +9,10 @@ created: "2026-08-27"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] AC1 (declare + reconcile is idempotent) -> commit `<hash>` / test `<name>` / live transcript below
-- [ ] AC2 (undeclared is reported, never deleted) -> commit `<hash>` / test `<name>`
-- [ ] AC3 (issues and pull requests carry over) -> live count against the baseline below
-- [ ] AC4 (`hefesto` owns nothing) -> API listing
+- [x] AC1 (declare + reconcile is idempotent) -> `890f6f56` / `tests/test_gitea_repo_reconcile.py` / live transcript under *AC1/AC4 measured on prod*
+- [x] AC2 (undeclared is reported, never deleted) -> `890f6f56` / `test_the_plan_has_no_deletion_field` (structural, over `dataclasses.fields`)
+- [x] AC3 (issues and pull requests carry over) -> `personal/resume`, counts under *AC3 — `resume` migrated*
+- [x] AC4 (`hefesto` owns nothing) -> live listing under *AC1/AC4 measured on prod*, printed by the reconcile itself
 - [ ] AC5 (migration credential scoped and checked both ways) -> both transcripts
 - [ ] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> run URL
 - [ ] AC7 (`act_runner` registration idempotent) -> `changed=0` transcript
@@ -141,6 +141,176 @@ That drift is the whole argument for PR0 existing. The template in git was corre
 running container was not, and no static test could tell them apart. It is also a caution for PR3:
 `act_runner` will be added to this same role, so the first run after it lands will report changes and
 the *second* is the one that proves anything.
+
+## AC1/AC4 measured on prod (2026-09-02)
+
+**The first-run half of AC1 is a stated gap.** The organizations and repositories were created on
+2026-09-01 and that transcript was not written down before the session ended — evidence produced and
+not made durable, which is the same failure this file exists to prevent, one level up from the code.
+What is recorded below is the convergence half, measured on 2026-09-02. First-run evidence returns for real
+in PR2: the migration path creates `personal/resume`, so its first `--apply` is a first run.
+
+**AC1 — a second run changes nothing.** `make gitea-reconcile ENV=prod`:
+
+```text
+Gitea reconcile — https://gitea.kubelab.live (prod)
+
+  (nothing to do — forge matches the declaration)
+
+AC4 ok — hefesto owns: (none)
+[SUCCESS] forge matches the declaration — nothing to create
+```
+
+**AC4 — the machine identity owns nothing.** Printed by the reconcile itself rather than by a
+separate command, so the run that proves AC1 produces AC4's evidence as a side effect. It is on the
+CLI path rather than in a pytest because the property is about the LIVE forge and this repo's live
+suites cannot decrypt SOPS (`tests/infra/fixtures.py` reads `common.yaml` only) — a credentialed test
+would be new machinery, not evidence.
+
+**AC4 could not be read at all until today, and every signal said otherwise.** The client carried
+`whoami` and `list_owned_repos` specifically "to assert AC4 by consequence"; both call `/users/...`;
+the admin grant did not include `read:user`. Measured before the fix:
+
+```text
+GET /users/hefesto        -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
+GET /users/hefesto/repos  -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
+GET /user                 -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
+```
+
+`tests/test_gitea_token_scopes.py` was green throughout, because it compared a hand-written
+`REQUIRED_ADMIN_SCOPES` against a grant that matched it — two declarations agreeing about the wrong
+set. **Lesson 413 one layer up**: last time a credential was present and powerless, this time a
+METHOD was, and presence passed for capability both times. The cure is derivation, not another
+literal: `REQUIRED_ADMIN_SCOPES` is now a union over `SCOPE_BY_METHOD`, and a test introspects
+`GiteaClient` so a method cannot enter the class without its scope entering the requirement.
+
+Guards verified by mutation, all four red with the intended diagnostic:
+
+| mutation | fails |
+|---|---|
+| drop `read:user` from the declared grant | `test_admin_grant_covers_what_the_reconciler_reads` |
+| add a public client method with no map entry | `test_every_client_method_declares_the_scope_it_needs` |
+| restate `REQUIRED_ADMIN_SCOPES` as a literal | `test_the_admin_requirement_is_derived_from_the_methods_it_performs` |
+| drop a method from the map while `ADMIN_METHODS` names it | `RuntimeError` at import, naming the method |
+
+**The rotation that closed it.** Gitea cannot edit a minted token's scopes, so widening
+`token_scopes.admin` alone changes nothing on an instance that already holds a token:
+
+```text
+make gitea-rotate-token TOKEN=admin ENV=prod APPLY=1
+  [SUCCESS] revoked kubelab-reconciler on manu — the outage window is now OPEN
+  [SUCCESS] cleared apps.services.core.gitea.admin_token — the mint gate is open
+
+make provision NODE=bee ENV=prod TAGS=gitea
+  run 1: ok=44 changed=2   (mint the superadmin's scoped token; record it in SOPS)
+  run 2: ok=42 changed=0
+```
+
+Idempotent, and the re-mint is gated on the SOPS key being absent — so the rotation is what opens the
+gate, and a provision with the key present does nothing.
+
+**AC2 — observed as well as structural (2026-09-02).** The forge held no stray, so one was made:
+`personal/zz-stray`, created by the bot, empty, undeclared. Both paths that could have removed it were
+then run against it:
+
+```
+$ make gitea-reconcile ENV=prod
+  ? repo personal/zz-stray   undeclared — reported, not removed
+  AC4 ok — hefesto owns: (none)
+  [SUCCESS] forge matches the declaration — nothing to create
+
+$ make gitea-drop-empty REPO=personal/zz-stray ENV=prod
+  [ERROR] personal/zz-stray is not declared in `apps.services.core.gitea.organizations`.
+          Undeclared repositories are reported and never removed (#1076, ADR-065 D3) —
+          being empty does not change that.
+
+  survived: True | empty= True        <- read back afterwards
+```
+
+The second run is the one worth noticing: `zz-stray` **is** empty, so the only thing standing between
+it and deletion was the declaration check. Emptiness does not make someone else's repository ours.
+Removed afterwards through the same basic-auth path the command uses, so the forge is back to
+declared state.
+
+The structural claim still carries the weight for every future caller:
+`test_the_plan_has_no_deletion_field` asserts over `dataclasses.fields(ReconcilePlan)` that no field
+a deletion could travel in exists at all — stronger than a fixture that happened not to delete
+anything.
+
+## AC3 — `resume` migrated (2026-09-02)
+
+**Counts against the GitHub baseline, once the import settled:**
+
+| | Gitea | GitHub baseline |
+|---|---|---|
+| pull requests (all states) | **165** | 165 |
+| open pull requests | **5** | 5 |
+| open issues | **28** | 28 |
+
+Nothing is recorded as missing. `owner=personal` — the organization, not a person — so ADR-065 D1
+holds by consequence and not by assertion, and the reconcile's own AC4 line still reads
+`hefesto owns: (none)`.
+
+**Risk 3's standing assumption is now measured rather than assumed.** It rested on migrated pull
+requests arriving mergeable, because the plan is to drain them in Gitea:
+
+```
+#259  mergeable=True  head='chore/align-agents-cascade'                   -> 'main'
+#258  mergeable=True  head='feat/docs-005-modular-lessons'                -> 'main'
+#256  mergeable=True  head='feat/res-065-scan-format-json'                -> 'main'
+#255  mergeable=True  head='docs/ci-blocked-actions-quota'                -> 'main'
+#253  mergeable=True  head='release-please--branches--main--components--resume' -> 'main'
+```
+
+All five same-repository heads resolved. The fallback documented in Risk 3 — draining on GitHub with
+`resume`'s local `make check` path — is not needed.
+
+### Three things this migration taught, none of which were in the plan
+
+**1. NO TOKEN MAY MIGRATE INTO AN ORGANIZATION.** The spec assigned migration to the bot, by analogy
+with repository creation. Gitea disagrees. Discriminated cleanly by asking each credential to migrate
+an already-existing repository — 409 means *may*, 403 means *may not*:
+
+```
+bot token             -> 403 "Given user is not owner of organization."
+admin token           -> 403 required=[write:repository], token scope=read:admin,write:organization,read:repository,read:user
+superadmin basic auth -> 409 "The repository with the same name already exists."
+```
+
+Two different walls, and neither is worth demolishing. The bot is stopped by **organization
+ownership**, which ADR-065 D1 requires it never to have — so it cannot be fixed by widening a scope,
+only by violating D1. The admin token is stopped by **scope**, and granting it `write:repository`
+would hand the reconciler a standing `DELETE /repos/...` capability. So migration goes through the
+basic-auth session, exactly as `drop-empty` does. `execute` now takes an explicit `migrator` and
+refuses rather than silently falling back to a token that Gitea will reject.
+
+**2. THE IMPORT OUTLIVES THE RESPONSE, so an early count measures the clock.** Counted at three
+moments on the same repository: **98** pull requests, then **147**, then **165**. Had the first
+number been written into this file it would have been recorded as evidence of a partial migration —
+lesson-408's mistake wearing a new disguise, since the API answers 200 throughout and never says
+"still importing". The reconcile now prints that the import continues, and says the counts must stop
+moving before AC3 is checked.
+
+A related false alarm worth recording because it nearly became a finding: an early reading showed
+`open PRs = 0` against a baseline of 5, which read as "pull requests did not carry over". They had
+simply not arrived yet.
+
+**3. `POST /repos/migrate` outlives the client's timeout too.** The 15s default raised `ReadTimeout`
+while the server was succeeding — an error meaning "it may or may not have worked", which is worse
+than a slow call. `MIGRATION_TIMEOUT = 600` now applies to that call alone.
+
+### Two latent defects found on the way, both fixed here
+
+- **`_paginate` built an invalid URL for any endpoint carrying a query string**, appending `?page=1`
+  unconditionally: `/repos/x/y/issues?state=open&type=issues?page=1&limit=50`. Gitea reads the second
+  `?` as part of the previous value, so the filter silently becomes `type=issues?page=1` and the
+  endpoint answers with the wrong set rather than an error. Latent because no existing caller passed
+  a filter; AC3's issue count was the first. Guarded by `tests/test_gitea_client_pagination.py`.
+- **`drop-empty` built its own declared-repository set** and drifted the moment `RepoSpec` landed,
+  producing strings like `"personal/RepoSpec(name='resume', ...)"` — so a declared repository read as
+  undeclared and the command refused it. It failed *safe*, because that membership test guards a
+  deletion, but that was the bug's direction rather than the design's doing. One producer now:
+  `declared_full_names`.
 
 ## Risk 1 — settled 2026-08-27, against the live instance
 

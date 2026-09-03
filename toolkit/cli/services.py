@@ -1,7 +1,7 @@
 "Service and application management commands."
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -13,6 +13,9 @@ from toolkit.core.logging import logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.docker_service import DockerService
+
+if TYPE_CHECKING:
+    from toolkit.features.gitea_client import GiteaClient
 
 console = Console()
 app = typer.Typer(help="Manage services and applications")
@@ -362,7 +365,7 @@ gitea_app = typer.Typer(help="Reconcile the Gitea forge against its declaration"
 app.add_typer(gitea_app, name="gitea")
 
 
-def _gitea_clients(env: str) -> tuple[object, object, str, str]:
+def _gitea_clients(env: str) -> tuple["GiteaClient", "GiteaClient", str, str]:
     """Build the admin and bot clients from SOPS, and resolve the bot's username.
 
     TWO CLIENTS BECAUSE TWO CREDENTIALS MAY DIFFERENT THINGS, per ADR-065 D1:
@@ -403,6 +406,46 @@ def _gitea_clients(env: str) -> tuple[object, object, str, str]:
     )
 
 
+def _report_machine_ownership(admin: "GiteaClient", bot_username: str) -> None:
+    """Print what the machine identity owns — ADR-065 D1 / TOOL-035 AC4, every run.
+
+    ON THE RECONCILE PATH RATHER THAN IN A TEST, deliberately. The property is
+    about the LIVE forge, and the repo's live suites cannot decrypt SOPS, so a
+    credentialed pytest would be new machinery rather than evidence. Printing it
+    where the operator already looks makes `make gitea-reconcile ENV=prod` produce
+    AC4's proof as a side effect of the run that proves AC1 — one transcript,
+    both criteria, no second command anyone has to remember.
+
+    NOT FATAL WHEN IT CANNOT BE READ, and the distinction is the point: a refusal
+    means "I could not look", which lesson-408 says must never be reported as "I
+    looked and it is empty". A reconcile that converged still converged; what is
+    lost is the check, and the message says so rather than printing `(none)` and
+    letting an unread state pass for a verified one.
+    """
+    from toolkit.features.gitea_client import GiteaError
+
+    try:
+        owned = sorted(admin.list_owned_repos(bot_username))
+    except GiteaError as exc:
+        console.print(
+            f"\n[yellow]AC4 unchecked[/yellow] — could not read what {bot_username} owns: "
+            f"{exc.status_code}. This is 'I did not look', not 'it owns nothing'. "
+            f"A 403 here means the admin token predates `read:user` in "
+            f"`apps.services.core.gitea.token_scopes.admin`; rotate and re-provision."
+        )
+        return
+
+    if owned:
+        console.print(
+            f"\n[red]AC4 VIOLATED[/red] — {bot_username} owns {owned}. ADR-065 D1 requires the "
+            f"machine identity to own nothing, so that retiring it is a membership deletion "
+            f"rather than a data migration."
+        )
+        return
+
+    console.print(f"\n[dim]AC4 ok — {bot_username} owns: (none)[/dim]")
+
+
 @gitea_app.command("reconcile")
 def gitea_reconcile(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
@@ -425,14 +468,19 @@ def gitea_reconcile(
     declared = load_declaration(merged)
     if not declared:
         logger.warning("no `gitea.organizations` declared in common.yaml — nothing to reconcile")
+        # Checked even here. AC4 is a property of the FORGE, not of the declaration:
+        # an empty declaration is exactly the state in which nobody would think to
+        # look, and a machine identity that has acquired a repository is worth
+        # hearing about whether or not this run had anything to reconcile.
+        _report_machine_ownership(admin, bot_username)
         raise typer.Exit(0)
 
     try:
         # Read with the admin credential: a listing taken with the bot's token
         # reports an organization it cannot see as absent, and the plan would
         # then propose creating something that already exists (lesson-408).
-        existing_orgs = admin.list_orgs()  # type: ignore[attr-defined]
-        existing_repos = admin.list_repos()  # type: ignore[attr-defined]
+        existing_orgs = admin.list_orgs()
+        existing_repos = admin.list_repos()
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
@@ -442,22 +490,150 @@ def gitea_reconcile(
     console.print(format_plan(plan))
 
     if plan.is_noop:
+        _report_machine_ownership(admin, bot_username)
         logger.success("forge matches the declaration — nothing to create")
         return
 
     if not apply:
         console.print("\n[dim]plan only — re-run with --apply to create[/dim]")
+        _report_machine_ownership(admin, bot_username)
         return
 
-    report = execute(plan, admin, bot, bot_username=bot_username)  # type: ignore[arg-type]
+    # Read only when a migration is actually planned. Its absence is a hard error
+    # for a run that needs it and a non-event for one that does not, so fetching it
+    # unconditionally would make every ordinary reconcile depend on a credential it
+    # never uses.
+    # Read only when a migration is actually planned, so an ordinary reconcile does
+    # not depend on credentials it never uses.
+    migration_token = None
+    migrator = None
+    if plan.repos_to_migrate:
+        from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+        gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
+        migration_token = gitea_cfg.get("github_migration_token")
+        admin_password = gitea_cfg.get("admin_password")
+        if not admin_password:
+            logger.error(
+                f"missing apps.services.core.gitea.admin_password in {env} SOPS. Migration is the "
+                f"one operation no token may perform (bot: not an organization owner; admin token: "
+                f"lacks write:repository, which it must not be granted), so there is no fallback."
+            )
+            raise typer.Exit(1)
+        migrator = GiteaBasicAuthClient(
+            base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password)
+        )
+
+    report = execute(plan, admin, bot, bot_username=bot_username, migration_token=migration_token, migrator=migrator)
     for created in report.orgs_created:
         logger.success(f"org created: {created}")
     for created in report.repos_created:
         logger.success(f"repo created: {created}")
+    for migrated in report.repos_migrated:
+        logger.success(f"repo migration accepted: {migrated}")
+    if report.repos_migrated:
+        console.print(
+            "\n[yellow]The import continues in the background.[/yellow] Gitea returns from "
+            "`/repos/migrate` before issues and pull requests have all arrived — counted minutes "
+            "apart on `resume`: 98 pull requests, then 147. Verify AC3 once the counts stop moving, "
+            "not when this command exits."
+        )
     for target, reason in report.failures:
         logger.error(f"{target}: {reason}")
+
+    # AFTER `execute`, not before. AC4 reads "the machine identity owns nothing
+    # AFTERWARDS", and this call used to run once before the plan was carried out
+    # -- so on `--apply` it reported PRE-reconcile state and an ownership violation
+    # created by the very run being reported could not appear in its own output.
+    # Reported by review on #1562.
+    _report_machine_ownership(admin, bot_username)
+
     if not report.ok:
         raise typer.Exit(1)
+
+
+@gitea_app.command("drop-empty")
+def gitea_drop_empty(
+    repo: Annotated[str, typer.Option("--repo", help="Target as `owner/name`")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
+    apply: Annotated[bool, typer.Option("--apply", help="Actually delete. Without it, plan only.")] = False,
+) -> None:
+    """Remove an EMPTY DECLARED repository, so a migration can create it in its place.
+
+    NOT A DELETION PATH FOR THE RECONCILER. `make gitea-reconcile` still cannot
+    remove anything — `ReconcilePlan` has no field a deletion could travel in, and
+    a test asserts that over `dataclasses.fields`. This is a separate command with
+    its own object, its own credential and three refusals in front of it.
+
+    It exists because PR1 created the declared repositories as empty shells and
+    Gitea's `POST /repos/migrate` answers 409 when the target already exists — it
+    creates a repository, it does not fill one. The shells therefore block the
+    migration they were declared for, and something has to remove them once.
+
+    Reads with the least-privileged credential that can answer and deletes with the
+    one Gitea will accept: the admin TOKEN is refused `DELETE` with
+    `required=[write:repository]`, and widening it would buy a standing delete
+    capability on the reconciler's credential. `GiteaBasicAuthClient` grants nothing
+    durable — see `gitea_client.GiteaBasicAuthClient.delete_repo`.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
+    from toolkit.features.gitea_repos import declared_full_names, load_declaration, plan_drop, split_full_name
+
+    admin, _bot, _bot_username, base_url = _gitea_clients(env)
+    merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
+    gitea = merged["apps"]["services"]["core"]["gitea"]
+    declared = declared_full_names(load_declaration(merged))
+
+    try:
+        # The SAME parser the planner uses. Splitting here independently is what
+        # made a malformed target die on "not enough values to unpack" instead of
+        # on the refusal written for it.
+        owner, name = split_full_name(repo)
+        current = admin.get_repo(owner, name)
+        decision = plan_drop(full_name=repo, repo=current, declared=declared)
+    except ValueError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+    except GiteaError as exc:
+        logger.error(f"could not read {repo} from {base_url}: {exc}")
+        raise typer.Exit(1) from exc
+
+    console.print(f"\n[bold]Gitea drop-empty[/bold] — {base_url} ({env})\n")
+    if current is not None:
+        console.print(f"  {repo}  empty={current.get('empty')}  size={current.get('size')}")
+
+    if not decision.may_drop:
+        # Deliberately exit 0 on "already absent" and non-zero on a refusal: the
+        # first is convergence, the second is a target that must not be touched,
+        # and a caller scripting this needs to tell them apart.
+        already_gone = current is None
+        (logger.info if already_gone else logger.error)(decision.reason or "refused")
+        raise typer.Exit(0 if already_gone else 1)
+
+    if not apply:
+        console.print("\n[dim]plan only — re-run with --apply to delete[/dim]")
+        return
+
+    admin_password = gitea.get("admin_password")
+    if not admin_password:
+        logger.error(
+            f"missing apps.services.core.gitea.admin_password in {env} SOPS — the delete endpoint "
+            f"refuses bearer tokens, so there is no token fallback. Re-provision the Beelink."
+        )
+        raise typer.Exit(1)
+
+    client = GiteaBasicAuthClient(base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password))
+    try:
+        deleted = client.delete_repo(owner, name)
+    except GiteaError as exc:
+        hint = " (a 401 here usually means the SOPS admin password has drifted — re-provision the Beelink)"
+        logger.error(f"delete failed{hint if exc.status_code == 401 else ''}: {exc}")
+        raise typer.Exit(1) from exc
+
+    if deleted:
+        logger.success(f"deleted {repo} (was empty) — `gitea-reconcile --apply` would recreate it as a shell")
+    else:
+        logger.info(f"{repo} was already absent — nothing to delete")
 
 
 @gitea_app.command("rotate-token")
@@ -553,3 +729,101 @@ def _secret_leaf(token: str) -> str:
 
     spec = ROTATABLE_TOKENS.get(token)
     return spec.secret_key.rsplit(".", 1)[-1] if spec else ""
+
+
+vikunja_app = typer.Typer(help="Audit the Vikunja task platform")
+app.add_typer(vikunja_app, name="vikunja")
+
+
+@vikunja_app.command("audit-users")
+def vikunja_audit_users(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+) -> None:
+    """List every Vikunja account, separating password signups from OIDC logins.
+
+    SEC-VIKUNJA-001 (#1568) AC3. Public self-registration was open on an
+    internet-facing domain from #1484 until #1568; closing it does not evict
+    whoever is already inside. This answers "who exists" with a count instead of
+    an assumption.
+
+    Read-only by construction: the SQL is a `SELECT` held as a constant in
+    `vikunja_users`, and nothing here writes. Emails are printed because
+    identifying a stranger is the entire point -- they are not secrets, and no
+    password, hash or token is read.
+    """
+    import subprocess
+
+    from toolkit.cli.infra import _get_kubeconfig
+    from toolkit.features.vikunja_users import (
+        EXEC_TIMEOUT,
+        FIELD_SEPARATOR,
+        USER_AUDIT_SQL,
+        local_accounts,
+        parse_user_rows,
+    )
+
+    cmd = [
+        "kubectl",
+        "--kubeconfig",
+        _get_kubeconfig(env),
+        "-n",
+        "kubelab",
+        "exec",
+        "-i",
+        "deployment/postgres",
+        "--",
+        "psql",
+        "-U",
+        "kubelab",
+        "-d",
+        "vikunja",
+        "-tAF",
+        FIELD_SEPARATOR,
+        "-c",
+        USER_AUDIT_SQL,
+    ]
+    # Every failure below lands on the same branch, and that is the point: an audit
+    # that cannot read the table must say so. Reporting zero accounts because the
+    # query never ran is the same inversion the ticket was filed for -- "I could not
+    # look" rendered as "nobody is there".
+    #
+    # The timeout is not defensive dressing. `kubectl exec` opens a stream and will
+    # wait forever on an unreachable API server or a pod stuck terminating, and the
+    # homelab is on-demand, so "unreachable" is a normal state here rather than an
+    # exceptional one. Without a bound the command hangs instead of failing.
+    try:
+        res = subprocess.run(cmd, text=True, capture_output=True, timeout=EXEC_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        logger.error(
+            f"timed out after {EXEC_TIMEOUT}s reading the Vikunja user table in {env} — "
+            "the cluster did not answer. This is NOT an empty account list."
+        )
+        raise typer.Exit(1) from None
+    except OSError as exc:
+        # Raised before `res` exists, so it cannot be handled by a returncode check:
+        # a missing `kubectl` binary is the common case.
+        logger.error(f"could not run kubectl: {exc}")
+        raise typer.Exit(1) from None
+
+    if res.returncode != 0:
+        logger.error(f"could not read the Vikunja user table in {env}: {res.stderr.strip()}")
+        raise typer.Exit(1)
+
+    users = parse_user_rows(res.stdout)
+    locals_ = local_accounts(users)
+
+    table = Table(title=f"Vikunja accounts — {env}")
+    table.add_column("id")
+    table.add_column("username")
+    table.add_column("email")
+    table.add_column("origin")
+    for user in users:
+        table.add_row(user.user_id, user.username, user.email, user.issuer)
+    console.print(table)
+
+    console.print(
+        f"\n{len(users)} account(s), {len(locals_)} created by password signup "
+        f"(the ones an open /register endpoint could have produced)."
+    )
+    if locals_:
+        console.print("[yellow]Confirm every password account above is yours.[/yellow]")

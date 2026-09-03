@@ -37,30 +37,121 @@ import requests
 #: guarantees exhaustion.
 PAGE_SIZE = 50
 
+#: Seconds allowed for `POST /repos/migrate`, which is not a CRUD call. Measured
+#: 2026-09-02: migrating `resume` (3 MB, 93 issues, 165 pull requests) had not
+#: returned after the client's 15s default and `requests` raised `ReadTimeout`
+#: while the server carried on succeeding. An error that means "it may or may not
+#: have worked" is worse than a slow call, so this is generous on purpose.
+MIGRATION_TIMEOUT = 600
+
 #: The scope the bot's token needs before it can create a repository inside an
 #: organization it does not own. Measured 2026-08-27: without it the call is
 #: refused with `required=[write:organization]`, and a token's scopes cannot be
 #: edited after minting -- widening means re-minting.
 REQUIRED_BOT_SCOPE = "write:organization"
 
-#: Scopes the superadmin's token needs for every admin-client call this module
-#: makes: `write:organization` (`create_org`), `read:repository` (`list_repos`),
-#: `read:admin` (`list_orgs`, via `/admin/orgs`).
+#: The scope Gitea demands for each public method on `GiteaClient`, keyed by
+#: method name. THE MAP IS THE DECLARATION; nothing below restates it.
 #:
-#: Measured 2026-09-01: minted without `read:admin`, the token authenticated,
-#: landed in SOPS and passed `secrets-audit` -- and `/admin/orgs` refused it with
-#: `403 token does not have at least one of required scope(s)`. Presence of the
-#: credential was never evidence that it worked.
+#: WHY A MAP AND NOT A HAND-WRITTEN SET. `REQUIRED_ADMIN_SCOPES` used to be a
+#: literal, written once by reading the code. The code then moved and the literal
+#: did not: `whoami` and `list_owned_repos` were added to assert AC4 "the bot owns
+#: nothing" by consequence, both call `/users/...`, both need `read:user`, and no
+#: declaration anywhere mentioned it. Measured 2026-09-02 against live prod, all
+#: three refused:
 #:
-#: Read-only on the admin axis by design. `read:admin` buys the whole-forge
-#: LISTING that `/user/orgs` cannot give (an organization this account is not a
-#: member of would read as absent, and reporting those is the point); it is not
-#: `write:admin`, which nothing here needs.
+#:     GET /users/hefesto        -> 403 required=[read:user]
+#:     GET /users/hefesto/repos  -> 403 required=[read:user]
+#:     GET /user                 -> 403 required=[read:user]
 #:
-#: Like `REQUIRED_BOT_SCOPE`, this is only half a contract on its own -- the
-#: grant is declared in `common.yaml` and minted by Ansible, which cannot import
-#: Python. `tests/test_gitea_token_scopes.py` is what makes the two agree.
-REQUIRED_ADMIN_SCOPES = frozenset({"read:admin", "write:organization", "read:repository"})
+#: So the acceptance criterion had a reader that could never read, while the scope
+#: guard stayed green because it compared a stale requirement against a matching
+#: grant. Lesson 413 one layer up: last time a credential was present and
+#: powerless, this time a METHOD was. `tests/test_gitea_token_scopes.py` keeps
+#: this map exhaustive by introspecting the class, so a new method cannot arrive
+#: without its scope arriving too.
+SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
+    # Reads. `/admin/orgs` rather than `/user/orgs` is what `read:admin` buys --
+    # the whole-forge listing AC2's stray report needs. Read-only on that axis:
+    # `write:admin` is never granted because nothing here needs it.
+    "list_orgs": frozenset({"read:admin"}),
+    "list_repos": frozenset({"read:repository"}),
+    "get_repo": frozenset({"read:repository"}),
+    "whoami": frozenset({"read:user"}),
+    "list_owned_repos": frozenset({"read:user"}),
+    "get_team": frozenset({"read:organization"}),
+    # Writes.
+    "create_org": frozenset({"write:organization"}),
+    "create_repo": frozenset({"write:organization"}),
+    # A migration creates a repository inside an organization, so it needs what
+    # `create_repo` needs; `write:repository` on top of it because the endpoint
+    # writes repository content rather than only registering the name.
+    "migrate_repo": frozenset({"write:organization", "write:repository"}),
+    "create_team": frozenset({"write:organization"}),
+    "add_team_member": frozenset({"write:organization"}),
+}
+
+#: Which methods the SUPERADMIN credential performs. Not every method: `create_repo`
+#: is the bot's, because Gitea makes the creating account an organization's owner
+#: and ADR-065 D1 requires the machine identity to own nothing.
+ADMIN_METHODS: tuple[str, ...] = (
+    "list_orgs",
+    "list_repos",
+    "get_repo",
+    "whoami",
+    "list_owned_repos",
+    "get_team",
+    "create_org",
+    "create_team",
+    "add_team_member",
+)
+
+
+def _derive_admin_scopes() -> frozenset[str]:
+    """Union the scopes of the methods the admin credential performs.
+
+    RAISES AT IMPORT rather than defaulting a missing method to "no scope", and
+    the difference is the point of the module: silently narrowing the requirement
+    is exactly the defect being cured, so an incoherent map has to be impossible
+    to run rather than merely tested against.
+
+    The explicit message exists because the bare `SCOPE_BY_METHOD[name]` this
+    replaced raised `KeyError: 'whoami'` out of a comprehension -- accurate, and
+    useless to whoever hits it.
+    """
+    undeclared = [name for name in ADMIN_METHODS if name not in SCOPE_BY_METHOD]
+    if undeclared:
+        raise RuntimeError(
+            f"ADMIN_METHODS names {undeclared}, absent from SCOPE_BY_METHOD. Every method the "
+            f"superadmin performs must declare the scope Gitea demands for it, or the grant in "
+            f"`apps.services.core.gitea.token_scopes.admin` cannot be checked against it."
+        )
+    return frozenset().union(*(SCOPE_BY_METHOD[name] for name in ADMIN_METHODS))
+
+
+#: DERIVED, never restated. A method entering `ADMIN_METHODS` drags its scope into
+#: the requirement automatically, which is the property the old literal lacked.
+#:
+#: Still only half a contract on its own: the grant is declared in `common.yaml`
+#: and minted by Ansible, which cannot import Python.
+#: `tests/test_gitea_token_scopes.py` is what makes the two agree.
+REQUIRED_ADMIN_SCOPES: frozenset[str] = _derive_admin_scopes()
+
+
+def expand_grant(granted: set[str]) -> set[str]:
+    """Add the read scope every write scope already implies.
+
+    Gitea's `write:organization` carries `read:organization` -- a token holding the
+    write scope is not refused a read. Modelling that here lets each method declare
+    the scope it HONESTLY needs (`get_team` reads, so it says `read:organization`)
+    without forcing the grant to spell out a scope it already covers.
+
+    Without this the choice would be between a dishonest map (`get_team` claiming
+    a write scope it does not use) and a bloated grant, and the first is how a map
+    stops describing the code it is supposed to describe.
+    """
+    return granted | {f"read:{scope.split(':', 1)[1]}" for scope in granted if scope.startswith("write:")}
+
 
 #: The units a reconciler team is granted, each at the team's coarse permission.
 #: Gitea 1.25 refuses a team with no per-unit modes (`units permission should not
@@ -144,7 +235,15 @@ class GiteaClient:
         """
         page = 1
         while True:
-            payload = self._request("GET", f"{endpoint}?page={page}&limit={PAGE_SIZE}")
+            # `&` when the caller already brought a query string, `?` otherwise.
+            # It was unconditionally `?`, which produced
+            # `/repos/x/y/issues?state=open?page=1&limit=50` -- a second `?` that
+            # Gitea reads as part of the previous VALUE, so the filter silently
+            # became `type=issues?page=1`. Latent until the first caller passed a
+            # filter (AC3's issue count, 2026-09-02); the shape is a wrong answer
+            # rather than an error, which is why it gets a guard and not just a fix.
+            separator = "&" if "?" in endpoint else "?"
+            payload = self._request("GET", f"{endpoint}{separator}page={page}&limit={PAGE_SIZE}")
             items = payload.get(key, []) if key else payload
             if not isinstance(items, list):
                 raise GiteaError(f"Gitea API GET {endpoint} returned {type(items).__name__}, expected a list")
@@ -174,6 +273,24 @@ class GiteaClient:
         """
         return {f"{r['owner']['username']}/{r['name']}" for r in self._paginate("/repos/search", key="data")}
 
+    def get_repo(self, owner: str, name: str) -> dict[str, Any] | None:
+        """One repository's metadata, or None when it does not exist.
+
+        Absence is a state, not an error -- same contract as `get_team`. The caller
+        that matters here is `plan_drop`, whose "already absent" branch is what
+        makes dropping idempotent on a second run.
+
+        Read with the LEAST-PRIVILEGED credential that can answer: `read:repository`
+        rather than the basic-auth session that performs the deletion. Reading and
+        deleting deliberately do not share a credential.
+        """
+        try:
+            return dict(self._request("GET", f"/repos/{owner}/{name}"))
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+
     def whoami(self) -> dict[str, Any]:
         """The authenticated account. Used to assert AC4 by consequence, not by assumption."""
         return self._request("GET", "/user")
@@ -191,6 +308,78 @@ class GiteaClient:
     def create_repo(self, org: str, name: str, private: bool = True) -> dict[str, Any]:
         """Create a repository inside an organization. The bot's job (ADR-065 D1)."""
         return self._request("POST", f"/orgs/{org}/repos", json={"name": name, "private": private})
+
+    def migrate_repo(
+        self,
+        org: str,
+        name: str,
+        clone_addr: str,
+        service: str,
+        auth_token: str,
+        private: bool = True,
+    ) -> dict[str, Any]:
+        """Migrate a remote repository INTO an organization, with its issues and pull requests.
+
+        The bot's job, not the superadmin's: this creates a repository inside an
+        organization, and ADR-065 D1 keeps the machine identity owning nothing --
+        the same reasoning as `create_repo`, which this replaces for any repository
+        whose declaration names a source.
+
+        WHAT IS ASKED FOR AND WHY EACH FLAG IS THERE. `mirror: False` because
+        Risk 3 settled this as a MOVE, not a mirror: Gitea accepts merges from the
+        migration onward and GitHub becomes the frozen rollback snapshot. A mirror
+        would keep pulling from GitHub and overwrite exactly that. The content flags
+        are TOOL-035 AC3 stated as a request -- they are not defaults, and omitting
+        one carries the code across while silently leaving its issues behind.
+
+        THE CREDENTIAL TRAVELS AS `auth_token`, NEVER INSIDE `clone_addr`. Embedding
+        it in the URL would persist it in Gitea's stored remote and surface it in any
+        error that echoes the address, and `GiteaError` echoes response bodies
+        verbatim by design.
+
+        `409` MEANS THE TARGET ALREADY EXISTS and is deliberately not swallowed.
+        Migration is not idempotent the way creation is: it cannot fill an existing
+        repository, so a 409 means the caller planned work against a forge state it
+        had already been given. `plan_reconcile` prevents that by never proposing a
+        migration for a repository that is present; a 409 reaching here means that
+        invariant broke and should be loud.
+
+        ITS OWN TIMEOUT, AND A LONG ONE. The client's 15s default is right for CRUD
+        and wrong here: measured 2026-09-02 migrating `resume`, the call had not
+        returned after 15 seconds and `requests` raised `ReadTimeout` -- while the
+        migration was proceeding perfectly well on the server. A timeout on this
+        call therefore does NOT mean the migration failed, which is the worst
+        possible thing for an error to mean, so the window is widened rather than
+        left to produce a false negative on every real repository.
+
+        AND THE IMPORT OUTLIVES THE RESPONSE. Even after this returns, Gitea keeps
+        importing issues and pull requests in the background. Counted minutes apart
+        on the same repository: 98 pull requests then 147, 93 issues throughout. So
+        a count taken when this returns measures the clock rather than the
+        repository -- lesson-408's mistake with a different disguise. Callers
+        verifying AC3 must wait for the import to settle, and `execute` says so
+        rather than implying the repository is complete.
+        """
+        return self._request(
+            "POST",
+            "/repos/migrate",
+            timeout=MIGRATION_TIMEOUT,
+            json={
+                "clone_addr": clone_addr,
+                "repo_owner": org,
+                "repo_name": name,
+                "service": service,
+                "auth_token": auth_token,
+                "private": private,
+                "mirror": False,
+                "issues": True,
+                "pull_requests": True,
+                "labels": True,
+                "milestones": True,
+                "releases": True,
+                "wiki": True,
+            },
+        )
 
     def get_team(self, org: str, name: str) -> dict[str, Any] | None:
         """The named team, or None. Absence is a state, not an error."""
@@ -293,6 +482,41 @@ class GiteaBasicAuthClient(GiteaClient):
     def list_tokens(self, username: str) -> list[dict[str, Any]]:
         """Every access token on an account. Names and ids only -- Gitea never returns values."""
         return list(self._paginate(f"/users/{username}/tokens"))
+
+    def delete_repo(self, owner: str, name: str) -> bool:
+        """Delete a repository. True if it was there, False if it already was not.
+
+        ON THIS CLASS RATHER THAN THE TOKEN CLIENT, and that placement is the
+        safety property of the whole drop-empty path. Measured against live prod
+        2026-09-02, cheapest privilege first:
+
+            DELETE as bot token             -> 403 "user should be the owner of the repo"
+            DELETE as admin token           -> 403 required=[write:repository]
+            DELETE as superadmin basic auth -> 204
+
+        Two 403s from two DIFFERENT layers -- permission and scope -- which is why
+        the body is read rather than the status code. The obvious fix, widening the
+        admin token with `write:repository`, is the wrong one: any credential that
+        can delete an empty repository can delete a populated one, so it would buy
+        a permanent delete capability on the reconciler's own token in exchange for
+        removing three shells once. That capability is what #1076 refuses
+        structurally, and a scope guard would not have objected -- the superset
+        check passes on any widening.
+
+        Basic auth is already the documented path for what Gitea refuses to tokens
+        (`revoke_token` above), and ADR-062 keeps machine credentials reversible in
+        SOPS precisely so automation can use them. It grants nothing durable.
+
+        IDEMPOTENT BY 404, same contract as `revoke_token`: a name that matches
+        nothing is the desired end state, not an error.
+        """
+        try:
+            self._request("DELETE", f"/repos/{owner}/{name}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return True
 
     def revoke_token(self, username: str, token_name: str) -> bool:
         """Delete a named token. True if it was there, False if it already was not.

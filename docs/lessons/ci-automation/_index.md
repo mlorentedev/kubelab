@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-23 lessons, newest first. Back to [all categories](../_index.md).
+24 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 416 | [An anti-vacuity test must assert on the value under test, not one step upstream of it](lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact.md) | 2026-09-02 |
 | 411 | [A review guard's two documented failure causes were not exhaustive — a third, structural one hid behind an identical error](lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive.md) | 2026-09-01 |
 | 409 | [Fixing the error you got can leave the bug you did not reach](lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did.md) | 2026-08-31 |
 | 383 | [A reviewer fabricated a count and a CI failure — check the claim, not the confidence](lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence.md) | 2026-08-23 |

@@ -30,14 +30,26 @@ Legend: `[ACn]` traces a task to its acceptance criterion in `proposal.md`.
 - [x] **[AC5]** Live half: queries the Hetzner API for the firewall attached to the running server and compares its rules to the SSOT in both directions — a missing rule is a coming outage, an extra rule is an undeclared open port. Marked `infra`; run via `make test-vps-firewall-live`, which injects the token from SOPS rather than having anyone print it.
 - [x] **[AC5]** Mutation-proved. M1 (drop 22/tcp) red, M2 (data source → managed resource) red, M3 (unwire ufw from the SSOT) red. Committed before mutating; working tree restored and `make test-fast` green afterwards — 1810 passed, 15 skipped.
 
-## Blocked on the operator — not startable in this session
+## The apply, and everything that could only be checked afterwards — DONE 2026-09-02
 
-These are the post-apply half. None can be done before a human reads a plan and applies, because every one of them verifies a running system rather than a declaration, which is the entire premise of the spec.
+The post-apply half. None of it could be done before a human read a plan and
+applied, because every item verifies a running system rather than a declaration,
+which is the entire premise of the spec. The operator applied on 2026-09-02 and
+each is now evidenced in `verification.md`.
+
+This section was headed *"Blocked on the operator — not startable in this
+session"* with every box unticked while the firewall was already live in
+production. That is worth leaving a note about rather than silently correcting:
+a spec whose task list says the apply never happened, archived next to a
+verification file that says it did, is the same declaration-versus-reality gap
+the whole spec exists to close — reproduced inside the spec's own paperwork. It
+was caught by the independent reviewer reading `tasks.md` and listing the
+operator tasks as outstanding.
 
 - [x] **[AC2]** `make tf-vps-firewall-plan` — **`Plan: 2 to add, 0 to change, 0 to destroy`**, the firewall plus its attachment to `server_ids = [61231002]`, which is the machine at `162.55.57.175`. Three real defects surfaced on the way and none was visible before the module met a live account; each is fixed and guarded (see *Found by running it*, below).
-- [ ] **[AC2]** **A human reads the plan**, then `make tf-vps-firewall-apply`. Confirm the Hetzner web console is reachable *first* (spec Risk 2): it is the only out-of-band path if the SSH rule is wrong, because Headscale is on the machine being firewalled.
-- [ ] **[AC3]** Verify by consequence from a **non-tailnet** path that a port outside the allow-list is refused at the cloud edge. Confirm the path really is non-tailnet first (`ip route get`), the way #1538 did — a check that leaves via `tailscale0` proves nothing about the public internet.
-- [ ] **[AC4]** Verify every allow-listed port still works: SSH reachable, HTTPS serving, tailnet still forming. 3478/udp is the one that would fail quietly rather than loudly.
+- [x] **[AC2]** **A human reads the plan**, then `make tf-vps-firewall-apply`. Confirm the Hetzner web console is reachable *first* (spec Risk 2): it is the only out-of-band path if the SSH rule is wrong, because Headscale is on the machine being firewalled.
+- [x] **[AC3]** Verify by consequence from a **non-tailnet** path that a port outside the allow-list is refused at the cloud edge. Confirm the path really is non-tailnet first (`ip route get`), the way #1538 did — a check that leaves via `tailscale0` proves nothing about the public internet.
+- [x] **[AC4]** Verify every allow-listed port still works: SSH reachable, HTTPS serving, tailnet still forming. 3478/udp is the one that would fail quietly rather than loudly.
 - [x] **[AC4]** Establish, *before* the apply, that no monitor breaks. The ICMP omission raised this and it was initially recorded as unanswerable — "Uptime Kuma's monitors live in its DB, not in Ansible". **That was wrong, and the operator was right to push back:** OPS-016 made them config-as-code in `infra/config/uptime-kuma/monitors.json`. Checked all 37:
 
   | Type | Count | Verdict |
@@ -49,15 +61,15 @@ These are the post-apply half. None can be done before a human reads a plan and 
   | `dns` | 1 | resolver `100.64.0.10` — the RPi4, not the VPS |
 
   **No monitor targets the VPS's public IP with ICMP**, so declaring no ICMP rule costs no observability. The two that touch it publicly use 22 and 443, both allow-listed. This is the check that had been deferred to "watch the dashboard after the apply"; it is answerable beforehand, and answering it beforehand is the difference between a verification and a rollback.
-- [ ] **[AC6]** Re-run apply; assert no changes.
-- [ ] **[AC5]** Add the continuous sentinel: one Uptime Kuma `port` monitor on `162.55.57.175:8080` with `upsideDown: true` — up when the check *fails*. Declared in `infra/config/uptime-kuma/monitors.json` and applied with `make monitoring-apply`, since OPS-016 made monitors config-as-code.
+- [x] **[AC6]** Re-run apply; assert no changes.
+- [x] **[AC5]** Add the continuous sentinel: one Uptime Kuma `port` monitor on `162.55.57.175:8080` with `upsideDown: true` — up when the check *fails*. Declared in `infra/config/uptime-kuma/monitors.json` and applied with `make monitoring-apply`, since OPS-016 made monitors config-as-code.
 
   **Why 8080 and not 9000, which is the port that actually burned us.** 9000 is a bad sentinel *because* #1541 fixed it properly: Traefik no longer serves it, so it stays closed whether or not a firewall exists — green for the wrong reason. Headscale keeps listening on 8080 regardless of the firewall, so 8080 answers again the instant the firewall is detached. A canary has to be a port whose *listener* survives the thing being monitored.
 
   This is also the first monitor in the whole set that asks "is this **closed**". The other 37 all ask "is this up", which is exactly why 9000 could answer the internet for months with everything green. Availability monitoring cannot see exposure.
 
   Deliberately partial, and the gap is ticketed rather than papered over: one monitor covers one port, and "every port not in the allow-list" cannot be enumerated as monitors. The exhaustive half is the live guard below, which compares the whole rule set in both directions — and which nothing schedules. That is **#1570**.
-- [ ] **[AC5]** Run `make test-vps-firewall-live` against the applied state. This is also the first execution of the API accessors, whose response shape is asserted rather than assumed — if the shape is wrong it fails here naming the missing key, which is intended.
+- [x] **[AC5]** Run `make test-vps-firewall-live` against the applied state. This is also the first execution of the API accessors, whose response shape is asserted rather than assumed — if the shape is wrong it fails here naming the missing key, which is intended.
 
 ## Found by running it (2026-09-02)
 
@@ -111,8 +123,8 @@ it is the one change here with observable effect, which is why AC4 checks
 
 ## Closing
 
-- [ ] Confirm the plan output and the AC3 verification are recorded in `verification.md` as evidence, not as claims.
-- [ ] Independent `adversarial-review` before archive — must not be the implementer.
+- [x] Confirm the plan output and the AC3 verification are recorded in `verification.md` as evidence, not as claims.
+- [x] Independent `adversarial-review` before archive — must not be the implementer.
 - [ ] `#1557` closed with the change that closed it. Reference other ACs **without** a closing keyword: `Closes #N (AC1, AC2)` closes the whole issue, which bit #1538 and #1543 on consecutive days.
 
 ## Out of scope, tracked elsewhere
