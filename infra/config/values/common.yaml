@@ -70,7 +70,36 @@ networking:
     # never selected from that client. Retiring it is a capability change with
     # its own ticket; SEC-006 preserves current behaviour deliberately.
     - { port: 3478, proto: udp, description: "Headscale DERP STUN" }
+    # K3s prod API server. Present because it is load-bearing TODAY, not because
+    # a public control plane is desirable: ~/.kube/kubelab-prod-config points at
+    # https://162.55.57.175:6443, and CLAUDE.md's "kubeconfig must use the public
+    # IP" rule is why. Measured 2026-09-02 from a verified non-tailnet path: open,
+    # answering 401 Unauthorized — auth holds, so this is reachability, not an
+    # exposure of SEC-005's kind. Argo CD does NOT need it (argocd.spokes reaches
+    # prod at 100.64.0.2:6443 over Tailscale). Moving the operator's kubeconfig to
+    # Tailscale and dropping this line is tracked separately; it is a capability
+    # change, and SEC-006 deliberately does not couple one to a security fix.
+    - { port: 6443, proto: tcp, description: "K3s prod API server" }
     - { port: 41641, proto: udp, description: "Tailscale WireGuard" }
+
+    # DELIBERATELY ABSENT — read this before "fixing" an omission.
+    #
+    # An absent port is a decision here, not an oversight, because this list is
+    # default-deny at the cloud edge: whatever is not named is dropped.
+    #
+    #   8080/tcp — Headscale's control plane, published to the public IP by
+    #     roles/headscale/templates/docker-compose.yml.j2:10 and answering the
+    #     internet in PLAINTEXT HTTP (measured 2026-09-02: 200 OK, no TLS). It is
+    #     left out on purpose: K3s Traefik terminates TLS for vpn.kubelab.live and
+    #     reaches Headscale at the host's own public IP from the same host
+    #     (overlays/prod/headscale.yaml:53), which is delivered locally and never
+    #     traverses Hetzner's edge. This is the one entry whose omission changes
+    #     observable behaviour, which is why AC4 verifies vpn.kubelab.live right
+    #     after the apply rather than trusting the routing argument.
+    #
+    #   icmp — a Hetzner firewall drops inbound ICMP unless declared, so public
+    #     ping to the VPS stops. Intra-tailnet ping is unaffected: it rides inside
+    #     WireGuard on 41641/udp. Matches infra/terraform/compute/'s declaration.
 
   # SSOT-014a: SSH user per node category. Consumers infer category by YAML
   # position (vps + aws → cloud; nodes.* → homelab). Per-node `ssh_user` field
