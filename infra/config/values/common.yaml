@@ -64,11 +64,18 @@ networking:
     - { port: 443, proto: tcp, description: "HTTPS — Traefik" }
     # Headscale's embedded DERP STUN endpoint. NOT the relay: the relay is
     # served over 443 (roles/headscale/templates/config.yaml.j2 — the derp block
-    # names 0.0.0.0:3478 as its only UDP listener). Measured 2026-09-02 from a
-    # tailnet client: the embedded region answers at 167.5ms, the slowest of
-    # every region offered, against 24.6ms for the nearest public one, and is
-    # never selected from that client. Retiring it is a capability change with
-    # its own ticket; SEC-006 preserves current behaviour deliberately.
+    # names 0.0.0.0:3478 as its only UDP listener).
+    #
+    # CORRECTED 2026-09-02, same day, by a better measurement. An earlier note
+    # here said `tailscale netcheck` showed the embedded region at 167.5ms
+    # against 24.6ms for the nearest public one and therefore "never selected".
+    # That inference was wrong: netcheck ranks regions by latency to pick THIS
+    # client's home region, but a relayed connection uses the PEER's home region.
+    # `tailscale status --json` for the VPS peer reports Relay "kubelab" with an
+    # empty CurAddr — no direct path, traffic relayed through the embedded region.
+    # It is in active use, not dormant. Keeping 3478 open is therefore load
+    # bearing rather than merely conservative, and retiring the embedded DERP
+    # (its own ticket) would move real traffic onto a public relay.
     - { port: 3478, proto: udp, description: "Headscale DERP STUN" }
     # K3s prod API server. Present because it is load-bearing TODAY, not because
     # a public control plane is desirable: ~/.kube/kubelab-prod-config points at

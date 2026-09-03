@@ -58,9 +58,15 @@ A new Terraform root module, `infra/terraform/vps-firewall/`, that manages **onl
   **Resolved 2026-09-02 — 3478/udp stays in the allow-list.** Two facts settle it:
 
   1. **3478/udp is STUN, not the relay.** `config.yaml.j2:28` shows `stun_listen_addr: "0.0.0.0:3478"` as the block's only UDP listener; the embedded DERP relay itself is served over Headscale's HTTPS listener, which is 443 and already allowed. So blocking 3478 would not sever relaying — it would remove the NAT-discovery/latency probe for region 999, which in practice deprioritises the embedded region without breaking the public ones. `config.yaml.j2:32` also loads `controlplane.tailscale.com/derpmap/default`, so the public regions are available independently.
-  2. **Measured from msi (`tailscale netcheck`, 2026-09-02):** region `kubelab` is served and reachable at **167.5ms** — the slowest of every region offered — against Denver at 24.6ms, which is the nearest. From this client, connections are direct or public-relayed and the embedded region is never selected.
+  2. ~~**Measured from msi (`tailscale netcheck`, 2026-09-02):** region `kubelab` is served and reachable at **167.5ms** — the slowest of every region offered — against Denver at 24.6ms, which is the nearest. From this client, connections are direct or public-relayed and the embedded region is never selected.~~
 
-  **Scope limit on that measurement, stated deliberately:** `tailscale status` on one client shows only *this* client's paths. It is not evidence about how ace1↔rpi4 or beelink↔vps reach each other, and the one `relay "fra"` visible belongs to aws1, which has been offline 10 days and destroyed — stale state, not current behaviour. So "no peer uses the embedded DERP" is **not** established and is not claimed here.
+  **CORRECTED the same day, before the apply, by a better measurement.** Point 2 was a wrong inference from a right number. `netcheck` ranks regions by latency in order to choose *this client's* home region; a **relayed connection to a peer uses that peer's home region**, not the client's nearest. So a slow embedded region does not mean an unused one.
+
+  `tailscale status --json` for the VPS peer, 2026-09-02: `Relay: "kubelab"`, `CurAddr: ""`. There is **no direct path** to the VPS from this client and traffic is relayed **through the embedded region**. It is in active use.
+
+  The conclusion is unchanged and better supported: 3478/udp stays. What changes is why — it is load-bearing rather than merely conservative, and retiring the embedded DERP would move real traffic onto a public relay rather than tidying away something dormant. That ticket now needs its own evidence; this measurement is not it.
+
+  **Scope limit, still stated deliberately:** this is one client's view. It says nothing about how ace1↔rpi4 or beelink↔vps reach each other, and the `relay "fra"` previously seen belonged to aws1, offline 10 days and destroyed — stale state. The correction above narrows what was claimed; it does not license the opposite claim about other peers.
 
   Therefore: SEC-006 preserves current behaviour. Making the perimeter real and changing what the perimeter allows are two changes, and coupling them would mean a VPN capability change shipping inside a security fix. Retiring the embedded DERP (`headscale_derp_enabled: false`, drop the compose publish, then drop 3478) is a separate ticket, for which the netcheck above is the evidence. Confirmed no existing DERP/STUN issue in the repo.
 
