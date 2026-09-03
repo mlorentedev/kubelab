@@ -37,6 +37,13 @@ import requests
 #: guarantees exhaustion.
 PAGE_SIZE = 50
 
+#: Seconds allowed for `POST /repos/migrate`, which is not a CRUD call. Measured
+#: 2026-09-02: migrating `resume` (3 MB, 93 issues, 165 pull requests) had not
+#: returned after the client's 15s default and `requests` raised `ReadTimeout`
+#: while the server carried on succeeding. An error that means "it may or may not
+#: have worked" is worse than a slow call, so this is generous on purpose.
+MIGRATION_TIMEOUT = 600
+
 #: The scope the bot's token needs before it can create a repository inside an
 #: organization it does not own. Measured 2026-08-27: without it the call is
 #: refused with `required=[write:organization]`, and a token's scopes cannot be
@@ -76,6 +83,10 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
+    # A migration creates a repository inside an organization, so it needs what
+    # `create_repo` needs; `write:repository` on top of it because the endpoint
+    # writes repository content rather than only registering the name.
+    "migrate_repo": frozenset({"write:organization", "write:repository"}),
     "create_team": frozenset({"write:organization"}),
     "add_team_member": frozenset({"write:organization"}),
 }
@@ -224,7 +235,15 @@ class GiteaClient:
         """
         page = 1
         while True:
-            payload = self._request("GET", f"{endpoint}?page={page}&limit={PAGE_SIZE}")
+            # `&` when the caller already brought a query string, `?` otherwise.
+            # It was unconditionally `?`, which produced
+            # `/repos/x/y/issues?state=open?page=1&limit=50` -- a second `?` that
+            # Gitea reads as part of the previous VALUE, so the filter silently
+            # became `type=issues?page=1`. Latent until the first caller passed a
+            # filter (AC3's issue count, 2026-09-02); the shape is a wrong answer
+            # rather than an error, which is why it gets a guard and not just a fix.
+            separator = "&" if "?" in endpoint else "?"
+            payload = self._request("GET", f"{endpoint}{separator}page={page}&limit={PAGE_SIZE}")
             items = payload.get(key, []) if key else payload
             if not isinstance(items, list):
                 raise GiteaError(f"Gitea API GET {endpoint} returned {type(items).__name__}, expected a list")
@@ -289,6 +308,78 @@ class GiteaClient:
     def create_repo(self, org: str, name: str, private: bool = True) -> dict[str, Any]:
         """Create a repository inside an organization. The bot's job (ADR-065 D1)."""
         return self._request("POST", f"/orgs/{org}/repos", json={"name": name, "private": private})
+
+    def migrate_repo(
+        self,
+        org: str,
+        name: str,
+        clone_addr: str,
+        service: str,
+        auth_token: str,
+        private: bool = True,
+    ) -> dict[str, Any]:
+        """Migrate a remote repository INTO an organization, with its issues and pull requests.
+
+        The bot's job, not the superadmin's: this creates a repository inside an
+        organization, and ADR-065 D1 keeps the machine identity owning nothing --
+        the same reasoning as `create_repo`, which this replaces for any repository
+        whose declaration names a source.
+
+        WHAT IS ASKED FOR AND WHY EACH FLAG IS THERE. `mirror: False` because
+        Risk 3 settled this as a MOVE, not a mirror: Gitea accepts merges from the
+        migration onward and GitHub becomes the frozen rollback snapshot. A mirror
+        would keep pulling from GitHub and overwrite exactly that. The content flags
+        are TOOL-035 AC3 stated as a request -- they are not defaults, and omitting
+        one carries the code across while silently leaving its issues behind.
+
+        THE CREDENTIAL TRAVELS AS `auth_token`, NEVER INSIDE `clone_addr`. Embedding
+        it in the URL would persist it in Gitea's stored remote and surface it in any
+        error that echoes the address, and `GiteaError` echoes response bodies
+        verbatim by design.
+
+        `409` MEANS THE TARGET ALREADY EXISTS and is deliberately not swallowed.
+        Migration is not idempotent the way creation is: it cannot fill an existing
+        repository, so a 409 means the caller planned work against a forge state it
+        had already been given. `plan_reconcile` prevents that by never proposing a
+        migration for a repository that is present; a 409 reaching here means that
+        invariant broke and should be loud.
+
+        ITS OWN TIMEOUT, AND A LONG ONE. The client's 15s default is right for CRUD
+        and wrong here: measured 2026-09-02 migrating `resume`, the call had not
+        returned after 15 seconds and `requests` raised `ReadTimeout` -- while the
+        migration was proceeding perfectly well on the server. A timeout on this
+        call therefore does NOT mean the migration failed, which is the worst
+        possible thing for an error to mean, so the window is widened rather than
+        left to produce a false negative on every real repository.
+
+        AND THE IMPORT OUTLIVES THE RESPONSE. Even after this returns, Gitea keeps
+        importing issues and pull requests in the background. Counted minutes apart
+        on the same repository: 98 pull requests then 147, 93 issues throughout. So
+        a count taken when this returns measures the clock rather than the
+        repository -- lesson-408's mistake with a different disguise. Callers
+        verifying AC3 must wait for the import to settle, and `execute` says so
+        rather than implying the repository is complete.
+        """
+        return self._request(
+            "POST",
+            "/repos/migrate",
+            timeout=MIGRATION_TIMEOUT,
+            json={
+                "clone_addr": clone_addr,
+                "repo_owner": org,
+                "repo_name": name,
+                "service": service,
+                "auth_token": auth_token,
+                "private": private,
+                "mirror": False,
+                "issues": True,
+                "pull_requests": True,
+                "labels": True,
+                "milestones": True,
+                "releases": True,
+                "wiki": True,
+            },
+        )
 
     def get_team(self, org: str, name: str) -> dict[str, Any] | None:
         """The named team, or None. Absence is a state, not an error."""

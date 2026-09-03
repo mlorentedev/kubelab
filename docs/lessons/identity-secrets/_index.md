@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-55 lessons, newest first. Back to [all categories](../_index.md).
+56 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 415 | [To learn whether a credential *may* do something, ask it to do something already done](lesson-415-discriminate-a-refusal-by-asking-for-something-that-already-exists.md) | 2026-09-02 |
 | 413 | [A credential can exist, authenticate, and still not work — and every presence check will call that success](lesson-413-a-credential-can-exist-authenticate-and-not-work.md) | 2026-09-01 |
 | 403 | [`known_hosts` has two independent ways to make a host-key purge a silent no-op](lesson-403-known-hosts-has-two-ways-to-make-a-purge-a-silent-no-op.md) | 2026-08-26 |
 | 398 | [A quoting bug that breaks a command announces itself; one that widens a scope does not](lesson-398-a-quoting-bug-that-widens-a-scope-does-not-announce-itself.md) | 2026-08-26 |

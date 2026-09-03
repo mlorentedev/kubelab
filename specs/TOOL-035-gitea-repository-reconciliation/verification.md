@@ -11,7 +11,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - [x] AC1 (declare + reconcile is idempotent) -> `890f6f56` / `tests/test_gitea_repo_reconcile.py` / live transcript under *AC1/AC4 measured on prod*
 - [x] AC2 (undeclared is reported, never deleted) -> `890f6f56` / `test_the_plan_has_no_deletion_field` (structural, over `dataclasses.fields`)
-- [ ] AC3 (issues and pull requests carry over) -> live count against the baseline below
+- [x] AC3 (issues and pull requests carry over) -> `personal/resume`, counts under *AC3 — `resume` migrated*
 - [x] AC4 (`hefesto` owns nothing) -> live listing under *AC1/AC4 measured on prod*, printed by the reconcile itself
 - [ ] AC5 (migration credential scoped and checked both ways) -> both transcripts
 - [ ] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> run URL
@@ -236,6 +236,81 @@ The structural claim still carries the weight for every future caller:
 `test_the_plan_has_no_deletion_field` asserts over `dataclasses.fields(ReconcilePlan)` that no field
 a deletion could travel in exists at all — stronger than a fixture that happened not to delete
 anything.
+
+## AC3 — `resume` migrated (2026-09-02)
+
+**Counts against the GitHub baseline, once the import settled:**
+
+| | Gitea | GitHub baseline |
+|---|---|---|
+| pull requests (all states) | **165** | 165 |
+| open pull requests | **5** | 5 |
+| open issues | **28** | 28 |
+
+Nothing is recorded as missing. `owner=personal` — the organization, not a person — so ADR-065 D1
+holds by consequence and not by assertion, and the reconcile's own AC4 line still reads
+`hefesto owns: (none)`.
+
+**Risk 3's standing assumption is now measured rather than assumed.** It rested on migrated pull
+requests arriving mergeable, because the plan is to drain them in Gitea:
+
+```
+#259  mergeable=True  head='chore/align-agents-cascade'                   -> 'main'
+#258  mergeable=True  head='feat/docs-005-modular-lessons'                -> 'main'
+#256  mergeable=True  head='feat/res-065-scan-format-json'                -> 'main'
+#255  mergeable=True  head='docs/ci-blocked-actions-quota'                -> 'main'
+#253  mergeable=True  head='release-please--branches--main--components--resume' -> 'main'
+```
+
+All five same-repository heads resolved. The fallback documented in Risk 3 — draining on GitHub with
+`resume`'s local `make check` path — is not needed.
+
+### Three things this migration taught, none of which were in the plan
+
+**1. NO TOKEN MAY MIGRATE INTO AN ORGANIZATION.** The spec assigned migration to the bot, by analogy
+with repository creation. Gitea disagrees. Discriminated cleanly by asking each credential to migrate
+an already-existing repository — 409 means *may*, 403 means *may not*:
+
+```
+bot token             -> 403 "Given user is not owner of organization."
+admin token           -> 403 required=[write:repository], token scope=read:admin,write:organization,read:repository,read:user
+superadmin basic auth -> 409 "The repository with the same name already exists."
+```
+
+Two different walls, and neither is worth demolishing. The bot is stopped by **organization
+ownership**, which ADR-065 D1 requires it never to have — so it cannot be fixed by widening a scope,
+only by violating D1. The admin token is stopped by **scope**, and granting it `write:repository`
+would hand the reconciler a standing `DELETE /repos/...` capability. So migration goes through the
+basic-auth session, exactly as `drop-empty` does. `execute` now takes an explicit `migrator` and
+refuses rather than silently falling back to a token that Gitea will reject.
+
+**2. THE IMPORT OUTLIVES THE RESPONSE, so an early count measures the clock.** Counted at three
+moments on the same repository: **98** pull requests, then **147**, then **165**. Had the first
+number been written into this file it would have been recorded as evidence of a partial migration —
+lesson-408's mistake wearing a new disguise, since the API answers 200 throughout and never says
+"still importing". The reconcile now prints that the import continues, and says the counts must stop
+moving before AC3 is checked.
+
+A related false alarm worth recording because it nearly became a finding: an early reading showed
+`open PRs = 0` against a baseline of 5, which read as "pull requests did not carry over". They had
+simply not arrived yet.
+
+**3. `POST /repos/migrate` outlives the client's timeout too.** The 15s default raised `ReadTimeout`
+while the server was succeeding — an error meaning "it may or may not have worked", which is worse
+than a slow call. `MIGRATION_TIMEOUT = 600` now applies to that call alone.
+
+### Two latent defects found on the way, both fixed here
+
+- **`_paginate` built an invalid URL for any endpoint carrying a query string**, appending `?page=1`
+  unconditionally: `/repos/x/y/issues?state=open&type=issues?page=1&limit=50`. Gitea reads the second
+  `?` as part of the previous value, so the filter silently becomes `type=issues?page=1` and the
+  endpoint answers with the wrong set rather than an error. Latent because no existing caller passed
+  a filter; AC3's issue count was the first. Guarded by `tests/test_gitea_client_pagination.py`.
+- **`drop-empty` built its own declared-repository set** and drifted the moment `RepoSpec` landed,
+  producing strings like `"personal/RepoSpec(name='resume', ...)"` — so a declared repository read as
+  undeclared and the command refused it. It failed *safe*, because that membership test guards a
+  deletion, but that was the bug's direction rather than the design's doing. One producer now:
+  `declared_full_names`.
 
 ## Risk 1 — settled 2026-08-27, against the live instance
 

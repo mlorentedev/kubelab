@@ -32,6 +32,7 @@ from toolkit.features.gitea_repos import (
     Actor,
     DeclaredRepo,
     ReconcilePlan,
+    RepoSpec,
     actor_for_org_creation,
     actor_for_repo_creation,
     load_declaration,
@@ -43,22 +44,72 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: ADR-065 D2's provenance split, in the shape the reconciler consumes. `kubelab`
 #: is declared while holding nothing, per D3 — an organization that exists only
 #: because someone made it in the UI is state with no consumer.
+#:
+#: Every repository here carries a `migrate_from`, because all three are moves off
+#: GitHub rather than new work. A `RepoSpec` without one is still legal and means
+#: "create it empty" — that is what a genuinely new repository would look like.
 DECLARED = {
-    "teledyne": ["fae-brain", "openkm-brain"],
-    "personal": ["resume"],
+    "teledyne": [
+        RepoSpec("fae-brain", migrate_from="github:mlorentedev/fae-brain"),
+        RepoSpec("openkm-brain", migrate_from="github:mlorentedev/openkm-brain"),
+    ],
+    "personal": [RepoSpec("resume", migrate_from="github:mlorentedev/resume")],
     "kubelab": [],
 }
 
 
-def test_an_empty_forge_gets_every_org_and_repo():
+def test_an_empty_forge_migrates_every_declared_repository():
+    """The shells are the bug this shape exists to prevent.
+
+    PR1 declared repositories as bare names, so the only thing the reconciler could
+    do with an absent one was create it EMPTY. All three were then blocked from
+    ever receiving their content, because Gitea's `POST /repos/migrate` answers 409
+    when the target exists — it creates a repository, it does not fill one. So a
+    declaration that named a repository without saying where it comes from
+    guaranteed the shell that blocked the move.
+    """
     plan = plan_reconcile(DECLARED, existing_orgs=set(), existing_repos=set())
 
     assert set(plan.orgs_to_create) == {"teledyne", "personal", "kubelab"}
-    assert {(r.org, r.name) for r in plan.repos_to_create} == {
-        ("teledyne", "fae-brain"),
-        ("teledyne", "openkm-brain"),
-        ("personal", "resume"),
+    assert plan.repos_to_create == (), "a repository with a source must be migrated, never created empty"
+    assert {(r.org, r.name, r.migrate_from) for r in plan.repos_to_migrate} == {
+        ("teledyne", "fae-brain", "github:mlorentedev/fae-brain"),
+        ("teledyne", "openkm-brain", "github:mlorentedev/openkm-brain"),
+        ("personal", "resume", "github:mlorentedev/resume"),
     }
+
+
+def test_a_repository_with_no_source_is_still_created_empty():
+    """`migrate_from` is optional, and its absence means something specific.
+
+    A genuinely new repository has nowhere to come from. Making the field required
+    would force a fake source on the next repository that starts life in Gitea.
+    """
+    plan = plan_reconcile(
+        {"kubelab": [RepoSpec("brand-new")]},
+        existing_orgs={"kubelab"},
+        existing_repos=set(),
+    )
+    assert plan.repos_to_migrate == ()
+    assert {(r.org, r.name) for r in plan.repos_to_create} == {("kubelab", "brand-new")}
+
+
+def test_an_existing_repository_is_never_re_migrated():
+    """AC1's idempotence, on the path that would otherwise be destructive.
+
+    Re-running a migration against a repository that already arrived is not a
+    no-op the way a re-create is — Gitea answers 409, and a reconciler that
+    treated that as "needs work" would report a permanent failure on a converged
+    forge. Presence is presence, whatever put it there.
+    """
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain", "teledyne/openkm-brain", "personal/resume"},
+    )
+    assert plan.repos_to_migrate == ()
+    assert plan.repos_to_create == ()
+    assert plan.is_noop
 
 
 def test_a_declared_but_empty_org_is_still_created():
@@ -74,7 +125,7 @@ def test_a_declared_but_empty_org_is_still_created():
 def test_a_second_run_creates_nothing():
     """AC1's idempotence, expressed where it can be tested without a forge."""
     existing_orgs = set(DECLARED)
-    existing_repos = {f"{org}/{name}" for org, names in DECLARED.items() for name in names}
+    existing_repos = {f"{org}/{spec.name}" for org, specs in DECLARED.items() for spec in specs}
 
     plan = plan_reconcile(DECLARED, existing_orgs=existing_orgs, existing_repos=existing_repos)
 
@@ -142,7 +193,7 @@ def test_repositories_inside_an_org_are_created_by_the_bot():
 
 
 @pytest.mark.parametrize("declared", [{}, {"only-org": []}])
-def test_planning_never_reports_a_declared_org_as_undeclared(declared: dict[str, list[str]]):
+def test_planning_never_reports_a_declared_org_as_undeclared(declared: dict[str, list[RepoSpec]]):
     """Guard the guard: a stray-detector that flags declared state is worse than none."""
     plan = plan_reconcile(declared, existing_orgs=set(declared), existing_repos=set())
     assert plan.undeclared_orgs == ()
@@ -154,7 +205,7 @@ def test_declared_repos_carry_private_by_default():
     `REQUIRE_SIGNIN_VIEW` closes the anonymous surface, but defaulting to private
     means the forge does not depend on that one setting for confidentiality.
     """
-    plan = plan_reconcile({"personal": ["resume"]}, existing_orgs={"personal"}, existing_repos=set())
+    plan = plan_reconcile({"personal": [RepoSpec("resume")]}, existing_orgs={"personal"}, existing_repos=set())
     assert plan.repos_to_create == (DeclaredRepo(org="personal", name="resume", private=True),)
 
 
@@ -171,11 +222,21 @@ def test_the_real_declaration_matches_adr_065():
     common_yaml = REPO_ROOT / "infra/config/values/common.yaml"
     declared = load_declaration(yaml.safe_load(common_yaml.read_text()))
 
-    assert declared == {
+    assert {org: [s.name for s in specs] for org, specs in declared.items()} == {
         "teledyne": ["fae-brain", "openkm-brain"],
         "personal": ["resume"],
         "kubelab": [],
     }, "the declaration drifted from ADR-065's table — change the ADR or change the declaration"
+
+    # Every declared repository is a MOVE off GitHub, not new work. A source that
+    # went missing would silently turn a migration back into an empty shell -- the
+    # exact regression this shape was introduced to end -- and nothing else would
+    # look wrong, because creating a declared repository is a legitimate outcome.
+    assert all(s.migrate_from for specs in declared.values() for s in specs), (
+        "a declared repository lost its `migrate_from`. All three named by ADR-065 are migrations; "
+        "without a source the reconciler would create an empty shell, which `POST /repos/migrate` "
+        "then refuses with 409 -- the state this whole shape exists to prevent."
+    )
 
 
 def test_the_vault_is_not_declared():
@@ -192,7 +253,7 @@ def test_the_vault_is_not_declared():
 
     common_yaml = REPO_ROOT / "infra/config/values/common.yaml"
     declared = load_declaration(yaml.safe_load(common_yaml.read_text()))
-    all_repos = {name for names in declared.values() for name in names}
+    all_repos = {spec.name for specs in declared.values() for spec in specs}
 
     assert "knowledge" not in all_repos, (
         "`knowledge` is the vault. ADR-065 keeps it on GitHub because Gitea is on an "
