@@ -38,6 +38,17 @@ These are the post-apply half. None can be done before a human reads a plan and 
 - [ ] **[AC2]** **A human reads the plan**, then `make tf-vps-firewall-apply`. Confirm the Hetzner web console is reachable *first* (spec Risk 2): it is the only out-of-band path if the SSH rule is wrong, because Headscale is on the machine being firewalled.
 - [ ] **[AC3]** Verify by consequence from a **non-tailnet** path that a port outside the allow-list is refused at the cloud edge. Confirm the path really is non-tailnet first (`ip route get`), the way #1538 did — a check that leaves via `tailscale0` proves nothing about the public internet.
 - [ ] **[AC4]** Verify every allow-listed port still works: SSH reachable, HTTPS serving, tailnet still forming. 3478/udp is the one that would fail quietly rather than loudly.
+- [x] **[AC4]** Establish, *before* the apply, that no monitor breaks. The ICMP omission raised this and it was initially recorded as unanswerable — "Uptime Kuma's monitors live in its DB, not in Ansible". **That was wrong, and the operator was right to push back:** OPS-016 made them config-as-code in `infra/config/uptime-kuma/monitors.json`. Checked all 37:
+
+  | Type | Count | Verdict |
+  |---|---|---|
+  | `http` | 20 | all on **443**, zero on another port |
+  | `ping` | 10 | nine target `100.64.0.x` or LAN; the VPS one targets **`100.64.0.2`**, its Tailscale IP — that ICMP rides inside WireGuard and never reaches Hetzner's edge |
+  | `push` | 4 | outbound from the node to Kuma; egress is unrestricted with no outbound rules declared (Hetzner's documented default) |
+  | `port` | 2 | `162.55.57.175:22` (allow-listed) and `vpn.kubelab.live:443` |
+  | `dns` | 1 | resolver `100.64.0.10` — the RPi4, not the VPS |
+
+  **No monitor targets the VPS's public IP with ICMP**, so declaring no ICMP rule costs no observability. The two that touch it publicly use 22 and 443, both allow-listed. This is the check that had been deferred to "watch the dashboard after the apply"; it is answerable beforehand, and answering it beforehand is the difference between a verification and a rollback.
 - [ ] **[AC6]** Re-run apply; assert no changes.
 - [ ] **[AC5]** Run `make test-vps-firewall-live` against the applied state. This is also the first execution of the API accessors, whose response shape is asserted rather than assumed — if the shape is wrong it fails here naming the missing key, which is intended.
 
