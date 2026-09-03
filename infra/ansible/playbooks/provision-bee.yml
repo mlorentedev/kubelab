@@ -318,7 +318,15 @@
         act_runner_runner_name: "{{ config.apps.services.automation.gitea_runner.runner_name }}"
         act_runner_enabled: "{{ config.apps.services.automation.gitea_runner.enabled }}"
         act_runner_image: "{{ config.apps.services.automation.gitea_runner.image }}"
-        act_runner_token: "{{ secrets.apps.services.automation.gitea_runner.registration_token | default('', true) }}"
+        # `gitea_secrets`, NOT `secrets`. The role writes this key with
+        # `--env {{ gitea_identity_env }}`, so it lands in prod.enc.yaml, while
+        # `secrets` is common merged with `deploy_env` (staging). Reading the wrong
+        # store does not fail — it resolves to '' forever, which makes the mint's
+        # `when: not act_runner_token` gate true on EVERY provision. Gitea's
+        # `generate-runner-token` invalidates all prior tokens for the scope, so
+        # each re-provision would revoke the token its own running runner
+        # registered with, deregistering it while the playbook reports success.
+        act_runner_token: "{{ gitea_secrets.apps.services.automation.gitea_runner.registration_token | default('', true) }}"
         act_runner_labels: "{{ config.apps.services.automation.gitea_runner.labels }}"
         act_runner_capacity: "{{ config.apps.services.automation.gitea_runner.capacity }}"
         act_runner_container_options: "{{ config.apps.services.automation.gitea_runner.container_options }}"
