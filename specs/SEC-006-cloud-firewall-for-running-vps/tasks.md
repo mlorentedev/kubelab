@@ -50,6 +50,13 @@ These are the post-apply half. None can be done before a human reads a plan and 
 
   **No monitor targets the VPS's public IP with ICMP**, so declaring no ICMP rule costs no observability. The two that touch it publicly use 22 and 443, both allow-listed. This is the check that had been deferred to "watch the dashboard after the apply"; it is answerable beforehand, and answering it beforehand is the difference between a verification and a rollback.
 - [ ] **[AC6]** Re-run apply; assert no changes.
+- [ ] **[AC5]** Add the continuous sentinel: one Uptime Kuma `port` monitor on `162.55.57.175:8080` with `upsideDown: true` — up when the check *fails*. Declared in `infra/config/uptime-kuma/monitors.json` and applied with `make monitoring-apply`, since OPS-016 made monitors config-as-code.
+
+  **Why 8080 and not 9000, which is the port that actually burned us.** 9000 is a bad sentinel *because* #1541 fixed it properly: Traefik no longer serves it, so it stays closed whether or not a firewall exists — green for the wrong reason. Headscale keeps listening on 8080 regardless of the firewall, so 8080 answers again the instant the firewall is detached. A canary has to be a port whose *listener* survives the thing being monitored.
+
+  This is also the first monitor in the whole set that asks "is this **closed**". The other 37 all ask "is this up", which is exactly why 9000 could answer the internet for months with everything green. Availability monitoring cannot see exposure.
+
+  Deliberately partial, and the gap is ticketed rather than papered over: one monitor covers one port, and "every port not in the allow-list" cannot be enumerated as monitors. The exhaustive half is the live guard below, which compares the whole rule set in both directions — and which nothing schedules. That is **#1570**.
 - [ ] **[AC5]** Run `make test-vps-firewall-live` against the applied state. This is also the first execution of the API accessors, whose response shape is asserted rather than assumed — if the shape is wrong it fails here naming the missing key, which is intended.
 
 ## Found by running it (2026-09-02)
