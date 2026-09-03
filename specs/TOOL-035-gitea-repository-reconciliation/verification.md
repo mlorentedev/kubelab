@@ -147,12 +147,12 @@ the *second* is the one that proves anything.
 **The first-run half of AC1 is a stated gap.** The organizations and repositories were created on
 2026-09-01 and that transcript was not written down before the session ended — evidence produced and
 not made durable, which is the same failure this file exists to prevent, one level up from the code.
-What is recorded below is the convergence half, measured today. First-run evidence returns for real
+What is recorded below is the convergence half, measured on 2026-09-02. First-run evidence returns for real
 in PR2: the migration path creates `personal/resume`, so its first `--apply` is a first run.
 
 **AC1 — a second run changes nothing.** `make gitea-reconcile ENV=prod`:
 
-```
+```text
 Gitea reconcile — https://gitea.kubelab.live (prod)
 
   (nothing to do — forge matches the declaration)
@@ -171,7 +171,7 @@ would be new machinery, not evidence.
 `whoami` and `list_owned_repos` specifically "to assert AC4 by consequence"; both call `/users/...`;
 the admin grant did not include `read:user`. Measured before the fix:
 
-```
+```text
 GET /users/hefesto        -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
 GET /users/hefesto/repos  -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
 GET /user                 -> 403 required=[read:user], token scope=read:admin,write:organization,read:repository
@@ -196,7 +196,7 @@ Guards verified by mutation, all four red with the intended diagnostic:
 **The rotation that closed it.** Gitea cannot edit a minted token's scopes, so widening
 `token_scopes.admin` alone changes nothing on an instance that already holds a token:
 
-```
+```text
 make gitea-rotate-token TOKEN=admin ENV=prod APPLY=1
   [SUCCESS] revoked kubelab-reconciler on manu — the outage window is now OPEN
   [SUCCESS] cleared apps.services.core.gitea.admin_token — the mint gate is open
