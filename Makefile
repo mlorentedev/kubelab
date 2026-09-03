@@ -1303,6 +1303,11 @@ sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
 	@test -n "$(ENV)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync vikunja --env $(ENV)
 
+.PHONY: vikunja-audit-users
+vikunja-audit-users: ## List Vikunja accounts, separating password signups from OIDC logins
+	@test -n "$(ENV)" || (echo "Usage: make vikunja-audit-users ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) services vikunja audit-users --env $(ENV)
+
 .PHONY: provision-postgres-tenant
 provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
 	@test -n "$(ENV)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)

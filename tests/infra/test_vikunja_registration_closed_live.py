@@ -16,7 +16,16 @@ Why an infra test and not a unit one: the failure mode is a pod running an older
 ConfigMap than the one in git. `vikunja.env` is rendered through `configMapGenerator`,
 so a content hash rolls the Deployment and that *should* be automatic -- but a merged
 template is not a deployed one (lesson-404, #1548), and only the running instance
-knows. The static half lives in `tests/test_vikunja_registration_declared.py`.
+knows. The static half lives in `tests/test_vikunja_registration_render.py`, and it
+covers BOTH environments.
+
+**This one is prod-only on purpose** (#1568 AC4). `tasks.kubelab.live` is the only
+one of the two with a public Cloudflare record (`infra/terraform/dns/services.json`);
+`tasks.staging.kubelab.live` lives in `networking.staging_zones`, which is VPN-only
+split DNS, so an anonymous caller on the internet cannot reach it and there is no
+exposure for a live guard to measure. Staging's manifest is covered by the render
+test. That split is recorded rather than left implicit, because "the guard only runs
+against one environment" is otherwise indistinguishable from someone forgetting.
 """
 
 from __future__ import annotations
@@ -30,7 +39,10 @@ import yaml
 pytestmark = pytest.mark.infra
 
 _REPO_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
-_COMMON_YAML = os.path.abspath(os.path.join(_REPO_ROOT, "infra/config/values/common.yaml"))
+#: prod.yaml, not common.yaml: the domain is a per-environment value and common's copy
+#: is only the base default. Reading the file that actually governs prod means this
+#: guard follows the domain if it ever moves, instead of silently probing the old one.
+_PROD_YAML = os.path.abspath(os.path.join(_REPO_ROOT, "infra/config/values/prod.yaml"))
 
 #: Vikunja advertises its own registration state here, unauthenticated. This is what
 #: the web UI reads to decide whether to render the signup form.
@@ -53,16 +65,20 @@ FLAG_PATH = ("auth", "local", "registration_enabled")
 REGISTER_PATH = "/api/v1/register"
 
 
-def _vikunja() -> dict:
-    """The Vikunja service block, from the SSOT. Never a literal -- CLAUDE.md's rule."""
-    with open(_COMMON_YAML, encoding="utf-8") as handle:
-        common = yaml.safe_load(handle)
-    return common["apps"]["services"]["core"]["vikunja"]
+def _prod_domain() -> str:
+    """Vikunja's prod domain, from the SSOT. Never a literal -- CLAUDE.md's rule.
+
+    A test carrying its own copy of the domain keeps passing after the domain changes,
+    which makes it a slower way of not testing.
+    """
+    with open(_PROD_YAML, encoding="utf-8") as handle:
+        prod = yaml.safe_load(handle)
+    return prod["apps"]["services"]["core"]["vikunja"]["domain"]
 
 
 @pytest.fixture(scope="module")
 def base_url() -> str:
-    return f"https://{_vikunja()['domain']}"
+    return f"https://{_prod_domain()}"
 
 
 @pytest.fixture(scope="module")
