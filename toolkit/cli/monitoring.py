@@ -308,8 +308,17 @@ def import_cmd() -> None:
 def apply_cmd() -> None:
     """Declarative sync: apply monitors from seed JSON to Uptime Kuma.
 
-    Deletes all existing monitors and recreates from seed (IaC pattern).
-    Same approach as 'kubectl apply' or 'make deploy-k8s' — seed is truth.
+    Converges the live instance onto the seed by UPSERTING. Monitors are matched
+    on an immutable `key` carried in the description, so a rename is an edit and
+    **uptime history survives a sync**. A live monitor matching no seed entry is
+    removed, because the seed is the source of truth.
+
+    This said "deletes all existing monitors and recreates from seed" until
+    2026-09-02, describing behaviour OPS-016 replaced with the diff in
+    `monitoring_diff.compute_sync_plan`. The error mattered in the direction that
+    stops people: an operator reading it concludes a routine sync costs every
+    monitor's history and reaches for the Kuma UI instead, which is how a
+    config-as-code file drifts from the instance it is supposed to describe.
     """
     settings = get_settings()
     apply_monitors(settings.project_root)
