@@ -54,6 +54,6 @@ variable "inbound_rules" {
 
   validation {
     condition     = alltrue([for r in var.inbound_rules : contains(["tcp", "udp"], r.proto)])
-    error_message = "Every rule's proto must be tcp or udp. Hetzner cloud firewalls also accept icmp/gre/esp, but those take no port and this module renders one for every rule."
+    error_message = "Every rule's proto must be tcp or udp. Fix it in networking.firewall.vps_inbound in infra/config/values/common.yaml, NOT in the generated tfvars. Hetzner cloud firewalls also accept icmp/gre/esp, but those carry no port and this module renders one for every rule, so supporting them is a change to main.tf rather than a wider list here. Refusing is deliberate: the generator must never drop a declared rule on the way to the firewall, because a port an operator believes is open and that never reaches the edge is the exact divergence this spec exists to end."
   }
 }
