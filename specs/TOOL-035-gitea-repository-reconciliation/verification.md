@@ -209,10 +209,33 @@ make provision NODE=bee ENV=prod TAGS=gitea
 Idempotent, and the re-mint is gated on the SOPS key being absent — so the rotation is what opens the
 gate, and a provision with the key present does nothing.
 
-**AC2 is structural rather than observed, deliberately.** The forge currently holds no undeclared
-repository, so there is no stray to report. `test_the_plan_has_no_deletion_field` asserts over
-`dataclasses.fields(ReconcilePlan)` that no field a deletion could travel in exists at all, which
-holds for every future caller — a stronger claim than a fixture that happened not to delete anything.
+**AC2 — observed as well as structural (2026-09-02).** The forge held no stray, so one was made:
+`personal/zz-stray`, created by the bot, empty, undeclared. Both paths that could have removed it were
+then run against it:
+
+```
+$ make gitea-reconcile ENV=prod
+  ? repo personal/zz-stray   undeclared — reported, not removed
+  AC4 ok — hefesto owns: (none)
+  [SUCCESS] forge matches the declaration — nothing to create
+
+$ make gitea-drop-empty REPO=personal/zz-stray ENV=prod
+  [ERROR] personal/zz-stray is not declared in `apps.services.core.gitea.organizations`.
+          Undeclared repositories are reported and never removed (#1076, ADR-065 D3) —
+          being empty does not change that.
+
+  survived: True | empty= True        <- read back afterwards
+```
+
+The second run is the one worth noticing: `zz-stray` **is** empty, so the only thing standing between
+it and deletion was the declaration check. Emptiness does not make someone else's repository ours.
+Removed afterwards through the same basic-auth path the command uses, so the forge is back to
+declared state.
+
+The structural claim still carries the weight for every future caller:
+`test_the_plan_has_no_deletion_field` asserts over `dataclasses.fields(ReconcilePlan)` that no field
+a deletion could travel in exists at all — stronger than a fixture that happened not to delete
+anything.
 
 ## Risk 1 — settled 2026-08-27, against the live instance
 

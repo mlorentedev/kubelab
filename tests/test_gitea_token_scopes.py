@@ -170,6 +170,132 @@ def test_the_admin_requirement_is_derived_from_the_methods_it_performs() -> None
     )
 
 
+#: The methods without which the reconciler cannot do its job at all. An ANCHOR
+#: against emptiness, deliberately NOT a restatement of `ADMIN_METHODS` — copying
+#: the full tuple here would reintroduce the second declaration this file exists to
+#: prevent, and a floor is enough to make vacuity impossible.
+LOAD_BEARING_ADMIN_METHODS = frozenset({"list_orgs", "list_repos"})
+
+
+def test_the_scope_guards_cannot_pass_by_being_empty() -> None:
+    """GUARD THE GUARD, and check the DERIVED artefact rather than an upstream one.
+
+    Measured by mutation on 2026-09-02: setting `ADMIN_METHODS = ()` left **all
+    eight tests in this file green**. `REQUIRED_ADMIN_SCOPES` becomes the empty set,
+    so `REQUIRED - expand_grant(...)` is empty, so the grant check is trivially
+    satisfied — the entire scope apparatus switches off by emptying one tuple, and
+    nothing says so.
+
+    That is the same defect this file was written to cure, one level up. The file's
+    thesis is "a check comparing a hand-written expectation against something that
+    happens to match it proves nothing"; an empty expectation matches EVERYTHING,
+    which is the strongest form of the same failure. It was found because a peer hit
+    the identical shape in `test_traefik_ports_stay_behind_the_firewall.py` (#1565),
+    where a derived set of exposed ports is empty and the ufw comparison is vacuous
+    — and where the file's own anti-vacuity test passes, because it asserts the RAW
+    render is populated rather than the DERIVED set.
+
+    So this asserts on `REQUIRED_ADMIN_SCOPES` and `ADMIN_METHODS` themselves, which
+    is what the other tests consume. Asserting that `SCOPE_BY_METHOD` is populated
+    would repeat the peer's mistake exactly: it is one step upstream and stays full
+    while the thing under test empties.
+    """
+    assert ADMIN_METHODS, (
+        "ADMIN_METHODS is empty, so REQUIRED_ADMIN_SCOPES is the empty set and every scope check in "
+        "this file passes against any grant whatsoever — including one that has been narrowed to "
+        "nothing. An empty expectation matches everything."
+    )
+    assert REQUIRED_ADMIN_SCOPES, "REQUIRED_ADMIN_SCOPES is empty; the grant check cannot fail."
+
+    missing = LOAD_BEARING_ADMIN_METHODS - set(ADMIN_METHODS)
+    assert not missing, (
+        f"ADMIN_METHODS no longer names {sorted(missing)}. The reconciler reads the forge with "
+        f"those, so dropping one both breaks it and silently shrinks the requirement its own scope "
+        f"guard checks. This is a floor, not a copy of the tuple — widening ADMIN_METHODS is "
+        f"expected and does not fail here."
+    )
+
+
+def test_the_method_exhaustiveness_check_cannot_pass_by_being_empty() -> None:
+    """The same trap on the other guard: no methods to check means nothing undeclared.
+
+    `test_every_client_method_declares_the_scope_it_needs` computes `public` by
+    introspecting `GiteaClient`. If that set were ever empty — a refactor moving the
+    methods onto a mixin, a rename of the class — the subtraction yields nothing and
+    the test reports success on a client whose scopes are entirely undeclared.
+    """
+    public = {
+        name for name in vars(GiteaClient) if not name.startswith("_") and callable(getattr(GiteaClient, name, None))
+    }
+    assert len(public) >= len(LOAD_BEARING_ADMIN_METHODS), (
+        f"introspection of GiteaClient found {sorted(public)}, which is too few to be the real "
+        f"client. The exhaustiveness check subtracts this set from SCOPE_BY_METHOD, so an empty or "
+        f"near-empty result makes it pass over a client that declares no scopes at all."
+    )
+
+
+def test_the_superadmin_token_is_never_granted_repository_writes(declared_scopes: dict[str, set[str]]) -> None:
+    """`write:repository` on the ADMIN token would make deletion a standing capability. It must not.
+
+    #1076 refuses deletion STRUCTURALLY — `ReconcilePlan` has no field one could
+    travel in — and `drop-empty` keeps that intact by going through
+    `GiteaBasicAuthClient`, an operator-triggered path with no token behind it.
+
+    That arrangement has one soft spot, and this test is it. Measured 2026-09-02
+    against live prod, `DELETE /repos/<owner>/<repo>` was refused three times, and
+    the three refusals are NOT the same refusal:
+
+        bot token             -> 403 "user should be the owner of the repo"
+        admin token           -> 403 required=[write:repository]
+        superadmin basic auth -> 204
+
+    THE ASYMMETRY IS THE REASON THIS TEST NAMES ONLY ONE TOKEN. The bot already
+    holds `write:repository` — it must, to create repositories at all — and is
+    still refused, because deletion is additionally gated on repository ownership
+    and ADR-065 D1 keeps the bot owning nothing. Scope is not the bot's last line
+    of defence; ownership is. The superadmin's account IS a site admin, so for that
+    token scope is the ONLY remaining gate, and the 403 it received is the entire
+    thing standing between a reconciler credential and `DELETE` on any repository
+    in the forge — populated ones included, since the `empty` guard is client-side
+    and no credential consults it.
+
+    So the obvious "fix" for anyone meeting that 403 — appending the scope here —
+    is the one thing that must not happen quietly. The superset check in this file
+    would not object: widening always passes. If a future caller genuinely needs
+    superadmin repository writes, that is a decision taken deliberately against
+    #1076's scope section, not a word added to a YAML string.
+    """
+    assert "write:repository" not in declared_scopes["admin"], (
+        "the admin token's grant includes `write:repository`, which carries "
+        "`DELETE /repos/<owner>/<repo>`. That account is a site admin, so this scope is the only "
+        "gate left — granting it makes deletion a standing capability of the reconciler's own "
+        "credential (#1076 refuses exactly that). `drop-empty` uses GiteaBasicAuthClient instead, "
+        "so the power exists only for the duration of an operator-run command. If this was added "
+        "to get past a 403 on a delete, that 403 was the design working."
+    )
+
+
+def test_basic_auth_methods_are_exempt_from_the_scope_map() -> None:
+    """`GiteaBasicAuthClient` carries no token, so its methods declare no scope.
+
+    Stated rather than left implicit, because `SCOPE_BY_METHOD` is checked for
+    exhaustiveness against `GiteaClient` and a reader could reasonably wonder
+    whether the subclass was forgotten. It was not: these endpoints reject bearer
+    tokens before the handler runs (`reqBasicOrRevProxyAuth()` in Gitea's
+    `routers/api/v1/api.go`), so a scope is not merely unnecessary, it is
+    meaningless.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+    own = {name for name in vars(GiteaBasicAuthClient) if not name.startswith("_")}
+    assert own, "GiteaBasicAuthClient defines no methods of its own — has it been refactored away?"
+    assert not (own & set(SCOPE_BY_METHOD)), (
+        f"{sorted(own & set(SCOPE_BY_METHOD))} appear in SCOPE_BY_METHOD but are basic-auth "
+        f"methods. Declaring a scope for one implies a token path that does not exist, and would "
+        f"drag that scope into REQUIRED_ADMIN_SCOPES if the method were ever added to ADMIN_METHODS."
+    )
+
+
 def test_every_rotatable_token_has_a_declared_scope(declared_scopes: dict[str, set[str]]) -> None:
     """A token that can be rotated but has no declared grant is re-minted with whatever the playbook guesses.
 

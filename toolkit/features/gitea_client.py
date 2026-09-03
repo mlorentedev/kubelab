@@ -69,6 +69,7 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # `write:admin` is never granted because nothing here needs it.
     "list_orgs": frozenset({"read:admin"}),
     "list_repos": frozenset({"read:repository"}),
+    "get_repo": frozenset({"read:repository"}),
     "whoami": frozenset({"read:user"}),
     "list_owned_repos": frozenset({"read:user"}),
     "get_team": frozenset({"read:organization"}),
@@ -85,6 +86,7 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
 ADMIN_METHODS: tuple[str, ...] = (
     "list_orgs",
     "list_repos",
+    "get_repo",
     "whoami",
     "list_owned_repos",
     "get_team",
@@ -252,6 +254,24 @@ class GiteaClient:
         """
         return {f"{r['owner']['username']}/{r['name']}" for r in self._paginate("/repos/search", key="data")}
 
+    def get_repo(self, owner: str, name: str) -> dict[str, Any] | None:
+        """One repository's metadata, or None when it does not exist.
+
+        Absence is a state, not an error -- same contract as `get_team`. The caller
+        that matters here is `plan_drop`, whose "already absent" branch is what
+        makes dropping idempotent on a second run.
+
+        Read with the LEAST-PRIVILEGED credential that can answer: `read:repository`
+        rather than the basic-auth session that performs the deletion. Reading and
+        deleting deliberately do not share a credential.
+        """
+        try:
+            return dict(self._request("GET", f"/repos/{owner}/{name}"))
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+
     def whoami(self) -> dict[str, Any]:
         """The authenticated account. Used to assert AC4 by consequence, not by assumption."""
         return self._request("GET", "/user")
@@ -371,6 +391,41 @@ class GiteaBasicAuthClient(GiteaClient):
     def list_tokens(self, username: str) -> list[dict[str, Any]]:
         """Every access token on an account. Names and ids only -- Gitea never returns values."""
         return list(self._paginate(f"/users/{username}/tokens"))
+
+    def delete_repo(self, owner: str, name: str) -> bool:
+        """Delete a repository. True if it was there, False if it already was not.
+
+        ON THIS CLASS RATHER THAN THE TOKEN CLIENT, and that placement is the
+        safety property of the whole drop-empty path. Measured against live prod
+        2026-09-02, cheapest privilege first:
+
+            DELETE as bot token             -> 403 "user should be the owner of the repo"
+            DELETE as admin token           -> 403 required=[write:repository]
+            DELETE as superadmin basic auth -> 204
+
+        Two 403s from two DIFFERENT layers -- permission and scope -- which is why
+        the body is read rather than the status code. The obvious fix, widening the
+        admin token with `write:repository`, is the wrong one: any credential that
+        can delete an empty repository can delete a populated one, so it would buy
+        a permanent delete capability on the reconciler's own token in exchange for
+        removing three shells once. That capability is what #1076 refuses
+        structurally, and a scope guard would not have objected -- the superset
+        check passes on any widening.
+
+        Basic auth is already the documented path for what Gitea refuses to tokens
+        (`revoke_token` above), and ADR-062 keeps machine credentials reversible in
+        SOPS precisely so automation can use them. It grants nothing durable.
+
+        IDEMPOTENT BY 404, same contract as `revoke_token`: a name that matches
+        nothing is the desired end state, not an error.
+        """
+        try:
+            self._request("DELETE", f"/repos/{owner}/{name}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return True
 
     def revoke_token(self, username: str, token_name: str) -> bool:
         """Delete a named token. True if it was there, False if it already was not.
