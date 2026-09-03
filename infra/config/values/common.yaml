@@ -1006,6 +1006,59 @@ apps:
           cpu_reservation: "1.0"
           memory_reservation: 2G
 
+      # Gitea Actions runner (TOOL-035 PR3). A SIBLING of github_runner above, not a
+      # replacement: the two forges speak different protocols. Gitea exposes its own
+      # gRPC service (`routers/api/actions/runner/runner.go`) and act_runner is its
+      # only client, so a GitHub runner on this node can never pick up a Gitea job
+      # however close it sits.
+      gitea_runner:
+        name: act-runner
+        image: gitea/act_runner:0.2.13
+        # `ubuntu-latest` DOES NOT EXIST on a self-hosted forge -- Gitea has no hosted
+        # runners, so the label is only ever what act_runner declares. Every workflow
+        # migrated from GitHub asks for it, and a job matching no runner is QUEUED
+        # FOREVER rather than failed: no error, no red check, nothing to notice. That
+        # is why this mapping is asserted by a test rather than left to be discovered
+        # by a pipeline that never starts.
+        #
+        # `catthehacker/ubuntu` is the de-facto image for this because it approximates
+        # GitHub's hosted runner image, which migrated workflows assume the tools of.
+        # Gitea's OWN runner image, not catthehacker: `act_runner generate-config`
+        # ships exactly this mapping as its default (read from the image, not from
+        # memory). First-party, and it is what the project documents.
+        labels: "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
+        # How many jobs run AT ONCE on this node. 1 is act_runner's own default and
+        # it is kept deliberately: with several PRs open, jobs QUEUE instead of
+        # competing for an 8 GB box that also hosts the forge they build for. Raising
+        # this is the single knob that turns parallel CI into an out-of-memory event,
+        # so it is declared rather than inherited.
+        capacity: 1
+        # Bounds the JOB containers, which is a different thing from the runner's own
+        # `resources` below. act_runner is a 43 MB binary that orchestrates; the
+        # multi-GB `runner-images` container it spawns per job is a SIBLING on the
+        # same daemon and inherits none of the runner's compose limits. Without this,
+        # the limit below bounds the wrong process entirely.
+        container_options: "--memory=3g --cpus=2"
+        # Retention for what Actions accumulates INSIDE Gitea. Separate problem from
+        # Docker layers on the node (which `node_maintenance` already prunes) and with
+        # a separate mechanism: these grow in Gitea's data volume, which is the one
+        # backed up to R2. Gitea's defaults are generous; declared here so the first
+        # job runs against a bounded store rather than a growing one.
+        log_retention_days: 30
+        artifact_retention_days: 14
+        run_retention_days: 30
+        resources:
+          # The DAEMON's limits, and it is tiny -- the image is 43.6 MB (measured on
+          # the Beelink) and its job is to poll Gitea and drive the Docker socket.
+          # My first draft gave it 3G, which bounded a 43 MB process while leaving
+          # the multi-GB job container it spawns unbounded: the wrong process, and
+          # 3G of an 8 GB node reserved against nothing. Job containers are bounded
+          # by `container_options` above.
+          cpu_limit: "0.5"
+          memory_limit: 512M
+          cpu_reservation: "0.1"
+          memory_reservation: 128M
+
       apprise:
         name: apprise
         image: caronc/apprise:1.5.0

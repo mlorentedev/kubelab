@@ -311,6 +311,19 @@
         runner_labels: "{{ config.apps.services.automation.github_runner.labels }}"
         runner_cpu_limit: "{{ config.apps.services.automation.github_runner.resources.cpu_limit }}"
         runner_memory_limit: "{{ config.apps.services.automation.github_runner.resources.memory_limit }}"
+        # Gitea Actions runner (TOOL-035 PR3). A sibling of the GitHub runner
+        # above, never a replacement -- the two forges speak different protocols
+        # and neither runner can serve the other's jobs.
+        act_runner_image: "{{ config.apps.services.automation.gitea_runner.image }}"
+        act_runner_token: "{{ secrets.apps.services.automation.gitea_runner.registration_token | default('', true) }}"
+        act_runner_labels: "{{ config.apps.services.automation.gitea_runner.labels }}"
+        act_runner_capacity: "{{ config.apps.services.automation.gitea_runner.capacity }}"
+        act_runner_container_options: "{{ config.apps.services.automation.gitea_runner.container_options }}"
+        act_runner_cpu_limit: "{{ config.apps.services.automation.gitea_runner.resources.cpu_limit }}"
+        act_runner_memory_limit: "{{ config.apps.services.automation.gitea_runner.resources.memory_limit }}"
+        act_runner_log_retention_days: "{{ config.apps.services.automation.gitea_runner.log_retention_days }}"
+        act_runner_artifact_retention_days: "{{ config.apps.services.automation.gitea_runner.artifact_retention_days }}"
+        act_runner_run_retention_days: "{{ config.apps.services.automation.gitea_runner.run_retention_days }}"
 
     - role: ../roles/glances
       tags: [monitoring, glances]

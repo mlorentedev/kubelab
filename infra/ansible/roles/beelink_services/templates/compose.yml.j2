@@ -61,6 +61,26 @@ services:
       GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
       GITEA__log__MODE: "console"
       GITEA__log__LEVEL: "Info"
+      # Actions is ENABLED BY DEFAULT (`modules/setting/actions.go` sets
+      # `Enabled: true`), and measured so on the running instance before this ran:
+      # `/api/v1/repos/personal/resume/actions/tasks` -> 200, and `has_actions=True`
+      # on both migrated repositories. So this line changes nothing today and is
+      # here because ADR-065 D3 says declared, not remembered — an undeclared
+      # setting that happens to default correctly is one image bump from flipping.
+      #
+      # NOTE for whoever verifies this: a variable matching the running default
+      # produces a byte-identical container, so Docker will not recreate it and
+      # `changed=0` proves nothing about whether it took effect. Read the value
+      # back from INSIDE the container, never from this file or the changed count.
+      GITEA__actions__ENABLED: "true"
+      # Retention for what Actions accumulates inside Gitea's data volume — the one
+      # backed up to R2. A separate problem from Docker layers on the node, which
+      # `node_maintenance` prunes on a timer, and with a separate mechanism. Set
+      # BEFORE the first job runs, so the store is bounded from the start rather
+      # than trimmed once someone notices it growing.
+      GITEA__actions__LOG_RETENTION_DAYS: "{{ act_runner_log_retention_days }}"
+      GITEA__actions__ARTIFACT_RETENTION_DAYS: "{{ act_runner_artifact_retention_days }}"
+      GITEA__actions__RUN_RETENTION_DAYS: "{{ act_runner_run_retention_days }}"
       GITEA__security__SECRET_KEY: "{{ gitea_secret_key }}"
       GITEA__security__INSTALL_LOCK: "true"
       # Consumed by gitea-bootstrap.sh, not by Gitea itself.
@@ -124,6 +144,47 @@ services:
     networks:
       - kubelab
 
+  act-runner:
+    image: {{ act_runner_image }}
+    container_name: act-runner
+    restart: {{ restart_policy }}
+    depends_on:
+      - gitea
+    environment:
+      # The instance URL, not the public domain: the runner reaches Gitea over the
+      # compose network, so it does not depend on DNS, TLS or the tailnet being up
+      # to poll for work. A runner that cannot register when the VPN is down is a
+      # runner that fails exactly when the node has just booted.
+      # Port 3000 is the CONTAINER port, not `gitea_http_port` -- that one is the
+      # host-side publication bound to the Tailscale IP, and it does not exist on
+      # this network. Using it here would fail only at runtime, and only on a node
+      # where the two happen to differ.
+      GITEA_INSTANCE_URL: "http://gitea:3000"
+      # Minted by `gitea actions generate-runner-token` and recorded in SOPS. Never
+      # a literal here -- this template is committed.
+      GITEA_RUNNER_REGISTRATION_TOKEN: "{{ act_runner_token }}"
+      GITEA_RUNNER_NAME: "kubelab-bee-gitea"
+      # Labels, capacity and the job-container limits live in the mounted
+      # config.yaml, not here: the env vars cannot express `capacity` or
+      # `container.options`, and splitting the runner's configuration across two
+      # mechanisms is how one half silently stops being read.
+      CONFIG_FILE: /config.yaml
+    volumes:
+      # Jobs run as sibling containers on this daemon, so the socket is required
+      # rather than convenient: four of the six jobs in resume's ci.yml build
+      # images. Same mount, and the same accepted trade-off, as github-runner below
+      # (ADR-030).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - act_runner_data:/data
+      - {{ beelink_deploy_dir }}/act-runner-config.yaml:/config.yaml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ act_runner_cpu_limit }}"
+          memory: "{{ act_runner_memory_limit }}"
+    networks:
+      - kubelab
+
   github-runner:
     image: {{ runner_image }}
     container_name: github-runner
@@ -153,6 +214,8 @@ services:
 # and the GitHub Actions Runner.
 
 volumes:
+  act_runner_data:
+    name: act_runner_data
   runner_data:
     name: github_runner_data
   runner_toolcache:

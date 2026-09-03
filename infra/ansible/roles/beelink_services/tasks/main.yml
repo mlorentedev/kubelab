@@ -108,6 +108,26 @@
   notify: Restart gitea
   tags: [gitea]
 
+- name: Install the act_runner configuration
+  template:
+    src: act-runner-config.yaml.j2
+    dest: "{{ beelink_deploy_dir }}/act-runner-config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  # Same single-file bind mount as the bootstrap script above, and therefore the
+  # same inode trap (ANSIBLE-054, #1400): `template` writes through a tempfile
+  # and a rename, so the host gets a NEW inode while the running container keeps
+  # the old one. A changed config would report success and not be read until
+  # something else happened to restart the container. The notify is what closes
+  # that, and it is load-bearing rather than tidy.
+  #
+  # No secret in this file, deliberately — it is mode 0644 and holds only
+  # capacity, labels and container options. The registration token reaches the
+  # runner through the environment, which is why the two are split.
+  notify: Restart act-runner
+  tags: [gitea, runner]
+
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
 - name: Install the Tailscale address wait helper
   copy:
@@ -330,6 +350,49 @@
   changed_when: true
   no_log: true
   tags: [gitea]
+
+- name: Mint the Gitea Actions runner registration token
+  # GATED, and the gate is load-bearing in a way the bot token's is not.
+  #
+  # `models/actions/runner_token.go`: generating a registration token "reuses the
+  # latest active token or creates a new one, INVALIDATING ALL PRIOR TOKENS for
+  # the same scope". So an ungated mint does not merely churn a value — it
+  # revokes the token the RUNNING runner registered with, and Gitea then rejects
+  # it (`runner registration token has been invalidated`). Re-provisioning this
+  # node would deregister its own runner as a side effect of a task that reports
+  # SUCCESS: the playbook goes green, CI stops picking up jobs, and the cause is
+  # a token mint several tasks earlier that nobody associates with a runner going
+  # offline.
+  #
+  # `argv` for the same reason as the mint above: the string form loses the inner
+  # `su git -c` quoting through YAML folding plus argv splitting, and a partial
+  # invocation of a token command is the worst possible failure — it creates a
+  # credential while reporting failure.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - gitea actions generate-runner-token
+  register: _act_runner_token
+  when: not act_runner_token
+  changed_when: _act_runner_token.rc == 0
+  no_log: true
+  tags: [gitea, runner]
+
+- name: Record the runner registration token in SOPS
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.automation.gitea_runner.registration_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _act_runner_token.stdout | trim }}"
+  delegate_to: localhost
+  become: false
+  when: not act_runner_token
+  changed_when: true
+  no_log: true
+  tags: [gitea, runner]
 
 - name: Probe whether the recorded admin password still authenticates
   # THE FLOOR OF THE RECOVERY CHAIN, and the reason it is a probe and not a

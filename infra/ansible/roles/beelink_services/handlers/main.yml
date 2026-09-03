@@ -41,3 +41,15 @@
   delay: 3
   register: _gitea_post_restart
   until: _gitea_post_restart is success
+
+# Deliberately NOT "Restart beelink services", for the same blast-radius reason
+# the gitea handler above gives: a change to the runner's config must not bounce
+# Gitea, MinIO and the GitHub runner alongside it.
+#
+# `docker restart` rather than `compose up -d`: the config is a single-file bind
+# mount, so a `template` rewrite hands the host a new inode while the running
+# container keeps the old one. A restart is what re-resolves the mount, and
+# without it a changed config reports success and is never read (ANSIBLE-054).
+- name: Restart act-runner
+  command: docker restart act-runner
+  changed_when: true

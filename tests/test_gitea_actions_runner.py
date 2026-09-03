@@ -44,6 +44,12 @@ RUNNER_SERVICE = "act-runner"
 GITHUB_HOSTED_LABEL = "ubuntu-latest"
 
 
+def _ssot() -> dict:
+    """The runner's declaration, read once and shared by both renderers."""
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    return common["apps"]["services"]["automation"]["gitea_runner"]
+
+
 def _render() -> dict:
     """Render the Beelink compose template and parse it as YAML.
 
@@ -53,6 +59,7 @@ def _render() -> dict:
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
     gitea = common["apps"]["services"]["core"]["gitea"]
+    runner = common["apps"]["services"]["automation"]["gitea_runner"]
 
     return yaml.safe_load(
         env.get_template(COMPOSE_TEMPLATE).render(
@@ -76,6 +83,11 @@ def _render() -> dict:
             gitea_oidc_client_secret="x",
             gitea_lfs_jwt_secret="x",
             gitea_internal_token="x",
+            gitea_health_path=gitea["health_path"],
+            gitea_oidc_discovery_url="https://auth.kubelab.live/.well-known/openid-configuration",
+            gitea_cpu_limit=gitea["resources"]["cpu_limit"],
+            gitea_memory_limit=gitea["resources"]["memory_limit"],
+            beelink_minio_data_dir="/opt/minio/data",
             minio_image="minio/minio",
             minio_api_port=9000,
             minio_console_port=9001,
@@ -91,11 +103,16 @@ def _render() -> dict:
             runner_labels="self-hosted,linux,docker",
             runner_cpu_limit="2",
             runner_memory_limit="2G",
-            act_runner_image="gitea/act_runner:0.2.13",
+            # From the SSOT rather than literals: the label mapping is the thing
+            # under test, so a copy here would assert the test against itself.
+            act_runner_image=runner["image"],
             act_runner_token="x",
-            act_runner_cpu_limit="2",
-            act_runner_memory_limit="2G",
-            act_runner_labels=f"{GITHUB_HOSTED_LABEL}:docker://catthehacker/ubuntu:act-22.04",
+            act_runner_cpu_limit=runner["resources"]["cpu_limit"],
+            act_runner_memory_limit=runner["resources"]["memory_limit"],
+            act_runner_labels=runner["labels"],
+            act_runner_log_retention_days=runner["log_retention_days"],
+            act_runner_artifact_retention_days=runner["artifact_retention_days"],
+            act_runner_run_retention_days=runner["run_retention_days"],
             docker_dns_servers=["100.100.100.100", "1.1.1.1"],
         )
     )
@@ -112,6 +129,20 @@ def _runner() -> dict:
     return services[RUNNER_SERVICE]
 
 
+def _config() -> dict:
+    """The rendered act_runner config.yaml, parsed."""
+    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
+    runner = _ssot()
+    return yaml.safe_load(
+        env.get_template("act-runner-config.yaml.j2").render(
+            ansible_managed="Ansible managed",
+            act_runner_capacity=runner["capacity"],
+            act_runner_labels=runner["labels"],
+            act_runner_container_options=runner["container_options"],
+        )
+    )
+
+
 def test_the_runner_advertises_the_github_hosted_label() -> None:
     """A migrated workflow says `runs-on: ubuntu-latest`, which Gitea does not define.
 
@@ -119,13 +150,48 @@ def test_the_runner_advertises_the_github_hosted_label() -> None:
     Without the mapping, `runs-on: ubuntu-latest` matches no runner and the job waits
     indefinitely — no error, no failed check, nothing to notice.
     """
-    rendered = yaml.safe_dump(_runner())
+    labels = _config()["runner"]["labels"]
 
-    assert GITHUB_HOSTED_LABEL in rendered, (
-        f"the runner declares no `{GITHUB_HOSTED_LABEL}` label. Every workflow "
-        "migrated from GitHub asks for it, and a job matching no runner is queued "
-        "forever rather than reported as failed."
+    assert any(str(label).startswith(f"{GITHUB_HOSTED_LABEL}:") for label in labels), (
+        f"no label maps `{GITHUB_HOSTED_LABEL}` to an image; got {labels}. Every "
+        "workflow migrated from GitHub asks for it, and a job matching no runner is "
+        "queued forever rather than reported as failed."
     )
+
+
+def test_only_one_job_runs_at_a_time() -> None:
+    """Capacity is the knob that turns several open PRs into an out-of-memory event.
+
+    The Beelink is 8 GB and also hosts the forge these jobs build for. With capacity
+    1 the jobs queue, which on this hardware is the correct answer rather than a
+    limitation — so it is declared rather than inherited from a default that a future
+    act_runner release is free to change.
+    """
+    capacity = int(_config()["runner"]["capacity"])
+
+    assert capacity == 1, (
+        f"capacity is {capacity}. Each concurrent job is a multi-GB container on an "
+        "8 GB node that also runs Gitea, MinIO and the GitHub runner. Raising this "
+        "needs a memory calculation, not a convenience."
+    )
+
+
+def test_the_job_containers_are_bounded_not_just_the_runner() -> None:
+    """The runner's compose limit bounds a 43 MB process, not the build.
+
+    A job container is a SIBLING started on the host daemon through the mounted
+    socket. It is not a child of act_runner and inherits none of its
+    `deploy.resources`. `container.options` is the only thing that bounds it, and
+    without this assertion the compose limit reads as protection while the process
+    that actually consumes the node is unlimited.
+    """
+    options = str(_config()["container"]["options"] or "")
+
+    assert "--memory" in options, (
+        f"container.options has no --memory: {options!r}. The runner's own compose "
+        "limit does not reach the job container."
+    )
+    assert "--cpus" in options, f"container.options has no --cpus: {options!r}"
 
 
 def test_the_registration_token_is_injected_not_literal() -> None:

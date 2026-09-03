@@ -931,6 +931,40 @@ SECRET_CATALOG: list[SecretSpec] = [
         # said ace2, which would send a rotation to the wrong host.
         rotate_note="Re-provision beelink (Ansible). Token must have repo + workflow scope.",
     ),
+    SecretSpec(
+        key_path="apps.services.automation.gitea_runner.registration_token",
+        description="Gitea Actions runner registration token (act_runner on the Beelink)",
+        # EXTERNAL for the same reason as `gitea.bot_token` above: the value is minted
+        # BY Gitea and only Gitea can honour it, so `secrets init` must never generate
+        # one. A locally generated 40-character string would look entirely valid, pass
+        # every audit, and register nothing — this repository has already paid for that
+        # lesson once (a token that authenticated nowhere while every signal was green).
+        kind=SecretKind.EXTERNAL,
+        # NEVER, and the distinction matters: this token carries no expiry date and
+        # no issuer can be asked for one, so `PROVIDER` would make the expiry checker
+        # go looking for an answer that does not exist. It is nonetheless REVOCABLE —
+        # generating another registration token for the same scope invalidates it —
+        # which is a different axis from expiry and is covered by `rotate_note`.
+        # Leaving it UNKNOWN was the honest default and is what the classification
+        # guard caught; recording the reason is what closes it.
+        expiry=Expiry.NEVER,
+        services=("act-runner", "gitea"),
+        # `envs` is the AUDIT dimension, not the storage location (ANSIBLE-033). The
+        # forge is prod-identity even though the node is provisioned with
+        # deploy_env=staging -- ADR-061's axes are independent -- so this follows the
+        # other gitea.* machine credentials.
+        envs=("prod",),
+        # NOT rotatable by re-running the mint. Gitea's
+        # `models/actions/runner_token.go` invalidates every prior token for the same
+        # scope, so minting a replacement revokes the one the RUNNING runner holds
+        # and deregisters it. To rotate deliberately: unset this key, re-provision to
+        # mint, then recreate the act-runner container so it registers with the new
+        # value. Doing it in the other order leaves CI silently offline.
+        rotate_note=(
+            "toolkit secrets unset apps.services.automation.gitea_runner.registration_token "
+            "--env prod, then `make provision NODE=bee ENV=prod`, then recreate act-runner."
+        ),
+    ),
     # Dev-node machine identity (ANSIBLE-033, ADR-058 D1/D3). Lives in
     # common.enc.yaml, NOT per-env: it authenticates ace2 to GitHub, and GitHub is
     # not an environment. Audited under `staging` because that is the env ace2
