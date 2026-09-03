@@ -1250,6 +1250,30 @@ wait-node-ready:
 # Same rule the notification path already follows for the same reason
 # (ANSIBLE-038 f4): a credential belongs on stdin or in the environment of the
 # process that consumes it, never as an argument.
+# SEC-006. Plan is safe and reversible; apply CREATES a firewall and ATTACHES it
+# to the running production VPS. There is deliberately no -auto-approve on the
+# apply: an allow-list mistake here is not a degraded service, it is an operator
+# locked out of a host whose recovery path (Headscale) is on that same host.
+# Read the plan. Hetzner's web console is the only way back in.
+#
+# The token goes into the child process's environment, never an argument
+# (ANSIBLE-038 f4), matching tf-dns-* below. The allow-list is NOT a secret and
+# comes from common.yaml via the generator, so it shows up in the diff.
+.PHONY: tf-vps-firewall-plan tf-vps-firewall-apply
+tf-vps-firewall-plan:
+	@$(POETRY) run toolkit infra terraform vps-firewall-tfvars
+	@TF_VAR_hetzner_api_token=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_hetzner_api_token && \
+		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
+		terraform plan
+
+tf-vps-firewall-apply:
+	@$(POETRY) run toolkit infra terraform vps-firewall-tfvars
+	@TF_VAR_hetzner_api_token=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_hetzner_api_token && \
+		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
+		terraform apply
+
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \

@@ -37,6 +37,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ROLE = REPO_ROOT / "infra/ansible/roles/k3s_server"
 TEMPLATE = ROLE / "templates/traefik-helmconfig.yaml.j2"
 BASE_SYSTEM_DEFAULTS = REPO_ROOT / "infra/ansible/roles/base_system/defaults/main.yml"
+COMMON_VALUES = REPO_ROOT / "infra/config/values/common.yaml"
 
 
 def _role_defaults() -> dict:
@@ -70,9 +71,27 @@ def _render(acme_enabled: bool) -> dict:
 
 
 def _firewall_allowed_tcp_ports() -> set[int]:
-    """TCP ports ufw opens fleet-wide, from the base_system role's own defaults."""
-    data = yaml.safe_load(BASE_SYSTEM_DEFAULTS.read_text(encoding="utf-8")) or {}
-    return {int(rule["port"]) for rule in data.get("firewall_allowed_ports", []) if rule.get("proto") == "tcp"}
+    """TCP ports the VPS accepts inbound, from the SSOT that now governs it.
+
+    SEC-006 moved the VPS's allow-list to `networking.firewall.vps_inbound` in
+    common.yaml, because it had been declared twice -- here in the role default
+    and again in infra/terraform/compute/ -- and the two disagreed. Reading the
+    role default now would answer for the *fleet*, not for the VPS this test is
+    about, and would keep passing while the list that actually governs prod
+    drifted. That is the failure this whole file exists to prevent, so the test
+    follows the SSOT rather than the file it used to live in.
+
+    The cloud firewall reads the same key, and it is the layer that holds: ufw
+    cannot restrict a published port (#959), which is mechanism 2 above.
+    """
+    data = yaml.safe_load(COMMON_VALUES.read_text(encoding="utf-8")) or {}
+    rules = data.get("networking", {}).get("firewall", {}).get("vps_inbound", [])
+    assert rules, (
+        "networking.firewall.vps_inbound is missing from common.yaml. It is the SSOT for "
+        "what the VPS accepts from the internet (SEC-006); without it this test would "
+        "silently compare against an empty set and pass for the wrong reason."
+    )
+    return {int(rule["port"]) for rule in rules if rule.get("proto") == "tcp"}
 
 
 def _exposed_ports(values: dict) -> dict[str, int]:

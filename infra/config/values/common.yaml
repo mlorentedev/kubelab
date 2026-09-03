@@ -38,6 +38,40 @@ networking:
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
 
+  # SEC-006: the VPS inbound allow-list, declared ONCE and read by two layers.
+  #
+  # Consumers:
+  #   - infra/terraform/vps-firewall/  → the Hetzner cloud firewall. This is the
+  #     layer that actually holds: it is enforced at Hetzner's edge, BEFORE the
+  #     host's DNAT, so it can restrict a Docker- or klipper-lb-published port.
+  #   - provision.yml → base_system's `firewall_allowed_ports` (ufw), for the vps
+  #     host only. Every other node keeps the role's fleet-wide default; the VPS
+  #     is the only node with a public IP and so the only one declared here.
+  #
+  # ufw is kept in step for defence in depth, but do NOT mistake it for the
+  # control: a ufw rule CANNOT restrict a published port (#959 — Docker's DNAT
+  # runs in PREROUTING, before ufw's filter chains, and DOCKER-USER is empty on
+  # every node in the fleet). That gap is precisely why SEC-005 happened.
+  #
+  # Editing this list changes what prod accepts from the internet. Removing an
+  # entry is enforced at the cloud edge and WILL drop live traffic — unlike the
+  # ufw side, where removing a published port's entry is a no-op. Read
+  # specs/SEC-006-cloud-firewall-for-running-vps/proposal.md before touching it.
+  firewall:
+    vps_inbound:
+    - { port: 22, proto: tcp, description: "SSH" }
+    - { port: 80, proto: tcp, description: "HTTP — Traefik, ACME http-01" }
+    - { port: 443, proto: tcp, description: "HTTPS — Traefik" }
+    # Headscale's embedded DERP STUN endpoint. NOT the relay: the relay is
+    # served over 443 (roles/headscale/templates/config.yaml.j2 — the derp block
+    # names 0.0.0.0:3478 as its only UDP listener). Measured 2026-09-02 from a
+    # tailnet client: the embedded region answers at 167.5ms, the slowest of
+    # every region offered, against 24.6ms for the nearest public one, and is
+    # never selected from that client. Retiring it is a capability change with
+    # its own ticket; SEC-006 preserves current behaviour deliberately.
+    - { port: 3478, proto: udp, description: "Headscale DERP STUN" }
+    - { port: 41641, proto: udp, description: "Tailscale WireGuard" }
+
   # SSOT-014a: SSH user per node category. Consumers infer category by YAML
   # position (vps + aws → cloud; nodes.* → homelab). Per-node `ssh_user` field
   # remains supported as an override (currently unused — no node deviates from
