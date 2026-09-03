@@ -1274,6 +1274,15 @@ tf-vps-firewall-apply:
 		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
 		terraform apply
 
+# The only check that can tell an APPLIED firewall from a DECLARED one. The
+# token goes into pytest's environment and nowhere else -- never printed, never
+# an argument, so it stays out of shell history and out of transcripts.
+.PHONY: test-vps-firewall-live
+test-vps-firewall-live:
+	@HCLOUD_TOKEN=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
+		export HCLOUD_TOKEN && \
+		$(POETRY) run pytest tests/test_vps_cloud_firewall_is_attached.py -m infra -v --no-cov
+
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \

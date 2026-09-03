@@ -134,12 +134,31 @@ class TestTheFirewallIsLive:
 
     @pytest.fixture(scope="class")
     def attached_rules(self) -> set[tuple[int, str]]:
+        """Read the firewall from Hetzner and return its inbound {(port, proto)}.
+
+        A NOTE ON THE RESPONSE SHAPE. This was written without a token to hand,
+        so the field layout below is believed, not confirmed. Every access is
+        therefore asserted rather than defaulted: no `.get(x) or .get(y)`
+        fallback chain, no `isinstance` hedge. A hedged read of an API whose
+        shape you guessed does not fail when the guess is wrong -- it quietly
+        selects the branch that happens to parse and certifies the belief. That
+        is #1546's FakeClient, which echoed a `permission` value no real Gitea
+        returns and kept fourteen tests green over a dead capability.
+
+        So: if the shape is wrong, the first run with a real token fails and
+        says which key was missing. That is the intended behaviour, not a bug
+        to work around -- correct the accessor, do not add a fallback.
+        """
         token = os.environ.get("HCLOUD_TOKEN")
         if not token:
             pytest.skip(
-                "HCLOUD_TOKEN not set. This is the only check that can tell an "
-                "applied firewall from a declared one; skipping it leaves that "
-                "unverified. Run: HCLOUD_TOKEN=$(make secrets-show KEY=hetzner.api_key ...)"
+                "HCLOUD_TOKEN not set, so the live check did not run. Nothing else "
+                "in this repo can tell an applied firewall from a declared one, so "
+                "this skip means prod's firewall is UNVERIFIED -- not that it is "
+                "fine. Run `make test-vps-firewall-live`, which injects the token "
+                "from SOPS into this process's environment. Do not export it by "
+                "hand from `make secrets-show`: that puts a live credential in your "
+                "shell history and in any transcript it is pasted into."
             )
 
         import httpx
@@ -150,10 +169,20 @@ class TestTheFirewallIsLive:
         headers = {"Authorization": f"Bearer {token}"}
         with httpx.Client(base_url="https://api.hetzner.cloud/v1", headers=headers, timeout=20) as c:
             servers = c.get("/servers", params={"name": server_name}).raise_for_status().json()
-            assert servers["servers"], f"No Hetzner server named {server_name!r} in this account."
+            assert servers.get("servers"), f"No Hetzner server named {server_name!r} in this account."
             server = servers["servers"][0]
 
-            attached = server.get("public_net", {}).get("firewalls") or server.get("firewalls") or []
+            assert "public_net" in server, (
+                "Hetzner's server object has no `public_net` key. The response shape "
+                f"assumed by this test is wrong; the keys present are {sorted(server)}. "
+                "Fix the accessor to match the real API -- do NOT add a fallback."
+            )
+            attached = server["public_net"].get("firewalls")
+            assert attached is not None, (
+                "`public_net` has no `firewalls` key. Shape assumption is wrong; keys "
+                f"present are {sorted(server['public_net'])}. Fix the accessor."
+            )
+
             assert attached, (
                 f"The production VPS ({server_name}) has NO cloud firewall attached. "
                 "This is the exact state SEC-006 was opened to fix (#1557): every port "
@@ -161,12 +190,21 @@ class TestTheFirewallIsLive:
                 "cover a published port (#959). Run `make tf-vps-firewall-apply`."
             )
 
-            fw_id = attached[0]["id"] if isinstance(attached[0], dict) else attached[0]
-            fw = c.get(f"/firewalls/{fw_id}").raise_for_status().json()["firewall"]
+            entry = attached[0]
+            assert isinstance(entry, dict) and "id" in entry, (
+                f"Expected each entry of public_net.firewalls to be an object with an "
+                f"`id`; got {entry!r}. Fix the accessor to match the real API."
+            )
+            fw = c.get(f"/firewalls/{entry['id']}").raise_for_status().json()["firewall"]
+
+        assert "rules" in fw, (
+            f"The firewall object has no `rules` key; keys present are {sorted(fw)}. "
+            "Fix the accessor."
+        )
 
         return {
             (int(r["port"]), str(r["protocol"]).lower())
-            for r in fw.get("rules", [])
+            for r in fw["rules"]
             if r.get("direction") == "in" and r.get("port")
         }
 
