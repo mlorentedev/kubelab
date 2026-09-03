@@ -75,6 +75,22 @@ class FakeClient:
         self.calls.append(("create_repo", f"{org}/{name}"))
         return {"name": name}
 
+    def migrate_repo(
+        self,
+        org: str,
+        name: str,
+        clone_addr: str,
+        service: str,
+        auth_token: str,
+        private: bool = True,
+    ) -> dict[str, Any]:
+        # The credential is recorded so a test can assert it was PASSED rather than
+        # merely accepted -- a migration that silently ran unauthenticated would
+        # succeed against a public source and fail against every private one, which
+        # is all three of the declared repositories.
+        self.calls.append(("migrate_repo", f"{org}/{name}", clone_addr, service, auth_token))
+        return {"name": name}
+
     def get_team(self, org: str, name: str) -> dict[str, Any] | None:
         return self._teams.get((org, name))
 
@@ -362,3 +378,111 @@ def test_a_run_with_no_failures_reports_ok() -> None:
     report = execute(_two_org_plan(), admin, bot, bot_username="hefesto")
 
     assert report.ok and report.failures == []
+
+
+# =============================================================================
+# Migration (PR2, AC3) -- the path that replaces "create it empty"
+# =============================================================================
+
+
+def test_a_migration_is_performed_by_the_bot_with_the_source_credential():
+    """The actor is the bot (ADR-065 D1) and the credential reaches the call.
+
+    Both halves asserted, because each fails silently on its own. A migration run
+    as the superadmin would put the machine identity's repositories under an
+    account D1 says owns nothing; a migration run without `auth_token` would
+    succeed against a public source and fail against every private one -- and all
+    three declared repositories are private.
+    """
+    admin, bot = FakeClient("admin"), FakeClient("bot")
+    plan = ReconcilePlan(
+        repos_to_migrate=(
+            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
+        )
+    )
+
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN")
+
+    assert report.repos_migrated == ["personal/resume"]
+    assert report.ok
+    assert ("migrate_repo", "personal/resume", "https://github.com/mlorentedev/resume.git", "github", "TOKEN") in bot.calls
+    assert not [c for c in admin.calls if c[0] == "migrate_repo"], "the superadmin must not migrate (D1)"
+
+
+def test_a_migration_without_a_credential_fails_loudly_rather_than_running_open():
+    """No token means refused, never attempted.
+
+    Attempting anyway would 404 against a private source -- GitHub does not confirm
+    existence to an unauthorised caller -- and "the repository is gone" is exactly
+    the wrong lesson to draw from that, as this spec's own AC5 measurement records.
+    """
+    admin, bot = FakeClient("admin"), FakeClient("bot")
+    plan = ReconcilePlan(
+        repos_to_migrate=(
+            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
+        )
+    )
+
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token=None)
+
+    assert not report.ok
+    assert report.repos_migrated == []
+    assert not [c for c in bot.calls if c[0] == "migrate_repo"]
+    assert "migration credential" in report.failures[0][1]
+
+
+def test_an_organization_receiving_only_a_migration_still_gets_the_write_team():
+    """The bot needs the team to create a repository, and a migration creates one.
+
+    Team preparation used to iterate `repos_to_create` alone. An organization whose
+    only declared repository is a migration would then have been skipped, and the
+    migration refused with the same "not allowed to create repository in
+    organization" 403 that Risk 1 spent a session diagnosing.
+    """
+    admin, bot = FakeClient("admin"), FakeClient("bot")
+    plan = ReconcilePlan(
+        repos_to_migrate=(
+            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
+        )
+    )
+
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN")
+
+    assert report.teams_ensured == ["personal"]
+
+
+def test_an_unknown_migration_service_is_refused_before_the_call():
+    """Gitea falls back to a plain git clone on an unrecognised `service`.
+
+    That drops issues, pull requests, labels, milestones and releases while
+    reporting success -- so AC3 would be false and nothing would say so. Refused
+    here instead, and the repository is reported as failed rather than migrated.
+    """
+    admin, bot = FakeClient("admin"), FakeClient("bot")
+    plan = ReconcilePlan(
+        repos_to_migrate=(
+            DeclaredRepo(org="personal", name="resume", migrate_from="bitbucket:someone/resume"),
+        )
+    )
+
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN")
+
+    assert not report.ok
+    assert report.repos_migrated == []
+    assert not [c for c in bot.calls if c[0] == "migrate_repo"]
+    assert "unknown migration service" in report.failures[0][1]
+
+
+def test_the_migration_body_never_carries_the_credential_in_the_clone_address():
+    """`auth_token` is a body field, not part of the URL.
+
+    A credential inside `clone_addr` persists in Gitea's stored remote and surfaces
+    in any error that echoes the address back -- and `GiteaError` echoes response
+    bodies verbatim by design.
+    """
+    from toolkit.features.gitea_repos import parse_migration_source
+
+    service, clone_addr = parse_migration_source("github:mlorentedev/resume")
+    assert service == "github"
+    assert clone_addr == "https://github.com/mlorentedev/resume.git"
+    assert "@" not in clone_addr and "token" not in clone_addr.lower()

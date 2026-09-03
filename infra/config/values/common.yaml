@@ -905,11 +905,24 @@ apps:
         # exclusion is in ADR-065 (`knowledge` is the vault and its canonical
         # remote must not depend on an on-demand node; the 36 archived repos are
         # 81% of the bytes and cannot change, so their RPO is infinite).
+        # `migrate_from` is `<service>:<owner>/<name>` and it is what makes the
+        # difference between MOVING a repository and creating an empty shell where
+        # it should have been. PR1 declared these as bare names, so the reconciler
+        # could only create them empty — and Gitea's `POST /repos/migrate` answers
+        # 409 when the target already exists, which meant each shell permanently
+        # blocked the move it was declared for. All three are moves; a repository
+        # that genuinely starts life in Gitea simply omits the field.
         organizations:
           teledyne:
-            repositories: [fae-brain, openkm-brain]
+            repositories:
+              - name: fae-brain
+                migrate_from: github:mlorentedev/fae-brain
+              - name: openkm-brain
+                migrate_from: github:mlorentedev/openkm-brain
           personal:
-            repositories: [resume]
+            repositories:
+              - name: resume
+                migrate_from: github:mlorentedev/resume
           kubelab:
             repositories: []
         # Mirrors the limits the K8s Deployment carried, so the move is not also a

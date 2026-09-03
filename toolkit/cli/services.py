@@ -496,11 +496,21 @@ def gitea_reconcile(
         _report_machine_ownership(admin, bot_username)
         return
 
-    report = execute(plan, admin, bot, bot_username=bot_username)  # type: ignore[arg-type]
+    # Read only when a migration is actually planned. Its absence is a hard error
+    # for a run that needs it and a non-event for one that does not, so fetching it
+    # unconditionally would make every ordinary reconcile depend on a credential it
+    # never uses.
+    migration_token = None
+    if plan.repos_to_migrate:
+        migration_token = merged["apps"]["services"]["core"]["gitea"].get("github_migration_token")
+
+    report = execute(plan, admin, bot, bot_username=bot_username, migration_token=migration_token)  # type: ignore[arg-type]
     for created in report.orgs_created:
         logger.success(f"org created: {created}")
     for created in report.repos_created:
         logger.success(f"repo created: {created}")
+    for migrated in report.repos_migrated:
+        logger.success(f"repo migrated: {migrated}")
     for target, reason in report.failures:
         logger.error(f"{target}: {reason}")
 

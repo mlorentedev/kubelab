@@ -76,6 +76,10 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
+    # A migration creates a repository inside an organization, so it needs what
+    # `create_repo` needs; `write:repository` on top of it because the endpoint
+    # writes repository content rather than only registering the name.
+    "migrate_repo": frozenset({"write:organization", "write:repository"}),
     "create_team": frozenset({"write:organization"}),
     "add_team_member": frozenset({"write:organization"}),
 }
@@ -289,6 +293,61 @@ class GiteaClient:
     def create_repo(self, org: str, name: str, private: bool = True) -> dict[str, Any]:
         """Create a repository inside an organization. The bot's job (ADR-065 D1)."""
         return self._request("POST", f"/orgs/{org}/repos", json={"name": name, "private": private})
+
+    def migrate_repo(
+        self,
+        org: str,
+        name: str,
+        clone_addr: str,
+        service: str,
+        auth_token: str,
+        private: bool = True,
+    ) -> dict[str, Any]:
+        """Migrate a remote repository INTO an organization, with its issues and pull requests.
+
+        The bot's job, not the superadmin's: this creates a repository inside an
+        organization, and ADR-065 D1 keeps the machine identity owning nothing --
+        the same reasoning as `create_repo`, which this replaces for any repository
+        whose declaration names a source.
+
+        WHAT IS ASKED FOR AND WHY EACH FLAG IS THERE. `mirror: False` because
+        Risk 3 settled this as a MOVE, not a mirror: Gitea accepts merges from the
+        migration onward and GitHub becomes the frozen rollback snapshot. A mirror
+        would keep pulling from GitHub and overwrite exactly that. The content flags
+        are TOOL-035 AC3 stated as a request -- they are not defaults, and omitting
+        one carries the code across while silently leaving its issues behind.
+
+        THE CREDENTIAL TRAVELS AS `auth_token`, NEVER INSIDE `clone_addr`. Embedding
+        it in the URL would persist it in Gitea's stored remote and surface it in any
+        error that echoes the address, and `GiteaError` echoes response bodies
+        verbatim by design.
+
+        `409` MEANS THE TARGET ALREADY EXISTS and is deliberately not swallowed.
+        Migration is not idempotent the way creation is: it cannot fill an existing
+        repository, so a 409 means the caller planned work against a forge state it
+        had already been given. `plan_reconcile` prevents that by never proposing a
+        migration for a repository that is present; a 409 reaching here means that
+        invariant broke and should be loud.
+        """
+        return self._request(
+            "POST",
+            "/repos/migrate",
+            json={
+                "clone_addr": clone_addr,
+                "repo_owner": org,
+                "repo_name": name,
+                "service": service,
+                "auth_token": auth_token,
+                "private": private,
+                "mirror": False,
+                "issues": True,
+                "pull_requests": True,
+                "labels": True,
+                "milestones": True,
+                "releases": True,
+                "wiki": True,
+            },
+        )
 
     def get_team(self, org: str, name: str) -> dict[str, Any] | None:
         """The named team, or None. Absence is a state, not an error."""
