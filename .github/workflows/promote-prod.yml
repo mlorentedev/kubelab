@@ -1,10 +1,10 @@
 ---
 name: Promote Prod
-# Continuous delivery to prod (ADR-046 — gated promotion). Manually dispatched:
-# pick a platform app and an existing immutable semver tag, run
-# `toolkit deployment promote --env prod`, and open a PR with the regenerated
-# overlay. Merging it (human review + required checks) lets Argo CD (prod,
-# selfHeal:true) sync and deploy that version, then defend it.
+# Continuous delivery to prod (ADR-046 — gated promotion). Run
+# `toolkit deployment promote --env prod` for a platform app at an existing
+# immutable semver tag, and open a PR with the regenerated overlay. Merging it
+# (human review + required checks) lets Argo CD (prod, selfHeal:true) sync and
+# deploy that version, then defend it.
 #
 # Mirror of staging-deploy.yml, minus the build step: prod only ships tags that
 # already exist (built + released for staging). The promote command refuses a
@@ -14,6 +14,16 @@ name: Promote Prod
 # the default GITHUB_TOKEN. A GITHUB_TOKEN-opened PR does not trigger
 # `on: pull_request` workflows, so its required checks would never run and it
 # could never be merged.
+#
+# TWO WAYS IN, ONE GATE (#1585). Until 2026-09-03 the only trigger was a human
+# remembering to dispatch this workflow — and prod ran kubelab-web:1.1.1 from
+# 15 June through eleven consecutive releases because that remembering failed
+# every time, with every release pipeline green throughout (web#190).
+# `web-release-published` fires from mlorentedev/web when a release publishes
+# (web#295), so the promotion PR now opens itself. That automates the
+# REMEMBERING and not the GATE: a human still reviews and merges the PR, Argo CD
+# still syncs afterwards, ADR-046 is unchanged and auto-merge stays forbidden.
+# `workflow_dispatch` remains the path for a re-promote, a rollback, or `api`.
 on:
   workflow_dispatch:
     inputs:
@@ -28,6 +38,8 @@ on:
         description: 'Immutable semver image tag (e.g. 1.1.1) — must already exist in the registry'
         type: string
         required: true
+  repository_dispatch:
+    types: [web-release-published]
 
 permissions:
   contents: write
@@ -35,8 +47,13 @@ permissions:
 
 # Serialize promotions of the same app; never cancel an in-flight one (it may be
 # mid-push). Different apps can promote concurrently.
+#
+# The `|| 'web'` is load-bearing, not defensive noise: on a repository_dispatch
+# the `inputs` context is empty, so the bare form degrades to `promote-prod-`
+# and an automated promote would sit in a different group from a human promoting
+# web at the same moment — two runs racing a force-push to one branch name.
 concurrency:
-  group: promote-prod-${{ inputs.app }}
+  group: promote-prod-${{ inputs.app || 'web' }}
   cancel-in-progress: false
 
 jobs:
@@ -54,17 +71,65 @@ jobs:
         run: |
           python -m pip install "poetry>=1.8,<2.0"
           poetry install --only main
-      - name: Promote app to prod
+      # One place decides what this run promotes, whichever trigger started it.
+      # Every value below reaches the step through `env:`, never `${{ }}` inside
+      # the script: client_payload is arbitrary JSON from the sender, and `${{ }}`
+      # in a `run:` is textual substitution before bash ever sees it.
+      - name: Resolve the app and version this run promotes
+        id: target
         env:
-          APP: ${{ inputs.app }}
-          VERSION: ${{ inputs.version }}
+          EVENT: ${{ github.event_name }}
+          INPUT_APP: ${{ inputs.app }}
+          INPUT_VERSION: ${{ inputs.version }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            repository_dispatch)
+              # The app comes from the EVENT TYPE, not the payload:
+              # `web-release-published` means web. The sender does not get to
+              # choose which application is promoted to production, and the
+              # payload surface stays at exactly one field.
+              app=web
+              version="$PAYLOAD_VERSION"
+              ;;
+            *)
+              app="$INPUT_APP"
+              version="$INPUT_VERSION"
+              ;;
+          esac
+          case "$app" in
+            web|api) ;;
+            *) echo "::error::Unknown app '${app}' — expected web or api"; exit 1 ;;
+          esac
+          # An immutable semver tag and nothing else. This value becomes a
+          # command-line argument, a registry lookup and a git branch name.
+          #
+          # `[[ =~ ]]` rather than a pipe into `grep`: grep is line-oriented, so
+          # `printf '%s' "$version" | grep -qE '^[0-9.]+$'` matches the FIRST
+          # line and returns 0 — and JSON strings carry newlines. Bash anchors
+          # `^`/`$` against the whole string.
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing to promote '${version}' to prod — expected an immutable" \
+              "semver tag such as 1.12.0: no leading v, no mutable alias, no sha-* staging tag"
+            exit 1
+          fi
+          echo "app=${app}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Promoting ${app} to ${version} (trigger: ${EVENT})"
+      - name: Promote app to prod
+        id: promote
+        env:
+          APP: ${{ steps.target.outputs.app }}
+          VERSION: ${{ steps.target.outputs.version }}
         run: |
           poetry run toolkit deployment promote --env prod --app "$APP" --version "$VERSION"
       - name: Open prod promotion PR
+        id: open-pr
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          APP: ${{ inputs.app }}
-          VERSION: ${{ inputs.version }}
+          APP: ${{ steps.target.outputs.app }}
+          VERSION: ${{ steps.target.outputs.version }}
         run: |
           git config user.name "kubelab-bot"
           git config user.email "bot@kubelab.live"
