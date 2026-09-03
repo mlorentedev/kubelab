@@ -15,6 +15,7 @@ from toolkit.features.observability import (
     GrafanaAlertClient,
     LogsUnavailableError,
     LokiClient,
+    ObservabilityUnavailableError,
     SlackSreClient,
     SreTriageEngine,
     kubectl_service_port_forward,
@@ -150,6 +151,18 @@ def _loki_client(env: str) -> Generator[LokiClient, None, None]:
     try:
         with kubectl_service_port_forward(env, "loki", 3100) as port:
             yield LokiClient(base_url=f"http://127.0.0.1:{port}")
+    except ObservabilityUnavailableError:
+        # Already precise about which backend failed -- re-wrapping would
+        # RE-ATTRIBUTE it. `ObservabilityUnavailableError` subclasses
+        # `RuntimeError`, so before this the broad clause below caught an
+        # AlertsUnavailableError raised inside the `with` body and relabelled it:
+        # `obs triage --env prod` reported "could not reach Loki in prod: could
+        # not reach Grafana in prod: 401" while Loki was working perfectly. An
+        # operator reads the first clause and goes to debug Loki.
+        #
+        # Invisible until something nested the two context managers, which
+        # TOOL-055 is the first thing to do.
+        raise
     except (RuntimeError, TimeoutError) as exc:
         raise LogsUnavailableError(f"could not reach Loki in {env}: {exc}") from exc
 
@@ -173,6 +186,10 @@ def _grafana_client(env: str) -> Generator[GrafanaAlertClient, None, None]:
         with kubectl_service_port_forward(env, "grafana", 3000) as port:
             token = read_cluster_secret_key(env, "grafana-admin", "alerts-ro-token") or ""
             yield GrafanaAlertClient(base_url=f"http://127.0.0.1:{port}", token=token)
+    except ObservabilityUnavailableError:
+        # Symmetric to `_loki_client`: never re-attribute an error that already
+        # names its backend. See the comment there for the measurement.
+        raise
     except (RuntimeError, TimeoutError) as exc:
         raise AlertsUnavailableError(f"could not reach Grafana in {env}: {exc}") from exc
 

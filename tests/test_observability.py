@@ -619,6 +619,55 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
         assert parsed["report"] is None
         assert "no kubeconfig for prod" in parsed["error"]
 
+    def test_a_grafana_failure_is_not_reported_as_a_loki_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Measured against prod 2026-09-02, on the first real run of the fix.
+
+        `ObservabilityUnavailableError` subclasses `RuntimeError`, and
+        `_loki_client` caught `(RuntimeError, TimeoutError)` to wrap transport
+        failures. So an `AlertsUnavailableError` raised INSIDE the nested `with`
+        body was caught on the way out and relabelled, producing:
+
+            could not reach Loki in prod: could not reach Grafana in prod: 401
+
+        Loki was working perfectly. An operator reads the first clause and goes
+        to debug the wrong backend -- the error message is an instrument, and it
+        reported the same thing under two different causes.
+
+        Pre-existing in `_loki_client`, and invisible until something nested the
+        two context managers. TOOL-055 is the first thing that does.
+        """
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            yield 55555
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+        monkeypatch.setattr(obs_cli, "read_cluster_secret_key", lambda *a, **kw: "")
+        monkeypatch.setattr(obs_cli.LokiClient, "query_service_logs", lambda self, **kw: [])
+
+        def unauthorised(self):
+            raise AlertsUnavailableError("Grafana alert fetch failed: HTTP Error 401: Unauthorized")
+
+        monkeypatch.setattr(obs_cli.GrafanaAlertClient, "get_alerts", unauthorised)
+
+        result = runner.invoke(app, ["obs", "triage", "--env", "prod", "--service", "api", "--json"])
+
+        assert result.exit_code == 1
+        error = json.loads(result.output)["error"]
+        assert "Grafana" in error, f"the failing backend must be named; got {error!r}"
+        assert "Loki" not in error, (
+            f"Loki answered, and must not be blamed for Grafana's failure; got {error!r}. "
+            "Re-wrapping an already-precise error re-attributes it, and the operator "
+            "debugs the wrong backend."
+        )
+
     def test_the_human_output_says_it_is_not_a_clean_bill_of_health(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
