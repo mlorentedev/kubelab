@@ -186,6 +186,56 @@ firewalls in this project: 0
   that had been declared and unapplied for months — the same failure as the
   firewall, in a different subsystem.
 
+## The review round-trip, and why the pool has two provider families
+
+Worth recording, because the outcome turned on it.
+
+`nan/mimo-v2.5` returned **PASS**, grade A across all six rubric dimensions. Its
+re-run then died on a `520 status code (no body)` from NaN — a provider outage,
+not a refusal, and **a review that produces no verdict is not a pass**. The
+correct fallback for a NaN outage is the provider-diverse member rather than
+another NaN model, which is what the pool means by *"ordering is meaning rather
+than sequence"*.
+
+`agy/gemini-3.1-pro-high` returned **FAIL**, with two Major findings that are
+both correct, both in the live guard, and both invisible to the first reviewer:
+
+1. **Outbound rules were skipped entirely** (`if direction != "in": continue`).
+   Hetzner permits all egress only while a firewall declares **zero** outbound
+   rules; the first one turns egress into an allow-list. This module declares
+   none, and the argument that the change is safe rests on exactly that — ACME
+   renewal, image pulls and the tailnet are all outbound. One rule added in the
+   console converts unrestricted egress into everything-not-listed-is-dropped,
+   and not one of the resulting failures would name a firewall as its cause. The
+   property is stated as load-bearing above, and was left unguarded.
+
+2. **`source_ips` was ignored.** Narrowing `22/tcp` to a single address in the
+   console leaves the `(port, proto)` tuple unchanged, so the guard reported a
+   clean match while every operator was locked out of a host whose recovery path
+   runs on that same host. The narrowing direction is the dangerous one, and it
+   was the invisible one.
+
+**Both are this spec's own subject, in the guard written to prevent it**: a check
+that confirms a weaker claim than it appears to. It says *the live firewall
+matches the declaration*; it compared inbound tuples. Same class as #1565.
+
+Fixed in `a4964e17`, with the third (Minor) finding — the tfvars generator
+testing the SSH port with `== 22`, which a YAML-quoted `"22"` makes false. That
+one is not hypothetical here: the Hetzner API returns `'port': '22'` as a
+**string**, visible in the M9 output below.
+
+**Mutation-proved, and the limit of the proof stated:**
+
+- **M9** — point the outbound check at `in` rules → red, listing all six.
+- **M10** — expect a narrowed source set → red, naming the rule and both sets.
+
+These prove the assertions are reachable and non-vacuous. They are **weaker than
+the AC3/AC5 evidence above**, which came from the real system changing state, and
+the reason is deliberate: proving the outbound assertion the strong way means
+adding an outbound rule to the production firewall, which would restrict egress
+the instant it landed. That is a real outage to test a guard, so it was not done,
+and this paragraph exists so the difference is not glossed over later.
+
 ## Promotion candidates
 
 - [x] Lesson — already written before the apply:
