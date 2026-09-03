@@ -256,6 +256,10 @@ def triage_cmd(
         str,
         typer.Option("--service", "-s", help="Service to diagnose"),
     ],
+    env: Annotated[
+        str,
+        typer.Option("--env", "-e", help="Cluster to query (staging|prod) — ADR-028: prod is the monitoring of record"),
+    ] = "prod",
     since: Annotated[
         str,
         typer.Option("--since", help="Incident analysis time window"),
@@ -265,9 +269,44 @@ def triage_cmd(
         typer.Option("--json", "-j", help="Output results in JSON format"),
     ] = False,
 ) -> None:
-    """Execute the 4-step automated SRE triage pipeline."""
-    engine = SreTriageEngine()
-    report = engine.diagnose_service(service=service, since=since)
+    """Execute the 4-step automated SRE triage pipeline.
+
+    TOOL-055: this built both clients from `default_factory` until 2026-09-02,
+    while its siblings `logs` and `alerts` had already been given `--env` and a
+    port-forward transport. So it asked `127.0.0.1:3100` for logs and the default
+    URL for alerts.
+
+    That is worse here than in `logs`, and the difference is the reason this
+    command is the one that mattered. `obs logs` against the wrong Loki prints
+    "No logs found" — wrong, but visibly a non-answer. `diagnose_service` turns
+    the same emptiness into `severity: INFO` and "No active error signatures
+    detected in telemetry window": an assertion of health, sourced from a Loki
+    it never contacted. Measured 2026-09-01, `0.0.0.0:3100` on this workstation
+    was held by an unrelated local Loki, so the wrong answer was the default
+    state of the machine the command runs from.
+
+    Both halves are threaded now. The port-forwards must stay open for the whole
+    diagnosis, so the engine is built and run inside both context managers rather
+    than handed clients that outlive their tunnel.
+    """
+    try:
+        with _loki_client(env) as loki, _grafana_client(env) as grafana:
+            engine = SreTriageEngine(loki=loki, grafana=grafana)
+            report = engine.diagnose_service(service=service, since=since)
+    except (LogsUnavailableError, AlertsUnavailableError) as exc:
+        # A diagnosis is the one output that must never be produced from a source
+        # that was not reached. `logs` and `alerts` already refuse to render a
+        # blind check as a healthy one; this refuses to render it as a VERDICT,
+        # which is the same rule with more at stake.
+        #
+        # `--json` gets `severity: null`, not "INFO", for the machine consumer
+        # that would otherwise read a missing key as benign.
+        if json_output:
+            typer.echo(json.dumps({"error": str(exc), "service": service, "severity": None, "report": None}, indent=2))
+        else:
+            typer.echo(f"✗ Could not triage {service} in {env}: {exc}", err=True)
+            typer.echo("  This is NOT a clean bill of health — a source went unread.", err=True)
+        raise typer.Exit(1) from exc
 
     if json_output:
         typer.echo(json.dumps(report, indent=2))
