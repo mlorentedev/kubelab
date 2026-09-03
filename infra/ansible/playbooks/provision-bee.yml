@@ -314,6 +314,8 @@
         # Gitea Actions runner (TOOL-035 PR3). A sibling of the GitHub runner
         # above, never a replacement -- the two forges speak different protocols
         # and neither runner can serve the other's jobs.
+        act_runner_name: "{{ config.apps.services.automation.gitea_runner.name }}"
+        act_runner_enabled: "{{ config.apps.services.automation.gitea_runner.enabled }}"
         act_runner_image: "{{ config.apps.services.automation.gitea_runner.image }}"
         act_runner_token: "{{ secrets.apps.services.automation.gitea_runner.registration_token | default('', true) }}"
         act_runner_labels: "{{ config.apps.services.automation.gitea_runner.labels }}"

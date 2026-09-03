@@ -1013,6 +1013,19 @@ apps:
       # however close it sits.
       gitea_runner:
         name: act-runner
+        # Governs PRESENCE AND ABSENCE, which is the whole point of it being here
+        # rather than implied by the block existing. Ansible is additive: deleting a
+        # service from a template never removes what it installed, so a runner
+        # "retired" by deletion keeps running and keeps its registration on the forge
+        # forever. CLAUDE.md records the same rule for the dev node -- the cleanup
+        # belongs to whatever role still owns the machine.
+        #
+        # Setting this false removes the container AND deregisters the runner. The
+        # second half matters more than it looks: a registered runner that no longer
+        # exists is a row the scheduler still places jobs on, and those jobs wait for
+        # a machine that is gone, with no error anywhere. `aws1` demonstrated the
+        # same shape on the tailnet ten days after the node was destroyed.
+        enabled: true
         image: gitea/act_runner:0.2.13
         # `ubuntu-latest` DOES NOT EXIST on a self-hosted forge -- Gitea has no hosted
         # runners, so the label is only ever what act_runner declares. Every workflow

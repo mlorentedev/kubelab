@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 
 import yaml
+from tests.ansible_jinja import ansible_env
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from tests.test_beelink_compose_unit import REPO, ROLE
@@ -52,19 +53,27 @@ def _ssot() -> dict:
     return common["apps"]["services"]["automation"]["gitea_runner"]
 
 
-def _render() -> dict:
-    """Render the Beelink compose template and parse it as YAML.
+def _render_with(env, runner: dict) -> dict:
+    """Render the compose template with an explicit runner declaration.
 
-    Rendered rather than read: the runner block is Jinja, and asserting on the source
-    text would pass on a template that never emits the service.
+    Takes the whole declaration rather than a flag so a future field is exercised by
+    the branch tests too, instead of silently defaulting.
     """
-    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
+    return yaml.safe_load(env.get_template(COMPOSE_TEMPLATE).render(**_template_vars(runner)))
+
+
+def _template_vars(runner: dict) -> dict:
+    """Every variable the Beelink compose template needs, for one runner declaration.
+
+    Runner values come from the passed declaration rather than from the SSOT read
+    directly, so the enabled/disabled branch tests can vary one field without
+    duplicating this list — and so a field added later is exercised by both branches
+    instead of silently defaulting in one.
+    """
     common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
     gitea = common["apps"]["services"]["core"]["gitea"]
-    runner = common["apps"]["services"]["automation"]["gitea_runner"]
+    return dict(
 
-    return yaml.safe_load(
-        env.get_template(COMPOSE_TEMPLATE).render(
             ansible_managed="Ansible managed",
             restart_policy="unless-stopped",
             beelink_deploy_dir="/opt/kubelab",
@@ -107,6 +116,8 @@ def _render() -> dict:
             runner_memory_limit="2G",
             # From the SSOT rather than literals: the label mapping is the thing
             # under test, so a copy here would assert the test against itself.
+            act_runner_enabled=runner["enabled"],
+            act_runner_name=runner["name"],
             act_runner_image=runner["image"],
             act_runner_token="x",
             act_runner_cpu_limit=runner["resources"]["cpu_limit"],
@@ -116,8 +127,14 @@ def _render() -> dict:
             act_runner_artifact_retention_days=runner["artifact_retention_days"],
             act_runner_run_retention_days=runner["run_retention_days"],
             docker_dns_servers=["100.100.100.100", "1.1.1.1"],
-        )
+
     )
+
+
+def _render() -> dict:
+    """Render the Beelink compose template with the declaration as committed."""
+    env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
+    return yaml.safe_load(env.get_template(COMPOSE_TEMPLATE).render(**_template_vars(_ssot())))
 
 
 def _runner() -> dict:
@@ -133,7 +150,7 @@ def _runner() -> dict:
 
 def _config() -> dict:
     """The rendered act_runner config.yaml, parsed."""
-    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
+    env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
     runner = _ssot()
     return yaml.safe_load(
         env.get_template("act-runner-config.yaml.j2").render(
@@ -233,9 +250,8 @@ def test_the_registration_token_is_injected_not_literal() -> None:
     avoid.
     """
     raw = (ROLE / "templates" / COMPOSE_TEMPLATE).read_text()
-    block = raw[raw.index(f"  {RUNNER_SERVICE}:") :] if f"  {RUNNER_SERVICE}:" in raw else ""
 
-    assert "{{ act_runner_token }}" in block, (
+    assert 'GITEA_RUNNER_REGISTRATION_TOKEN: "{{ act_runner_token }}"' in raw, (
         "the runner's registration token must come from a Jinja variable fed by SOPS, "
         "never a literal in a committed template."
     )
@@ -291,3 +307,46 @@ def test_the_mint_is_gated_on_the_secret_being_absent() -> None:
             "idempotent and invalidates the previous token, so an ungated mint "
             "deregisters the running runner on every re-provision."
         )
+
+
+def test_disabling_the_runner_removes_it_from_the_render() -> None:
+    """`enabled: false` must actually withhold the service, not just read as if it does.
+
+    Ansible is additive: deleting a service from a template stops rendering it and
+    does nothing to the container already running. So the declaration needs a false
+    branch that a test exercises — otherwise `enabled` is documentation, and the
+    first person to rely on it finds a runner still taking jobs.
+
+    The string-truthiness trap is the reason this asserts on the RENDER rather than
+    on the flag. Ansible can deliver a var declared as `"{{ ... }}"` as the string
+    `"False"`, and every non-empty string is truthy in Jinja — without `| bool` the
+    gate would render the service for precisely the value meant to suppress it.
+    """
+    env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
+    runner = _ssot()
+    rendered = _render_with(env, {**runner, "enabled": False})
+
+    assert RUNNER_SERVICE not in rendered["services"], (
+        f"`{RUNNER_SERVICE}` is still rendered with enabled=false; the gate does not gate."
+    )
+    # The rest of the stack must survive the branch — a gate that takes the forge
+    # with it is worse than no gate.
+    assert "gitea" in rendered["services"] and "github-runner" in rendered["services"], (
+        "disabling the Actions runner removed other services from the stack"
+    )
+
+
+def test_the_gate_rejects_the_string_false() -> None:
+    """`"False"` must disable, which is the whole reason the template carries `| bool`.
+
+    Asserted directly because it is the failure that silently inverts: a truthy
+    string renders the service while the declaration says it is off, and nothing
+    about the output looks wrong.
+    """
+    env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
+    rendered = _render_with(env, {**_ssot(), "enabled": "False"})
+
+    assert RUNNER_SERVICE not in rendered["services"], (
+        'the string "False" rendered the runner. The `| bool` filter is missing from '
+        "the gate, and Ansible can deliver this var as a string."
+    )

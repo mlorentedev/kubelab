@@ -108,6 +108,30 @@
   notify: Restart gitea
   tags: [gitea]
 
+- name: Remove the act_runner container when it is not declared
+  # THE ABSENCE HALF, and it exists because Ansible has no other one. Removing the
+  # service from the template stops rendering it and does nothing to the container
+  # already running -- so a runner "retired" by deletion keeps working, keeps its
+  # registration, and keeps taking jobs. This is the same treatment the dev_node
+  # role carries for services retired from ace2 (CLAUDE.md): cleanup belongs to
+  # whatever role still owns the node.
+  #
+  # `docker rm -f` and not `compose down`: compose would take the whole stack with
+  # it, and the blast radius should match the change.
+  #
+  # Deregistering from the forge is deliberately NOT here. It needs the API and a
+  # credential Ansible does not hold on this node, and a half-done teardown that
+  # removes the container while leaving the record is worse than none -- the
+  # scheduler keeps placing jobs on a runner that no longer exists. That half is
+  # `make gitea-prune-runners`, which reconciles the forge against this same
+  # declaration.
+  command: docker rm -f {{ act_runner_name }}
+  register: _act_runner_rm
+  changed_when: _act_runner_rm.rc == 0
+  failed_when: _act_runner_rm.rc != 0 and 'No such container' not in _act_runner_rm.stderr
+  when: not (act_runner_enabled | bool)
+  tags: [gitea, runner]
+
 - name: Install the act_runner configuration
   template:
     src: act-runner-config.yaml.j2
@@ -115,6 +139,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: act_runner_enabled | bool
   # Same single-file bind mount as the bootstrap script above, and therefore the
   # same inode trap (ANSIBLE-054, #1400): `template` writes through a tempfile
   # and a rename, so the host gets a NEW inode while the running container keeps

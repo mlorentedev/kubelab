@@ -144,9 +144,10 @@ services:
     networks:
       - kubelab
 
-  act-runner:
+{% if act_runner_enabled | bool %}
+  {{ act_runner_name }}:
     image: {{ act_runner_image }}
-    container_name: act-runner
+    container_name: {{ act_runner_name }}
     restart: {{ restart_policy }}
     depends_on:
       - gitea
@@ -184,6 +185,7 @@ services:
           memory: "{{ act_runner_memory_limit }}"
     networks:
       - kubelab
+{% endif %}
 
   github-runner:
     image: {{ runner_image }}
