@@ -93,13 +93,36 @@ ADMIN_METHODS: tuple[str, ...] = (
     "add_team_member",
 )
 
+
+def _derive_admin_scopes() -> frozenset[str]:
+    """Union the scopes of the methods the admin credential performs.
+
+    RAISES AT IMPORT rather than defaulting a missing method to "no scope", and
+    the difference is the point of the module: silently narrowing the requirement
+    is exactly the defect being cured, so an incoherent map has to be impossible
+    to run rather than merely tested against.
+
+    The explicit message exists because the bare `SCOPE_BY_METHOD[name]` this
+    replaced raised `KeyError: 'whoami'` out of a comprehension -- accurate, and
+    useless to whoever hits it.
+    """
+    undeclared = [name for name in ADMIN_METHODS if name not in SCOPE_BY_METHOD]
+    if undeclared:
+        raise RuntimeError(
+            f"ADMIN_METHODS names {undeclared}, absent from SCOPE_BY_METHOD. Every method the "
+            f"superadmin performs must declare the scope Gitea demands for it, or the grant in "
+            f"`apps.services.core.gitea.token_scopes.admin` cannot be checked against it."
+        )
+    return frozenset().union(*(SCOPE_BY_METHOD[name] for name in ADMIN_METHODS))
+
+
 #: DERIVED, never restated. A method entering `ADMIN_METHODS` drags its scope into
 #: the requirement automatically, which is the property the old literal lacked.
 #:
 #: Still only half a contract on its own: the grant is declared in `common.yaml`
 #: and minted by Ansible, which cannot import Python.
 #: `tests/test_gitea_token_scopes.py` is what makes the two agree.
-REQUIRED_ADMIN_SCOPES: frozenset[str] = frozenset().union(*(SCOPE_BY_METHOD[name] for name in ADMIN_METHODS))
+REQUIRED_ADMIN_SCOPES: frozenset[str] = _derive_admin_scopes()
 
 
 def expand_grant(granted: set[str]) -> set[str]:
