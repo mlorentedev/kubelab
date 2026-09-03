@@ -172,7 +172,8 @@ class TestTheFirewallIsLive:
     """
 
     @pytest.fixture(scope="class")
-    def attached_rules(self) -> set[tuple[int, str]]:
+    @staticmethod
+    def attached_rules() -> set[tuple[int | None, str]]:
         """Read the firewall from Hetzner and return its inbound {(port, proto)}.
 
         A NOTE ON THE RESPONSE SHAPE. This was written without a token to hand,
@@ -272,13 +273,32 @@ class TestTheFirewallIsLive:
             "Fix the accessor."
         )
 
-        return {
-            (int(r["port"]), str(r["protocol"]).lower())
-            for r in fw["rules"]
-            if r.get("direction") == "in" and r.get("port")
-        }
+        # `and r.get("port")` used to filter here, and it was a hole of exactly
+        # the kind this file is about. Hetzner represents icmp/gre/esp rules with
+        # a NULL port, so that condition silently dropped them -- an ICMP rule
+        # added in the console would never appear in `extra`, and the guard would
+        # report a clean match over a firewall that had been edited out of band.
+        # The operator's decision was explicitly NO ICMP, so that is precisely
+        # the drift this test exists to catch.
+        #
+        # Portless protocols now normalise to a None port, which the SSOT (tcp/udp
+        # only, enforced in variables.tf) can never produce -- so any such rule
+        # lands in `extra` and fails loudly instead of being invisible.
+        inbound = set()
+        for r in fw["rules"]:
+            direction = r.get("direction")
+            assert direction in ("in", "out"), (
+                f"Firewall rule has direction {direction!r}, which this test does not "
+                f"understand: {r!r}. It was written for 'in'/'out'. Fix the accessor "
+                "rather than letting an unrecognised rule be skipped."
+            )
+            if direction != "in":
+                continue
+            port = r.get("port")
+            inbound.add((int(port) if port else None, str(r["protocol"]).lower()))
+        return inbound
 
-    def test_the_live_rules_match_the_ssot(self, attached_rules: set[tuple[int, str]]) -> None:
+    def test_the_live_rules_match_the_ssot(self, attached_rules: set[tuple[int | None, str]]) -> None:
         """Detached, deleted, or edited out of band -- all three fail here.
 
         Comparing as sets in both directions matters. A missing rule is an
