@@ -76,7 +76,16 @@ Before running a before/after check, ask: **what would make the "before" reading
 different from the "after" one — and is that thing the mechanism I am testing?**
 If the answer names anything else, the probe is measuring that instead.
 
-Two cheap tests that catch it:
+The mechanical form of the question, which is what makes this usable rather than
+merely true — **before measuring, ask what the reading would be if the change had
+NOT been made. If the answer is the same, the instrument is inert, and no amount
+of care recovers it.**
+
+That is the whole diagnostic. The question is never *was I careful*, it is
+**does this instrument have two possible readings in this experiment?** Care
+cannot rescue a probe that returns the same value under both hypotheses.
+
+Two supporting checks:
 
 - **Predict the "before" reading and why.** If the prediction does not mention
   the mechanism under test, change probes. "9000 times out because Traefik does
@@ -86,6 +95,37 @@ Two cheap tests that catch it:
 
 For a continuous monitor the question is the same one shifted in time: *if the
 control I am watching disappeared, would this signal change?*
+
+## Two more instances, from a different subsystem entirely
+
+Found the same day in a parallel lane, and they matter because neither involves a
+network probe — the shape is not about ports.
+
+**An Ansible `changed` count.** Adding `GITEA__actions__ENABLED` to a compose
+file when it matches Gitea's running default produces a byte-identical container,
+so Docker does not recreate it. `changed=0` is the reading under *"the variable
+took effect"* and equally under *"the variable was never read"*. Inert. The only
+discriminating instrument is reading the value from **inside** the running
+container.
+
+**`docker ps`.** An `act-runner` container looping on a rejected registration
+token reports `Up` exactly as a correctly registered one does. Container state
+cannot distinguish registered from rejected; only the forge's own runner list
+can.
+
+Together with the port probes these give the same failure in three unrelated
+places — a network check, a configuration-management signal, and a process
+supervisor. **Salience is what makes you reach for an instrument; discrimination
+is a property of the mechanism under test. The two are unrelated, which is why
+the mistake survives careful people.**
+
+The `changed` count deserves one further note, because it fails in *both*
+directions on the same node. A variable matching the default gives `changed=0`
+while possibly never taking effect — under-reporting. A Gitea runner-registration
+token mint always succeeds and invalidates every prior token for its scope, so it
+gives `changed=1` on every run while destroying the state the running runner
+depends on — over-reporting. Neither is visible without asking the runtime what
+it actually holds.
 
 ## Generalisation
 
