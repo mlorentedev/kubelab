@@ -808,36 +808,6 @@
     "expiryNotification": true
   },
   {
-    "key": "staging-web-gitea-staging",
-    "name": "Staging · Web · Gitea Staging",
-    "type": "http",
-    "url": "https://gitea.staging.kubelab.live/api/healthz",
-    "hostname": null,
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": true,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": "Gitea Git server health (staging). VPN-only. SSOT: apps.services.core.gitea.health_path.",
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      "staging",
-      "data"
-    ],
-    "expiryNotification": true
-  },
-  {
     "key": "staging-web-n8n-staging",
     "name": "Staging · Web · n8n Staging",
     "type": "http",
