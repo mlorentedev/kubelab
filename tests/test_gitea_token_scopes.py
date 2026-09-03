@@ -170,6 +170,70 @@ def test_the_admin_requirement_is_derived_from_the_methods_it_performs() -> None
     )
 
 
+#: The methods without which the reconciler cannot do its job at all. An ANCHOR
+#: against emptiness, deliberately NOT a restatement of `ADMIN_METHODS` — copying
+#: the full tuple here would reintroduce the second declaration this file exists to
+#: prevent, and a floor is enough to make vacuity impossible.
+LOAD_BEARING_ADMIN_METHODS = frozenset({"list_orgs", "list_repos"})
+
+
+def test_the_scope_guards_cannot_pass_by_being_empty() -> None:
+    """GUARD THE GUARD, and check the DERIVED artefact rather than an upstream one.
+
+    Measured by mutation on 2026-09-02: setting `ADMIN_METHODS = ()` left **all
+    eight tests in this file green**. `REQUIRED_ADMIN_SCOPES` becomes the empty set,
+    so `REQUIRED - expand_grant(...)` is empty, so the grant check is trivially
+    satisfied — the entire scope apparatus switches off by emptying one tuple, and
+    nothing says so.
+
+    That is the same defect this file was written to cure, one level up. The file's
+    thesis is "a check comparing a hand-written expectation against something that
+    happens to match it proves nothing"; an empty expectation matches EVERYTHING,
+    which is the strongest form of the same failure. It was found because a peer hit
+    the identical shape in `test_traefik_ports_stay_behind_the_firewall.py` (#1565),
+    where a derived set of exposed ports is empty and the ufw comparison is vacuous
+    — and where the file's own anti-vacuity test passes, because it asserts the RAW
+    render is populated rather than the DERIVED set.
+
+    So this asserts on `REQUIRED_ADMIN_SCOPES` and `ADMIN_METHODS` themselves, which
+    is what the other tests consume. Asserting that `SCOPE_BY_METHOD` is populated
+    would repeat the peer's mistake exactly: it is one step upstream and stays full
+    while the thing under test empties.
+    """
+    assert ADMIN_METHODS, (
+        "ADMIN_METHODS is empty, so REQUIRED_ADMIN_SCOPES is the empty set and every scope check in "
+        "this file passes against any grant whatsoever — including one that has been narrowed to "
+        "nothing. An empty expectation matches everything."
+    )
+    assert REQUIRED_ADMIN_SCOPES, "REQUIRED_ADMIN_SCOPES is empty; the grant check cannot fail."
+
+    missing = LOAD_BEARING_ADMIN_METHODS - set(ADMIN_METHODS)
+    assert not missing, (
+        f"ADMIN_METHODS no longer names {sorted(missing)}. The reconciler reads the forge with "
+        f"those, so dropping one both breaks it and silently shrinks the requirement its own scope "
+        f"guard checks. This is a floor, not a copy of the tuple — widening ADMIN_METHODS is "
+        f"expected and does not fail here."
+    )
+
+
+def test_the_method_exhaustiveness_check_cannot_pass_by_being_empty() -> None:
+    """The same trap on the other guard: no methods to check means nothing undeclared.
+
+    `test_every_client_method_declares_the_scope_it_needs` computes `public` by
+    introspecting `GiteaClient`. If that set were ever empty — a refactor moving the
+    methods onto a mixin, a rename of the class — the subtraction yields nothing and
+    the test reports success on a client whose scopes are entirely undeclared.
+    """
+    public = {
+        name for name in vars(GiteaClient) if not name.startswith("_") and callable(getattr(GiteaClient, name, None))
+    }
+    assert len(public) >= len(LOAD_BEARING_ADMIN_METHODS), (
+        f"introspection of GiteaClient found {sorted(public)}, which is too few to be the real "
+        f"client. The exhaustiveness check subtracts this set from SCOPE_BY_METHOD, so an empty or "
+        f"near-empty result makes it pass over a client that declares no scopes at all."
+    )
+
+
 def test_the_superadmin_token_is_never_granted_repository_writes(declared_scopes: dict[str, set[str]]) -> None:
     """`write:repository` on the ADMIN token would make deletion a standing capability. It must not.
 
