@@ -1,7 +1,7 @@
 ---
 id: "SEC-006-cloud-firewall-for-running-vps"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-02"
 issue: "mlorentedev/kubelab#1557"   # repo#NNN — GitHub issue / Project item that tracks this spec
 # Work-gate note: scaffolded with --force-no-gate because `dotf spec init`'s Gate()
@@ -97,3 +97,5 @@ A new Terraform root module, `infra/terraform/vps-firewall/`, that manages **onl
 - `#558` / `#559` / `#1499` — remote state backend, out of scope here
 - ADR-020 — IaC Lifecycle Strategy; defines `infra/terraform/compute/` as DR Layer 0
 - ADR-049 — Edge & Object-Storage Placement Doctrine (Hetzner Storage Box, relevant to #558)
+
+<!-- archived 2026-09-02 — PR: https://github.com/mlorentedev/kubelab/pull/1574 -->
