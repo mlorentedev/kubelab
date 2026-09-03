@@ -284,6 +284,26 @@ class TestTheFirewallIsLive:
         # Portless protocols now normalise to a None port, which the SSOT (tcp/udp
         # only, enforced in variables.tf) can never produce -- so any such rule
         # lands in `extra` and fails loudly instead of being invisible.
+        # EGRESS. Hetzner permits all outbound traffic only while the firewall
+        # declares ZERO outbound rules; the first `out` rule turns egress into an
+        # allow-list. The module declares none, and this spec's whole argument for
+        # it being safe rests on that -- ACME, image pulls and the tailnet are all
+        # outbound. So one rule added in the console silently converts "unrestricted"
+        # into "everything not listed is dropped".
+        #
+        # An earlier version of this parser skipped every non-`in` rule, which meant
+        # that edit passed the guard cleanly. Asserted before anything else, because
+        # it is the change with the widest blast radius and the least visible cause.
+        outbound = [r for r in fw["rules"] if r.get("direction") == "out"]
+        assert not outbound, (
+            f"The live firewall declares {len(outbound)} OUTBOUND rule(s): {outbound!r}. "
+            "The module declares none, deliberately: with zero outbound rules Hetzner "
+            "permits all egress, and the first one added turns egress into an allow-list "
+            "-- which breaks ACME renewal, image pulls and the tailnet, none of which "
+            "would name a firewall as the cause. This was edited out of band; remove it "
+            "there, or declare it in the module if it is intended."
+        )
+
         inbound = set()
         for r in fw["rules"]:
             direction = r.get("direction")
@@ -294,6 +314,26 @@ class TestTheFirewallIsLive:
             )
             if direction != "in":
                 continue
+
+            # SOURCE. Comparing only (port, proto) lets a narrowing edit pass: restrict
+            # 22/tcp to one address in the console and the tuple is unchanged, so the
+            # guard reports a clean match over a firewall that can lock every operator
+            # out. The module renders 0.0.0.0/0 and ::/0 for every rule, so any other
+            # value is an out-of-band edit by definition -- which is the single thing
+            # this test exists to catch.
+            sources = r.get("source_ips")
+            assert sources is not None, (
+                f"Inbound rule {r!r} has no `source_ips` key. The response shape assumed "
+                "here is wrong; fix the accessor rather than skipping the check."
+            )
+            assert set(sources) == {"0.0.0.0/0", "::/0"}, (
+                f"Inbound rule {r.get('protocol')}/{r.get('port')} allows {sorted(sources)}, "
+                "not the 0.0.0.0/0 + ::/0 the module renders. A NARROWED rule is the more "
+                "dangerous direction: 22/tcp restricted to one address locks every operator "
+                "out of a host whose recovery path (Headscale) is on that same host. Declare "
+                "it in the module if intended; otherwise it was edited out of band."
+            )
+
             port = r.get("port")
             inbound.add((int(port) if port else None, str(r["protocol"]).lower()))
         return inbound

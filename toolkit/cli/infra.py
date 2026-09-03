@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 import yaml
@@ -1583,7 +1583,17 @@ def tf_vps_firewall_tfvars() -> None:
 
     # Fail here rather than let Terraform's validation catch it, so the message
     # names the SSOT the operator has to edit rather than the generated file.
-    if not any(r.get("port") == 22 and r.get("proto") == "tcp" for r in rules):
+    # int() rather than ==22: YAML quoting the port ("22") would make an identity
+    # check false and refuse a correct allow-list. It fails safe, but on a message
+    # about SSH being absent when it is present -- the operator then goes looking
+    # for the wrong thing.
+    def _is_ssh(rule: dict[str, Any]) -> bool:
+        try:
+            return int(rule.get("port", 0)) == 22 and str(rule.get("proto", "")).lower() == "tcp"
+        except (TypeError, ValueError):
+            return False
+
+    if not any(_is_ssh(r) for r in rules):
         logger.error(
             "22/tcp is absent from networking.firewall.vps_inbound. Applying "
             "this would lock every operator out of the VPS, and Headscale runs "
