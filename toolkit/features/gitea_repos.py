@@ -190,6 +190,100 @@ def format_plan(plan: ReconcilePlan) -> str:
     return "\n".join(lines)
 
 
+def split_full_name(full_name: str) -> tuple[str, str]:
+    """Split `owner/name`, refusing anything else with a message worth reading.
+
+    SHARED BY THE CALLER AND THE PLANNER ON PURPOSE. When the CLI did its own
+    `full_name.split("/", 1)` before consulting `plan_drop`, a malformed target
+    died on `ValueError: not enough values to unpack (expected 2, got 1)` --
+    accurate, and it names Python's problem rather than the operator's. The
+    planner's careful refusal was unreachable because the split ran first.
+
+    Refusing here also keeps a typo from ever becoming a URL: `DELETE /repos/resume`
+    is a well-formed request to the wrong thing.
+    """
+    owner, _, name = full_name.partition("/")
+    if not owner or not name or "/" in name:
+        raise ValueError(
+            f"{full_name!r} is not an `owner/name` repository reference. Refused before building a "
+            f"URL from it: `DELETE /repos/{full_name}` would address something nobody meant."
+        )
+    return owner, name
+
+
+@dataclass(frozen=True)
+class DropDecision:
+    """Whether one repository may be dropped, and why not when it may not.
+
+    A VERDICT, NEVER AN ACTOR. It holds no client and no callable, asserted
+    structurally by `test_the_decision_carries_no_capability` -- the same reasoning
+    that keeps `ReconcilePlan` free of a deletion field. Planning stays unable to
+    perform the thing it plans.
+    """
+
+    may_drop: bool
+    reason: str | None = None
+
+
+def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]) -> DropDecision:
+    """Decide whether an EMPTY DECLARED repository may be removed. Pure -- no network.
+
+    WHY THIS DOES NOT REOPEN #1076'S DELETION QUESTION. The reconciler still cannot
+    delete: `ReconcilePlan` has no field for it and `execute` has no path to it.
+    This is a separate operator-triggered command with its own object, and it
+    exists for one situation -- PR1 created the declared repositories as empty
+    shells, and `POST /repos/migrate` answers 409 rather than filling one, so the
+    shells block the migration they were declared for.
+
+    THREE REFUSALS, and the order is deliberate -- each answers a different
+    question, and the first two would be wrong to skip even if the third held:
+
+    - **Malformed target.** `owner/name` or nothing. A typo must not become a URL.
+    - **Not declared.** A stray survives, always. Emptiness does not make someone
+      else's repository ours to remove (ADR-065 D3), and a stray is precisely the
+      object whose removal needs a human who knows what it was.
+    - **Not empty, or emptiness unknown.** `empty` is the field Gitea maintains for
+      this; `size` is not a proxy for it. A freshly created empty repository
+      reports `size: 22` -- the git directory itself -- measured on all three
+      shells 2026-09-02. An absent `empty` key is "I do not know", refused rather
+      than defaulted, because defaulting it to True deletes on a missing value.
+
+    None of these guards the CREDENTIAL, which is the point worth remembering: the
+    superadmin's basic-auth session can delete any repository on the instance, and
+    it does not consult this function. These refusals catch operator error. The
+    safety property that does not depend on anyone's care is that no TOKEN was
+    widened to make this work -- see the module docstring of the test file.
+    """
+    split_full_name(full_name)
+
+    if repo is None:
+        return DropDecision(False, f"{full_name} is already absent — nothing to drop")
+
+    if full_name not in declared:
+        return DropDecision(
+            False,
+            f"{full_name} is not declared in `apps.services.core.gitea.organizations`. Undeclared "
+            f"repositories are reported and never removed (#1076, ADR-065 D3) — being empty does "
+            f"not change that. Declare it first if it really is ours.",
+        )
+
+    if "empty" not in repo:
+        return DropDecision(
+            False,
+            f"Gitea did not report whether {full_name} is empty. That is 'I do not know', not 'it "
+            f"is empty' — refusing rather than deleting on a missing field.",
+        )
+
+    if not repo["empty"]:
+        return DropDecision(
+            False,
+            f"{full_name} is not empty (size={repo.get('size', '?')}). This command removes the "
+            f"shells PR1 created, never a repository with content.",
+        )
+
+    return DropDecision(True)
+
+
 # =============================================================================
 # The I/O half. Everything above is pure; everything below talks to Gitea.
 # =============================================================================

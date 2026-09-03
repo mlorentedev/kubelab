@@ -463,6 +463,18 @@ gitea-reconcile:
 gitea-rotate-token:
 	@$(TOOLKIT) services gitea rotate-token --token $(or $(TOKEN),bot) --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
 
+# Plan only. `APPLY=1` deletes ONE empty, DECLARED repository — the shells PR1
+# created, which block `POST /repos/migrate` (Gitea answers 409 rather than
+# filling an existing repo). Refuses a repository with content, an undeclared one,
+# and one whose emptiness Gitea did not report. This is NOT a deletion path for
+# the reconciler: it goes through the superadmin's basic-auth session, because
+# granting either long-lived token `write:repository` would make deletion a
+# standing capability (TOOL-035, #1076).
+.PHONY: gitea-drop-empty
+gitea-drop-empty:
+	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1]" && exit 1)
+	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
+
 .PHONY: sync-secret-manager
 sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
 	@$(TOOLKIT) secrets sync-secret-manager

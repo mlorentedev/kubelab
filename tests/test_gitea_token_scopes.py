@@ -170,6 +170,68 @@ def test_the_admin_requirement_is_derived_from_the_methods_it_performs() -> None
     )
 
 
+def test_the_superadmin_token_is_never_granted_repository_writes(declared_scopes: dict[str, set[str]]) -> None:
+    """`write:repository` on the ADMIN token would make deletion a standing capability. It must not.
+
+    #1076 refuses deletion STRUCTURALLY — `ReconcilePlan` has no field one could
+    travel in — and `drop-empty` keeps that intact by going through
+    `GiteaBasicAuthClient`, an operator-triggered path with no token behind it.
+
+    That arrangement has one soft spot, and this test is it. Measured 2026-09-02
+    against live prod, `DELETE /repos/<owner>/<repo>` was refused three times, and
+    the three refusals are NOT the same refusal:
+
+        bot token             -> 403 "user should be the owner of the repo"
+        admin token           -> 403 required=[write:repository]
+        superadmin basic auth -> 204
+
+    THE ASYMMETRY IS THE REASON THIS TEST NAMES ONLY ONE TOKEN. The bot already
+    holds `write:repository` — it must, to create repositories at all — and is
+    still refused, because deletion is additionally gated on repository ownership
+    and ADR-065 D1 keeps the bot owning nothing. Scope is not the bot's last line
+    of defence; ownership is. The superadmin's account IS a site admin, so for that
+    token scope is the ONLY remaining gate, and the 403 it received is the entire
+    thing standing between a reconciler credential and `DELETE` on any repository
+    in the forge — populated ones included, since the `empty` guard is client-side
+    and no credential consults it.
+
+    So the obvious "fix" for anyone meeting that 403 — appending the scope here —
+    is the one thing that must not happen quietly. The superset check in this file
+    would not object: widening always passes. If a future caller genuinely needs
+    superadmin repository writes, that is a decision taken deliberately against
+    #1076's scope section, not a word added to a YAML string.
+    """
+    assert "write:repository" not in declared_scopes["admin"], (
+        "the admin token's grant includes `write:repository`, which carries "
+        "`DELETE /repos/<owner>/<repo>`. That account is a site admin, so this scope is the only "
+        "gate left — granting it makes deletion a standing capability of the reconciler's own "
+        "credential (#1076 refuses exactly that). `drop-empty` uses GiteaBasicAuthClient instead, "
+        "so the power exists only for the duration of an operator-run command. If this was added "
+        "to get past a 403 on a delete, that 403 was the design working."
+    )
+
+
+def test_basic_auth_methods_are_exempt_from_the_scope_map() -> None:
+    """`GiteaBasicAuthClient` carries no token, so its methods declare no scope.
+
+    Stated rather than left implicit, because `SCOPE_BY_METHOD` is checked for
+    exhaustiveness against `GiteaClient` and a reader could reasonably wonder
+    whether the subclass was forgotten. It was not: these endpoints reject bearer
+    tokens before the handler runs (`reqBasicOrRevProxyAuth()` in Gitea's
+    `routers/api/v1/api.go`), so a scope is not merely unnecessary, it is
+    meaningless.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+    own = {name for name in vars(GiteaBasicAuthClient) if not name.startswith("_")}
+    assert own, "GiteaBasicAuthClient defines no methods of its own — has it been refactored away?"
+    assert not (own & set(SCOPE_BY_METHOD)), (
+        f"{sorted(own & set(SCOPE_BY_METHOD))} appear in SCOPE_BY_METHOD but are basic-auth "
+        f"methods. Declaring a scope for one implies a token path that does not exist, and would "
+        f"drag that scope into REQUIRED_ADMIN_SCOPES if the method were ever added to ADMIN_METHODS."
+    )
+
+
 def test_every_rotatable_token_has_a_declared_scope(declared_scopes: dict[str, set[str]]) -> None:
     """A token that can be rotated but has no declared grant is re-minted with whatever the playbook guesses.
 
