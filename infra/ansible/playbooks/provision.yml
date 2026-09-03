@@ -18,6 +18,20 @@
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
 
+    # SEC-006. The VPS is the only node with a public IP, so it is the only one
+    # whose inbound list is declared centrally; every other host keeps
+    # base_system's fleet-wide default. set_fact outranks role defaults, which
+    # is what makes this an override rather than a second declaration.
+    #
+    # This keeps ufw in step with the Hetzner cloud firewall, which reads the
+    # same key. ufw is NOT the control here — it cannot restrict a published
+    # port (#959) — so if the two ever diverge, the cloud firewall is what prod
+    # actually enforces.
+    - name: Declare the VPS inbound allow-list from SSOT (networking.firewall.vps_inbound)
+      set_fact:
+        firewall_allowed_ports: "{{ config.networking.firewall.vps_inbound }}"
+      when: "'vps' in group_names"
+
   roles:
     - role: ../roles/base_system
       tags: [base, packages]

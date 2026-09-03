@@ -1,0 +1,51 @@
+[
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f1",
+    "behavior": "The VPS inbound allow-list is declared once in common.yaml and read by both the Hetzner cloud firewall and ufw, so the two cannot disagree without the declaration changing.",
+    "verification": "poetry run pytest tests/test_vps_cloud_firewall_is_attached.py::TestTheDeclarationIsInternallyConsistent tests/test_traefik_ports_stay_behind_the_firewall.py -q --no-cov",
+    "state": "done",
+    "evidence": "AC1. Mutation M3 (unwire provision.yml from the SSOT) turns test_the_ansible_side_reads_the_ssot_rather_than_its_own_copy red."
+  },
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f2",
+    "behavior": "The Terraform module attaches a firewall to the running VPS without ever managing the server, so no plan can propose replacing production.",
+    "verification": "poetry run pytest tests/test_vps_cloud_firewall_is_attached.py::TestTheDeclarationIsInternallyConsistent::test_the_module_does_not_manage_the_server -q --no-cov",
+    "state": "done",
+    "evidence": "AC2. Plan output: 2 to add, 0 to change, 0 to destroy. Mutation M2 (data source -> managed resource) red."
+  },
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f3",
+    "behavior": "The firewall attaches only to the server whose public IP matches networking.vps.public_ip; a renamed or reused server name fails the plan rather than firewalling the wrong machine.",
+    "verification": "cd infra/terraform/vps-firewall && terraform plan",
+    "state": "done",
+    "evidence": "AC2. Mutation M8 (point expected_public_ip elsewhere) makes the precondition refuse, printing both the resolved and the expected address. Needed because the original lookup used the OS hostname and resolved to nothing."
+  },
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f4",
+    "behavior": "A port outside the allow-list is dropped at Hetzner's edge, and every port inside it still serves.",
+    "verification": "nc -vz 162.55.57.175 8080  # must time out; confirm ip route get leaves via wlp1s0, not tailscale0",
+    "state": "done",
+    "evidence": "AC3/AC4. 8080 went from 200 OK to timeout across the apply on the same non-tailnet path; 22/80/443 connect, 6443 returns 401, vpn.kubelab.live returns 200, tailnet unchanged. 9000 is NOT a valid probe here -- #1541 closed it at the Traefik layer, so it times out with or without a firewall."
+  },
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f5",
+    "behavior": "A guard asks Hetzner what is actually attached and fails when the live rules do not match the declaration in either direction -- detached, deleted, or edited out of band.",
+    "verification": "make test-vps-firewall-live",
+    "state": "done",
+    "evidence": "AC5. Run before the apply it FAILED with assert [] naming the unprotected VPS; run after, it passes. Same test, same command, opposite verdict, driven only by the state of production."
+  },
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f6",
+    "behavior": "Re-applying changes nothing.",
+    "verification": "make tf-vps-firewall-plan",
+    "state": "done",
+    "evidence": "AC6. 'No changes. Your infrastructure matches the configuration.' The em-dashes in rule descriptions survive the round-trip, so there is no perpetual ~description diff."
+  },
+  {
+    "id": "SEC-006-cloud-firewall-for-running-vps-f7",
+    "behavior": "Something continuously reports that the firewall is still attached, without anyone running a command.",
+    "verification": "make monitoring-apply  # then read Infra · Sec · VPS firewall holds (8080 shut) in Uptime Kuma",
+    "state": "done",
+    "evidence": "AC5. An upsideDown port monitor on 162.55.57.175:8080 -- up when the check fails. 8080 is the correct canary because Headscale keeps listening on it regardless of the firewall, so it answers again within one interval if the firewall is detached. Its exhaustive complement, the live guard, has no scheduler: #1570."
+  }
+]
