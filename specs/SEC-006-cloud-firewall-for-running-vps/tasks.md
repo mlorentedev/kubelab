@@ -34,12 +34,62 @@ Legend: `[ACn]` traces a task to its acceptance criterion in `proposal.md`.
 
 These are the post-apply half. None can be done before a human reads a plan and applies, because every one of them verifies a running system rather than a declaration, which is the entire premise of the spec.
 
-- [ ] **[AC2]** `make tf-vps-firewall-plan`, and **a human reads the plan**. Proceed only if destroy count is 0 and the only change is the firewall plus its attachment. Note the module has never been `terraform init`-ed, so the first run also downloads the provider — expected, not a failure.
-- [ ] **[AC2]** `make tf-vps-firewall-apply` once the plan is approved.
+- [x] **[AC2]** `make tf-vps-firewall-plan` — **`Plan: 2 to add, 0 to change, 0 to destroy`**, the firewall plus its attachment to `server_ids = [61231002]`, which is the machine at `162.55.57.175`. Three real defects surfaced on the way and none was visible before the module met a live account; each is fixed and guarded (see *Found by running it*, below).
+- [ ] **[AC2]** **A human reads the plan**, then `make tf-vps-firewall-apply`. Confirm the Hetzner web console is reachable *first* (spec Risk 2): it is the only out-of-band path if the SSH rule is wrong, because Headscale is on the machine being firewalled.
 - [ ] **[AC3]** Verify by consequence from a **non-tailnet** path that a port outside the allow-list is refused at the cloud edge. Confirm the path really is non-tailnet first (`ip route get`), the way #1538 did — a check that leaves via `tailscale0` proves nothing about the public internet.
 - [ ] **[AC4]** Verify every allow-listed port still works: SSH reachable, HTTPS serving, tailnet still forming. 3478/udp is the one that would fail quietly rather than loudly.
 - [ ] **[AC6]** Re-run apply; assert no changes.
 - [ ] **[AC5]** Run `make test-vps-firewall-live` against the applied state. This is also the first execution of the API accessors, whose response shape is asserted rather than assumed — if the shape is wrong it fails here naming the missing key, which is intended.
+
+## Found by running it (2026-09-02)
+
+The module passed 1810 tests and a full static review, then failed three times in
+a row the first time it met a real account. Each failure is the spec's own thesis
+turned on the spec: **nothing in the repository could have distinguished these
+from a working module.**
+
+1. **It could not initialise.** A `description` explained that the firewall's name
+   is deliberately unlike the DR module's `${project_name}-vps`, and HCL expands
+   `${...}` inside any quoted string — prose read as a reference. Fixed with the
+   `$${...}` escape; guarded by a text scan over `infra/terraform`, because no CI
+   workflow installs Terraform and a `terraform validate` test would skip in CI
+   and assert nothing (#1565's failure shape).
+2. **`hetzner.api_key` was not a Hetzner Cloud token.** The provider refused it:
+   *"must be exactly 64 characters long"*; the stored value was 32. Declared since
+   the catalogue was written, never exercised, because `compute/` has never been
+   applied — SEC-006 is its first consumer. The same shape as #1546: a credential
+   that exists, is named correctly, and cannot do the job. Re-issued by the
+   operator into SOPS. The DR runbook's `sops -d <whole file> | yq` step was
+   replaced in the same pass with a single-key extraction.
+3. **The server lookup named the wrong thing.** `data "hcloud_server"` used
+   `networking.vps.hostname` (`kubelab-vps`) — the OS hostname. Hetzner calls the
+   machine `mlorente-01`. Declared as `networking.vps.hetzner_server_name`,
+   generated into the tfvars, and both Terraform variables lost their defaults: a
+   plausible-looking default is how this was silently wrong. The attachment now
+   carries a `precondition` asserting the resolved `ipv4_address` equals
+   `networking.vps.public_ip`, so a rename or a reused name fails the plan
+   instead of firewalling a different machine.
+
+**The premise is now established at the source, not inferred.** Asked the Hetzner
+API directly: the project holds one server, `mlorente-01` at `162.55.57.175`,
+with `firewalls=[]`, and the project contains **zero** firewalls. Production has
+no cloud firewall. Previously this rested on a missing local state file, which
+proves nothing — every root here is `backend "local"` with gitignored state.
+
+**Allow-list decisions taken with the operator.** Measured from a verified
+non-tailnet path, two TCP ports answered the internet and were absent from the
+list: `6443` (K3s API, `401 Unauthorized`) and `8080` (Headscale control plane,
+**plaintext HTTP, 200 OK**). 6443 was added — it is load-bearing for the prod
+kubeconfig, and preserving behaviour is the same reasoning that kept 3478. 8080
+was deliberately left out and the omission documented in `common.yaml`; closing
+it is the one change here with observable effect, which is why AC4 checks
+`vpn.kubelab.live` immediately. ICMP stays undeclared, matching the DR module.
+
+**Mutation-proved (second round), committed before mutating:**
+
+- **M6** reintroduce an unescaped `${...}` in a description → red.
+- **M7** blank `networking.vps.hetzner_server_name` → generator refuses, naming the key.
+- **M8** point `expected_public_ip` at another address → **plan refuses**, printing both the resolved and expected IP. This is the guard that makes attaching to the wrong machine structurally impossible.
 
 ## Closing
 
