@@ -1315,6 +1315,22 @@ sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
 # which `$(filter)` alone accepts and then splices unquoted into the argv.
 VIKUNJA_ENVS := staging prod
 
+# The forge is prod-identity even though the Beelink is provisioned with
+# deploy_env=staging -- ADR-061's axes are independent, and "prod is an
+# environment, not a location". So `prod` is the only value these targets accept,
+# and the guard validates the VALUE rather than its presence: `ENV ?= dev` further
+# down makes `test -n "$(ENV)"` unfailable (#1118/#1122).
+GITEA_ENVS := prod
+
+.PHONY: gitea-prune-runners
+gitea-prune-runners: ## Deregister Gitea Actions runners the declaration does not name
+	@{ test "$(words $(ENV))" = 1 && test -n "$(filter $(ENV),$(GITEA_ENVS))"; } || { \
+		echo "Usage: make gitea-prune-runners ENV=<one of: $(GITEA_ENVS)> [APPLY=1]"; \
+		echo "  Got ENV='$(ENV)'. Plan-only unless APPLY=1."; \
+		exit 1; \
+	}
+	@$(TOOLKIT) services gitea prune-runners --env $(ENV) $(if $(APPLY),--apply,)
+
 .PHONY: vikunja-audit-users
 vikunja-audit-users: ## List Vikunja accounts, separating password signups from OIDC logins
 	@{ test "$(words $(ENV))" = 1 \

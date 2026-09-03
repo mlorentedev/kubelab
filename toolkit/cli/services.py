@@ -827,3 +827,72 @@ def vikunja_audit_users(
     )
     if locals_:
         console.print("[yellow]Confirm every password account above is yours.[/yellow]")
+
+
+@gitea_app.command("prune-runners")
+def gitea_prune_runners(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    apply: Annotated[bool, typer.Option("--apply", help="Deregister; default is plan-only")] = False,
+) -> None:
+    """Deregister Actions runners the declaration does not name.
+
+    The forge half of the runner's teardown. Ansible removes the container; only
+    this removes the registration, and the registration is the half that keeps
+    costing: a runner record whose machine no longer exists is still a row the
+    scheduler places jobs on, and those jobs wait for a machine that is gone with
+    no error anywhere. `aws1` demonstrated the same shape on the tailnet, ten days
+    after the node was destroyed.
+
+    Plan-only by default. `--apply` is opt-in for the same reason it is on
+    `reconcile` and `drop-empty`: a command that deregisters CI runners should not
+    do it because somebody wanted to look.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
+
+    admin, _bot, _bot_username, base_url = _gitea_clients(env)
+    cfg = ConfigurationManager(env=env)
+    merged = cfg.get_merged_config()
+    declared = merged["apps"]["services"]["automation"]["gitea_runner"]
+    # From the SSOT. A literal here would keep matching after a rename and quietly
+    # protect the wrong record -- or, worse, stop matching and deregister the live
+    # runner as "undeclared".
+    keep = declared["runner_name"] if declared.get("enabled") else None
+
+    console.print(f"\n[bold]Gitea runner reconcile[/bold] — {base_url} ({env})\n")
+
+    try:
+        runners = admin.list_runners()
+    except GiteaError as exc:
+        logger.error(f"could not list runners: {exc}")
+        raise typer.Exit(1) from exc
+
+    strays = [r for r in runners if r.get("name") != keep]
+    if not strays:
+        # Say which question was answered. "nothing to do" over an empty listing and
+        # over a correct one look identical, and only one of them is reassuring.
+        console.print(f"  (nothing to prune — {len(runners)} runner(s) registered, all declared)\n")
+        logger.success("forge matches the declaration")
+        return
+
+    for runner in strays:
+        console.print(f"  - runner {runner.get('id')}  {runner.get('name')!r}  (not declared)")
+
+    if not apply:
+        console.print("\nplan only — re-run with --apply to deregister\n")
+        return
+
+    # Basic auth, not the admin token: the token would need `write:admin`, and any
+    # credential that can deregister a runner holds that capability permanently.
+    # Same refusal as `delete_repo`, for the same reason.
+    admin_password = cfg.get_secret_by_path("apps.services.core.gitea.admin_password")
+    if not admin_password:
+        logger.error("no Gitea admin password in SOPS — deregistering needs basic auth")
+        raise typer.Exit(1)
+
+    pruner = GiteaBasicAuthClient(base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password))
+    for runner in strays:
+        runner_id = int(runner["id"])
+        if pruner.delete_runner(runner_id):
+            logger.success(f"deregistered runner {runner_id} ({runner.get('name')})")
+        else:
+            logger.info(f"runner {runner_id} was already gone")

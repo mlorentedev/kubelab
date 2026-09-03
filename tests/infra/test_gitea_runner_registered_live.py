@@ -30,10 +30,14 @@ pytestmark = pytest.mark.infra
 _REPO_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 _COMMON_YAML = os.path.abspath(os.path.join(_REPO_ROOT, "infra/config/values/common.yaml"))
 
-#: Set in `compose.yml.j2`. The runner's identity on the forge, and what makes "is
-#: OUR runner registered" a different question from "is ANY runner registered" — a
-#: leftover record from a decommissioned node would answer the second one yes.
-RUNNER_NAME = "kubelab-bee-gitea"
+def _runner_name() -> str:
+    """The runner's identity on the forge, from the SSOT.
+
+    What makes "is OUR runner registered" a different question from "is ANY runner
+    registered" — a leftover record from a decommissioned node answers the second
+    one yes. Read rather than repeated so a rename moves the assertion with it.
+    """
+    return _common()["apps"]["services"]["automation"]["gitea_runner"]["runner_name"]
 
 
 def _common() -> dict:
@@ -79,8 +83,8 @@ def test_the_declared_runner_is_registered(runners: list[dict]) -> None:
     """
     names = [r.get("name") for r in runners]
 
-    assert RUNNER_NAME in names, (
-        f"`{RUNNER_NAME}` is not registered with the forge; it holds {names or 'no runners'}.\n"
+    assert _runner_name() in names, (
+        f"`{_runner_name()}` is not registered with the forge; it holds {names or 'no runners'}.\n"
         "CI jobs will QUEUE rather than fail, so nothing else will report this. Check "
         "the container's logs for a rejected registration token — the mint is gated on "
         "the SOPS key being absent, so a token that drifted from the one Gitea holds "
@@ -99,7 +103,7 @@ def test_the_registered_runner_can_serve_the_migrated_workflows(runners: list[di
     declared = _common()["apps"]["services"]["automation"]["gitea_runner"]["labels"]
     wanted = str(declared).split(":", 1)[0]
 
-    ours = [r for r in runners if r.get("name") == RUNNER_NAME]
+    ours = [r for r in runners if r.get("name") == _runner_name()]
     if not ours:
         pytest.skip("runner not registered — covered by the test above, not re-reported here")
 
@@ -123,7 +127,7 @@ def test_no_undeclared_runner_is_registered(runners: list[dict]) -> None:
     machine that is gone — again with no error. Deregistering is
     `make gitea-prune-runners APPLY=1`.
     """
-    strays = [r.get("name") for r in runners if r.get("name") != RUNNER_NAME]
+    strays = [r.get("name") for r in runners if r.get("name") != _runner_name()]
 
     assert not strays, (
         f"runners registered that this repository does not declare: {strays}. "

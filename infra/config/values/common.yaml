@@ -1026,6 +1026,13 @@ apps:
         # a machine that is gone, with no error anywhere. `aws1` demonstrated the
         # same shape on the tailnet ten days after the node was destroyed.
         enabled: true
+        # The name the runner REGISTERS UNDER on the forge, which is a different
+        # thing from `name` above (the container). Three consumers need to agree on
+        # it -- the compose environment that sets it, the live guard that asserts
+        # this runner is registered, and `prune-runners`, which decides what to
+        # deregister by NOT matching it. A literal in any one of them keeps matching
+        # after a rename and quietly protects or destroys the wrong record.
+        runner_name: kubelab-bee-gitea
         image: gitea/act_runner:0.2.13
         # `ubuntu-latest` DOES NOT EXIST on a self-hosted forge -- Gitea has no hosted
         # runners, so the label is only ever what act_runner declares. Every workflow

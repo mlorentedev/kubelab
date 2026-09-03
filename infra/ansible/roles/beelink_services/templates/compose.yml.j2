@@ -164,7 +164,7 @@ services:
       # Minted by `gitea actions generate-runner-token` and recorded in SOPS. Never
       # a literal here -- this template is committed.
       GITEA_RUNNER_REGISTRATION_TOKEN: "{{ act_runner_token }}"
-      GITEA_RUNNER_NAME: "kubelab-bee-gitea"
+      GITEA_RUNNER_NAME: "{{ act_runner_runner_name }}"
       # Labels, capacity and the job-container limits live in the mounted
       # config.yaml, not here: the env vars cannot express `capacity` or
       # `container.options`, and splitting the runner's configuration across two

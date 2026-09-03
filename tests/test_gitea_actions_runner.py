@@ -118,6 +118,7 @@ def _template_vars(runner: dict) -> dict:
             # under test, so a copy here would assert the test against itself.
             act_runner_enabled=runner["enabled"],
             act_runner_name=runner["name"],
+            act_runner_runner_name=runner["runner_name"],
             act_runner_image=runner["image"],
             act_runner_token="x",
             act_runner_cpu_limit=runner["resources"]["cpu_limit"],
