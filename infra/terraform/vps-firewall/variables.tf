@@ -17,7 +17,10 @@ variable "project_name" {
 }
 
 variable "firewall_name" {
-  description = "Firewall name. Deliberately distinct from the DR module's ${project_name}-vps so a disaster-recovery recreate cannot collide with a firewall that survived the disaster."
+  # The `$${...}` below is an escaped literal, not an interpolation. HCL expands
+  # `${...}` inside ANY quoted string, a description included, so naming another
+  # module's expression in prose breaks `init` before a provider is downloaded.
+  description = "Firewall name. Deliberately distinct from the DR module's $${project_name}-vps so a disaster-recovery recreate cannot collide with a firewall that survived the disaster."
   type        = string
   default     = "kubelab-vps-inbound"
 }

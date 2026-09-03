@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 
 import pytest
 import yaml
@@ -105,6 +106,44 @@ class TestTheDeclarationIsInternallyConsistent:
             "The server lookup is gone. Without it there is nothing to attach the "
             "firewall to, and the module would create an orphan firewall that "
             "protects nothing while appearing to."
+        )
+
+    def test_no_terraform_description_interpolates_prose(self) -> None:
+        """HCL expands `${...}` inside ANY quoted string, a `description` included.
+
+        Measured 2026-09-02: this module's `firewall_name` description explained
+        that its value is deliberately distinct from the DR module's
+        `${project_name}-vps`. Terraform read that prose as an interpolation and
+        refused to *initialise* -- "Variables may not be used here" -- so the
+        first `plan` ever attempted against a real account died before a provider
+        was downloaded.
+
+        The bug survived 1810 passing tests because nothing in this repo runs
+        `terraform validate`, and nothing can: no CI workflow installs Terraform,
+        so a test that shelled out to it would skip in CI and assert nothing --
+        the vacuity failure this same session filed as #1565. A text check is
+        weaker than `validate` but it actually runs, and it covers the whole
+        class: interpolation in a description is always prose, never intent.
+
+        The escape is `$${...}`, which renders the literal.
+        """
+        offenders = []
+        pattern = re.compile(r'^\s*description\s*=\s*"([^"]*)"', re.MULTILINE)
+        for tf_file in sorted((REPO_ROOT / "infra/terraform").rglob("*.tf")):
+            if ".terraform" in tf_file.parts:
+                continue
+            for match in pattern.finditer(tf_file.read_text(encoding="utf-8")):
+                if re.search(r"(?<!\$)\$\{", match.group(1)):
+                    rel = tf_file.relative_to(REPO_ROOT)
+                    offenders.append(f"{rel}: {match.group(1)[:80]}")
+
+        assert not offenders, (
+            "A Terraform `description` contains an unescaped ${...}, which HCL "
+            "expands as an interpolation rather than printing. This breaks "
+            "`terraform init` for the whole module -- before any provider is "
+            "fetched, so the error names the description, not the resource you "
+            "were changing. Write $${...} to mean the literal.\n  "
+            + "\n  ".join(offenders)
         )
 
     def test_the_dr_module_is_not_the_one_being_applied(self) -> None:
