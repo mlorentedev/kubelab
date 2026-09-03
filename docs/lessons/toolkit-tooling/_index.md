@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-31 lessons, newest first. Back to [all categories](../_index.md).
+32 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 420 | [A `try` that spans a `yield` catches the caller's failures and reports them as its own](lesson-420-a-try-around-a-yield-catches-the-callers-failures.md) | 2026-09-02 |
 | 389 | [A declaration with no readers pays its whole cost at once](lesson-389-a-declaration-with-no-readers-pays-its-whole-cost-at-once.md) | 2026-08-24 |
 | 380 | [The catalog names every consumer and nothing acts on it](lesson-380-the-catalog-names-every-consumer-and-nothing-acts-on-it.md) | 2026-08-23 |
 | 378 | [When two commands reach the same value, the guard on one is not a guard](lesson-378-two-paths-to-one-value-and-only-one-guarded.md) | 2026-08-23 |
