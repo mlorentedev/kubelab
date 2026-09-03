@@ -29,6 +29,8 @@ repeatedly, including in the test next door.
 
 from __future__ import annotations
 
+import re
+
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
@@ -159,21 +161,50 @@ def test_the_runner_advertises_the_github_hosted_label() -> None:
     )
 
 
-def test_only_one_job_runs_at_a_time() -> None:
-    """Capacity is the knob that turns several open PRs into an out-of-memory event.
+#: Physical RAM on the Beelink, measured 2026-09-03 (`free -m` reports 7716 MB of
+#: 8 GB). Not read from a config file because no SSOT declares the node's hardware,
+#: and inventing one to satisfy a test would be worse than a documented constant.
+BEELINK_TOTAL_MB = 7716
 
-    The Beelink is 8 GB and also hosts the forge these jobs build for. With capacity
-    1 the jobs queue, which on this hardware is the correct answer rather than a
-    limitation — so it is declared rather than inherited from a default that a future
-    act_runner release is free to change.
+#: What must remain for the OS, page cache, and the ~450 MB the service stack uses
+#: at rest (gitea 131M, minio 135M, glances 108M, github-runner 61M -- measured, not
+#: their declared ceilings, which reserve nothing).
+RESERVED_MB = 1800
+
+
+def test_concurrent_jobs_fit_in_the_node_s_memory() -> None:
+    """capacity x per-job memory must fit, whatever those two numbers become.
+
+    Pinning `capacity == 1` would have been the wrong assertion: it fixes a value
+    rather than the property that makes the value safe, and it goes red on a change
+    that is perfectly correct -- which is how a test gets loosened instead of read.
+
+    The property is arithmetic. **CPU can be oversubscribed safely and memory cannot**:
+    too many CPU shares only throttles, while too much committed memory invokes the
+    OOM killer on a node that also hosts the forge these jobs build for. So this
+    checks memory, and lets CPU be a judgement call.
     """
-    capacity = int(_config()["runner"]["capacity"])
+    runner = _ssot()
+    capacity = int(runner["capacity"])
+    options = str(runner["container_options"])
 
-    assert capacity == 1, (
-        f"capacity is {capacity}. Each concurrent job is a multi-GB container on an "
-        "8 GB node that also runs Gitea, MinIO and the GitHub runner. Raising this "
-        "needs a memory calculation, not a convenience."
+    match = re.search(r"--memory=(\d+(?:\.\d+)?)([gGmM])", options)
+    assert match, (
+        f"container_options declares no parseable --memory: {options!r}. Without it "
+        "the job container is unbounded and this arithmetic is vacuous."
     )
+    per_job_mb = float(match.group(1)) * (1024 if match.group(2).lower() == "g" else 1)
+    committed = capacity * per_job_mb
+    budget = BEELINK_TOTAL_MB - RESERVED_MB
+
+    assert committed <= budget, (
+        f"{capacity} concurrent jobs x {per_job_mb:.0f} MB = {committed:.0f} MB, over "
+        f"the {budget} MB budget on a {BEELINK_TOTAL_MB} MB node. Raising capacity "
+        "without shrinking the per-job limit is how parallel CI becomes an OOM event "
+        "that takes Gitea down with it."
+    )
+
+    assert capacity >= 1, "capacity below 1 means no job ever runs"
 
 
 def test_the_job_containers_are_bounded_not_just_the_runner() -> None:

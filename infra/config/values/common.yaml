@@ -1027,18 +1027,38 @@ apps:
         # ships exactly this mapping as its default (read from the image, not from
         # memory). First-party, and it is what the project documents.
         labels: "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
-        # How many jobs run AT ONCE on this node. 1 is act_runner's own default and
-        # it is kept deliberately: with several PRs open, jobs QUEUE instead of
-        # competing for an 8 GB box that also hosts the forge they build for. Raising
-        # this is the single knob that turns parallel CI into an out-of-memory event,
-        # so it is declared rather than inherited.
-        capacity: 1
+        # How many jobs run AT ONCE on this node, and the number is measured rather
+        # than chosen. `resume`'s ci.yml has SIX jobs and none of them declares
+        # `needs`, so they all start together: at capacity 1 a workflow takes six
+        # times the length of its slowest job, WITHIN A SINGLE pull request. That is
+        # the real cost, and it is not about several PRs competing.
+        #
+        # Measured on the Beelink 2026-09-03: 4 cores, 7716 MB total, 6605 MB
+        # available, and the whole service stack consuming ~440 MB at rest (gitea
+        # 131M, minio 135M, glances 108M, github-runner 61M against a 6G ceiling it
+        # does not use, because ADR-030's amendment left it idle). The 10 GB of
+        # declared limits on this node are CEILINGS and reserve nothing.
+        #
+        # Budget: 6.6G available - ~450M services - ~1G for OS and page cache leaves
+        # roughly 5G for jobs. Two at 2G fits with real headroom, and the arithmetic
+        # is enforced by tests/test_gitea_actions_runner.py rather than by this
+        # comment.
+        #
+        # NOT three, for two reasons. The marginal gain is smaller than it looks --
+        # six jobs go from 3 waves to 2, a third less rather than a half -- and there
+        # are only 4 cores, so three jobs at `--cpus=2` request six and throttle each
+        # other anyway. **CPU can be oversubscribed safely; memory cannot**: the first
+        # only slows down, the second invokes the OOM killer on the node hosting the
+        # forge these jobs build for. Revisit with evidence from a real run --
+        # nothing has ever executed this workflow on this hardware, so `build-pdf`'s
+        # actual footprint is unknown.
+        capacity: 2
         # Bounds the JOB containers, which is a different thing from the runner's own
         # `resources` below. act_runner is a 43 MB binary that orchestrates; the
         # multi-GB `runner-images` container it spawns per job is a SIBLING on the
         # same daemon and inherits none of the runner's compose limits. Without this,
         # the limit below bounds the wrong process entirely.
-        container_options: "--memory=3g --cpus=2"
+        container_options: "--memory=2g --cpus=2"
         # Retention for what Actions accumulates INSIDE Gitea. Separate problem from
         # Docker layers on the node (which `node_maintenance` already prunes) and with
         # a separate mechanism: these grow in Gitea's data volume, which is the one
