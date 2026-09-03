@@ -1303,6 +1303,30 @@ sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
 	@test -n "$(ENV)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync vikunja --env $(ENV)
 
+# Validate the ENV *value* against the environments that have a Vikunja, the same
+# way `config-check-drift` does and for the same reason: `test -n "$(ENV)"` can
+# never fail, because `ENV ?= dev` further down this file is global regardless of
+# position. A bare `make vikunja-audit-users` would then audit `dev`, which has no
+# Vikunja — and the audit would report an empty account list rather than an error,
+# turning "I could not look" into "nobody is there". That is the exact inversion
+# this command exists to prevent. #1118/#1122 shipped the weak guard twice.
+#
+# `$(words)` rejects the empty value and a multi-word one like ENV="staging prod",
+# which `$(filter)` alone accepts and then splices unquoted into the argv.
+VIKUNJA_ENVS := staging prod
+
+.PHONY: vikunja-audit-users
+vikunja-audit-users: ## List Vikunja accounts, separating password signups from OIDC logins
+	@{ test "$(words $(ENV))" = 1 \
+	   && test -n "$(filter $(ENV),$(VIKUNJA_ENVS))"; } || { \
+		echo "Usage: make vikunja-audit-users ENV=<one of: $(VIKUNJA_ENVS)>"; \
+		echo "  Got ENV='$(ENV)'. Only these environments run a Vikunja; any"; \
+		echo "  other value — including the repo-wide 'ENV ?= dev' default —"; \
+		echo "  would report an empty account list instead of failing."; \
+		exit 1; \
+	}
+	@$(TOOLKIT) services vikunja audit-users --env $(ENV)
+
 .PHONY: provision-postgres-tenant
 provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
 	@test -n "$(ENV)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)

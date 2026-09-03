@@ -729,3 +729,101 @@ def _secret_leaf(token: str) -> str:
 
     spec = ROTATABLE_TOKENS.get(token)
     return spec.secret_key.rsplit(".", 1)[-1] if spec else ""
+
+
+vikunja_app = typer.Typer(help="Audit the Vikunja task platform")
+app.add_typer(vikunja_app, name="vikunja")
+
+
+@vikunja_app.command("audit-users")
+def vikunja_audit_users(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+) -> None:
+    """List every Vikunja account, separating password signups from OIDC logins.
+
+    SEC-VIKUNJA-001 (#1568) AC3. Public self-registration was open on an
+    internet-facing domain from #1484 until #1568; closing it does not evict
+    whoever is already inside. This answers "who exists" with a count instead of
+    an assumption.
+
+    Read-only by construction: the SQL is a `SELECT` held as a constant in
+    `vikunja_users`, and nothing here writes. Emails are printed because
+    identifying a stranger is the entire point -- they are not secrets, and no
+    password, hash or token is read.
+    """
+    import subprocess
+
+    from toolkit.cli.infra import _get_kubeconfig
+    from toolkit.features.vikunja_users import (
+        EXEC_TIMEOUT,
+        FIELD_SEPARATOR,
+        USER_AUDIT_SQL,
+        local_accounts,
+        parse_user_rows,
+    )
+
+    cmd = [
+        "kubectl",
+        "--kubeconfig",
+        _get_kubeconfig(env),
+        "-n",
+        "kubelab",
+        "exec",
+        "-i",
+        "deployment/postgres",
+        "--",
+        "psql",
+        "-U",
+        "kubelab",
+        "-d",
+        "vikunja",
+        "-tAF",
+        FIELD_SEPARATOR,
+        "-c",
+        USER_AUDIT_SQL,
+    ]
+    # Every failure below lands on the same branch, and that is the point: an audit
+    # that cannot read the table must say so. Reporting zero accounts because the
+    # query never ran is the same inversion the ticket was filed for -- "I could not
+    # look" rendered as "nobody is there".
+    #
+    # The timeout is not defensive dressing. `kubectl exec` opens a stream and will
+    # wait forever on an unreachable API server or a pod stuck terminating, and the
+    # homelab is on-demand, so "unreachable" is a normal state here rather than an
+    # exceptional one. Without a bound the command hangs instead of failing.
+    try:
+        res = subprocess.run(cmd, text=True, capture_output=True, timeout=EXEC_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        logger.error(
+            f"timed out after {EXEC_TIMEOUT}s reading the Vikunja user table in {env} — "
+            "the cluster did not answer. This is NOT an empty account list."
+        )
+        raise typer.Exit(1) from None
+    except OSError as exc:
+        # Raised before `res` exists, so it cannot be handled by a returncode check:
+        # a missing `kubectl` binary is the common case.
+        logger.error(f"could not run kubectl: {exc}")
+        raise typer.Exit(1) from None
+
+    if res.returncode != 0:
+        logger.error(f"could not read the Vikunja user table in {env}: {res.stderr.strip()}")
+        raise typer.Exit(1)
+
+    users = parse_user_rows(res.stdout)
+    locals_ = local_accounts(users)
+
+    table = Table(title=f"Vikunja accounts — {env}")
+    table.add_column("id")
+    table.add_column("username")
+    table.add_column("email")
+    table.add_column("origin")
+    for user in users:
+        table.add_row(user.user_id, user.username, user.email, user.issuer)
+    console.print(table)
+
+    console.print(
+        f"\n{len(users)} account(s), {len(locals_)} created by password signup "
+        f"(the ones an open /register endpoint could have produced)."
+    )
+    if locals_:
+        console.print("[yellow]Confirm every password account above is yours.[/yellow]")
