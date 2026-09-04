@@ -1,0 +1,9 @@
+[
+  {
+    "id": "DELIVERY-004-exempt-generated-deploy-prs-f1",
+    "behavior": "Outcome 1",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
