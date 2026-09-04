@@ -17,6 +17,17 @@ on:
         description: List what would be deleted, delete nothing
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      dry_run:
+        description: List what would be deleted, delete nothing
+        type: boolean
+        default: false
+  push:
+    branches: [master]
+    paths:
+      - 'infra/config/values/prod.yaml'
+      - 'infra/config/values/staging.yaml'
 
 permissions:
   contents: read
