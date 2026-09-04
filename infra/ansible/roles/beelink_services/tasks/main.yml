@@ -108,6 +108,51 @@
   notify: Restart gitea
   tags: [gitea]
 
+- name: Remove the act_runner container when it is not declared
+  # THE ABSENCE HALF, and it exists because Ansible has no other one. Removing the
+  # service from the template stops rendering it and does nothing to the container
+  # already running -- so a runner "retired" by deletion keeps working, keeps its
+  # registration, and keeps taking jobs. This is the same treatment the dev_node
+  # role carries for services retired from ace2 (CLAUDE.md): cleanup belongs to
+  # whatever role still owns the node.
+  #
+  # `docker rm -f` and not `compose down`: compose would take the whole stack with
+  # it, and the blast radius should match the change.
+  #
+  # Deregistering from the forge is deliberately NOT here. It needs the API and a
+  # credential Ansible does not hold on this node, and a half-done teardown that
+  # removes the container while leaving the record is worse than none -- the
+  # scheduler keeps placing jobs on a runner that no longer exists. That half is
+  # `make gitea-prune-runners`, which reconciles the forge against this same
+  # declaration.
+  command: docker rm -f {{ act_runner_name }}
+  register: _act_runner_rm
+  changed_when: _act_runner_rm.rc == 0
+  failed_when: _act_runner_rm.rc != 0 and 'No such container' not in _act_runner_rm.stderr
+  when: not (act_runner_enabled | bool)
+  tags: [gitea, runner]
+
+- name: Install the act_runner configuration
+  template:
+    src: act-runner-config.yaml.j2
+    dest: "{{ beelink_deploy_dir }}/act-runner-config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  when: act_runner_enabled | bool
+  # Same single-file bind mount as the bootstrap script above, and therefore the
+  # same inode trap (ANSIBLE-054, #1400): `template` writes through a tempfile
+  # and a rename, so the host gets a NEW inode while the running container keeps
+  # the old one. A changed config would report success and not be read until
+  # something else happened to restart the container. The notify is what closes
+  # that, and it is load-bearing rather than tidy.
+  #
+  # No secret in this file, deliberately — it is mode 0644 and holds only
+  # capacity, labels and container options. The registration token reaches the
+  # runner through the environment, which is why the two are split.
+  notify: Recreate act-runner
+  tags: [gitea, runner]
+
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
 - name: Install the Tailscale address wait helper
   copy:
@@ -330,6 +375,84 @@
   changed_when: true
   no_log: true
   tags: [gitea]
+
+- name: Mint the Gitea Actions runner registration token
+  # GATED, and the gate is load-bearing in a way the bot token's is not.
+  #
+  # `models/actions/runner_token.go`: generating a registration token "reuses the
+  # latest active token or creates a new one, INVALIDATING ALL PRIOR TOKENS for
+  # the same scope". So an ungated mint does not merely churn a value — it
+  # revokes the token the RUNNING runner registered with, and Gitea then rejects
+  # it (`runner registration token has been invalidated`). Re-provisioning this
+  # node would deregister its own runner as a side effect of a task that reports
+  # SUCCESS: the playbook goes green, CI stops picking up jobs, and the cause is
+  # a token mint several tasks earlier that nobody associates with a runner going
+  # offline.
+  #
+  # `argv` for the same reason as the mint above: the string form loses the inner
+  # `su git -c` quoting through YAML folding plus argv splitting, and a partial
+  # invocation of a token command is the worst possible failure — it creates a
+  # credential while reporting failure.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - gitea actions generate-runner-token
+  register: _act_runner_token
+  when: not act_runner_token
+  changed_when: _act_runner_token.rc == 0
+  no_log: true
+  tags: [gitea, runner]
+
+- name: Record the runner registration token in SOPS
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.automation.gitea_runner.registration_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _act_runner_token.stdout | trim }}"
+  delegate_to: localhost
+  become: false
+  when: not act_runner_token
+  changed_when: true
+  no_log: true
+  tags: [gitea, runner]
+
+- name: Re-render the Compose stack now that the runner token exists
+  # THE SECOND RENDER, and it is not duplication -- do not "clean it up".
+  #
+  # The registration token can only be minted by a RUNNING Gitea, and Gitea is
+  # started by the very compose file that has to carry the token. That
+  # circularity is irreducible: no ordering of tasks resolves it, because the
+  # credential is issued by the service the credential configures. So on the run
+  # that mints, this file is rendered twice; on every run after, `act_runner_token`
+  # is already in SOPS and this task is skipped.
+  #
+  # Without it the first provision leaves a container holding an EMPTY token,
+  # looping on a rejected registration while reporting `Up` -- and the playbook
+  # goes green. The runner would silently start working on the SECOND provision.
+  # That is the exact shape this whole change exists to make impossible: a
+  # workflow whose `runs-on` matches no runner is QUEUED, never failed.
+  template:
+    src: compose.yml.j2
+    dest: "{{ beelink_deploy_dir }}/compose.yml"
+    owner: root
+    group: root
+    # Renders secrets. Same mode as the first render, restated rather than
+    # inherited so a change to one cannot silently widen the other.
+    mode: "0600"
+  vars:
+    # Scoped to this task. The play-level fact stays empty so the `when` guards
+    # on the mint and the SOPS write above keep reading the pre-mint state.
+    act_runner_token: "{{ _act_runner_token.stdout | trim }}"
+  when:
+    - act_runner_enabled | bool
+    - _act_runner_token is defined
+    - _act_runner_token is changed
+  notify: Recreate act-runner
+  no_log: true
+  tags: [gitea, runner]
 
 - name: Probe whether the recorded admin password still authenticates
   # THE FLOOR OF THE RECOVERY CHAIN, and the reason it is a probe and not a
