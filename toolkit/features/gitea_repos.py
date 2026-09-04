@@ -89,12 +89,41 @@ class DeclaredRepo:
     repository by omission. `gitea.kubelab.live` has a public Cloudflare A record;
     `REQUIRE_SIGNIN_VIEW` closes the anonymous surface (SEC-GITEA-001), but
     confidentiality should not rest on a single setting staying true.
+
+    THAT DEFAULT STANDS, AND THE OPERATOR HAS OVERRIDDEN IT EXPLICITLY. Every
+    declared repository carries `private: false` as of 2026-09-03, accepting the
+    single-control posture above with the trade-off measured rather than assumed:
+    `REQUIRE_SIGNIN_VIEW` makes "public" mean *readable by any authenticated
+    account*, local registration and OpenID signup are both closed, and the only
+    door is Authelia, which has no self-registration. The readership is therefore
+    `apps.auth.identities` and nobody else. The paragraph above is why omission
+    still cannot reach public; this one is why declaring it is not a contradiction.
     """
 
     org: str
     name: str
     private: bool = True
     migrate_from: str | None = None
+
+
+@dataclass(frozen=True)
+class VisibilityDrift:
+    """A repository that exists, but not with the visibility that was declared.
+
+    REPORTED, NEVER CORRECTED, for the same reason the plan has no deletion field:
+    flipping a repository's visibility is a disclosure decision, and a reconciler
+    that made it silently on the strength of a YAML edit would be a worse tool than
+    one that says what it found. `execute` does not read this.
+    """
+
+    org: str
+    name: str
+    declared_private: bool
+    live_private: bool
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.org}/{self.name}"
 
 
 @dataclass(frozen=True)
@@ -110,6 +139,7 @@ class ReconcilePlan:
     repos_to_migrate: tuple[DeclaredRepo, ...] = ()
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
+    visibility_drift: tuple[VisibilityDrift, ...] = ()
 
     @property
     def is_noop(self) -> bool:
@@ -135,7 +165,7 @@ def actor_for_repo_creation() -> Actor:
 def plan_reconcile(
     declared: Mapping[str, Iterable[RepoSpec]],
     existing_orgs: set[str],
-    existing_repos: set[str],
+    existing_repos: Mapping[str, bool],
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -144,8 +174,21 @@ def plan_reconcile(
     nothing, because an organization that exists only because someone made it in
     the UI is state with no consumer.
 
-    `existing_repos` is a set of `"org/name"` strings, the same shape the API
-    listing is normalised into.
+    `existing_repos` maps `"org/name"` to whether the forge holds it PRIVATE, which
+    is the shape `GiteaClient.list_repos` returns.
+
+    IT IS A MAPPING AND NOT A SET, AND THE PARAMETER IS REQUIRED, because the
+    alternative was an optional visibility argument -- and an optional argument that
+    silently skips a comparison is the precise defect this comparison exists to
+    catch. Before this, the plan compared EXISTENCE only: a repository declared
+    private and living public was reported as converged, and `make gitea-reconcile`
+    ended with "forge matches the declaration". The declaration and the forge
+    disagreed about who could read the code, and every check in the path passed.
+    Measured 2026-09-03 on prod, where all three repositories read `private=False`
+    against a declaration that then said nothing at all.
+
+    Membership tests read identically on a mapping, so the existence logic below is
+    unchanged; only set algebra needs `set(existing_repos)` spelled out.
 
     MISSING-AND-HAS-A-SOURCE MEANS MIGRATE, NOT CREATE, and that split is the whole
     reason `RepoSpec` carries `migrate_from`. Before it, a declared-and-absent
@@ -192,7 +235,23 @@ def plan_reconcile(
     # Reported, never acted on. The corollary ADR-065 D3 binds the reconciler to:
     # "import by accident must not become policy by inertia."
     undeclared_orgs = tuple(sorted(existing_orgs - declared_orgs))
-    undeclared_repos = tuple(sorted(existing_repos - declared_repos))
+    undeclared_repos = tuple(sorted(set(existing_repos) - declared_repos))
+
+    # Only for repositories that EXIST. A declared-and-absent one is already in
+    # `repos_to_create`/`repos_to_migrate` carrying its declared visibility, and
+    # reporting drift on something that does not exist yet would be reporting the
+    # plan back to itself.
+    visibility_drift = tuple(
+        VisibilityDrift(
+            org=org,
+            name=spec.name,
+            declared_private=spec.private,
+            live_private=existing_repos[f"{org}/{spec.name}"],
+        )
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if f"{org}/{spec.name}" in existing_repos and existing_repos[f"{org}/{spec.name}"] != spec.private
+    )
 
     return ReconcilePlan(
         orgs_to_create=orgs_to_create,
@@ -200,6 +259,7 @@ def plan_reconcile(
         repos_to_migrate=repos_to_migrate,
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
+        visibility_drift=visibility_drift,
     )
 
 
@@ -293,6 +353,13 @@ def format_plan(plan: ReconcilePlan) -> str:
         lines.append(f"  ? org  {stray_org}   undeclared — reported, not removed")
     for stray_repo in plan.undeclared_repos:
         lines.append(f"  ? repo {stray_repo}   undeclared — reported, not removed")
+    # Spelled out both ways rather than as "drift": an operator reading this has to
+    # decide whether the declaration or the forge is wrong, and "declared private,
+    # forge has it public" says which direction to look. "differs" would not.
+    for drift in plan.visibility_drift:
+        want = "private" if drift.declared_private else "public"
+        got = "private" if drift.live_private else "public"
+        lines.append(f"  ! repo {drift.full_name}   declared {want}, forge has it {got} — reported, not changed")
     if not lines:
         return "  (nothing to do — forge matches the declaration)"
     return "\n".join(lines)

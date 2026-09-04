@@ -491,6 +491,17 @@ def gitea_reconcile(
 
     if plan.is_noop:
         _report_machine_ownership(admin, bot_username)
+        # Drift does not make the plan non-idempotent -- nothing here would act on
+        # it -- but it must not be reported as a match either. "Nothing to create"
+        # is the honest claim; "forge matches the declaration" was not, and was
+        # printed for weeks over three repositories whose visibility disagreed.
+        if plan.visibility_drift:
+            logger.warning(
+                f"nothing to create, but {len(plan.visibility_drift)} repository/ies differ from the "
+                "declaration in visibility (listed above). Reported, never changed: flipping visibility "
+                "is a disclosure decision. Reconcile the declaration or the forge by hand."
+            )
+            return
         logger.success("forge matches the declaration — nothing to create")
         return
 
