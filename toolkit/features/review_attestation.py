@@ -155,6 +155,31 @@ def _rationale_under(body: str, section: str) -> str:
     return "".join("".join(rest).split())
 
 
+def exempt_signature(pr: dict[str, Any], registry: dict[str, Any]) -> str | None:
+    """Name the declared signature this PR's changed-file set matches, or None.
+
+    Split out of `classify` so the exemption decision has a name and can be
+    read on its own; `classify` is its only caller. It is deliberately NOT wired
+    into `pr-agent.yml`, which skips these PRs by branch prefix instead — the
+    two live at opposite ends of the same abuse and a shared predicate would be
+    the wrong shape, not merely unnecessary. Gaming a branch name forfeits a
+    review and this gate then reports the PR unreviewed; gaming it HERE would
+    grant a bypass. So the reviewer may match on a name and the gate may not,
+    and that asymmetry is the design (DELIVERY-004, #1619).
+
+    Exact set equality, both directions, and an empty diff never matches: a
+    shape nobody declared produces a red PR asking for one, never a silent
+    exemption.
+    """
+    changed = {f.get("path") for f in (pr.get("files") or []) if isinstance(f, dict) and f.get("path")}
+    if not changed:
+        return None
+    for sig in (registry.get("exempt") or {}).get("signatures") or []:
+        if changed == set(sig.get("files") or []):
+            return str(sig.get("name") or "")
+    return None
+
+
 def classify(pr: dict[str, Any], registry: dict[str, Any]) -> Verdict:
     """Decide the PR's review state. Pure — no IO, no network."""
     if not isinstance(pr, dict):
@@ -227,15 +252,13 @@ def classify(pr: dict[str, Any], registry: dict[str, Any]) -> Verdict:
     # tooling in this repository opens per-app releases whose file sets vary. The
     # strictness is kept and each real shape is declared instead: a shape nobody
     # declared produces a red PR asking for one, never a silent exemption.
-    changed = {f.get("path") for f in (pr.get("files") or []) if isinstance(f, dict) and f.get("path")}
-    if changed:
-        for sig in (registry.get("exempt") or {}).get("signatures") or []:
-            if changed == set(sig.get("files") or []):
-                return Verdict(
-                    "exempt",
-                    True,
-                    f'every changed file is in the "{sig.get("name")}" signature; nothing here is reviewable',
-                )
+    matched = exempt_signature(pr, registry)
+    if matched:
+        return Verdict(
+            "exempt",
+            True,
+            f'every changed file is in the "{matched}" signature; nothing here is reviewable',
+        )
 
     # --- declined? -------------------------------------------------------------
     declined_by = declined_marker = ""
