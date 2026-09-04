@@ -17,6 +17,7 @@ from toolkit.features.observability import (
     LogsUnavailableError,
     GrafanaAlertClient,
     LokiClient,
+    ObservabilityUnavailableError,
     SlackSreClient,
     SreTriageEngine,
     _parse_time_offset,
@@ -666,6 +667,58 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
             f"Loki answered, and must not be blamed for Grafana's failure; got {error!r}. "
             "Re-wrapping an already-precise error re-attributes it, and the operator "
             "debugs the wrong backend."
+        )
+
+    def test_an_engine_bug_is_not_relabelled_as_an_unreachable_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Raised in adversarial review of this PR (gemini-3.1-pro-high, Major).
+
+        The first fix for the sibling test above added `except
+        ObservabilityUnavailableError: raise` to both clients. That covers only
+        the subclass. In a `@contextmanager`, an exception from the caller's
+        `with` body is re-injected AT THE YIELD -- so with the yield inside the
+        `try`, every OTHER `RuntimeError`/`TimeoutError` raised by
+        `diagnose_service` was still caught by the broad clause and relabelled
+        "could not reach <backend>". A parse bug in the triage engine sent the
+        operator to debug a backend that had answered correctly.
+
+        That is the same misattribution TOOL-055 exists to remove, one level up,
+        and it is why the fix is structural (the yield lives OUTSIDE the `try`)
+        rather than a longer exception tuple: a narrower `except` still has to
+        enumerate every type the body might raise, and the body is not this
+        function's to know.
+        """
+        import contextlib
+
+        import toolkit.cli.observability as obs_cli
+
+        @contextlib.contextmanager
+        def fake_forward(env, service, port):
+            yield 55555
+
+        def engine_bug(self, **kwargs):
+            raise RuntimeError("unexpected JSON payload from the Loki API")
+
+        monkeypatch.delenv("LOKI_URL", raising=False)
+        monkeypatch.delenv("GRAFANA_URL", raising=False)
+        monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
+        monkeypatch.setattr(obs_cli, "read_cluster_secret_key", lambda *a, **kw: "tok")
+        monkeypatch.setattr(obs_cli.LokiClient, "query_service_logs", engine_bug)
+        monkeypatch.setattr(obs_cli.GrafanaAlertClient, "get_alerts", lambda self: [])
+
+        result = runner.invoke(app, ["obs", "triage", "--env", "prod", "--service", "api"])
+
+        assert not isinstance(result.exception, ObservabilityUnavailableError), (
+            "both port-forwards succeeded, so neither backend is unreachable; a bug "
+            f"inside the triage engine must not be dressed as one. Got: {result.exception!r}"
+        )
+        assert "could not reach" not in result.output, (
+            "an engine-side failure must not be reported as a transport failure; "
+            f"got: {result.output!r}"
+        )
+        assert isinstance(result.exception, RuntimeError), (
+            f"the engine's own error must surface unaltered; got {result.exception!r}"
         )
 
     def test_the_human_output_says_it_is_not_a_clean_bill_of_health(
