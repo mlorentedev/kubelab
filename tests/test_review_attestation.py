@@ -224,11 +224,85 @@ class TestExempt:
             v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
             assert v.state == "exempt", f"{sorted(files)} classified as {v.state}"
 
+    def test_the_delivery_shapes_actually_observed_are_all_covered(self, registry: dict) -> None:
+        """The deploy/promote shapes, measured rather than assumed (DELIVERY-004).
+
+        Same discipline as the release-please entries above and for the same
+        reason: matching is exact set equality, so a shape nobody measured is a
+        red PR asking for a signature, never a silent exemption. Five staging
+        deploys (#1560, #1582, #1590, #1601, #1617) and one prod promote (#1618)
+        were read from the API on 2026-09-04; all six carried exactly two paths.
+
+        Both are SINGLE-APP shapes. A multi-app promotion would produce a
+        different set and must be declared when one is first observed — which is
+        the lesson `release-please (api only)` records, where one signature was
+        assumed sufficient and #804 refuted it.
+        """
+        observed = [
+            {
+                "infra/config/values/staging.yaml",
+                "infra/k8s/overlays/staging/generated/deployments.yaml",
+            },
+            {
+                "infra/config/values/prod.yaml",
+                "infra/k8s/overlays/prod/generated/deployments.yaml",
+            },
+        ]
+        for files in observed:
+            v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
+            assert v.state == "exempt", f"{sorted(files)} classified as {v.state}"
+
+    def test_the_two_environments_do_not_share_a_signature(self, registry: dict) -> None:
+        """A staging path and a prod path must never exempt each other.
+
+        The two shapes differ only in the substring `staging`/`prod`, which is
+        exactly the kind of near-miss that a subset or prefix comparison would
+        collapse. Exact set equality already separates them; this asserts it,
+        so a future loosening of the comparison fails here rather than silently
+        letting a prod file ride on the staging signature.
+        """
+        crossed = [
+            {
+                "infra/config/values/staging.yaml",
+                "infra/k8s/overlays/prod/generated/deployments.yaml",
+            },
+            {
+                "infra/config/values/prod.yaml",
+                "infra/k8s/overlays/staging/generated/deployments.yaml",
+            },
+        ]
+        for files in crossed:
+            v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
+            assert v.state == "pending", (
+                f"{sorted(files)} mixes the two environments and classified as "
+                f"{v.state}; no declared signature covers that set."
+            )
+
     def test_one_extra_file_ends_the_exemption(self, registry: dict) -> None:
-        """Nothing to borrow: the signature cannot be used to smuggle a change."""
-        sig = registry["exempt"]["signatures"][0]
-        payload = pr(files=[{"path": p} for p in [*sig["files"], "toolkit/cli/tools.py"]])
-        assert classify(payload, registry).state == "pending"
+        """Nothing to borrow: no signature can be used to smuggle a change.
+
+        Every declared signature, not `signatures[0]`. Reading one entry made
+        this assert something weaker than its name: a signature added after the
+        first was never tested against the case that decides whether an
+        exemption is an exemption or a bypass, and adding one is precisely when
+        that question is live. The entry it happened to read was also the oldest,
+        so the guard got quieter with every signature declared.
+        """
+        signatures = registry["exempt"]["signatures"]
+        # Floor on the collection being iterated, not on its source: an empty
+        # list makes every assertion below vacuous while the test still passes.
+        assert len(signatures) >= 3, (
+            f"Only {len(signatures)} exempt signatures parsed from the registry. "
+            f"At least the three release-please shapes are declared, so the parse "
+            f"is broken and the loop below would assert nothing."
+        )
+
+        for sig in signatures:
+            payload = pr(files=[{"path": p} for p in [*sig["files"], "toolkit/cli/tools.py"]])
+            assert classify(payload, registry).state == "pending", (
+                f'signature "{sig["name"]}" still classified as exempt with an extra '
+                f"file in the diff — it can be used to carry an unreviewed change."
+            )
 
     def test_an_empty_diff_is_not_exempt(self, registry: dict) -> None:
         assert classify(pr(files=[]), registry).state == "pending"
