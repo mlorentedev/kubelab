@@ -252,14 +252,47 @@ class TestExempt:
             v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
             assert v.state == "exempt", f"{sorted(files)} classified as {v.state}"
 
+    def test_a_proper_subset_of_a_signature_is_not_exempt(self, registry: dict) -> None:
+        """Half a signature is not a signature.
+
+        This is the case a SUBSET comparison would wrongly exempt, and until it
+        was written nothing in this file covered it: `test_one_extra_file...`
+        catches a widening to superset, and the crossed-environment test below
+        catches neither. Reachable in practice — someone edits
+        `values/staging.yaml` by hand and does not regenerate the overlay. The
+        drift gate would reject that PR, but this gate must not exempt it from
+        review on the way, because the two answer different questions.
+        """
+        for sig in registry["exempt"]["signatures"]:
+            files = sorted(sig["files"])
+            assert len(files) >= 2, f'{sig["name"]} has one file; a proper subset is empty'
+            for dropped in range(len(files)):
+                partial = [f for i, f in enumerate(files) if i != dropped]
+                v = classify(pr(files=[{"path": p} for p in partial]), registry)
+                assert v.state == "pending", (
+                    f'{sig["name"]} minus {files[dropped]!r} classified as {v.state}. '
+                    f"A partial match is not a match: exemption requires the whole "
+                    f"declared set, or a half-finished change rides in on it."
+                )
+
     def test_the_two_environments_do_not_share_a_signature(self, registry: dict) -> None:
         """A staging path and a prod path must never exempt each other.
 
         The two shapes differ only in the substring `staging`/`prod`, which is
-        exactly the kind of near-miss that a subset or prefix comparison would
-        collapse. Exact set equality already separates them; this asserts it,
-        so a future loosening of the comparison fails here rather than silently
-        letting a prod file ride on the staging signature.
+        exactly the kind of near-miss a prefix or substring comparison would
+        collapse.
+
+        What this does NOT do, stated because an earlier version of this
+        docstring claimed it and pr-agent was right to call it out on #1628: it
+        does not make a loosening of the comparison fail. Work it through — the
+        crossed set is neither equal to, nor a superset of, nor a subset of
+        either signature, so exact, `>=` and `<=` all return `pending` and this
+        test reads identically under all three. The discrimination lives in
+        `test_one_extra_file_ends_the_exemption` (catches `>=`) and
+        `test_a_proper_subset_of_a_signature_is_not_exempt` (catches `<=`).
+
+        It is kept because the near-miss it covers is a real one and cheap to
+        assert; it is just not the guard the old docstring advertised.
         """
         crossed = [
             {
