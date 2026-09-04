@@ -131,12 +131,69 @@ def test_every_declared_source_produces_a_capture_block():
 
 def test_the_live_sqlite_db_is_snapshotted_with_backup_not_copied():
     script = _render("node-backup-capture.sh.j2", node_backup_sources=RPI3_SOURCES)
-    assert 'sqlite3 "$SRC_DIR_uptime_kuma/kuma.db" ".backup' in script
+    # Asserted as "sqlite3 ... .backup over THIS database" rather than as one
+    # literal string. The previous form pinned the exact argument order and
+    # broke when `-cmd ".timeout"` was inserted between the binary and the path
+    # — a test that fails on a change it has no opinion about, while still not
+    # noticing if `.backup` were swapped for `.dump`. Both halves are checked
+    # here, and neither depends on where the flags sit.
+    assert "sqlite3 " in script
+    assert '"$SRC_DIR_uptime_kuma/kuma.db"' in script
+    assert '".backup ' in script
+    assert ".dump" not in script, "`.dump` is a text export, not a consistent binary snapshot"
+
     # A plain `cp` of the live db defeats the entire point of using .backup —
     # assert the generic copy step explicitly excludes it.
     assert '! -path "./kuma.db"' in script
     assert '! -path "./kuma.db-wal"' in script
     assert '! -path "./kuma.db-shm"' in script
+
+
+def test_the_snapshot_waits_out_a_contended_database_instead_of_failing():
+    """A writer's commit must not be able to abort the whole capture.
+
+    Measured 2026-09-04 on beelink: `.backup` with no timeout hit gitea.db while
+    act_runner was committing every second, failed instantly with "database is
+    locked", `set -e` aborted before the sentinel, and the ship step then
+    (correctly) refused to send a partial backup. Both halves are asserted: the
+    timeout must be set BEFORE `.backup` runs, which is what `-cmd` does and
+    what a trailing PRAGMA would not, and the retry covers a SQLITE_BUSY
+    returned from a backup step rather than from the open.
+    """
+    script = _render("node-backup-capture.sh.j2", node_backup_sources=RPI3_SOURCES)
+    assert '-cmd ".timeout' in script, (
+        "`.backup` runs with no busy timeout: a single contended instant aborts "
+        "the capture, and nothing ships until the next run"
+    )
+    assert script.index('-cmd ".timeout') < script.index('".backup '), (
+        "the timeout is set after `.backup` — it must precede it to apply"
+    )
+    assert "for attempt in 1 2 3" in script, "no retry around a contended .backup"
+
+
+def test_a_failed_snapshot_names_which_database_it_was():
+    """`Error: database is locked` names nothing, and the VPS has three.
+
+    On a node with one source that is unhelpful; on the VPS it leaves the reader
+    guessing between n8n, authelia and headscale. The service and the file must
+    both appear in the failure line.
+    """
+    # The module's `VPS_SOURCES` carries only headscale, while common.yaml
+    # declares three for that host (n8n, authelia, headscale). Rendering all
+    # three here rather than reusing the fixture: this test is specifically
+    # about telling several sources APART, so a single-source fixture would
+    # pass while proving nothing about the case it names.
+    three = {
+        "n8n": {"pvc": {"namespace": "kubelab", "claim": "n8n-data"}, "sqlite": "database.sqlite"},
+        "authelia": {"pvc": {"namespace": "kubelab", "claim": "authelia-data"}, "sqlite": "db.sqlite3"},
+        "headscale": {"volume": "headscale_headscale_data", "sqlite": "db.sqlite"},
+    }
+    script = _render("node-backup-capture.sh.j2", node_backup_sources=three)
+    for service, db in (("n8n", "database.sqlite"), ("authelia", "db.sqlite3"), ("headscale", "db.sqlite")):
+        assert f"node-backup-capture: {service} ({db})" in script, (
+            f"a failed snapshot of {service} would not say so; the operator sees "
+            f"only sqlite3's own message, which names no database"
+        )
 
 
 def test_the_generic_copy_excludes_only_the_db_and_its_wal_shm_siblings():

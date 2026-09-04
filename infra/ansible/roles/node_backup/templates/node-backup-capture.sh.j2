@@ -95,8 +95,47 @@ SRC_DIR_{{ service }}="$(docker volume inspect {{ src.volume }} --format '{{ '{{
 # the restart checkpointed the WAL). Staged at the SAME relative path it has
 # in the source (not just the basename), so a restore is a plain reverse
 # copy with no per-service path table to keep in sync.
+#
+# `.backup` being WAL-aware is a property of `.backup`, and for four years
+# nothing checked it was also true of the DATABASE. Measured 2026-09-04 across
+# all six declared sources: four were in WAL by each application's default,
+# and two -- beelink/gitea and prod/authelia -- were in rollback-journal mode,
+# where a writer's commit takes an EXCLUSIVE lock that refuses readers. Gitea
+# failed that morning at 06:23:58 with "database is locked" while act_runner
+# posted UpdateTask every second for a running job.
+#
+# Two defences, and this is the second. The first is declaring WAL where the
+# application allows it. This one covers the rest -- an application with no
+# such setting, and the SQLITE_BUSY a WAL checkpoint can still return -- by
+# waiting instead of failing at the first contended instant. `.timeout` is
+# passed via `-cmd` so it is set BEFORE `.backup` runs; a `PRAGMA` after the
+# fact would be too late.
+#
+# The retry is not redundant with the timeout: the CLI's `.backup` can return
+# SQLITE_BUSY from a backup STEP rather than from the initial open, which the
+# timeout does not cover on every build. Three attempts over ~35s against a
+# capture that runs hourly -- a partial backup is refused downstream, so the
+# cost of trying again is strictly lower than the cost of not.
 mkdir -p "$(dirname "$STAGING/{{ service }}/{{ src.sqlite }}")"
-sqlite3 "$SRC_DIR_{{ service }}/{{ src.sqlite }}" ".backup '$STAGING/{{ service }}/{{ src.sqlite }}'"
+capture_sqlite_{{ service }}() {
+    local attempt
+    for attempt in 1 2 3; do
+        if sqlite3 -cmd ".timeout 10000" \
+                   "$SRC_DIR_{{ service }}/{{ src.sqlite }}" \
+                   ".backup '$STAGING/{{ service }}/{{ src.sqlite }}'"; then
+            [ "$attempt" -gt 1 ] && echo "{{ service }}: .backup succeeded on attempt ${attempt}"
+            return 0
+        fi
+        echo "{{ service }}: .backup attempt ${attempt}/3 failed (database contended); retrying" >&2
+        sleep $(( attempt * 5 ))
+    done
+    # Names the service. The bare sqlite3 error is "Error: database is locked"
+    # and nothing else -- on a node with one source that is merely unhelpful,
+    # on the VPS with three it leaves you guessing which one.
+    echo "node-backup-capture: {{ service }} ({{ src.sqlite }}): .backup failed 3 times -- database stayed locked" >&2
+    return 1
+}
+capture_sqlite_{{ service }}
 
 # Everything else in the source directory, verbatim -- e.g. Headscale's
 # noise_private.key and derp_server_private.key, which are not databases but
