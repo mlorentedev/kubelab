@@ -88,42 +88,110 @@ def test_every_platform_app_pins_a_version(filename: str) -> None:
     assert len(apps) == len(set(apps)), f"{filename} pins a version twice for {apps}"
 
 
+def _stranded_version_keys(label: str, text: str) -> list[str]:
+    """Every `apps.platform.<app>.version` that something separates from its block.
+
+    The rule this applies is stated in full on
+    `test_version_key_is_adjacent_to_its_siblings`, and exercised directly on
+    synthetic input by `TestPlacementRule` — so the rule is guarded even when the
+    committed files happen to satisfy it, which they now do.
+    """
+    lines = text.splitlines()
+    offenders = []
+
+    for number, app in _platform_version_keys(text):
+        indent = len(lines[number - 1]) - len(lines[number - 1].lstrip())
+        previous = lines[number - 2] if number >= 2 else ""
+        stripped = previous.strip()
+        previous_indent = len(previous) - len(previous.lstrip())
+
+        if not stripped:
+            adjacent = False
+        elif stripped.startswith("#"):
+            # A comment indented into the block is about this app; one outdented
+            # below it belongs to an enclosing section and strands the key.
+            adjacent = previous_indent >= indent
+        else:
+            match = _KEY.match(previous)
+            # A sibling key, or the app key that opens this block.
+            adjacent = match is not None and (
+                previous_indent == indent or (match.group(2) == app and previous_indent < indent)
+            )
+
+        if not adjacent:
+            reason = "a blank line" if not stripped else f"{stripped!r} (outdented to {previous_indent})"
+            offenders.append(f"  {label}:{number} apps.platform.{app}.version — preceded by {reason}")
+    return offenders
+
+
+_BLOCK = (
+    "apps:\n"
+    "  platform:\n"
+    "    web:\n"
+    "{body}"
+    "\n"
+    "  # Third-party services\n"
+    "  services:\n"
+    "    core: {{}}\n"
+)
+
+
+class TestPlacementRule:
+    """The rule itself, on synthetic input — independent of what is committed."""
+
+    @pytest.mark.parametrize(
+        ("label", "body"),
+        [
+            ("after a sibling key", "      domain: example.com\n      version: 1.0.0\n"),
+            ("first in the block", "      version: 1.0.0\n      domain: example.com\n"),
+            (
+                "after a comment indented into the block",
+                "      # this app is pinned deliberately\n      version: 1.0.0\n      domain: example.com\n",
+            ),
+        ],
+    )
+    def test_accepts(self, label: str, body: str) -> None:
+        assert not _stranded_version_keys(label, _BLOCK.format(body=body)), label
+
+    @pytest.mark.parametrize(
+        ("label", "body"),
+        [
+            ("stranded by a blank line", "      domain: example.com\n\n      version: 1.0.0\n"),
+            (
+                "stranded under an outdented comment",
+                "      domain: example.com\n  # Third-party services\n      version: 1.0.0\n",
+            ),
+        ],
+    )
+    def test_rejects(self, label: str, body: str) -> None:
+        assert _stranded_version_keys(label, _BLOCK.format(body=body)), label
+
+
 @pytest.mark.parametrize("filename", ENVIRONMENTS)
 def test_version_key_is_adjacent_to_its_siblings(filename: str) -> None:
     """Nothing separates `version:` from the block it belongs to.
 
-    Two placements satisfy that, and the test accepts both because both are
-    unambiguous to a reader:
+    Three placements satisfy that, and the test accepts all three because all
+    three are unambiguous to a reader:
 
     - preceded by a **sibling key** at the same indent — where the existing pins
       sit, and where ruamel's in-place rewrite keeps them;
     - preceded by the **app's own key** one level out, i.e. first in the block —
       where `promote` now inserts a new pin, that being the one position which
-      cannot collide with a comment trailing the block.
+      cannot collide with a comment trailing the block;
+    - preceded by a **comment indented into the block**, which is a comment about
+      this app. ruamel keeps such a comment above an `insert(0, ...)` rather than
+      being displaced by it — measured, not assumed.
 
-    What it rejects is anything between: a blank line, or a comment belonging to
-    the next section. "Previous *non-blank* line" would be too lenient — it
-    accepts the stranded form that `prod.yaml`'s api entry had.
+    What it rejects is a blank line, or a comment **outdented below the block's
+    own indentation**, which by that outdent belongs to an enclosing section.
+    Indentation is the whole signal: `# Third-party services` sits at two spaces
+    while the key it stranded sits at six, and that gap is precisely what made the
+    file read wrong. A rule phrased as "no comment at all" would fail a legitimate
+    per-app note; a rule phrased as "previous *non-blank* line" would accept the
+    stranded form that `prod.yaml`'s api entry had. This is the rule between them.
     """
-    path = VALUES_DIR / filename
-    lines = path.read_text().splitlines()
-    offenders = []
-
-    for number, app in _platform_version_keys(path.read_text()):
-        indent = len(lines[number - 1]) - len(lines[number - 1].lstrip())
-        previous = lines[number - 2] if number >= 2 else ""
-        match = _KEY.match(previous)
-        if match is None:
-            adjacent = False
-        else:
-            previous_indent = len(match.group(1))
-            # A sibling key, or the app key that opens this block.
-            adjacent = previous_indent == indent or (
-                match.group(2) == app and previous_indent < indent
-            )
-        if not adjacent:
-            reason = "a blank line" if not previous.strip() else f"{previous.strip()!r}"
-            offenders.append(f"  {filename}:{number} apps.platform.{app}.version — preceded by {reason}")
+    offenders = _stranded_version_keys(filename, (VALUES_DIR / filename).read_text())
 
     assert not offenders, (
         "A version key is separated from the block it belongs to:\n"
