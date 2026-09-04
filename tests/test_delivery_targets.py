@@ -172,6 +172,22 @@ def test_prune_passes_the_dry_run_flag_through() -> None:
     assert "(dry run)" in proc.stdout, "the operator is not told which mode this is"
 
 
+def test_ci_cleanup_triggers_on_promotions_to_staging_and_prod() -> None:
+    """The janitor must run on every promotion push to master (ADR-046)."""
+    import yaml
+
+    workflow_path = REPO_ROOT / ".github" / "workflows" / "ci-cleanup.yml"
+    with open(workflow_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    triggers = data.get("on") or data.get(True) or {}
+    assert "push" in triggers
+    push = triggers["push"]
+    assert push.get("branches") == ["master"]
+    assert "infra/config/values/prod.yaml" in push.get("paths", [])
+    assert "infra/config/values/staging.yaml" in push.get("paths", [])
+
+
 # --- discoverability --------------------------------------------------------
 
 
