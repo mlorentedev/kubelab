@@ -47,6 +47,8 @@ import enum
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
+from toolkit.features.gitea_client import TEAM_UNITS
+
 if TYPE_CHECKING:
     from toolkit.features.gitea_client import GiteaClient
 
@@ -137,6 +139,7 @@ class ReconcilePlan:
     orgs_to_create: tuple[str, ...] = ()
     repos_to_create: tuple[DeclaredRepo, ...] = ()
     repos_to_migrate: tuple[DeclaredRepo, ...] = ()
+    teams_to_converge: tuple[str, ...] = ()
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
     visibility_drift: tuple[VisibilityDrift, ...] = ()
@@ -145,11 +148,30 @@ class ReconcilePlan:
     def is_noop(self) -> bool:
         """True when a second run would change nothing -- AC1's idempotence.
 
-        Strays do not count: reporting one is not a change to the forge, and a
-        forge holding an undeclared repository is still converged with respect to
+        THE RULE, STATED ONCE SO THE NEXT FIELD DOES NOT HAVE TO GUESS: anything
+        `execute` acts on belongs here; anything reported and never acted on does
+        not. That is what separates `teams_to_converge` from `visibility_drift`,
+        which look alike -- both are a live value disagreeing with the declaration
+        -- and are opposites. `execute` calls `ensure_team`; nothing anywhere reads
+        `visibility_drift`, because flipping a repository's visibility is a
+        disclosure decision this tool refuses to make.
+
+        Strays do not count either: reporting one is not a change to the forge, and
+        a forge holding an undeclared repository is still converged with respect to
         what was declared.
+
+        `teams_to_converge` was added because omitting it made the property lie in
+        the direction that hides work. The CLI returns early on `is_noop`, so a
+        forge whose teams needed repair reported "nothing to create" and exited
+        before `execute` ran -- measured on prod 2026-09-03, every declared
+        repository already present and both teams covering none of them.
         """
-        return not self.orgs_to_create and not self.repos_to_create and not self.repos_to_migrate
+        return (
+            not self.orgs_to_create
+            and not self.repos_to_create
+            and not self.repos_to_migrate
+            and not self.teams_to_converge
+        )
 
 
 def actor_for_org_creation() -> Actor:
@@ -166,6 +188,7 @@ def plan_reconcile(
     declared: Mapping[str, Iterable[RepoSpec]],
     existing_orgs: set[str],
     existing_repos: Mapping[str, bool],
+    existing_teams: Mapping[str, Mapping[str, Any] | None],
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -202,6 +225,20 @@ def plan_reconcile(
     more on the migrate path than the create path: re-creating is harmlessly
     refused, while a reconciler that kept proposing a migration for a repository
     that had already migrated would report a permanent failure on a converged forge.
+
+    `existing_teams` maps EVERY DECLARED organization to its `reconcilers` team, or
+    to None when the organization or the team is absent. Required and complete for
+    the same reason `existing_repos` is a required mapping: the missing-key
+    `KeyError` below is the loud failure, and the alternative -- treating an absent
+    key as "fine" -- is how a comparison silently stops comparing. The team of an
+    organization that does not exist yet is None, which is honest and lands it in
+    `teams_to_converge` alongside the organization's own creation.
+
+    TEAMS ARE PLANNED OVER THE DECLARED ORGANIZATIONS, NOT OVER THE ONES RECEIVING
+    A REPOSITORY. That distinction is the entire defect this parameter closes: the
+    grant belongs to the organization, not to the act of creating something in it,
+    so a forge where every declared repository already exists still has teams to
+    repair. See `team_needs_convergence`.
     """
     declared_orgs = set(declared)
     declared_repos = {f"{org}/{spec.name}" for org, specs in declared.items() for spec in specs}
@@ -232,6 +269,10 @@ def plan_reconcile(
         if spec.migrate_from
     )
 
+    # Sorted over the DECLARED organizations, so the plan reads in the same order
+    # every run and a diff between two runs is a real change rather than dict order.
+    teams_to_converge = tuple(sorted(org for org in declared_orgs if team_needs_convergence(existing_teams[org])))
+
     # Reported, never acted on. The corollary ADR-065 D3 binds the reconciler to:
     # "import by accident must not become policy by inertia."
     undeclared_orgs = tuple(sorted(existing_orgs - declared_orgs))
@@ -257,6 +298,7 @@ def plan_reconcile(
         orgs_to_create=orgs_to_create,
         repos_to_create=repos_to_create,
         repos_to_migrate=repos_to_migrate,
+        teams_to_converge=teams_to_converge,
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
@@ -346,6 +388,11 @@ def format_plan(plan: ReconcilePlan) -> str:
             f"  ~ repo {repo.org}/{repo.name}   migrate from {repo.migrate_from}"
             + ("" if repo.private else "  (PUBLIC)")
         )
+    # Named as a repair rather than as a creation, because it usually is one: the
+    # team exists and grants write over nothing. "widen" is the verb `edit_team`
+    # is restricted to, so the line also says what will NOT happen.
+    for team_org in plan.teams_to_converge:
+        lines.append(f"  ~ team {team_org}/{TEAM_NAME}   widen to the full grant over all repositories")
     # Distinct names from the loops above, and not only for style: the created
     # entries are `DeclaredRepo`s while the strays are `"org/name"` strings, so
     # reusing `repo` shadows one type with the other and mypy refuses it.
@@ -511,6 +558,45 @@ TEAM_NAME = "reconcilers"
 TEAM_PERMISSION = "write"
 
 
+def team_needs_convergence(team: Mapping[str, Any] | None) -> bool:
+    """Does this team fall short of the grant `create_team`/`edit_team` would give it?
+
+    ONE PREDICATE, TWO CALLERS, AND THAT IS THE POINT. `plan_reconcile` asks it to
+    decide whether the run has work to do; `ensure_team` asks it to decide whether
+    to call `edit_team`. If they were separate expressions the plan could report a
+    converged forge while `execute` still had a repair to make -- or, as measured on
+    prod 2026-09-03, the reverse: `ensure_team` held a correct repair that nothing
+    ever reached, because the only thing that decided whether it ran was whether a
+    repository was being created.
+
+    That is the defect this exists to close, and it is worth naming as a class: **a
+    convergence step scoped to the creation diff never repairs what already exists.**
+    `execute` iterated the organizations RECEIVING a new repository, so on a forge
+    where everything declared already existed the set was empty, `is_noop` was True,
+    and the CLI returned before `execute` was called at all. Both live teams kept
+    `includes_all_repositories: False` -- write over zero repositories -- across
+    every green run.
+
+    EVERY FIELD `edit_team` SENDS IS CHECKED, not only the one that was wrong. A
+    predicate covering a subset of the grant is the same defect one field over: the
+    plan would report a match on a team whose `can_create_org_repo` was unset, and
+    `ensure_team` would then raise on a run that claimed there was nothing to do.
+    So the list here and the payload there are the same list, derived from
+    `TEAM_UNITS` rather than restated.
+
+    An absent team needs convergence too. `create_team` is the repair in that case,
+    and the caller that acts on this does not need to know which of the two it is.
+    """
+    if team is None:
+        return True
+    if not team.get("includes_all_repositories"):
+        return True
+    if not team.get("can_create_org_repo"):
+        return True
+    units = team.get("units_map") or {}
+    return any(units.get(unit) != TEAM_PERMISSION for unit in TEAM_UNITS)
+
+
 class TeamPermissionError(Exception):
     """A team exists but does not grant what it was asked to grant.
 
@@ -581,7 +667,11 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     # Both live teams were in exactly that state. Raising instead would have been
     # honest and useless: it would fail every reconcile until someone edited the
     # forge by hand, which is the manual step this whole feature replaces.
-    if not team.get("includes_all_repositories"):
+    #
+    # The condition is `team_needs_convergence` and not an inline field test, so
+    # that the plan's decision to schedule this org and this function's decision to
+    # act cannot disagree. They did, in the other direction, until 2026-09-03.
+    if team_needs_convergence(team):
         admin.edit_team(int(team["id"]), TEAM_NAME, TEAM_PERMISSION)
         team = admin.get_team(org, TEAM_NAME)
         if team is None:
@@ -690,8 +780,14 @@ def execute(
     # a migration creates a repository inside an organization exactly as a create
     # does, and omitting them here would refuse every migration into an
     # organization that receives nothing else.
+    #
+    # UNIONED WITH `teams_to_converge`, which is what makes a repair reachable on a
+    # forge that needs no repository created. `receiving` alone scoped this step to
+    # the creation diff, so an organization whose team was wrong and whose
+    # repositories all existed was never visited -- and the CLI never even called
+    # `execute`, because such a plan was `is_noop`.
     receiving = {repo.org for repo in plan.repos_to_create} | {repo.org for repo in plan.repos_to_migrate}
-    for org in sorted(receiving - failed_orgs):
+    for org in sorted((receiving | set(plan.teams_to_converge)) - failed_orgs):
         try:
             ensure_team(admin, org, member=bot_username)
             report.teams_ensured.append(org)

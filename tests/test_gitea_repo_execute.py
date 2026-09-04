@@ -40,6 +40,7 @@ from typing import Any
 
 import pytest
 
+from toolkit.features.gitea_client import TEAM_UNITS
 from toolkit.features.gitea_repos import (
     TEAM_NAME,
     TEAM_PERMISSION,
@@ -113,25 +114,82 @@ class FakeClient:
             "name": name,
             "permission": "none",
             "can_create_org_repo": self._can_create_org_repo,
-            "units_map": {"repo.code": self._code_permission},
+            "units_map": self._units_map(),
             "includes_all_repositories": self._includes_all_repositories,
         }
         return self._teams[(org, name)]
 
-    def edit_team(self, team_id: int, name: str, permission: str) -> dict[str, Any]:
-        """Widens an existing team in place, the way `PATCH /teams/{id}` does.
+    def _units_map(self) -> dict[str, str]:
+        """Every unit the real payload sends, not just the one a test cares about.
 
-        Only `includes_all_repositories` moves, and only upward: the real call
-        widens and never narrows, so a fake that reset the other fields would
-        model a forge that does not exist -- the mistake this file already made
-        once by echoing `permission: "write"`.
+        This used to be `{"repo.code": self._code_permission}`, which modelled a
+        forge no `create_team` call could produce -- the real one sends a mode for
+        each of `TEAM_UNITS`. It was harmless while nothing read the other units and
+        stopped being harmless the moment a predicate compared the whole grant.
+
+        Same failure mode as the `permission: "write"` echo this file already records: a
+        fake narrower than the request it stands for reports a state the forge never
+        returns, and every test built on it agrees with the fake rather than with
+        Gitea.
+        """
+        units = {unit: TEAM_PERMISSION for unit in TEAM_UNITS}
+        if self._code_permission is None:
+            del units["repo.code"]
+        else:
+            units["repo.code"] = self._code_permission
+        return units
+
+    def edit_team(self, team_id: int, name: str, permission: str) -> dict[str, Any]:
+        """Applies the whole grant, the way `PATCH /teams/{id}` does.
+
+        THE REAL CALL SENDS EVERY FIELD, not only the one that happened to be
+        wrong -- see `GiteaClient.edit_team`. A fake that moved
+        `includes_all_repositories` alone modelled a narrower repair than the one
+        the code performs, and a test built on it would report a team still
+        missing `can_create_org_repo` after a call that in fact sets it.
+
+        `permission` is NOT touched, and that is not an omission: the coarse mode
+        reads back `none` on a correct team because the grant lives per unit. A
+        fake that echoed `"write"` here is the fake this file used to have.
+
+        Still widens and never narrows -- `TEAM_PERMISSION` is the only mode any
+        caller passes, and `GiteaClient.edit_team` has no narrowing path.
         """
         self.calls.append(("edit_team", name))
         for key, team in self._teams.items():
             if team.get("id") == team_id:
-                self._teams[key] = {**team, "includes_all_repositories": True}
+                self._teams[key] = {
+                    **team,
+                    "can_create_org_repo": True,
+                    "units_map": {unit: permission for unit in TEAM_UNITS},
+                    "includes_all_repositories": True,
+                }
                 return self._teams[key]
         raise AssertionError(f"edit_team called for unknown team id {team_id}")
+
+    def refuse_widening(self) -> None:
+        """Model a forge where the PATCH is accepted and changes nothing.
+
+        THE FIELD CHECKS IN `ensure_team` ARE POST-CONDITIONS, not preconditions:
+        convergence runs first and repairs what it can, so a fixture carrying a
+        defect `edit_team` would fix never reaches the guard that names it. Without
+        this, a test asserting "a team that cannot create repositories is refused"
+        silently becomes "a team that cannot create repositories is repaired" — it
+        keeps passing for a while and then stops asserting anything.
+
+        It is a state the forge can genuinely be in: Gitea refusing the edit, a
+        token that lost `write:organization`, a concurrent change. Naming it is
+        what keeps the guards under test.
+        """
+
+        def _refuse(team_id: int, name: str, permission: str) -> dict[str, Any]:
+            self.calls.append(("edit_team", name))
+            for team in self._teams.values():
+                if team.get("id") == team_id:
+                    return team
+            raise AssertionError(f"edit_team called for unknown team id {team_id}")
+
+        self.edit_team = _refuse  # type: ignore[method-assign]
 
     def add_team_member(self, team_id: int, username: str) -> dict[str, Any]:
         self.calls.append(("add_team_member", f"{team_id}:{username}"))
@@ -228,6 +286,7 @@ def test_a_team_that_cannot_create_repositories_is_refused() -> None:
     a body that says nothing about scopes, unlike the other 403 in this area.
     """
     admin = FakeClient("admin", can_create_org_repo=False)
+    admin.refuse_widening()
 
     with pytest.raises(TeamPermissionError) as exc:
         ensure_team(admin, "personal", member="hefesto")
@@ -248,6 +307,7 @@ def test_a_team_that_cannot_push_is_refused() -> None:
     worked.
     """
     admin = FakeClient("admin", code_permission="read")
+    admin.refuse_widening()
 
     with pytest.raises(TeamPermissionError) as exc:
         ensure_team(admin, "personal", member="hefesto")
@@ -298,8 +358,11 @@ def test_the_team_is_read_back_rather_than_trusted() -> None:
                 "units_map": {"repo.code": TEAM_PERMISSION},
             }
 
+    lying = LyingClient("admin")
+    lying.refuse_widening()
+
     with pytest.raises(TeamPermissionError):
-        ensure_team(LyingClient("admin"), "personal", member="hefesto")
+        ensure_team(lying, "personal", member="hefesto")
 
 
 def test_an_existing_team_is_not_recreated() -> None:
@@ -429,9 +492,7 @@ def test_a_migration_is_performed_by_the_migrator_never_by_a_token_client():
     """
     admin, bot, migrator = FakeClient("admin"), FakeClient("bot"), FakeClient("migrator")
     plan = ReconcilePlan(
-        repos_to_migrate=(
-            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
-        )
+        repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
     report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=migrator)
@@ -439,7 +500,11 @@ def test_a_migration_is_performed_by_the_migrator_never_by_a_token_client():
     assert report.repos_migrated == ["personal/resume"]
     assert report.ok
     assert (
-        "migrate_repo", "personal/resume", "https://github.com/mlorentedev/resume.git", "github", "TOKEN"
+        "migrate_repo",
+        "personal/resume",
+        "https://github.com/mlorentedev/resume.git",
+        "github",
+        "TOKEN",
     ) in migrator.calls
     assert not [c for c in bot.calls if c[0] == "migrate_repo"], "the bot is refused by Gitea; do not ask it"
     assert not [c for c in admin.calls if c[0] == "migrate_repo"], "the admin token lacks write:repository"
@@ -449,9 +514,7 @@ def test_a_migration_without_a_migrator_is_refused_rather_than_attempted_with_a_
     """The tempting fallback is the one Gitea refuses; make it impossible to reach by accident."""
     admin, bot = FakeClient("admin"), FakeClient("bot")
     plan = ReconcilePlan(
-        repos_to_migrate=(
-            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
-        )
+        repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
     report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=None)
@@ -471,9 +534,7 @@ def test_a_migration_without_a_credential_fails_loudly_rather_than_running_open(
     """
     admin, bot = FakeClient("admin"), FakeClient("bot")
     plan = ReconcilePlan(
-        repos_to_migrate=(
-            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
-        )
+        repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
     report = execute(plan, admin, bot, bot_username="hefesto", migration_token=None, migrator=FakeClient("m"))
@@ -494,14 +555,10 @@ def test_an_organization_receiving_only_a_migration_still_gets_the_write_team():
     """
     admin, bot = FakeClient("admin"), FakeClient("bot")
     plan = ReconcilePlan(
-        repos_to_migrate=(
-            DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),
-        )
+        repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(
-        plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m")
-    )
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"))
 
     assert report.teams_ensured == ["personal"]
 
@@ -515,14 +572,10 @@ def test_an_unknown_migration_service_is_refused_before_the_call():
     """
     admin, bot = FakeClient("admin"), FakeClient("bot")
     plan = ReconcilePlan(
-        repos_to_migrate=(
-            DeclaredRepo(org="personal", name="resume", migrate_from="bitbucket:someone/resume"),
-        )
+        repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="bitbucket:someone/resume"),)
     )
 
-    report = execute(
-        plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m")
-    )
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"))
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -568,7 +621,7 @@ def test_a_team_whose_units_cover_no_repository_is_refused():
     }
     # Model a forge that refuses to widen, so the guard is what raises rather
     # than the convergence quietly repairing the fixture out from under it.
-    admin.edit_team = lambda *a, **k: admin._teams[("personal", TEAM_NAME)]  # type: ignore[method-assign]
+    admin.refuse_widening()
 
     with pytest.raises(TeamPermissionError, match="includes_all_repositories"):
         ensure_team(admin, "personal")
@@ -629,3 +682,68 @@ def test_a_freshly_created_team_covers_the_organization():
 
     assert team["includes_all_repositories"] is True
     assert ("create_team", f"personal/{TEAM_NAME}") in admin.calls
+
+
+def test_a_team_repair_runs_on_an_organization_receiving_nothing() -> None:
+    """The reachability half. Without it the repair is correct, tested, and never called.
+
+    Measured on prod 2026-09-03, after `create_team` learned to send
+    `includes_all_repositories` and the PR merged green: both live teams still
+    covered zero repositories. `execute` iterated only the organizations RECEIVING a
+    new repository, and every declared repository already existed.
+
+    So the plan below is the production state: nothing to create, one team to
+    repair. If `execute` goes back to iterating `receiving` alone, `edit_team` is
+    never reached and this fails.
+    """
+    admin = FakeClient("admin", includes_all_repositories=False)
+    admin._teams[("personal", TEAM_NAME)] = {
+        "id": 7,
+        "name": TEAM_NAME,
+        "permission": "none",
+        "can_create_org_repo": True,
+        "units_map": {unit: TEAM_PERMISSION for unit in TEAM_UNITS},
+        "includes_all_repositories": False,
+    }
+    bot = FakeClient("bot")
+
+    report = execute(
+        ReconcilePlan(teams_to_converge=("personal",)),
+        admin,
+        bot,
+        bot_username="hefesto",
+    )
+
+    assert report.ok, f"the repair failed: {report.failures}"
+    assert ("edit_team", TEAM_NAME) in admin.calls, (
+        "an organization with a team to repair and no repository to create was never visited"
+    )
+    assert report.teams_ensured == ["personal"]
+    assert bot.calls == [], "the bot has no part in a team repair; the grant is the superadmin's to give"
+
+
+def test_a_team_repair_is_skipped_when_its_organization_could_not_be_created() -> None:
+    """`failed_orgs` still quarantines the cascade after the union.
+
+    An organization whose creation failed has no team to widen, and attempting one
+    turns a single root cause into two reported failures.
+    """
+
+    class RefusingAdmin(FakeClient):
+        def create_org(self, name: str) -> dict[str, Any]:
+            self.calls.append(("create_org", name))
+            raise RuntimeError("no")
+
+    admin = RefusingAdmin("admin")
+    bot = FakeClient("bot")
+
+    report = execute(
+        ReconcilePlan(orgs_to_create=("personal",), teams_to_converge=("personal",)),
+        admin,
+        bot,
+        bot_username="hefesto",
+    )
+
+    assert not report.ok
+    assert [target for target, _ in report.failures] == ["org personal"]
+    assert "create_team" not in admin.kinds() and "edit_team" not in admin.kinds()
