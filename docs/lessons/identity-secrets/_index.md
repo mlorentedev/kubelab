@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-57 lessons, newest first. Back to [all categories](../_index.md).
+58 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 425 | [A capability probe can stop at the first authorization layer and report the whole answer](lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer.md) | 2026-09-04 |
 | 421 | [A secret read from the wrong SOPS store resolves to `''`, so a presence gate on it is open forever](lesson-421-secret-written-to-one-sops-store-read-from-another.md) | 2026-09-02 |
 | 415 | [To learn whether a credential *may* do something, ask it to do something already done](lesson-415-discriminate-a-refusal-by-asking-for-something-that-already-exists.md) | 2026-09-02 |
 | 413 | [A credential can exist, authenticate, and still not work — and every presence check will call that success](lesson-413-a-credential-can-exist-authenticate-and-not-work.md) | 2026-09-01 |
