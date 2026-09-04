@@ -67,6 +67,53 @@ def test_the_reviewer_skips_release_branches_at_the_job_level() -> None:
     )
 
 
+def test_the_reviewer_skips_generated_deploy_and_promote_branches() -> None:
+    """Generated version bumps carry nothing a review could act on (DELIVERY-004).
+
+    Two lines: an app version in `values/<env>.yaml` and the same value in the
+    regenerated overlay, written by `toolkit deployment promote` and already
+    guaranteed byte-for-byte against the generator by the config-drift gate. 23
+    of the last 60 PRs here were these, and each takes the ONE pending slot of
+    the `pr-agent-nan-inference` group — so a generated bump does not merely
+    waste a review, it displaces a human PR's (#1203).
+
+    Both prefixes are asserted, not just one. They are opened by two different
+    workflows (`web-image-receiver.yml`, `promote-prod.yml`), so one can be
+    dropped from the condition while the other keeps this test green — which is
+    the failure this repository keeps finding, an assertion that covers less
+    than its name claims.
+    """
+    condition = _load(REVIEWER)["jobs"]["review"]["if"]
+    for prefix in ("deploy/", "promote/"):
+        assert f"'{prefix}'" in condition, (
+            f"the {prefix} skip is gone from the job condition; generated version "
+            f"bumps will be reviewed again and will displace human PRs from the "
+            f"single pending inference slot"
+        )
+
+
+def test_the_reviewer_skips_by_branch_but_the_gate_never_does() -> None:
+    """The asymmetry is deliberate and must not be 'made consistent'.
+
+    Matching a branch name HERE is safe because gaming it forfeits a review: the
+    attestation gate then reports the PR unreviewed and goes red, so the cost
+    lands on whoever gamed it. Matching a branch name in the GATE would do the
+    opposite — it would grant a bypass to anyone who can push a branch, and
+    `RELEASE_PLEASE_TOKEN` is a PAT.
+
+    So the gate matches on the exact changed-file set and this workflow matches
+    on a name, and a future edit that unifies them would silently convert a
+    protection into a hole. This asserts the gate has not acquired a branch rule.
+    """
+    gate_module = (REPO_ROOT / "toolkit" / "features" / "review_attestation.py").read_text(encoding="utf-8")
+    for token in ("head_ref", "headRefName", "startswith('deploy/", 'startswith("deploy/'):
+        assert token not in gate_module, (
+            f"the attestation gate now references {token!r}. Branch-based matching in "
+            f"the GATE is a bypass for anyone who can name a branch — the reviewer "
+            f"may match on a name, this must not."
+        )
+
+
 def test_the_inert_upstream_setting_was_not_ported() -> None:
     """Guard against someone 'restoring' it from upstream later.
 

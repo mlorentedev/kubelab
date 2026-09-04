@@ -104,11 +104,33 @@ jobs:
     #   The `issue_comment` path is deliberately NOT excluded. A human typing
     #   `/review` on a bump gets one, and that run carries the real secrets
     #   because it is triggered by the human, not by the bot.
+    #
+    # - Generated deploy/promote PRs are skipped, for the same reason as release
+    #   PRs and by the same mechanism (DELIVERY-004, #1619). Each is two lines —
+    #   an app version in `values/<env>.yaml` and the same value in the
+    #   regenerated overlay — written by `toolkit deployment promote` and already
+    #   guaranteed byte-for-byte against the generator by the config-drift gate,
+    #   so there is no seam a reviewer could act on. Measured on four of them:
+    #   three reported "No major issues detected" and the fourth (#1590) reported
+    #   an indentation defect that does not exist — `version` sits at the same
+    #   6-space indent as every sibling and the file parses. That is the expected
+    #   yield from two lines shown without the surrounding file, and a false
+    #   positive on a PR nobody reads closely is worse than silence: it trains
+    #   the reader to skip this reviewer, which is the asset worth protecting.
+    #
+    #   Why this one skips a job that the whole point is to run: 23 of the last
+    #   60 PRs here are these, and each takes the ONE pending slot of the
+    #   `pr-agent-nan-inference` group below — GitHub keeps a single pending run
+    #   per group and evicts it when the next arrives (#1203). So a generated
+    #   bump does not merely waste a review, it displaces a human PR's. Measured
+    #   the same day on #1617: `cancelled`, `steps: 0`, the job never ran.
     if: >
       (github.event_name == 'pull_request'
         && github.event.pull_request.draft == false
         && github.actor != 'dependabot[bot]'
-        && !startsWith(github.head_ref, 'release-please--'))
+        && !startsWith(github.head_ref, 'release-please--')
+        && !startsWith(github.head_ref, 'deploy/')
+        && !startsWith(github.head_ref, 'promote/'))
       || (github.event_name == 'issue_comment'
             && github.event.issue.pull_request
             && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
