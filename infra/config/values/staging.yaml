@@ -51,8 +51,9 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-  # Third-party services
       version: sha-0ed134d
+
+  # Third-party services
   services:
     core:
       vikunja:
