@@ -920,3 +920,44 @@ def gitea_prune_runners(
             logger.success(f"deregistered runner {runner_id} ({runner.get('name')})")
         else:
             logger.info(f"runner {runner_id} was already gone")
+
+
+@gitea_app.command(
+    "git",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def gitea_git(
+    ctx: typer.Context,
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
+) -> None:
+    """Run `git` against the forge with the operator credential injected.
+
+    `toolkit services gitea git -- clone https://gitea.kubelab.live/personal/resume.git`
+
+    A WRAPPER AND NOT A CREDENTIAL HELPER GIT COULD CALL DIRECTLY, deliberately. A
+    helper is a program that PRINTS the password when asked, so a helper installed
+    in git's config is one stray invocation away from putting it in a terminal and
+    from there into a session transcript — a durable artefact that nothing scans
+    and nothing can un-print. This shape has no invocation that emits the secret:
+    the only way out of the process is git's own pipe.
+
+    Everything about which credential and why is in `toolkit.features.gitea_git`,
+    measured rather than assumed.
+    """
+    from toolkit.features.gitea_git import GiteaGitError, run_git
+
+    if not ctx.args:
+        logger.error("nothing to run — pass git's arguments after `--`, e.g. `... gitea git -- status`")
+        raise typer.Exit(2)
+
+    merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
+    try:
+        code = run_git(ctx.args, merged)
+    except GiteaGitError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    # Propagated rather than swallowed: this is a git wrapper, and a caller
+    # scripting it must be able to tell a failed push from a successful one.
+    if code != 0:
+        raise typer.Exit(code)
