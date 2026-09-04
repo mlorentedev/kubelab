@@ -997,49 +997,53 @@ apps:
         # blocked the move it was declared for. All three are moves; a repository
         # that genuinely starts life in Gitea simply omits the field.
         #
-        # VISIBILITY IS NOT DECLARED HERE, AND THE LIVE STATE DIVERGES ON PURPOSE.
-        # `create_repo` and `migrate_repo` both default to `private=True`
-        # (gitea_client.py:312,323), so anything this reconciler creates is private.
-        # The operator then made `personal/resume` and `teledyne/fae-brain` PUBLIC by
-        # hand, deliberately, on 2026-09-03 — measured `private=False` on both, while
-        # their GitHub originals are `PRIVATE`. Recorded rather than "fixed": a later
-        # reader finding public repositories in a forge whose ADR-061 role is "private
-        # repositories and private experiments only" would otherwise read it as drift.
+        # `private: false` IS DELIBERATE AND IT IS DECLARED SO THE FORGE CAN BE
+        # REPRODUCED. The default is `private: true` and omission cannot reach a
+        # public repository (`DeclaredRepo` in gitea_repos.py says why), so every
+        # public repository here is an explicit decision, taken by the operator on
+        # 2026-09-03. Declared rather than left implicit for one concrete reason:
+        # `create_repo` and `migrate_repo` both default to private, so a repository
+        # this reconciler ever re-creates — a restore, a re-migration — would come
+        # back private and silently revert the choice.
         #
-        # Two consequences that are NOT obvious and are the reason this comment exists:
+        # WHAT "PUBLIC" MEANS HERE IS NARROWER THAN THE WORD SUGGESTS, and the
+        # distinction is the whole basis of the decision. `REQUIRE_SIGNIN_VIEW` is
+        # true, so public means *readable by any authenticated account*, not
+        # world-readable. Measured 2026-09-03 from outside the tailnet (the route to
+        # gitea.kubelab.live leaves via the physical interface, not tailscale0):
         #
-        #   1. The choice is not reproducible. Nothing here declares it, so any repo
-        #      this reconciler re-creates — a restore, a re-migration, a new org —
-        #      comes back PRIVATE and the choice is silently reverted. IaC will not
-        #      warn; it will simply apply its own default.
-        #   2. What keeps these repositories unreadable is NOT the VPN and NOT
-        #      Authelia. `gitea.kubelab.live` has a public Cloudflare A record to the
-        #      VPS (162.55.57.175) and its prod IngressRoute carries secure-headers,
-        #      rate-limit, crowdsec-bouncer and error-pages — no ForwardAuth, and
-        #      `auth_level: bypass` below says so. Authelia is the OIDC *provider*
-        #      Gitea logs you in with, which is a different thing from a gate in front
-        #      of it, and the gate is deliberately absent because ForwardAuth would
-        #      break `git clone` over HTTPS, the API and act_runner alike (the same
-        #      reasoning as Vikunja, ADR-066 D3). The single control actually holding
-        #      the line is `GITEA__service__REQUIRE_SIGNIN_VIEW: "true"` in the
-        #      beelink_services compose template. Measured 2026-09-03 from OUTSIDE the
-        #      tailnet (route leaves via wlp1s0, not tailscale0): every anonymous path
-        #      redirects to /user/login and the API answers 403.
+        #   anonymous browse   -> 302 /user/login, no repository content
+        #   anonymous API      -> 403
+        #   local registration -> closed (DISABLE_REGISTRATION, no form fields)
+        #   OpenID signup      -> closed (ENABLE_OPENID_SIGNUP false)
         #
-        # So `private: false` here is one control deep, not two. That is a decision,
-        # not an oversight — but it is only a decision if it is written down. See
+        # The only door is Authelia OIDC, and Authelia has no self-registration — so
+        # the readership is exactly `apps.auth.identities`: manu, operator, hefesto.
+        # Making the bot a reader is intended (ADR-065 D1 forbids the machine
+        # identity OWNING repositories, not working in them).
+        #
+        # ONE CONTROL, NOT TWO, AND THAT IS THE ACCEPTED TRADE-OFF. Authelia does not
+        # gate Gitea: the prod IngressRoute carries secure-headers, rate-limit,
+        # crowdsec-bouncer and error-pages and no ForwardAuth, which `auth_level:
+        # bypass` below states. That absence is correct — ForwardAuth would break
+        # `git clone` over HTTPS, the REST API and act_runner, none of which holds a
+        # browser session (the same reasoning as Vikunja, ADR-066 D3). So the line is
+        # held by `GITEA__service__REQUIRE_SIGNIN_VIEW: "true"` alone. See
         # SEC-GITEA-001 (#1389), whose title predates the forge having any content.
         organizations:
           teledyne:
             repositories:
               - name: fae-brain
                 migrate_from: github:mlorentedev/fae-brain
+                private: false
               - name: openkm-brain
                 migrate_from: github:mlorentedev/openkm-brain
+                private: false
           personal:
             repositories:
               - name: resume
                 migrate_from: github:mlorentedev/resume
+                private: false
           kubelab:
             repositories: []
         # Mirrors the limits the K8s Deployment carried, so the move is not also a
