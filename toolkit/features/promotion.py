@@ -182,7 +182,20 @@ def promote(env: str, app: str, version: str) -> None:
     if previous == version:
         logger.info(f"{env}: {app} already at {version}; nothing to do")
         return
-    app_cfg["version"] = version
+    if "version" in app_cfg:
+        # An existing pin is rewritten where it already sits by the round-trip.
+        app_cfg["version"] = version
+    else:
+        # First promotion for this app. Plain assignment would APPEND, and ruamel
+        # holds a comment that follows the block (`# Third-party services`) as a
+        # trailing comment of the block's LAST key — so an appended key renders
+        # *below* that comment and reads as if it belonged to the next section.
+        # The round-trip then preserves that position forever; it never
+        # self-corrects, which is how prod's web pin spent months looking like a
+        # third-party service. Inserting at the top is the one position that
+        # cannot collide with a trailing comment, and it puts the key that decides
+        # which image runs where a reader looks first (GITOPS-004).
+        app_cfg.insert(0, "version", version)
 
     with values_path.open("w") as fh:
         yaml.dump(data, fh)

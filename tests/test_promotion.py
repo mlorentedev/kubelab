@@ -71,6 +71,48 @@ class TestPromote:
         assert "# top-of-file comment must survive a round-trip edit" in text
         assert "# inline comment must survive too" in text
 
+    def test_first_promotion_does_not_land_under_a_following_comment(
+        self, env_patched, monkeypatch
+    ) -> None:
+        """A brand-new pin goes inside its block, not below the next section's comment.
+
+        ruamel attaches a comment that follows a block to the block's LAST key, so
+        appending a key renders it *after* that comment. The round-trip then
+        preserves the wrong position forever — which is how prod's web pin came to
+        sit under `# Third-party services` (GITOPS-004). Only the FIRST promotion
+        of an app can do this; later ones rewrite an existing key in place, which
+        is why this went unnoticed across eleven releases.
+        """
+        root, _ = env_patched
+        values = _write_values(
+            root,
+            "apps:\n"
+            "  platform:\n"
+            "    web:\n"
+            "      image_name: kubelab-web\n"
+            "      domain: staging.mlorente.dev\n"
+            "\n"
+            "  # Third-party services\n"
+            "  services:\n"
+            "    core: {}\n",
+        )
+        _mock_registry(monkeypatch, 200)
+
+        promotion.promote("staging", "web", "1.2.0")
+
+        lines = values.read_text().splitlines()
+        version_at = next(i for i, line in enumerate(lines) if line.strip() == "version: 1.2.0")
+        comment_at = next(i for i, line in enumerate(lines) if "Third-party services" in line)
+
+        assert version_at < comment_at, (
+            "the new pin rendered below the next section's comment:\n" + "\n".join(lines)
+        )
+        # And it is inside the app block, not promoted a level out.
+        assert lines[version_at].startswith("      "), lines[version_at]
+        assert lines[comment_at + 1].strip() == "services:", (
+            "the comment no longer sits with the section it describes:\n" + "\n".join(lines)
+        )
+
     def test_rejects_missing_tag(self, env_patched, monkeypatch) -> None:
         root, generator = env_patched
         _write_values(root)
