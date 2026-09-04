@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-32 lessons, newest first. Back to [all categories](../_index.md).
+33 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 423 | [A fake cannot verify a request — it can only agree with whoever wrote it](lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it.md) | 2026-09-03 |
 | 420 | [A `try` that spans a `yield` catches the caller's failures and reports them as its own](lesson-420-a-try-around-a-yield-catches-the-callers-failures.md) | 2026-09-02 |
 | 389 | [A declaration with no readers pays its whole cost at once](lesson-389-a-declaration-with-no-readers-pays-its-whole-cost-at-once.md) | 2026-08-24 |
 | 380 | [The catalog names every consumer and nothing acts on it](lesson-380-the-catalog-names-every-consumer-and-nothing-acts-on-it.md) | 2026-08-23 |
