@@ -1,6 +1,6 @@
 # Lessons
 
-418 lessons, one file each. Newest: 2026-09-02. Open a category for its list.
+419 lessons, one file each. Newest: 2026-09-03. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
