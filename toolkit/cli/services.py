@@ -461,7 +461,7 @@ def gitea_reconcile(
     (#1076 scope), and undeclared entries are printed rather than acted on.
     """
     from toolkit.features.gitea_client import GiteaError
-    from toolkit.features.gitea_repos import execute, format_plan, load_declaration, plan_reconcile
+    from toolkit.features.gitea_repos import TEAM_NAME, execute, format_plan, load_declaration, plan_reconcile
 
     admin, bot, bot_username, base_url = _gitea_clients(env)
     merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
@@ -481,11 +481,17 @@ def gitea_reconcile(
         # then propose creating something that already exists (lesson-408).
         existing_orgs = admin.list_orgs()
         existing_repos = admin.list_repos()
+        # One read per declared organization, and None for one that does not exist
+        # yet: `GET /orgs/<absent>/teams` is a 404, not an empty list, so asking
+        # would turn a plan that should propose creating the organization into a
+        # failure to read the forge. An absent organization has no team, which is
+        # what None says.
+        existing_teams = {org: (admin.get_team(org, TEAM_NAME) if org in existing_orgs else None) for org in declared}
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
 
-    plan = plan_reconcile(declared, existing_orgs, existing_repos)
+    plan = plan_reconcile(declared, existing_orgs, existing_repos, existing_teams)
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
 
@@ -542,6 +548,13 @@ def gitea_reconcile(
         logger.success(f"repo created: {created}")
     for migrated in report.repos_migrated:
         logger.success(f"repo migration accepted: {migrated}")
+    # Printed because a run whose ONLY work is a team repair is now possible, and
+    # without this it would produce no output at all -- a successful apply
+    # indistinguishable from one that did nothing. "ensured" and not "widened": the
+    # organizations receiving a repository pass through here too, and for them the
+    # call asserted a grant rather than changing one.
+    for ensured in report.teams_ensured:
+        logger.success(f"team ensured: {ensured}/{TEAM_NAME}")
     if report.repos_migrated:
         console.print(
             "\n[yellow]The import continues in the background.[/yellow] Gitea returns from "
