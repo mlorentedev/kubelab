@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-33 lessons, newest first. Back to [all categories](../_index.md).
+34 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 424 | [A convergence step scoped to the creation diff never repairs what already exists](lesson-424-a-convergence-step-scoped-to-the-creation-diff-repairs-nothing.md) | 2026-09-04 |
 | 423 | [A fake cannot verify a request — it can only agree with whoever wrote it](lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it.md) | 2026-09-03 |
 | 420 | [A `try` that spans a `yield` catches the caller's failures and reports them as its own](lesson-420-a-try-around-a-yield-catches-the-callers-failures.md) | 2026-09-02 |
 | 389 | [A declaration with no readers pays its whole cost at once](lesson-389-a-declaration-with-no-readers-pays-its-whole-cost-at-once.md) | 2026-08-24 |
