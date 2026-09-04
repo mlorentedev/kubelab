@@ -381,9 +381,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         # unlike `gcp.headscale_api_key` (Expiry.PROVIDER), this one has no
         # remote lifetime to ask about; only a manual revoke ends it.
         expiry=Expiry.NEVER,
-        # Prod token minting is blocked by #951 (prod admin credential rejected).
-        # Staging carries a real value; prod will not until #951 closes, and
-        # `make secrets-audit` will correctly report that as a gap until then.
+        # Both envs carry a real value. This said prod minting was blocked by
+        # #951 until 2026-09-04, and the claim outlived the block: #951's admin
+        # drift had healed on prod at some point without anything recording it,
+        # so the credential the note called "rejected" answered 200. The comment
+        # was the only reason anyone believed prod could not have this token,
+        # which is what a stale blocker costs -- it reads exactly like a live
+        # one. Establish a block by consequence (try the call) before repeating
+        # one you read.
         envs=("staging", "prod"),
     ),
     # =========================================================================
