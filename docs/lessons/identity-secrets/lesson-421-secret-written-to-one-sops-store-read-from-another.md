@@ -1,5 +1,5 @@
 ---
-id: lesson-419-secret-written-to-one-sops-store-read-from-another
+id: lesson-421-secret-written-to-one-sops-store-read-from-another
 type: lesson
 status: active
 created: "2026-09-02"
