@@ -52,7 +52,7 @@ apps:
       enable_homelabs: false
       enable_contact: false
   # Third-party services
-      version: sha-f98a705
+      version: sha-0ed134d
   services:
     core:
       vikunja:
