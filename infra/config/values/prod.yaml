@@ -86,7 +86,7 @@ apps:
       enable_contact: false
 
   # Third-party services
-      version: 1.1.1
+      version: 1.12.0
   services:
     core:
       gitea:
