@@ -508,6 +508,18 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     if team is None:
         raise TeamPermissionError(f"team {org}/{TEAM_NAME} was created but does not read back")
 
+    # CONVERGE A TEAM THAT PREDATES THE CURRENT GRANT, then re-read. `ensure_team`
+    # only ever created, so a team born before `includes_all_repositories` was set
+    # kept covering zero repositories forever and no amount of re-running fixed it.
+    # Both live teams were in exactly that state. Raising instead would have been
+    # honest and useless: it would fail every reconcile until someone edited the
+    # forge by hand, which is the manual step this whole feature replaces.
+    if not team.get("includes_all_repositories"):
+        admin.edit_team(int(team["id"]), TEAM_NAME, TEAM_PERMISSION)
+        team = admin.get_team(org, TEAM_NAME)
+        if team is None:
+            raise TeamPermissionError(f"team {org}/{TEAM_NAME} does not read back after being widened")
+
     if not team.get("can_create_org_repo"):
         raise TeamPermissionError(
             f"team {org}/{TEAM_NAME} has can_create_org_repo unset. Repository creation inside an "
@@ -524,6 +536,24 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
             f"{TEAM_PERMISSION!r}. The team can create repositories but could not push to them, and "
             "the resulting refusal is the same 403 as a missing token scope -- the trap AUTH-004 AC5 "
             "already recorded once."
+        )
+
+    # THE SCOPE, WHICH EVERY CHECK ABOVE TAKES FOR GRANTED. A permission is a pair
+    # -- what may be done, and to what -- and the three assertions above only ever
+    # examined the first half. Measured on prod 2026-09-03: both teams passed all
+    # of them while covering zero repositories, so the bot could read the migrated
+    # repositories and push to none of them.
+    #
+    # This is lesson-416 on a grant: an empty scope is not a weak permission, it is
+    # a permission over nothing, and it reads identically to a correct one in every
+    # field-level check. Asserted last because it is the value the others depend on.
+    if not team.get("includes_all_repositories"):
+        raise TeamPermissionError(
+            f"team {org}/{TEAM_NAME} has includes_all_repositories unset, so its units apply to no "
+            "repository. Every other field on it can be correct and the bot still cannot push: "
+            "measured 2026-09-03, `repo.code -> write` and `can_create_org_repo -> True` alongside "
+            "`repos attached: NONE`, with push available only on the one repository the bot had "
+            "created itself. A grant is what may be done AND to what; this is the second half."
         )
 
     if member:
