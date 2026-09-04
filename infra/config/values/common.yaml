@@ -1090,6 +1090,99 @@ apps:
           cpu_reservation: "1.0"
           memory_reservation: 2G
 
+      # Gitea Actions runner (TOOL-035 PR3). A SIBLING of github_runner above, not a
+      # replacement: the two forges speak different protocols. Gitea exposes its own
+      # gRPC service (`routers/api/actions/runner/runner.go`) and act_runner is its
+      # only client, so a GitHub runner on this node can never pick up a Gitea job
+      # however close it sits.
+      gitea_runner:
+        name: act-runner
+        # Governs PRESENCE AND ABSENCE, which is the whole point of it being here
+        # rather than implied by the block existing. Ansible is additive: deleting a
+        # service from a template never removes what it installed, so a runner
+        # "retired" by deletion keeps running and keeps its registration on the forge
+        # forever. CLAUDE.md records the same rule for the dev node -- the cleanup
+        # belongs to whatever role still owns the machine.
+        #
+        # Setting this false removes the container AND deregisters the runner. The
+        # second half matters more than it looks: a registered runner that no longer
+        # exists is a row the scheduler still places jobs on, and those jobs wait for
+        # a machine that is gone, with no error anywhere. `aws1` demonstrated the
+        # same shape on the tailnet ten days after the node was destroyed.
+        enabled: true
+        # The name the runner REGISTERS UNDER on the forge, which is a different
+        # thing from `name` above (the container). Three consumers need to agree on
+        # it -- the compose environment that sets it, the live guard that asserts
+        # this runner is registered, and `prune-runners`, which decides what to
+        # deregister by NOT matching it. A literal in any one of them keeps matching
+        # after a rename and quietly protects or destroys the wrong record.
+        runner_name: kubelab-bee-gitea
+        image: gitea/act_runner:0.2.13
+        # `ubuntu-latest` DOES NOT EXIST on a self-hosted forge -- Gitea has no hosted
+        # runners, so the label is only ever what act_runner declares. Every workflow
+        # migrated from GitHub asks for it, and a job matching no runner is QUEUED
+        # FOREVER rather than failed: no error, no red check, nothing to notice. That
+        # is why this mapping is asserted by a test rather than left to be discovered
+        # by a pipeline that never starts.
+        #
+        # `catthehacker/ubuntu` is the de-facto image for this because it approximates
+        # GitHub's hosted runner image, which migrated workflows assume the tools of.
+        # Gitea's OWN runner image, not catthehacker: `act_runner generate-config`
+        # ships exactly this mapping as its default (read from the image, not from
+        # memory). First-party, and it is what the project documents.
+        labels: "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
+        # How many jobs run AT ONCE on this node, and the number is measured rather
+        # than chosen. `resume`'s ci.yml has SIX jobs and none of them declares
+        # `needs`, so they all start together: at capacity 1 a workflow takes six
+        # times the length of its slowest job, WITHIN A SINGLE pull request. That is
+        # the real cost, and it is not about several PRs competing.
+        #
+        # Measured on the Beelink 2026-09-03: 4 cores, 7716 MB total, 6605 MB
+        # available, and the whole service stack consuming ~440 MB at rest (gitea
+        # 131M, minio 135M, glances 108M, github-runner 61M against a 6G ceiling it
+        # does not use, because ADR-030's amendment left it idle). The 10 GB of
+        # declared limits on this node are CEILINGS and reserve nothing.
+        #
+        # Budget: 6.6G available - ~450M services - ~1G for OS and page cache leaves
+        # roughly 5G for jobs. Two at 2G fits with real headroom, and the arithmetic
+        # is enforced by tests/test_gitea_actions_runner.py rather than by this
+        # comment.
+        #
+        # NOT three, for two reasons. The marginal gain is smaller than it looks --
+        # six jobs go from 3 waves to 2, a third less rather than a half -- and there
+        # are only 4 cores, so three jobs at `--cpus=2` request six and throttle each
+        # other anyway. **CPU can be oversubscribed safely; memory cannot**: the first
+        # only slows down, the second invokes the OOM killer on the node hosting the
+        # forge these jobs build for. Revisit with evidence from a real run --
+        # nothing has ever executed this workflow on this hardware, so `build-pdf`'s
+        # actual footprint is unknown.
+        capacity: 2
+        # Bounds the JOB containers, which is a different thing from the runner's own
+        # `resources` below. act_runner is a 43 MB binary that orchestrates; the
+        # multi-GB `runner-images` container it spawns per job is a SIBLING on the
+        # same daemon and inherits none of the runner's compose limits. Without this,
+        # the limit below bounds the wrong process entirely.
+        container_options: "--memory=2g --cpus=2"
+        # Retention for what Actions accumulates INSIDE Gitea. Separate problem from
+        # Docker layers on the node (which `node_maintenance` already prunes) and with
+        # a separate mechanism: these grow in Gitea's data volume, which is the one
+        # backed up to R2. Gitea's defaults are generous; declared here so the first
+        # job runs against a bounded store rather than a growing one.
+        log_retention_days: 30
+        artifact_retention_days: 14
+        run_retention_days: 30
+        resources:
+          # The DAEMON's limits, and it is tiny -- the image is 43.6 MB (measured on
+          # the Beelink) and its job is to poll Gitea and drive the Docker socket.
+          # My first draft gave it 3G, which bounded a 43 MB process while leaving
+          # the multi-GB job container it spawns unbounded: the wrong process, and
+          # 3G of an 8 GB node reserved against nothing. Job containers are bounded
+          # by `container_options` above.
+          cpu_limit: "0.5"
+          memory_limit: 512M
+          cpu_reservation: "0.1"
+          memory_reservation: 128M
+
       apprise:
         name: apprise
         image: caronc/apprise:1.5.0
@@ -1425,6 +1518,42 @@ backup:
     # workloads a Helm chart could reach — restic is node state, same layer
     # as the systemd timer that invokes it.
     restic_version: "0.19.1"  # tag is v0.19.1; release asset names drop the "v"
+  # Every named Docker volume on a covered node is either backed up above or
+  # excluded HERE, with its reason. Enforced by tests/test_backup_volume_coverage.py
+  # over the compose template, so a volume added in a future change fails a test
+  # instead of being silently uncovered.
+  #
+  # This is deliberately NOT the same thing as BACKUP-044 AC6, and does not close
+  # it: AC6 asks what exists ON DISK on a live node and is absent from the
+  # declaration, which needs the node. This asks the narrower, static question --
+  # what does the compose template create that nobody has ruled on. A comment
+  # would have done neither; `postgres` is excluded ten lines below on a rationale
+  # that expired when Vikunja shipped, and no test noticed.
+  excluded:
+    beelink:
+      act_runner_data:
+        reason: >-
+          Holds act_runner's `.runner` registration file and its actions/cache
+          directory. The registration is re-derivable -- deleting the SOPS key and
+          re-provisioning mints a fresh token and registers again -- and a build
+          cache that survives a node rebuild is a liability rather than an asset,
+          since it would carry state from a machine that no longer exists. Nothing
+          here is canonical.
+      # Keyed by the name the DAEMON holds (`docker volume ls`), not by the compose
+      # key -- `runner_data:` in the template declares `name: github_runner_data`,
+      # and the daemon's name is the one a restore would have to address. The guard
+      # reads the rendered `name:` for that reason, and caught this exact mismatch
+      # on its first run.
+      github_runner_data:
+        reason: >-
+          The GitHub runner's work directory. Ephemeral by declaration -- the
+          container runs with EPHEMERAL=1, so it is discarded between jobs anyway.
+      github_runner_toolcache:
+        reason: >-
+          Downloaded toolchains (`/opt/hostedtoolcache`). Rebuildable by
+          construction: every entry is re-fetched from its upstream on demand, and
+          restoring a stale copy would pin versions a fresh run would not choose.
+
   sources:
     beelink:
       gitea:

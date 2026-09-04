@@ -32,6 +32,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from tests.ansible_jinja import ansible_env
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 REPO = Path(__file__).resolve().parent.parent
@@ -70,10 +71,7 @@ def _vars() -> dict:
 
 def _gitea_environment() -> dict[str, str]:
     """The `environment:` block Gitea actually receives, parsed from the render."""
-    env = Environment(
-        loader=FileSystemLoader(str(ROLE / "templates")),
-        undefined=ChainableUndefined,
-    )
+    env = ansible_env(str(ROLE / "templates"), undefined=ChainableUndefined)
     rendered = env.get_template("compose.yml.j2").render(**_vars())
     compose = yaml.safe_load(rendered)
     assert compose and "gitea" in compose.get("services", {}), (
@@ -173,7 +171,7 @@ def test_the_healthcheck_does_not_use_an_endpoint_the_hardening_closes():
     """
     import re
 
-    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=ChainableUndefined)
+    env = ansible_env(str(ROLE / "templates"), undefined=ChainableUndefined)
     rendered = env.get_template("compose.yml.j2").render(**{**_vars(), "gitea_health_path": "/api/healthz"})
     compose = yaml.safe_load(rendered)
     test_cmd = " ".join(compose["services"]["gitea"]["healthcheck"]["test"])

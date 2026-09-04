@@ -80,6 +80,9 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     "whoami": frozenset({"read:user"}),
     "list_owned_repos": frozenset({"read:user"}),
     "get_team": frozenset({"read:organization"}),
+    # `/admin/actions/runners` sits under the same admin router as `list_orgs`, so
+    # `read:admin` covers it. Measured 200 with that grant before this line existed.
+    "list_runners": frozenset({"read:admin"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -104,6 +107,7 @@ ADMIN_METHODS: tuple[str, ...] = (
     "create_org",
     "create_team",
     "add_team_member",
+    "list_runners",
 )
 
 
@@ -429,6 +433,19 @@ class GiteaClient:
         """Add an account to a team. Idempotent on Gitea's side -- re-adding answers 204."""
         return self._request("PUT", f"/teams/{team_id}/members/{username}")
 
+    def list_runners(self) -> list[dict[str, Any]]:
+        """Every Actions runner registered on the instance.
+
+        Instance scope deliberately: a runner registered at organisation or
+        repository level still runs on this node and still consumes its memory, so
+        a listing that could not see one would report an empty fleet over a
+        populated one.
+
+        `read:admin` is already in the grant -- this endpoint sits under the same
+        admin router as `list_orgs`, verified 200 before the method existed.
+        """
+        return list(self._paginate("/admin/actions/runners", key="runners"))
+
 
 class GiteaBasicAuthClient(GiteaClient):
     """The subset of the API that REFUSES tokens and requires a password.
@@ -535,6 +552,32 @@ class GiteaBasicAuthClient(GiteaClient):
         """
         try:
             self._request("DELETE", f"/users/{username}/tokens/{token_name}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return True
+
+    def delete_runner(self, runner_id: int) -> bool:
+        """Deregister a runner. True if it was there, False if it already was not.
+
+        ON THIS CLASS, not the token client, for exactly the reason `delete_repo`
+        gives: the admin token would need `write:admin` to reach this endpoint, and
+        any credential that can deregister a runner holds that capability
+        permanently. Buying a standing delete on a long-lived reconciler credential
+        to remove a stale record occasionally is the trade #1076 refuses
+        structurally -- and a superset scope guard would not object to the widening,
+        which is what makes the refusal a design choice rather than a check.
+
+        Idempotent by 404, and the discrimination is real rather than assumed:
+        measured 2026-09-03 against live prod, a non-existent id answers
+        `{"message":"Runner not found"}` -- a SEMANTIC 404 from a wired route, not
+        the router's `404 page not found`. Reading the body is what tells "already
+        gone" apart from "this endpoint does not exist on this version", and those
+        two call for opposite reactions.
+        """
+        try:
+            self._request("DELETE", f"/admin/actions/runners/{runner_id}")
         except GiteaError as exc:
             if exc.status_code == 404:
                 return False

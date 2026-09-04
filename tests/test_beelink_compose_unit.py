@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 
 import yaml
+from tests.ansible_jinja import ansible_env
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
 
 REPO = Path(__file__).resolve().parent.parent
@@ -41,7 +42,7 @@ UNIT_TEMPLATE = "kubelab-compose.service.j2"
 
 
 def _render() -> str:
-    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
+    env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
     return env.get_template(UNIT_TEMPLATE).render(
         ansible_managed="Ansible managed",
         beelink_deploy_dir="/opt/kubelab",
@@ -134,7 +135,7 @@ def test_every_service_that_publishes_on_the_tailscale_address_is_covered() -> N
     # is supplied. Enumerating every image tag and credential the compose file
     # interpolates would make this test fail whenever an unrelated variable is
     # renamed, which is a guard that cries wolf rather than one that guards.
-    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=ChainableUndefined)
+    env = ansible_env(str(ROLE / "templates"), undefined=ChainableUndefined)
     compose = yaml.safe_load(
         env.get_template("compose.yml.j2").render(
             ansible_managed="Ansible managed",

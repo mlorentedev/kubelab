@@ -1,0 +1,60 @@
+# {{ ansible_managed }}
+# act_runner configuration (TOOL-035 PR3).
+#
+# This file exists because the environment variables cannot express the three
+# settings that decide whether parallel CI is survivable on an 8 GB node also
+# hosting the forge it builds for. Derived from `act_runner generate-config`
+# read out of the image itself -- not from memory -- so the key names are the
+# ones this version actually parses.
+#
+# Only the keys that differ from the shipped defaults are set. Everything else
+# is deliberately absent so an upgrade inherits the project's choices rather
+# than a snapshot of them frozen here.
+
+log:
+  level: info
+
+runner:
+  file: .runner
+  # ONE job at a time. This is act_runner's own default and it is restated here
+  # because it is the knob that turns several open pull requests into an
+  # out-of-memory event: with capacity 1 the jobs QUEUE, which on this hardware
+  # is the correct answer rather than a limitation. Raising it must be a
+  # deliberate change accompanied by a memory calculation, not a convenience.
+  capacity: {{ act_runner_capacity }}
+  # `<label>:docker://<image>`. Gitea has no hosted runners, so `ubuntu-latest`
+  # is only ever what is declared here -- and a job whose `runs-on` matches no
+  # runner is QUEUED FOREVER rather than failed. No error, no red check.
+  labels:
+    - "{{ act_runner_labels }}"
+
+cache:
+  # actions/cache support. On by default in act_runner, and left on: the whole
+  # point of the forge holding CI is that builds are fast enough to be a gate.
+  # The cache lives inside this container's own volume, so it is bounded by the
+  # volume rather than by Gitea's retention settings.
+  enabled: true
+
+container:
+  # Job containers join the same network as Gitea, so `actions/checkout` reaches
+  # the instance over the compose network rather than out through the public
+  # domain and back. If left empty act_runner creates a network per job, and the
+  # checkout would then depend on DNS, TLS and the tailnet being up.
+  network: kubelab
+  # NOT privileged. Docker-in-Docker would need it; this runner builds through
+  # the mounted socket instead, which is the trade-off ADR-030 already accepted
+  # for the GitHub runner on this same node.
+  privileged: false
+  # THE LIMIT THAT ACTUALLY MATTERS. A job container is a SIBLING started on the
+  # host daemon through the mounted socket -- it is not a child of act_runner and
+  # inherits none of act_runner's compose `deploy.resources`. Bounding the runner
+  # alone bounds a 43 MB polling process while leaving the multi-GB build
+  # container unbounded, which is precisely backwards.
+  options: {{ act_runner_container_options }}
+  # Left at act_runner's default (`true`). It costs a pull per job, and in
+  # exchange it makes this node's aggressive `docker image prune -af` -- run on a
+  # timer by node_maintenance -- a non-issue rather than a conflict: the image is
+  # re-fetched regardless of whether the prune removed it. Turning it off is a
+  # speed optimisation that would then require exempting the image from the
+  # prune, which is two coupled changes instead of none.
+  force_pull: true

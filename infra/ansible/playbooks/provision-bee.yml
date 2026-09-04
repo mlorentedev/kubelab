@@ -311,6 +311,30 @@
         runner_labels: "{{ config.apps.services.automation.github_runner.labels }}"
         runner_cpu_limit: "{{ config.apps.services.automation.github_runner.resources.cpu_limit }}"
         runner_memory_limit: "{{ config.apps.services.automation.github_runner.resources.memory_limit }}"
+        # Gitea Actions runner (TOOL-035 PR3). A sibling of the GitHub runner
+        # above, never a replacement -- the two forges speak different protocols
+        # and neither runner can serve the other's jobs.
+        act_runner_name: "{{ config.apps.services.automation.gitea_runner.name }}"
+        act_runner_runner_name: "{{ config.apps.services.automation.gitea_runner.runner_name }}"
+        act_runner_enabled: "{{ config.apps.services.automation.gitea_runner.enabled }}"
+        act_runner_image: "{{ config.apps.services.automation.gitea_runner.image }}"
+        # `gitea_secrets`, NOT `secrets`. The role writes this key with
+        # `--env {{ gitea_identity_env }}`, so it lands in prod.enc.yaml, while
+        # `secrets` is common merged with `deploy_env` (staging). Reading the wrong
+        # store does not fail — it resolves to '' forever, which makes the mint's
+        # `when: not act_runner_token` gate true on EVERY provision. Gitea's
+        # `generate-runner-token` invalidates all prior tokens for the scope, so
+        # each re-provision would revoke the token its own running runner
+        # registered with, deregistering it while the playbook reports success.
+        act_runner_token: "{{ gitea_secrets.apps.services.automation.gitea_runner.registration_token | default('', true) }}"
+        act_runner_labels: "{{ config.apps.services.automation.gitea_runner.labels }}"
+        act_runner_capacity: "{{ config.apps.services.automation.gitea_runner.capacity }}"
+        act_runner_container_options: "{{ config.apps.services.automation.gitea_runner.container_options }}"
+        act_runner_cpu_limit: "{{ config.apps.services.automation.gitea_runner.resources.cpu_limit }}"
+        act_runner_memory_limit: "{{ config.apps.services.automation.gitea_runner.resources.memory_limit }}"
+        act_runner_log_retention_days: "{{ config.apps.services.automation.gitea_runner.log_retention_days }}"
+        act_runner_artifact_retention_days: "{{ config.apps.services.automation.gitea_runner.artifact_retention_days }}"
+        act_runner_run_retention_days: "{{ config.apps.services.automation.gitea_runner.run_retention_days }}"
 
     - role: ../roles/glances
       tags: [monitoring, glances]

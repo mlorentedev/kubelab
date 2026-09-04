@@ -41,3 +41,28 @@
   delay: 3
   register: _gitea_post_restart
   until: _gitea_post_restart is success
+
+# Deliberately NOT "Restart beelink services", for the same blast-radius reason
+# the gitea handler above gives: a change to the runner's config must not bounce
+# Gitea, MinIO and the GitHub runner alongside it. Hence the service argument.
+#
+# `compose up -d --force-recreate <service>` rather than `docker restart`, and
+# the difference is load-bearing twice over:
+#
+#   1. A NEW CONTAINER, so the environment is re-read from compose.yml. The
+#      registration token is an env var that only exists after the mint, which
+#      needs a running Gitea, which this same file starts -- see the re-render
+#      task in tasks/main.yml. `docker restart` keeps the container it has, and
+#      would carry the empty token from the first render forever.
+#   2. It CREATES the container when it is absent instead of failing with
+#      `No such container`. A handler that can only ever run second is a handler
+#      whose ordering nobody may change.
+#
+# The inode trap this originally guarded (ANSIBLE-054, #1400) is covered a
+# fortiori: recreating resolves every bind mount fresh, where a plain restart
+# depends on Docker re-resolving a path whose inode `template` has replaced.
+- name: Recreate act-runner
+  command: >-
+    docker compose -f {{ beelink_deploy_dir }}/compose.yml
+    up -d --force-recreate {{ act_runner_name }}
+  changed_when: true
