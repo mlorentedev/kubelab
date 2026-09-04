@@ -60,11 +60,16 @@ class FakeClient:
         *,
         can_create_org_repo: bool = True,
         code_permission: str | None = TEAM_PERMISSION,
+        includes_all_repositories: bool = True,
     ) -> None:
         self.label = label
         self.calls: list[tuple[str, Any]] = []
         self._can_create_org_repo = can_create_org_repo
         self._code_permission = code_permission
+        # Gitea's OWN default is False. It reads back True here because
+        # `create_team` now sends it; a team created before it did reads back
+        # False forever, which is what the knob models.
+        self._includes_all_repositories = includes_all_repositories
         self._teams: dict[tuple[str, str], dict[str, Any]] = {}
 
     def create_org(self, name: str) -> dict[str, Any]:
@@ -109,8 +114,24 @@ class FakeClient:
             "permission": "none",
             "can_create_org_repo": self._can_create_org_repo,
             "units_map": {"repo.code": self._code_permission},
+            "includes_all_repositories": self._includes_all_repositories,
         }
         return self._teams[(org, name)]
+
+    def edit_team(self, team_id: int, name: str, permission: str) -> dict[str, Any]:
+        """Widens an existing team in place, the way `PATCH /teams/{id}` does.
+
+        Only `includes_all_repositories` moves, and only upward: the real call
+        widens and never narrows, so a fake that reset the other fields would
+        model a forge that does not exist -- the mistake this file already made
+        once by echoing `permission: "write"`.
+        """
+        self.calls.append(("edit_team", name))
+        for key, team in self._teams.items():
+            if team.get("id") == team_id:
+                self._teams[key] = {**team, "includes_all_repositories": True}
+                return self._teams[key]
+        raise AssertionError(f"edit_team called for unknown team id {team_id}")
 
     def add_team_member(self, team_id: int, username: str) -> dict[str, Any]:
         self.calls.append(("add_team_member", f"{team_id}:{username}"))
@@ -522,3 +543,89 @@ def test_the_migration_body_never_carries_the_credential_in_the_clone_address():
     assert service == "github"
     assert clone_addr == "https://github.com/mlorentedev/resume.git"
     assert "@" not in clone_addr and "token" not in clone_addr.lower()
+
+
+def test_a_team_whose_units_cover_no_repository_is_refused():
+    """The scope half of a grant, which every other check here takes for granted.
+
+    Measured on prod 2026-09-03: both live `reconcilers` teams read back
+    `repo.code -> write` and `can_create_org_repo -> True` while covering zero
+    repositories, so the bot could read the migrated repositories and push to
+    none of them. Every assertion in `ensure_team` passed.
+
+    Lesson-416 on a permission: an empty scope is not a weak grant, it is a grant
+    over nothing, and it is indistinguishable from a correct one in every
+    field-level check.
+    """
+    admin = FakeClient("admin", includes_all_repositories=False)
+    admin._teams[("personal", TEAM_NAME)] = {
+        "id": 7,
+        "name": TEAM_NAME,
+        "permission": "none",
+        "can_create_org_repo": True,
+        "units_map": {"repo.code": TEAM_PERMISSION},
+        "includes_all_repositories": False,
+    }
+    # Model a forge that refuses to widen, so the guard is what raises rather
+    # than the convergence quietly repairing the fixture out from under it.
+    admin.edit_team = lambda *a, **k: admin._teams[("personal", TEAM_NAME)]  # type: ignore[method-assign]
+
+    with pytest.raises(TeamPermissionError, match="includes_all_repositories"):
+        ensure_team(admin, "personal")
+
+
+def test_a_pre_existing_narrow_team_is_widened_rather_than_refused():
+    """Both live teams were born before the flag was sent, so refusing is useless.
+
+    `ensure_team` only ever created. A team that predates the current payload
+    keeps what it was born with and no amount of re-running fixes it — raising
+    would fail every reconcile until someone edited the forge by hand, which is
+    the manual step this feature exists to remove.
+    """
+    admin = FakeClient("admin", includes_all_repositories=False)
+    admin._teams[("personal", TEAM_NAME)] = {
+        "id": 7,
+        "name": TEAM_NAME,
+        "permission": "none",
+        "can_create_org_repo": True,
+        "units_map": {"repo.code": TEAM_PERMISSION},
+        "includes_all_repositories": False,
+    }
+
+    team = ensure_team(admin, "personal")
+
+    assert ("edit_team", TEAM_NAME) in admin.calls, "a narrow team must be widened, not left alone"
+    assert team["includes_all_repositories"] is True
+
+
+def test_widening_is_not_attempted_on_a_team_that_already_covers_everything():
+    """Idempotence, AC1's property, on the path that would otherwise write every run.
+
+    A reconcile that PATCHed the team on every pass would report work forever on a
+    converged forge — the same failure `plan_reconcile` avoids by treating presence
+    as presence.
+    """
+    admin = FakeClient("admin")
+    admin.create_team("personal", TEAM_NAME, TEAM_PERMISSION)
+    admin.calls.clear()
+
+    ensure_team(admin, "personal")
+
+    assert not [c for c in admin.calls if c[0] == "edit_team"], "converged team was widened again"
+
+
+def test_a_freshly_created_team_covers_the_organization():
+    """The create path and the converge path must agree on the end state.
+
+    If `create_team` stopped sending the flag, only the pre-existing-team test
+    above would fail — and someone reading it could reasonably conclude the
+    convergence covers the gap. It does not: it runs after creation on the same
+    pass, so a create that omits the flag is repaired invisibly rather than
+    caught. This asserts the end state of the create path on its own.
+    """
+    admin = FakeClient("admin")
+
+    team = ensure_team(admin, "personal")
+
+    assert team["includes_all_repositories"] is True
+    assert ("create_team", f"personal/{TEAM_NAME}") in admin.calls

@@ -91,6 +91,13 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # writes repository content rather than only registering the name.
     "migrate_repo": frozenset({"write:organization", "write:repository"}),
     "create_team": frozenset({"write:organization"}),
+    # Same endpoint family as `create_team`, so the same grant. It is listed
+    # rather than inherited because `REQUIRED_ADMIN_SCOPES` is DERIVED from this
+    # map: a method absent here is a method whose scope never enters the
+    # requirement, which is how a token was minted that could authenticate and
+    # not work (#1564). The guard that just failed on this line is that
+    # derivation refusing to let a new method in silently.
+    "edit_team": frozenset({"write:organization"}),
     "add_team_member": frozenset({"write:organization"}),
 }
 
@@ -106,6 +113,7 @@ ADMIN_METHODS: tuple[str, ...] = (
     "get_team",
     "create_org",
     "create_team",
+    "edit_team",
     "add_team_member",
     "list_runners",
 )
@@ -428,6 +436,21 @@ class GiteaClient:
         team's COARSE access mode, which Gitea sets to none precisely because the
         grant now lives per unit. Do not "fix" it; `gitea_repos.ensure_team`
         checks the fields that actually govern instead.
+
+        A FOURTH MEASUREMENT, 2026-09-03, and it is the one that made the other
+        three worth nothing on a migrated repository. `includes_all_repositories`
+        defaults to FALSE, and a team's units apply only to the repositories the
+        team covers. Measured on prod: `reconcilers` in both organizations read
+        back `repo.code -> write`, `can_create_org_repo -> True`, and
+        `repos attached: NONE`. So the bot held write over an empty set --
+
+            personal/resume         pull=True  push=False  admin=False
+            teledyne/fae-brain      pull=True  push=False  admin=False
+            teledyne/openkm-brain   pull=True  push=True   admin=True
+
+        -- with push only on the repository it had created itself, where creation
+        conferred access directly rather than through the team. Every field this
+        function had learned to set was correct and the grant covered nothing.
         """
         return self._request(
             "POST",
@@ -437,6 +460,35 @@ class GiteaClient:
                 "permission": permission,
                 "can_create_org_repo": True,
                 "units_map": {unit: permission for unit in TEAM_UNITS},
+                # The scope the units apply TO. Without it the team is created
+                # covering zero repositories and every other field is decoration.
+                "includes_all_repositories": True,
+            },
+        )
+
+    def edit_team(self, team_id: int, name: str, permission: str) -> dict[str, Any]:
+        """Bring an existing team up to the grant `create_team` would give it now.
+
+        Needed because `ensure_team` only ever created: a team that predates a
+        change to the payload above keeps whatever it was born with, and Gitea has
+        no notion of reconciling one. Both live `reconcilers` teams were created
+        before `includes_all_repositories` was set, so without this the fix would
+        apply to organizations that do not exist yet and to no others.
+
+        WIDENS, NEVER NARROWS, and the asymmetry is deliberate: this is the bot's
+        own team and the declaration says what it should hold. Narrowing someone's
+        access from a config edit is the kind of change that should require a
+        human noticing, so nothing here removes a unit or a repository.
+        """
+        return self._request(
+            "PATCH",
+            f"/teams/{team_id}",
+            json={
+                "name": name,
+                "permission": permission,
+                "can_create_org_repo": True,
+                "units_map": {unit: permission for unit in TEAM_UNITS},
+                "includes_all_repositories": True,
             },
         )
 
