@@ -479,6 +479,20 @@ gitea-drop-empty:
 	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1]" && exit 1)
 	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
 
+# Run git against the forge with the operator credential injected into the child
+# process. No workstation holds a credential for gitea.kubelab.live, and the three
+# alternatives are all worse: a token in the remote URL lands in .git/config, a
+# `store` helper writes it to ~/.git-credentials, and printing it to copy-paste
+# puts it in a session transcript. It is `admin_password` and not a token because
+# neither token may push -- measured 2026-09-04, see toolkit/features/gitea_git.py.
+#
+#   make gitea-git ARGS="clone https://gitea.kubelab.live/personal/resume.git"
+#   make gitea-git ARGS="push origin HEAD"      # from inside the clone
+.PHONY: gitea-git
+gitea-git:
+	@test -n "$(ARGS)" || (echo "Usage: make gitea-git ARGS='push origin HEAD' [ENV=prod]" && exit 1)
+	@$(TOOLKIT) services gitea git --env $(or $(ENV),prod) -- $(ARGS)
+
 .PHONY: sync-secret-manager
 sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
 	@$(TOOLKIT) secrets sync-secret-manager
