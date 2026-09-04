@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-63 lessons, newest first. Back to [all categories](../_index.md).
+64 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 422 | [A stale blocker reads exactly like a live one, so nobody retries what a comment says is impossible](lesson-422-a-stale-blocker-reads-exactly-like-a-live-one.md) | 2026-09-04 |
 | 419 | [A mutation harness runs what it mutates, so a mutation can do the thing the code was written to prevent](lesson-419-a-mutation-harness-runs-what-it-mutates.md) | 2026-09-03 |
 | 418 | [A before/after probe must be one whose state can actually change, or it passes without measuring anything](lesson-418-a-before-after-probe-must-be-able-to-change.md) | 2026-09-02 |
 | 408 | [A bounded query answers about its bound, and its answer is indistinguishable from data](lesson-408-a-bounded-query-answers-about-its-bound-not-the-collection.md) | 2026-08-28 |
