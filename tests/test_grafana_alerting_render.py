@@ -47,6 +47,11 @@ REQUIRED_KEYS = {
     "sre-rules.yaml",
     "disk-rules.yaml",
     "slo-rules.yaml",
+    # Retired rules are DELETED here, not merely un-listed: dropping a file does
+    # not remove the rule from Grafana's database (#1583). Its own semantics are
+    # asserted in test_grafana_deleted_rules.py; this entry only holds it in the
+    # merge, alongside the rest.
+    "deleted-rules.yaml",
     # `security-rules.yaml` was here until 2026-09-01 and is deliberately gone.
     # Its only rule fired permanently and was never true; see the rationale at
     # its generator entry in infra/k8s/base/kustomization.yaml. The `merge`

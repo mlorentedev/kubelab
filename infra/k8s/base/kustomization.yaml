@@ -140,6 +140,11 @@ configMapGenerator:
       - services/grafana-alerting/sre-rules.yaml
       - services/grafana-alerting/disk-rules.yaml
       - services/grafana-alerting/slo-rules.yaml
+      # Rules that are retired and must be actively DELETED from Grafana's
+      # database. Dropping a file from this list does not remove the rule --
+      # measured on both clusters, #1583. Whatever leaves this list gets a uid
+      # in deleted-rules.yaml, in the same change.
+      - services/grafana-alerting/deleted-rules.yaml
       # `security-rules.yaml` was here and is deliberately gone (OBS-015).
       #
       # It held one rule, "CrowdSec automated perimeter IP ban surge", which
