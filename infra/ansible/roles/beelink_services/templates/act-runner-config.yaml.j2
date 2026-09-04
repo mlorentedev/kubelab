@@ -16,11 +16,18 @@ log:
 
 runner:
   file: .runner
-  # ONE job at a time. This is act_runner's own default and it is restated here
-  # because it is the knob that turns several open pull requests into an
-  # out-of-memory event: with capacity 1 the jobs QUEUE, which on this hardware
-  # is the correct answer rather than a limitation. Raising it must be a
-  # deliberate change accompanied by a memory calculation, not a convenience.
+  # THE KNOB THAT TURNS SEVERAL OPEN PULL REQUESTS INTO AN OUT-OF-MEMORY EVENT.
+  # Jobs beyond this QUEUE, which on this hardware is the correct answer rather
+  # than a limitation. Declared in `gitea_runner.capacity` and currently 2 --
+  # sized, not chosen: `tests/test_gitea_actions_runner.py` asserts that
+  # `capacity * per-job memory` fits the node's real memory minus a reserve, so
+  # raising it fails the build rather than the node. Raise it there, never here.
+  #
+  # This comment described capacity 1 -- act_runner's own default -- for as long
+  # as the value was 2, which is the shape `test_gitea_anonymous_surface.py`'s
+  # docstring warns about and lesson-021's addendum recorded: a comment and the
+  # value it documents disagreeing, with nothing to notice. It says the number
+  # only by pointing at where the number lives.
   capacity: {{ act_runner_capacity }}
   # `<label>:docker://<image>`. Gitea has no hosted runners, so `ubuntu-latest`
   # is only ever what is declared here -- and a job whose `runs-on` matches no

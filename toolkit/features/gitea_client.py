@@ -275,15 +275,26 @@ class GiteaClient:
         """
         return {str(org["username"]) for org in self._paginate("/admin/orgs")}
 
-    def list_repos(self) -> set[str]:
-        """Every repository, as `"owner/name"` -- the shape `plan_reconcile` compares against.
+    def list_repos(self) -> dict[str, bool]:
+        """Every repository, as `"owner/name" -> is_private` -- what `plan_reconcile` compares against.
 
         `/repos/search` with an admin token spans all owners, which is what makes
         the stray report (AC2) meaningful: a repository in an undeclared
         organization is exactly the case worth reporting, and a per-organization
         listing would never see it.
+
+        RETURNS VISIBILITY ALONGSIDE THE NAME, from the same listing, so the two can
+        never disagree. It returned a bare set until 2026-09-03, and the plan built
+        on it could only compare existence: three repositories declared with no
+        visibility at all were living public, and the reconcile reported "forge
+        matches the declaration". Fetching visibility separately would have restored
+        the gap in a new place -- two reads of the same forge at two moments -- so
+        the one listing carries both. Membership tests read the same on a mapping.
         """
-        return {f"{r['owner']['username']}/{r['name']}" for r in self._paginate("/repos/search", key="data")}
+        return {
+            f"{r['owner']['username']}/{r['name']}": bool(r.get("private"))
+            for r in self._paginate("/repos/search", key="data")
+        }
 
     def get_repo(self, owner: str, name: str) -> dict[str, Any] | None:
         """One repository's metadata, or None when it does not exist.
