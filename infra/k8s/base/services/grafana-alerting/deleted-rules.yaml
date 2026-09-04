@@ -1,0 +1,37 @@
+# Grafana alert rules that are RETIRED and must be actively removed.
+#
+# Removing a rule's provisioning file does NOT delete the rule. Grafana keeps
+# it in its own database and goes on evaluating it forever, and nothing in this
+# repo shows that -- the file is gone, the ConfigMap is clean, Argo CD reports
+# Synced/Healthy, and the alert keeps arriving in Slack.
+#
+# Measured on prod 2026-09-04, ten days after `security-rules.yaml` was deleted
+# by #1529 and two days after the pod restarted without it:
+#
+#   rule_uid=obs015-crowdsec-ban-surge org_id=1 fromAlert=true
+#     query="sum(count_over_time({container=\"crowdsec\"}
+#            |~ \"(?i)(ban|decision|blocked|remediation)\" [10m]))"
+#   logger=ngalert.sender.router msg="Sending alerts to local notifier" count=1
+#
+# Identical on staging. Deleting the file is one operation; deleting the rule is
+# another, and only this file performs the second one. See #1583.
+#
+# ENTRIES ARE PERMANENT. An entry costs nothing once the rule is gone -- Grafana
+# applies it on every start and a missing rule is not an error -- but removing
+# one re-arms the failure for any instance that has not yet processed it (a
+# restored PVC, a cluster rebuilt from an older backup). Retire a rule by
+# deleting its file AND adding its uid here, in the same change.
+---
+apiVersion: 1
+
+deleteRules:
+  # "CrowdSec automated perimeter IP ban surge" (OBS-015), retired by #1529.
+  # Its LogQL counted log lines matching `(?i)(ban|decision|blocked|remediation)`
+  # and the bouncer's own 60s `GET /v1/decisions/stream` poll matches `decision`,
+  # so it read ~20 lines per 10m window against a `> 5` threshold on an idle
+  # CrowdSec. It was never once true. The reasoning for not re-adding a corrected
+  # version -- the alert described a capability this deployment does not have
+  # until #1067 lands -- is in kustomization.yaml, where the file used to be
+  # listed, and in lesson-412.
+  - orgId: 1
+    uid: obs015-crowdsec-ban-surge
