@@ -29,6 +29,11 @@ permissions:
 # Serialize dispatches so rapid web pushes process one at a time (latest wins
 # via the coalescing step below). cancel-in-progress: false — never kill a
 # promote mid-push, which could leave a branch without its PR.
+#
+# That state arrived anyway, six times, through the path this guard does not
+# cover: the PR call failing after the push succeeded (DELIVERY-006, #1651). The
+# step below now rolls its own push back, so "a branch without its PR" is
+# handled rather than only avoided.
 concurrency:
   group: web-image-receiver
   cancel-in-progress: false
@@ -78,14 +83,93 @@ jobs:
           git checkout -b "$BRANCH"
           git commit -m "chore(staging): deploy web ${TAG}"
           git push -u origin "$BRANCH" --force-with-lease
-          gh pr create --base master --head "$BRANCH" \
-            --title "chore(staging): deploy web ${TAG}" \
-            --body "Staging promotion of \`web\` to \`${TAG}\` (ADR-046, cross-repo dispatch from mlorentedev/web)."
+
+          # REST, not `gh pr create` (DELIVERY-006, #1651).
+          #
+          # Every failure this workflow has ever had is this one call: 6 of 119
+          # runs, 2026-06-28 through 2026-09-05, each ending on the identical
+          # line `GraphQL: API rate limit already exceeded for user ID ...`.
+          # `gh pr create` is a GraphQL mutation, and that budget is per ACCOUNT
+          # — shared with every other tool authenticating as the same user, CI
+          # and laptop alike — so an unrelated burst anywhere silently drops a
+          # staging offer here. REST is a separate 5000/hr bucket, verified
+          # during the 2026-09-05 exhaustion itself: `gh api -X POST` opened
+          # issues while every GraphQL call from this account was refused.
+          #
+          # A replacement rather than a fallback. Trying GraphQL first would
+          # spend the call already known to fail and leave a second path that
+          # runs only during an outage — an untested recovery, which is the
+          # thing this ticket exists to remove, not add.
+          if ! gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f title="chore(staging): deploy web ${TAG}" \
+              -f head="$BRANCH" \
+              -f base="master" \
+              -f body="Staging promotion of \`web\` to \`${TAG}\` (ADR-046, cross-repo dispatch from mlorentedev/web)." \
+              --jq '.html_url'; then
+            # The push already succeeded, so returning here without cleaning up
+            # leaves a committed promotion on a branch nobody was ever offered.
+            # Five such branches existed when this was written and NONE of them
+            # ever had a pull request — that is the whole defect, and the count
+            # of orphans is the count of staging deploys dropped in silence.
+            #
+            # But ask first whether the create actually failed.
+            #
+            # A non-zero exit says the CALL failed, not that GitHub refused: a
+            # timeout or a 502 arriving after the pull request was accepted looks
+            # identical here. Deleting the branch then closes a live PR and drops
+            # the promotion with no branch left to recover it from — silently,
+            # and strictly worse than the orphan branch this is fixing.
+            #
+            # So the branch is removed only when the absence of a PR is
+            # CONFIRMED. The lookup is REST, the same bucket the create used, so
+            # a quota failure there means we cannot tell — and "cannot tell" is
+            # not "absent". Same shape as the closing-refs guard's third exit
+            # code: an unanswerable question must never read as a clean answer.
+            if EXISTING=$(gh api \
+                "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY%%/*}:${BRANCH}" \
+                --jq '.[0].html_url // ""'); then
+              if [ -n "$EXISTING" ]; then
+                echo "::warning::the create reported failure but the pull request exists (${EXISTING}); keeping ${BRANCH}"
+              else
+                # Confirmed absent. Deleting over git transport, not
+                # `gh api -X DELETE`: the cleanup has to survive the exhaustion
+                # that triggered it.
+                #
+                # Safe unconditionally at this point because reaching here means
+                # THIS run created THIS branch — the step returns early when the
+                # promotion produced no diff, and the branch is named after the
+                # tag, so a re-dispatch of an already-promoted tag never arrives.
+                # Should it pre-exist anyway, the push above is rejected as
+                # `stale info` and the run is red before this: `actions/checkout`
+                # fetches only the ref it checks out, so there is no
+                # remote-tracking value for `--force-with-lease` to match. That
+                # is the flag working *because* this checkout never fetched the
+                # branch, not a general guarantee of the flag.
+                git push origin --delete "$BRANCH" \
+                  || echo "::warning::could not delete ${BRANCH}; it is now an orphan branch with no PR"
+              fi
+            else
+              echo "::warning::cannot tell whether a PR exists for ${BRANCH};" \
+                   "keeping it rather than risk closing a live one"
+            fi
+            # Still red, deliberately. An unopened staging offer is a promotion
+            # that did not happen; swallowing it would trade a loud failure for
+            # staging silently sitting on an older image.
+            echo "::error::could not open the staging deploy PR for ${TAG}"
+            exit 1
+          fi
 
           # Coalesce: for continuous staging only the LATEST web sha matters, so a
           # burst of web pushes must not pile up a queue of stale deploy PRs. Now
           # the new PR exists, close any older open web staging-deploy PRs and
           # delete their branches (each is superseded by this one).
+          #
+          # Still on GraphQL (`gh pr list --json`, `gh pr close`), on purpose.
+          # This runs only AFTER the offer exists, so its failure cannot drop
+          # one: the worst case under exhaustion is a red run with this PR open
+          # and stale ones left open, which the next dispatch resolves. #1645
+          # removes this loop entirely by promoting onto a stable per-app
+          # branch, so porting it to REST now would be rework.
           gh pr list --state open --json number,headRefName \
             --jq '.[] | select(.headRefName | startswith("deploy/staging-web-")) | "\(.number)\t\(.headRefName)"' \
           | while IFS=$'\t' read -r pr ref; do
