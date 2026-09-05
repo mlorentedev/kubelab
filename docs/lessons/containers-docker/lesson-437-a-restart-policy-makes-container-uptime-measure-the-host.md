@@ -29,7 +29,8 @@ them read **Up 3 hours** — consistent with the host's uptime, and consistent
 with the story everyone had: `personal/resume` migrated to this forge two days
 earlier and its CI ran here for the first time the day before.
 
-`docker inspect` told a different story:
+`docker inspect` told a different story — one #1456 had already written down a
+week earlier, and which nobody had connected to disk:
 
 | builder | `Created` | age | `docker ps` |
 |---|---|---|---|
@@ -79,10 +80,26 @@ removed any of these:
   not counted as reclaimable. The seven state volumes held 18.9GB, the largest
   8.3GB, none of it in the "reclaimable" figure.
 
-#1456 had already found these containers and chose to **report** rather than
-remove them, for want of an age signal it could trust. That was the right call
-with the information available: without a durable age, "is this mid-build?" has
-no safe answer, and killing a live builder fails someone's job.
+#1456 had already found these containers on 2026-08-27 and chose to **report**
+rather than remove them, in its own words because "the timer cannot distinguish
+an orphan from a build genuinely in progress". That was the right call: without
+a durable age, "is this mid-build?" has no safe answer, and killing a live
+builder fails someone's job.
+
+**And #1456 had already read the dates correctly** — it records the same four
+builders, "created 2026-05-24 through 2026-06-26". The ages were not hidden from
+it. What it concluded was that the impact was "cosmetic (25-35MB RAM each, no
+CPU)", with the growth risk framed as *RAM*. Their state volumes — 18.9GB, the
+largest 8.3GB — were never in the frame, because `docker system df` does not
+count a running container's volume as reclaimable.
+
+That is the second time in this incident that a correct measurement of this node
+answered a narrower question than the one that mattered: #1652/lesson-431 sized
+the same node under CI load and also concluded the constraint was memory. Two
+tickets, both accurate, both scoped to RAM, while the disk filled. **The failure
+was not measurement — it was the frame**, and a frame is not visible from inside
+itself. What would have surfaced it is an alert on the resource nobody was
+looking at, which is why "add a disk alert" outranks "look harder" as a fix.
 
 ## What to do instead
 
