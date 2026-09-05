@@ -55,6 +55,7 @@ help:
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
 	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
+	@echo "  make node-reclaim NODE=x     Remove orphaned buildx builders + CI job volumes over SSH [APPLY=1] (works at 0 bytes free, where Ansible cannot)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
@@ -933,6 +934,28 @@ maintain:
 	else \
 		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS) $(_CHECK); \
 	fi
+
+# Emergency reclaim for the residue `make maintain` structurally cannot reach
+# (OPS-024/#1657). Two reasons it is a separate path and not a tag on that one:
+#
+#   - `docker/setup-buildx-action` creates its buildkit container with
+#     `restart: unless-stopped`, so it outlives the job, the runner and every
+#     reboot. `docker container prune` removes STOPPED containers and therefore
+#     never reaches one; the weekly timer can only report them (#1456).
+#   - This runs at 0 bytes free, and Ansible cannot: it needs remote tmp for
+#     its own modules. The recovery has to be lighter than the prevention.
+#
+# Plan-only by default — removing a builder that is genuinely mid-build fails
+# that job. MIN_AGE_HOURS lowers the gate that protects against it, for an
+# operator who is watching; IMAGES_ALL adds `docker image prune -af` (unused
+# TAGGED images too), which is what the weekly timer already does here.
+.PHONY: node-reclaim
+node-reclaim: ## Remove orphaned buildx builders and CI job volumes over SSH (APPLY=1 to act)
+	@test -n "$(NODE)" || (echo "Usage: make node-reclaim NODE=beelink|ace1|ace2|rpi3|rpi4 [APPLY=1] [MIN_AGE_HOURS=n] [IMAGES_ALL=1]" && exit 1)
+	@$(TOOLKIT) infra node reclaim --node $(NODE) \
+		$(if $(APPLY),--apply,) \
+		$(if $(MIN_AGE_HOURS),--min-age-hours $(MIN_AGE_HOURS),) \
+		$(if $(IMAGES_ALL),--include-tagged,)
 
 # Live delivery test of the maintenance failure-notify path (ANSIBLE-035 AC7).
 # Really posts to prod n8n and really notifies — a delivery test that suppresses

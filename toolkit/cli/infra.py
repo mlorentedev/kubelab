@@ -76,6 +76,12 @@ n8n_app = typer.Typer(
     no_args_is_help=True,
 )
 
+node_app = typer.Typer(
+    name="node",
+    help="Node-level recovery that must work when Ansible cannot reach the host (OPS-024)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
@@ -83,6 +89,117 @@ k8s_app.add_typer(k8s_access_app, name="access")
 app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
 app.add_typer(n8n_app, name="n8n")
+app.add_typer(node_app, name="node")
+
+
+@node_app.command("reclaim")
+def node_reclaim(
+    node: Annotated[str, typer.Option("--node", help="Node key under networking.nodes (e.g. beelink)")],
+    apply: Annotated[bool, typer.Option("--apply", help="Actually remove; default reports only")] = False,
+    min_age_hours: Annotated[
+        int,
+        typer.Option("--min-age-hours", help="A builder younger than this could be mid-build"),
+    ] = 0,
+    images: Annotated[bool, typer.Option("--images/--no-images", help="Also prune dangling images")] = True,
+    include_tagged: Annotated[
+        bool,
+        typer.Option("--include-tagged", help="Prune unused TAGGED images too (docker image prune -af)"),
+    ] = False,
+) -> None:
+    """Remove the buildx builders and CI job volumes a full disk leaves no other way to clear.
+
+    This exists because the weekly `node_maintenance` timer structurally cannot:
+    `docker/setup-buildx-action` gives its builder `restart: unless-stopped`, so
+    the container survives the job, the runner and every reboot, and
+    `docker container prune` only removes STOPPED containers. Ansible cannot
+    stand in either -- it needs remote tmp, and this runs at 0 bytes free.
+
+    Reports a plan and changes nothing without `--apply`.
+    """
+    from datetime import datetime, timezone
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.docker_reclaim import (
+        DEFAULT_MIN_AGE_HOURS,
+        DockerUnavailableError,
+        ReclaimRefused,
+        disk_usage,
+        plan_reclaim,
+        probe,
+        prune_images,
+        remove,
+        set_runners,
+    )
+    from toolkit.features.k8s_connect import resolve_ssh_user
+
+    gate = min_age_hours or DEFAULT_MIN_AGE_HOURS
+
+    net = ConfigurationManager("common", settings.project_root).get_merged_config()["networking"]
+    block = (net.get("nodes") or {}).get(node)
+    if not block:
+        declared = ", ".join(sorted(net.get("nodes") or {})) or "(none)"
+        logger.error(f"unknown node {node!r}; declared nodes: {declared}")
+        raise typer.Exit(1)
+    host = block.get("tailscale_ip")
+    if not host:
+        logger.error(f"networking.nodes.{node}.tailscale_ip not declared")
+        raise typer.Exit(1)
+    ssh_target = f"{resolve_ssh_user(net, node)}@{host}"
+
+    logger.section(f"Docker reclaim — {node} ({ssh_target})")
+    try:
+        logger.info(f"before  {disk_usage(ssh_target)}")
+        containers, volumes = probe(ssh_target)
+        plan = plan_reclaim(containers, volumes, datetime.now(timezone.utc), gate)
+    except (DockerUnavailableError, ReclaimRefused) as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    now = datetime.now(timezone.utc)
+    for container in plan.containers:
+        logger.info(f"remove container  {container.label(now)}")
+    for volume in plan.volumes:
+        logger.info(f"remove volume     {volume}")
+    for container, why in plan.kept_containers:
+        logger.warning(f"keep container    {container.name} — {why}")
+    for volume, why in plan.kept_volumes:
+        logger.warning(f"keep volume       {volume} — {why}")
+
+    if plan.is_noop and not images:
+        logger.success("nothing to reclaim")
+        return
+
+    if not apply:
+        logger.warning("plan only — re-run with --apply to perform it")
+        return
+
+    # Freeing space is exactly when a queued job starts, and a job that starts
+    # mid-reclaim writes into the space just recovered. Restarting them is in a
+    # `finally` because leaving this node's CI stopped is a worse failure than
+    # the one that would have caused it.
+    paused: list[str] = []
+    try:
+        paused = set_runners(ssh_target, running=False)
+        if paused:
+            logger.info(f"paused  {', '.join(paused)}")
+        remove(ssh_target, plan)
+        logger.info(f"after volumes   {disk_usage(ssh_target)}")
+        if images:
+            reclaimed = prune_images(ssh_target, include_tagged=include_tagged)
+            logger.info(reclaimed.splitlines()[-1] if reclaimed else "no images pruned")
+    except (DockerUnavailableError, ReclaimRefused) as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+    finally:
+        if paused:
+            try:
+                set_runners(ssh_target, running=True)
+                logger.info(f"resumed {', '.join(paused)}")
+            except DockerUnavailableError as exc:
+                logger.error(f"RUNNERS LEFT STOPPED — start them by hand: {exc}")
+
+    logger.info(f"after   {disk_usage(ssh_target)}")
+    logger.success(f"reclaimed {len(plan.containers)} container(s), {len(plan.volumes)} volume(s)")
 
 
 @headscale_app.command("policy-check")
