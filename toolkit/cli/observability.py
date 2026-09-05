@@ -411,6 +411,19 @@ def drill_pvc_unbound_cmd(
     if result.absorbed_residue:
         typer.echo("  (a claim from an earlier run was present and has been cleared)")
 
+    if not result.measured:
+        # A DIFFERENT exit code from "did not fire". "I could not measure" and
+        # "the rule is broken" must not share one, or the caller collapses them
+        # into the same conclusion -- which is the exact failure this command
+        # exists to remove, reproduced in its own exit status.
+        typer.echo(
+            "✗ Could not measure: the alert was already firing before this drill "
+            "created anything, so a firing now proves nothing. This is NOT a "
+            "failing rule. The claim is cleared; re-run in ~45m.",
+            err=True,
+        )
+        raise typer.Exit(3)
+
     if not result.fired:
         typer.echo(
             f"✗ {DRILL_ALERT_NAME} did not fire within {timeout_minutes}m. "

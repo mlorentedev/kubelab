@@ -1324,14 +1324,38 @@ apps:
         artifact_retention_days: 14
         run_retention_days: 30
         resources:
-          # The DAEMON's limits, and it is tiny -- the image is 43.6 MB (measured on
-          # the Beelink) and its job is to poll Gitea and drive the Docker socket.
-          # My first draft gave it 3G, which bounded a 43 MB process while leaving
-          # the multi-GB job container it spawns unbounded: the wrong process, and
-          # 3G of an 8 GB node reserved against nothing. Job containers are bounded
-          # by `container_options` above.
+          # The DAEMON's limits. Job containers are bounded by `container_options`
+          # above; this bounds only the process that orchestrates them.
+          #
+          # 512M WAS TOO LOW AND THE REASONING BEHIND IT WAS ABOUT THE WRONG THING.
+          # It read: "it is tiny -- the image is 43.6 MB (measured on the Beelink)
+          # and its job is to poll Gitea and drive the Docker socket". The image
+          # size is right and irrelevant: act_runner buffers each running job's log
+          # stream in memory, so its footprint scales with `capacity`, not with the
+          # binary. Measured 2026-09-04 with two jobs running, sampled every 10s:
+          #
+          #     act-runner   peak 512M   limit 512M      <- exactly at the ceiling
+          #
+          # A container at its own limit is not "efficient", it is one allocation
+          # from being OOM-killed -- and killing act_runner mid-job leaves the job
+          # containers it started orphaned on the daemon, since they are siblings
+          # rather than children and nothing reaps them.
+          #
+          # 1G is TWO jobs' measured headroom plus the same again. It is not sized
+          # for a future capacity increase: raise this in the same change that
+          # raises `capacity`, because the two are one decision. And it costs the
+          # node nothing at rest -- a compose `mem_limit` is a CEILING, not a
+          # reservation.
+          #
+          # THE PRIOR VALUE'S REAL MISTAKE IS WORTH KEEPING. The 3G first draft was
+          # corrected for a good reason (it bounded a 43 MB process while leaving
+          # the multi-GB job container unbounded) and the correction then over-
+          # applied: the fix for "the limit is on the wrong process" is to bound the
+          # right one too, not to shrink the wrong one to fit a belief about the
+          # image. Both containers need a limit, and neither number is derivable
+          # from the other.
           cpu_limit: "0.5"
-          memory_limit: 512M
+          memory_limit: 1G
           cpu_reservation: "0.1"
           memory_reservation: 128M
 

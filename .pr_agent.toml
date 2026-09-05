@@ -102,6 +102,23 @@ require_security_review = true
 persistent_comment = true
 final_update_message = false
 
+# The "verdict without the change" bullet below was added 2026-09-04 after four
+# instances in one day, all of which passed unit tests and code review:
+#
+#   - a drill printed `FIRING after 0.0m` because the alert it waited for had
+#     been firing for ten days on the residue it had just absorbed (#1654);
+#   - a capability probe returned 200 on the one repository the caller had
+#     created itself, measuring that repository's history, not the grant (#1633);
+#   - a scope guard compared a hand-written requirement against a matching
+#     grant, so it agreed with itself (#1563);
+#   - `PATCH /repos/{o}/{r}` answered 200 having applied none of the six fields
+#     it was sent (#1633).
+#
+# None is a linter finding and none is visible in a single hunk, which is what
+# makes it worth the reviewer's budget. It is phrased as a question the reviewer
+# can apply mechanically -- "would this still pass with the change reverted?" --
+# rather than as doctrine, for the reason the next paragraph gives.
+#
 # NOTE the absent block. Upstream carries a "HARNESS COMPLIANCE" preamble asking
 # for a per-rule PASS/FAIL sweep. It is NOT ported: measured upstream as asked for
 # on every review and delivered 1 time in 16 (dotfiles #1072, whose own
@@ -121,6 +138,10 @@ Spend the budget on what static analysis cannot see:
 - a test that passes vacuously — asserting a condition the code cannot violate,
   or agreeing only with its own fixtures rather than with the committed tree;
 - a check whose only reachable branch is the no-op one;
+- an assertion whose verdict could have been produced WITHOUT the change under
+  test: one that would still pass with the change reverted, a probe run against
+  a target that already satisfied the condition, or a comparison over a set that
+  may be empty. Say what sample the check measured, not only what it concluded;
 - cross-file consequences a single-hunk reader would miss, especially between
   `infra/config/values/common.yaml` and anything generated from it.
 

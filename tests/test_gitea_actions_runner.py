@@ -190,6 +190,66 @@ BEELINK_TOTAL_MB = 7716
 RESERVED_MB = 1800
 
 
+def _budget_mb() -> float:
+    """The memory a configuration commits: every job container, plus the daemon.
+
+    Extracted so the term the budget check adds can be shown to CHANGE AN ANSWER at
+    a reachable configuration, rather than merely being present in a sum.
+    """
+    runner = _ssot()
+    per_job = re.search(r"--memory=(\d+(?:\.\d+)?)([gGmM])", str(runner["container_options"]))
+    daemon = re.search(r"(\d+(?:\.\d+)?)\s*([gGmM])", str(runner["resources"]["memory_limit"]))
+    assert per_job and daemon
+
+    def to_mb(m: re.Match[str]) -> float:
+        return float(m.group(1)) * (1024 if m.group(2).lower() == "g" else 1)
+
+    return int(runner["capacity"]) * to_mb(per_job) + to_mb(daemon)
+
+
+def test_the_daemon_s_own_ceiling_can_decide_the_budget() -> None:
+    """Counting act_runner itself is not decoration, and this pins it at a REAL configuration.
+
+    Mutation-tested 2026-09-04: dropping the daemon term from the budget left the
+    suite green, because at today's numbers (capacity 2, 2G per job, 1G daemon) the
+    answer is "fits" either way. A term that never changes an answer is a term
+    nobody would notice losing -- which is exactly how the daemon's old 512M went
+    unmodelled until it was measured sitting ON that limit.
+
+    So the term is pinned where it decides: 1.6G per job at capacity 3 fits WITHOUT
+    it and does not fit WITH it. Not a contrived number -- it is the shape of the
+    change this repository is actively considering, since `build-pdf` peaked at
+    479M against a 2G allowance and the obvious move is to lower the per-job limit
+    and raise capacity together.
+    """
+    budget = BEELINK_TOTAL_MB - RESERVED_MB
+    per_job_mb, capacity, daemon_mb = 1.6 * 1024, 3, 1024
+
+    without_daemon = capacity * per_job_mb
+    with_daemon = without_daemon + daemon_mb
+
+    assert without_daemon <= budget, "the fixture no longer models a config that passes without the term"
+    assert with_daemon > budget, "the fixture no longer models a config the term rejects"
+
+
+def test_the_committed_total_counts_both_kinds_of_container() -> None:
+    """The live configuration's committed memory includes the daemon's ceiling.
+
+    Asserted on the DERIVED total rather than by reading the sum, so a refactor that
+    drops the term fails here even on a day when the budget assertion would still
+    pass without it.
+    """
+    runner = _ssot()
+    daemon = re.search(r"(\d+(?:\.\d+)?)\s*([gGmM])", str(runner["resources"]["memory_limit"]))
+    per_job = re.search(r"--memory=(\d+(?:\.\d+)?)([gGmM])", str(runner["container_options"]))
+    assert daemon and per_job
+    daemon_mb = float(daemon.group(1)) * (1024 if daemon.group(2).lower() == "g" else 1)
+    per_job_mb = float(per_job.group(1)) * (1024 if per_job.group(2).lower() == "g" else 1)
+
+    assert _budget_mb() == int(runner["capacity"]) * per_job_mb + daemon_mb
+    assert daemon_mb > 0, "the daemon contributes nothing; the term is present but empty"
+
+
 def test_concurrent_jobs_fit_in_the_node_s_memory() -> None:
     """capacity x per-job memory must fit, whatever those two numbers become.
 
@@ -201,6 +261,21 @@ def test_concurrent_jobs_fit_in_the_node_s_memory() -> None:
     too many CPU shares only throttles, while too much committed memory invokes the
     OOM killer on a node that also hosts the forge these jobs build for. So this
     checks memory, and lets CPU be a judgement call.
+
+    WHAT THIS ARITHMETIC CANNOT SEE, stated here because a green result on it was
+    read as "the node is safe" and that is a stronger claim than it makes. Measured
+    on the Beelink 2026-09-04, peak RSS while four pull requests ran:
+
+        buildkit builder   4095M   no limit    <- larger than everything below
+        (unnamed)          1968M   no limit
+        job:build-pdf       479M   2G limit    <- what this test models, at 23%
+
+    Every container a job starts through the mounted Docker socket is created by
+    the daemon on the HOST -- a sibling, outside the job's cgroup, inheriting no
+    limit. Those containers are declared in a workflow in another repository, so
+    nothing here can count them. This test therefore bounds the containers act_runner
+    itself creates, and says nothing about the ones they create in turn. Keeping the
+    limitation written down is the difference between a guard and a false assurance.
     """
     runner = _ssot()
     capacity = int(runner["capacity"])
@@ -212,17 +287,33 @@ def test_concurrent_jobs_fit_in_the_node_s_memory() -> None:
         "the job container is unbounded and this arithmetic is vacuous."
     )
     per_job_mb = float(match.group(1)) * (1024 if match.group(2).lower() == "g" else 1)
-    committed = capacity * per_job_mb
+
+    # THE DAEMON'S OWN CEILING COUNTS. It was omitted while it was 512M, which was
+    # small enough for the omission not to matter and is exactly why it went
+    # unnoticed -- the number moved to 1G when act_runner was measured sitting ON
+    # its old limit, and an unmodelled term that grows is one that changes the
+    # answer without changing the test.
+    runner_match = re.search(r"(\d+(?:\.\d+)?)\s*([gGmM])", str(runner["resources"]["memory_limit"]))
+    assert runner_match, (
+        f"the runner's own memory_limit is unparseable: {runner['resources']['memory_limit']!r}. "
+        "It is a term in this budget, not decoration."
+    )
+    daemon_mb = float(runner_match.group(1)) * (1024 if runner_match.group(2).lower() == "g" else 1)
+
+    committed = capacity * per_job_mb + daemon_mb
     budget = BEELINK_TOTAL_MB - RESERVED_MB
 
     assert committed <= budget, (
-        f"{capacity} concurrent jobs x {per_job_mb:.0f} MB = {committed:.0f} MB, over "
-        f"the {budget} MB budget on a {BEELINK_TOTAL_MB} MB node. Raising capacity "
-        "without shrinking the per-job limit is how parallel CI becomes an OOM event "
-        "that takes Gitea down with it."
+        f"{capacity} concurrent jobs x {per_job_mb:.0f} MB + {daemon_mb:.0f} MB for act_runner "
+        f"itself = {committed:.0f} MB, over the {budget} MB budget on a {BEELINK_TOTAL_MB} MB "
+        "node. Raising capacity without shrinking the per-job limit is how parallel CI becomes "
+        "an OOM event that takes Gitea down with it."
     )
 
     assert capacity >= 1, "capacity below 1 means no job ever runs"
+    # The floor, per lesson-416: every assertion above is satisfied by a budget of
+    # zero committed memory, which is the one state that can never occur.
+    assert committed > 0, "nothing was counted; this budget check is measuring an empty set"
 
 
 def test_the_job_containers_are_bounded_not_just_the_runner() -> None:
