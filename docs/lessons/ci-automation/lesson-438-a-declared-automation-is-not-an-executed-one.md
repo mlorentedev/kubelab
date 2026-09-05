@@ -17,12 +17,13 @@ fix was to stop writing the number and derive it, applied by a pre-commit hook �
 turning a rule people must remember into a fact that cannot be wrong.
 
 **Problem**: The hook was declared correctly and did not run where it mattered.
-Three separate reasons, each found only by trying it rather than reading it:
+Four separate reasons, each found only by trying it rather than reading it —
+and the fourth was found by this lesson's own pull request going red:
 
 1. **git does not run `pre-commit` for a merge that resolves cleanly.** The
    hook's own comment claimed it fired on the merge commit. Measured:
 
-   ```
+   ```console
    $ git merge tmp/merge-probe
    Merge made by the 'ort' strategy.
     docs/lessons/observability/lesson-901-probe.md | 6 ++++++
@@ -46,7 +47,20 @@ Three separate reasons, each found only by trying it rather than reading it:
    `grep -c` for the new check returned `0`. The guard starts protecting when
    the change reaches master, not when it is written.
 
-Each of the three is invisible to every test of the *logic*. The reconciler had
+4. **A branch updated from the GitHub UI runs no local hook of any kind.** The
+   "Update branch" button merges master into the PR branch *on GitHub's
+   servers*: there is no local commit for `pre-commit` to see and no local push
+   for `pre-push` to intercept. Measured on this very PR — `7cc5b6fc`, a
+   `Merge branch 'master' into docs/lesson-declared-is-not-executed` authored
+   by the button — which brought the corpus to 434 files against a declared
+   433 and turned the `Tests` job red on `test_the_real_index_currently_agrees`.
+
+   So `.pre-commit-config.yaml`'s claim that *"nothing reaches CI stale, which
+   is the whole point"* is false, and the PR that shipped the two stages proved
+   it four hours later. CI is not a redundant net here; on this route it is the
+   only one. Two local stages plus a red build is the honest description.
+
+Each of the four is invisible to every test of the *logic*. The reconciler had
 15 passing tests and worked perfectly; what did not work was anything reaching
 it.
 
@@ -54,7 +68,7 @@ it.
 route you had in mind. Two stages, each proven as a live cycle rather than as a
 unit test:
 
-```
+```text
 commit path -- a lesson arrives, counters untouched
   commit 1 -> hook FAILED, "files were modified by this hook"
               total 432 -> 433, category column 17 -> 18, heading 17 -> 18
@@ -72,11 +86,17 @@ file, since that is the plausible-looking mistake.
 **Rule**: When you automate away a recurring mistake, name the route the
 mistake takes and prove the automation sits on it. "It runs on commit" is a
 claim about your workflow, not about the defect: this one arrived by merge, and
-merges skip `pre-commit` entirely. Three questions the same shape — *does this
-hook run at all, in this repo's configuration, from this working tree?* — and
-all three answers were no, while the config read as correct. A mechanism is not
-verified by its unit tests any more than [[lesson-429]]'s drill was; run it
-against the thing it is supposed to catch, and watch it catch it.
+merges skip `pre-commit` entirely. Four questions the same shape — *does this
+hook run at all, in this repo's configuration, from this working tree, on the
+machine where the merge happens?* — and all four answers were no, while the
+config read as correct. A mechanism is not verified by its unit tests any more
+than [[lesson-429]]'s drill was; run it against the thing it is supposed to
+catch, and watch it catch it.
+
+And having enumerated the routes, say which ones you did **not** cover. A
+server-side merge is outside the reach of any local hook, so the residual net
+is CI and the honest sentence is "two stages and a red build", not "nothing
+reaches CI stale". Claiming full coverage is how the next person stops looking.
 
 Corollary for shared hooks: `core.hooksPath` means a hook change is inert until
 it lands on the branch the main worktree has checked out. Say so when you ship
