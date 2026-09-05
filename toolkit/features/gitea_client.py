@@ -28,7 +28,7 @@ this very spec's baseline. `_paginate` walks until a short page arrives, so
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import requests
 
@@ -597,6 +597,50 @@ class GiteaBasicAuthClient(GiteaClient):
                 return False
             raise
         return True
+
+    def edit_repo(self, owner: str, name: str, settings: Mapping[str, Any]) -> dict[str, Any]:
+        """Set repository settings -- merge styles, branch cleanup, optional units.
+
+        ON THIS CLASS, and the measurement that put it here is more interesting than
+        the two that came before it. Same probe shape as `delete_repo` (a no-op
+        PATCH handing back the value the read had just returned), run against all
+        three declared repositories on 2026-09-04:
+
+            PATCH as admin token           -> 403 required=[write:repository]   (x3)
+            PATCH as bot token             -> 403 "owner or a collaborator with
+                                              admin write", on teledyne/fae-brain
+                                              and personal/resume
+            PATCH as bot token             -> 200, on teledyne/openkm-brain
+            PATCH as superadmin basic auth -> 200                               (x3)
+
+        THE BOT'S ONE SUCCESS IS NOT A CAPABILITY, and reading it as one is the trap
+        this docstring exists to close. `openkm-brain` is the empty shell the BOT
+        created, and Gitea makes a repository's creator its admin; the other two were
+        migrated by the superadmin, so the bot holds only the `reconcilers` team's
+        `write`. Gitea gates repository editing on repo-ADMIN, which a `write` team
+        does not confer -- so the bot's answer tracks the PROVENANCE of each
+        repository, not its own grant.
+
+        Which makes this the sampling version of lesson-425: a probe that measures a
+        single target measures that target's history. Had it run only on
+        `openkm-brain` it would have "established" that the bot may configure
+        repositories, and the reconciler would then have failed on exactly the
+        repositories that matter -- the migrated ones, which are all of them that
+        hold content.
+
+        Widening the admin token with `write:repository` is the same wrong fix
+        `delete_repo` refuses: that scope is a standing DELETE capability, bought
+        permanently to set a merge style. Granting the team repo-admin is wrong in
+        the other direction -- it would let the machine identity reconfigure and
+        delete every repository in the organization, which is the concentration
+        ADR-065 D1 exists to avoid.
+
+        `settings` is passed through as Gitea's own `EditRepoOption` field names, so
+        the declaration and the API speak one vocabulary and no mapping layer can
+        drift between them. NOT idempotent-by-404: a PATCH against an absent
+        repository is a caller error, and `plan_reconcile` never schedules one.
+        """
+        return self._request("PATCH", f"/repos/{owner}/{name}", json=dict(settings))
 
     def revoke_token(self, username: str, token_name: str) -> bool:
         """Delete a named token. True if it was there, False if it already was not.

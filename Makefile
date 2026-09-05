@@ -488,10 +488,31 @@ gitea-drop-empty:
 #
 #   make gitea-git ARGS="clone https://gitea.kubelab.live/personal/resume.git"
 #   make gitea-git ARGS="push origin HEAD"      # from inside the clone
+# TWO BUGS FIXED HERE ON 2026-09-04, and both produced a confusing failure rather
+# than a wrong result — but only because the forge does not exist in `dev`.
+#
+# 1. `poetry run --`. Poetry stops parsing its OWN options at the first `--`, so
+#    `poetry run toolkit ... --env prod -- clone ...` handed `--env` to POETRY,
+#    which answered `The option "--env" does not exist`. It affects only targets
+#    that pass a `--` through to the wrapped program, which is why the rest of the
+#    gitea family never showed it. `poetry run -- toolkit ...` marks poetry's own
+#    arguments as finished and the inner `--` still reaches typer.
+#
+# 2. `$(or $(ENV),prod)` CANNOT DEFAULT TO PROD. `ENV ?= dev` is set globally
+#    below, so `$(or ...)` never sees an empty value and this ran against `dev`
+#    while its own usage line promised prod. The `$(filter)` form is the one the
+#    `alerts` target already uses, with the reason spelled out at its call site —
+#    the same fix, written down once and unable to reach the other places using
+#    the broken idiom. The remaining seven are #1644, with a guard rather than
+#    seven hand edits, since a documented fix that eight sites cannot see is the
+#    shape this repo keeps rediscovering.
+#
+# Verify a change here with `make -n gitea-git ARGS=status`, which expands the
+# recipe without running it — the cheapest proof, and it needs no forge.
 .PHONY: gitea-git
 gitea-git:
 	@test -n "$(ARGS)" || (echo "Usage: make gitea-git ARGS='push origin HEAD' [ENV=prod]" && exit 1)
-	@$(TOOLKIT) services gitea git --env $(or $(ENV),prod) -- $(ARGS)
+	@$(POETRY) run -- toolkit services gitea git --env $(or $(filter staging prod,$(ENV)),prod) -- $(ARGS)
 
 .PHONY: sync-secret-manager
 sync-secret-manager: ## Deliver the GCP hub's boot secrets to Secret Manager (one-way; SOPS stays SSOT)
