@@ -71,6 +71,34 @@ check_merged_branch() {
 # name is git's first argument.
 check_merged_branch "${1:-origin}"
 
+# ---------------------------------------------------------------------------
+# Guard: the lesson index counters must match the files being pushed.
+#
+# The pre-commit hook derives them when a lesson is WRITTEN. It structurally
+# cannot see a lesson that arrived by MERGE: measured 2026-09-05, git does not
+# run pre-commit for a merge that resolves cleanly -- `Merge made by the 'ort'
+# strategy`, no hook output, 433 files and 432 declared. That is the route all
+# four counter collisions took (#1649).
+#
+# So the commit-time hook catches the author and this catches the merger.
+# Without it the only remaining net is CI, seven minutes after the push, which
+# is the state this whole change exists to end.
+#
+# --check, never --fix: rewriting files mid-push would leave the working tree
+# ahead of what is being pushed.
+# ---------------------------------------------------------------------------
+if ! poetry run -- toolkit tools lessons-index --check >/dev/null 2>&1; then
+  echo "[ERROR] The lesson index counters disagree with the files on disk."
+  poetry run -- toolkit tools lessons-index --check || true
+  echo ""
+  echo "        Usually this means a merge brought a lesson in without touching"
+  echo "        the counters — git merges that line as text and raises no conflict."
+  echo ""
+  echo "          toolkit tools lessons-index --fix && git commit -a --amend --no-edit"
+  echo ""
+  exit 1
+fi
+
 echo "[INFO] Running pre-push checks..."
 # `set -e` already aborts on a non-zero exit, so the old `status=$?` branch below
 # this line was unreachable. Kept explicit instead of implicit: a lint failure
