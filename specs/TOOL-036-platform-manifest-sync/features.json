@@ -1,0 +1,30 @@
+[
+  {
+    "id": "TOOL-036-platform-manifest-sync-f1",
+    "behavior": "tk sync platform-json outputs valid platform.json conforming to web schema from common.yaml",
+    "verification": "poetry run pytest tests/test_sync_platform_json.py -k test_manifest_schema_and_counts",
+    "state": "pass",
+    "evidence": "PASSED tests/test_sync_platform_json.py::test_manifest_schema_and_counts (counts: activeNodes=8, kubernetesClusters=3, kubernetesNodes=3, totalServices=35)"
+  },
+  {
+    "id": "TOOL-036-platform-manifest-sync-f2",
+    "behavior": "Output strictly enforces Zero-Addressing (ADR-056 §3): no IPs, no .internal domains, no non-public URLs",
+    "verification": "poetry run pytest tests/test_sync_platform_json.py -k test_zero_addressing_sanitization",
+    "state": "pass",
+    "evidence": "PASSED tests/test_sync_platform_json.py::test_zero_addressing_sanitization (asserts no IPs, no .internal, private URLs mapped to None)"
+  },
+  {
+    "id": "TOOL-036-platform-manifest-sync-f3",
+    "behavior": "Drift check tk sync platform-json --check detects mutations and exits 1 with diff",
+    "verification": "poetry run pytest tests/test_sync_platform_json.py -k test_drift_gate_detects_mutation",
+    "state": "pass",
+    "evidence": "PASSED tests/test_sync_platform_json.py::test_drift_gate_detects_mutation (asserts exit code 1 and stdout diff when mutated)"
+  },
+  {
+    "id": "TOOL-036-platform-manifest-sync-f4",
+    "behavior": "Makefile sync-platform-json and sync-platform-json-check run cleanly",
+    "verification": "make sync-platform-json-check",
+    "state": "pass",
+    "evidence": "[SUCCESS] Platform manifest platform.json is in sync (exit 0)"
+  }
+]

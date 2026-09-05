@@ -1436,6 +1436,14 @@ sync-branding: ## Sync master brand CSS from common.yaml SSOT (ADR-032)
 sync-branding-check: ## Verify master brand CSS is in sync with common.yaml SSOT
 	@$(TOOLKIT) sync branding --check
 
+.PHONY: sync-platform-json
+sync-platform-json: ## Sync public platform.json manifest from common.yaml SSOT (issue #1347)
+	@$(TOOLKIT) sync platform-json
+
+.PHONY: sync-platform-json-check
+sync-platform-json-check: ## Verify public platform.json manifest is in sync with common.yaml SSOT
+	@$(TOOLKIT) sync platform-json --check
+
 .PHONY: sync-k8s-images
 sync-k8s-images:
 	@$(TOOLKIT) sync images
