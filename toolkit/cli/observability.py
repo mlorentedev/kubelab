@@ -27,6 +27,7 @@ from toolkit.features.pvc_drill import (
     DRILL_ALERT_NAME,
     DRILL_NAMESPACE,
     DRILL_PVC_NAME,
+    RESOLVE_LATENCY_MIN,
     DrillTeardownError,
     apply_pvc,
     delete_pvc,
@@ -419,7 +420,7 @@ def drill_pvc_unbound_cmd(
         typer.echo(
             "✗ Could not measure: the alert was already firing before this drill "
             "created anything, so a firing now proves nothing. This is NOT a "
-            "failing rule. The claim is cleared; re-run in ~45m.",
+            f"failing rule. The claim is cleared; re-run in ~{RESOLVE_LATENCY_MIN}m.",
             err=True,
         )
         raise typer.Exit(3)
@@ -434,6 +435,6 @@ def drill_pvc_unbound_cmd(
 
     typer.echo(
         f"✓ {DRILL_ALERT_NAME} fired and the claim is removed. "
-        "The alert instance resolves on its own in roughly 30-45m — "
-        "the rule reads a [30m] window on a 15m interval."
+        f"The alert instance resolves on its own in about {RESOLVE_LATENCY_MIN}m — "
+        "measured, not derived from the rule's interval."
     )

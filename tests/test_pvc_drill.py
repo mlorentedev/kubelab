@@ -333,3 +333,61 @@ class TestTheDrillWatchesTheRuleThatExists:
             for rule in group["rules"]
         }
         assert by_title[pvc_drill.DRILL_ALERT_NAME] == "obs015-pvc-unbound-failure"
+
+
+class TestTheAdviceMatchesWhatWasMeasured:
+    """Every message that tells the operator when to come back must quote the
+    one measured constant.
+
+    The number shipped wrong: `30-45m`, derived from the rule's `[30m]` window
+    on its `15m` interval, when the observed latency is ~90m. At 45 minutes the
+    alert had been through two blind evaluations and was still firing, so the
+    advice sent the operator into a second refusal -- and a drill that appears
+    to fail twice reads as a broken drill, not as advice that was optimistic.
+
+    Three call sites carried the figure independently, which is why it is a
+    constant now and why this checks the messages rather than the constant: a
+    constant nothing quotes does not stop the next hardcoded number.
+    """
+
+    #: Figures that were the wrong answer to this exact question. Not a ban on
+    #: the digits anywhere -- `~45m worst case` on the FIRING timeout is a
+    #: different quantity and stays.
+    STALE_FIGURES = ("30-45m", "roughly 30-45", "re-run in ~45m")
+
+    def _refusal_message(self) -> str:
+        spy = Spy(already_firing=True)
+        lines: list[str] = []
+        result = pvc_drill.run_drill(
+            exists=spy.exists,
+            create=spy.create,
+            delete=spy.delete,
+            fetch_alerts=spy.fetch_alerts,
+            sleep=lambda _s: None,
+            log=lines.append,
+        )
+        # Floor: if this ever stopped being the refusal path, the assertions
+        # below would be inspecting whatever message the drill happened to
+        # print instead -- and would pass or fail for unrelated reasons.
+        assert result.measured is False, "expected the refusal path, got a real measurement"
+        return "\n".join(lines)
+
+    def test_the_refusal_quotes_the_measured_constant(self) -> None:
+        msg = self._refusal_message()
+        assert f"{pvc_drill.RESOLVE_LATENCY_MIN}m" in msg, f"refusal did not name the latency: {msg}"
+
+    def test_no_message_carries_a_superseded_figure(self) -> None:
+        """Reads the shipped source, not this test's own strings: the CLI is
+        where two of the three wrong figures lived, and a check that only looked
+        at the module it imports would have missed both."""
+        sources = [
+            pathlib.Path(pvc_drill.__file__).read_text(),
+            (pathlib.Path(pvc_drill.__file__).parents[1] / "cli" / "observability.py").read_text(),
+        ]
+        assert any("RESOLVE_LATENCY_MIN" in s for s in sources), "the constant is not referenced anywhere"
+        for src in sources:
+            body = "\n".join(
+                line for line in src.splitlines() if not line.lstrip().startswith("#") and "#:" not in line
+            )
+            for stale in self.STALE_FIGURES:
+                assert stale not in body, f"a superseded resolve figure {stale!r} is still in a message"

@@ -50,6 +50,32 @@ from typing import Any
 DRILL_PVC_NAME = "ac2-drill-unbound"
 DRILL_NAMESPACE = "kubelab"
 
+#: How long the alert instance takes to resolve once the claim is gone.
+#:
+#: MEASURED, not derived -- and the derived figure was wrong. This said "30-45m,
+#: a [30m] window on a 15m interval", which is the arithmetic anyone would do
+#: from the rule and is roughly half the truth. Full trace, staging 2026-09-05,
+#: one line per rule evaluation:
+#:
+#:     01:45:06  last disk_pvc_health line for the claim
+#:     02:14:55  evaluates, STILL SEES it -- inside the [30m] window
+#:     02:15     the series leaves the query result
+#:     02:29:55  first evaluation that cannot see it -> still FIRING
+#:     02:44:55  still FIRING   (45m in: the old advice said re-run about here)
+#:     02:59:55  still FIRING
+#:     03:14:55  RESOLVED
+#:
+#: Two effects the arithmetic misses. `relativeTimeRange: from: 1800` with
+#: `queryType: range` is not one evaluation at a point: it asks for 30 minutes
+#: of points and EACH carries its own `[30m]` lookback, so a single log line
+#: keeps producing points for a further 30 minutes and `reduce: last` takes the
+#: last one that exists. Only once the whole range is past that final point does
+#: Grafana's staleness handling start counting its intervals.
+#:
+#: The number matters because the advice is acted on: told 45m, the operator
+#: re-runs into a second refusal and concludes the drill is broken.
+RESOLVE_LATENCY_MIN = 90
+
 #: A storage class that cannot exist is what makes the claim *stay* Pending.
 #: A claim on a real class would bind as soon as anything consumed it, and a
 #: drill whose condition can resolve itself proves nothing.
@@ -224,7 +250,7 @@ def run_drill(
             "  Refusing to measure -- a firing seen now could not be attributed to\n"
             "  this run, and reporting it as proof is the false green this drill exists\n"
             "  to remove. The claim is cleared either way; the existing alert instance\n"
-            "  resolves in roughly 30-45m (a [30m] window on a 15m interval). Re-run then."
+            f"  resolves on its own in about {RESOLVE_LATENCY_MIN}m. Re-run then."
         )
         return DrillResult(
             fired=False,
