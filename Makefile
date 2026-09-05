@@ -55,6 +55,7 @@ help:
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
 	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
+	@echo "  make node-reclaim NODE=x     Remove orphaned buildx builders + CI job volumes over SSH [APPLY=1] (works at 0 bytes free, where Ansible cannot)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
 	@echo ""
@@ -781,7 +782,7 @@ register-spoke:
 # Remove spoke from Argo CD hub + cleanup RBAC on spoke
 .PHONY: unregister-spoke
 unregister-spoke:
-	@test -n "$(ENV)" || (echo "Usage: make unregister-spoke ENV=staging|prod HUB=<kubeconfig>" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make unregister-spoke ENV=staging|prod HUB=<kubeconfig>" && exit 1)
 	@test -n "$(HUB)" || (echo "Usage: make unregister-spoke ENV=x HUB=<kubeconfig>  # required: two hubs are live, so the hub must be named explicitly" && exit 1)
 	@$(TOOLKIT) infra argo unregister-spoke --env $(ENV) --kubeconfig $(HUB) $(if $(REMOVE_SHARED_RBAC),--remove-shared-rbac,) $(if $(DRY_RUN),--dry-run,)
 
@@ -810,7 +811,7 @@ check-spokes:
 # Rotate spoke SA token and re-register on hub
 .PHONY: rotate-spoke-token
 rotate-spoke-token:
-	@test -n "$(ENV)" || (echo "Usage: make rotate-spoke-token ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make rotate-spoke-token ENV=staging|prod" && exit 1)
 	@echo "=== Rotating token for $(ENV) spoke ==="
 	@kubectl delete secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH)
 	@kubectl apply -f infra/k8s/argocd/spoke-rbac.yaml --kubeconfig $(KUBECONFIG_PATH)
@@ -934,6 +935,28 @@ maintain:
 		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS) $(_CHECK); \
 	fi
 
+# Emergency reclaim for the residue `make maintain` structurally cannot reach
+# (OPS-024/#1657). Two reasons it is a separate path and not a tag on that one:
+#
+#   - `docker/setup-buildx-action` creates its buildkit container with
+#     `restart: unless-stopped`, so it outlives the job, the runner and every
+#     reboot. `docker container prune` removes STOPPED containers and therefore
+#     never reaches one; the weekly timer can only report them (#1456).
+#   - This runs at 0 bytes free, and Ansible cannot: it needs remote tmp for
+#     its own modules. The recovery has to be lighter than the prevention.
+#
+# Plan-only by default — removing a builder that is genuinely mid-build fails
+# that job. MIN_AGE_HOURS lowers the gate that protects against it, for an
+# operator who is watching; IMAGES_ALL adds `docker image prune -af` (unused
+# TAGGED images too), which is what the weekly timer already does here.
+.PHONY: node-reclaim
+node-reclaim: ## Remove orphaned buildx builders and CI job volumes over SSH (APPLY=1 to act)
+	@test -n "$(NODE)" || (echo "Usage: make node-reclaim NODE=beelink|ace1|ace2|rpi3|rpi4 [APPLY=1] [MIN_AGE_HOURS=n] [IMAGES_ALL=1]" && exit 1)
+	@$(TOOLKIT) infra node reclaim --node $(NODE) \
+		$(if $(APPLY),--apply,) \
+		$(if $(MIN_AGE_HOURS),--min-age-hours $(MIN_AGE_HOURS),) \
+		$(if $(IMAGES_ALL),--include-tagged,)
+
 # Live delivery test of the maintenance failure-notify path (ANSIBLE-035 AC7).
 # Really posts to prod n8n and really notifies — a delivery test that suppresses
 # delivery proves nothing. Re-run this after any change to the notify script or
@@ -992,7 +1015,7 @@ benchmark-disk:
 .PHONY: deploy
 deploy:
 	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK)
 
@@ -1050,7 +1073,7 @@ backup:
 # Usage: make backup-pvc ENV=prod
 .PHONY: backup-pvc
 backup-pvc:
-	@test -n "$(ENV)" || (echo "Usage: make backup-pvc ENV=prod" && exit 1)
+	@test -n "$(filter $(ENV),prod)" || (echo "Usage: make backup-pvc ENV=prod" && exit 1)
 	@echo "=== Triggering PVC backup ($(ENV)) ==="
 	@kubectl create job --from=cronjob/pvc-backup pvc-backup-manual-$$(date +%s) \
 		--namespace kubelab --kubeconfig $(KUBECONFIG_PATH)
@@ -1425,12 +1448,12 @@ sync-operators:
 
 .PHONY: sync-oidc-hashes
 sync-oidc-hashes:
-	@test -n "$(ENV)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync oidc --env $(ENV)
 
 .PHONY: sync-vikunja
 sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
-	@test -n "$(ENV)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync vikunja --env $(ENV)
 
 # Validate the ENV *value* against the environments that have a Vikunja, the same
@@ -1475,7 +1498,7 @@ vikunja-audit-users: ## List Vikunja accounts, separating password signups from 
 
 .PHONY: provision-postgres-tenant
 provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
-	@test -n "$(ENV)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
 	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) --tenant $(or $(TENANT),vikunja)
 
 .PHONY: validate-sync
@@ -1484,14 +1507,14 @@ validate-sync:
 
 .PHONY: configure-oidc
 configure-oidc:
-	@test -n "$(ENV)" || (echo "Usage: make configure-oidc ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make configure-oidc ENV=staging|prod" && exit 1)
 	@echo "=== Configuring OIDC providers for $(ENV) ==="
 	@$(POETRY) run python toolkit/scripts/configure_oidc.py --env $(ENV)
 	@echo "✓ OIDC providers configured for $(ENV)"
 
 .PHONY: apply-secrets
 apply-secrets:
-	@test -n "$(ENV)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
 
 # Restart any K8s deployment via the toolkit (rollout restart + wait). Generic over
@@ -1500,7 +1523,7 @@ apply-secrets:
 .PHONY: restart-service
 restart-service:
 	@test -n "$(SVC)" || (echo "Usage: make restart-service SVC=<deployment> ENV=staging|prod [NS=namespace]" && exit 1)
-	@test -n "$(ENV)" || (echo "Usage: make restart-service SVC=<deployment> ENV=staging|prod [NS=namespace]" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make restart-service SVC=<deployment> ENV=staging|prod [NS=namespace]" && exit 1)
 	@$(TOOLKIT) infra k8s restart $(SVC) --env $(ENV) $(if $(NS),--namespace $(NS),)
 
 # Renders Traefik Middlewares that wrap SOPS-sourced API keys (ADR-035 Stage 1).
@@ -1512,7 +1535,7 @@ restart-service:
 #   3. Put the api_key in SOPS, then `make apply-middleware-secrets ENV=prod`
 .PHONY: apply-middleware-secrets
 apply-middleware-secrets:
-	@test -n "$(ENV)" || (echo "Usage: make apply-middleware-secrets ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make apply-middleware-secrets ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s apply-middleware-secrets --env $(ENV)
 
 # Reconstructs the n8n notify-router workflow + Header Auth credential from
@@ -1521,7 +1544,7 @@ apply-middleware-secrets:
 # Auto-runs as the last step of deploy-k8s; staging-only today (no-op elsewhere).
 .PHONY: import-n8n
 import-n8n:
-	@test -n "$(ENV)" || (echo "Usage: make import-n8n ENV=staging" && exit 1)
+	@test -n "$(filter $(ENV),staging)" || (echo "Usage: make import-n8n ENV=staging" && exit 1)
 	@$(TOOLKIT) infra n8n import --env $(ENV)
 
 # End-to-end smoke of the notification fabric (NOTIFY-001): POSTs page + log
@@ -1530,7 +1553,7 @@ import-n8n:
 # (403). Confirm the messages land in Telegram. Staging-only today.
 .PHONY: notify-smoke
 notify-smoke:
-	@test -n "$(ENV)" || (echo "Usage: make notify-smoke ENV=staging" && exit 1)
+	@test -n "$(filter $(ENV),staging)" || (echo "Usage: make notify-smoke ENV=staging" && exit 1)
 	@$(TOOLKIT) infra n8n smoke --env $(ENV)
 
 # Prove the offsite backup destination (Cloudflare R2) is usable: that the token
@@ -1580,12 +1603,12 @@ backup-generate-password:
 # evaluates every 5m with a 5m pending period. Staging only; prod pages.
 .PHONY: alert-smoke
 alert-smoke:
-	@test -n "$(ENV)" || (echo "Usage: make alert-smoke ENV=staging" && exit 1)
+	@test -n "$(filter $(ENV),staging)" || (echo "Usage: make alert-smoke ENV=staging" && exit 1)
 	@$(TOOLKIT) infra k8s alert-smoke --env $(ENV)
 
 .PHONY: flush-sessions
 flush-sessions:
-	@test -n "$(ENV)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)
 	@echo "Flushing Authelia sessions (Redis) for $(ENV)..."
 	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config exec -n kubelab deploy/redis -- redis-cli FLUSHDB
 	@echo "✓ Sessions flushed. All users must re-authenticate."
@@ -1600,7 +1623,7 @@ flush-sessions:
 #        make logs SVC=argocd-application-controller-0 ENV=hub
 .PHONY: pods
 pods:
-	@test -n "$(ENV)" || (echo "Usage: make pods ENV=staging|prod|hub" && exit 1)
+	@test -n "$(filter $(ENV),staging prod hub)" || (echo "Usage: make pods ENV=staging|prod|hub" && exit 1)
 	$(eval _NS := $(if $(filter hub,$(ENV)),argocd,kubelab))
 	@kubectl --kubeconfig ~/.kube/kubelab-$(ENV)-config get pods -n $(_NS) -o wide
 
@@ -1648,7 +1671,7 @@ drill-pvc-unbound:
 
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets apply-middleware-secrets provision-postgres-tenant validate-sync
-	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)
 	@$(MAKE) import-n8n ENV=$(ENV) || echo "⚠️  n8n workflow import failed after a successful K8s deploy — the deploy itself is fine; re-run: make import-n8n ENV=$(ENV)"
 
@@ -1656,7 +1679,7 @@ deploy-k8s: apply-secrets apply-middleware-secrets provision-postgres-tenant val
 # CRDs/operators/kube-system config outside the Argo CD overlay, without touching workloads.
 .PHONY: bootstrap-k8s
 bootstrap-k8s:
-	@test -n "$(ENV)" || (echo "Usage: make bootstrap-k8s ENV=staging|prod" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make bootstrap-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s bootstrap --env $(ENV)
 
 # -----------------------------------------------------------------------------
