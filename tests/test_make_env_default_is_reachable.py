@@ -105,7 +105,13 @@ class TestNoTargetUsesTheUnreachableDefault:
 #: environment is tested" but "every target spelling the filter exactly this way
 #: is tested". Two derivations from one blind literal cannot disagree, which is
 #: why the agreement proved nothing.
-FILTER_FORM = re.compile(r"\$\(or\s+\$\(filter\s+[a-z ]+,\$\(ENV\)\)")
+#: `[^,]+` and not `[a-z ]+`: the filter list is data, and narrowing the pattern
+#: to the spellings that happen to exist today is how the literal it replaced got
+#: it wrong in the first place. Both match the same 17 sites in the committed
+#: Makefile -- measured, so this buys nothing now and costs nothing either. What
+#: it buys is that a list containing a digit, a capital or a variable stays
+#: visible instead of silently leaving the derived set.
+FILTER_FORM = re.compile(r"\$\(or\s+\$\(filter\s+[^,]+,\$\(ENV\)\)")
 
 #: Every target that resolves an environment, with the flag it passes it under
 #: and the default it must reach. `-e` is Ansible's; `--env` is the toolkit's.
@@ -158,6 +164,35 @@ def _targets_resolving_an_env() -> set[str]:
         elif line.startswith("\t") and FILTER_FORM.search(line) and current:
             found.add(current)
     return found
+
+
+class TestTheDerivationSeesWhatItClaims:
+    """The pattern itself, exercised against lines it will never meet in this
+    Makefile. `_targets_resolving_an_env` derives one side of an equality whose
+    other side is a hand-written table; when the pattern is too narrow BOTH sides
+    shrink together and the equality still holds, which is exactly how twelve
+    sites read as complete while five were invisible. Only a direct test of the
+    pattern can fail in that situation."""
+
+    @pytest.mark.parametrize(
+        "filter_list",
+        [
+            "staging prod",
+            "staging prod hub",  # the four the old literal missed
+            "staging prod hub dev",
+            "$(DRIFT_ENVS)",  # a variable, not a literal list
+            "staging prod gcp1",  # a digit
+        ],
+    )
+    def test_any_filter_list_is_recognised(self, filter_list: str) -> None:
+        line = f"\t@$(TOOLKIT) thing --env $(or $(filter {filter_list},$(ENV)),prod)"
+        assert FILTER_FORM.search(line), f"a filter list of {filter_list!r} left the derived set"
+
+    def test_the_broken_form_is_not_mistaken_for_the_fixed_one(self) -> None:
+        """The floor. A pattern loose enough to match everything would make every
+        test above pass while asserting nothing -- `$(or $(ENV),prod)` is the
+        idiom this whole file exists to forbid, and it must NOT read as the fix."""
+        assert not FILTER_FORM.search("\t@$(TOOLKIT) thing --env $(or $(ENV),prod)")
 
 
 class TestTheDefaultIsReachedInPractice:
