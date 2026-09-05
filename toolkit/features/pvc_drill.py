@@ -21,6 +21,15 @@ Idempotent in both directions, which is what lets the drill be the thing that
 clears an existing leftover rather than needing a hand-run `kubectl delete`
 first: the claim is deleted before it is created (so a residue from an earlier
 run is absorbed, not collided with), and the delete tolerates absence.
+
+And it refuses to measure while the alert is already firing. That is not
+caution, it is the first run of this drill reporting `FIRING after 0.0m` on the
+ten-day-old instance it had just absorbed the claim for -- proof of nothing,
+indistinguishable in the output from proof of something. The alert instance is
+keyed by (namespace, pvc), so a fresh claim under the same name RESUMES the
+existing one rather than starting a distinguishable one; there is no `startsAt`
+that advances and no label that differs, which makes attribution after the fact
+impossible and refusal before the fact the only honest option.
 """
 
 from __future__ import annotations
@@ -75,6 +84,12 @@ class DrillResult:
     waited_s: float
     absorbed_residue: bool  #: a claim from an earlier run was present at start
     polls: int
+    #: Whether the drill was in a position to measure anything at all. False
+    #: when the alert was already firing before the claim was created, which
+    #: makes `fired` unattributable rather than false -- a distinction the
+    #: caller must not collapse, since collapsing it is how a borrowed firing
+    #: gets reported as proof.
+    measured: bool = True
 
 
 def drill_pvc_manifest(
@@ -188,6 +203,36 @@ def run_drill(
     # by an earlier run may differ in spec, and a drill that silently reuses a
     # foreign object is measuring that object's history, not this run.
     delete()
+
+    # The alert must be QUIET before the claim is created, or a firing seen
+    # afterwards cannot be attributed to it.
+    #
+    # Measured on staging 2026-09-04, by running this drill for real: the alert
+    # had been firing for ten days on the residue absorbed one line above, and
+    # the first poll after `create()` reported `FIRING after 0.0m (1 polls)`.
+    # The drill passed without its claim having caused anything. The instance is
+    # keyed by (namespace, pvc), so a fresh claim under the same name RESUMES
+    # the existing alert instead of starting a distinguishable one -- there is
+    # no `startsAt` to compare and no label that differs.
+    #
+    # Level-triggered where the claim being tested is edge-triggered. Refusing
+    # is the only honest answer available: it is not a failure of the rule, it
+    # is the drill saying it cannot measure right now.
+    if alert_is_firing(fetch_alerts()):
+        log(
+            f"{DRILL_ALERT_NAME}: already firing before this drill created anything.\n"
+            "  Refusing to measure -- a firing seen now could not be attributed to\n"
+            "  this run, and reporting it as proof is the false green this drill exists\n"
+            "  to remove. The claim is cleared either way; the existing alert instance\n"
+            "  resolves in roughly 30-45m (a [30m] window on a 15m interval). Re-run then."
+        )
+        return DrillResult(
+            fired=False,
+            waited_s=0.0,
+            absorbed_residue=absorbed,
+            polls=0,
+            measured=False,
+        )
 
     started = now()
     polls = 0
