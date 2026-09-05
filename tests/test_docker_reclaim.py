@@ -334,6 +334,41 @@ def test_every_real_name_survives_the_check(containers: list[Container], volumes
         assert _checked_name(volume) == volume
 
 
+def test_containers_are_removed_before_the_volumes_they_hold(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Docker refuses to remove an attached volume, so a volume pass that runs
+    first fails on every volume that matters — which is all of them, since a
+    volume worth reclaiming is one a builder is holding.
+
+    Found by mutation: flipping the two loops left all 35 other tests green.
+    The order was stated in a docstring and asserted nowhere, the same shape as
+    lesson 433 — correctness that reads as obvious is exactly what nobody writes
+    a test for.
+    """
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "toolkit.features.docker_reclaim._ssh",
+        lambda target, command, **kw: calls.append(command) or "",
+    )
+
+    from toolkit.features.docker_reclaim import remove
+
+    builder = Container(
+        name="buildx_buildkit_builder-aaaa-bbbb",
+        created=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        running=True,
+        volumes=("buildx_buildkit_builder-aaaa-bbbb_state",),
+    )
+    remove(
+        "user@host",
+        ReclaimPlan(containers=(builder,), volumes=("buildx_buildkit_builder-aaaa-bbbb_state",)),
+    )
+
+    assert calls == [
+        "docker rm -f buildx_buildkit_builder-aaaa-bbbb",
+        "docker volume rm buildx_buildkit_builder-aaaa-bbbb_state",
+    ]
+
+
 def test_both_runners_on_this_node_are_paused() -> None:
     """A node with one runner must not mask a failure to stop the other. Naming
     them here means adding a third runner without adding it to the pause list
