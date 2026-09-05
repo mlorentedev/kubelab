@@ -131,6 +131,31 @@ def test_the_inert_upstream_setting_was_not_ported() -> None:
         )
 
 
+def test_the_reviewer_is_asked_about_verdicts_that_needed_no_change() -> None:
+    """The one review dimension this repo has shipped four bugs against.
+
+    **This asserts the instruction is DECLARED, not that it works.** No test can
+    check the second — whether a model acts on a prompt line is measured over
+    reviews, not asserted in CI, and this file's own history says so: upstream's
+    "HARNESS COMPLIANCE" preamble was asked for on every review and delivered 1
+    time in 16. So read this as a guard against silent deletion during a config
+    tidy, which is the only failure mode it can actually cover.
+
+    If the bullet is ever measured inert the way that preamble was, delete it and
+    delete this test with it — an instruction that looks like a control and is
+    not is the exact thing it was added to catch.
+    """
+    import tomllib
+
+    config = tomllib.loads((REPO_ROOT / ".pr_agent.toml").read_text(encoding="utf-8"))
+    instructions = config["pr_reviewer"]["extra_instructions"]
+    assert "WITHOUT the change under" in instructions, (
+        "the reviewer is no longer asked whether a check's verdict could be "
+        "produced without the change under test -- see the measured instances "
+        "in .pr_agent.toml's comment above the block"
+    )
+
+
 def test_credential_material_is_excluded_from_the_model_call() -> None:
     """kubelab is public, so the source is not the concern. Credentials are."""
     import tomllib
