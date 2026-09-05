@@ -1111,6 +1111,40 @@ apps:
           # `apps.auth.identities`, on a forge days old. If that ever stops holding,
           # this is the line to revisit.
           has_projects: false
+        # The trigger for infra/n8n/workflows/multi-forge-sync.json, applied to every
+        # declared repository. It is declared because its absence is invisible: that
+        # workflow had been imported and ACTIVE in prod n8n for days with no webhook
+        # anywhere on either forge, so it had never received a single event — and an
+        # active workflow with no trigger reads exactly like a working integration.
+        webhook:
+          # DECLARED WHOLE, NOT DERIVED from apps.services.automation.n8n.domain,
+          # which is the prod value this must equal (pinned by a committed test, so
+          # the duplication cannot drift quietly). Deriving per environment would be
+          # wrong rather than merely redundant: gitea is `state_promotion: singleton`
+          # — one forge, on the Beelink — so `--env staging` would rewrite the real
+          # forge's hooks to n8n.staging, a wrong value produced by correct code.
+          url: https://n8n.kubelab.live/webhook/multi-forge-sync
+          # The workflow reads `rawBody` and HMACs it. `form` would deliver a body
+          # that no longer matches what was signed.
+          content_type: json
+          # Gitea's payload dialect. Not cosmetic: `slack`/`discord` send an entirely
+          # different body, and `Parse Forge Event` reads pull_request.merged and
+          # head_commit.message out of Gitea's.
+          type: gitea
+          # Compared as a FLOOR, never for equality — Gitea expands `pull_request`
+          # into nine sub-events and returns them unordered, so an equality check
+          # would fail forever on a correct hook. Measured 2026-09-04 on
+          # personal/resume; see `webhook_changes`.
+          #
+          # Both are needed and neither is spare: the workflow branches on
+          # pull_request `action` for the In Review / Done buckets, and falls back to
+          # head_commit.message on a push, which is the only path that moves a task
+          # for work landing without a pull request.
+          events:
+            - push
+            - pull_request
+          branch_filter: "*"
+          active: true
         organizations:
           teledyne:
             repositories:

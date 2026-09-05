@@ -467,6 +467,7 @@ def gitea_reconcile(
         format_plan,
         load_declaration,
         load_settings,
+        load_webhook,
         plan_reconcile,
     )
 
@@ -486,6 +487,7 @@ def gitea_reconcile(
     # is a fault in the declaration, and finding it out after several network round
     # trips reports it as though the forge were involved.
     declared_settings = load_settings(merged)
+    declared_webhook = load_webhook(merged)
 
     try:
         # Read with the admin credential: a listing taken with the bot's token
@@ -508,12 +510,30 @@ def gitea_reconcile(
             for org, specs in declared.items()
             for spec in specs
         }
+        # Read with the ADMIN token, unlike every webhook WRITE, which needs the
+        # superadmin's password. Measured 2026-09-04 on both repositories: the admin
+        # token's `read:repository` reaches this listing while its lack of
+        # `write:repository` stops at the create; the bot cannot even read. Reading
+        # here keeps a plan-only run independent of the admin password, which this
+        # command deliberately does not touch until work is planned.
+        existing_repo_hooks = {
+            f"{org}/{spec.name}": (admin.list_hooks(org, spec.name) if f"{org}/{spec.name}" in existing_repos else None)
+            for org, specs in declared.items()
+            for spec in specs
+        }
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
 
     plan = plan_reconcile(
-        declared, existing_orgs, existing_repos, existing_teams, existing_repo_settings, declared_settings
+        declared,
+        existing_orgs,
+        existing_repos,
+        existing_teams,
+        existing_repo_settings,
+        declared_settings,
+        existing_repo_hooks,
+        declared_webhook,
     )
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
@@ -549,17 +569,23 @@ def gitea_reconcile(
     # Read only when a migration is actually planned, so an ordinary reconcile does
     # not depend on credentials it never uses.
     migration_token = None
+    webhook_secret = None
     superadmin: "GiteaBasicAuthClient | None" = None
     # ONE CLIENT FOR BOTH, because it is one credential: migration and repository
     # settings are the two operations here that no token may perform, and each was
     # established the same way -- by asking every credential to do it and reading
     # which answered. Built once when EITHER kind of work is planned, so an ordinary
     # reconcile still depends on no credential it does not use.
-    if plan.repos_to_migrate or plan.repos_to_configure:
+    if plan.repos_to_migrate or plan.repos_to_configure or plan.repos_to_hook:
         from toolkit.features.gitea_client import GiteaBasicAuthClient
 
         gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
         migration_token = gitea_cfg.get("github_migration_token")
+        # The same secret n8n validates deliveries against, read from the n8n service
+        # rather than copied under `gitea`: there is exactly one value, and a second
+        # SOPS key holding it is a rotation that silently half-lands. Absence is
+        # reported per repository by `execute`, never written as an unsigned hook.
+        webhook_secret = merged["apps"]["services"]["automation"]["n8n"].get("forge_webhook_secret")
         admin_password = gitea_cfg.get("admin_password")
         if not admin_password:
             logger.error(
@@ -580,7 +606,9 @@ def gitea_reconcile(
         bot,
         bot_username=bot_username,
         declared_settings=declared_settings,
+        declared_webhook=declared_webhook,
         migration_token=migration_token,
+        webhook_secret=str(webhook_secret) if webhook_secret else None,
         migrator=superadmin,
         configurator=superadmin,
     )
@@ -603,6 +631,20 @@ def gitea_reconcile(
     # this list means the repository is converged and not merely that Gitea said 200.
     for configured in report.repos_configured:
         logger.success(f"settings applied: {configured}")
+    # "registered", not "working". The post-condition proves the hook has the right
+    # shape; it cannot prove the right SECRET, because Gitea never returns it. A hook
+    # signed with the wrong value delivers, gets 200 from n8n and is dropped
+    # silently — so the only proof is a downstream effect, and the wording here must
+    # not read as though this line were it.
+    for hooked in report.repos_hooked:
+        logger.success(f"webhook registered: {hooked}")
+    if report.repos_hooked:
+        console.print(
+            "\n[yellow]Registered is not delivering.[/yellow] `multi-forge-sync` answers HTTP 200 "
+            "to a delivery whose signature it rejects, and drops the event — so a green delivery "
+            "log is not evidence. Confirm by consequence: open a pull request whose title carries a "
+            "task key and check the Vikunja task changed bucket."
+        )
     if report.repos_migrated:
         console.print(
             "\n[yellow]The import continues in the background.[/yellow] Gitea returns from "
