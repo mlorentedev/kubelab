@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-34 lessons, newest first. Back to [all categories](../_index.md).
+35 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 433 | [A stub's canned answer decides which of your assertions can fail](lesson-433-a-stubs-canned-answer-decides-which-assertions-can-fail.md) | 2026-09-05 |
 | 424 | [A convergence step scoped to the creation diff never repairs what already exists](lesson-424-a-convergence-step-scoped-to-the-creation-diff-repairs-nothing.md) | 2026-09-04 |
 | 423 | [A fake cannot verify a request — it can only agree with whoever wrote it](lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it.md) | 2026-09-03 |
 | 420 | [A `try` that spans a `yield` catches the caller's failures and reports them as its own](lesson-420-a-try-around-a-yield-catches-the-callers-failures.md) | 2026-09-02 |

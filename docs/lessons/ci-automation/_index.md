@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-25 lessons, newest first. Back to [all categories](../_index.md).
+26 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 434 | [When every normal path deletes it, the leftovers are a counter](lesson-434-when-every-normal-path-deletes-it-the-residue-is-a-counter.md) | 2026-09-05 |
 | 426 | [Hand a sibling container contents, never a path](lesson-426-hand-a-sibling-container-contents-never-a-path.md) | 2026-09-04 |
 | 416 | [An anti-vacuity test must assert on the value under test, not one step upstream of it](lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact.md) | 2026-09-02 |
 | 411 | [A review guard's two documented failure causes were not exhaustive — a third, structural one hid behind an identical error](lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive.md) | 2026-09-01 |
