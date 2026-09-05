@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-16 lessons, newest first. Back to [all categories](../_index.md).
+17 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 429 | [A verification that creates a condition has no natural end](lesson-429-the-state-that-was-evidence-became-residue-with-no-event.md) | 2026-09-04 |
 | 412 | [An alert on a capability the system does not have fires always or never, and fixing its query only picks which](lesson-412-an-alert-on-a-capability-that-does-not-exist.md) | 2026-09-01 |
 | 386 | [A channel with a permanent false positive is not a channel anyone reads](lesson-386-the-alert-that-was-never-true-and-the-one-nobody-read.md) | 2026-08-24 |
 | 373 | [Internal telemetry requires VPN-gated ingress and token-aware traceback deduplication](lesson-373-internal-telemetry-requires-vpn-gated-ingress-and-token-aware-traceback-deduplication.md) | 2026-08-23 |
