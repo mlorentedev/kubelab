@@ -41,11 +41,16 @@ from toolkit.features.gitea_repos import (
     VisibilityDrift,
     actor_for_org_creation,
     actor_for_repo_creation,
+    WebhookSpec,
+    find_declared_hook,
     load_declaration,
     load_settings,
+    load_webhook,
     plan_reconcile,
     settings_needs_convergence,
     team_needs_convergence,
+    webhook_changes,
+    webhook_needs_convergence,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +80,73 @@ GITEA_MIGRATION_DEFAULTS: dict[str, object] = {
 #: tests measure what the forge will actually be given -- a literal here would let
 #: the SSOT and the suite drift, which is the whole failure mode this file is about.
 DECLARED_SETTINGS = load_settings(yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text()))
+
+#: Read from common.yaml for the same reason `DECLARED_SETTINGS` is: a literal here
+#: would let the SSOT and the suite drift apart, and the suite would keep passing.
+DECLARED_WEBHOOK = load_webhook(yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text()))
+
+#: What Gitea returned in `events` after being SENT `["push", "pull_request"]` --
+#: transcribed from the live forge on 2026-09-04 (`personal/resume`), not derived.
+#: Nine entries for two declared, because Gitea expands `pull_request` into its
+#: sub-events; and the POST response and the following GET listed them in DIFFERENT
+#: orders, which is why nothing here may assume a sequence.
+#:
+#: This fixture is the whole reason `webhook_changes` compares events as a floor. A
+#: fixture built from `DECLARED_WEBHOOK.events` would satisfy an equality comparison
+#: and certify a reconciler that can never converge against the real forge -- exactly
+#: the shape of lesson-423, and the reason this list is ugly rather than generated.
+GITEA_EVENT_EXPANSION: list[str] = [
+    "pull_request_assign",
+    "pull_request",
+    "pull_request_sync",
+    "push",
+    "pull_request_label",
+    "pull_request_milestone",
+    "pull_request_review_request",
+    "pull_request_comment",
+    "pull_request_review",
+]
+
+
+def converged_hook() -> dict[str, object]:
+    """A live hook body that already satisfies the declaration.
+
+    The scalars are derived from the declaration (restating them would make the
+    fixture agree with itself), but `events` is the MEASURED expansion above and not
+    `DECLARED_WEBHOOK.events`. That asymmetry is the point: this fixture is only
+    honest if it reproduces the one behaviour that broke the obvious design.
+
+    `id` and the undeclared live keys are carried so a comparison that wrongly ranged
+    over the whole body instead of the declared fields would be caught here.
+    """
+    return {
+        "id": 1,
+        "type": DECLARED_WEBHOOK.type,
+        "active": DECLARED_WEBHOOK.active,
+        "branch_filter": DECLARED_WEBHOOK.branch_filter,
+        "events": list(GITEA_EVENT_EXPANSION),
+        "config": {
+            "url": DECLARED_WEBHOOK.url,
+            "content_type": DECLARED_WEBHOOK.content_type,
+        },
+        # Present in the live body, never declared, never compared.
+        "authorization_header": "",
+        "created_at": "2026-09-05T02:08:33Z",
+        "updated_at": "2026-09-05T02:08:33Z",
+    }
+
+
+def hooks_for(declared: object) -> dict[str, list[dict[str, object]] | None]:
+    """Every declared repository, already carrying a converged hook.
+
+    The default for tests about something else, exactly as `settings_for` is for
+    settings. Tests about webhooks build their own mapping.
+    """
+    return {
+        f"{org}/{spec.name}": [converged_hook()]
+        for org, specs in declared.items()  # type: ignore[attr-defined]
+        for spec in specs
+    }
 
 
 def converged_body() -> dict[str, object]:
@@ -177,7 +249,16 @@ def test_an_empty_forge_migrates_every_declared_repository():
     declaration that named a repository without saying where it comes from
     guaranteed the shell that blocked the move.
     """
-    plan = plan_reconcile(DECLARED, existing_orgs=set(), existing_repos={}, existing_teams=converged_for(DECLARED), existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(),
+        existing_repos={},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert set(plan.orgs_to_create) == {"teledyne", "personal", "kubelab"}
     assert plan.repos_to_create == (), "a repository with a source must be migrated, never created empty"
@@ -199,7 +280,11 @@ def test_a_repository_with_no_source_is_still_created_empty():
         existing_orgs={"kubelab"},
         existing_repos={},
         existing_teams=converged_for({"kubelab": [RepoSpec("brand-new")]}),
-        existing_repo_settings=settings_for({"kubelab": [RepoSpec("brand-new")]}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"kubelab": [RepoSpec("brand-new")]}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"kubelab": [RepoSpec("brand-new")]}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.repos_to_migrate == ()
     assert {(r.org, r.name) for r in plan.repos_to_create} == {("kubelab", "brand-new")}
 
@@ -217,7 +302,11 @@ def test_an_existing_repository_is_never_re_migrated():
         existing_orgs=set(DECLARED),
         existing_repos={"teledyne/fae-brain": True, "teledyne/openkm-brain": True, "personal/resume": True},
         existing_teams=converged_for(DECLARED),
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.repos_to_migrate == ()
     assert plan.repos_to_create == ()
     assert plan.is_noop
@@ -230,8 +319,15 @@ def test_a_declared_but_empty_org_is_still_created():
     and the declaration would quietly mean something else than it says.
     """
     plan = plan_reconcile(
-        {"kubelab": []}, existing_orgs=set(), existing_repos={}, existing_teams=converged_for({"kubelab": []}),
-        existing_repo_settings=settings_for({"kubelab": []}), declared_settings=DECLARED_SETTINGS)
+        {"kubelab": []},
+        existing_orgs=set(),
+        existing_repos={},
+        existing_teams=converged_for({"kubelab": []}),
+        existing_repo_settings=settings_for({"kubelab": []}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"kubelab": []}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.orgs_to_create == ("kubelab",)
 
 
@@ -241,8 +337,15 @@ def test_a_second_run_creates_nothing():
     existing_repos = {f"{org}/{spec.name}": spec.private for org, specs in DECLARED.items() for spec in specs}
 
     plan = plan_reconcile(
-        DECLARED, existing_orgs=existing_orgs, existing_repos=existing_repos, existing_teams=converged_for(DECLARED),
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+        DECLARED,
+        existing_orgs=existing_orgs,
+        existing_repos=existing_repos,
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert plan.orgs_to_create == ()
     assert plan.repos_to_create == ()
@@ -254,7 +357,11 @@ def test_an_undeclared_repository_is_reported():
         existing_orgs=set(DECLARED),
         existing_repos={"personal/resume": True, "personal/something-nobody-declared": True},
         existing_teams=converged_for(DECLARED),
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.undeclared_repos == ("personal/something-nobody-declared",)
 
 
@@ -264,7 +371,11 @@ def test_an_undeclared_organization_is_reported():
         existing_orgs=set(DECLARED) | {"made-in-the-ui"},
         existing_repos={},
         existing_teams=converged_for(DECLARED),
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.undeclared_orgs == ("made-in-the-ui",)
 
 
@@ -313,8 +424,15 @@ def test_repositories_inside_an_org_are_created_by_the_bot():
 def test_planning_never_reports_a_declared_org_as_undeclared(declared: dict[str, list[RepoSpec]]):
     """Guard the guard: a stray-detector that flags declared state is worse than none."""
     plan = plan_reconcile(
-        declared, existing_orgs=set(declared), existing_repos={}, existing_teams=converged_for(declared),
-        existing_repo_settings=settings_for(declared), declared_settings=DECLARED_SETTINGS)
+        declared,
+        existing_orgs=set(declared),
+        existing_repos={},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.undeclared_orgs == ()
 
 
@@ -329,7 +447,11 @@ def test_declared_repos_carry_private_by_default():
         existing_orgs={"personal"},
         existing_repos={},
         existing_teams=converged_for({"personal": [RepoSpec("resume")]}),
-        existing_repo_settings=settings_for({"personal": [RepoSpec("resume")]}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"personal": [RepoSpec("resume")]}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume")]}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.repos_to_create == (DeclaredRepo(org="personal", name="resume", private=True),)
 
 
@@ -400,7 +522,11 @@ def test_a_repository_living_at_a_different_visibility_is_reported():
         existing_orgs={"personal"},
         existing_repos={"personal/resume": False},
         existing_teams=converged_for({"personal": [RepoSpec("resume", private=True)]}),
-        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=True)]}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=True)]}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=True)]}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.visibility_drift == (
         VisibilityDrift(org="personal", name="resume", declared_private=True, live_private=False),
     )
@@ -419,7 +545,11 @@ def test_drift_is_reported_in_both_directions():
         existing_orgs={"personal"},
         existing_repos={"personal/resume": True},
         existing_teams=converged_for({"personal": [RepoSpec("resume", private=False)]}),
-        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=False)]}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=False)]}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=False)]}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert [(d.full_name, d.declared_private, d.live_private) for d in plan.visibility_drift] == [
         ("personal/resume", False, True)
     ]
@@ -433,7 +563,11 @@ def test_a_matching_repository_is_not_reported_as_drift():
             existing_orgs={"personal"},
             existing_repos={"personal/resume": private},
             existing_teams=converged_for({"personal": [RepoSpec("resume", private=private)]}),
-        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=private)]}), declared_settings=DECLARED_SETTINGS)
+            existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=private)]}),
+            declared_settings=DECLARED_SETTINGS,
+            existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=private)]}),
+            declared_webhook=DECLARED_WEBHOOK,
+        )
         assert plan.visibility_drift == (), f"agreement at private={private} was reported as drift"
 
 
@@ -448,7 +582,11 @@ def test_a_repository_that_does_not_exist_yet_is_not_drift():
         existing_orgs={"personal"},
         existing_repos={},
         existing_teams=converged_for({"personal": [RepoSpec("resume", private=False)]}),
-        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=False)]}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=False)]}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=False)]}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.visibility_drift == ()
     assert plan.repos_to_create == (DeclaredRepo(org="personal", name="resume", private=False),)
 
@@ -465,7 +603,11 @@ def test_drift_does_not_make_the_plan_non_idempotent():
         existing_orgs={"personal"},
         existing_repos={"personal/resume": False},
         existing_teams=converged_for({"personal": [RepoSpec("resume", private=True)]}),
-        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=True)]}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"personal": [RepoSpec("resume", private=True)]}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=True)]}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
     assert plan.visibility_drift, "fixture must actually drift or this asserts nothing"
     assert plan.is_noop
 
@@ -501,8 +643,15 @@ def test_the_declaration_and_the_forge_are_compared_on_every_declared_repo():
     live = {"personal/resume": True, "personal/cv": True, "teledyne/fae-brain": True}
 
     plan = plan_reconcile(
-        declared, existing_orgs=set(declared), existing_repos=live, existing_teams=converged_for(declared),
-        existing_repo_settings=settings_for(declared), declared_settings=DECLARED_SETTINGS)
+        declared,
+        existing_orgs=set(declared),
+        existing_repos=live,
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     compared = {d.full_name for d in plan.visibility_drift} | {
         f"{org}/{spec.name}"
@@ -554,7 +703,11 @@ def test_a_forge_with_nothing_to_create_still_plans_a_team_repair() -> None:
         existing_orgs={"personal"},
         existing_repos={"personal/resume": False},
         existing_teams={"personal": _narrow_team()},
-        existing_repo_settings=settings_for(declared), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert plan.repos_to_create == () and plan.repos_to_migrate == () and plan.orgs_to_create == ()
     assert plan.teams_to_converge == ("personal",)
@@ -575,7 +728,11 @@ def test_a_team_is_planned_for_a_declared_org_that_receives_no_repository() -> N
         existing_orgs={"kubelab"},
         existing_repos={},
         existing_teams={"kubelab": None},
-        existing_repo_settings=settings_for({"kubelab": []}), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for({"kubelab": []}),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for({"kubelab": []}),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert plan.teams_to_converge == ("kubelab",)
 
@@ -587,7 +744,11 @@ def test_converged_teams_leave_the_plan_a_noop() -> None:
         existing_orgs=set(DECLARED),
         existing_repos={"teledyne/fae-brain": True, "teledyne/openkm-brain": True, "personal/resume": True},
         existing_teams=converged_for(DECLARED),
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert plan.teams_to_converge == ()
     assert plan.is_noop
@@ -617,7 +778,11 @@ def test_every_field_the_grant_sends_is_compared(broken: dict[str, object]) -> N
         existing_orgs={"personal"},
         existing_repos={"personal/resume": True},
         existing_teams={"personal": {**converged_team(), **broken}},
-        existing_repo_settings=settings_for(declared), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert plan.teams_to_converge == ("personal",), f"a team with {broken} was reported as converged"
 
@@ -635,7 +800,11 @@ def test_a_declared_org_missing_from_the_team_reading_is_a_loud_failure() -> Non
             existing_orgs=set(DECLARED),
             existing_repos={},
             existing_teams={"personal": converged_team()},
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+            existing_repo_settings=settings_for(DECLARED),
+            declared_settings=DECLARED_SETTINGS,
+            existing_repo_hooks=hooks_for(DECLARED),
+            declared_webhook=DECLARED_WEBHOOK,
+        )
 
 
 def test_the_plan_compares_a_team_for_every_declared_organization() -> None:
@@ -652,7 +821,11 @@ def test_the_plan_compares_a_team_for_every_declared_organization() -> None:
         existing_orgs=set(DECLARED),
         existing_repos={"teledyne/fae-brain": True, "teledyne/openkm-brain": True, "personal/resume": True},
         existing_teams={org: _narrow_team() for org in DECLARED},
-        existing_repo_settings=settings_for(DECLARED), declared_settings=DECLARED_SETTINGS)
+        existing_repo_settings=settings_for(DECLARED),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert set(plan.teams_to_converge) == set(DECLARED), (
         "the plan did not consider a team for every declared organization: "
@@ -750,6 +923,8 @@ def test_a_migrated_repository_is_scheduled_for_configuration() -> None:
         existing_teams=converged_for(declared),
         existing_repo_settings={"personal/resume": GITEA_MIGRATION_DEFAULTS},
         declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
     )
 
     assert [change.full_name for change in plan.repos_to_configure] == ["personal/resume"]
@@ -771,6 +946,10 @@ def test_a_repository_this_run_creates_is_scheduled_in_the_same_run() -> None:
         existing_teams=converged_for(declared),
         existing_repo_settings={"personal/brand-new": None},
         declared_settings=DECLARED_SETTINGS,
+        # None, not a converged hook: a repository the forge does not hold has no
+        # hooks either, and the fixture should not describe a state that cannot exist.
+        existing_repo_hooks={"personal/brand-new": None},
+        declared_webhook=DECLARED_WEBHOOK,
     )
 
     assert [change.full_name for change in plan.repos_to_configure] == ["personal/brand-new"]
@@ -788,6 +967,8 @@ def test_a_converged_repository_schedules_nothing() -> None:
         existing_teams=converged_for(declared),
         existing_repo_settings={"personal/resume": converged_body()},
         declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
     )
 
     assert plan.repos_to_configure == ()
@@ -828,6 +1009,8 @@ def test_a_declared_repository_missing_from_the_settings_reading_is_a_loud_failu
             existing_teams=converged_for(declared),
             existing_repo_settings={"personal/resume": converged_body()},
             declared_settings=DECLARED_SETTINGS,
+            existing_repo_hooks=hooks_for(declared),
+            declared_webhook=DECLARED_WEBHOOK,
         )
 
 
@@ -847,6 +1030,8 @@ def test_the_plan_names_the_fields_that_will_change() -> None:
         existing_teams=converged_for(declared),
         existing_repo_settings={"personal/resume": GITEA_MIGRATION_DEFAULTS},
         declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
     )
     rendered = format_plan(plan)
 
@@ -867,6 +1052,10 @@ def test_a_new_repository_is_summarised_rather_than_diffed() -> None:
         existing_teams=converged_for(declared),
         existing_repo_settings={"personal/brand-new": None},
         declared_settings=DECLARED_SETTINGS,
+        # None, not a converged hook: a repository the forge does not hold has no
+        # hooks either, and the fixture should not describe a state that cannot exist.
+        existing_repo_hooks={"personal/brand-new": None},
+        declared_webhook=DECLARED_WEBHOOK,
     )
     rendered = format_plan(plan)
 
@@ -967,6 +1156,321 @@ def test_the_declaration_carries_the_gate_on_the_merge_fields() -> None:
         "allow_fast_forward_only_merge",
         "default_delete_branch_after_merge",
     }
-    assert merge_fields <= set(payload), (
-        "the gate is declared but the fields it gates are not; nothing is being set"
+    assert merge_fields <= set(payload), "the gate is declared but the fields it gates are not; nothing is being set"
+
+
+# ── webhooks (#503) ───────────────────────────────────────────────────────────
+
+
+def test_the_hook_fixtures_are_what_they_claim() -> None:
+    """The floor under every test below, and it has to come first.
+
+    Two claims, because each of the tests that follow is vacuous without one of
+    them:
+
+    - `converged_hook()` genuinely satisfies the declaration. If it did not, the
+      idempotence tests would pass by scheduling work nobody asserted.
+    - `GITEA_EVENT_EXPANSION` genuinely holds MORE than the declaration. If it were
+      the same two events, `test_gitea_s_event_expansion_is_not_drift` would be
+      asserting nothing at all -- the exact shape of lesson-416, where a guard sat
+      over an empty set and eight tests stayed green.
+    """
+    assert not webhook_needs_convergence(converged_hook(), DECLARED_WEBHOOK)
+    assert set(GITEA_EVENT_EXPANSION) > set(DECLARED_WEBHOOK.events), (
+        "the expansion fixture must be strictly larger than the declaration, or the "
+        "superset comparison is never exercised"
     )
+
+
+def test_gitea_s_event_expansion_is_not_drift() -> None:
+    """The measurement that decided the comparison, asserted as a property.
+
+    Sending `["push", "pull_request"]` came back as nine events. Under equality this
+    forge could never converge: every run would schedule the same write and every
+    `--apply` would then fail its own post-condition, permanently, on a hook that was
+    entirely correct.
+    """
+    live = {**converged_hook(), "events": list(GITEA_EVENT_EXPANSION)}
+
+    assert webhook_changes(live, DECLARED_WEBHOOK) == ()
+
+
+def test_event_order_is_not_drift() -> None:
+    """The POST response and the following GET listed the same nine in DIFFERENT orders.
+
+    So even a comparison that knew about the expansion would flap if it compared
+    sequences.
+    """
+    live = {**converged_hook(), "events": list(reversed(GITEA_EVENT_EXPANSION))}
+
+    assert webhook_changes(live, DECLARED_WEBHOOK) == ()
+
+
+def test_a_missing_declared_event_is_drift() -> None:
+    """A floor is only a floor if a SHORTFALL fails.
+
+    A superset check that accepted anything would pass for a hook subscribed to
+    nothing -- the vacuous version of this design.
+    """
+    live = {**converged_hook(), "events": [e for e in GITEA_EVENT_EXPANSION if e != "push"]}
+
+    changes = webhook_changes(live, DECLARED_WEBHOOK)
+
+    assert [key for key, _live, _declared in changes] == ["events"]
+    assert changes[0][1] == ("push",), "the live slot carries what is MISSING, not the live list"
+
+
+def test_a_hook_subscribed_to_nothing_is_drift() -> None:
+    """The degenerate case the superset comparison must still catch."""
+    live = {**converged_hook(), "events": []}
+
+    assert webhook_needs_convergence(live, DECLARED_WEBHOOK)
+
+
+@pytest.mark.parametrize("field_name", sorted(f.name for f in dataclasses.fields(WebhookSpec)))
+def test_every_declared_webhook_field_is_compared(field_name: str) -> None:
+    """One field wrong is enough, for every field.
+
+    Parametrised over the dataclass itself, so a field added to `WebhookSpec` cannot
+    arrive without a case -- the same construction as
+    `test_every_declared_field_is_compared` one object over.
+    """
+    declared_value = getattr(DECLARED_WEBHOOK, field_name)
+    live = converged_hook()
+
+    if field_name == "events":
+        live["events"] = []
+    elif field_name in {"url", "content_type"}:
+        live["config"] = {**live["config"], field_name: "wrong"}  # type: ignore[dict-item]
+    elif isinstance(declared_value, bool):
+        live[field_name] = not declared_value
+    else:
+        live[field_name] = "wrong"
+
+    assert webhook_needs_convergence(live, DECLARED_WEBHOOK), f"{field_name} is declared but never compared"
+
+
+def test_a_repository_with_no_webhook_is_scheduled() -> None:
+    """The state every repository on the forge was in on 2026-09-04: zero hooks."""
+    declared = {"personal": [RepoSpec("resume")]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={"personal/resume": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={"personal/resume": []},
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+
+    assert [change.full_name for change in plan.repos_to_hook] == ["personal/resume"]
+    assert plan.repos_to_hook[0].absent is True
+    assert plan.repos_to_hook[0].hook_id is None
+    assert not plan.is_noop, "a forge with no webhook has work to do"
+
+
+def test_a_repository_this_run_creates_gets_a_webhook_in_the_same_run() -> None:
+    """lesson-424 again: convergence scoped to what EXISTS never reaches what this run makes."""
+    declared = {"personal": [RepoSpec("brand-new")]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={},
+        existing_teams=converged_for(declared),
+        existing_repo_settings={"personal/brand-new": None},
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={"personal/brand-new": None},
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+
+    assert [change.full_name for change in plan.repos_to_hook] == ["personal/brand-new"]
+    assert plan.repos_to_hook[0].absent is True
+
+
+def test_a_foreign_hook_is_neither_adopted_nor_reported_as_drift() -> None:
+    """Identity is the URL, so somebody else's webhook is invisible to this reconciler.
+
+    `mlorentedev/kubelab` on GitHub carries exactly one hook and it points at Argo
+    CD. A reconciler that treated "the repository's hook" as "the first one" would
+    have rewritten it -- pointing Argo CD's push trigger at n8n.
+    """
+    declared = {"personal": [RepoSpec("resume")]}
+    foreign = {"id": 99, "type": "gitea", "config": {"url": "https://argo.kubelab.live/api/webhook"}}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={"personal/resume": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={"personal/resume": [foreign]},
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+
+    assert plan.repos_to_hook[0].absent is True, "ours is absent; the foreign one is not ours"
+    assert plan.repos_to_hook[0].hook_id is None, "the foreign hook's id must never be adopted"
+
+
+def test_find_declared_hook_matches_on_the_url_alone() -> None:
+    hooks = [
+        {"id": 99, "config": {"url": "https://argo.kubelab.live/api/webhook"}},
+        {"id": 1, "config": {"url": DECLARED_WEBHOOK.url}},
+    ]
+
+    assert find_declared_hook(hooks, DECLARED_WEBHOOK) is hooks[1]
+    assert find_declared_hook([hooks[0]], DECLARED_WEBHOOK) is None
+
+
+def test_a_converged_webhook_schedules_nothing() -> None:
+    """AC2's idempotence on the webhook path: a second run must be a no-op."""
+    declared = {"personal": [RepoSpec("resume")]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={"personal/resume": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+
+    assert plan.repos_to_hook == ()
+    assert plan.is_noop
+
+
+def test_a_drifted_webhook_makes_the_plan_non_idempotent() -> None:
+    """`is_noop` must count webhook work, or the CLI exits before `execute` runs.
+
+    That exact omission shipped once already: `teams_to_converge` was missing from
+    `is_noop`, so a forge whose teams needed repair reported "nothing to create" and
+    returned before touching anything.
+    """
+    declared = {"personal": [RepoSpec("resume")]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={"personal/resume": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={"personal/resume": [{**converged_hook(), "active": False}]},
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+
+    assert not plan.is_noop
+    assert plan.repos_to_hook[0].hook_id == 1, "an existing hook is patched in place, so its id travels"
+
+
+def test_a_declared_repository_missing_from_the_hook_reading_is_a_loud_failure() -> None:
+    """The fourth mapping with this contract, and the fourth for the same reason."""
+    declared = {"personal": [RepoSpec("resume"), RepoSpec("other")]}
+    with pytest.raises(KeyError):
+        plan_reconcile(
+            declared,
+            existing_orgs={"personal"},
+            existing_repos={"personal/resume": True, "personal/other": True},
+            existing_teams=converged_for(declared),
+            existing_repo_settings=settings_for(declared),
+            declared_settings=DECLARED_SETTINGS,
+            existing_repo_hooks={"personal/resume": [converged_hook()]},
+            declared_webhook=DECLARED_WEBHOOK,
+        )
+
+
+def test_an_absent_webhook_block_is_refused_rather_than_defaulted() -> None:
+    """A default here would switch off the only trigger the integration has."""
+    with pytest.raises(ValueError) as exc:
+        load_webhook({"apps": {"services": {"core": {"gitea": {}}}}})
+
+    message = str(exc.value)
+    assert "is absent" in message
+    assert "required rather than defaulted" in message
+    assert "is missing" not in message, "this is the ABSENT branch, not the incomplete-block branch"
+
+
+def test_an_unknown_webhook_key_is_refused() -> None:
+    """A typo is a field left unmanaged, not a new setting."""
+    block = {**{f.name: getattr(DECLARED_WEBHOOK, f.name) for f in dataclasses.fields(WebhookSpec)}, "urll": "x"}
+    with pytest.raises(ValueError, match="unknown key"):
+        load_webhook({"apps": {"services": {"core": {"gitea": {"webhook": block}}}}})
+
+
+def test_a_partial_webhook_block_is_refused() -> None:
+    """An omitted field is one whose value is whatever the forge happens to hold."""
+    block = {f.name: getattr(DECLARED_WEBHOOK, f.name) for f in dataclasses.fields(WebhookSpec)}
+    del block["events"]
+    with pytest.raises(ValueError, match="missing"):
+        load_webhook({"apps": {"services": {"core": {"gitea": {"webhook": block}}}}})
+
+
+def test_the_declared_webhook_targets_the_prod_n8n_domain() -> None:
+    """The pin under a deliberate duplication.
+
+    The URL is declared whole rather than derived, because the forge is a singleton
+    and a per-environment derivation would rewrite the real forge's hooks to
+    `n8n.staging` on `--env staging`. That choice is only safe with this test: it is
+    what stops the duplicate drifting away from the service it names.
+    """
+    prod = yaml.safe_load((REPO_ROOT / "infra/config/values/prod.yaml").read_text())
+    domain = prod["apps"]["services"]["automation"]["n8n"]["domain"]
+
+    assert DECLARED_WEBHOOK.url.startswith(f"https://{domain}/"), (
+        f"the declared webhook points somewhere other than prod n8n ({domain})"
+    )
+
+
+def test_the_declared_events_cover_what_the_workflow_branches_on() -> None:
+    """#503 AC5, written as a FLOOR and never as a copy (lesson-416).
+
+    `multi-forge-sync` reads `pull_request.action` for the In Review / Done buckets
+    and falls back to `head_commit.message` on a push, which is the only path that
+    moves a task for work landing without a pull request. Asserting equality with the
+    declaration would make this test agree with whatever the declaration said,
+    including nothing.
+    """
+    assert {"push", "pull_request"} <= set(DECLARED_WEBHOOK.events)
+
+
+def test_the_plan_names_the_event_that_is_missing() -> None:
+    """The printed plan is what `--apply` is approved on."""
+    from toolkit.features.gitea_repos import format_plan
+
+    declared = {"personal": [RepoSpec("resume")]}
+    live = {**converged_hook(), "events": [e for e in GITEA_EVENT_EXPANSION if e != "push"]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={"personal/resume": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={"personal/resume": [live]},
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+    rendered = format_plan(plan)
+
+    assert "events: missing ['push']" in rendered
+    assert "pull_request_review" not in rendered, "printing nine live events buries the one that is absent"
+
+
+def test_a_new_hook_is_summarised_with_its_destination() -> None:
+    """An operator approving `--apply` needs to see WHERE events will be sent."""
+    from toolkit.features.gitea_repos import format_plan
+
+    declared = {"personal": [RepoSpec("resume")]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"personal"},
+        existing_repos={"personal/resume": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={"personal/resume": []},
+        declared_webhook=DECLARED_WEBHOOK,
+    )
+    rendered = format_plan(plan)
+
+    assert f"+ hook personal/resume   -> {DECLARED_WEBHOOK.url}" in rendered
+    assert "None ->" not in rendered
