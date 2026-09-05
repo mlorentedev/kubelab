@@ -456,7 +456,7 @@ secrets-audit:
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
 .PHONY: gitea-reconcile
 gitea-reconcile:
-	@$(TOOLKIT) services gitea reconcile --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
+	@$(TOOLKIT) services gitea reconcile --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,)
 
 # Plan only. `APPLY=1` revokes the token and clears its SOPS key — which OPENS AN
 # OUTAGE until `make provision NODE=bee ENV=prod` mints the replacement. Both
@@ -465,7 +465,7 @@ gitea-reconcile:
 # `TOKEN=admin` rotates the superadmin's reconciler token instead of the bot's.
 .PHONY: gitea-rotate-token
 gitea-rotate-token:
-	@$(TOOLKIT) services gitea rotate-token --token $(or $(TOKEN),bot) --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
+	@$(TOOLKIT) services gitea rotate-token --token $(or $(TOKEN),bot) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,)
 
 # Plan only. `APPLY=1` deletes ONE empty, DECLARED repository — the shells PR1
 # created, which block `POST /repos/migrate` (Gitea answers 409 rather than
@@ -477,7 +477,7 @@ gitea-rotate-token:
 .PHONY: gitea-drop-empty
 gitea-drop-empty:
 	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1]" && exit 1)
-	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(ENV),prod) $(if $(APPLY),--apply,)
+	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,)
 
 # Run git against the forge with the operator credential injected into the child
 # process. No workstation holds a credential for gitea.kubelab.live, and the three
@@ -1044,7 +1044,7 @@ backup-schedule:
 .PHONY: backup
 backup:
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@$(TOOLKIT) infra ansible run -p backup -e $(or $(ENV),prod) $(_CHECK)
+	@$(TOOLKIT) infra ansible run -p backup -e $(or $(filter staging prod,$(ENV)),prod) $(_CHECK)
 
 # K8s PVC backup — triggers a one-off Job from the CronJob (ADR-024)
 # Usage: make backup-pvc ENV=prod
@@ -1544,7 +1544,7 @@ notify-smoke:
 # never actually retained anything (BACKUP-044).
 .PHONY: backup-verify-destination
 backup-verify-destination:
-	@$(TOOLKIT) backup verify-destination --env $(or $(ENV),prod)
+	@$(TOOLKIT) backup verify-destination --env $(or $(filter staging prod,$(ENV)),prod)
 
 # One level above backup-verify-destination: that one proves the BUCKET works,
 # this one proves RESTIC works in it. Runs the full lifecycle (init, backup,
@@ -1552,7 +1552,7 @@ backup-verify-destination:
 # different claims and only the second is what backups depend on.
 .PHONY: backup-verify-restic
 backup-verify-restic:
-	@$(TOOLKIT) backup verify-restic --env $(or $(ENV),prod)
+	@$(TOOLKIT) backup verify-restic --env $(or $(filter staging prod,$(ENV)),prod)
 
 # BACKUP-044 AC1: does every declared node actually HAVE a backup, and how old
 # is it — asked from this workstation rather than from the nodes themselves.
@@ -1561,7 +1561,7 @@ backup-verify-restic:
 # when half the fleet cannot answer for itself.
 .PHONY: backup-coverage
 backup-coverage:
-	@$(TOOLKIT) backup coverage --env $(or $(ENV),prod)
+	@$(TOOLKIT) backup coverage --env $(or $(filter staging prod,$(ENV)),prod)
 
 # Generate the restic repository password into SOPS. The value is never printed;
 # read it once with `make secrets-show KEY=backup.restic_password
