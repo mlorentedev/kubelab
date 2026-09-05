@@ -1,5 +1,5 @@
 ---
-id: lesson-431-a-guard-that-cannot-tell-a-warning-from-an-instance
+id: lesson-432-a-guard-that-cannot-tell-a-warning-from-an-instance
 type: lesson
 status: active
 created: "2026-09-04"
