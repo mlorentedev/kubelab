@@ -97,8 +97,20 @@ def test_the_summary_names_the_watcher_as_a_cause(filename: str, uid: str) -> No
     """
     rule = next(r for f, u, r in _rules_over_cronjob_streams() if f == filename and u == uid)
     summary = str((rule.get("annotations") or {}).get("summary", "")).lower()
-    assert "watcher" in summary or "reporting" in summary, (
-        f"{uid} ({filename}) alerts on no-data but its summary does not mention that the "
-        "watcher stopping is one of the two causes. The responder needs the cheap check "
-        "first, in the alert text — not in a runbook they open after chasing the other cause."
+
+    assert "watcher" in summary, (
+        f"{uid} ({filename}) alerts on no-data but its summary never names the watcher. "
+        "The responder needs the cheap check in the alert text, not in a runbook they "
+        "open after chasing the other cause."
+    )
+
+    # Naming the watcher is not enough, and a mutation proved it: a summary that
+    # ASSERTS the interesting cause as fact and only later says "check the
+    # watcher" still passed. That is #1377's shape exactly — the responder reads
+    # a statement, not a question, and goes to the wrong system. The summary must
+    # present two causes, not one cause plus a footnote.
+    assert any(marker in summary for marker in ("either", "or the", "no data")), (
+        f"{uid} ({filename}) names the watcher but still asserts a single cause. "
+        "With noDataState: Alerting the rule has two, and the summary has to say so — "
+        'lead with "Either … or … stopped reporting", never with the finding as fact.'
     )
