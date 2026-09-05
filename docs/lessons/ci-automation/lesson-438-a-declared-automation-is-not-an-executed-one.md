@@ -5,7 +5,7 @@ status: active
 created: "2026-09-05"
 owner: manu
 category: ci-automation
-tags: [kubelab, ci-automation, pre-commit, git-hooks, verification, tool-064]
+tags: [kubelab, ci-automation, pre-commit, git-hooks, verification, tool-064, dx-002]
 ---
 
 # A declared automation is not an executed one — check the route the failure actually takes
@@ -57,8 +57,19 @@ and the fourth was found by this lesson's own pull request going red:
 
    So `.pre-commit-config.yaml`'s claim that *"nothing reaches CI stale, which
    is the whole point"* is false, and the PR that shipped the two stages proved
-   it four hours later. CI is not a redundant net here; on this route it is the
-   only one. Two local stages plus a red build is the honest description.
+   it four hours later.
+
+   **Two hours after that it happened again, on a different branch, to someone
+   else** — `7d489552`, same button, same 434-against-433, same test red. Two
+   instances in one day is not bad luck: `strict: true` on the branch
+   protection *requires* a branch to be current before it merges, and the
+   button is the one-click way to make it current. The trap is where the
+   configuration sends you. To tell the routes apart after the fact, read the
+   **committer**, never the message: a server-made merge is
+   `committer: GitHub <noreply@github.com>` with you as author. It only
+   discriminates on a feature branch — on `master`, 200 of the last 200 merges
+   have that committer, because master receives nothing but squash merges.
+   Tracked as #1678.
 
 Each of the four is invisible to every test of the *logic*. The reconciler had
 15 passing tests and worked perfectly; what did not work was anything reaching
@@ -95,11 +106,30 @@ catch, and watch it catch it.
 
 And having enumerated the routes, say which ones you did **not** cover. A
 server-side merge is outside the reach of any local hook, so the residual net
-is CI and the honest sentence is "two stages and a red build", not "nothing
-reaches CI stale". Claiming full coverage is how the next person stops looking.
+is CI, not "nothing reaches CI stale". Claiming full coverage is how the next
+person stops looking.
+
+Then check that the residual net is a net. "Two stages and a red build" was
+written here first, and it was still flattering: `Tests` is **not** among this
+repo's required status checks (`Validate`, `Detect Changes`,
+`review-attestation` are), so the counter guard goes red and the merge button
+stays enabled. The last honest sentence is *two stages, and a red build that
+blocks nothing* — which is a state worth deciding about rather than
+discovering. Every weaker claim in this paragraph was written by someone who
+had just finished writing the previous one.
 
 Corollary for shared hooks: `core.hooksPath` means a hook change is inert until
 it lands on the branch the main worktree has checked out. Say so when you ship
-one, or the next person will conclude it does not work.
+one, or the next person will conclude it does not work. Corroborated within the
+hour by a second session, in the sharpest form the whole lesson produced: their
+pre-push printed `All checks passed` over a tree whose counter they had
+corrected by hand a minute earlier, and
+
+> the hook agreeing with a correct tree is not the hook having checked it.
+
+That is the general test. A guard and a correct input produce the same output
+as a guard that never ran, so a passing check on a healthy tree is evidence of
+nothing at all — which is why every stage above was proved by feeding it
+something broken.
 
 **Tags**: `#pre-commit` `#git-hooks` `#verification` `#pr-1673`
