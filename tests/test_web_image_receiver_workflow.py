@@ -1,28 +1,30 @@
-"""A staging promotion is either offered or rolled back — never left on a branch.
+"""One long-lived staging offer, force-updated — never a queue of pull requests.
 
-DELIVERY-006 (#1651). `web-image-receiver.yml` computes a staging promotion,
-commits it, pushes the branch, and then opens the pull request that offers it.
-Those are two operations against two different services with nothing joining
-them, so a failure between them leaves the promotion committed on a branch
-nobody was ever shown.
+DELIVERY-005 (#1645). `web-image-receiver.yml` used to key its branch on the
+promoted sha, so every web push minted a new branch and therefore a new pull
+request. Measured over every `chore(staging): deploy` PR this repository has had:
+104 opened, 35 merged, 68 closed — and 67 of those closes were superseded by a
+newer PR rather than declined. The human gate was exercised as a genuine "hold
+staging" exactly once.
 
-That is not hypothetical. It is the ONLY way this workflow has ever failed: 6 of
-119 runs, 2026-06-28 through 2026-09-05, every one of them in this step and every
-one on `GraphQL: API rate limit already exceeded`. The residue is measurable —
-five `deploy/staging-web-*` branches existed when this was written and not one of
-them had ever had a pull request, which is forced: the repo sets
-`delete_branch_on_merge`, and the coalescing loop closes superseded PRs with
-`--delete-branch`, so a surviving branch means the PR was never created.
+The branch is now `deploy/staging-web`, stable, force-updated to the newest sha,
+with its pull request created once and patched thereafter. The gate is untouched:
+merging still moves staging, and declining is now simply not merging.
 
-The tests below EXECUTE the shipped step against a real git remote with `gh`
-stubbed, rather than reading it. Written after the same reasoning as
-`test_pr_agent_workflow.py`'s executed half: this step runs only on
-`repository_dispatch` from another repository, so CI cannot exercise it on the
-branch that changes it, and "CI green" would not be the claim anyone needs here.
+DELIVERY-006 (#1651) is retired by the same change rather than kept. Its defect
+was a push that succeeded followed by a create that failed, leaving a branch
+nobody was offered; on a stable branch the ref is *meant* to persist, so there is
+nothing to roll back and no reconciliation to get wrong.
+
+These tests EXECUTE the shipped step against a real bare git remote with `gh`
+stubbed. The step runs only on `repository_dispatch` from another repository, so
+CI cannot exercise it on the branch that changes it — "CI green" is not the claim
+anyone needs here.
 """
 
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import subprocess
@@ -33,8 +35,10 @@ import yaml
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 RECEIVER = REPO_ROOT / ".github/workflows/web-image-receiver.yml"
 
-TAG = "sha-abc1234"
-BRANCH = f"deploy/staging-web-{TAG}"
+BRANCH = "deploy/staging-web"
+TAG_ONE = "sha-aaa1111"
+TAG_TWO = "sha-bbb2222"
+OPEN_PR = "4242"
 
 _needs_bash = pytest.mark.skipif(
     shutil.which("bash") is None, reason="the step is a bash script"
@@ -44,44 +48,44 @@ _needs_bash = pytest.mark.skipif(
 def _step() -> dict:
     """The step under test, found by a distinctive substring of its `name:`.
 
-    Same convention as `test_pr_agent_workflow.py`: a rename must make these
-    tests error, not silently skip the subject.
+    A rename must make these tests error rather than silently skip their subject.
     """
     workflow = yaml.safe_load(RECEIVER.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["promote-web"]["steps"]
-    return next(s for s in steps if "Open staging deploy PR" in s.get("name", ""))
+    return next(s for s in steps if "staging deploy PR" in s.get("name", ""))
 
 
-# `gh` replaced entirely. It answers as the real command's `--jq`-filtered output
-# would, and logs every invocation so the ROUTE taken is observable rather than
-# merely declared.
-#
-# The `*) exit 1` default is load-bearing: `gh pr create` matches no arm, so
-# reverting the create to the GraphQL subcommand fails these tests behaviourally
-# and not only through the string assertion below.
+def _executable_lines() -> str:
+    """The step body without comments.
+
+    Asserting against the raw `run:` matched `gh pr create` inside the comment
+    explaining why it is gone — a guard failing on its own rationale.
+    """
+    return "\n".join(
+        line for line in _step()["run"].splitlines() if not line.strip().startswith("#")
+    )
+
+
+# `gh` replaced entirely, logging every invocation so the ROUTE and the ORDER are
+# observable rather than declared. The `*) exit 1` default is load-bearing: any
+# `gh pr <subcommand>` matches no arm, so a revert to the GraphQL subcommands
+# fails behaviourally and not only through the string assertions below.
 _GH_STUB = """#!/usr/bin/env bash
 echo "$*" >> "$GH_CALLS"
 case "$*" in
   *"/pulls?state=open&head="*)
-      if [ "${STUB_LOOKUP:-}" = "fail" ]; then exit 1; fi
-      printf '%s\\n' "${STUB_EXISTING_PR:-}" ;;
-  *"-X POST"*"/pulls"*)
-      if [ -n "${STUB_CREATE_FAILS:-}" ]; then
-        echo "GraphQL: API rate limit already exceeded for user ID 13562150." >&2
+      if [ "${STUB_LOOKUP:-}" = "fail" ]; then
+        echo "GraphQL: API rate limit already exceeded" >&2
         exit 1
       fi
+      printf '%s\\n' "${STUB_OPEN_PR:-}" ;;
+  *"-X PATCH"*"/pulls/"*)
+      printf '%s\\n' "https://github.com/mlorentedev/kubelab/pull/${STUB_OPEN_PR}" ;;
+  *"-X POST"*"/pulls"*)
       printf '%s\\n' "https://github.com/mlorentedev/kubelab/pull/9999" ;;
-  "pr list"*) printf '%s\\t%s\\n' "$STUB_STALE_PR" "deploy/staging-web-sha-0000000" ;;
-  "pr close"*) ;;
   *) exit 1 ;;
 esac
 """
-# `pr list` answers with ONE stale staging PR rather than nothing. An empty
-# answer made `test_a_failed_create_does_not_close_the_previous_staging_offer`
-# vacuous — no `pr close` could occur under any code, so it passed against a
-# step with the `exit 1` deliberately removed. Measured, not assumed: the
-# mutation was applied and the test stayed green.
-STALE_PR = "1234"
 
 # Git must not read the developer's own config: a global `core.hooksPath`,
 # `commit.gpgsign` or `user.signingkey` would fail the commit for reasons that
@@ -99,8 +103,6 @@ STAGED_PATHS = (
 
 
 def _git(cwd: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
-    import os
-
     return subprocess.run(  # noqa: S603
         ["git", *args],
         cwd=cwd,
@@ -114,10 +116,9 @@ def _git(cwd: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
 def _clone_with_remote(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
     """A working checkout on `master` with a real bare `origin` behind it.
 
-    Real git rather than a stub, because the property under test is what the
-    REMOTE holds after the step fails. A stubbed `git push --delete` could only
-    confirm the command was issued, which is the thing that already looked fine
-    in every one of the six failed runs.
+    Real git, because the properties under test are what the REMOTE holds and how
+    many branches it grows. A stubbed `git push` could only confirm a command was
+    issued, which is what already looked fine while 104 PRs piled up.
     """
     remote = tmp_path / "origin.git"
     subprocess.run(  # noqa: S603
@@ -142,25 +143,43 @@ def _clone_with_remote(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Pa
     return work, remote
 
 
-def _promote(work: pathlib.Path) -> None:
+def _promote(work: pathlib.Path, tag: str) -> None:
     """Stand in for `toolkit deployment promote`: leave the overlay changed."""
     for rel in STAGED_PATHS:
-        (work / rel).write_text(f"web: {TAG}\n", encoding="utf-8")
+        (work / rel).write_text(f"web: {tag}\n", encoding="utf-8")
 
 
 def _run_step(
-    tmp_path: pathlib.Path, work: pathlib.Path, **scenario: str
+    tmp_path: pathlib.Path,
+    work: pathlib.Path,
+    tag: str = TAG_ONE,
+    promote: bool = True,
+    calls_path: pathlib.Path | None = None,
+    **scenario: str,
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
-    import os
+    """Run one dispatch end to end, as CI performs it.
 
+    Checkout, then promote, then the step — in that order, because that is the
+    job. Resetting to `master` first is what makes a second call faithful: every
+    dispatch gets a new `actions/checkout`, which lands on master and knows
+    nothing of the deploy branch. That is also the condition that makes
+    `--force-with-lease` unusable in this step.
+
+    `promote=False` is the no-op dispatch: a checkout with nothing to stage.
+    """
     bindir = tmp_path / "bin"
-    bindir.mkdir()
-    stub = bindir / "gh"
-    stub.write_text(_GH_STUB, encoding="utf-8")
-    stub.chmod(0o755)
+    if not bindir.exists():
+        bindir.mkdir()
+        stub = bindir / "gh"
+        stub.write_text(_GH_STUB, encoding="utf-8")
+        stub.chmod(0o755)
 
-    calls = tmp_path / "gh_calls"
+    calls = calls_path or (tmp_path / "gh_calls")
     calls.touch()
+
+    _git(work, "checkout", "-f", "master")
+    if promote:
+        _promote(work, tag)
 
     env = {
         **os.environ,
@@ -169,17 +188,13 @@ def _run_step(
         "GH_CALLS": str(calls),
         "GH_TOKEN": "stub",
         "GITHUB_REPOSITORY": "mlorentedev/kubelab",
-        "TAG": TAG,
-        "STUB_CREATE_FAILS": "",
-        "STUB_STALE_PR": STALE_PR,
-        "STUB_EXISTING_PR": "",
+        "TAG": tag,
+        "STUB_OPEN_PR": "",
         "STUB_LOOKUP": "",
         **scenario,
     }
-    # `bash -e`, because that is what GitHub Actions uses for `run:` (`bash -e
-    # {0}`). Running without it would exercise a different program: the whole
-    # reason the create is wrapped in `if !` is that errexit would otherwise end
-    # the step before it could clean up.
+    # `bash -e`, because that is the shell GitHub Actions uses for `run:`
+    # (`bash -e {0}`). Without it this would exercise a different program.
     proc = subprocess.run(  # noqa: S603
         ["bash", "-e", "-c", _step()["run"]],
         cwd=work,
@@ -199,198 +214,196 @@ def _remote_branches(remote: pathlib.Path) -> list[str]:
         capture_output=True,
         text=True,
     )
-    return out.stdout.split()
+    return sorted(out.stdout.split())
 
 
-# --- the offer is made over a route that survives the outage ----------------
-
-
-def _executable_lines() -> str:
-    """The step body with its comments removed.
-
-    Asserting against the raw `run:` matched the word `gh pr create` inside the
-    comment that explains why it is gone — a guard failing on its own rationale.
-    Same filtering as `test_the_inert_upstream_setting_was_not_ported`.
-    """
-    return "\n".join(
-        line for line in _step()["run"].splitlines() if not line.strip().startswith("#")
+def _remote_file(remote: pathlib.Path, ref: str, path: str) -> str:
+    out = subprocess.run(  # noqa: S603
+        ["git", "show", f"{ref}:{path}"],
+        cwd=remote,
+        check=True,
+        capture_output=True,
+        text=True,
     )
+    return out.stdout
 
 
-def test_the_pull_request_is_not_opened_with_the_graphql_subcommand() -> None:
-    """`gh pr create` is a GraphQL mutation, and the GraphQL budget is spent by
-    every tool authenticating as this account — CI, laptop, agents. That shared
-    exhaustion is the sole cause of all six failures this workflow has had, so
-    the create must not go back through it."""
-    assert "gh pr create" not in _executable_lines(), (
-        "the staging PR is opened with `gh pr create` again. That is a GraphQL "
-        "mutation on an account-wide budget, and it is the one call that has "
-        "ever failed here — 6 of 119 runs, always with the same rate-limit line."
-    )
+# --- AC1: two pushes, one pull request --------------------------------------
 
 
 @_needs_bash
-def test_the_offer_is_opened_over_rest_and_the_branch_survives(
+def test_two_consecutive_dispatches_produce_one_pr_and_one_branch(
     tmp_path: pathlib.Path,
 ) -> None:
-    """The ordinary path, asserted on the route actually taken at runtime."""
-    work, remote = _clone_with_remote(tmp_path)
-    _promote(work)
-    proc, calls = _run_step(tmp_path, work)
+    """The whole ticket, executed.
 
-    assert proc.returncode == 0, (
-        f"the step exited {proc.returncode}\n--- stdout ---\n{proc.stdout}\n"
-        f"--- stderr ---\n{proc.stderr}"
-    )
-    created = [c for c in calls if "/pulls" in c]
-    assert created, f"no pull-request call was made at all: {calls!r}"
-    assert "-X POST" in created[0], f"the create did not go over REST: {created[0]!r}"
-    assert BRANCH in _remote_branches(remote), (
-        "the branch is missing from the remote after a SUCCESSFUL create; the "
-        "pull request would reference a head that no longer exists"
-    )
-    assert [c for c in calls if c.startswith(f"pr close {STALE_PR}")], (
-        f"the stale staging PR #{STALE_PR} was left open. Coalescing must still "
-        f"run once the offer exists — this change was only supposed to alter how "
-        f"the offer is made: {calls!r}"
-    )
-
-
-# --- and rolled back when it cannot be made ---------------------------------
-
-
-@_needs_bash
-def test_a_failed_create_leaves_no_branch_behind(tmp_path: pathlib.Path) -> None:
-    """The defect itself, reproduced and then required not to happen.
-
-    Six runs ended exactly here, and each left the promotion committed on a
-    branch with no pull request. Asserted against the remote's own ref list, not
-    against the step having issued a delete.
+    Before this change the second dispatch minted a second branch and a second
+    pull request, and the first was closed as superseded. 67 of 68 closes were
+    that. Now the second dispatch updates what the first opened.
     """
     work, remote = _clone_with_remote(tmp_path)
-    _promote(work)
-    proc, _ = _run_step(tmp_path, work, STUB_CREATE_FAILS="1")
+    calls = tmp_path / "gh_calls"
 
-    assert BRANCH not in _remote_branches(remote), (
-        f"{BRANCH} is still on the remote after the create failed. That is the "
-        f"orphan branch this ticket is about: a staging promotion that was "
-        f"computed, committed and pushed, and then offered to nobody."
+    first, _ = _run_step(tmp_path, work, tag=TAG_ONE, calls_path=calls)
+    assert first.returncode == 0, first.stderr
+
+    # The offer now exists, so the second dispatch's lookup finds it.
+    second, all_calls = _run_step(
+        tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=OPEN_PR
     )
-    assert proc.returncode != 0, (
-        "the step succeeded despite never opening the staging offer. Cleaning up "
-        "is not the same as recovering — staging is still on the older image, and "
-        "a green run says otherwise."
+    assert second.returncode == 0, second.stderr
+
+    creates = [c for c in all_calls if "-X POST" in c and "/pulls" in c]
+    updates = [c for c in all_calls if "-X PATCH" in c and "/pulls/" in c]
+    assert len(creates) == 1, (
+        f"two dispatches opened {len(creates)} pull requests. One stable branch "
+        f"must carry one offer: {all_calls!r}"
     )
-    assert "::error::" in proc.stdout, "the failure must name itself in the log"
+    assert len(updates) == 1, f"the second dispatch did not update the offer: {all_calls!r}"
+
+    assert _remote_branches(remote) == [BRANCH, "master"], (
+        "a second deploy branch was minted. The per-sha branch is exactly what "
+        "produced 104 branches and 68 closes."
+    )
+
+
+# --- AC2: the offer describes the sha it is actually offering ---------------
 
 
 @_needs_bash
-def test_a_failed_create_does_not_close_the_previous_staging_offer(
+def test_the_update_renames_the_pr_to_the_sha_it_now_offers(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Coalescing must never run when there is no new offer to coalesce onto.
+    """A long-lived PR whose title names an older commit is worse than churn.
 
-    It closes the older staging PRs on the premise that this one supersedes
-    them. If it ran after a failed create, the burst would end with the previous
-    offer closed and no replacement — strictly worse than the orphan branch,
-    because staging would be left with nothing to merge at all.
-
-    Unlike its neighbours this passes on the pre-fix step too, and deliberately:
-    it guards a risk the FIX introduces rather than one it removes. Before, the
-    create failing under `bash -e` ended the step outright. Now it is wrapped in
-    `if !` so the branch can be cleaned up, which suspends errexit — and a later
-    edit dropping the `exit 1` from that block would fall straight through into
-    coalescing with no offer to coalesce onto.
-
-    That is exactly the mutation this was checked against: `exit 1` deleted, test
-    re-run, and it goes red. The first version of it did not — the `gh` stub
-    answered `pr list` with nothing, so no `pr close` was reachable under any
-    code at all and the assertion could only ever pass.
-    """
-    work, _ = _clone_with_remote(tmp_path)
-    _promote(work)
-    _, calls = _run_step(tmp_path, work, STUB_CREATE_FAILS="1")
-
-    assert not [c for c in calls if c.startswith("pr close")], (
-        f"a stale staging PR was closed although the new one was never opened: "
-        f"{calls!r}"
-    )
-
-
-# --- but only when the absence of a pull request is confirmed ---------------
-
-
-@_needs_bash
-def test_a_branch_is_kept_when_the_failed_create_actually_created_the_pr(
-    tmp_path: pathlib.Path,
-) -> None:
-    """A non-zero exit says the CALL failed, not that GitHub refused.
-
-    A timeout or a 502 arriving after the pull request was accepted is
-    indistinguishable here. Deleting the branch then closes a live PR and drops
-    the promotion with nothing left to recover it from — silently, and strictly
-    worse than the orphan branch this change exists to remove. Raised by review
-    on #1660 rather than found by measurement.
+    Someone merges a pull request by reading its title. If the branch moves and
+    the title does not, the title becomes an invitation to merge something else —
+    the point-of-use staleness this repository has hit repeatedly.
     """
     work, remote = _clone_with_remote(tmp_path)
-    _promote(work)
-    proc, _ = _run_step(
-        tmp_path,
-        work,
-        STUB_CREATE_FAILS="1",
-        STUB_EXISTING_PR="https://github.com/mlorentedev/kubelab/pull/4242",
-    )
+    calls = tmp_path / "gh_calls"
 
-    assert BRANCH in _remote_branches(remote), (
-        "the branch of a LIVE pull request was deleted. GitHub closes a PR whose "
-        "head ref disappears, so this trades an orphan branch for a dropped "
-        "promotion and no way back to it."
-    )
-    assert proc.returncode != 0, "an ambiguous create must still fail the run"
+    _run_step(tmp_path, work, tag=TAG_ONE, calls_path=calls)
+    _run_step(tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=OPEN_PR)
 
+    patch = next(c for c in calls.read_text().splitlines() if "-X PATCH" in c)
+    assert TAG_TWO in patch, f"the update did not carry the new sha: {patch!r}"
+    assert TAG_ONE not in patch, f"the update still names the previous sha: {patch!r}"
 
-@_needs_bash
-def test_a_branch_is_kept_when_the_reconciliation_cannot_answer(
-    tmp_path: pathlib.Path,
-) -> None:
-    """"Cannot tell" is not "absent", and must not be rounded to it.
-
-    The lookup shares the REST bucket with the create, so the exhaustion that
-    broke one can break the other. Same shape as the closing-refs guard's third
-    exit code: an unanswerable question read as a clean answer is how a guard
-    becomes the thing it was built to prevent.
-    """
-    work, remote = _clone_with_remote(tmp_path)
-    _promote(work)
-    proc, _ = _run_step(
-        tmp_path, work, STUB_CREATE_FAILS="1", STUB_LOOKUP="fail"
-    )
-
-    assert BRANCH in _remote_branches(remote), (
-        "the branch was deleted although nothing could confirm the pull request "
-        "was absent. The recoverable failure is keeping it; the unrecoverable one "
-        "is deleting it under a PR that exists."
-    )
-    assert proc.returncode != 0, "an undeterminable outcome must still fail the run"
+    # And the branch really holds the newer promotion, not merely a new title.
+    for rel in STAGED_PATHS:
+        assert TAG_TWO in _remote_file(remote, BRANCH, rel), (
+            f"{rel} on the remote branch does not hold {TAG_TWO}"
+        )
 
 
-# --- and nothing happens at all when there is nothing to promote ------------
+# --- AC4: an unchanged overlay changes nothing -------------------------------
 
 
 @_needs_bash
 def test_an_unchanged_overlay_pushes_nothing_and_calls_nothing(
     tmp_path: pathlib.Path,
 ) -> None:
-    """A re-dispatch of an already-promoted tag returns before the branch exists.
-
-    This is what makes the unconditional delete above safe: the create is only
-    reached when this run has just created this branch.
-    """
+    """Idempotence. A re-dispatch of an already-promoted tag must not push an
+    empty commit, must not touch the pull request, and must not go red."""
     work, remote = _clone_with_remote(tmp_path)
-    proc, calls = _run_step(tmp_path, work)
+    proc, calls = _run_step(tmp_path, work, promote=False)
 
     assert proc.returncode == 0, proc.stderr
     assert calls == [], f"the API was called for a no-op promotion: {calls!r}"
+    assert _remote_branches(remote) == ["master"], "a deploy branch was pushed for nothing"
+
+
+# --- AC5: closing means "not now", never "never again" ----------------------
+
+
+@_needs_bash
+def test_a_closed_offer_is_reopened_by_the_next_dispatch(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The capability ADR-037 protects, preserved on a stable branch.
+
+    Declining used to mean closing a PR a newer one would replace anyway. Now it
+    means not merging — and if someone closes the PR outright to hold staging, the
+    next dispatch must offer again rather than leave the app with no live offer.
+    The lookup asks for `state=open`, so a closed PR reads as absent.
+    """
+    work, remote = _clone_with_remote(tmp_path)
+    calls = tmp_path / "gh_calls"
+
+    _run_step(tmp_path, work, tag=TAG_ONE, calls_path=calls)
+
+    # The human closes it. `state=open` now answers empty, as GitHub would.
+    proc, all_calls = _run_step(
+        tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=""
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    creates = [c for c in all_calls if "-X POST" in c and "/pulls" in c]
+    assert len(creates) == 2, (
+        f"a closed staging offer was not reopened: {all_calls!r}. Closing must "
+        f"mean 'not now', never 'never again' — otherwise holding staging once "
+        f"strands the app with no offer for good."
+    )
+    assert _remote_branches(remote) == [BRANCH, "master"]
+
+
+# --- ordering: ask before you touch the remote -------------------------------
+
+
+@_needs_bash
+def test_an_unanswerable_lookup_leaves_the_remote_untouched(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The lookup runs BEFORE the push, and that ordering is the point.
+
+    Pushing first and then failing to reach the API would leave the branch
+    holding a new promotion while the pull request still advertised the old sha —
+    exactly the stale-title failure AC2 forbids, arrived at by a different road.
+    Asking first means an API failure costs nothing: the offer and its
+    description still agree, and the next dispatch retries.
+    """
+    work, remote = _clone_with_remote(tmp_path)
+    proc, calls = _run_step(tmp_path, work, STUB_LOOKUP="fail")
+
+    assert proc.returncode != 0, "an unanswerable lookup must fail the run"
     assert _remote_branches(remote) == ["master"], (
-        "a deploy branch was pushed for a promotion that changed nothing"
+        "the branch was pushed although the pull request could not be reached. "
+        "The offer would then describe a sha it no longer carries."
+    )
+    assert not [c for c in calls if "-X POST" in c or "-X PATCH" in c], (
+        f"a write was attempted after the lookup failed: {calls!r}"
+    )
+
+
+# --- what the change removes -------------------------------------------------
+
+
+def test_the_coalescing_loop_is_gone_with_its_graphql_calls() -> None:
+    """With one branch there is nothing to supersede.
+
+    `gh pr list` and `gh pr close` were the last GraphQL calls in this step, kept
+    deliberately in #1660 because a coalescing failure could not drop an offer.
+    They have no subject any more, and a loop that closes `deploy/staging-web-*`
+    PRs would now match the live offer itself.
+    """
+    body = _executable_lines()
+    for gone in ("gh pr create", "gh pr list", "gh pr close"):
+        assert gone not in body, (
+            f"{gone!r} is back in the step. It is a GraphQL call, and with a "
+            f"stable branch it also has nothing left to act on."
+        )
+
+
+def test_the_branch_is_keyed_on_the_app_and_not_on_the_tag() -> None:
+    """The defect in one line: `deploy/staging-web-${TAG}` mints a branch per push.
+
+    Asserted on the executable body rather than the whole `run:`, so the comment
+    that explains the old shape does not satisfy the guard against it.
+    """
+    body = _executable_lines()
+    assert f'BRANCH="{BRANCH}"' in body, "the staging branch is no longer the stable one"
+    assert 'BRANCH="deploy/staging-web-${TAG}"' not in body, (
+        "the branch is keyed on the tag again; every dispatch will mint a new "
+        "branch and a new pull request, which is #1645"
     )

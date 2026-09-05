@@ -79,9 +79,24 @@ def _run(script: str, **env: Any) -> dict[str, str]:
 
 def test_the_scan_finds_workflow_jobs_with_repository_context_calls():
     """Without this, a moved directory or a loosened matcher turns the assertion
-    below into a pass."""
+    below into a pass.
+
+    Lowered from 5 to 4 by #1645, and the reason matters. Nothing drifted: the
+    coalescing loop in `web-image-receiver.yml` was the fifth, and it was removed
+    because a stable staging branch has nothing to supersede. Its replacement is
+    `gh api`, whose endpoint names the repository and so cannot have the defect
+    this module guards — the population shrank by getting safer.
+
+    That is the honest decrement, and it is also the last one that should happen
+    silently. A floor edited downwards whenever it fires stops asserting
+    anything, so #1669 proposes replacing the count with a relation: every
+    workflow whose text contains a porcelain call must be found by the scan, and
+    at least one must exist. Until then, treat a failure here as a question —
+    "did a call migrate, or did the scan go blind?" — and answer it before
+    touching the number.
+    """
     with_calls = [(path, name) for path, name, job in _jobs() if job_calls(job)]
-    assert len(with_calls) >= 5, (
+    assert len(with_calls) >= 4, (
         f"only {len(with_calls)} jobs call a porcelain gh subcommand under {WORKFLOWS}; "
         "the scan has drifted and the check below is asserting nothing"
     )

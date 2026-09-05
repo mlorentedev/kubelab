@@ -10,3 +10,5 @@
 # TOOL-020: homepage-config/custom.js is toolkit-generated too (sync_homepage_config.py) —
 # same CRLF-churn risk as the YAML above.
 *.js   text eol=lf
+*.svg  text eol=lf
+*.css  text eol=lf
