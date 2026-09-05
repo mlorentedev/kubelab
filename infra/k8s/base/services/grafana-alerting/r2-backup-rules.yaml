@@ -20,8 +20,11 @@ groups:
         execErrState: Alerting
         annotations:
           summary: >-
-            Cloudflare R2 backup integrity verification or fleet snapshot coverage
-            check failed. One or more nodes may be unprotected or the destination bucket unreachable.
+            Either Cloudflare R2 backup integrity verification or fleet snapshot coverage
+            check failed — one or more nodes unprotected, or the destination bucket
+            unreachable — or r2-backup-watcher stopped reporting, since this rule alerts
+            on no data too. Check `kubectl get cronjob r2-backup-watcher -n kubelab` first:
+            an unrun watcher means backup coverage is unknown, not that it is good.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/backup-restore.md
         data:
           - refId: A

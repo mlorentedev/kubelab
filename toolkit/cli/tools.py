@@ -351,3 +351,47 @@ def review_attestation(
         "Proceeding on an unreviewed PR is allowed. Proceeding silently is not."
     )
     raise typer.Exit(1)
+
+
+# =============================================================================
+# LESSON INDEX COUNTERS (#1649)
+# =============================================================================
+
+
+@app.command("lessons-index")
+def lessons_index(
+    root: Annotated[
+        Path,
+        typer.Option("--root", help="Root of the lessons tree"),
+    ] = Path("docs/lessons"),
+    fix: Annotated[
+        bool,
+        typer.Option("--fix/--check", help="Rewrite the counters, or only report what disagrees"),
+    ] = False,
+) -> None:
+    """Derive the lesson index counters from the files on disk.
+
+    The counters are shared mutable state that every lesson PR writes, and git
+    merges the line as text without raising a conflict — so a branch that was
+    correct when authored is wrong the moment another lesson PR merges first
+    (#1649). Deriving them at author time is not enough; that is what failed.
+
+    Run with --fix from the pre-commit hook, --check from anywhere.
+    """
+    from toolkit.features import lessons_index as index
+
+    fixes = index.reconcile(root, apply=fix)
+
+    if not fixes:
+        logger.success(f"{root}: counters already match the files")
+        return
+
+    for f in fixes:
+        logger.info(str(f))
+
+    if fix:
+        logger.success(f"{root}: rewrote {len(fixes)} counter(s) from the files")
+        raise typer.Exit(1)  # pre-commit convention: a hook that modified files fails
+
+    logger.error(f"{root}: {len(fixes)} counter(s) disagree with the files — run with --fix")
+    raise typer.Exit(1)
