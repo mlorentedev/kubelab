@@ -263,6 +263,20 @@ def branding(
             raise typer.Exit(result)
 
 
+@app.command(name="platform-json")
+def platform_json(
+    check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Custom output path")] = None,
+) -> None:
+    """Sync public platform.json manifest from common.yaml SSOT (issue #1347)."""
+    from toolkit.features import platform_manifest
+
+    target = output or platform_manifest.DEFAULT_OUTPUT
+    rc = platform_manifest.sync(output_path=target, check=check)
+    if rc != 0:
+        raise typer.Exit(rc)
+
+
 @app.command()
 def operators(
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
@@ -415,6 +429,21 @@ def sync_all(
     except Exception as e:
         logger.error(f"branding sync crashed: {e}")
         failures.append("branding")
+
+    # 5. Platform Manifest (issue #1347)
+    try:
+        from toolkit.features import platform_manifest
+
+        output_files = [platform_manifest.DEFAULT_OUTPUT]
+        if check:
+            if not _run_with_check(output_files, lambda: platform_manifest.sync(check=False), "platform-json"):
+                failures.append("platform-json")
+        else:
+            if platform_manifest.sync() != 0:
+                failures.append("platform-json")
+    except Exception as e:
+        logger.error(f"platform-json sync crashed: {e}")
+        failures.append("platform-json")
 
     if failures:
         logger.error(f"Sync failures: {', '.join(failures)}")
