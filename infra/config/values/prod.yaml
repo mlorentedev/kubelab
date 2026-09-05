@@ -83,7 +83,7 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-      version: 1.13.0
+      version: 1.14.0
 
   # Third-party services
   services:

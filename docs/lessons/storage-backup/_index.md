@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-8 lessons, newest first. Back to [all categories](../_index.md).
+9 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 427 | [A default nobody chose is not a decision, and four backups were relying on one](lesson-427-the-property-everything-relied-on-was-never-declared.md) | 2026-09-04 |
 | 361 | [CI green is not the same claim as "this runs on real hardware"](lesson-361-ci-green-is-not-the-same-claim-as-this-runs-on-real-hardware.md) | 2026-08-21 |
 | 332 | [A retired PVC stays pinned by *completed* Job pods — and the CronJob's retention setting is what pins it](lesson-332-a-retired-pvc-stays-pinned-by-completed-job-p.md) | 2026-08-15 |
 | 311 | [Nine stateful services were duplicated across environments by a packaging choice, not a decision](lesson-311-nine-stateful-services-were-duplicated-across.md) | 2026-08-11 |
