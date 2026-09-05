@@ -50,8 +50,12 @@ from toolkit.features.gitea_repos import (
     RepoSettingsError,
     SettingsChange,
     TeamPermissionError,
+    WebhookChange,
+    WebhookError,
+    WebhookSpec,
     ensure_settings,
     ensure_team,
+    ensure_webhook,
     execute,
 )
 
@@ -79,6 +83,22 @@ DECLARED_SETTINGS = RepoSettings(
     has_projects=False,
 )
 
+#: The webhook every `execute` in this file is handed. A literal for the same reason
+#: `DECLARED_SETTINGS` is one: these tests are about which client writes and what
+#: happens when the write does not take.
+DECLARED_WEBHOOK = WebhookSpec(
+    url="https://n8n.example/webhook/multi-forge-sync",
+    content_type="json",
+    events=("push", "pull_request"),
+    active=True,
+    branch_filter="*",
+    type="gitea",
+)
+
+#: The secret every `execute` is handed. Not a real one and not read from SOPS: these
+#: tests assert that a secret REACHES the write, never what it contains.
+WEBHOOK_SECRET = "test-secret-not-a-real-one"
+
 
 class FakeClient:
     """Records calls. One instance per credential, which is what makes the split visible."""
@@ -101,6 +121,8 @@ class FakeClient:
         self._includes_all_repositories = includes_all_repositories
         self._teams: dict[tuple[str, str], dict[str, Any]] = {}
         self._repos: dict[tuple[str, str], dict[str, Any]] = {}
+        self._hooks: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        self._next_hook_id = 1
 
     def create_org(self, name: str) -> dict[str, Any]:
         self.calls.append(("create_org", name))
@@ -259,6 +281,104 @@ class FakeClient:
 
         self.edit_repo = _refuse  # type: ignore[method-assign]
 
+    # ── webhooks ──────────────────────────────────────────────────────────────
+    #
+    # THE FAKE EXPANDS `pull_request` AND REDACTS THE SECRET, because the real forge
+    # does both and a fake that does neither certifies a design the forge refuses.
+    # This file already carries the scar: `create_team` used to echo `write` back,
+    # modelling a Gitea that does not exist, and every test passed while the live
+    # reconcile 500'd. Measured on `personal/resume`, 2026-09-04.
+
+    def list_hooks(self, owner: str, name: str) -> list[dict[str, Any]]:
+        self.calls.append(("list_hooks", f"{owner}/{name}"))
+        return list(self._hooks.get((owner, name), []))
+
+    def create_hook(self, owner: str, name: str, payload: Any) -> dict[str, Any]:
+        # The whole payload is recorded, not the target, so a test can assert the
+        # SECRET went out. A fake recording only the repository would pass for an
+        # `execute` that registered an unsigned endpoint.
+        self.calls.append(("create_hook", f"{owner}/{name}", dict(payload)))
+        hook = self._store_hook(dict(payload), hook_id=self._next_hook_id)
+        self._next_hook_id += 1
+        self._hooks.setdefault((owner, name), []).append(hook)
+        return hook
+
+    def edit_hook(self, owner: str, name: str, hook_id: int, payload: Any) -> dict[str, Any]:
+        self.calls.append(("edit_hook", f"{owner}/{name}", hook_id, dict(payload)))
+        for index, existing in enumerate(self._hooks.get((owner, name), [])):
+            if existing["id"] == hook_id:
+                updated = self._store_hook(dict(payload), hook_id=hook_id)
+                self._hooks[(owner, name)][index] = updated
+                return updated
+        raise AssertionError(f"edit_hook called for unknown hook id {hook_id}")
+
+    def _store_hook(self, payload: dict[str, Any], hook_id: int) -> dict[str, Any]:
+        """What Gitea gives BACK for what it was sent -- which is not what it was sent.
+
+        Two divergences, both measured, both load-bearing:
+
+        - `events` comes back EXPANDED. `pull_request` becomes nine entries, so a
+          reconciler comparing for equality would never converge.
+        - `config.secret` does not come back AT ALL, which is why the post-condition
+          can prove the hook's shape and never its signature.
+        """
+        config = dict(payload.get("config") or {})
+        config.pop("secret", None)
+        events = set(payload.get("events") or ())
+        if "pull_request" in events:
+            events |= {
+                "pull_request_assign",
+                "pull_request_sync",
+                "pull_request_label",
+                "pull_request_milestone",
+                "pull_request_review_request",
+                "pull_request_comment",
+                "pull_request_review",
+            }
+        return {
+            "id": hook_id,
+            "type": payload.get("type"),
+            "active": payload.get("active"),
+            "branch_filter": payload.get("branch_filter"),
+            # Reversed so no assertion can quietly depend on ordering: the live forge
+            # returned the POST's list and the GET's list in different orders.
+            "events": sorted(events, reverse=True),
+            "config": config,
+            "authorization_header": "",
+        }
+
+    def seed_hook(self, owner: str, name: str, **overrides: Any) -> dict[str, Any]:
+        """Put a converged hook on a repository, optionally bent out of shape."""
+        hook = self._store_hook(
+            {
+                "type": DECLARED_WEBHOOK.type,
+                "active": DECLARED_WEBHOOK.active,
+                "branch_filter": DECLARED_WEBHOOK.branch_filter,
+                "events": list(DECLARED_WEBHOOK.events),
+                "config": {"url": DECLARED_WEBHOOK.url, "content_type": DECLARED_WEBHOOK.content_type},
+            },
+            hook_id=self._next_hook_id,
+        )
+        hook.update(overrides)
+        self._next_hook_id += 1
+        self._hooks.setdefault((owner, name), []).append(hook)
+        return hook
+
+    def refuse_hook_write(self) -> None:
+        """Model a forge that accepts the write and stores nothing.
+
+        THE THIRD `refuse_*` IN THIS FILE, and the reason has not changed: the check
+        in `ensure_webhook` is a POST-CONDITION, so on a fake whose write works it
+        can never fire, and a test asserting "a write that does not take is a
+        failure" would quietly become "a write takes".
+        """
+
+        def _refuse(owner: str, name: str, payload: Any) -> dict[str, Any]:
+            self.calls.append(("create_hook", f"{owner}/{name}", dict(payload)))
+            return {}
+
+        self.create_hook = _refuse  # type: ignore[method-assign]
+
     def kinds(self) -> set[str]:
         return {call[0] for call in self.calls}
 
@@ -279,7 +399,14 @@ def test_organizations_are_created_by_the_admin_client(monkeypatch: pytest.Monke
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    execute(
+        _plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert ("create_org", "personal") in admin.calls
     assert "create_org" not in bot.kinds(), (
@@ -292,7 +419,14 @@ def test_repositories_are_created_by_the_bot_client(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    execute(
+        _plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert ("create_repo", "personal/resume") in bot.calls
     assert "create_repo" not in admin.kinds(), (
@@ -305,7 +439,14 @@ def test_the_bot_is_added_to_a_write_team(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    report = execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        _plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert ("add_team_member", "7:hefesto") in admin.calls
     assert report.teams_ensured == ["personal"]
@@ -316,7 +457,14 @@ def test_a_report_is_not_a_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    report = execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        _plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert report.orgs_created == ["personal"]
     assert report.repos_created == ["personal/resume"]
@@ -333,7 +481,9 @@ def test_execute_never_deletes(monkeypatch: pytest.MonkeyPatch) -> None:
     admin, bot = FakeClient("admin"), FakeClient("bot")
     plan = ReconcilePlan(undeclared_orgs=("legacy",), undeclared_repos=("legacy/old",))
 
-    execute(plan, admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    execute(
+        plan, admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS, declared_webhook=DECLARED_WEBHOOK
+    )
 
     assert admin.calls == [] and bot.calls == [], (
         "a plan containing only strays produced API calls. Strays are reported, never acted on (#1076 scope)."
@@ -481,7 +631,14 @@ def test_one_failed_org_does_not_stop_the_others() -> None:
     """
     admin, bot = BrokenOrgClient("admin", refuse="personal"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        _two_org_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert ("create_org", "teledyne") in admin.calls, "a later organization was skipped after an earlier one failed"
     assert report.orgs_created == ["teledyne"]
@@ -497,7 +654,14 @@ def test_a_failed_orgs_repositories_are_skipped_not_failed() -> None:
     """
     admin, bot = BrokenOrgClient("admin", refuse="personal"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        _two_org_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert ("create_repo", "personal/resume") not in bot.calls
     assert ("create_repo", "teledyne/fae-brain") in bot.calls
@@ -513,7 +677,14 @@ def test_the_failure_message_keeps_gitea_s_own_diagnostics() -> None:
     """
     admin, bot = BrokenOrgClient("admin", refuse="personal"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        _two_org_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     _, reason = report.failures[0]
     assert "write:organization" in reason
@@ -523,7 +694,14 @@ def test_a_run_with_no_failures_reports_ok() -> None:
     """The control: `ok` must be capable of being True, or the guards above prove nothing."""
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        _two_org_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert report.ok and report.failures == []
 
@@ -559,7 +737,16 @@ def test_a_migration_is_performed_by_the_migrator_never_by_a_token_client():
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=migrator, declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        migration_token="TOKEN",
+        migrator=migrator,
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert report.repos_migrated == ["personal/resume"]
     assert report.ok
@@ -581,7 +768,16 @@ def test_a_migration_without_a_migrator_is_refused_rather_than_attempted_with_a_
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=None, declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        migration_token="TOKEN",
+        migrator=None,
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -601,7 +797,16 @@ def test_a_migration_without_a_credential_fails_loudly_rather_than_running_open(
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token=None, migrator=FakeClient("m"), declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        migration_token=None,
+        migrator=FakeClient("m"),
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -622,7 +827,16 @@ def test_an_organization_receiving_only_a_migration_still_gets_the_write_team():
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"), declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        migration_token="TOKEN",
+        migrator=FakeClient("m"),
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert report.teams_ensured == ["personal"]
 
@@ -639,7 +853,16 @@ def test_an_unknown_migration_service_is_refused_before_the_call():
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="bitbucket:someone/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"), declared_settings=DECLARED_SETTINGS)
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        migration_token="TOKEN",
+        migrator=FakeClient("m"),
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -776,7 +999,9 @@ def test_a_team_repair_runs_on_an_organization_receiving_nothing() -> None:
         admin,
         bot,
         bot_username="hefesto",
-        declared_settings=DECLARED_SETTINGS)
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert report.ok, f"the repair failed: {report.failures}"
     assert ("edit_team", TEAM_NAME) in admin.calls, (
@@ -806,7 +1031,9 @@ def test_a_team_repair_is_skipped_when_its_organization_could_not_be_created() -
         admin,
         bot,
         bot_username="hefesto",
-        declared_settings=DECLARED_SETTINGS)
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+    )
 
     assert not report.ok
     assert [target for target, _ in report.failures] == ["org personal"]
@@ -856,6 +1083,7 @@ def test_settings_are_applied_by_the_configurator_never_by_a_token_client(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         configurator=configurator,
     )
 
@@ -885,6 +1113,7 @@ def test_the_whole_declaration_is_sent_not_only_the_fields_that_drifted(
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         configurator=configurator,
     )
 
@@ -906,6 +1135,7 @@ def test_settings_without_a_configurator_are_refused_rather_than_attempted_with_
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         configurator=None,
     )
 
@@ -932,6 +1162,7 @@ def test_a_patch_that_is_accepted_and_does_nothing_is_a_failure() -> None:
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         configurator=configurator,
     )
 
@@ -985,6 +1216,7 @@ def test_a_repository_whose_migration_failed_is_not_configured() -> None:
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         migration_token="TOKEN",
         migrator=migrator,
         configurator=configurator,
@@ -1017,6 +1249,7 @@ def test_a_repository_created_by_this_run_is_configured_by_this_run(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         configurator=configurator,
     )
 
@@ -1039,9 +1272,310 @@ def test_the_report_distinguishes_configured_from_created() -> None:
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
         configurator=configurator,
     )
 
     assert report.repos_configured == ["personal/resume"]
     assert report.repos_created == [] and report.orgs_created == [] and report.repos_migrated == []
     assert report.ok
+
+
+# ── webhooks (#503) ───────────────────────────────────────────────────────────
+#
+# The third write this module performs and the one with the quietest failure. A
+# hook that exists but is signed wrong delivers successfully, gets HTTP 200 from
+# n8n's `multi-forge-sync`, and is dropped without a trace -- so the forge's
+# delivery log, the surface anyone would check, stays green over an integration
+# processing nothing. Everything below is written against that.
+
+
+def _hook_plan(absent: bool = True, hook_id: int | None = None) -> ReconcilePlan:
+    return ReconcilePlan(
+        repos_to_hook=(
+            WebhookChange(
+                org="personal",
+                name="resume",
+                hook_id=hook_id,
+                changes=(("url", None, DECLARED_WEBHOOK.url),),
+                absent=absent,
+                url=DECLARED_WEBHOOK.url,
+            ),
+        ),
+    )
+
+
+def test_a_webhook_is_written_by_the_configurator_never_by_a_token_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Measured 2026-09-04, both repositories, so the answer is not one repo's provenance.
+
+    admin token 403 required=[write:repository]; bot token 403 "owner or a
+    collaborator with admin write"; superadmin basic auth 201.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    assert "create_hook" in configurator.kinds()
+    assert "create_hook" not in admin.kinds() and "create_hook" not in bot.kinds()
+
+
+def test_the_secret_reaches_the_write(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The one field the post-condition can never verify, so the test verifies the REQUEST.
+
+    Gitea does not return `config.secret`, which means a hook written without one
+    converges perfectly and processes nothing. The only place the secret is
+    observable is on its way out (lesson-423: assert what leaves the process).
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    payload = next(call[2] for call in configurator.calls if call[0] == "create_hook")
+    assert payload["config"]["secret"] == WEBHOOK_SECRET
+    assert payload["config"]["url"] == DECLARED_WEBHOOK.url
+    assert payload["config"]["content_type"] == DECLARED_WEBHOOK.content_type
+
+
+def test_a_webhook_without_a_secret_is_refused_rather_than_written_unsigned() -> None:
+    """A missing secret must STOP the write, never degrade it.
+
+    An unsigned hook is worse than no hook: it delivers, n8n rejects the signature,
+    and n8n's rejection path answers 200 and drops the event. The forge would then
+    record a successful delivery for every event it failed to deliver -- a broken
+    integration that looks healthier than a missing one.
+    """
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    report = execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=None,
+        configurator=configurator,
+    )
+
+    assert "create_hook" not in configurator.kinds()
+    assert not report.ok
+    assert any("secret" in message for _target, message in report.failures)
+
+
+def test_a_webhook_without_a_configurator_is_refused_rather_than_attempted_with_a_token() -> None:
+    admin, bot = FakeClient("admin"), FakeClient("bot")
+
+    report = execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=None,
+    )
+
+    assert "create_hook" not in admin.kinds() and "create_hook" not in bot.kinds()
+    assert not report.ok
+
+
+def test_an_existing_hook_is_patched_in_place_rather_than_recreated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The id carries the delivery history, which is the only record of what was sent.
+
+    On an integration whose failure mode is a silent drop, that history is the
+    evidence a future debugging session will want -- so a drifted hook is updated,
+    never deleted and remade.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+    seeded = configurator.seed_hook("personal", "resume", active=False)
+
+    execute(
+        _hook_plan(absent=False, hook_id=seeded["id"]),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    assert "edit_hook" in configurator.kinds()
+    assert "create_hook" not in configurator.kinds()
+    assert [hook["id"] for hook in configurator._hooks[("personal", "resume")]] == [seeded["id"]]
+
+
+def test_the_full_config_is_sent_on_an_update_not_only_the_field_that_drifted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whether a partial `config` clears the omitted keys is UNMEASURED, so it is avoided.
+
+    If omitting `secret` cleared it, an update that fixed `active` would silently
+    unsign the hook -- and the resulting breakage is invisible on both sides.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+    seeded = configurator.seed_hook("personal", "resume", active=False)
+
+    execute(
+        _hook_plan(absent=False, hook_id=seeded["id"]),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    payload = next(call[3] for call in configurator.calls if call[0] == "edit_hook")
+    assert payload["config"]["secret"] == WEBHOOK_SECRET, "an update that omits the secret may unsign the hook"
+    assert set(payload["config"]) == {"url", "content_type", "secret"}
+
+
+def test_a_write_that_is_accepted_and_stores_nothing_is_a_failure() -> None:
+    """The post-condition, and the reason `ensure_webhook` re-reads instead of trusting.
+
+    A 2xx says the request was accepted, never that the hook exists afterwards.
+    """
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+    configurator.refuse_hook_write()
+
+    report = execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    assert not report.ok
+    assert report.repos_hooked == []
+
+
+def test_gitea_s_event_expansion_is_not_read_as_a_failed_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The regression this whole design exists for, asserted end to end.
+
+    The fake expands `pull_request` into nine and returns them in a different order,
+    exactly as the forge does. Under an equality post-condition every `--apply` would
+    fail on a hook it had just written correctly -- not churn, a hard red run.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    report = execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    stored = configurator._hooks[("personal", "resume")][0]["events"]
+    assert len(stored) > len(DECLARED_WEBHOOK.events), "the fake must expand, or this asserts nothing"
+    assert report.repos_hooked == ["personal/resume"]
+    assert report.ok
+
+
+def test_a_hook_that_lost_a_declared_event_is_a_failure() -> None:
+    """The floor is a floor in both directions: a SHORTFALL must still be caught.
+
+    A superset comparison that accepted anything would be the vacuous version of
+    this design -- passing for a hook subscribed to nothing at all.
+    """
+    configurator = FakeClient("configurator")
+    change = WebhookChange(org="personal", name="resume", url=DECLARED_WEBHOOK.url)
+    configurator.seed_hook("personal", "resume", events=["pull_request"])
+
+    def _keep_as_seeded(owner: str, name: str, payload: Any) -> dict[str, Any]:
+        configurator.calls.append(("create_hook", f"{owner}/{name}", dict(payload)))
+        return configurator._hooks[(owner, name)][0]
+
+    configurator.create_hook = _keep_as_seeded  # type: ignore[method-assign]
+
+    with pytest.raises(WebhookError) as exc:
+        ensure_webhook(configurator, change, DECLARED_WEBHOOK, WEBHOOK_SECRET)
+
+    assert "push" in str(exc.value), "the failure must name the event that is missing"
+
+
+def test_a_repository_whose_migration_failed_gets_no_webhook() -> None:
+    """One reported failure, not two, and the second naming a symptom.
+
+    A repository that did not arrive has no hooks endpoint to POST to.
+    """
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+    plan = ReconcilePlan(
+        repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),),
+        repos_to_hook=(WebhookChange(org="personal", name="resume", url=DECLARED_WEBHOOK.url, absent=True),),
+    )
+
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        migration_token=None,
+        migrator=None,
+        configurator=configurator,
+    )
+
+    assert "create_hook" not in configurator.kinds()
+    assert [target for target, _ in report.failures] == ["repo personal/resume"]
+
+
+def test_the_report_distinguishes_hooked_from_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A report is an observation, not a plan replayed back."""
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    report = execute(
+        _hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhook=DECLARED_WEBHOOK,
+        webhook_secret=WEBHOOK_SECRET,
+        configurator=configurator,
+    )
+
+    assert report.repos_hooked == ["personal/resume"]
+    assert report.repos_configured == [] and report.repos_created == []
