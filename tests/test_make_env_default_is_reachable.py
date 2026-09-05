@@ -40,12 +40,13 @@ WHY = """
 `$(or $(ENV),<default>)` can never be selected. The target will run against
 `dev` while its usage line promises something else.
 
-Use the filter form instead, which is what `alerts` and `logs` already do:
+Use a filter form instead. Either of these, both already in this Makefile:
 
-    --env $(or $(filter staging prod,$(ENV)),prod)
+    --env $(or $(filter staging prod,$(ENV)),prod)            # backup, gitea-*
+    $(eval _ENV := $(if $(filter staging prod,$(ENV)),$(ENV),staging))  # alerts
 
 `filter` yields empty for any value that is not a real target for this command,
-which does two things: it lets `or` reach its default, and it stops a nonsense
+which does two things: it lets the default be selected, and it stops a nonsense
 `ENV` from being passed through to the command. See #1644.
 """
 
@@ -111,7 +112,21 @@ class TestNoTargetUsesTheUnreachableDefault:
 #: Makefile -- measured, so this buys nothing now and costs nothing either. What
 #: it buys is that a list containing a digit, a capital or a variable stays
 #: visible instead of silently leaving the derived set.
-FILTER_FORM = re.compile(r"\$\(or\s+\$\(filter\s+[^,]+,\$\(ENV\)\)")
+#: TWO spellings, because the Makefile uses two and the `$(or` half alone left
+#: `alerts` and `drill-pvc-unbound` invisible -- the latter added the day before
+#: this guard, citing #1644 in its own comment, which is as close to a live
+#: demonstration as the gap will get.
+#:
+#: The `$(if` arm insists the "then" branch is `$(ENV)` itself, and that is not
+#: decoration. `$(if $(filter hub,$(ENV)),argocd,kubelab)` at Makefile:1596 and
+#: :1603 selects a NAMESPACE, not an environment; a pattern loose enough to take
+#: it would match a line that resolves nothing of the sort, and would then be
+#: right about which targets to check for the wrong reason.
+FILTER_FORM = re.compile(
+    r"\$\(or\s+\$\(filter\s+[^,]+,\$\(ENV\)\)"
+    r"|"
+    r"\$\(if\s+\$\(filter\s+[^,]+,\$\(ENV\)\),\$\(ENV\),"
+)
 
 #: Every target that resolves an environment, with the flag it passes it under
 #: and the default it must reach. `-e` is Ansible's; `--env` is the toolkit's.
@@ -142,14 +157,30 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "maintain-notify-test": ("-e", "staging"),
     "benchmark-disk": ("-e", "staging"),
     "wait-node-ready": ("-e", "staging"),
+    # Invisible again until FILTER_FORM learned the `$(if ...)` spelling. The
+    # second one is the whole argument for widening it: `drill-pvc-unbound` was
+    # written the day before this guard, cites #1644 in its own comment, and was
+    # still not covered by it.
+    "alerts": ("--env", "prod"),
+    "drill-pvc-unbound": ("--env", "staging"),
 }
 
 #: Resolves an environment but passes it under no flag at all, so the
 #: `(flag, default)` model above cannot express it: `logs` interpolates the env
-#: into a kubeconfig filename (`~/.kube/kubelab-$(_ENV)-config`). It is checked
-#: by `test_logs_reaches_its_default` rather than bent into the table, and it is
-#: named here so `covers_every_site` still accounts for every derived site --
-#: an exemption that is declared is a different thing from one that is invisible.
+#: into a kubeconfig filename (`~/.kube/kubelab-$(_ENV)-config`).
+#:
+#: This is an EXEMPTION from the parametrised checks, and an exemption nothing
+#: polices is a silencer. As first written it was exactly that: moving any real
+#: target out of `ENV_TARGETS` and into this dict left every test green, because
+#: `covers_every_site` unions the two and `@parametrize` binds `sorted(ENV_TARGETS)`
+#: at collection time -- so the three expansion checks were simply never
+#: generated for it. A target that reintroduced `--env dev` could have been
+#: silenced by moving one line. Found in adversarial review, and it is the same
+#: class as the defect this file exists to catch, reintroduced by its own fix.
+#:
+#: `TestTheExemptionCannotBeUsedAsASilencer` below now earns the word "declared":
+#: membership here requires that the target genuinely passes no `--env`/`-e`
+#: flag, checked against `make -n` rather than taken on trust.
 NO_FLAG_TARGETS: dict[str, str] = {"logs": "kubelab-staging-config"}
 
 
@@ -216,7 +247,12 @@ class TestTheDefaultIsReachedInPractice:
         parametrised checks below silently stop covering it, which is how eight
         sites reached prod-in-name-only in the first place."""
         found = _targets_resolving_an_env()
-        assert len(found) >= 12, f"expected the Makefile to resolve envs in >=12 targets, found {found}"
+        # 15, and the number is chosen against a specific regression rather than
+        # picked for headroom. The blind literal this pattern replaced derived
+        # exactly 12, so a floor of 12 would sit AT the defective value and let
+        # a revert to it pass -- an anti-vacuity floor that cannot fail for the
+        # one cause it exists to catch. Above 12 and below the current 19.
+        assert len(found) >= 15, f"expected the Makefile to resolve envs in >=15 targets, found {found}"
         covered = set(ENV_TARGETS) | set(NO_FLAG_TARGETS)
         assert found == covered, (
             f"ENV_TARGETS is out of step with the Makefile.\n"
@@ -225,8 +261,9 @@ class TestTheDefaultIsReachedInPractice:
         )
 
     def test_logs_reaches_its_default(self) -> None:
-        """`logs` needs SVC before its recipe expands at all, which is why it
-        gets its own check rather than a row that would need a third column."""
+        """`logs` passes the resolved env under no flag, so the `(flag, default)`
+        rows cannot express it. It needs `SVC` before the interesting line
+        expands, which is why it is spelled out rather than parametrised."""
         out = self._expand("logs", "SVC=authelia")
         assert NO_FLAG_TARGETS["logs"] in out, f"logs with no ENV expanded to: {out.strip()[:200]}"
         dev = self._expand("logs", "SVC=authelia", "ENV=dev")
@@ -234,6 +271,33 @@ class TestTheDefaultIsReachedInPractice:
         assert NO_FLAG_TARGETS["logs"] in dev
         real = self._expand("logs", "SVC=authelia", "ENV=prod")
         assert "kubelab-prod-config" in real, f"logs ignored ENV=prod: {real.strip()[:200]}"
+
+    @pytest.mark.parametrize("target", sorted(NO_FLAG_TARGETS))
+    def test_the_exemption_cannot_be_used_as_a_silencer(self, target: str) -> None:
+        """Membership in NO_FLAG_TARGETS must be EARNED, not asserted.
+
+        The dict exempts a target from the three expansion checks. Before this,
+        nothing stopped a real flag-passing target being moved here: the union
+        in `covers_every_site` still balanced, `@parametrize` binds
+        `sorted(ENV_TARGETS)` at collection time so its checks were never
+        generated, and the whole suite stayed green. One line could silence a
+        target that had reintroduced `--env dev`.
+
+        So the qualifying property is checked against `make -n`: a target that
+        actually passes a flag does not belong here, and saying it does fails.
+        """
+        out = self._expand(target, "SVC=authelia")
+        for flag in ("--env", "-e"):
+            for env in ("staging", "prod", "dev", "hub"):
+                assert f"{flag} {env}" not in out, (
+                    f"{target} is exempted as flagless but passes `{flag} {env}`.\n"
+                    f"  It belongs in ENV_TARGETS, where its default is verified.\n"
+                    f"  Expanded to: {out.strip()[:200]}"
+                )
+        assert NO_FLAG_TARGETS[target] in out, (
+            f"{target} is listed here but its recorded default "
+            f"{NO_FLAG_TARGETS[target]!r} does not appear in its expansion"
+        )
 
     @pytest.mark.parametrize("target", sorted(ENV_TARGETS))
     def test_an_unset_env_reaches_the_documented_default(self, target: str) -> None:
