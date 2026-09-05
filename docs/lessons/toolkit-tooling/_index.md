@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-35 lessons, newest first. Back to [all categories](../_index.md).
+36 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 435 | [A stub's canned answer decides which of your assertions can fail](lesson-435-a-stubs-canned-answer-decides-which-assertions-can-fail.md) | 2026-09-05 |
 | 432 | [A file that contains its own explanation cannot be edited by a pattern that matches it](lesson-432-a-guard-that-cannot-tell-a-warning-from-an-instance.md) | 2026-09-04 |
 | 424 | [A convergence step scoped to the creation diff never repairs what already exists](lesson-424-a-convergence-step-scoped-to-the-creation-diff-repairs-nothing.md) | 2026-09-04 |
 | 423 | [A fake cannot verify a request — it can only agree with whoever wrote it](lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it.md) | 2026-09-03 |
