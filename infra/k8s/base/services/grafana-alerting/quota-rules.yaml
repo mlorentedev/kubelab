@@ -44,10 +44,12 @@ groups:
         execErrState: Alerting
         annotations:
           summary: >-
-            kubelab namespace requests.memory utilization crossed 80% of its
-            ResourceQuota ceiling (IDP-031/#811). Deploys are still
-            succeeding, but the room to grow the namespace without hitting
-            admission rejection is shrinking.
+            Either kubelab namespace requests.memory utilization crossed 80% of its
+            ResourceQuota ceiling (IDP-031/#811), or quota-watcher stopped reporting —
+            this rule alerts on no data too, by the deliberate choice above. Check
+            `kubectl get cronjob quota-watcher -n kubelab` first. If it is running, this
+            is the real thing: deploys still succeed, but the room to grow the namespace
+            without hitting admission rejection is shrinking.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/quota-alerting.md
         data:
           - refId: A
@@ -112,11 +114,12 @@ groups:
         execErrState: Alerting
         annotations:
           summary: >-
-            kubelab namespace limits.memory utilization crossed 80% of its
-            ResourceQuota ceiling (IDP-031/#811) — the load-bearing dimension,
-            5.7% headroom by design. Deploys are still succeeding, but the
-            room to grow the namespace without hitting admission rejection is
-            shrinking.
+            Either kubelab namespace limits.memory utilization crossed 80% of its
+            ResourceQuota ceiling (IDP-031/#811), or quota-watcher stopped reporting —
+            this rule alerts on no data too. Check
+            `kubectl get cronjob quota-watcher -n kubelab` first. If it is running, this
+            is the load-bearing dimension at 5.7% headroom by design: deploys still
+            succeed, but the room to grow without hitting admission rejection is shrinking.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/quota-alerting.md
         data:
           - refId: A

@@ -99,11 +99,38 @@ groups:
         title: Node root filesystem disk space critical (>90%)
         condition: C
         for: 15m
-        noDataState: OK
+        # `Alerting`, matching the sibling rule above, and for the same reason it
+        # gives: a metric that must never go quiet cannot treat silence as health.
+        #
+        # This said `OK` until 2026-09-05, and the asymmetry was invisible because
+        # both rules read the SAME stream: if `disk-watcher` stops, the PVC rule
+        # above goes red and this one goes green, from one cause. So the node
+        # whose disk is unwatched is exactly the node that looks fine.
+        #
+        # Found reviewing OPS-024, which planned to feed node-level producers into
+        # this rule — the plan would have added five nodes to a rule that reports
+        # health when nobody is reporting. Not hypothetical: #1377 is the same
+        # rule family firing on a stopped watcher for a day and a half, which is
+        # also the evidence that `Alerting` DOES fire on no-data here.
+        #
+        # NOTE for OPS-024: the on-demand nodes (ADR-028 — beelink, rpi4, ace2,
+        # jetson) are off by design, so when a producer for them exists this rule
+        # cannot be the one that watches them; silence is their normal state.
+        # Today the only producer is the in-cluster CronJob on always-on nodes,
+        # which is why `Alerting` is correct NOW and why adding those nodes here
+        # later would be wrong.
+        noDataState: Alerting
         execErrState: Error
         annotations:
+          # TWO CAUSES, and the summary must not assert one of them. #1377 cost a
+          # day and a half on the rule above by naming only the interesting cause,
+          # so the responder chased a storage fault while the real fault was the
+          # watcher. The cheap check goes first, in the text, not in a runbook.
           summary: >-
-            Node root filesystem utilization crossed 90%. Immediate disk reclamation or volume resizing is required.
+            Either a node's root filesystem crossed 90%, or the disk-watcher stopped reporting —
+            this rule alerts on no data too. Check `kubectl get cronjob disk-watcher -n kubelab`
+            first: if it is suspended, failing, or its last run is older than 30m, the fault is the
+            watcher and no node is being measured at all.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
         data:
           - refId: A
