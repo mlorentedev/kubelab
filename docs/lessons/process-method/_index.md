@@ -1,6 +1,6 @@
 # How the work is run: specs, reviews, knowledge
 
-66 lessons, newest first. Back to [all categories](../_index.md).
+67 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -70,3 +70,4 @@
 | 394 | [The ticket body is the contract; the prompt that names it is not](lesson-394-the-ticket-body-is-the-contract-not-the-prompt-that-names-it.md) | 2026-08-25 |
 | 428 | [A sample is not the population — state the frame next to the verdict](lesson-428-a-sample-is-not-the-population-say-which-frame-you-measured.md) | 2026-09-04 |
 | 433 | [A branch that only improves a message is invisible to a test that asserts only failure](lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure.md) | 2026-09-05 |
+| 430 | [Fetching is what arms the `--force-with-lease` trap](lesson-430-fetching-is-what-arms-the-force-with-lease-trap.md) | 2026-09-04 |

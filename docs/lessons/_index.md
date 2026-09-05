@@ -1,6 +1,6 @@
 # Lessons
 
-435 lessons, one file each. Newest: 2026-09-05. Open a category for its list.
+437 lessons, one file each. Newest: 2026-09-05. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -8,13 +8,13 @@
 | [kubernetes](kubernetes/_index.md) | 52 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 45 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 49 | Roles, playbooks, IaC, node setup |
-| [process-method](process-method/_index.md) | 66 | Specs, reviews, how work is run |
+| [process-method](process-method/_index.md) | 67 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 36 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 28 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 28 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 17 | Metrics, logs, alerting |
-| [containers-docker](containers-docker/_index.md) | 13 | Docker, Compose, image builds |
+| [containers-docker](containers-docker/_index.md) | 14 | Docker, Compose, image builds |
 | [storage-backup](storage-backup/_index.md) | 9 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
 
