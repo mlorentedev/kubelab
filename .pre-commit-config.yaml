@@ -105,8 +105,43 @@ repos:
       # meant to stop it.
       #
       # So `pre-commit` catches the lesson being written, and `pre-push` catches
-      # the one that arrived by merge. Nothing reaches CI stale, which is the
-      # whole point: CI already had a red light for this, seven minutes late.
+      # the one that arrived by a LOCAL merge.
+      #
+      # A THIRD route stays uncovered, and this comment claimed otherwise until
+      # 2026-09-05: GitHub's "Update branch" button. It merges master in on
+      # GitHub's servers, so there is no local commit for `pre-commit` to see and
+      # no local push for `pre-push` to intercept -- both stages are blind to it
+      # by construction, not by oversight, and the stale counter goes straight to
+      # CI. Measured twice that day on two different branches by two sessions,
+      # #1675 (`7cc5b6fc`) and #1665 (`7d489552`), both red on
+      # `test_the_real_index_currently_agrees`, 434 files against a declared 433.
+      #
+      # To tell that route from a local merge after the fact, read the COMMITTER
+      # and mind the qualifier -- an earlier draft of this comment got it wrong
+      # in both directions:
+      #
+      #     git log -1 --format='%cn <%ce>' <merge-sha>
+      #
+      # `GitHub <noreply@github.com>` means only "created on GitHub's servers",
+      # which is equally true of every squash-merge: measured here, 200 of the
+      # last 200 commits on master and 186 of the last 200 merge commits
+      # anywhere. So it discriminates only ON A FEATURE BRANCH, where a merge
+      # commit has no business being server-made. The other way round is clean:
+      # all 14 local merges are `Manu <mlorentedev@gmail.com>`.
+      #
+      # Do NOT lean on the commit MESSAGE. `git merge master` and the button do
+      # produce the same subject, but `git merge origin/master` -- which is what
+      # the 14 local merges here actually are -- produces `Merge remote-tracking
+      # branch 'origin/master' into X` instead, and one of them is neither form.
+      #
+      # So: rebase locally rather than pressing the button. And do not read the
+      # rest of this as "CI catches it" -- CI is where it SURFACES, not where it
+      # is stopped. `Tests` is not a required check on master (only `Validate`,
+      # `Detect Changes` and `review-attestation` are), so the guard goes red and
+      # the merge button stays enabled. Surfacing and blocking are different
+      # things, and every instance of this defect so far has been merged past a
+      # red `Tests`. Closing the route needs something neither stage can be --
+      # tracked as #1678, whose AC4 is exactly that gap.
       - id: lessons-index-counts
         name: Derive lesson index counters from the files
         entry: poetry run -- toolkit tools lessons-index --fix

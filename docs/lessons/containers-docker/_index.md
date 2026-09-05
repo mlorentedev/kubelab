@@ -16,4 +16,4 @@
 | 062 | [Docker Compose Prefixes Volumes with the Project Name](lesson-062-docker-compose-prefixes-volumes-with-the-proj.md) | 2026-02-21 |
 | 053 | [Docker Bind Mounts Resolve from Compose File Directory](lesson-053-docker-bind-mounts-resolve-from-compose-file-.md) | 2026-02-14 |
 | 046 | [Docker Anonymous Volumes Inherit Image Ownership](lesson-046-docker-anonymous-volumes-inherit-image-owners.md) | 2026-02-09 |
-| 431 | [A cgroup limit does not reach what the bounded process starts](lesson-431-a-cgroup-limit-does-not-reach-what-the-bounded-process-starts.md) | 2026-09-04 |
+| 437 | [A restart policy makes container uptime measure the host, not the container](lesson-437-a-restart-policy-makes-container-uptime-measure-the-host.md) | 2026-09-05 |
