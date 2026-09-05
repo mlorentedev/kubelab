@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-27 lessons, newest first. Back to [all categories](../_index.md).
+28 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 438 | [A declared automation is not an executed one — check the route the failure actually takes](lesson-438-a-declared-automation-is-not-an-executed-one.md) | 2026-09-05 |
 | 436 | [A failed call is not a refused one, so a rollback needs a reconciliation](lesson-436-a-failed-call-is-not-a-refused-one.md) | 2026-09-05 |
 | 434 | [When every normal path deletes it, the leftovers are a counter](lesson-434-when-every-normal-path-deletes-it-the-residue-is-a-counter.md) | 2026-09-05 |
 | 426 | [Hand a sibling container contents, never a path](lesson-426-hand-a-sibling-container-contents-never-a-path.md) | 2026-09-04 |
