@@ -85,6 +85,43 @@ repos:
         language: system
         pass_filenames: false
 
+      # Derive the lesson index counters instead of trusting what was typed.
+      #
+      # The counters are shared mutable state that every lesson PR writes, and
+      # git merges the line as text without raising a conflict -- so a branch
+      # correct when authored is wrong the moment another lesson PR merges
+      # first (#1649). Four collisions in two days across three parallel
+      # sessions; one merge produced a self-consistent lie, a counter that
+      # balanced while the row indexing a real lesson had been dropped.
+      #
+      # TWO stages, and the second is not belt-and-braces -- it covers the case
+      # the first structurally cannot.
+      #
+      # MEASURED, after an earlier version of this claimed otherwise: git does
+      # NOT run pre-commit for a merge that resolves cleanly. Merging a branch
+      # carrying a new lesson produced `Merge made by the 'ort' strategy`, no
+      # hook output, 433 files and 432 declared -- the exact defect, arriving by
+      # the exact route that caused all four collisions, straight past the hook
+      # meant to stop it.
+      #
+      # So `pre-commit` catches the lesson being written, and `pre-push` catches
+      # the one that arrived by merge. Nothing reaches CI stale, which is the
+      # whole point: CI already had a red light for this, seven minutes late.
+      - id: lessons-index-counts
+        name: Derive lesson index counters from the files
+        entry: poetry run -- toolkit tools lessons-index --fix
+        language: system
+        files: '^docs/lessons/.*\.md$'
+        pass_filenames: false
+        stages: [pre-commit]
+
+      # The second stage is NOT declared here. This repo sets `core.hooksPath`
+      # to share hooks across worktrees, and its `pre-push` is its own script
+      # (`.github/hooks/pre-push.sh`) which does not invoke pre-commit at all --
+      # so a hook declared here with `stages: [pre-push]` would be configuration
+      # nothing runs. The push-time check lives in that script instead, and
+      # `test_a_second_stage_covers_the_merge_route` asserts it is wired there.
+
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.46.0
