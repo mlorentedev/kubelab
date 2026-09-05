@@ -82,6 +82,14 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # `/admin/actions/runners` sits under the same admin router as `list_orgs`, so
     # `read:admin` covers it. Measured 200 with that grant before this line existed.
     "list_runners": frozenset({"read:admin"}),
+    # MEASURED, not assumed, because the read and the write of a webhook sit on
+    # different credentials and it would have been easy to declare the write's scope
+    # here. `GET /repos/{o}/{r}/hooks` answered 200 with the admin token on both
+    # `personal/resume` and `teledyne/fae-brain` on 2026-09-04, while `POST` to the
+    # same path answered 403 required=[write:repository]. So the listing costs
+    # `read:repository` and nothing more -- and `write:repository`, a standing DELETE
+    # capability, stays ungranted. The write goes through basic auth instead.
+    "list_hooks": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -115,6 +123,12 @@ ADMIN_METHODS: tuple[str, ...] = (
     "edit_team",
     "add_team_member",
     "list_runners",
+    # The plan's webhook read. Listed even though `read:repository` already enters
+    # the requirement through `list_repos`: the point of this tuple is that a method
+    # the admin token performs cannot be absent from the derivation, and "its scope
+    # happens to be covered by a sibling" is a coincidence, not a rule. It is exactly
+    # how #1564's token came to authenticate and not work.
+    "list_hooks",
 )
 
 
