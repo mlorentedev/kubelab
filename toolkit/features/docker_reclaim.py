@@ -74,6 +74,25 @@ DEFAULT_MIN_AGE_HOURS = 4
 RUNNER_CONTAINERS = ("act-runner", "github-runner")
 
 
+def resolve_gate(min_age_hours: int | None) -> int:
+    """`None` means "unset"; `0` means "reclaim everything", and they differ.
+
+    This exists as a named function because the obvious spelling --
+    `min_age_hours or DEFAULT_MIN_AGE_HOURS` -- silently maps 0 to the default,
+    which makes the ONE value the emergency needs the one value that cannot be
+    asked for. Make passes `MIN_AGE_HOURS=0` through as `--min-age-hours 0`
+    quite happily, so the failure was invisible from both ends: the operator
+    types the documented override and the tool ignores it without saying so.
+
+    Tested through the CLI's own resolution rather than only through
+    `plan_reclaim(min_age_hours=0)`, which passed throughout (lesson 433 --
+    a path that is covered one layer below the defect is not covered).
+    """
+    if min_age_hours is None:
+        return DEFAULT_MIN_AGE_HOURS
+    return min_age_hours
+
+
 class DockerUnavailableError(RuntimeError):
     """The daemon could not be asked. Distinct from 'there is nothing to do'."""
 

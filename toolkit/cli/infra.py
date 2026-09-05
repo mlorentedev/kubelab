@@ -97,9 +97,9 @@ def node_reclaim(
     node: Annotated[str, typer.Option("--node", help="Node key under networking.nodes (e.g. beelink)")],
     apply: Annotated[bool, typer.Option("--apply", help="Actually remove; default reports only")] = False,
     min_age_hours: Annotated[
-        int,
-        typer.Option("--min-age-hours", help="A builder younger than this could be mid-build"),
-    ] = 0,
+        int | None,
+        typer.Option("--min-age-hours", help="A builder younger than this could be mid-build; 0 reclaims all"),
+    ] = None,
     images: Annotated[bool, typer.Option("--images/--no-images", help="Also prune dangling images")] = True,
     include_tagged: Annotated[
         bool,
@@ -120,7 +120,6 @@ def node_reclaim(
 
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.docker_reclaim import (
-        DEFAULT_MIN_AGE_HOURS,
         DockerUnavailableError,
         ReclaimRefused,
         disk_usage,
@@ -128,11 +127,12 @@ def node_reclaim(
         probe,
         prune_images,
         remove,
+        resolve_gate,
         set_runners,
     )
     from toolkit.features.k8s_connect import resolve_ssh_user
 
-    gate = min_age_hours or DEFAULT_MIN_AGE_HOURS
+    gate = resolve_gate(min_age_hours)
 
     net = ConfigurationManager("common", settings.project_root).get_merged_config()["networking"]
     block = (net.get("nodes") or {}).get(node)
@@ -177,7 +177,13 @@ def node_reclaim(
     # mid-reclaim writes into the space just recovered. Restarting them is in a
     # `finally` because leaving this node's CI stopped is a worse failure than
     # the one that would have caused it.
-    paused: list[str] = []
+    # The restart is unconditional, and deliberately not driven by what the stop
+    # reported. `set_runners` stops them one at a time, so a failure on the
+    # SECOND leaves the first stopped and returns nothing — and a `finally`
+    # guarded by that return value then restarts nothing, which is exactly the
+    # outcome the `finally` was written to prevent. Starting an already-running
+    # container exits 0, and one this node does not have is skipped, so asking
+    # for all of them is both safe and idempotent.
     try:
         paused = set_runners(ssh_target, running=False)
         if paused:
@@ -191,12 +197,12 @@ def node_reclaim(
         logger.error(str(exc))
         raise typer.Exit(1) from exc
     finally:
-        if paused:
-            try:
-                set_runners(ssh_target, running=True)
-                logger.info(f"resumed {', '.join(paused)}")
-            except DockerUnavailableError as exc:
-                logger.error(f"RUNNERS LEFT STOPPED — start them by hand: {exc}")
+        try:
+            resumed = set_runners(ssh_target, running=True)
+            if resumed:
+                logger.info(f"resumed {', '.join(resumed)}")
+        except DockerUnavailableError as exc:
+            logger.error(f"RUNNERS MAY BE LEFT STOPPED — check with `docker ps`: {exc}")
 
     logger.info(f"after   {disk_usage(ssh_target)}")
     logger.success(f"reclaimed {len(plan.containers)} container(s), {len(plan.volumes)} volume(s)")

@@ -20,6 +20,7 @@ expectation -- it matches everything (lesson 416).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -35,6 +36,7 @@ from toolkit.features.docker_reclaim import (
     parse_containers,
     parse_volumes,
     plan_reclaim,
+    resolve_gate,
 )
 
 # `docker inspect -f '{{.Name}}|{{.Created}}|{{.State.Running}}|{{range .Mounts}}{{.Name}},{{end}}'`
@@ -295,6 +297,30 @@ def test_a_gate_above_every_age_reclaims_nothing(
     assert len(result.kept_containers) == 6
     # And nothing follows them: every state volume is still held.
     assert not [v for v in result.volumes if v.endswith("_state") and "ed7ae5c5" not in v]
+
+
+def test_an_explicit_zero_gate_is_not_the_default() -> None:
+    """`--min-age-hours 0` is the emergency lever the Makefile documents, and
+    `min_age_hours or DEFAULT` silently turned it into 4 — so the one value the
+    emergency needs was the one value that could not be asked for, with no
+    message either way.
+
+    Every test above passed throughout, because they all call
+    `plan_reclaim(min_age_hours=0)` directly and the defect was one layer up in
+    the CLI's resolution. Covered below the defect is not covered (lesson 433).
+    """
+    assert resolve_gate(0) == 0
+    assert resolve_gate(None) == DEFAULT_MIN_AGE_HOURS
+    assert resolve_gate(12) == 12
+
+
+def test_make_passes_a_zero_gate_through_to_the_cli() -> None:
+    """The other half of the same bug: `$(if $(MIN_AGE_HOURS),...)` is Make's
+    truthiness, not the shell's, and `0` is a non-empty string there. Verified
+    rather than assumed — had Make swallowed it, fixing only the Python would
+    have left the lever just as unreachable."""
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
+    assert "$(if $(MIN_AGE_HOURS),--min-age-hours $(MIN_AGE_HOURS),)" in makefile
 
 
 def test_a_negative_gate_is_refused(containers: list[Container], volumes: list[str]) -> None:
