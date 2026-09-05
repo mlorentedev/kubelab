@@ -163,6 +163,24 @@ class TestTeardownFailureIsLoud:
         with pytest.raises(pvc_drill.DrillTeardownError, match="LIVE in the cluster"):
             _run(spy)
 
+    def test_the_original_failure_survives_a_teardown_failure_on_top_of_it(self) -> None:
+        """Both causes reach the operator when the drill fails AND cleanup fails.
+
+        Raised on review of #1646: replacing the in-flight exception was read as
+        losing it. It is not lost — a `raise ... from exc` inside a `finally`
+        chains BOTH, the teardown's own cause as `__cause__` and whatever was
+        already propagating as `__context__`, and the traceback prints all
+        three. Pinning it, because the reasoning is not obvious from the code
+        and the next reader will have the same doubt.
+        """
+        spy = Spy(alerts=[])
+        spy.fetch_alerts = _raiser(spy, KeyboardInterrupt())  # type: ignore[method-assign]
+        spy.delete_raises = RuntimeError("connection refused")
+        with pytest.raises(pvc_drill.DrillTeardownError) as exc:
+            _run(spy)
+        assert isinstance(exc.value.__cause__, RuntimeError)
+        assert isinstance(exc.value.__context__.__context__, KeyboardInterrupt)
+
     def test_the_message_names_the_object_and_how_to_clear_it(self) -> None:
         spy = Spy(alerts=FIRING)
         spy.delete_raises = RuntimeError("boom")
