@@ -59,11 +59,19 @@ class TestBrandingSyncLive:
         assert "--kl-primary: #0E7490;" in content
         assert "--kl-accent: #3F51B5;" in content
 
-    def test_drift_check_passes_on_synced_file(self) -> None:
-        rc = sync_branding.main()
-        assert rc == 0
+    def test_committed_brand_css_matches_common_yaml(self) -> None:
+        """The committed brand.css must match common.yaml without running a sync first."""
+        assert sync_branding.OUTPUT_CSS.exists()
         in_sync = _run_with_check([sync_branding.OUTPUT_CSS], sync_branding.main, "branding")
         assert in_sync is True
+
+    def test_drift_check_detects_mutation(self, tmp_path: Path, monkeypatch) -> None:
+        """Drift check returns False when the target CSS diverges from common.yaml."""
+        test_css = tmp_path / "brand.css"
+        test_css.write_text("/* drifted content */\n:root { --drift: true; }\n", encoding="utf-8")
+        monkeypatch.setattr(sync_branding, "OUTPUT_CSS", test_css)
+        in_sync = _run_with_check([test_css], sync_branding.main, "branding")
+        assert in_sync is False
 
     def test_returns_error_when_yaml_missing(self, tmp_path: Path, monkeypatch) -> None:
         non_existent = tmp_path / "missing.yaml"
