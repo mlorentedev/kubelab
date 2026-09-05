@@ -23,18 +23,24 @@
       "name": "Webhook Ingress",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-400, 0],
+      "position": [
+        -400,
+        0
+      ],
       "webhookId": "w2000000-0000-4000-8000-000000000001"
     },
     {
       "parameters": {
-        "jsCode": "// Extract event info, validate HMAC SHA-256 signature (fail-closed), and parse task key\nlet rawPayload = '';\nlet body = {};\n\nif (typeof $json.rawBody === 'string') {\n  rawPayload = $json.rawBody;\n  try { body = JSON.parse($json.rawBody); } catch (e) { body = (typeof $json.body === 'object' && $json.body) ? $json.body : {}; }\n} else if (typeof $json.body === 'string') {\n  rawPayload = $json.body;\n  try { body = JSON.parse($json.body); } catch (e) { body = {}; }\n} else if (typeof $json.body === 'object' && $json.body !== null) {\n  body = $json.body;\n  rawPayload = JSON.stringify(body);\n} else if (typeof $json === 'object') {\n  body = $json;\n  rawPayload = JSON.stringify(body);\n}\n\nconst headers = $json.headers || {};\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst isMerged = Boolean(pr.merged);\nconst title = pr.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, AREA-123)\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10})-(\\d+)\\b/);\nconst taskKey = match ? match[0] : null;\nconst taskId = match ? parseInt(match[2], 10) : null;\n\n// HMAC validation: strictly fail-closed\nconst isGitHub = Boolean(headers['x-hub-signature-256']);\nconst isGitea = Boolean(headers['x-gitea-signature']);\nconst sig = headers['x-hub-signature-256'] || headers['x-gitea-signature'] || '';\nconst secret = (isGitHub && $env.GITHUB_WEBHOOK_SECRET) || (isGitea && $env.GITEA_WEBHOOK_SECRET) || $env.FORGE_WEBHOOK_SECRET || '';\nlet isValidSig = false;\n\nif (secret && sig && rawPayload) {\n  const crypto = require('crypto');\n  const hmac = crypto.createHmac('sha256', secret);\n  hmac.update(rawPayload);\n  const hexDigest = hmac.digest('hex');\n  isValidSig = (sig === 'sha256=' + hexDigest || sig === hexDigest);\n}\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    taskId: taskId,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    hasTask: Boolean(taskKey && isValidSig),\n    isValidSig: isValidSig\n  }\n}];"
+        "jsCode": "// Extract event info, validate HMAC SHA-256 signature (fail-closed), and parse task key\nlet rawPayload = '';\nlet body = {};\n\nif (typeof $json.rawBody === 'string') {\n  rawPayload = $json.rawBody;\n  try { body = JSON.parse($json.rawBody); } catch (e) { body = (typeof $json.body === 'object' && $json.body) ? $json.body : {}; }\n} else if (typeof $json.body === 'string') {\n  rawPayload = $json.body;\n  try { body = JSON.parse($json.body); } catch (e) { body = {}; }\n} else if (typeof $json.body === 'object' && $json.body !== null) {\n  body = $json.body;\n  rawPayload = JSON.stringify(body);\n} else if (typeof $json === 'object') {\n  body = $json;\n  rawPayload = JSON.stringify(body);\n}\n\nconst headers = $json.headers || {};\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst issue = body.issue || {};\nconst repo = body.repository || {};\nconst isMerged = Boolean(pr.merged);\n\n// An `issues` event carries `issue` and no `pull_request`. Gitea also sends an\n// `issue` object for pull-request comment events, where `issue.pull_request` is\n// populated -- excluded here, or a PR comment would be treated as a new issue.\nconst isIssueEvent = Boolean(body.issue && !body.pull_request && !issue.pull_request);\n\nconst title = pr.title || issue.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\nconst issueUrl = issue.html_url || '';\nconst issueNumber = issue.number || body.number || null;\nconst repoOwner = repo.owner?.login || repo.owner?.username || (repo.full_name || '').split('/')[0] || '';\nconst repoName = repo.name || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, APP-CONFIG-008).\n//\n// The AREA may itself be hyphenated -- `APP-CONFIG`, `CI-GATE`, `SEC-VIKUNJA`\n// are live on this board. A single `[A-Z]{2,10}-(\\d+)` truncates those to\n// `CONFIG-008` / `GATE-018` / `VIKUNJA-001`, because `\\b` lets the match restart\n// after the first hyphen. Measured 2026-09-05 over 300 real issue titles: 25 of\n// the 256 that matched were truncated, spanning five whole AREAs.\n//\n// The truncation could not surface as a failed lookup, which is why it survived:\n// `?s=` is a SUBSTRING search, so `?s=CONFIG-008` still finds a task titled\n// `APP-CONFIG-008: ...`. It surfaces only as a collision between two AREAs\n// sharing a final segment -- and by then two tickets share one key.\n//\n// Repeating the segment keeps the whole AREA. Verified over the same 300 titles:\n// the set of titles that match is IDENTICAL (256), so no event starts or stops\n// being processed; 25 of them merely carry their full key now.\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10}(?:-[A-Z]{2,10})*)-(\\d+)\\b/);\nconst taskKey = match ? match[0] : null;\nconst taskId = match ? parseInt(match[2], 10) : null;\n\n// HMAC validation: strictly fail-closed\nconst isGitHub = Boolean(headers['x-hub-signature-256']);\nconst isGitea = Boolean(headers['x-gitea-signature']);\nconst sig = headers['x-hub-signature-256'] || headers['x-gitea-signature'] || '';\nconst secret = (isGitHub && $env.GITHUB_WEBHOOK_SECRET) || (isGitea && $env.GITEA_WEBHOOK_SECRET) || $env.FORGE_WEBHOOK_SECRET || '';\nlet isValidSig = false;\n\nif (secret && sig && rawPayload) {\n  const crypto = require('crypto');\n  const hmac = crypto.createHmac('sha256', secret);\n  hmac.update(rawPayload);\n  const hexDigest = hmac.digest('hex');\n  isValidSig = (sig === 'sha256=' + hexDigest || sig === hexDigest);\n}\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\n// The create-path's trigger floor. It mirrors `add-to-project.yml`, the workflow\n// being retired, which fires on `opened` and `reopened` and nothing else -- so\n// the invariant ported here is exactly the one that existed, not a wider one.\n// `closed` and `edited` deliberately fall through to a 200 without creating:\n// creating a task from a closing issue would resurrect work, not track it.\nconst CREATE_ACTIONS = ['opened', 'reopened'];\nconst isCreateCandidate = Boolean(taskKey && isValidSig && isIssueEvent && CREATE_ACTIONS.includes(action));\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    taskId: taskId,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    issueUrl: issueUrl,\n    issueNumber: issueNumber,\n    repoOwner: repoOwner,\n    repoName: repoName,\n    isIssueEvent: isIssueEvent,\n    isCreateCandidate: isCreateCandidate,\n    hasTask: Boolean(taskKey && isValidSig),\n    isValidSig: isValidSig\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000002",
       "name": "Parse Forge Event",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-180, 0]
+      "position": [
+        -180,
+        0
+      ]
     },
     {
       "parameters": {
@@ -51,7 +57,10 @@
       "name": "Has Task Key & Valid Sig?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [40, 0]
+      "position": [
+        40,
+        0
+      ]
     },
     {
       "parameters": {
@@ -74,7 +83,10 @@
       "name": "Find Vikunja Task by Key",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [240, -100]
+      "position": [
+        240,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -84,7 +96,10 @@
       "name": "Extract Matched Task ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, -100]
+      "position": [
+        440,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -101,7 +116,10 @@
       "name": "Found Matched Task in Vikunja?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [640, -100]
+      "position": [
+        640,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -127,7 +145,10 @@
       "name": "Update Vikunja Task State",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [840, -100]
+      "position": [
+        840,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -153,7 +174,10 @@
       "name": "Append PR URL Comment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1040, -100]
+      "position": [
+        1040,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -168,7 +192,10 @@
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1240, 0]
+      "position": [
+        1240,
+        0
+      ]
     },
     {
       "parameters": {
@@ -182,7 +209,264 @@
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1440, 0]
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isIssueEvent }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "n-is-issue-event",
+      "name": "Is Issue Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        140,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isCreateCandidate }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "n-should-create-task",
+      "name": "Should Create Task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        340,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://vikunja:3456/api/v1/tasks?s={{ $json.taskKey }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "n-find-task-for-issue",
+      "name": "Find Task for Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Decide whether the issue's task already exists -- by an EXACT key match, never\n// by \"the search returned something\".\n//\n// `GET /tasks?s=` is a SUBSTRING search. The pull-request path's sibling node\n// takes `searchResults[0].id`, which is safe there only because it is looking\n// for a task it expects to find. Reused here it would be a silent bug: searching\n// `TOOL-035` also matches a task titled `TOOL-0350: ...`, so the create path\n// would conclude TOOL-035 already exists and never create it -- and answer 200.\nconst event = $('Parse Forge Event').first().json;\nconst raw = Array.isArray($json) ? $json : ($json.data || []);\nconst results = Array.isArray(raw) ? raw : [];\n\n// A search that ERRORED is not a search that found nothing. `continueOnFail` on\n// the request node turns a 401/timeout into an item carrying `error`, which is\n// indistinguishable from an empty result set unless it is checked. Creating on\n// that would duplicate a task that already exists.\nconst searchFailed = Boolean($json.error) || !Array.isArray(raw);\n\nconst key = (event.taskKey || '').toUpperCase();\nconst exact = results.filter(t => {\n  const title = (t.title || '').toUpperCase();\n  if (!key || !title.startsWith(key)) return false;\n  // Reject only a continuing DIGIT: `TOOL-035` must not match `TOOL-0350`, but\n  // must match both `TOOL-035: slug` and `TOOL-035-slug`, since the board's ID\n  // convention is `AREA-NNN-slug` and the issue title renders it `AREA-NNN: ...`.\n  return !/[0-9]/.test(title.charAt(key.length));\n});\n\n// AC1 by construction, not by convention. The key is extracted from anywhere in\n// the title, so an issue called `fix the TOOL-035 thing` would otherwise produce\n// a task whose title does not START with the key -- and `?s=` would still find\n// it, right up until a second AREA collides. Prefixing when it is absent makes\n// the join key a property of every task this path creates.\nconst rawTitle = (event.title || '').trim();\nconst taskTitle = rawTitle.toUpperCase().startsWith(key) ? rawTitle : (event.taskKey + ': ' + rawTitle);\n\nreturn [{\n  json: {\n    ...event,\n    searchFailed: searchFailed,\n    existingTaskId: exact.length > 0 ? exact[0].id : null,\n    taskAlreadyExists: exact.length > 0,\n    notCreatedReason: exact.length > 0 ? 'task already exists in vikunja' : null,\n    taskTitle: taskTitle,\n    taskDescription: '<p>Forge issue: <a href=\"' + event.issueUrl + '\">'\n      + event.repoOwner + '/' + event.repoName + '#' + event.issueNumber + '</a></p>'\n  }\n}];"
+      },
+      "id": "n-extract-issue-task-match",
+      "name": "Extract Issue Task Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.taskAlreadyExists }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "n-task-already-exists",
+      "name": "Task Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        940,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://vikunja:3456/api/v1/projects",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "n-resolve-vikunja-project",
+      "name": "Resolve Vikunja Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resolve which Vikunja project the new task belongs to, from the forge payload.\n//\n// There is NO numeric fallback. `slack-task-capture` defaults to `projectId = 1`\n// because a human typed the command and can see where it landed; nothing watches\n// a webhook, so the same default would file issues into whatever project happens\n// to be first, invisibly and forever.\n//\n// Declaring the fallback in `n8n-config` was considered and rejected: that\n// ConfigMap is a plain resource, not a `configMapGenerator` entry, and n8n reads\n// env once at container start -- so the key would change, Argo CD would report\n// Synced/Healthy, and the pod would keep the old value (lesson-404). Resolving\n// from the payload needs no new config surface at all.\n//\n// Unresolved therefore means DO NOT CREATE, and the caller answers non-2xx so\n// the forge records a failed delivery. That is the whole point: a task filed in\n// the wrong project looks exactly like a task filed correctly.\nconst event = $('Extract Issue Task Match').first().json;\nconst raw = Array.isArray($json) ? $json : ($json.data || []);\nconst projects = Array.isArray(raw) ? raw : [];\n\nconst norm = s => (s || '').toString().trim().toLowerCase();\n\n// Repository name first (a repo with its own project is the more specific\n// match), then the owning organisation -- `kubelab`, `personal`, `teledyne` are\n// the units `vikunja_reconciler.DEFAULT_NAMESPACES` declares.\nconst byName = projects.find(p => norm(p.title) === norm(event.repoName));\nconst byOwner = projects.find(p => norm(p.title) === norm(event.repoOwner));\nconst picked = byName || byOwner || null;\n\nreturn [{\n  json: {\n    ...event,\n    projectId: picked ? picked.id : null,\n    projectTitle: picked ? picked.title : null,\n    projectLookupFailed: Boolean($json.error) || !Array.isArray(raw),\n    readyToCreate: Boolean(picked && picked.id && !event.searchFailed)\n  }\n}];"
+      },
+      "id": "n-pick-project-for-repo",
+      "name": "Pick Project for Repo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.readyToCreate }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "n-ready-to-create",
+      "name": "Ready to Create?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://vikunja:3456/api/v1/projects/{{ $json.projectId }}/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.taskTitle, description: $json.taskDescription }) }}",
+        "options": {}
+      },
+      "id": "n-create-task-from-issue",
+      "name": "Create Task from Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1740,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://apprise:8000/notify/kubelab",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: '\\ud83c\\udd95 Task created: ' + $json.taskKey, body: $json.repoOwner + '/' + $json.repoName + '#' + $json.issueNumber + ' -> Vikunja project ' + $json.projectTitle + ' (' + $json.issueUrl + ')', type: 'info' }) }}",
+        "options": {}
+      },
+      "id": "n-notify-task-created",
+      "name": "Notify Task Created",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1940,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', created: true, taskKey: $json.taskKey, projectId: $json.projectId, projectTitle: $json.projectTitle }) }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "n-respond-task-created",
+      "name": "Respond Task Created",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2140,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', created: false, taskKey: $json.taskKey, existingTaskId: $json.existingTaskId || null, reason: $json.notCreatedReason || 'issue action outside the create floor' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "n-respond-issue-handled",
+      "name": "Respond Issue Handled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'blocked', created: false, taskKey: $json.taskKey, reason: $json.searchFailed ? 'vikunja task search failed -- refusing to create a possible duplicate' : 'no vikunja project matches repository ' + $json.repoOwner + '/' + $json.repoName }) }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "n-respond-create-blocked",
+      "name": "Respond Create Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1740,
+        420
+      ]
     }
   ],
   "connections": {
@@ -212,7 +496,7 @@
       "main": [
         [
           {
-            "node": "Find Vikunja Task by Key",
+            "node": "Is Issue Event?",
             "type": "main",
             "index": 0
           }
@@ -293,6 +577,144 @@
         [
           {
             "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Issue Event?": {
+      "main": [
+        [
+          {
+            "node": "Should Create Task?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Vikunja Task by Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Create Task?": {
+      "main": [
+        [
+          {
+            "node": "Find Task for Issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Issue Handled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Task for Issue": {
+      "main": [
+        [
+          {
+            "node": "Extract Issue Task Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Issue Task Match": {
+      "main": [
+        [
+          {
+            "node": "Task Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Respond Issue Handled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve Vikunja Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Vikunja Project": {
+      "main": [
+        [
+          {
+            "node": "Pick Project for Repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Project for Repo": {
+      "main": [
+        [
+          {
+            "node": "Ready to Create?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready to Create?": {
+      "main": [
+        [
+          {
+            "node": "Create Task from Issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Create Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Task from Issue": {
+      "main": [
+        [
+          {
+            "node": "Notify Task Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Task Created": {
+      "main": [
+        [
+          {
+            "node": "Respond Task Created",
             "type": "main",
             "index": 0
           }

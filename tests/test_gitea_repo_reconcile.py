@@ -86,10 +86,10 @@ DECLARED_SETTINGS = load_settings(yaml.safe_load((REPO_ROOT / "infra/config/valu
 DECLARED_WEBHOOK = load_webhook(yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text()))
 
 #: What Gitea returned in `events` after being SENT `["push", "pull_request"]` --
-#: transcribed from the live forge on 2026-09-04 (`personal/resume`), not derived.
-#: Nine entries for two declared, because Gitea expands `pull_request` into its
-#: sub-events; and the POST response and the following GET listed them in DIFFERENT
-#: orders, which is why nothing here may assume a sequence.
+#: the first NINE entries are transcribed from the live forge on 2026-09-04
+#: (`personal/resume`), not derived. Nine for two declared, because Gitea expands
+#: `pull_request` into its sub-events; and the POST response and the following GET
+#: listed them in DIFFERENT orders, which is why nothing here may assume a sequence.
 #:
 #: This fixture is the whole reason `webhook_changes` compares events as a floor. A
 #: fixture built from `DECLARED_WEBHOOK.events` would satisfy an equality comparison
@@ -105,6 +105,16 @@ GITEA_EVENT_EXPANSION: list[str] = [
     "pull_request_review_request",
     "pull_request_comment",
     "pull_request_review",
+    # NOT MEASURED, and separated from the nine above rather than blended into them.
+    # `issues` was added to the declaration by APP-CONFIG-008; no live read-back has
+    # been taken since. It is here so `converged_hook()` still means what its name
+    # says, and it is the DECLARED event alone -- Gitea very likely expands `issues`
+    # into sub-events the way it expands `pull_request`, and inventing that list
+    # would put a belief exactly where this fixture exists to hold a measurement.
+    # The floor comparison only requires the declared event to come back, so the
+    # unknown expansion cannot affect convergence either way. If a live read shows
+    # otherwise, this is the line to correct.
+    "issues",
 ]
 
 
@@ -1189,6 +1199,11 @@ def test_gitea_s_event_expansion_is_not_drift() -> None:
     forge could never converge: every run would schedule the same write and every
     `--apply` would then fail its own post-condition, permanently, on a hook that was
     entirely correct.
+
+    The fixture now carries a tenth entry, `issues`, which is declared and not
+    measured -- see its comment. That does not weaken this test: the property under
+    assertion is that a live list LARGER than the declaration is not drift, and a
+    tenth entry makes it larger still.
     """
     live = {**converged_hook(), "events": list(GITEA_EVENT_EXPANSION)}
 
@@ -1429,8 +1444,12 @@ def test_the_declared_events_cover_what_the_workflow_branches_on() -> None:
     moves a task for work landing without a pull request. Asserting equality with the
     declaration would make this test agree with whatever the declaration said,
     including nothing.
+
+    `issues` joined the floor with APP-CONFIG-008: it is the only trigger that
+    CREATES a task, so without it the create path is unreachable and every issue
+    misses the board with no failed delivery to show for it.
     """
-    assert {"push", "pull_request"} <= set(DECLARED_WEBHOOK.events)
+    assert {"push", "pull_request", "issues"} <= set(DECLARED_WEBHOOK.events)
 
 
 def test_the_plan_names_the_event_that_is_missing() -> None:

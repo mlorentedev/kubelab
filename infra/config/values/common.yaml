@@ -1166,13 +1166,22 @@ apps:
           # would fail forever on a correct hook. Measured 2026-09-04 on
           # personal/resume; see `webhook_changes`.
           #
-          # Both are needed and neither is spare: the workflow branches on
-          # pull_request `action` for the In Review / Done buckets, and falls back to
+          # All three are needed and none is spare: the workflow branches on
+          # pull_request `action` for the In Review / Done buckets, falls back to
           # head_commit.message on a push, which is the only path that moves a task
-          # for work landing without a pull request.
+          # for work landing without a pull request, and `issues` is the only
+          # trigger that CREATES a task at all (APP-CONFIG-008).
+          #
+          # `issues` is the event Gitea and GitHub both name for issue lifecycle
+          # actions; the workflow narrows it further to `opened`/`reopened`, which
+          # is exactly what the `add-to-project.yml` it retires fired on. Without
+          # it the create path is unreachable and every issue silently misses the
+          # board -- with a 200 recorded on every delivery, because there is no
+          # delivery to record.
           events:
             - push
             - pull_request
+            - issues
           branch_filter: "*"
           active: true
         organizations:
