@@ -27,10 +27,21 @@ DISK_RULES = REPO_ROOT / "infra/k8s/base/services/grafana-alerting/disk-rules.ya
 class Spy:
     """Records the order of the drill's side effects, so ordering is assertable."""
 
-    def __init__(self, *, exists: bool = False, alerts: list | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        exists: bool = False,
+        alerts: list | None = None,
+        already_firing: bool = False,
+    ) -> None:
         self.calls: list[str] = []
         self._exists = exists
         self._alerts = alerts if alerts is not None else []
+        #: The FIRST fetch is the precondition check, before anything is
+        #: created. It is separate from the polling responses because the whole
+        #: point of the check is that those two moments can differ -- on
+        #: staging they did, for ten days.
+        self._already_firing = already_firing
         #: Which delete blows up. The drill deletes twice -- once to absorb
         #: residue before creating, once to tear down -- and only the second is
         #: the teardown this module exists to guarantee. A spy that failed on
@@ -52,7 +63,10 @@ class Spy:
             raise self.delete_raises
 
     def fetch_alerts(self) -> list:
+        first = "fetch" not in self.calls
         self.calls.append("fetch")
+        if first:
+            return FIRING if self._already_firing else []
         return self._alerts
 
     @property
@@ -114,11 +128,65 @@ class TestTheClaimAlwaysGoesAway:
 
 
 def _raiser(spy: Spy, exc: BaseException):
+    """Fail on the POLL, not on the precondition check.
+
+    The precondition runs before anything is created, so a failure there leaves
+    nothing behind and proves nothing about teardown. The interesting moment is
+    the one where a claim exists and the wait blows up.
+    """
+
     def _fn():
+        first = "fetch" not in spy.calls
         spy.calls.append("fetch")
+        if first:
+            return []
         raise exc
 
     return _fn
+
+
+class TestABorrowedFiringIsNotProof:
+    """The defect this drill shipped with, found by running it (#1583).
+
+    On staging the alert had been firing for ten days on the residue the drill
+    absorbs at startup. It deleted that claim, created its own, polled once, saw
+    an alerting instance with the right name, and reported `FIRING after 0.0m`.
+    Nothing it did had caused anything.
+
+    The instance is keyed by (namespace, pvc), so a fresh claim under the same
+    name RESUMES the existing alert rather than starting a distinguishable one:
+    there is no `startsAt` that advances and no label that differs. Attribution
+    is therefore impossible after the fact, and the only honest move is to
+    refuse before the fact.
+    """
+
+    def test_it_refuses_to_measure_when_the_alert_is_already_firing(self) -> None:
+        spy = Spy(exists=True, alerts=FIRING, already_firing=True)
+        result = _run(spy)
+        assert result.measured is False
+        assert result.fired is False, "an unattributable firing must not be reported as one"
+
+    def test_it_does_not_create_a_claim_it_cannot_measure(self) -> None:
+        spy = Spy(exists=True, alerts=FIRING, already_firing=True)
+        _run(spy)
+        assert "create" not in spy.calls
+
+    def test_it_still_clears_the_residue_before_refusing(self) -> None:
+        """Refusing to measure is not refusing to clean. The run that found this
+        defect was asked to leave staging clean, and it did."""
+        spy = Spy(exists=True, alerts=FIRING, already_firing=True)
+        result = _run(spy)
+        assert "delete" in spy.calls
+        assert result.absorbed_residue is True
+
+    def test_a_quiet_start_measures_normally(self) -> None:
+        """The floor for the three above: without this, making the precondition
+        always refuse would pass all of them."""
+        spy = Spy(alerts=FIRING, already_firing=False)
+        result = _run(spy)
+        assert result.measured is True
+        assert result.fired is True
+        assert "create" in spy.calls
 
 
 class TestIdempotence:
