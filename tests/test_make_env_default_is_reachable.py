@@ -94,7 +94,18 @@ class TestNoTargetUsesTheUnreachableDefault:
 
 #: The correct form, whose presence on a recipe line means that line resolves an
 #: environment and therefore owes the expansion checks below.
-FILTER_FORM = "$(or $(filter staging prod,$(ENV))"
+#:
+#: A PATTERN rather than a literal, and the difference is not tidiness. As a
+#: literal `"$(or $(filter staging prod,$(ENV))"` this matched twelve sites and
+#: missed four -- `provision`, `maintain-notify-test`, `benchmark-disk` and
+#: `wait-node-ready` all filter `staging prod hub`, one word longer. The derived
+#: set and the table below then agreed with each other perfectly while both were
+#: blind to the same four targets, so `covers_every_site` asserted something
+#: strictly weaker than it appeared to: not "every target that resolves an
+#: environment is tested" but "every target spelling the filter exactly this way
+#: is tested". Two derivations from one blind literal cannot disagree, which is
+#: why the agreement proved nothing.
+FILTER_FORM = re.compile(r"\$\(or\s+\$\(filter\s+[a-z ]+,\$\(ENV\)\)")
 
 #: Every target that resolves an environment, with the flag it passes it under
 #: and the default it must reach. `-e` is Ansible's; `--env` is the toolkit's.
@@ -118,7 +129,22 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-node": ("-e", "prod"),
     "backup-schedule": ("-e", "prod"),
     "validate-sync": ("--env", "staging"),
+    # Invisible to this table until FILTER_FORM stopped being a literal: these
+    # four filter `staging prod hub`, so the old exact-match found neither the
+    # site nor its absence here.
+    "provision": ("-e", "staging"),
+    "maintain-notify-test": ("-e", "staging"),
+    "benchmark-disk": ("-e", "staging"),
+    "wait-node-ready": ("-e", "staging"),
 }
+
+#: Resolves an environment but passes it under no flag at all, so the
+#: `(flag, default)` model above cannot express it: `logs` interpolates the env
+#: into a kubeconfig filename (`~/.kube/kubelab-$(_ENV)-config`). It is checked
+#: by `test_logs_reaches_its_default` rather than bent into the table, and it is
+#: named here so `covers_every_site` still accounts for every derived site --
+#: an exemption that is declared is a different thing from one that is invisible.
+NO_FLAG_TARGETS: dict[str, str] = {"logs": "kubelab-staging-config"}
 
 
 def _targets_resolving_an_env() -> set[str]:
@@ -129,7 +155,7 @@ def _targets_resolving_an_env() -> set[str]:
         m = re.match(r"^([a-zA-Z0-9_-]+):", line)
         if m:
             current = m.group(1)
-        elif line.startswith("\t") and FILTER_FORM in line and current:
+        elif line.startswith("\t") and FILTER_FORM.search(line) and current:
             found.add(current)
     return found
 
@@ -155,12 +181,24 @@ class TestTheDefaultIsReachedInPractice:
         parametrised checks below silently stop covering it, which is how eight
         sites reached prod-in-name-only in the first place."""
         found = _targets_resolving_an_env()
-        assert len(found) >= 8, f"expected the Makefile to resolve envs in >=8 targets, found {found}"
-        assert found == set(ENV_TARGETS), (
+        assert len(found) >= 12, f"expected the Makefile to resolve envs in >=12 targets, found {found}"
+        covered = set(ENV_TARGETS) | set(NO_FLAG_TARGETS)
+        assert found == covered, (
             f"ENV_TARGETS is out of step with the Makefile.\n"
-            f"  in the Makefile but not tested: {sorted(found - set(ENV_TARGETS))}\n"
-            f"  tested but no longer present:   {sorted(set(ENV_TARGETS) - found)}"
+            f"  in the Makefile but not tested: {sorted(found - covered)}\n"
+            f"  tested but no longer present:   {sorted(covered - found)}"
         )
+
+    def test_logs_reaches_its_default(self) -> None:
+        """`logs` needs SVC before its recipe expands at all, which is why it
+        gets its own check rather than a row that would need a third column."""
+        out = self._expand("logs", "SVC=authelia")
+        assert NO_FLAG_TARGETS["logs"] in out, f"logs with no ENV expanded to: {out.strip()[:200]}"
+        dev = self._expand("logs", "SVC=authelia", "ENV=dev")
+        assert "kubelab-dev-config" not in dev, f"logs passed ENV=dev through: {dev.strip()[:200]}"
+        assert NO_FLAG_TARGETS["logs"] in dev
+        real = self._expand("logs", "SVC=authelia", "ENV=prod")
+        assert "kubelab-prod-config" in real, f"logs ignored ENV=prod: {real.strip()[:200]}"
 
     @pytest.mark.parametrize("target", sorted(ENV_TARGETS))
     def test_an_unset_env_reaches_the_documented_default(self, target: str) -> None:
