@@ -82,4 +82,4 @@ And when a class of failure produces no job, stop expecting a check to report it
 this way needs something that reads that field on a schedule, or it fails in
 silence for as long as nobody thinks to look.
 
-**Tags**: `#github-actions` `#reusable-workflows` `#permissions` `#startup-failure` `#observability` `#pr-1666`
+**Tags**: `#github-actions` `#reusable-workflows` `#permissions` `#startup-failure` `#observability` `#pr-1683`

@@ -85,6 +85,10 @@ def _levels(block: Any) -> dict[str, int] | None:
     return None
 
 
+def _name(level: int) -> str:
+    return next(k for k, v in LEVELS.items() if v == level)
+
+
 def _granted(ceiling: dict[str, int], scope: str) -> int:
     """What the caller actually grants for one scope.
 
@@ -143,17 +147,31 @@ def _violations_in(
             requested = _levels(callee_job.get("permissions"))
             if not requested:
                 continue
+
+            def _report(scope: str, level: int, allowed: int) -> None:
+                found.append(
+                    f"{label}{job_name} -> {job['uses']}: nested job "
+                    f"'{callee_job_name}' requests '{scope}: {_name(level)}', "
+                    f"but the caller only allows '{scope}: {_name(allowed)}'"
+                )
+
+            if "*" in requested:
+                # `write-all` / `read-all` in the CALLEE asks for that level on
+                # every scope there is, so it clears a ceiling only when the
+                # ceiling is itself a blanket at least as high. Against an
+                # explicit mapping it always overreaches: the mapping names a
+                # finite set and leaves the rest at `none`. Without this branch
+                # a callee could say `write-all` and be waved through, which is
+                # the one shape that asks for the most.
+                level = requested["*"]
+                allowed = ceiling.get("*", 0)
+                if level > allowed:
+                    _report("every scope", level, allowed)
+                continue
+
             for scope, level in requested.items():
-                if scope == "*":
-                    continue
                 if level > _granted(ceiling, scope):
-                    found.append(
-                        f"{label}{job_name} -> {job['uses']}: nested job "
-                        f"'{callee_job_name}' requests '{scope}: "
-                        f"{[k for k, v in LEVELS.items() if v == level][0]}', "
-                        f"but the caller only allows '{scope}: "
-                        f"{[k for k, v in LEVELS.items() if v == _granted(ceiling, scope)][0]}'"
-                    )
+                    _report(scope, level, _granted(ceiling, scope))
     return found
 
 
@@ -320,6 +338,36 @@ _TABLE: list[tuple[str, dict[str, Any], dict[str, Any], int]] = [
         },
         _CALLEE_ASKS_SECURITY_EVENTS,
         2,
+    ),
+    (
+        "a callee asking write-all overreaches any explicit ceiling",
+        {
+            "permissions": {"contents": "write", "security-events": "write"},
+            "jobs": {"j": {"uses": "./.github/workflows/x.yml"}},
+        },
+        {"jobs": {"n": {"permissions": "write-all"}}},
+        1,
+    ),
+    (
+        "a callee asking read-all also overreaches an explicit ceiling",
+        {
+            "permissions": {"contents": "write"},
+            "jobs": {"j": {"uses": "./.github/workflows/x.yml"}},
+        },
+        {"jobs": {"n": {"permissions": "read-all"}}},
+        1,
+    ),
+    (
+        "write-all under write-all is fine, and so is read-all under it",
+        {"permissions": "write-all", "jobs": {"j": {"uses": "./.github/workflows/x.yml"}}},
+        {"jobs": {"n": {"permissions": "write-all"}, "m": {"permissions": "read-all"}}},
+        0,
+    ),
+    (
+        "write-all under read-all is not",
+        {"permissions": "read-all", "jobs": {"j": {"uses": "./.github/workflows/x.yml"}}},
+        {"jobs": {"n": {"permissions": "write-all"}}},
+        1,
     ),
     (
         "a step-level `uses:` is not a workflow call",
