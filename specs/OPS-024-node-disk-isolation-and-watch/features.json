@@ -1,0 +1,51 @@
+[
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f1",
+    "behavior": "AC1 — an Ansible role declares the Beelink's /var/lib/docker on its own LV, sized from the SSOT, and re-runs at changed=0",
+    "verification": "make provision NODE=bee ENV=staging TAGS=storage CHECK=1 2>&1 | grep -qE 'changed=0'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f2",
+    "behavior": "AC2 — with a sacrificial LV at /var/lib/docker filled to 100%, Gitea still accepts a real write (issue created), not merely reporting healthy",
+    "verification": "scripts/verify-gitea-write-under-full-lv.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f3",
+    "behavior": "AC3 — the migration refuses to start against a target LV that already holds data, so an interrupted run cannot half-copy over a live tree",
+    "verification": ".venv/bin/python -m pytest tests/test_node_storage_migration.py -q --no-cov",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f4",
+    "behavior": "AC4 — an induced crossing above 90% on a non-K8s node reaches obs015-disk-root-saturation and make alerts shows it firing",
+    "verification": "scripts/drill-node-disk-alert.sh --node beelink --env prod",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f5",
+    "behavior": "AC5 — every node in networking.nodes is covered by a disk watcher; adding one to the SSOT without a watcher fails",
+    "verification": ".venv/bin/python -m pytest tests/test_every_node_is_disk_watched.py -q --no-cov",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f6",
+    "behavior": "AC6 — node_maintenance removes age-gated orphaned builders via the docker_reclaim planner instead of only reporting them, at changed=0 on re-run",
+    "verification": "make maintain NODE=beelink CHECK=1 2>&1 | grep -qE 'changed=0'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f7",
+    "behavior": "AC8 — no always-on node (ADR-028) relies on noDataState: OK; an always-on node that stops reporting alerts, and on-demand exemptions are declared per node",
+    "verification": ".venv/bin/python -m pytest tests/test_always_on_nodes_alert_on_no_data.py -q --no-cov",
+    "state": "pending",
+    "evidence": ""
+  }
+]
