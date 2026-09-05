@@ -92,10 +92,52 @@ class TestNoTargetUsesTheUnreachableDefault:
         )
 
 
+#: The correct form, whose presence on a recipe line means that line resolves an
+#: environment and therefore owes the expansion checks below.
+FILTER_FORM = "$(or $(filter staging prod,$(ENV))"
+
+#: Every target that resolves an environment, with the flag it passes it under
+#: and the default it must reach. `-e` is Ansible's; `--env` is the toolkit's.
+#: The defaults are NOT all prod -- `maintain` and `validate-sync` legitimately
+#: default to staging -- so a table is the only honest form. `covers_every_site`
+#: below derives the expected key set from the Makefile, so a new target cannot
+#: use the idiom without appearing here.
+ENV_TARGETS: dict[str, tuple[str, str]] = {
+    # Fixed by #1644: promised prod, ran against dev.
+    "gitea-reconcile": ("--env", "prod"),
+    "gitea-rotate-token": ("--env", "prod"),
+    "gitea-drop-empty": ("--env", "prod"),
+    "gitea-git": ("--env", "prod"),
+    "backup": ("-e", "prod"),
+    "backup-verify-destination": ("--env", "prod"),
+    "backup-verify-restic": ("--env", "prod"),
+    "backup-coverage": ("--env", "prod"),
+    # Already correct before #1644. Included as a regression net: "correct and
+    # untested" is exactly the state the eight above were in.
+    "maintain": ("-e", "staging"),
+    "backup-node": ("-e", "prod"),
+    "backup-schedule": ("-e", "prod"),
+    "validate-sync": ("--env", "staging"),
+}
+
+
+def _targets_resolving_an_env() -> set[str]:
+    """Which target owns each recipe line that resolves an environment."""
+    found: set[str] = set()
+    current: str | None = None
+    for line in MAKEFILE.read_text().splitlines():
+        m = re.match(r"^([a-zA-Z0-9_-]+):", line)
+        if m:
+            current = m.group(1)
+        elif line.startswith("\t") and FILTER_FORM in line and current:
+            found.add(current)
+    return found
+
+
 class TestTheDefaultIsReachedInPractice:
     """Expansion, not inspection. `make -n` prints the recipe without running it,
-    which needs no cluster and no forge -- and it is the only check that would
-    have caught the original bug, since the idiom *looks* right."""
+    so this needs no cluster and no forge -- and it is the only check that would
+    have caught the original bug, because the idiom *looks* right."""
 
     @staticmethod
     def _expand(target: str, *env: str) -> str:
@@ -107,22 +149,40 @@ class TestTheDefaultIsReachedInPractice:
         )
         return proc.stdout
 
-    @pytest.mark.parametrize("target", ["backup-coverage", "backup-verify-restic"])
-    def test_an_unset_env_reaches_prod(self, target: str) -> None:
-        out = self._expand(target)
-        assert "--env prod" in out, f"{target} with no ENV expanded to: {out.strip()[:200]}"
+    def test_the_table_covers_every_site(self) -> None:
+        """Derived, not hand-maintained. A target that starts resolving an
+        environment must gain an entry here, or this fails -- otherwise the
+        parametrised checks below silently stop covering it, which is how eight
+        sites reached prod-in-name-only in the first place."""
+        found = _targets_resolving_an_env()
+        assert len(found) >= 8, f"expected the Makefile to resolve envs in >=8 targets, found {found}"
+        assert found == set(ENV_TARGETS), (
+            f"ENV_TARGETS is out of step with the Makefile.\n"
+            f"  in the Makefile but not tested: {sorted(found - set(ENV_TARGETS))}\n"
+            f"  tested but no longer present:   {sorted(set(ENV_TARGETS) - found)}"
+        )
 
-    @pytest.mark.parametrize("target", ["backup-coverage", "backup-verify-restic"])
+    @pytest.mark.parametrize("target", sorted(ENV_TARGETS))
+    def test_an_unset_env_reaches_the_documented_default(self, target: str) -> None:
+        flag, default = ENV_TARGETS[target]
+        out = self._expand(target)
+        assert f"{flag} {default}" in out, f"{target} with no ENV expanded to: {out.strip()[:200]}"
+
+    @pytest.mark.parametrize("target", sorted(ENV_TARGETS))
     def test_a_nonsense_env_does_not_reach_the_command(self, target: str) -> None:
         """A distinct claim from the one above, and the one that shows `filter`
         is doing work rather than being a longer spelling of `or`: `dev` is not
-        a target for these commands and must not be passed through."""
+        a target for any of these commands and must not be passed through."""
+        flag, default = ENV_TARGETS[target]
         out = self._expand(target, "ENV=dev")
-        assert "--env dev" not in out, f"{target} passed ENV=dev through: {out.strip()[:200]}"
-        assert "--env prod" in out
+        assert f"{flag} dev" not in out, f"{target} passed ENV=dev through: {out.strip()[:200]}"
+        assert f"{flag} {default}" in out
 
-    @pytest.mark.parametrize("target", ["backup-coverage", "backup-verify-restic"])
+    @pytest.mark.parametrize("target", sorted(ENV_TARGETS))
     def test_a_real_env_is_honoured(self, target: str) -> None:
-        """Without this, a target hardcoded to `prod` would pass both tests above."""
-        out = self._expand(target, "ENV=staging")
-        assert "--env staging" in out, f"{target} ignored ENV=staging: {out.strip()[:200]}"
+        """Without this, a target hardcoded to its default would pass both tests
+        above while ignoring the operator entirely."""
+        flag, default = ENV_TARGETS[target]
+        other = "staging" if default == "prod" else "prod"
+        out = self._expand(target, f"ENV={other}")
+        assert f"{flag} {other}" in out, f"{target} ignored ENV={other}: {out.strip()[:200]}"
