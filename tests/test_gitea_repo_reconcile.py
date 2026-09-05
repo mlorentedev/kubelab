@@ -57,6 +57,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: and could never catch us having invented one (lesson-423).
 GITEA_MIGRATION_DEFAULTS: dict[str, object] = {
     "default_merge_style": "merge",
+    "has_pull_requests": True,
     "allow_merge_commits": True,
     "allow_squash_merge": True,
     "allow_rebase": True,
@@ -931,3 +932,41 @@ def test_a_partial_settings_block_is_refused() -> None:
         load_settings({"apps": {"services": {"core": {"gitea": {"repository_settings": block}}}}})
 
     assert "default_merge_style" in str(exc.value)
+
+
+def test_the_declaration_carries_the_gate_on_the_merge_fields() -> None:
+    """`has_pull_requests` is not a unit toggle here — it is what makes the rest apply.
+
+    MEASURED AGAINST PROD 2026-09-04, the same PATCH body twice against
+    `teledyne/openkm-brain`:
+
+        without has_pull_requests   200 -> 0/6 merge fields applied
+        with    has_pull_requests   200 -> 6/6 merge fields applied
+
+    Gitea applies the merge settings inside the block that updates the
+    pull-requests unit, so a payload that does not declare the unit enabled skips
+    every one of them and still answers 200.
+
+    Guarded HERE as well as by the run-time read-back, because the two catch it at
+    different costs: `ensure_settings` turns its removal into a failed reconcile
+    against the live forge, while this turns it into a failed test. Nothing about
+    the name says "load-bearing", so the field is exactly the kind a later tidy-up
+    removes as unrelated to merge behaviour.
+    """
+    payload = DECLARED_SETTINGS.to_api_payload()
+
+    assert payload.get("has_pull_requests") is True, (
+        "the merge fields below are silently inert without this; measured 0/6 applied"
+    )
+    merge_fields = {
+        "default_merge_style",
+        "allow_merge_commits",
+        "allow_squash_merge",
+        "allow_rebase",
+        "allow_rebase_explicit",
+        "allow_fast_forward_only_merge",
+        "default_delete_branch_after_merge",
+    }
+    assert merge_fields <= set(payload), (
+        "the gate is declared but the fields it gates are not; nothing is being set"
+    )

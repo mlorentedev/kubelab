@@ -138,9 +138,27 @@ class RepoSettings:
     `has_actions` IS ABSENT AND MUST STAY ABSENT: act_runner needs it, and a
     declaration that turned it off would take CI down on the repository that just
     got it (personal/resume#260).
+
+    `has_pull_requests` IS PRESENT AND MUST STAY PRESENT, and it is not here because
+    anyone wants to toggle it. It is the GATE on every other merge field. Measured
+    against prod on 2026-09-04, the same PATCH body twice on `teledyne/openkm-brain`:
+
+        without has_pull_requests   200 -> 0/6 merge fields applied
+        with    has_pull_requests   200 -> 6/6 merge fields applied
+
+    Gitea applies the merge settings inside the block that updates the
+    pull-requests UNIT, so a payload that does not say the unit is enabled skips
+    them entirely -- and answers 200 either way. This was not deduced from the
+    source: the first `--apply` against prod reported all three repositories
+    unconverged, with `has_wiki` and `has_projects` applied and every merge field
+    untouched. The post-condition is the only reason that was a red run and not a
+    green one over a forge that still merges with merge commits.
     """
 
     default_merge_style: str
+    #: The gate. See the class docstring -- removing it silently disables the six
+    #: fields below, and `ensure_settings` is what turns that silence into a failure.
+    has_pull_requests: bool
     allow_merge_commits: bool
     allow_squash_merge: bool
     allow_rebase: bool

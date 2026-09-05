@@ -68,6 +68,7 @@ GITEA_LIVE_EXTRAS: dict[str, Any] = {"has_actions": True, "default_branch": "mai
 #: is the subject.
 DECLARED_SETTINGS = RepoSettings(
     default_merge_style="squash",
+    has_pull_requests=True,
     allow_merge_commits=False,
     allow_squash_merge=True,
     allow_rebase=False,

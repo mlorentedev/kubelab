@@ -482,6 +482,11 @@ def gitea_reconcile(
         _report_machine_ownership(admin, bot_username)
         raise typer.Exit(0)
 
+    # BEFORE the forge reads, not after: a malformed or absent `repository_settings`
+    # is a fault in the declaration, and finding it out after several network round
+    # trips reports it as though the forge were involved.
+    declared_settings = load_settings(merged)
+
     try:
         # Read with the admin credential: a listing taken with the bot's token
         # reports an organization it cannot see as absent, and the plan would
@@ -507,10 +512,6 @@ def gitea_reconcile(
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
 
-    # AFTER the empty-declaration guard above, so `load_settings` can refuse an
-    # absent block unconditionally instead of carrying a "…unless nothing is
-    # declared" branch whose return value would be a fabricated declaration.
-    declared_settings = load_settings(merged)
     plan = plan_reconcile(
         declared, existing_orgs, existing_repos, existing_teams, existing_repo_settings, declared_settings
     )
@@ -525,12 +526,15 @@ def gitea_reconcile(
         # printed for weeks over three repositories whose visibility disagreed.
         if plan.visibility_drift:
             logger.warning(
-                f"nothing to create, but {len(plan.visibility_drift)} repository/ies differ from the "
+                f"nothing to do, but {len(plan.visibility_drift)} repository/ies differ from the "
                 "declaration in visibility (listed above). Reported, never changed: flipping visibility "
                 "is a disclosure decision. Reconcile the declaration or the forge by hand."
             )
             return
-        logger.success("forge matches the declaration — nothing to create")
+        # "nothing to do" and not "nothing to create": the plan now carries settings
+        # convergence as well, and a message naming only creation would read as a
+        # narrower claim than the one being made.
+        logger.success("forge matches the declaration — nothing to do")
         return
 
     if not apply:

@@ -1065,6 +1065,16 @@ apps:
         # PROVENANCE of each repository, since Gitea makes a creator repo-admin and
         # gates repository editing on repo-admin rather than on the team's `write`.
         repository_settings:
+          # THE GATE ON EVERY MERGE FIELD BELOW, not a unit anyone wants to toggle.
+          # Gitea applies the merge settings inside the block that updates the
+          # pull-requests unit, so a payload that does not declare the unit enabled
+          # skips all six — and answers 200 either way. Measured on prod
+          # 2026-09-04, the same body twice against teledyne/openkm-brain:
+          #   without has_pull_requests   200 -> 0/6 applied
+          #   with    has_pull_requests   200 -> 6/6 applied
+          # Found by the first `--apply` failing its own read-back, not by reading
+          # documentation. Remove this line and the six below become decoration.
+          has_pull_requests: true
           # Squash only, matching what GitHub enforced on `resume` before the move.
           # It is also what keeps the next merge from baking a merge commit into a
           # history that has none.
@@ -1078,15 +1088,28 @@ apps:
           allow_rebase_explicit: false
           allow_fast_forward_only_merge: false
           default_delete_branch_after_merge: true
-          # Off because there is nothing there, verified rather than assumed:
-          # `migrate_repo` asks for `wiki: true`, and `GET /wiki/pages` answers 404
-          # with `errors: ["no such file or directory"]` on all three — the route
-          # resolved and the repository was found, so that body says "this repo has
-          # no wiki", not "no such repository" (which answers `errors: null`).
-          # Hiding a tab over CONTENT would be a disclosure-shaped decision and this
-          # reconciler does not make those; hiding an empty one is removing a door
-          # to nowhere.
+          # Both off because there is nothing behind either — but the two are known
+          # to different standards, and the weaker one is labelled rather than left
+          # to inherit the stronger one's evidence by sitting next to it. Hiding a
+          # tab over CONTENT is a disclosure-shaped decision this reconciler does
+          # not make; hiding an empty one removes a door to nowhere.
+          #
+          # MEASURED. `migrate_repo` asks for `wiki: true`, and `GET
+          # /repos/{o}/{r}/wiki/pages` answers 404 with
+          # `errors: ["no such file or directory"]` on all three — the route
+          # resolved and the repository was found, so that body says "this
+          # repository has no wiki". A repository that does not exist answers the
+          # same 404 with `errors: null`, which is how the two are told apart.
           has_wiki: false
+          # ARGUED, NOT MEASURED, and Gitea 1.25 gives no way to do better: there is
+          # no `/repos/{o}/{r}/projects` API route (404 `page not found`, the
+          # route-missing shape rather than the wiki's), and the web board needs a
+          # browser session. The argument: `POST /repos/migrate`'s option list has
+          # no `projects` flag — see `GiteaClient.migrate_repo`, which enumerates
+          # every flag it sends — so no board was imported; and boards can only be
+          # created through the UI, by one of the three accounts in
+          # `apps.auth.identities`, on a forge days old. If that ever stops holding,
+          # this is the line to revisit.
           has_projects: false
         organizations:
           teledyne:
