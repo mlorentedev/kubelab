@@ -1,5 +1,5 @@
 ---
-id: lesson-433-a-stubs-canned-answer-decides-which-assertions-can-fail
+id: lesson-435-a-stubs-canned-answer-decides-which-assertions-can-fail
 type: lesson
 status: active
 created: "2026-09-05"

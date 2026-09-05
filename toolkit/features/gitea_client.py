@@ -1,9 +1,8 @@
 """A minimal Gitea API client, carrying only what the reconciler needs (TOOL-035, #1076).
 
 Scope is deliberately narrow. This speaks the endpoints `gitea_repos.execute` calls
-and nothing else -- no migration endpoints (PR2), no webhooks or branch protection
-(#503, explicitly out of scope). A client that grows ahead of its callers is a
-surface nobody tests.
+and nothing else -- no branch protection (#1633, second slice). A client that grows
+ahead of its callers is a surface nobody tests.
 
 TWO CREDENTIALS, AND WHICH ONE READS IS NOT A DETAIL. ADR-065 D1 requires the
 machine identity to own nothing, and Gitea makes the creating account the sole
@@ -83,6 +82,14 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # `/admin/actions/runners` sits under the same admin router as `list_orgs`, so
     # `read:admin` covers it. Measured 200 with that grant before this line existed.
     "list_runners": frozenset({"read:admin"}),
+    # MEASURED, not assumed, because the read and the write of a webhook sit on
+    # different credentials and it would have been easy to declare the write's scope
+    # here. `GET /repos/{o}/{r}/hooks` answered 200 with the admin token on both
+    # `personal/resume` and `teledyne/fae-brain` on 2026-09-04, while `POST` to the
+    # same path answered 403 required=[write:repository]. So the listing costs
+    # `read:repository` and nothing more -- and `write:repository`, a standing DELETE
+    # capability, stays ungranted. The write goes through basic auth instead.
+    "list_hooks": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -116,6 +123,12 @@ ADMIN_METHODS: tuple[str, ...] = (
     "edit_team",
     "add_team_member",
     "list_runners",
+    # The plan's webhook read. Listed even though `read:repository` already enters
+    # the requirement through `list_repos`: the point of this tuple is that a method
+    # the admin token performs cannot be absent from the derivation, and "its scope
+    # happens to be covered by a sibling" is a coincidence, not a rule. It is exactly
+    # how #1564's token came to authenticate and not work.
+    "list_hooks",
 )
 
 
@@ -509,6 +522,30 @@ class GiteaClient:
         """
         return list(self._paginate("/admin/actions/runners", key="runners"))
 
+    def list_hooks(self, owner: str, name: str) -> list[dict[str, Any]]:
+        """Every webhook on a repository. On the TOKEN class, unlike every write below.
+
+        THE READ AND THE WRITE SIT ON DIFFERENT CREDENTIALS HERE, which is not the
+        shape `edit_repo` has, so it is measured rather than assumed. Asking all
+        three on 2026-09-04, on both `personal/resume` and `teledyne/fae-brain` so
+        the answer is not one repository's provenance (lesson-425):
+
+            GET as admin token           -> 200, both repositories
+            GET as bot token             -> 403 "owner or a collaborator with admin
+                                            write", both repositories
+            GET as superadmin basic auth -> 200, both repositories
+
+        So the admin token's `read:repository` reaches the listing while its lack of
+        `write:repository` stops at the create -- and this method belongs here, on
+        the class the plan's other reads already use. Putting it on the basic-auth
+        class would make an ordinary plan-only run depend on the admin password,
+        which `gitea_reconcile` deliberately reads only when work is planned.
+
+        The bot cannot read them at all. That is the same repo-admin gate as
+        `edit_repo`, and the reason the plan reads the forge with `admin`.
+        """
+        return self._request("GET", f"/repos/{owner}/{name}/hooks") or []
+
 
 class GiteaBasicAuthClient(GiteaClient):
     """The subset of the API that REFUSES tokens and requires a password.
@@ -641,6 +678,45 @@ class GiteaBasicAuthClient(GiteaClient):
         repository is a caller error, and `plan_reconcile` never schedules one.
         """
         return self._request("PATCH", f"/repos/{owner}/{name}", json=dict(settings))
+
+    def create_hook(self, owner: str, name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Create a repository webhook. Same credential table as `edit_repo`, re-measured.
+
+        Not inherited from that measurement -- asked directly, on 2026-09-04, both
+        repositories, creating and immediately deleting a hook pointing at an
+        unroutable URL so nothing was ever delivered:
+
+            POST as admin token           -> 403 required=[write:repository]
+            POST as bot token             -> 403 "owner or a collaborator with admin
+                                              write of a repository"
+            POST as superadmin basic auth -> 201
+
+        The probe deliberately sent NO secret. A capability question does not need
+        one, and a delete that failed would then have left an unauthenticated
+        endpoint registered on a real repository rather than a signed one.
+
+        `payload` is Gitea's own `CreateHookOption`, passed through unmapped for the
+        same reason `edit_repo` passes `EditRepoOption` through: one vocabulary from
+        the YAML key to the wire, with nothing in between free to drift.
+        """
+        return self._request("POST", f"/repos/{owner}/{name}/hooks", json=dict(payload))
+
+    def edit_hook(self, owner: str, name: str, hook_id: int, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Update a webhook in place, preserving its id and therefore its delivery history.
+
+        CALLERS MUST SEND THE WHOLE `config`, SECRET INCLUDED, on every update. Gitea's
+        `EditHookOption.config` is a map, and whether omitting a key leaves it alone or
+        clears it is a question this codebase has NOT measured. Rather than answer it,
+        the caller is built so the question cannot arise: `gitea_repos.ensure_webhook`
+        sends the full config every time.
+
+        That is not fastidiousness. If an omitted `secret` cleared it, the hook would
+        keep delivering and n8n's `multi-forge-sync` would reject every delivery for a
+        failed signature -- and its rejection path answers HTTP 200 and drops the event
+        silently. The forge's delivery log would stay green over an integration that
+        had stopped working. Sending the secret unconditionally costs one field.
+        """
+        return self._request("PATCH", f"/repos/{owner}/{name}/hooks/{hook_id}", json=dict(payload))
 
     def revoke_token(self, username: str, token_name: str) -> bool:
         """Delete a named token. True if it was there, False if it already was not.
