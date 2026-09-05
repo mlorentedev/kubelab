@@ -134,9 +134,14 @@ repos:
       # the 14 local merges here actually are -- produces `Merge remote-tracking
       # branch 'origin/master' into X` instead, and one of them is neither form.
       #
-      # So: rebase locally rather than pressing the button, and CI stays the last
-      # line rather than the only one. Closing that route needs something neither
-      # stage can be -- tracked as #1678.
+      # So: rebase locally rather than pressing the button. And do not read the
+      # rest of this as "CI catches it" -- CI is where it SURFACES, not where it
+      # is stopped. `Tests` is not a required check on master (only `Validate`,
+      # `Detect Changes` and `review-attestation` are), so the guard goes red and
+      # the merge button stays enabled. Surfacing and blocking are different
+      # things, and every instance of this defect so far has been merged past a
+      # red `Tests`. Closing the route needs something neither stage can be --
+      # tracked as #1678, whose AC4 is exactly that gap.
       - id: lessons-index-counts
         name: Derive lesson index counters from the files
         entry: poetry run -- toolkit tools lessons-index --fix

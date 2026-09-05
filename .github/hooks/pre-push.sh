@@ -87,9 +87,11 @@ check_merged_branch "${1:-origin}"
 # local push, so neither stage is reached and the stale counter goes straight
 # to CI. Measured 2026-09-05 on #1675 (`7cc5b6fc`) and #1665 (`7d489552`).
 # An earlier version of this comment claimed the pair left CI as nothing but a
-# late backstop; for that third route CI is still the only net there is, which
-# is why #1678 exists. See `.pre-commit-config.yaml` for how to tell the routes
-# apart after the fact (read the committer, not the message).
+# late backstop. For that third route CI is the only thing left, and calling it
+# a net is generous: `Tests` is not a required check on master, so the guard
+# goes red and the merge stays available. It surfaces the defect; it does not
+# stop it. That is why #1678 exists. See `.pre-commit-config.yaml` for how to
+# tell the routes apart after the fact (read the committer, not the message).
 #
 # --check, never --fix: rewriting files mid-push would leave the working tree
 # ahead of what is being pushed.
