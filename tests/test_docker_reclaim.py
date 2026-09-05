@@ -19,6 +19,7 @@ expectation -- it matches everything (lesson 416).
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -315,12 +316,39 @@ def test_an_explicit_zero_gate_is_not_the_default() -> None:
 
 
 def test_make_passes_a_zero_gate_through_to_the_cli() -> None:
-    """The other half of the same bug: `$(if $(MIN_AGE_HOURS),...)` is Make's
+    """The other half of the same bug: `$(if $(MIN_AGE_HOURS),…)` is Make's
     truthiness, not the shell's, and `0` is a non-empty string there. Verified
-    rather than assumed — had Make swallowed it, fixing only the Python would
-    have left the lever just as unreachable."""
-    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
-    assert "$(if $(MIN_AGE_HOURS),--min-age-hours $(MIN_AGE_HOURS),)" in makefile
+    rather than assumed — had Make swallowed the 0, fixing only the Python would
+    have left the lever just as unreachable.
+
+    Asserted by asking Make what it would run (`-n` expands the recipe without
+    executing it) rather than by matching the Makefile's text. pr-agent called
+    the string match a maintenance hazard on #1665 and was right: it would have
+    gone red on a reformat that changed nothing, and — worse for a guard —
+    stayed green on a rewrite that expanded to something else entirely.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        ["make", "-n", "node-reclaim", "NODE=beelink", "MIN_AGE_HOURS=0"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--min-age-hours 0" in result.stdout
+
+    # Anti-vacuity: unset must NOT pass the flag, or the assertion above would
+    # hold for a recipe that always sends one.
+    unset = subprocess.run(
+        ["make", "-n", "node-reclaim", "NODE=beelink"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert unset.returncode == 0, unset.stderr
+    assert "--min-age-hours" not in unset.stdout
 
 
 def test_a_negative_gate_is_refused(containers: list[Container], volumes: list[str]) -> None:
