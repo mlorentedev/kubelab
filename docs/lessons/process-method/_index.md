@@ -1,6 +1,6 @@
 # How the work is run: specs, reviews, knowledge
 
-65 lessons, newest first. Back to [all categories](../_index.md).
+66 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -69,3 +69,4 @@
 | 401 | [A second commit on a branch someone else can merge is a bet you lose silently](lesson-401-a-second-commit-on-a-branch-someone-else-can-merge-is-a-bet-you-lose-silently.md) | 2026-08-26 |
 | 394 | [The ticket body is the contract; the prompt that names it is not](lesson-394-the-ticket-body-is-the-contract-not-the-prompt-that-names-it.md) | 2026-08-25 |
 | 428 | [A sample is not the population — state the frame next to the verdict](lesson-428-a-sample-is-not-the-population-say-which-frame-you-measured.md) | 2026-09-04 |
+| 433 | [A branch that only improves a message is invisible to a test that asserts only failure](lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure.md) | 2026-09-05 |
