@@ -9,6 +9,36 @@ global:
   restart_policy: unless-stopped
   base_domain: kubelab.live
 
+# ==========================================================================
+# BRANDING & DESIGN SYSTEM (IDP SSOT)
+# ==========================================================================
+branding:
+  name: "KubeLab"
+  tagline: "Internal Developer Platform"
+  organization: "mlorente.dev"
+  palette:
+    primary: "#0E7490"         # Cyan-700
+    primary_hover: "#155E75"   # Cyan-800
+    accent: "#3F51B5"          # Indigo (K8s hexagon identity)
+    accent_light: "#5C6BC0"    # Indigo-400
+    bg_dark: "#09090B"         # Zinc-950
+    surface_dark: "#18181B"    # Zinc-900
+    surface_hover: "#27272A"   # Zinc-800
+    border_dark: "rgba(255, 255, 255, 0.08)"
+    text_primary: "#F4F4F5"    # Zinc-100
+    text_secondary: "#D4D4D8"  # Zinc-300
+    text_muted: "#A1A1AA"      # Zinc-400
+  typography:
+    font_sans: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    font_mono: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace"
+  paths:
+    base: "/brand"
+    logo_svg: "/brand/logo.svg"
+    mark_svg: "/brand/mark.svg"
+    favicon_svg: "/brand/favicon.svg"
+    favicon_ico: "/brand/favicon.ico"
+    brand_css: "/brand/brand.css"
+
 # ===========================================================================
 # NETWORKING & VPN
 # ===========================================================================

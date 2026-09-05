@@ -1405,6 +1405,14 @@ sync-homepage:
 	@$(TOOLKIT) sync homepage
 	@echo "✓ Homepage config regenerated. Run 'make deploy-k8s ENV=x' to deploy."
 
+.PHONY: sync-branding
+sync-branding: ## Sync master brand CSS from common.yaml SSOT (ADR-032)
+	@$(TOOLKIT) sync branding
+
+.PHONY: sync-branding-check
+sync-branding-check: ## Verify master brand CSS is in sync with common.yaml SSOT
+	@$(TOOLKIT) sync branding --check
+
 .PHONY: sync-k8s-images
 sync-k8s-images:
 	@$(TOOLKIT) sync images

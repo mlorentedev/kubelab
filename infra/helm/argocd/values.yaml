@@ -199,10 +199,12 @@ configs:
       return hs
     # Admin local account: API key only (CLI fallback), no web login
     accounts.admin: apiKey
+    # Custom branding CSS (ADR-032)
+    ui.cssurl: "https://assets.kubelab.live/brand/brand.css"
     # OIDC via Authelia (ARGO-010) — native OIDC, no dex
     url: https://argo.kubelab.live
     oidc.config: |
-      name: Authelia
+      name: KubeLab IDP
       issuer: https://auth.kubelab.live
       clientID: argocd
       clientSecret: $oidc.authelia.clientSecret
