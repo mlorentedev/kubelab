@@ -13,15 +13,42 @@ name: Deploy Staging
 #
 # `paths: apps/**` means the promotion PR (which touches only infra/) does not
 # re-trigger this workflow — no loop.
+#
+# `workflow_dispatch` exists to VERIFY this file, not to deploy from it. A run
+# that creates jobs is the only proof that the startup failure below is gone, and
+# a push under `apps/api/**` cannot be manufactured on demand. Dispatched on
+# master the path filter finds nothing changed, so the build is skipped and the
+# run is a clean no-op — which is exactly the evidence wanted (#1666, AC1).
 on:
   push:
     branches: [master]
     paths:
       - 'apps/**'
+  workflow_dispatch:
 
+# `security-events: write` is here because `ci-publish.yml`'s `docker-build-push`
+# job asks for it, and A CALLER'S `permissions:` BLOCK IS A CEILING: every scope
+# it does not name is `none`, including for the workflows it calls. Without this
+# line GitHub refuses the run when it is created:
+#
+#   Error calling workflow '.../ci-publish.yml'. The nested job
+#   'docker-build-push' is requesting 'security-events: write', but is only
+#   allowed 'security-events: none'.
+#
+# That is a `startup_failure`: no jobs, therefore no check runs, therefore no
+# annotations and nothing red on any commit or pull request. This file failed
+# that way SIXTEEN times out of sixteen between 2026-06-18 and 2026-08-25, and
+# `apps/api/**` reached staging exactly never in those ten weeks (#1666).
+#
+# `release.yml` has always granted it and has always worked; `ci-pipeline.yml`
+# declares no ceiling at all, so the repository default applies and it works too.
+# This file was the only caller that declared a ceiling and left the scope out.
+# `tests/test_reusable_workflow_permission_ceiling.py` now asserts the relation,
+# which `actionlint` cannot: it lives between two files.
 permissions:
   contents: write
   pull-requests: write
+  security-events: write
 
 jobs:
   detect-changes:
@@ -37,6 +64,15 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@v4
         with:
+          # ci.yml's expression, for the same reason: on a `push` this is the
+          # previous master commit, which is also what the action defaults to, so
+          # push behaviour is unchanged. On a `workflow_dispatch` there is no
+          # `before`, and the fallback to `github.sha` makes the filter compare a
+          # commit against itself — no changes, build skipped, verification run
+          # stays a no-op instead of deploying whatever master happens to hold.
+          base: >-
+            ${{ github.event.before != '0000000000000000000000000000000000000000'
+            && github.event.before || github.sha }}
           filters: |
             api:
               - 'apps/api/**'
