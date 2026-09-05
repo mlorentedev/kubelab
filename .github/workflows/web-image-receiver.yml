@@ -118,9 +118,14 @@ jobs:
             # Unconditional, and safe to be: reaching this line means THIS run
             # created THIS branch. The step returns early when the promotion
             # produced no diff, and the branch is named after the tag — so a
-            # re-dispatch of an already-promoted tag never gets here. In the one
-            # case where the branch does pre-exist, `--force-with-lease` above
-            # refuses on a stale lease and the run is already red, before this.
+            # re-dispatch of an already-promoted tag never gets here.
+            #
+            # Should the branch pre-exist anyway, the push above is rejected as
+            # `stale info` and the run is red before this line: `actions/checkout`
+            # fetches only the ref it checks out, so there is no remote-tracking
+            # value for `--force-with-lease` to match against. That is the flag
+            # working *because* this checkout never fetched the branch — it is
+            # not a general guarantee, and must not be read as one.
             git push origin --delete "$BRANCH" \
               || echo "::warning::could not delete ${BRANCH}; it is now an orphan branch with no PR"
             # Still red, deliberately. An unopened staging offer is a promotion
