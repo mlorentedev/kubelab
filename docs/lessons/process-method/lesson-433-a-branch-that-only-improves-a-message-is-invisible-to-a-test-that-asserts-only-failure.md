@@ -1,4 +1,14 @@
-# Lesson 433 — A branch that only improves a message is invisible to a test that asserts only failure
+---
+id: lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure
+type: lesson
+status: active
+created: "2026-09-05"
+owner: manu
+category: process-method
+tags: [kubelab, process-method, verification, mutation-testing, app-config-004]
+---
+
+# A branch that only improves a message is invisible to a test that asserts only failure
 
 > Number: 430 and 431 are claimed by #1648, 432 by a parallel session. Taken as 433
 > after checking both, because announcing a number is not allocating one (#1334).
