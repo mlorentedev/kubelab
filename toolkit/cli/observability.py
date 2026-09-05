@@ -10,6 +10,7 @@ from typing import Annotated, Generator, Optional
 import typer
 
 from toolkit.core.logging import logger
+from toolkit.features.k8s_kubeconfig import output_path as kubeconfig_path
 from toolkit.features.observability import (
     AlertsUnavailableError,
     GrafanaAlertClient,
@@ -20,6 +21,18 @@ from toolkit.features.observability import (
     SreTriageEngine,
     kubectl_service_port_forward,
     read_cluster_secret_key,
+)
+from toolkit.features.pvc_drill import (
+    DEFAULT_TIMEOUT_S,
+    DRILL_ALERT_NAME,
+    DRILL_NAMESPACE,
+    DRILL_PVC_NAME,
+    DrillTeardownError,
+    apply_pvc,
+    delete_pvc,
+    drill_pvc_manifest,
+    pvc_exists,
+    run_drill,
 )
 
 app = typer.Typer(
@@ -348,3 +361,66 @@ def triage_cmd(
         typer.echo(f"\nRecent Error Logs ({len(report['sample_errors'])} sample lines):")
         for err in report["sample_errors"]:
             typer.echo(f"  {err}")
+
+
+@app.command("drill-pvc-unbound")
+def drill_pvc_unbound_cmd(
+    env: Annotated[
+        str,
+        typer.Option(
+            "--env",
+            "-e",
+            help=(
+                "Cluster to drill. Against prod this fires a REAL alert into the "
+                "operator's channel — that is what a drill does, but do it knowingly."
+            ),
+        ),
+    ] = "staging",
+    timeout_minutes: Annotated[
+        int,
+        typer.Option(
+            "--timeout-minutes",
+            help="How long to wait for the alert. The rule needs ~45m worst case.",
+        ),
+    ] = DEFAULT_TIMEOUT_S // 60,
+) -> None:
+    """Prove `obs015-pvc-unbound-failure` fires, and remove the claim afterwards.
+
+    The removal is not a second command and not a runbook step: it is a
+    `finally` in the same call, so interrupting the wait still cleans up. See
+    `toolkit/features/pvc_drill.py` for why that matters (#1583).
+    """
+    kubeconfig = str(kubeconfig_path(env))
+    manifest = drill_pvc_manifest()
+
+    with _grafana_client(env) as client:
+        try:
+            result = run_drill(
+                exists=lambda: pvc_exists(kubeconfig, DRILL_PVC_NAME, DRILL_NAMESPACE),
+                create=lambda: apply_pvc(kubeconfig, manifest, DRILL_NAMESPACE),
+                delete=lambda: delete_pvc(kubeconfig, DRILL_PVC_NAME, DRILL_NAMESPACE),
+                fetch_alerts=client.get_alerts,
+                timeout_s=timeout_minutes * 60,
+                log=typer.echo,
+            )
+        except DrillTeardownError as exc:
+            # The one failure that leaves the cluster worse than it found it.
+            typer.echo(f"✗ {exc}", err=True)
+            raise typer.Exit(2) from exc
+
+    if result.absorbed_residue:
+        typer.echo("  (a claim from an earlier run was present and has been cleared)")
+
+    if not result.fired:
+        typer.echo(
+            f"✗ {DRILL_ALERT_NAME} did not fire within {timeout_minutes}m. "
+            "The claim is gone; the rule is what needs looking at.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    typer.echo(
+        f"✓ {DRILL_ALERT_NAME} fired and the claim is removed. "
+        "The alert instance resolves on its own in roughly 30-45m — "
+        "the rule reads a [30m] window on a 15m interval."
+    )

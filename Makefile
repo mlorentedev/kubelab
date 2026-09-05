@@ -1599,6 +1599,24 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Prove `obs015-pvc-unbound-failure` still fires, without leaving the claim
+# behind afterwards (#1583). The teardown lives in the command's own `finally`,
+# so there is no `drill-...-down` target here on purpose: a second target is a
+# step someone has to remember, and the ten days of `ac2-drill-unbound` in
+# staging are what that costs.
+#
+# Defaults to STAGING, unlike `alerts` above — this one CREATES a condition and
+# fires a real alert, so the safe default is the environment that is not the
+# monitoring of record. Same `$(filter)` idiom for the same reason (`$(or ...)`
+# cannot work; see the comment on `alerts` and #1644).
+#
+# Expect it to take up to 45 minutes: `for: 15m` on a 15m group reading a [30m]
+# window, and the claim only reaches Loki on the next disk-watcher run.
+.PHONY: drill-pvc-unbound
+drill-pvc-unbound:
+	$(eval _ENV := $(if $(filter staging prod,$(ENV)),$(ENV),staging))
+	@$(TOOLKIT) obs drill-pvc-unbound --env $(_ENV) $(if $(TIMEOUT_MINUTES),--timeout-minutes $(TIMEOUT_MINUTES),)
+
 .PHONY: deploy-k8s
 deploy-k8s: apply-secrets apply-middleware-secrets provision-postgres-tenant validate-sync
 	@test -n "$(ENV)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
