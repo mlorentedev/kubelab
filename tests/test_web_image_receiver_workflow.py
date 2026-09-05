@@ -62,6 +62,9 @@ def _step() -> dict:
 _GH_STUB = """#!/usr/bin/env bash
 echo "$*" >> "$GH_CALLS"
 case "$*" in
+  *"/pulls?state=open&head="*)
+      if [ "${STUB_LOOKUP:-}" = "fail" ]; then exit 1; fi
+      printf '%s\\n' "${STUB_EXISTING_PR:-}" ;;
   *"-X POST"*"/pulls"*)
       if [ -n "${STUB_CREATE_FAILS:-}" ]; then
         echo "GraphQL: API rate limit already exceeded for user ID 13562150." >&2
@@ -169,6 +172,8 @@ def _run_step(
         "TAG": TAG,
         "STUB_CREATE_FAILS": "",
         "STUB_STALE_PR": STALE_PR,
+        "STUB_EXISTING_PR": "",
+        "STUB_LOOKUP": "",
         **scenario,
     }
     # `bash -e`, because that is what GitHub Actions uses for `run:` (`bash -e
@@ -310,6 +315,63 @@ def test_a_failed_create_does_not_close_the_previous_staging_offer(
         f"a stale staging PR was closed although the new one was never opened: "
         f"{calls!r}"
     )
+
+
+# --- but only when the absence of a pull request is confirmed ---------------
+
+
+@_needs_bash
+def test_a_branch_is_kept_when_the_failed_create_actually_created_the_pr(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A non-zero exit says the CALL failed, not that GitHub refused.
+
+    A timeout or a 502 arriving after the pull request was accepted is
+    indistinguishable here. Deleting the branch then closes a live PR and drops
+    the promotion with nothing left to recover it from — silently, and strictly
+    worse than the orphan branch this change exists to remove. Raised by review
+    on #1660 rather than found by measurement.
+    """
+    work, remote = _clone_with_remote(tmp_path)
+    _promote(work)
+    proc, _ = _run_step(
+        tmp_path,
+        work,
+        STUB_CREATE_FAILS="1",
+        STUB_EXISTING_PR="https://github.com/mlorentedev/kubelab/pull/4242",
+    )
+
+    assert BRANCH in _remote_branches(remote), (
+        "the branch of a LIVE pull request was deleted. GitHub closes a PR whose "
+        "head ref disappears, so this trades an orphan branch for a dropped "
+        "promotion and no way back to it."
+    )
+    assert proc.returncode != 0, "an ambiguous create must still fail the run"
+
+
+@_needs_bash
+def test_a_branch_is_kept_when_the_reconciliation_cannot_answer(
+    tmp_path: pathlib.Path,
+) -> None:
+    """"Cannot tell" is not "absent", and must not be rounded to it.
+
+    The lookup shares the REST bucket with the create, so the exhaustion that
+    broke one can break the other. Same shape as the closing-refs guard's third
+    exit code: an unanswerable question read as a clean answer is how a guard
+    becomes the thing it was built to prevent.
+    """
+    work, remote = _clone_with_remote(tmp_path)
+    _promote(work)
+    proc, _ = _run_step(
+        tmp_path, work, STUB_CREATE_FAILS="1", STUB_LOOKUP="fail"
+    )
+
+    assert BRANCH in _remote_branches(remote), (
+        "the branch was deleted although nothing could confirm the pull request "
+        "was absent. The recoverable failure is keeping it; the unrecoverable one "
+        "is deleting it under a PR that exists."
+    )
+    assert proc.returncode != 0, "an undeterminable outcome must still fail the run"
 
 
 # --- and nothing happens at all when there is nothing to promote ------------
