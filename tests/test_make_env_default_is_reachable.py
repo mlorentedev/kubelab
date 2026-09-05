@@ -247,11 +247,20 @@ class TestTheDefaultIsReachedInPractice:
         parametrised checks below silently stop covering it, which is how eight
         sites reached prod-in-name-only in the first place."""
         found = _targets_resolving_an_env()
-        # 15, and the number is chosen against a specific regression rather than
-        # picked for headroom. The blind literal this pattern replaced derived
-        # exactly 12, so a floor of 12 would sit AT the defective value and let
-        # a revert to it pass -- an anti-vacuity floor that cannot fail for the
-        # one cause it exists to catch. Above 12 and below the current 19.
+        # A NAMED floor before the counted one, because a count is the weaker
+        # claim: trimming the table to match a narrowed pattern satisfies the
+        # equality below, and that is not hypothetical -- it is what the blind
+        # literal was doing. One site per spelling the pattern must recognise,
+        # so a regression in FILTER_FORM fails here whatever the totals say.
+        for site, spelling in (
+            ("backup-coverage", "$(or $(filter staging prod,...))"),
+            ("provision", "$(or $(filter staging prod hub,...))"),
+            ("alerts", "$(if $(filter ...),$(ENV),...)"),
+        ):
+            assert site in found, f"FILTER_FORM no longer recognises {spelling} -- {site} left the derived set"
+        # 15, and chosen against a specific regression rather than for headroom:
+        # the blind literal derived exactly 12, so a floor of 12 would sit AT the
+        # defective value and let a revert to it pass. Above 12, below today's 19.
         assert len(found) >= 15, f"expected the Makefile to resolve envs in >=15 targets, found {found}"
         covered = set(ENV_TARGETS) | set(NO_FLAG_TARGETS)
         assert found == covered, (
@@ -261,9 +270,15 @@ class TestTheDefaultIsReachedInPractice:
         )
 
     def test_logs_reaches_its_default(self) -> None:
-        """`logs` passes the resolved env under no flag, so the `(flag, default)`
-        rows cannot express it. It needs `SVC` before the interesting line
-        expands, which is why it is spelled out rather than parametrised."""
+        """`logs` passes the resolved env under no flag -- it interpolates it
+        into a kubeconfig filename -- so the `(flag, default)` rows cannot
+        express it. That shape, and nothing else, is why it sits apart.
+
+        An earlier version of this docstring claimed `logs` "needs SVC before
+        its recipe expands at all". It does not: `make -n logs` with no SVC
+        prints `test -n "" || (echo Usage...)` AND the kubectl line after it,
+        because `make -n` expands a recipe without running its guard. `SVC` is
+        passed below only to match how the target is really invoked."""
         out = self._expand("logs", "SVC=authelia")
         assert NO_FLAG_TARGETS["logs"] in out, f"logs with no ENV expanded to: {out.strip()[:200]}"
         dev = self._expand("logs", "SVC=authelia", "ENV=dev")
