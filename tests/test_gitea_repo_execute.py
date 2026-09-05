@@ -1463,6 +1463,15 @@ def test_a_write_that_is_accepted_and_stores_nothing_is_a_failure() -> None:
     """The post-condition, and the reason `ensure_webhook` re-reads instead of trusting.
 
     A 2xx says the request was accepted, never that the hook exists afterwards.
+
+    THE MESSAGE IS ASSERTED, NOT JUST THE FAILURE, and that is the whole value of
+    this test. Mutation testing found it: neutering the `live is None` branch left
+    every test green, because a hook that is absent also fails the field comparison
+    one line down and raises anyway. So the branch is redundant for FAILING and
+    exists only for its diagnostic -- "the hook was created against a different URL,
+    or something removed it" is a different investigation from "these three fields
+    disagree". A test that checked `not report.ok` covered a branch it could not
+    distinguish, which is the same shape as every other finding this week.
     """
     admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
     configurator.refuse_hook_write()
@@ -1480,6 +1489,10 @@ def test_a_write_that_is_accepted_and_stores_nothing_is_a_failure() -> None:
 
     assert not report.ok
     assert report.repos_hooked == []
+    message = next(msg for target, msg in report.failures if target == "hook personal/resume")
+    assert "has no webhook pointing at" in message, (
+        "the absent-hook branch must report its own diagnosis, not fall through to a field diff"
+    )
 
 
 def test_gitea_s_event_expansion_is_not_read_as_a_failed_write(
