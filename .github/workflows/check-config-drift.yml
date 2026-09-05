@@ -128,7 +128,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          # Full history, not the depth-1 default: `platform-json` derives
+          # `source_commit`/`generated_at` from `git log -1 -- common.yaml`
+          # (platform_manifest.py:_get_commit_provenance). In a shallow clone
+          # that log can only answer with the tip, so the manifest regenerates
+          # against the wrong commit and the check reports drift that does not
+          # exist. Measured: depth-1 returns the branch tip, full history
+          # returns 6c4e283e, which is what the committed file carries. The
+          # other depth-1 jobs in this file do not run the sync set.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
