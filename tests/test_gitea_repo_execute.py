@@ -46,9 +46,36 @@ from toolkit.features.gitea_repos import (
     TEAM_PERMISSION,
     DeclaredRepo,
     ReconcilePlan,
+    RepoSettings,
+    RepoSettingsError,
+    SettingsChange,
     TeamPermissionError,
+    ensure_settings,
     ensure_team,
     execute,
+)
+
+#: Live-body keys the declaration does NOT manage, carried by the fake so a
+#: comparison that wrongly ranged over the whole repository body instead of over the
+#: declared fields would be visible here rather than passing.
+GITEA_LIVE_EXTRAS: dict[str, Any] = {"has_actions": True, "default_branch": "main"}
+
+#: The settings every `execute` in this file is handed. A literal rather than the
+#: SSOT: these tests are about WHICH CLIENT performs the PATCH and what happens when
+#: it does not take, and pinning them to common.yaml would make an unrelated
+#: declaration edit fail them for a reason that has nothing to do with what they
+#: assert. The SSOT is read in `test_gitea_repo_reconcile.py`, where the declaration
+#: is the subject.
+DECLARED_SETTINGS = RepoSettings(
+    default_merge_style="squash",
+    allow_merge_commits=False,
+    allow_squash_merge=True,
+    allow_rebase=False,
+    allow_rebase_explicit=False,
+    allow_fast_forward_only_merge=False,
+    default_delete_branch_after_merge=True,
+    has_wiki=False,
+    has_projects=False,
 )
 
 
@@ -72,6 +99,7 @@ class FakeClient:
         # False forever, which is what the knob models.
         self._includes_all_repositories = includes_all_repositories
         self._teams: dict[tuple[str, str], dict[str, Any]] = {}
+        self._repos: dict[tuple[str, str], dict[str, Any]] = {}
 
     def create_org(self, name: str) -> dict[str, Any]:
         self.calls.append(("create_org", name))
@@ -195,8 +223,43 @@ class FakeClient:
         self.calls.append(("add_team_member", f"{team_id}:{username}"))
         return {}
 
+    def edit_repo(self, owner: str, name: str, settings: Any) -> dict[str, Any]:
+        """Applies what it was sent, and records it.
+
+        THE RECORDED VALUE IS THE PAYLOAD, not the repository name, because the
+        assertion worth making is that the whole declaration went out. A fake that
+        recorded only the target would pass for an `execute` that sent one field.
+        """
+        self.calls.append(("edit_repo", f"{owner}/{name}", dict(settings)))
+        self._repos.setdefault((owner, name), dict(GITEA_LIVE_EXTRAS)).update(settings)
+        return self._repos[(owner, name)]
+
+    def get_repo(self, owner: str, name: str) -> dict[str, Any] | None:
+        self.calls.append(("get_repo", f"{owner}/{name}"))
+        return self._repos.get((owner, name))
+
+    def refuse_repo_edit(self) -> None:
+        """Model a forge that answers 200 and applies nothing.
+
+        THE SAME REASON `refuse_widening` EXISTS, one object over: the settings
+        check in `ensure_settings` is a POST-CONDITION, so on a fake whose PATCH
+        works it can never fire, and a test asserting "a PATCH that does not take is
+        a failure" would quietly become "a PATCH takes".
+
+        It is a state Gitea can genuinely be in. A 200 from `PATCH /repos/{o}/{r}`
+        says the request was accepted, never that every field in it was applied --
+        which is the entire reason the code re-reads instead of trusting the
+        response.
+        """
+
+        def _refuse(owner: str, name: str, settings: Any) -> dict[str, Any]:
+            self.calls.append(("edit_repo", f"{owner}/{name}", dict(settings)))
+            return self._repos.setdefault((owner, name), dict(GITEA_LIVE_EXTRAS))
+
+        self.edit_repo = _refuse  # type: ignore[method-assign]
+
     def kinds(self) -> set[str]:
-        return {kind for kind, _ in self.calls}
+        return {call[0] for call in self.calls}
 
 
 def _plan() -> ReconcilePlan:
@@ -215,7 +278,7 @@ def test_organizations_are_created_by_the_admin_client(monkeypatch: pytest.Monke
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    execute(_plan(), admin, bot, bot_username="hefesto")
+    execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert ("create_org", "personal") in admin.calls
     assert "create_org" not in bot.kinds(), (
@@ -228,7 +291,7 @@ def test_repositories_are_created_by_the_bot_client(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    execute(_plan(), admin, bot, bot_username="hefesto")
+    execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert ("create_repo", "personal/resume") in bot.calls
     assert "create_repo" not in admin.kinds(), (
@@ -241,7 +304,7 @@ def test_the_bot_is_added_to_a_write_team(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    report = execute(_plan(), admin, bot, bot_username="hefesto")
+    report = execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert ("add_team_member", "7:hefesto") in admin.calls
     assert report.teams_ensured == ["personal"]
@@ -252,7 +315,7 @@ def test_a_report_is_not_a_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    report = execute(_plan(), admin, bot, bot_username="hefesto")
+    report = execute(_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert report.orgs_created == ["personal"]
     assert report.repos_created == ["personal/resume"]
@@ -269,7 +332,7 @@ def test_execute_never_deletes(monkeypatch: pytest.MonkeyPatch) -> None:
     admin, bot = FakeClient("admin"), FakeClient("bot")
     plan = ReconcilePlan(undeclared_orgs=("legacy",), undeclared_repos=("legacy/old",))
 
-    execute(plan, admin, bot, bot_username="hefesto")
+    execute(plan, admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert admin.calls == [] and bot.calls == [], (
         "a plan containing only strays produced API calls. Strays are reported, never acted on (#1076 scope)."
@@ -417,7 +480,7 @@ def test_one_failed_org_does_not_stop_the_others() -> None:
     """
     admin, bot = BrokenOrgClient("admin", refuse="personal"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto")
+    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert ("create_org", "teledyne") in admin.calls, "a later organization was skipped after an earlier one failed"
     assert report.orgs_created == ["teledyne"]
@@ -433,7 +496,7 @@ def test_a_failed_orgs_repositories_are_skipped_not_failed() -> None:
     """
     admin, bot = BrokenOrgClient("admin", refuse="personal"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto")
+    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert ("create_repo", "personal/resume") not in bot.calls
     assert ("create_repo", "teledyne/fae-brain") in bot.calls
@@ -449,7 +512,7 @@ def test_the_failure_message_keeps_gitea_s_own_diagnostics() -> None:
     """
     admin, bot = BrokenOrgClient("admin", refuse="personal"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto")
+    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     _, reason = report.failures[0]
     assert "write:organization" in reason
@@ -459,7 +522,7 @@ def test_a_run_with_no_failures_reports_ok() -> None:
     """The control: `ok` must be capable of being True, or the guards above prove nothing."""
     admin, bot = FakeClient("admin"), FakeClient("bot")
 
-    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto")
+    report = execute(_two_org_plan(), admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS)
 
     assert report.ok and report.failures == []
 
@@ -495,7 +558,7 @@ def test_a_migration_is_performed_by_the_migrator_never_by_a_token_client():
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=migrator)
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=migrator, declared_settings=DECLARED_SETTINGS)
 
     assert report.repos_migrated == ["personal/resume"]
     assert report.ok
@@ -517,7 +580,7 @@ def test_a_migration_without_a_migrator_is_refused_rather_than_attempted_with_a_
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=None)
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=None, declared_settings=DECLARED_SETTINGS)
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -537,7 +600,7 @@ def test_a_migration_without_a_credential_fails_loudly_rather_than_running_open(
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token=None, migrator=FakeClient("m"))
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token=None, migrator=FakeClient("m"), declared_settings=DECLARED_SETTINGS)
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -558,7 +621,7 @@ def test_an_organization_receiving_only_a_migration_still_gets_the_write_team():
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"))
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"), declared_settings=DECLARED_SETTINGS)
 
     assert report.teams_ensured == ["personal"]
 
@@ -575,7 +638,7 @@ def test_an_unknown_migration_service_is_refused_before_the_call():
         repos_to_migrate=(DeclaredRepo(org="personal", name="resume", migrate_from="bitbucket:someone/resume"),)
     )
 
-    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"))
+    report = execute(plan, admin, bot, bot_username="hefesto", migration_token="TOKEN", migrator=FakeClient("m"), declared_settings=DECLARED_SETTINGS)
 
     assert not report.ok
     assert report.repos_migrated == []
@@ -712,7 +775,7 @@ def test_a_team_repair_runs_on_an_organization_receiving_nothing() -> None:
         admin,
         bot,
         bot_username="hefesto",
-    )
+        declared_settings=DECLARED_SETTINGS)
 
     assert report.ok, f"the repair failed: {report.failures}"
     assert ("edit_team", TEAM_NAME) in admin.calls, (
@@ -742,8 +805,242 @@ def test_a_team_repair_is_skipped_when_its_organization_could_not_be_created() -
         admin,
         bot,
         bot_username="hefesto",
-    )
+        declared_settings=DECLARED_SETTINGS)
 
     assert not report.ok
     assert [target for target, _ in report.failures] == ["org personal"]
     assert "create_team" not in admin.kinds() and "edit_team" not in admin.kinds()
+
+
+# ---------------------------------------------------------------------------
+# Repository settings (TOOL-063, #1633)
+#
+# The same two questions the rest of this file asks, on the second operation no
+# token may perform: which credential performs it, and does the code believe the
+# response or read the state back.
+# ---------------------------------------------------------------------------
+
+
+def _settings_plan() -> ReconcilePlan:
+    return ReconcilePlan(
+        repos_to_configure=(
+            SettingsChange(
+                org="personal",
+                name="resume",
+                changes=(("default_merge_style", "merge", "squash"),),
+            ),
+        )
+    )
+
+
+def test_settings_are_applied_by_the_configurator_never_by_a_token_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Measured 2026-09-04: no token may do this, and one of them must never be able to.
+
+    `admin_token` is refused at the scope layer (`required=[write:repository]`), a
+    scope this line of work keeps off it because it is a standing DELETE capability.
+    The bot is refused by repo permission on every repository it did not itself
+    create. So the call belongs to the superadmin's basic-auth client, and asserting
+    that HERE is what stops a later edit from routing it through the token clients
+    already in scope -- which would work in a test with a permissive fake and fail
+    against the forge.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    report = execute(
+        _settings_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        configurator=configurator,
+    )
+
+    assert report.repos_configured == ["personal/resume"]
+    assert "edit_repo" not in admin.kinds(), "the admin token is refused by scope; it must not be tried"
+    assert "edit_repo" not in bot.kinds(), "the bot is only repo-admin where it created the repository"
+    assert ("edit_repo", "personal/resume", DECLARED_SETTINGS.to_api_payload()) in configurator.calls
+
+
+def test_the_whole_declaration_is_sent_not_only_the_fields_that_drifted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The plan carries a diff; the PATCH carries the declaration.
+
+    Sending only the drifted fields would be defensible right up to the first
+    concurrent change, and it would make the post-condition weaker than the
+    declaration: a field that had drifted between the read and the write would go
+    unsent and unchecked. The plan's diff exists to make the printed plan
+    reviewable, not to narrow what is applied.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    configurator = FakeClient("configurator")
+
+    execute(
+        _settings_plan(),
+        FakeClient("admin"),
+        FakeClient("bot"),
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        configurator=configurator,
+    )
+
+    sent = next(call[2] for call in configurator.calls if call[0] == "edit_repo")
+    assert sent == DECLARED_SETTINGS.to_api_payload()
+    assert len(sent) > 1, "only the drifted field was sent; the plan's diff is not the payload"
+
+
+def test_settings_without_a_configurator_are_refused_rather_than_attempted_with_a_token() -> None:
+    """Fail loudly, and say which credential is needed.
+
+    The alternative -- falling back to a token client -- is what the measurement
+    forbids, and it would fail with a 403 whose text points at scopes rather than at
+    the missing argument.
+    """
+    report = execute(
+        _settings_plan(),
+        FakeClient("admin"),
+        FakeClient("bot"),
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        configurator=None,
+    )
+
+    assert not report.ok
+    assert [target for target, _ in report.failures] == ["settings personal/resume"]
+    assert "GiteaBasicAuthClient" in report.failures[0][1]
+    assert report.repos_configured == []
+
+
+def test_a_patch_that_is_accepted_and_does_nothing_is_a_failure() -> None:
+    """The whole reason `ensure_settings` re-reads instead of trusting the 200.
+
+    Gitea answers 200 to a PATCH whose fields it did not apply. Without the
+    read-back the run would report a converged forge that still merges with merge
+    commits -- and the NEXT run would find the same drift and report success again,
+    forever. That is not a failing reconciler, it is one that cannot fail.
+    """
+    configurator = FakeClient("configurator")
+    configurator.refuse_repo_edit()
+
+    report = execute(
+        _settings_plan(),
+        FakeClient("admin"),
+        FakeClient("bot"),
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        configurator=configurator,
+    )
+
+    assert not report.ok
+    assert report.repos_configured == [], "a repository that did not converge must not be reported as configured"
+    reason = report.failures[0][1]
+    assert "did not converge" in reason
+    assert "default_merge_style" in reason, "the failure must name the fields, not just the repository"
+
+
+def test_ensure_settings_raises_its_own_category() -> None:
+    """A distinct exception, for the same reason `TeamPermissionError` is one.
+
+    The failure is silent by nature -- a successful request that changed nothing --
+    so it must not arrive as a generic error indistinguishable from a network fault.
+    """
+    configurator = FakeClient("configurator")
+    configurator.refuse_repo_edit()
+
+    with pytest.raises(RepoSettingsError):
+        ensure_settings(
+            configurator,  # type: ignore[arg-type]
+            SettingsChange(org="personal", name="resume"),
+            DECLARED_SETTINGS,
+        )
+
+
+def test_a_repository_whose_migration_failed_is_not_configured() -> None:
+    """One root cause, one reported failure.
+
+    A repository whose migration failed does not exist, so PATCHing it would add a
+    second failure naming a symptom -- `404` -- while the cause sits above it in the
+    same report. Same quarantine as `failed_orgs`, one level down.
+    """
+
+    class RefusingMigrator(FakeClient):
+        def migrate_repo(self, org: str, name: str, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(("migrate_repo", f"{org}/{name}"))
+            raise RuntimeError("migration refused")
+
+    migrator = RefusingMigrator("migrator")
+    configurator = FakeClient("configurator")
+    repo = DeclaredRepo(org="personal", name="resume", migrate_from="github:mlorentedev/resume")
+
+    report = execute(
+        ReconcilePlan(
+            repos_to_migrate=(repo,),
+            repos_to_configure=(SettingsChange(org="personal", name="resume", absent=True),),
+        ),
+        FakeClient("admin"),
+        FakeClient("bot"),
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        migration_token="TOKEN",
+        migrator=migrator,
+        configurator=configurator,
+    )
+
+    assert [target for target, _ in report.failures] == ["repo personal/resume"]
+    assert "edit_repo" not in configurator.kinds()
+
+
+def test_a_repository_created_by_this_run_is_configured_by_this_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings run AFTER the creates, and reach what the same run brought into being.
+
+    A repository arrives with Gitea's permissive defaults however it got there, so
+    scoping this step to repositories that already existed would leave every new one
+    unconfigured until the next run -- lesson-424's shape read backwards. The
+    ordering is what makes it work: PATCHing before the create would 404.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    bot = FakeClient("bot")
+    configurator = FakeClient("configurator")
+
+    report = execute(
+        ReconcilePlan(
+            repos_to_create=(DeclaredRepo(org="personal", name="brand-new"),),
+            repos_to_configure=(SettingsChange(org="personal", name="brand-new", absent=True),),
+        ),
+        FakeClient("admin"),
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        configurator=configurator,
+    )
+
+    assert report.repos_created == ["personal/brand-new"]
+    assert report.repos_configured == ["personal/brand-new"]
+
+
+def test_the_report_distinguishes_configured_from_created() -> None:
+    """`ExecutionReport` is an observation, and the two are different observations.
+
+    A run whose only work was a settings repair produces no created repository and
+    no created organization; collapsing the fields would make it indistinguishable
+    from a run that did nothing at all.
+    """
+    configurator = FakeClient("configurator")
+
+    report = execute(
+        _settings_plan(),
+        FakeClient("admin"),
+        FakeClient("bot"),
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        configurator=configurator,
+    )
+
+    assert report.repos_configured == ["personal/resume"]
+    assert report.repos_created == [] and report.orgs_created == [] and report.repos_migrated == []
+    assert report.ok

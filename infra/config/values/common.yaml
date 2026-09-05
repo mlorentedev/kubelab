@@ -1030,6 +1030,64 @@ apps:
         # browser session (the same reasoning as Vikunja, ADR-066 D3). So the line is
         # held by `GITEA__service__REQUIRE_SIGNIN_VIEW: "true"` alone. See
         # SEC-GITEA-001 (#1389), whose title predates the forge having any content.
+        # Repository settings, applied to EVERY declared repository (TOOL-063 #1633).
+        #
+        # WHY THIS BLOCK EXISTS. `POST /repos/migrate` carries code, issues, pull
+        # requests, labels, milestones and releases. It does NOT carry repository
+        # settings — so a migrated repository does not arrive UNCONFIGURED, it
+        # arrives CONFIGURED DIFFERENTLY and more weakly than the one it replaced.
+        # Those are not the same problem: the first shows up as an empty field, the
+        # second reads as a working repository. Measured on all three declared
+        # repositories 2026-09-04, every one of them:
+        #
+        #   default_merge_style                 merge   <- GitHub's copy is squash-only
+        #   allow_merge_commits                 True
+        #   allow_rebase / _explicit            True
+        #   allow_fast_forward_only_merge       True
+        #   default_delete_branch_after_merge   False
+        #
+        # Keys are Gitea's own `EditRepoOption` field names, so this block, the
+        # `RepoSettings` dataclass and the PATCH body are ONE vocabulary with no
+        # mapping layer between them to drift. Every field is declared explicitly;
+        # `toolkit.features.gitea_repos.load_settings` refuses a partial block and
+        # refuses an absent one, because a settings block that defaulted would
+        # converge the forge onto exactly the permissive state above, silently.
+        #
+        # `has_actions` IS DELIBERATELY ABSENT and must stay absent: act_runner needs
+        # it, and declaring it off would take CI down on the repository that only
+        # just got it (personal/resume#260, six of six jobs green).
+        #
+        # Applied by `GiteaBasicAuthClient`, not by a token. Measured the same day
+        # with a no-op PATCH against all three: admin token 403 on every one
+        # (required=[write:repository], a scope this line of work keeps off it
+        # because it is a standing DELETE capability); bot token 403 on the two it
+        # did not create and 200 on the one it did — the difference being the
+        # PROVENANCE of each repository, since Gitea makes a creator repo-admin and
+        # gates repository editing on repo-admin rather than on the team's `write`.
+        repository_settings:
+          # Squash only, matching what GitHub enforced on `resume` before the move.
+          # It is also what keeps the next merge from baking a merge commit into a
+          # history that has none.
+          default_merge_style: squash
+          allow_merge_commits: false
+          allow_squash_merge: true
+          # Both rebase modes off: `allow_rebase` is rebase-then-fast-forward and
+          # `allow_rebase_explicit` is rebase-then-merge-commit. Two names, one
+          # decision — leaving either on reopens the button this block closes.
+          allow_rebase: false
+          allow_rebase_explicit: false
+          allow_fast_forward_only_merge: false
+          default_delete_branch_after_merge: true
+          # Off because there is nothing there, verified rather than assumed:
+          # `migrate_repo` asks for `wiki: true`, and `GET /wiki/pages` answers 404
+          # with `errors: ["no such file or directory"]` on all three — the route
+          # resolved and the repository was found, so that body says "this repo has
+          # no wiki", not "no such repository" (which answers `errors: null`).
+          # Hiding a tab over CONTENT would be a disclosure-shaped decision and this
+          # reconciler does not make those; hiding an empty one is removing a door
+          # to nowhere.
+          has_wiki: false
+          has_projects: false
         organizations:
           teledyne:
             repositories:
