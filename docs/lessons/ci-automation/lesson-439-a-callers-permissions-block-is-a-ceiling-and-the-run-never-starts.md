@@ -65,6 +65,14 @@ the caller grants. Verified in three states: red against pre-fix master with
 GitHub's own wording, green with the fix, red under a mutation that removes the
 scope from `release.yml`.
 
+The guard follows **one** hop, and says so rather than implying more: it weighs a
+callee's job requests against its immediate caller. A requirement two levels down
+(`ci.yml` → `ci-pipeline.yml` → `ci-publish.yml`) is not reached, and that chain
+is satisfied today only because `ci.yml` happens to grant the scope — removing it
+leaves all nineteen tests green while the real run would fail to start. Measured,
+not assumed; tracked as `#1691`. A guard that covers one shape completely is
+worth more than one that gestures at two, but only if its edge is written down.
+
 A caller that declares **no** `permissions:` block is skipped rather than
 assumed permissive — the repository default is a setting, not a fact in the tree,
 and inventing one would either wave through a real violation or manufacture a

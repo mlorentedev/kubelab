@@ -189,17 +189,41 @@ def _callers() -> list[tuple[pathlib.Path, dict[str, Any]]]:
     return found
 
 
+#: The callers the guard below is known to cover. Named rather than counted:
+#: a count is satisfied by any N files, so deleting the one this whole change
+#: exists for and adding an unrelated caller keeps it green while the coverage
+#: is gone. Membership is asserted; the set is deliberately not exact, because a
+#: NEW caller is picked up by the guard automatically and needs no edit here —
+#: what must never happen silently is one of these LEAVING.
+#:
+#: Four, not three, and the difference is why the count was the wrong assertion.
+#: `ci-publish.yml` has three callers (`ci-pipeline`, `release`, `staging-deploy`
+#: — the set #1666 and lesson-439 are about). This scan is broader: it finds
+#: every caller of ANY local reusable workflow, which also catches `ci.yml`
+#: calling `ci-pipeline.yml`. A floor of 3 measured against a population of 4
+#: had one full unit of slack in it: `staging-deploy.yml` could have vanished
+#: today and the assertion would still have passed with three.
+KNOWN_CALLERS = {
+    "ci-pipeline.yml",
+    "ci.yml",
+    "release.yml",
+    "staging-deploy.yml",
+}
+
+
 def test_the_scan_finds_the_workflows_that_call_a_reusable_one():
     """Without this, a moved directory turns the assertion below into a pass.
 
-    Three today: `ci-pipeline.yml`, `release.yml` and `staging-deploy.yml`, all
-    calling `ci-publish.yml`. The floor is deliberately the exact count minus
-    nothing — if it drops, a caller was removed or the scan went blind, and both
-    are worth a question before the number is edited.
+    `staging-deploy.yml` is the one #1666 was about, and the reason this asserts
+    names instead of a number.
     """
-    assert len(_callers()) >= 3, (
-        f"only {len(_callers())} workflows under {WORKFLOWS} call a local reusable "
-        "workflow; the scan has drifted and the check below is asserting nothing"
+    scanned = {path.name for path, _ in _callers()}
+    missing = KNOWN_CALLERS - scanned
+    assert not missing, (
+        f"{sorted(missing)} no longer scan as callers of a local reusable workflow. "
+        f"Found {sorted(scanned) or 'nothing'} under {WORKFLOWS}. Either the file "
+        "was removed or renamed — update KNOWN_CALLERS deliberately — or the scan "
+        "went blind, in which case the guard below is asserting nothing."
     )
 
 
