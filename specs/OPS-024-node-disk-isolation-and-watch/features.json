@@ -2,14 +2,14 @@
   {
     "id": "OPS-024-node-disk-isolation-and-watch-f1",
     "behavior": "AC1 — an Ansible role declares the Beelink's /var/lib/docker on its own LV, sized from the SSOT, and re-runs at changed=0",
-    "verification": "make provision NODE=bee ENV=prod TAGS=storage CHECK=1 2>&1 | grep -qE 'changed=0'",
+    "verification": "make provision NODE=bee ENV=staging TAGS=storage CHECK=1 2>&1 | grep -qE 'changed=0'",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "OPS-024-node-disk-isolation-and-watch-f2",
-    "behavior": "AC2 — with /var/lib/docker at 100%, Gitea still accepts a write (a real issue or push, not a health check)",
-    "verification": "make gitea-reconcile ENV=prod",
+    "behavior": "AC2 — with a sacrificial LV at /var/lib/docker filled to 100%, Gitea still accepts a real write (issue created), not merely reporting healthy",
+    "verification": "scripts/verify-gitea-write-under-full-lv.sh",
     "state": "pending",
     "evidence": ""
   },
@@ -22,8 +22,8 @@
   },
   {
     "id": "OPS-024-node-disk-isolation-and-watch-f4",
-    "behavior": "AC4 — a non-K8s node's root-filesystem usage reaches obs015-disk-root-saturation and make alerts shows it firing above 90%",
-    "verification": "make alerts ENV=prod",
+    "behavior": "AC4 — an induced crossing above 90% on a non-K8s node reaches obs015-disk-root-saturation and make alerts shows it firing",
+    "verification": "scripts/drill-node-disk-alert.sh --node beelink --env prod",
     "state": "pending",
     "evidence": ""
   },
@@ -38,6 +38,13 @@
     "id": "OPS-024-node-disk-isolation-and-watch-f6",
     "behavior": "AC6 — node_maintenance removes age-gated orphaned builders via the docker_reclaim planner instead of only reporting them, at changed=0 on re-run",
     "verification": "make maintain NODE=beelink CHECK=1 2>&1 | grep -qE 'changed=0'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-024-node-disk-isolation-and-watch-f7",
+    "behavior": "AC8 — no always-on node (ADR-028) relies on noDataState: OK; an always-on node that stops reporting alerts, and on-demand exemptions are declared per node",
+    "verification": ".venv/bin/python -m pytest tests/test_always_on_nodes_alert_on_no_data.py -q --no-cov",
     "state": "pending",
     "evidence": ""
   }

@@ -13,14 +13,18 @@ created: "2026-09-04"
 
 - [ ] Branch created from main: `feat/OPS-024-node-disk-isolation-and-watch`
 - [x] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] No open questions left in `proposal.md` "Risks / open questions"
 
-> **Deliberately unticked.** Two open questions remain (direct Loki push vs a
-> shipper; whether the existing rule's `by (…)` grouping survives a node label).
-> Both are the sort an independent reviewer is better placed to settle than the
-> author, so this spec goes to `dotf spec review` *before* implementation rather
-> than after. That is off-label for the review skill, which is written for the
-> verification window — stated here so it reads as a decision, not an oversight.
+> Both open questions were settled by the pre-implementation adversarial review
+> (`review.md`, `nan/deepseek-v4-flash`, verdict FAIL on the draft): direct Loki
+> push, and `by (node)` survives. That review also found what the questions had
+> not asked about — `obs015-disk-root-saturation` carries `noDataState: OK`,
+> so a dead producer reads as healthy — which is now AC8.
+>
+> Running the review *before* implementation is off-label for the skill, which is
+> written for the verification window. Stated here as a decision: the three Major
+> findings were all in the plan, and finding them after four PRs would have cost
+> four PRs. A second review is still owed in the verification window.
 
 ## Implementation
 
@@ -60,8 +64,15 @@ probability or add detection.
       shows it. A log line in Loki is not the AC
 - [ ] [AC5] Failing test: every node in `networking.nodes` is covered by either
       the CronJob or the timer. Adding a node to the SSOT without one goes red
+- [ ] [P] [AC8] Failing test: no **always-on** node (ADR-028) relies on
+      `noDataState: OK`; on-demand exemptions are declared per node, so a new
+      node forces the choice instead of inheriting silence
 
 ### PR-D — the timer reaps what it used to report (AC6, AC7)
+
+> **Blocked on #1665 merging.** `toolkit/features/docker_reclaim.py` is not on
+> `master` — verified, `git cat-file -e origin/master:…` fails — so a branch cut
+> from master cannot reuse the planner. Sequenced last for that reason.
 
 - [ ] [P] [AC6] Failing test: `node_maintenance` calls #1665's planner with an
       age gate, rather than printing a warning

@@ -84,23 +84,52 @@ Three observable changes, in decreasing order of how much they guarantee:
   failures) and does not become a second disk evaluator. Two rules drift, and
   one stops evaluating silently, which is the failure class this incident
   belongs to.
-- **Open question:** does the node producer push to Loki's HTTP API directly
-  (`loki.kubelab.live` exists with Bearer auth, so no shipper is needed), or is
-  a shipper wanted on Docker hosts for reasons beyond this spec? The direct push
-  is assumed here as the smaller change.
-- **Open question:** the same `disk_root_usage` line from a node needs a label
-  that distinguishes it from the CronJob's. Whether the existing rule's grouping
-  survives that addition is unverified — OBS-018 already showed this rule's
-  `by (…)` clause to be load-bearing.
+- **`noDataState: OK` means "watched" cannot mean "we would know if it stopped
+  reporting".** Found by adversarial review, and verified: `disk-rules.yaml:18`
+  gives `obs015-pvc-unbound-failure` `noDataState: Alerting`, with a comment
+  explaining that a metric which must never go quiet needs it — while
+  `disk-rules.yaml:102` gives `obs015-disk-root-saturation` `noDataState: OK`.
+  A dead producer therefore reads as healthy.
+
+  **This is not flipped to `Alerting`, and the reason is ADR-028.** The nodes
+  this spec adds are the *on-demand* half of the fleet: the Beelink, RPi4, ace2
+  and the Jetson are off most of the time by design, so `Alerting` on no-data
+  would page continuously for the intended state. The honest consequence, which
+  the spec records rather than engineers around: **for an on-demand node this
+  alert protects it only while it is running** — which is also the only time its
+  disk fills, since nothing writes to a powered-off node. What must not happen
+  is an *always-on* node inheriting that silence, so AC8 draws the line where
+  ADR-028 already draws it.
+- **The producer must land in the stream the rule already selects.** The rule
+  selects `{container="disk-watcher"}` and groups `by (node)`. A producer that
+  labels its stream anything else is never evaluated and AC4 passes vacuously.
+- **#1665 is not on `master`.** Verified: `git cat-file -e
+  origin/master:toolkit/features/docker_reclaim.py` fails. PR-D cannot reuse the
+  planner until #1665 lands, so PR-D is sequenced last and blocked on it.
+
+**Resolved by adversarial review** (`review.md`, `nan/deepseek-v4-flash`):
+
+- *Direct Loki push vs a shipper* → **direct push**, as the smaller change,
+  subject to the stream-label constraint above.
+- *Does `by (node)` survive a node label* → **yes**. The CronJob emits no `node`
+  label and groups under an empty one; a producer that emits `node` groups
+  per-node. Distinct and correct; `disk-rules.yaml` already states the identity
+  choice ("node, not `pod`", OBS-018 AC5).
 
 ## Acceptance criteria
 
 - [ ] **AC1** An Ansible role declares the Beelink's `/var/lib/docker` on its own
       LV, sized from the SSOT and not hardcoded. Re-run reports `changed=0`.
-- [ ] **AC2** Filling `/var/lib/docker` to 100% on the Beelink leaves Gitea
-      accepting writes — demonstrated by a real write (an issue or a push), not
-      by a health check. If it does not hold, the finding is recorded and the
-      residual named rather than the AC quietly reworded.
+- [ ] **AC2** Isolation is proven on a **sacrificial LV, never on production's**.
+      A small LV is mounted at `/var/lib/docker` on a rehearsal host, filled with
+      `fallocate`, and Gitea — running against it — still accepts a **real
+      write** (an issue created, a push landed), not a health check: the
+      container reported `healthy` throughout the original incident.
+      Filling production's `/var/lib/docker` is explicitly forbidden as the AC's
+      method — Gitea's writable layer and logs live on that LV, so the test
+      would risk reproducing the outage it exists to prevent. If the sacrificial
+      run shows Gitea degrading, the residual is recorded and a reserve added
+      inside the LV; the AC is not quietly reworded to match what happened.
 - [ ] **AC3** The migration path is proven interruptible: killed midway, Docker
       restarts against intact data. Rehearsed somewhere other than the Beelink.
 - [ ] **AC4** A non-K8s node's root-filesystem usage reaches
@@ -114,6 +143,13 @@ Three observable changes, in decreasing order of how much they guarantee:
 - [ ] **AC7** #1456 is closed or updated: its report-only posture is superseded
       by AC6, and the reason it chose reporting (no trustworthy age signal) no
       longer holds.
+- [ ] **AC8** The producer emits into `{container="disk-watcher"}` with a `node`
+      label, and a committed test asserts that an **always-on** node
+      (ADR-028: VPS, aws1/gcp1, RPi3) is never left relying on
+      `noDataState: OK` — an always-on node that stops reporting must alert.
+      On-demand nodes are exempt by declaration, named individually, so adding a
+      node to `networking.nodes` forces the choice rather than inheriting
+      silence.
 
 ## References
 
