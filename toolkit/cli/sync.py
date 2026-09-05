@@ -247,6 +247,23 @@ def images(
 
 
 @app.command()
+def branding(
+    check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
+) -> None:
+    """Sync IDP brand CSS from common.yaml SSOT."""
+    from toolkit.scripts import sync_branding
+
+    output_files = [settings.project_root / "edge/errors/html/brand/brand.css"]
+    if check:
+        if not _run_with_check(output_files, sync_branding.main, "branding"):
+            raise typer.Exit(1)
+    else:
+        result = sync_branding.main()
+        if result != 0:
+            raise typer.Exit(result)
+
+
+@app.command()
 def operators(
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
 ) -> None:
@@ -383,6 +400,21 @@ def sync_all(
     except Exception as e:
         logger.error(f"oidc sync crashed: {e}")
         failures.append("oidc")
+
+    # 4. Branding
+    try:
+        from toolkit.scripts import sync_branding
+
+        output_files = [settings.project_root / "edge/errors/html/brand/brand.css"]
+        if check:
+            if not _run_with_check(output_files, sync_branding.main, "branding"):
+                failures.append("branding")
+        else:
+            if sync_branding.main() != 0:
+                failures.append("branding")
+    except Exception as e:
+        logger.error(f"branding sync crashed: {e}")
+        failures.append("branding")
 
     if failures:
         logger.error(f"Sync failures: {', '.join(failures)}")
