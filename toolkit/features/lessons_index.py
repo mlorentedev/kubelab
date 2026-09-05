@@ -32,8 +32,13 @@ import pathlib
 import re
 from collections.abc import Callable
 
-#: `433 lessons, one file each. Newest: 2026-09-05. ...`
-TOTAL_LINE = re.compile(r"^(?P<n>\d+) lessons, one file each\. Newest: (?P<date>\d{4}-\d{2}-\d{2})\.")
+#: `433 lessons, one file each. Newest: 2026-09-05. Open a category for its list.`
+#:
+#: `rest` exists so the rewrite REPLACES the two numbers and preserves whatever
+#: else the line says. Rewriting the whole line from a template would silently
+#: drop any wording added after the date -- the deriver would be destroying
+#: prose it does not own, once, invisibly, on somebody else's edit.
+TOTAL_LINE = re.compile(r"^(?P<n>\d+) lessons, one file each\. Newest: (?P<date>\d{4}-\d{2}-\d{2})\.(?P<rest>.*)$")
 
 #: `| [observability](observability/_index.md) | 17 | Metrics, logs, alerting |`
 CATEGORY_ROW = re.compile(r"^\| \[(?P<slug>[a-z-]+)\]\((?P=slug)/_index\.md\) \| (?P<n>\d+) \|")
@@ -110,9 +115,11 @@ def reconcile(root: pathlib.Path, apply: bool = False) -> list[Fix]:
     fixes: list[Fix] = []
 
     def top_level(line: str) -> str | None:
-        if m := TOTAL_LINE.match(line):
+        if m := TOTAL_LINE.match(line.rstrip("\n")):
+            # `newest or ...` keeps the committed date when no rows exist at
+            # all, rather than writing the string "None" into the index.
             date = newest or m.group("date")
-            return f"{total} lessons, one file each. Newest: {date}. Open a category for its list.\n"
+            return f"{total} lessons, one file each. Newest: {date}.{m.group('rest')}\n"
         if m := CATEGORY_ROW.match(line):
             slug = m.group("slug")
             if slug in counts:

@@ -214,3 +214,42 @@ class TestTheHookIsWired:
 def test_the_total_pattern_matches_only_the_total(line: str, expected: bool) -> None:
     """A pattern loose enough to match prose would rewrite the prose."""
     assert bool(lessons_index.TOTAL_LINE.match(line)) is expected
+
+
+class TestTheRewriteOnlyTouchesTheNumbers:
+    """It rewrites a line it does not own the whole of.
+
+    Raised in review: the pattern is anchored at the start and the replacement
+    was built from a fixed template, so any wording added after the date would
+    be discarded — once, invisibly, on somebody else's edit. The deriver has no
+    business editing prose.
+    """
+
+    def test_trailing_prose_survives(self, tmp_path: pathlib.Path) -> None:
+        root = _tree(tmp_path / "lessons", {"alpha": 3}, total=99)
+        top = root / "_index.md"
+        top.write_text(
+            top.read_text().replace(
+                "Open a category for its list.",
+                "Open a category for its list. Counts are derived; do not edit by hand.",
+            )
+        )
+        lessons_index.reconcile(root, apply=True)
+        line = next(ln for ln in top.read_text().splitlines() if "lessons, one file each" in ln)
+        assert line.startswith("3 lessons, one file each."), line
+        assert line.endswith("Counts are derived; do not edit by hand."), (
+            f"the rewrite dropped wording it does not own: {line!r}"
+        )
+
+    def test_an_empty_corpus_does_not_write_the_word_none(self, tmp_path: pathlib.Path) -> None:
+        """Also raised in review, and already handled — pinned so it stays that
+        way. `newest_date` returns None with no rows, and the committed date is
+        kept rather than interpolated."""
+        root = tmp_path / "lessons"
+        root.mkdir()
+        (root / "_index.md").write_text(
+            "# Lessons\n\n0 lessons, one file each. Newest: 2026-01-01. Open a category for its list.\n"
+        )
+        assert lessons_index.newest_date(root) is None
+        lessons_index.reconcile(root, apply=True)
+        assert "None" not in (root / "_index.md").read_text()
