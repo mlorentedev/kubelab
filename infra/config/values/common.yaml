@@ -89,9 +89,9 @@ networking:
   # specs/SEC-006-cloud-firewall-for-running-vps/proposal.md before touching it.
   firewall:
     vps_inbound:
-    - { port: 22, proto: tcp, description: "SSH" }
-    - { port: 80, proto: tcp, description: "HTTP — Traefik, ACME http-01" }
-    - { port: 443, proto: tcp, description: "HTTPS — Traefik" }
+    - {port: 22, proto: tcp, description: "SSH"}
+    - {port: 80, proto: tcp, description: "HTTP — Traefik, ACME http-01"}
+    - {port: 443, proto: tcp, description: "HTTPS — Traefik"}
     # Headscale's embedded DERP STUN endpoint. NOT the relay: the relay is
     # served over 443 (roles/headscale/templates/config.yaml.j2 — the derp block
     # names 0.0.0.0:3478 as its only UDP listener).
@@ -106,7 +106,7 @@ networking:
     # It is in active use, not dormant. Keeping 3478 open is therefore load
     # bearing rather than merely conservative, and retiring the embedded DERP
     # (its own ticket) would move real traffic onto a public relay.
-    - { port: 3478, proto: udp, description: "Headscale DERP STUN" }
+    - {port: 3478, proto: udp, description: "Headscale DERP STUN"}
     # K3s prod API server. Present because it is load-bearing TODAY, not because
     # a public control plane is desirable: ~/.kube/kubelab-prod-config points at
     # https://162.55.57.175:6443, and CLAUDE.md's "kubeconfig must use the public
@@ -116,8 +116,8 @@ networking:
     # prod at 100.64.0.2:6443 over Tailscale). Moving the operator's kubeconfig to
     # Tailscale and dropping this line is tracked separately; it is a capability
     # change, and SEC-006 deliberately does not couple one to a security fix.
-    - { port: 6443, proto: tcp, description: "K3s prod API server" }
-    - { port: 41641, proto: udp, description: "Tailscale WireGuard" }
+    - {port: 6443, proto: tcp, description: "K3s prod API server"}
+    - {port: 41641, proto: udp, description: "Tailscale WireGuard"}
 
     # DELIBERATELY ABSENT — read this before "fixing" an omission.
     #
@@ -632,7 +632,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.1.6"
+    version: "1.2.0"
     port: 8080
     health_path: /health
     resources:
@@ -854,8 +854,8 @@ apps:
       # is what the newsletter form has been doing. The target port is NOT
       # restated here; the generator reads it from the target app.
       extra_routes:
-        - path_prefix: /api
-          service: api
+      - path_prefix: /api
+        service: api
       # Site Info
       site_title: "Manu Lorente"
       site_description: "Cloud Native Automation in Spanish"
@@ -1171,24 +1171,24 @@ apps:
           # head_commit.message on a push, which is the only path that moves a task
           # for work landing without a pull request.
           events:
-            - push
-            - pull_request
+          - push
+          - pull_request
           branch_filter: "*"
           active: true
         organizations:
           teledyne:
             repositories:
-              - name: fae-brain
-                migrate_from: github:mlorentedev/fae-brain
-                private: false
-              - name: openkm-brain
-                migrate_from: github:mlorentedev/openkm-brain
-                private: false
+            - name: fae-brain
+              migrate_from: github:mlorentedev/fae-brain
+              private: false
+            - name: openkm-brain
+              migrate_from: github:mlorentedev/openkm-brain
+              private: false
           personal:
             repositories:
-              - name: resume
-                migrate_from: github:mlorentedev/resume
-                private: false
+            - name: resume
+              migrate_from: github:mlorentedev/resume
+              private: false
           kubelab:
             repositories: []
         # Mirrors the limits the K8s Deployment carried, so the move is not also a
@@ -1223,7 +1223,8 @@ apps:
         storage:
           # Account ID is not a secret (same account as `backup.r2` above) --
           # R2's S3 endpoint embeds it in the hostname, unlike AWS S3.
-          s3_endpoint: https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com
+          s3_endpoint: 
+            https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com
           # Staging's bucket (base default). Prod overrides to `kubelab-vikunja`
           # via the vikunja-config configMapGenerator (behavior: merge) in
           # overlays/prod/kustomization.yaml -- separate bucket, separate
@@ -1634,7 +1635,7 @@ apps:
         auth_level: one_factor
         default_port: 8080
         health_path: /health
-        bouncer_api_key:
+        bouncer_api_key: 
           secrets://apps.services.security.crowdsec.bouncer_api_key
 
     # Network services (bare-metal, external to K3s)
