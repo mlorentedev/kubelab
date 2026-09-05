@@ -15,7 +15,7 @@ from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.docker_service import DockerService
 
 if TYPE_CHECKING:
-    from toolkit.features.gitea_client import GiteaClient
+    from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaClient
 
 console = Console()
 app = typer.Typer(help="Manage services and applications")
@@ -461,7 +461,14 @@ def gitea_reconcile(
     (#1076 scope), and undeclared entries are printed rather than acted on.
     """
     from toolkit.features.gitea_client import GiteaError
-    from toolkit.features.gitea_repos import TEAM_NAME, execute, format_plan, load_declaration, plan_reconcile
+    from toolkit.features.gitea_repos import (
+        TEAM_NAME,
+        execute,
+        format_plan,
+        load_declaration,
+        load_settings,
+        plan_reconcile,
+    )
 
     admin, bot, bot_username, base_url = _gitea_clients(env)
     merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
@@ -475,6 +482,11 @@ def gitea_reconcile(
         _report_machine_ownership(admin, bot_username)
         raise typer.Exit(0)
 
+    # BEFORE the forge reads, not after: a malformed or absent `repository_settings`
+    # is a fault in the declaration, and finding it out after several network round
+    # trips reports it as though the forge were involved.
+    declared_settings = load_settings(merged)
+
     try:
         # Read with the admin credential: a listing taken with the bot's token
         # reports an organization it cannot see as absent, and the plan would
@@ -487,11 +499,22 @@ def gitea_reconcile(
         # failure to read the forge. An absent organization has no team, which is
         # what None says.
         existing_teams = {org: (admin.get_team(org, TEAM_NAME) if org in existing_orgs else None) for org in declared}
+        # One read per DECLARED repository, and None for one the forge does not hold
+        # yet. `list_repos` returns only visibility, so the settings need the full
+        # body; and `get_repo` already answers None on a 404, which is the state a
+        # repository this run is about to create is genuinely in.
+        existing_repo_settings = {
+            f"{org}/{spec.name}": (admin.get_repo(org, spec.name) if f"{org}/{spec.name}" in existing_repos else None)
+            for org, specs in declared.items()
+            for spec in specs
+        }
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
 
-    plan = plan_reconcile(declared, existing_orgs, existing_repos, existing_teams)
+    plan = plan_reconcile(
+        declared, existing_orgs, existing_repos, existing_teams, existing_repo_settings, declared_settings
+    )
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
 
@@ -503,12 +526,15 @@ def gitea_reconcile(
         # printed for weeks over three repositories whose visibility disagreed.
         if plan.visibility_drift:
             logger.warning(
-                f"nothing to create, but {len(plan.visibility_drift)} repository/ies differ from the "
+                f"nothing to do, but {len(plan.visibility_drift)} repository/ies differ from the "
                 "declaration in visibility (listed above). Reported, never changed: flipping visibility "
                 "is a disclosure decision. Reconcile the declaration or the forge by hand."
             )
             return
-        logger.success("forge matches the declaration — nothing to create")
+        # "nothing to do" and not "nothing to create": the plan now carries settings
+        # convergence as well, and a message naming only creation would read as a
+        # narrower claim than the one being made.
+        logger.success("forge matches the declaration — nothing to do")
         return
 
     if not apply:
@@ -523,8 +549,13 @@ def gitea_reconcile(
     # Read only when a migration is actually planned, so an ordinary reconcile does
     # not depend on credentials it never uses.
     migration_token = None
-    migrator = None
-    if plan.repos_to_migrate:
+    superadmin: "GiteaBasicAuthClient | None" = None
+    # ONE CLIENT FOR BOTH, because it is one credential: migration and repository
+    # settings are the two operations here that no token may perform, and each was
+    # established the same way -- by asking every credential to do it and reading
+    # which answered. Built once when EITHER kind of work is planned, so an ordinary
+    # reconcile still depends on no credential it does not use.
+    if plan.repos_to_migrate or plan.repos_to_configure:
         from toolkit.features.gitea_client import GiteaBasicAuthClient
 
         gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
@@ -532,16 +563,27 @@ def gitea_reconcile(
         admin_password = gitea_cfg.get("admin_password")
         if not admin_password:
             logger.error(
-                f"missing apps.services.core.gitea.admin_password in {env} SOPS. Migration is the "
-                f"one operation no token may perform (bot: not an organization owner; admin token: "
-                f"lacks write:repository, which it must not be granted), so there is no fallback."
+                f"missing apps.services.core.gitea.admin_password in {env} SOPS. Migration and "
+                f"repository settings are the operations no token may perform (bot: not an "
+                f"organization owner, and only repo-admin on repositories it created itself; admin "
+                f"token: lacks write:repository, which it must not be granted), so there is no "
+                f"fallback."
             )
             raise typer.Exit(1)
-        migrator = GiteaBasicAuthClient(
+        superadmin = GiteaBasicAuthClient(
             base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password)
         )
 
-    report = execute(plan, admin, bot, bot_username=bot_username, migration_token=migration_token, migrator=migrator)
+    report = execute(
+        plan,
+        admin,
+        bot,
+        bot_username=bot_username,
+        declared_settings=declared_settings,
+        migration_token=migration_token,
+        migrator=superadmin,
+        configurator=superadmin,
+    )
     for created in report.orgs_created:
         logger.success(f"org created: {created}")
     for created in report.repos_created:
@@ -555,6 +597,12 @@ def gitea_reconcile(
     # call asserted a grant rather than changing one.
     for ensured in report.teams_ensured:
         logger.success(f"team ensured: {ensured}/{TEAM_NAME}")
+    # "settings applied" and not "settings set": each of these was PATCHed and then
+    # read back, so the line reports a verified end state rather than an accepted
+    # request. `ensure_settings` raises if the two disagree, which is why a name in
+    # this list means the repository is converged and not merely that Gitea said 200.
+    for configured in report.repos_configured:
+        logger.success(f"settings applied: {configured}")
     if report.repos_migrated:
         console.print(
             "\n[yellow]The import continues in the background.[/yellow] Gitea returns from "

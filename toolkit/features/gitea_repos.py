@@ -44,13 +44,13 @@ wrong -- the silent shape this repo keeps writing lessons about.
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 from toolkit.features.gitea_client import TEAM_UNITS
 
 if TYPE_CHECKING:
-    from toolkit.features.gitea_client import GiteaClient
+    from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaClient
 
 
 class Actor(enum.Enum):
@@ -109,6 +109,136 @@ class DeclaredRepo:
 
 
 @dataclass(frozen=True)
+class RepoSettings:
+    """The repository settings the declaration insists on, for every declared repo.
+
+    WHY THESE EXIST AT ALL. `POST /repos/migrate` carries code, issues, pull
+    requests, labels, milestones and releases. It does NOT carry repository
+    settings, and Gitea's defaults are permissive -- so a migrated repository does
+    not arrive UNCONFIGURED, it arrives CONFIGURED DIFFERENTLY and more weakly than
+    the one it replaced. Those are not the same problem: the first shows up as an
+    empty field, the second reads as a working repository. Measured on all three,
+    2026-09-04: `default_merge_style: merge` against a GitHub original that was
+    squash-only, and every merge style allowed.
+
+    FIELD NAMES ARE GITEA'S OWN `EditRepoOption` NAMES, deliberately, so the YAML
+    key, this attribute and the PATCH body are one vocabulary with no mapping layer
+    between them to drift. `to_api_payload` is therefore `asdict`, and a test pins
+    the names against the live `GET /repos/{o}/{r}` output rather than against this
+    class -- a payload built from our own dataclass and compared to our own
+    dataclass certifies our belief about Gitea instead of testing it (lesson-423).
+
+    ONE BLOCK FOR ALL DECLARED REPOSITORIES, no per-repository override. All three
+    want the same thing, and an override mechanism with no user is a second place
+    for the answer to live. Branch protection is where per-repository declaration
+    becomes unavoidable -- `fae-brain` and `openkm-brain` have no CI on this forge,
+    so a shared required-checks list would block every pull request there forever --
+    and that is the reason it is a separate slice of #1633 rather than laziness.
+
+    `has_actions` IS ABSENT AND MUST STAY ABSENT: act_runner needs it, and a
+    declaration that turned it off would take CI down on the repository that just
+    got it (personal/resume#260).
+
+    `has_pull_requests` IS PRESENT AND MUST STAY PRESENT, and it is not here because
+    anyone wants to toggle it. It is the GATE on every other merge field. Measured
+    against prod on 2026-09-04, the same PATCH body twice on `teledyne/openkm-brain`:
+
+        without has_pull_requests   200 -> 0/6 merge fields applied
+        with    has_pull_requests   200 -> 6/6 merge fields applied
+
+    Gitea applies the merge settings inside the block that updates the
+    pull-requests UNIT, so a payload that does not say the unit is enabled skips
+    them entirely -- and answers 200 either way. This was not deduced from the
+    source: the first `--apply` against prod reported all three repositories
+    unconverged, with `has_wiki` and `has_projects` applied and every merge field
+    untouched. The post-condition is the only reason that was a red run and not a
+    green one over a forge that still merges with merge commits.
+    """
+
+    default_merge_style: str
+    #: The gate. See the class docstring -- removing it silently disables the six
+    #: fields below, and `ensure_settings` is what turns that silence into a failure.
+    has_pull_requests: bool
+    allow_merge_commits: bool
+    allow_squash_merge: bool
+    allow_rebase: bool
+    allow_rebase_explicit: bool
+    allow_fast_forward_only_merge: bool
+    default_delete_branch_after_merge: bool
+    has_wiki: bool
+    has_projects: bool
+
+    def to_api_payload(self) -> dict[str, Any]:
+        """The PATCH body. Every declared field, because every one is a declaration."""
+        return {f.name: getattr(self, f.name) for f in fields(self)}
+
+
+def settings_needs_convergence(live: Mapping[str, Any] | None, declared: RepoSettings) -> bool:
+    """Does this repository fall short of what `edit_repo` would set?
+
+    ONE PREDICATE, TWO CALLERS -- the same discipline as `team_needs_convergence`,
+    and for the same measured reason. If the plan's decision to schedule a
+    repository and the executor's decision to PATCH it were separate expressions,
+    they could disagree; on 2026-09-03 they did, and a correct repair sat in
+    `ensure_team` that nothing ever reached (lesson-424).
+
+    EVERY DECLARED FIELD IS COMPARED, not the interesting one. A predicate covering
+    a subset is the same defect one field over: the plan would report a match on a
+    repository whose `default_delete_branch_after_merge` was wrong, and the run
+    would exit at `is_noop` before touching it.
+
+    An absent repository needs convergence too. A repository this run is about to
+    create or migrate arrives with Gitea's permissive defaults, so `None` -- "not
+    there yet" -- is correctly short of the declaration, and the caller acting on
+    this does not need to know which of the two cases it is looking at.
+    """
+    return bool(settings_changes(live, declared))
+
+
+@dataclass(frozen=True)
+class SettingsChange:
+    """One repository whose settings fall short, and exactly which fields do.
+
+    CARRIES THE DIFF RATHER THAN JUST THE NAME, because the printed plan is what an
+    operator approves `--apply` on, and `~ settings personal/resume` tells them
+    nothing about what is about to change. `default_merge_style: merge -> squash`
+    tells them everything. This module already treats plan readability as a
+    property worth code (`plan_reconcile` sorts explicitly so a diff between two
+    runs is a real change); this is the same commitment one step further.
+
+    `absent` distinguishes a repository this run is about to create -- which has no
+    live values to diff against and will simply receive all of them -- from one that
+    exists and disagrees. Printing nine `None -> x` lines for a new repository would
+    bury the one repository whose settings actually drifted.
+    """
+
+    org: str
+    name: str
+    changes: tuple[tuple[str, Any, Any], ...] = ()
+    absent: bool = False
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.org}/{self.name}"
+
+
+def settings_changes(live: Mapping[str, Any] | None, declared: RepoSettings) -> tuple[tuple[str, Any, Any], ...]:
+    """`(field, live_value, declared_value)` for every field that disagrees.
+
+    THE SAME COMPARISON `settings_needs_convergence` MAKES, and deliberately its
+    only implementation: that predicate is now `bool(settings_changes(...))`, so the
+    question "does this need work" and the question "what work" cannot answer
+    differently. Two expressions of one comparison is how a plan comes to report a
+    field the executor does not send, or the reverse.
+    """
+    if live is None:
+        return tuple((key, None, value) for key, value in declared.to_api_payload().items())
+    return tuple(
+        (key, live.get(key), value) for key, value in declared.to_api_payload().items() if live.get(key) != value
+    )
+
+
+@dataclass(frozen=True)
 class VisibilityDrift:
     """A repository that exists, but not with the visibility that was declared.
 
@@ -140,6 +270,7 @@ class ReconcilePlan:
     repos_to_create: tuple[DeclaredRepo, ...] = ()
     repos_to_migrate: tuple[DeclaredRepo, ...] = ()
     teams_to_converge: tuple[str, ...] = ()
+    repos_to_configure: tuple[SettingsChange, ...] = ()
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
     visibility_drift: tuple[VisibilityDrift, ...] = ()
@@ -165,12 +296,15 @@ class ReconcilePlan:
         forge whose teams needed repair reported "nothing to create" and exited
         before `execute` ran -- measured on prod 2026-09-03, every declared
         repository already present and both teams covering none of them.
+        `repos_to_configure` is the same kind of field and joins for the same
+        reason: `execute` acts on it.
         """
         return (
             not self.orgs_to_create
             and not self.repos_to_create
             and not self.repos_to_migrate
             and not self.teams_to_converge
+            and not self.repos_to_configure
         )
 
 
@@ -189,6 +323,8 @@ def plan_reconcile(
     existing_orgs: set[str],
     existing_repos: Mapping[str, bool],
     existing_teams: Mapping[str, Mapping[str, Any] | None],
+    existing_repo_settings: Mapping[str, Mapping[str, Any] | None],
+    declared_settings: RepoSettings,
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -239,6 +375,18 @@ def plan_reconcile(
     grant belongs to the organization, not to the act of creating something in it,
     so a forge where every declared repository already exists still has teams to
     repair. See `team_needs_convergence`.
+
+    `existing_repo_settings` maps `"org/name"` to the live `GET /repos/{o}/{r}`
+    body for EVERY DECLARED repository, or to None when the forge does not hold it
+    yet. Required and complete for the third time in this signature, and the reason
+    has not changed: the missing-key `KeyError` is the loud failure, and an absent
+    key treated as "fine" is how a comparison silently stops comparing. Here the
+    silence would be particularly quiet -- a repository whose merge style was never
+    set reads as a working repository, not as an empty field.
+
+    `declared_settings` is separate from `declared` rather than folded into each
+    `RepoSpec` because it is one block for the whole forge; see `RepoSettings` for
+    why there is no per-repository override in this slice.
     """
     declared_orgs = set(declared)
     declared_repos = {f"{org}/{spec.name}" for org, specs in declared.items() for spec in specs}
@@ -273,6 +421,28 @@ def plan_reconcile(
     # every run and a diff between two runs is a real change rather than dict order.
     teams_to_converge = tuple(sorted(org for org in declared_orgs if team_needs_convergence(existing_teams[org])))
 
+    # OVER EVERY DECLARED REPOSITORY, INCLUDING THE ONES THIS RUN IS ABOUT TO
+    # CREATE. A repository arrives with Gitea's permissive defaults whether it was
+    # created empty or migrated, so scoping this to repositories that already exist
+    # would leave every new one unconfigured until the NEXT run -- which is
+    # lesson-424's shape read backwards: a convergence step scoped to the existing
+    # set never reaches what the same run creates. `existing_repo_settings` holds
+    # None for those, and `settings_needs_convergence` reads None as short.
+    repos_to_configure = tuple(
+        change
+        for change in (
+            SettingsChange(
+                org=org,
+                name=spec.name,
+                changes=settings_changes(existing_repo_settings[f"{org}/{spec.name}"], declared_settings),
+                absent=existing_repo_settings[f"{org}/{spec.name}"] is None,
+            )
+            for org, specs in sorted(declared.items())
+            for spec in sorted(specs, key=lambda s: s.name)
+        )
+        if change.changes
+    )
+
     # Reported, never acted on. The corollary ADR-065 D3 binds the reconciler to:
     # "import by accident must not become policy by inertia."
     undeclared_orgs = tuple(sorted(existing_orgs - declared_orgs))
@@ -299,6 +469,7 @@ def plan_reconcile(
         repos_to_create=repos_to_create,
         repos_to_migrate=repos_to_migrate,
         teams_to_converge=teams_to_converge,
+        repos_to_configure=repos_to_configure,
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
@@ -349,6 +520,67 @@ def load_declaration(common: Mapping[str, Any]) -> dict[str, list[RepoSpec]]:
     return declaration
 
 
+def load_settings(common: Mapping[str, Any]) -> RepoSettings:
+    """Read `gitea.repository_settings` out of a parsed common.yaml.
+
+    REFUSES AN ABSENT BLOCK, rather than defaulting. That is the opposite of
+    `load_declaration`, which treats an absent `organizations` as an empty dict,
+    and the asymmetry is deliberate: an empty declaration means "reconcile nothing"
+    and is a coherent state, while an absent settings block would mean "compare
+    nothing" -- silently switching off the check on every repository. That is the
+    defect this function exists to prevent, wearing the costume of a sensible
+    default.
+
+    UNCONDITIONALLY, with no "…unless nothing is declared" branch. The first draft
+    had one, returning Gitea's live defaults as a harmless sentinel for an empty
+    forge. It was not harmless: it was a fabricated declaration, indistinguishable
+    at every call site from one an operator wrote, and the whole point of the
+    refusal is that no such value exists. The caller reaches this only after its own
+    empty-declaration guard, so totality buys nothing here.
+
+    A DEFAULT WOULD BE WORSE THAN THE ABSENCE, because it would have to be either
+    Gitea's permissive values (converging the forge onto exactly what #1633 was
+    filed about) or an opinion invented here (an SSOT whose real source is a Python
+    literal). Neither is a declaration.
+
+    Unknown keys raise `TypeError` from the dataclass rather than being ignored: a
+    typo'd key that were dropped would leave a field silently unmanaged, and one
+    that reached the PATCH body would make the repository fail to converge forever
+    -- Gitea accepting the call and the next run finding the same drift.
+    """
+    gitea = (common.get("apps", {}).get("services", {}).get("core", {}).get("gitea", {})) or {}
+    block = gitea.get("repository_settings")
+
+    if not block:
+        raise ValueError(
+            "`apps.services.core.gitea.repository_settings` is absent. It is required rather "
+            "than defaulted: repository settings do NOT survive "
+            "`POST /repos/migrate`, so a migrated repository arrives configured with Gitea's "
+            "permissive defaults — measured 2026-09-04, `default_merge_style: merge` on all three "
+            "against a GitHub original that was squash-only. Defaulting here would converge the "
+            "forge onto exactly the state #1633 was filed about, and do it silently."
+        )
+
+    known = {f.name for f in fields(RepoSettings)}
+    unknown = sorted(set(block) - known)
+    if unknown:
+        raise ValueError(
+            f"`repository_settings` contains unknown key(s) {unknown}. Field names are Gitea's own "
+            f"`EditRepoOption` names, so a misspelling is not a new setting — it is a field left "
+            f"unmanaged, or a PATCH body Gitea accepts and ignores, which makes the repository fail "
+            f"to converge on every future run. Known: {sorted(known)}."
+        )
+    missing = sorted(known - set(block))
+    if missing:
+        raise ValueError(
+            f"`repository_settings` is missing {missing}. Every field is declared explicitly, with "
+            f"no partial block: a field omitted here is a field whose value is whatever the forge "
+            f"happens to hold, which is the reproducibility hole the declaration exists to close "
+            f"(the same reasoning as `private:` on each repository)."
+        )
+    return RepoSettings(**{key: block[key] for key in known})
+
+
 def declared_full_names(declaration: Mapping[str, Iterable[RepoSpec]]) -> set[str]:
     """Every declared repository as `"org/name"` -- the shape the API listing normalises into.
 
@@ -393,6 +625,18 @@ def format_plan(plan: ReconcilePlan) -> str:
     # is restricted to, so the line also says what will NOT happen.
     for team_org in plan.teams_to_converge:
         lines.append(f"  ~ team {team_org}/{TEAM_NAME}   widen to the full grant over all repositories")
+    # Field by field, because this is the line an operator approves `--apply` on and
+    # "settings differ" is not a basis for approving anything. A repository that does
+    # not exist yet gets a count instead of nine `None -> x` rows, so the one
+    # repository whose live settings actually drifted stays visible.
+    for change in plan.repos_to_configure:
+        if change.absent:
+            lines.append(
+                f"  ~ settings {change.full_name}   apply all {len(change.changes)} declared settings (new repository)"
+            )
+            continue
+        for key, live_value, declared_value in change.changes:
+            lines.append(f"  ~ settings {change.full_name}   {key}: {live_value!r} -> {declared_value!r}")
     # Distinct names from the loops above, and not only for style: the created
     # entries are `DeclaredRepo`s while the strays are `"org/name"` strings, so
     # reusing `repo` shadows one type with the other and mypy refuses it.
@@ -597,6 +841,18 @@ def team_needs_convergence(team: Mapping[str, Any] | None) -> bool:
     return any(units.get(unit) != TEAM_PERMISSION for unit in TEAM_UNITS)
 
 
+class RepoSettingsError(Exception):
+    """A repository was configured, and did not come back configured.
+
+    Its own category for the same reason `TeamPermissionError` is: the failure is
+    silent by nature. Gitea answers 200 to a PATCH whose fields it did not apply --
+    an unknown key, a value it declines, a permission that stops short of the field
+    -- so a run trusting the response would report a converged forge that still
+    merges with merge commits, and the next run would find the same drift and
+    report success again, forever.
+    """
+
+
 class TeamPermissionError(Exception):
     """A team exists but does not grant what it was asked to grant.
 
@@ -619,6 +875,7 @@ class ExecutionReport:
     repos_created: list[str] = field(default_factory=list)
     repos_migrated: list[str] = field(default_factory=list)
     teams_ensured: list[str] = field(default_factory=list)
+    repos_configured: list[str] = field(default_factory=list)
     failures: list[tuple[str, str]] = field(default_factory=list)
 
     @property
@@ -718,6 +975,44 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     return team
 
 
+def ensure_settings(configurator: GiteaBasicAuthClient, repo: SettingsChange, declared: RepoSettings) -> dict[str, Any]:
+    """PATCH a repository's settings, then READ THEM BACK and assert they took.
+
+    THE RE-READ IS THE POINT, exactly as in `ensure_team`, and the same measurement
+    is behind it: a create-team response reported `permission: write` on a team that
+    granted nothing. Gitea's PATCH answers 200 with a repository body, and that body
+    is the artefact whose trustworthiness is in question -- so the assertion is made
+    against a fresh `GET`, not against what the write returned.
+
+    THE POST-CONDITION IS `settings_needs_convergence` ITSELF, not a hand-written
+    field list. A separate list here would be a third expression of the same
+    question, free to fall behind the declaration -- and the failure mode of falling
+    behind is a field that is never checked, which is the one this module keeps
+    finding. Reusing the predicate makes "what the plan schedules", "what the PATCH
+    sends" and "what is verified afterwards" the same set by construction.
+    """
+    configurator.edit_repo(repo.org, repo.name, declared.to_api_payload())
+
+    live = configurator.get_repo(repo.org, repo.name)
+    if live is None:
+        raise RepoSettingsError(
+            f"{repo.full_name} does not read back after being configured. The PATCH was "
+            f"accepted, so this is not a permission problem — the repository is gone or the read "
+            f"credential lost sight of it."
+        )
+    remaining = settings_changes(live, declared)
+    if remaining:
+        detail = ", ".join(
+            f"{key}: live {live_value!r}, declared {declared_value!r}" for key, live_value, declared_value in remaining
+        )
+        raise RepoSettingsError(
+            f"{repo.full_name} was configured and did not converge — {detail}. Gitea answered the "
+            f"PATCH without applying these, which it does silently: a 200 here says the request was "
+            f"accepted, never that the settings changed."
+        )
+    return live
+
+
 def _handle_failure(report: ExecutionReport, target: str, exc: Exception) -> None:
     """Record a failed operation and let the run continue.
 
@@ -749,8 +1044,10 @@ def execute(
     admin: GiteaClient,
     bot: GiteaClient,
     bot_username: str,
+    declared_settings: RepoSettings,
     migration_token: str | None = None,
     migrator: GiteaClient | None = None,
+    configurator: GiteaBasicAuthClient | None = None,
 ) -> ExecutionReport:
     """Carry out a plan, with each operation performed by the credential that may.
 
@@ -759,6 +1056,15 @@ def execute(
     `Owners` and ADR-065 D1 requires the bot to own nothing; `bot` creates
     repositories inside them, which confers no ownership. `actor_for_org_creation`
     and `actor_for_repo_creation` encode the same answer for the test suite.
+
+    FOUR, COUNTING THE TWO THE SUPERADMIN'S PASSWORD CARRIES. `migrator` and
+    `configurator` are optional in the signature and mandatory in effect: each is
+    required exactly when the plan contains work of its kind, and its absence is
+    reported per repository rather than raised, so a run says which repositories it
+    could not reach instead of stopping at the first. They are the same client in
+    practice -- one `GiteaBasicAuthClient` on one credential -- and are separate
+    parameters because they are separate capabilities, and a later change that
+    narrows one should not silently widen the other.
 
     Nothing here deletes. `plan.undeclared_*` is carried into the report by the
     caller's formatting, never into a call.
@@ -855,5 +1161,46 @@ def execute(
             report.repos_migrated.append(f"{repo.org}/{repo.name}")
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             _handle_failure(report, f"repo {repo.org}/{repo.name}", exc)
+
+    # LAST, AND AFTER THE CREATES AND MIGRATES ON PURPOSE. A repository this run
+    # brought into existence arrives with Gitea's permissive defaults, so it needs
+    # configuring in the SAME run -- the plan already scheduled it, because
+    # `settings_needs_convergence(None, ...)` is True. Running this first would PATCH
+    # a repository that did not exist yet.
+    #
+    # Skipped for anything this run failed to produce, which is why the two sets are
+    # subtracted rather than the plan trusted: a repository whose migration failed is
+    # absent, and PATCHing it would turn one reported failure into two, the second
+    # naming a symptom instead of the cause.
+    failed_repos = {target.removeprefix("repo ") for target, _ in report.failures if target.startswith("repo ")} | {
+        f"{repo.org}/{repo.name}" for repo in plan.repos_to_create + plan.repos_to_migrate if repo.org in failed_orgs
+    }
+    # `change`, not `repo`: `repos_to_configure` holds `SettingsChange`s while the
+    # loops above hold `DeclaredRepo`s, and reusing the name shadows one type with
+    # the other -- which mypy refuses, for the same reason `format_plan` names its
+    # stray loops apart.
+    for change in plan.repos_to_configure:
+        full_name = change.full_name
+        if full_name in failed_repos:
+            continue
+        if configurator is None:
+            _handle_failure(
+                report,
+                f"settings {full_name}",
+                RuntimeError(
+                    "no configurator client was supplied. Repository settings are the second "
+                    "operation here that no token may perform — measured 2026-09-04 with a no-op "
+                    "PATCH against all three declared repositories: admin token 403 "
+                    "required=[write:repository] on every one, bot token 403 'owner or a "
+                    "collaborator with admin write' on the two it did not create, superadmin basic "
+                    "auth 200 on all three. So the caller must pass a GiteaBasicAuthClient."
+                ),
+            )
+            continue
+        try:
+            ensure_settings(configurator, change, declared_settings)
+            report.repos_configured.append(full_name)
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            _handle_failure(report, f"settings {full_name}", exc)
 
     return report
