@@ -68,6 +68,31 @@ alert the discriminator it already has.
   fails three tests, teardown-outside-`finally` fails the two that model an
   interrupted operator.
 
+**And the drill's first real run failed in the same family, inside the fix.**
+Asked to clear the residue, it printed:
+
+```
+ac2-drill-unbound: residue from an earlier run is present -- absorbing it
+ac2-drill-unbound: created; waiting up to 60m for the alert
+PersistentVolumeClaim unbound or failed: FIRING after 0.0m (1 polls)
+```
+
+The alert had been firing for ten days on the claim absorbed one line above.
+The drill deleted it, created its own, polled once, saw an alerting instance
+with the right name, and reported success. Its own claim had caused nothing.
+
+Attribution is not recoverable afterwards: the instance is keyed by
+`(namespace, pvc)`, so a fresh claim under the same name **resumes** the
+existing alert rather than starting a distinguishable one — no `startsAt`
+advances, no label differs. So the drill now checks that the alert is **quiet
+before it creates anything** and refuses otherwise, with an exit code distinct
+from "did not fire". *"I could not measure"* and *"the rule is broken"* sharing
+one status is the same collapse in the instrument's own output.
+
+Level-triggered where the property under test is edge-triggered. Only a run
+against a cluster that already had the condition could expose it — reading the
+code, it looks right.
+
 **Rule**: **Ask of any verification: what does this leave behind, and what event
 removes it?** If the answer to the second is "someone runs the cleanup
 afterwards", there is no such event — a created condition never stops being
