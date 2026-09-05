@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.6...errors-v1.2.0) (2026-09-05)
+
+
+### Features
+
+* **branding:** centralized idp branding substrate and satellite customization ([#1677](https://github.com/mlorentedev/kubelab/issues/1677)) ([6c4e283](https://github.com/mlorentedev/kubelab/commit/6c4e283e566f450c5421e93a5d568e6f7a1c9192))
+
 ## [1.1.6](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.5...errors-v1.1.6) (2026-08-25)
 
 
