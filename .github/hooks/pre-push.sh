@@ -80,9 +80,16 @@ check_merged_branch "${1:-origin}"
 # strategy`, no hook output, 433 files and 432 declared. That is the route all
 # four counter collisions took (#1649).
 #
-# So the commit-time hook catches the author and this catches the merger.
-# Without it the only remaining net is CI, seven minutes after the push, which
-# is the state this whole change exists to end.
+# So the commit-time hook catches the author and this catches the LOCAL merger.
+#
+# It does not catch the merger who never merges locally. GitHub's "Update
+# branch" button merges master in on GitHub's servers: no local commit, no
+# local push, so neither stage is reached and the stale counter goes straight
+# to CI. Measured 2026-09-05 on #1675 (`7cc5b6fc`) and #1665 (`7d489552`).
+# An earlier version of this comment claimed the pair left CI as nothing but a
+# late backstop; for that third route CI is still the only net there is, which
+# is why #1678 exists. See `.pre-commit-config.yaml` for how to tell the routes
+# apart after the fact (read the committer, not the message).
 #
 # --check, never --fix: rewriting files mid-push would leave the working tree
 # ahead of what is being pushed.
