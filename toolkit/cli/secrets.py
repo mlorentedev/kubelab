@@ -369,6 +369,7 @@ def _report_expiry(warn_days: int) -> None:
 
     from toolkit.features.secret_expiry import (
         PROVIDER_CHECKS,
+        CredentialRejectedError,
         Expiry,
         ExpiryUnavailableError,
         resolve_expiry,
@@ -385,6 +386,9 @@ def _report_expiry(warn_days: int) -> None:
             continue
         try:
             expires = check(value)
+        except CredentialRejectedError as exc:
+            logger.error(f"  {spec.key_path} — {exc}")
+            continue
         except ExpiryUnavailableError as exc:
             logger.warning(f"  {spec.key_path} — could not ask the issuer: {exc}")
             continue

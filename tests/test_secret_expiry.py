@@ -293,3 +293,71 @@ class TestTheSshTargetComesFromTheSSOT:
 
         src = inspect.getsource(cli.check_expiry)
         assert "public_ip" in src and "tailscale_ip" not in src
+
+
+class TestARejectedCredentialIsNotAnUnreachableIssuer:
+    """A 401 is the issuer ANSWERING: the credential is expired or revoked.
+
+    Reported as "could not ask the issuer" at WARNING, the GitHub runner PAT sat
+    dead for eight days after 2026-09-14 while every audit looked like a network
+    blip. The distinction the checker exists for is exactly this one.
+    """
+
+    @staticmethod
+    def _raise(code: int):  # type: ignore[no-untyped-def]
+        import io
+        import urllib.error
+
+        def _urlopen(*_a, **_k):  # type: ignore[no-untyped-def]
+            raise urllib.error.HTTPError("https://api.github.com/user", code, "x", {}, io.BytesIO())  # type: ignore[arg-type]
+
+        return _urlopen
+
+    def test_a_401_from_github_is_a_rejection(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import urllib.request
+
+        from toolkit.features.secret_expiry import CredentialRejectedError, github_pat_expiry
+
+        monkeypatch.setattr(urllib.request, "urlopen", self._raise(401))
+        with pytest.raises(CredentialRejectedError):
+            github_pat_expiry("dead")
+
+    def test_a_401_from_cloudflare_is_a_rejection(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import urllib.request
+
+        from toolkit.features.secret_expiry import CredentialRejectedError, cloudflare_token_expiry
+
+        monkeypatch.setattr(urllib.request, "urlopen", self._raise(401))
+        with pytest.raises(CredentialRejectedError):
+            cloudflare_token_expiry("dead")
+
+    def test_other_failures_stay_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import urllib.request
+
+        from toolkit.features.secret_expiry import CredentialRejectedError, github_pat_expiry
+
+        # 403 on GitHub is rate limiting or SSO enforcement, not a dead token.
+        monkeypatch.setattr(urllib.request, "urlopen", self._raise(403))
+        with pytest.raises(ExpiryUnavailableError) as info:
+            github_pat_expiry("maybe-fine")
+        assert not isinstance(info.value, CredentialRejectedError)
+
+    def test_the_report_calls_a_rejection_an_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        from toolkit.cli import secrets as cli
+        from toolkit.features import secret_expiry
+        from toolkit.features.secret_expiry import CredentialRejectedError
+
+        key = "apps.services.automation.github_runner.token"
+        monkeypatch.setattr(cli, "_provider_value_lookup", lambda: lambda k: "v" if k == key else None)
+        monkeypatch.setitem(
+            secret_expiry.PROVIDER_CHECKS, key, MagicMock(side_effect=CredentialRejectedError("HTTP 401"))
+        )
+        log = MagicMock()
+        monkeypatch.setattr(cli, "logger", log)
+        cli._report_expiry(warn_days=90)
+        errors = " ".join(str(c) for c in log.error.call_args_list)
+        warnings = " ".join(str(c) for c in log.warning.call_args_list)
+        assert key in errors
+        assert key not in warnings
