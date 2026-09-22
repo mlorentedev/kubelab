@@ -27,6 +27,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from typing import NoReturn
 
 
 class Expiry(str, Enum):
@@ -62,6 +63,25 @@ class ExpiryUnavailableError(RuntimeError):
     must never report success -- the same rule `argo check-drift` follows with
     its exit code 2.
     """
+
+
+class CredentialRejectedError(ExpiryUnavailableError):
+    """The issuer answered and refused the credential: expired or revoked.
+
+    A subclass so every caller that treats "cannot check" as not-a-pass keeps
+    doing so, while the report can tell the one case apart that is not a
+    reachability problem at all. HTTP 401 is the issuer's own verdict on the
+    credential; anything else (timeouts, DNS, 403 rate limits) still says only
+    that nobody could ask.
+    """
+
+
+def _raise_unavailable(issuer: str, exc: Exception) -> NoReturn:
+    import urllib.error
+
+    if isinstance(exc, urllib.error.HTTPError) and exc.code == 401:
+        raise CredentialRejectedError(f"{issuer} rejected the credential (HTTP 401): expired or revoked") from exc
+    raise ExpiryUnavailableError(f"{issuer} rejected or could not be reached: {exc}") from exc
 
 
 # `headscale apikeys list` renders a table with ANSI colour. Parsed by column
@@ -319,7 +339,7 @@ def github_pat_expiry(token: str, timeout: float = 15.0) -> datetime | None:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.headers.get("github-authentication-token-expiration")
     except Exception as exc:  # noqa: BLE001 - any failure here is "cannot check"
-        raise ExpiryUnavailableError(f"GitHub rejected or could not be reached: {exc}") from exc
+        _raise_unavailable("GitHub", exc)
 
     if not raw:
         return None
@@ -340,7 +360,7 @@ def cloudflare_token_expiry(token: str, timeout: float = 15.0) -> datetime | Non
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read().decode())
     except Exception as exc:  # noqa: BLE001
-        raise ExpiryUnavailableError(f"Cloudflare rejected or could not be reached: {exc}") from exc
+        _raise_unavailable("Cloudflare", exc)
 
     raw = (body.get("result") or {}).get("expires_on")
     if not raw:
