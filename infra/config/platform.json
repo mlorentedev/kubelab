@@ -7,7 +7,7 @@
     "gitops": "Argo CD v3.4.1 · 2 applications synced",
     "uptime": "99.9% (90d, Uptime Kuma)",
     "activeNodes": 8,
-    "totalServices": 35,
+    "totalServices": 39,
     "kubernetesClusters": 3,
     "kubernetesNodes": 3
   },
