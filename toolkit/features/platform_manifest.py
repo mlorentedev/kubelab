@@ -832,30 +832,22 @@ def project_services(config: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def compute_total_services(config: dict[str, Any]) -> int:
-    """Calculate total services/workloads running across all clusters.
+    """Count every service row the platform tables publish: staging, prod and shared.
 
-    The `+ 2` is an OPEN QUESTION, not a formula. `build_service_tables` yields
-    16 staging and 17 prod services; the offset exists because `ba1a2dd6` needed
-    the derived figure to equal 35, the literal that change set removed, and 35
-    is published on mlorente.dev/lab. It is not known to correspond to two
-    particular workloads -- that commit claims no such thing -- and which number
-    is right (33, or 39 if the discarded `shared` table belongs in it) is a
-    product decision nobody has taken.
-
-    Do not replace this with a plausible-sounding justification. A comment that
-    supplies a reason for a number nobody chose turns an unexamined default into
-    an apparent decision, and then the decision never gets taken (lesson 427).
-    The open question is recorded under "Gaps carried past the archive" in
-    specs/archive/TOOL-036-platform-manifest-sync/tasks.md.
+    `shared` is counted because the manifest lists those services (Gitea, Argo CD,
+    Headscale, ...) on the same page as this total, so a total without them would
+    contradict its own page. There is no constant on top: `ba1a2dd6` added `+ 2`
+    only so the derived figure matched the literal 35 it replaced, and nobody could
+    say which two workloads it stood for. Decided 2026-09-22; the published figure
+    moved from 35 to whatever the three tables sum to.
     """
     if "total_services" in config.get("apps", {}).get("platform", {}):
         return int(config["apps"]["platform"]["total_services"])
 
     from toolkit.scripts.sync_homepage_config import build_service_tables
 
-    legacy_workload_offset = 2
-    stg, prd, _ = build_service_tables(config)
-    return len(stg) + len(prd) + legacy_workload_offset
+    stg, prd, shared = build_service_tables(config)
+    return len(stg) + len(prd) + len(shared)
 
 
 def generate_manifest(config_path: Path | None = None, target_path: Path | None = None) -> dict[str, Any]:
