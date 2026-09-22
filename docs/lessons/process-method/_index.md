@@ -1,10 +1,11 @@
 # How the work is run: specs, reviews, knowledge
 
-69 lessons, newest first. Back to [all categories](../_index.md).
+70 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
 | 452 | [A partial view of a corpus answers exactly like the whole corpus](lesson-452-a-partial-view-of-a-corpus-answers-like-the-whole-corpus.md) | 2026-09-06 |
+| 453 | [An absence is only as strong as the search that produced it](lesson-453-an-absence-is-only-as-strong-as-the-search-that-produced-it.md) | 2026-09-07 |
 | 440 | [Running the real code against a mocked boundary tests the code and certifies the mock](lesson-440-a-mock-of-an-unmeasured-boundary-certifies-the-belief.md) | 2026-09-05 |
 | 422 | [A stale blocker reads exactly like a live one, so nobody retries what a comment says is impossible](lesson-422-a-stale-blocker-reads-exactly-like-a-live-one.md) | 2026-09-04 |
 | 419 | [A mutation harness runs what it mutates, so a mutation can do the thing the code was written to prevent](lesson-419-a-mutation-harness-runs-what-it-mutates.md) | 2026-09-03 |
