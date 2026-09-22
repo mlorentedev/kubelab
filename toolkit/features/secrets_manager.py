@@ -934,7 +934,17 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("github-runner",),
         # The runner moved ace2 -> Beelink with ADR-028 / IDP-024; the note still
         # said ace2, which would send a rotation to the wrong host.
-        rotate_note="Re-provision beelink (Ansible). Token must have repo + workflow scope.",
+        # Rotated 2026-09-22 after it expired unnoticed. The note used to ask for a
+        # classic token with `repo + workflow`: `repo` reaches every repository of
+        # the owner, and `workflow` lets the token rewrite the jobs this very
+        # runner executes. Registration needs neither.
+        rotate_note=(
+            "Fine-grained PAT named `bee-github-runner-<YYYY-MM>` (<host>-<purpose>-<YYYY-MM>, "
+            "as ANSIBLE-033), scoped to mlorentedev/kubelab with Administration read/write "
+            "only. Store with `toolkit secrets set <key> --env common --stdin`, then "
+            "`make provision NODE=bee ENV=prod TAGS=runner`; done when the runner is online "
+            "and a second run reports changed=0. Delete the previous token after that."
+        ),
     ),
     SecretSpec(
         key_path="apps.services.automation.gitea_runner.registration_token",
