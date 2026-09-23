@@ -47,7 +47,7 @@ identity_providers:
       - groups
       consent_mode: implicit
     - client_id: argocd
-      client_secret: $argon2id$v=19$m=65536,t=3,p=4$yvjYkRfwEZ5V21RsUaQjhg$cMEmNbSBX60lKukCoseDBxQQ3KgLyIFjJpahdJn0Nw0
+      client_secret: $argon2id$v=19$m=65536,t=3,p=4$ITrEVRiT5s0czAnRKOPviA$00Z6kT5lnb+mbWluVLWZyd5tn7jtDOwJu0qbMhldTA8
       client_name: Argo CD
       public: false
       authorization_policy: one_factor
