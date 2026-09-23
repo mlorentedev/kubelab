@@ -530,8 +530,6 @@ class CredentialsManager:
             f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_gitea_hash": gitea_oidc_client_secret_hash,
-            f"{_auth}.oidc_client_secret_argocd": argocd_oidc_client_secret,
-            f"{_auth}.oidc_client_secret_argocd_hash": argocd_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
@@ -552,10 +550,15 @@ class CredentialsManager:
             "apps.services.observability.uptime_kuma.admin_password": common_password,
         }
 
-        # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env)
+        # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env).
+        # The OIDC pair belongs here too. It sat in `generated_secrets` until SSOT-028
+        # (#1789), so every prod run wrote a copy into prod.enc.yaml. That copy overrode
+        # common in the merged config, so Authelia registered a digest the hub never sends.
         hub_secrets = {
             "argocd.admin_password": common_password,
             "argocd.admin_password_hash": argocd_admin_password_hash,
+            f"{_auth}.oidc_client_secret_argocd": argocd_oidc_client_secret,
+            f"{_auth}.oidc_client_secret_argocd_hash": argocd_oidc_client_secret_hash,
         }
 
         # Preserve immutable secrets (storage_encryption_key, session_secret, etc.)
