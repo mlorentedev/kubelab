@@ -1,0 +1,44 @@
+[
+  {
+    "id": "SSOT-017-oidc-client-ssot-f1",
+    "behavior": "AC1: rendered oidc-clients.yml per env registers exactly the SSOT clients for that env, all non-secret fields equal (no SOPS needed)",
+    "verification": "poetry run pytest -q --no-cov -k oidc_clients_match_ssot",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SSOT-017-oidc-client-ssot-f2",
+    "behavior": "AC2: no clients: key in either configuration.yml; emitted authelia-config carries both files and its hash changes on a client-only change",
+    "verification": "poetry run pytest -q --no-cov -k authelia_config_split",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SSOT-017-oidc-client-ssot-f3",
+    "behavior": "AC3: generator is the sole writer; sync_oidc_hashes.py gone; sync all --check reports a stale digest",
+    "verification": "test ! -e toolkit/scripts/sync_oidc_hashes.py && poetry run pytest -q --no-cov -k oidc_check_detects_stale_digest",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SSOT-017-oidc-client-ssot-f4",
+    "behavior": "AC4: a client missing token_endpoint_auth_method or authorization_policy fails generation naming the client",
+    "verification": "poetry run pytest -q --no-cov -k a_missing_required_field_fails_naming_the_client",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SSOT-017-oidc-client-ssot-f5",
+    "behavior": "AC5: live SSO login succeeds for every client in every env it is registered in (manual measurement, evidence in verification.md)",
+    "verification": "grep -q 'AC5 measured' specs/SSOT-017-oidc-client-ssot/verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SSOT-017-oidc-client-ssot-f6",
+    "behavior": "AC6: K8s generator and Compose dev renderer share one client resolver; same client_id set per env; no private digest-key derivation",
+    "verification": "poetry run pytest -q --no-cov -k oidc_single_resolver",
+    "state": "pending",
+    "evidence": ""
+  }
+]

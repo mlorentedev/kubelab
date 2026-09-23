@@ -69,7 +69,7 @@ help:
 	@echo "Kubernetes:"
 	@echo "  make sync-homepage      Sync Homepage config from common.yaml"
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
-	@echo "  make sync-oidc-hashes ENV=x  Sync OIDC hashes from SOPS to K8s manifests"
+	@echo "  make sync-oidc-hashes ENV=x  Generate oidc-clients.yml from the SSOT + SOPS digests"
 	@echo "  make validate-sync      Check for drift in generated files (ADR-027)"
 	@echo "  make apply-secrets ENV=x  Apply SOPS secrets to K8s cluster"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"

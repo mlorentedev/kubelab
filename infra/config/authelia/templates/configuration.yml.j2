@@ -41,6 +41,7 @@ authentication_backend:
 # =============================================================================
 # IDENTITY PROVIDERS
 # =============================================================================
+{% if oidc_clients %}
 identity_providers:
   oidc:
     jwks:
@@ -60,6 +61,9 @@ identity_providers:
         client_name: '{{ client.client_name }}'
         public: false
         client_secret: '{{ client.client_secret_hash }}'
+        authorization_policy: '{{ client.authorization_policy }}'
+        token_endpoint_auth_method: '{{ client.token_endpoint_auth_method }}'
+        consent_mode: '{{ client.consent_mode }}'
         redirect_uris:
           {% for uri in client.redirect_uris %}
           - '{{ uri }}'
@@ -69,6 +73,7 @@ identity_providers:
           - {{ scope }}
           {% endfor %}
       {% endfor %}
+{% endif %}
 
 # =============================================================================
 # ACCESS CONTROL

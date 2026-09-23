@@ -100,35 +100,6 @@ apps:
         domain: auth.kubelab.test
         default_domain_root: kubelab.test
         issuer_domain: kubelab.test
-        oidc_clients:
-          - client_id: kubelab-oidc
-            client_name: KubeLab OIDC Client (General)
-            redirect_uris:
-              - https://auth.kubelab.test/oauth2/callback
-            scopes:
-              - openid
-              - profile
-              - email
-              - groups
-          - client_id: grafana-oidc
-            client_name: Grafana OIDC Client
-            redirect_uris:
-              # Redirect de Grafana
-              - https://grafana.kubelab.test/login/generic_oauth
-            scopes:
-              - openid
-              - profile
-              - email
-              - groups
-          - client_id: minio-oidc
-            client_name: MinIO OIDC Client
-            redirect_uris:
-              - https://console.minio.kubelab.test/oauth_callback
-            scopes:
-              - openid
-              - profile
-              - email
-              - groups
         # Placeholder, replace with generated secret
         jwt_secret: "supersecretjwtkeyforauthelia"
         # Placeholder, replace with generated secret

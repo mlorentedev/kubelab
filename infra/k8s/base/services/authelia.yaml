@@ -48,6 +48,11 @@ spec:
               containerPort: 9091
               protocol: TCP
           env:
+            # Two config files, merged in this order. The OIDC client list is
+            # generated into the second one (SSOT-017); Authelia merges maps across
+            # files but never combines lists, so `clients` lives only there.
+            - name: X_AUTHELIA_CONFIG
+              value: /config/configuration.yml,/config/oidc-clients.yml
             - name: AUTHELIA_SESSION_SECRET_FILE
               value: /run/secrets/session_secret
             - name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE
@@ -64,6 +69,10 @@ spec:
             - name: config
               mountPath: /config/configuration.yml
               subPath: configuration.yml
+              readOnly: true
+            - name: config
+              mountPath: /config/oidc-clients.yml
+              subPath: oidc-clients.yml
               readOnly: true
             - name: users
               mountPath: /config/users

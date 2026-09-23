@@ -583,6 +583,10 @@ cluster_bootstrap:
 # ARGO CD (ADR-023 — Hub-and-Spoke GitOps)
 # ===========================================================================
 argocd:
+  # The hub's public host. Env-independent: there is one hub, and its OIDC issuer
+  # is prod Authelia (infra/helm/argocd/values.yaml). Read by the argocd OIDC
+  # client's redirect (SSOT-017); the Helm values still carry it literally.
+  domain: argo.kubelab.live
   # Argo CD Helm chart version, PINNED. Read by `_deploy-argocd-helm` and by the
   # GCP hub's cloud-init, so both installs agree on what "Argo CD" means.
   #
@@ -1503,7 +1507,9 @@ apps:
         image: grafana/grafana-oss
         # Permite que Authelia registre usuarios en Grafana si no existen
         oauth_allow_sign_up: true
-        oauth_client_id: grafana-oidc
+        # Must equal the grafana client_id in authelia.oidc_clients (SSOT-017).
+        # Read by the Compose stack only; the K8s grafana.env carries it literally.
+        oauth_client_id: grafana
 
 
       loki:
@@ -1615,44 +1621,74 @@ apps:
         regulation_ban_time: 5m
         notifier_disable_startup_check: false
         jwt_secret_reset_password: some_dummy_secret_for_jwt_reset
-        # Moved OIDC client definitions to a list structure
+        # SSOT-017 / ADR-040 §1: the ONLY declaration of an OIDC client. The K8s
+        # client files (`oidc-clients.yml`, base = staging, prod overlay) and the
+        # Compose dev config are generated from this list by `toolkit sync oidc`;
+        # a committed file that disagrees fails tests/test_oidc_clients.py.
+        # Every field is required, with no defaults. token_endpoint_auth_method in
+        # particular differs per client (argocd sends client_secret_POST; gitea was
+        # measured sending client_secret_BASIC on 2026-08-23), so a default would
+        # break exactly one client at token exchange. The redirect host is the
+        # service's declared domain in each env, never written twice. The client
+        # secret digest is read from SOPS at oidc_client_secret_<id>_hash, where
+        # <id> is client_id minus a trailing `-oidc`, with `-` as `_`.
         oidc_clients:
-        - client_id: kubelab-oidc
-          client_name: KubeLab OIDC Client (General)
-          redirect_uris:
-          - https://auth.kubelab.live/oauth2/callback
-          scopes:
-          - openid
-          - profile
-          - email
-          - groups
-        - client_id: grafana-oidc
-          client_name: Grafana OIDC Client
-          redirect_uris:
-          - https://grafana.kubelab.live/login/generic_oauth
-          scopes:
-          - openid
-          - profile
-          - email
-          - groups
-        - client_id: minio-oidc
-          client_name: MinIO OIDC Client
-          redirect_uris:
-          - https://console.minio.kubelab.live/oauth_callback
-          scopes:
-          - openid
-          - profile
-          - email
-          - groups
+        - client_id: minio
+          client_name: MinIO
+          envs: [staging, prod]
+          redirect:
+            domain: apps.services.data.minio.console_domain
+            path: /oauth_callback
+          scopes: [openid, profile, email]
+          token_endpoint_auth_method: client_secret_basic
+          authorization_policy: one_factor
+          consent_mode: implicit
+        # dev: the Compose Grafana enables generic OAuth; the only dev OIDC
+        # consumer (MinIO's compose.dev.yml switches OIDC off). SSOT-017 R8.
+        - client_id: grafana
+          client_name: Grafana
+          envs: [dev, staging, prod]
+          redirect:
+            domain: apps.services.observability.grafana.domain
+            path: /login/generic_oauth
+          scopes: [openid, profile, email, groups]
+          token_endpoint_auth_method: client_secret_basic
+          authorization_policy: one_factor
+          consent_mode: implicit
+        # Prod only: Gitea is a singleton (ADR-061).
+        - client_id: gitea
+          client_name: Gitea
+          envs: [prod]
+          redirect:
+            domain: apps.services.core.gitea.domain
+            path: /user/oauth2/authelia/callback
+          scopes: [openid, profile, email, groups]
+          token_endpoint_auth_method: client_secret_basic
+          authorization_policy: one_factor
+          consent_mode: implicit
+        # Prod only: the hub's issuer is prod Authelia, so a staging registration
+        # is unreachable.
+        - client_id: argocd
+          client_name: Argo CD
+          envs: [prod]
+          redirect:
+            domain: argocd.domain
+            path: /auth/callback
+          scopes: [openid, profile, email, groups]
+          token_endpoint_auth_method: client_secret_post
+          authorization_policy: one_factor
+          consent_mode: implicit
+        # client_secret_basic measured by a live staging SSO login, 2026-09-23 (SSOT-017 AC5).
         - client_id: vikunja-oidc
           client_name: Vikunja Task Platform
-          redirect_uris:
-          - https://tasks.staging.kubelab.live/auth/openid/authelia
-          - https://tasks.kubelab.live/auth/openid/authelia
-          scopes:
-          - openid
-          - profile
-          - email
+          envs: [staging, prod]
+          redirect:
+            domain: apps.services.core.vikunja.domain
+            path: /auth/openid/authelia
+          scopes: [openid, profile, email]
+          token_endpoint_auth_method: client_secret_basic
+          authorization_policy: one_factor
+          consent_mode: implicit
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:

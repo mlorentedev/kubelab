@@ -5,7 +5,7 @@ Wraps standalone sync scripts under a unified CLI with drift detection (ADR-027)
 Usage:
     toolkit sync homepage              Sync Homepage config
     toolkit sync images                Sync K8s image tags
-    toolkit sync oidc --env staging    Sync OIDC hashes
+    toolkit sync oidc --env staging    Generate the OIDC client file
     toolkit sync all --env staging     Run all syncs
     toolkit sync all --check           Check for drift (CI mode)
 """
@@ -17,7 +17,6 @@ import itertools
 import re
 import shutil
 import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
@@ -225,34 +224,22 @@ def _get_homepage_output_files() -> list[Path]:
 
 
 def _get_oidc_output_files() -> list[Path]:
-    """Target files for OIDC hash sync.
+    """Target files for the OIDC client generator (SSOT-017).
 
-    Reuses sync_oidc_hashes.FILE_PATHS as the single source of truth so the
-    --check snapshot/compare/restore set can never drift from the files the sync
-    actually writes. Hardcoding them separately is what broke OIDC-SYNC-001
-    (--check compared/restored the old files while the sync wrote the new ones,
-    falsely reporting "in sync" and leaving the real config modified).
+    Derived from the generator itself so the --check snapshot/compare/restore set
+    can never drift from the files it writes. Hardcoding them separately is what
+    broke OIDC-SYNC-001 (--check compared/restored the old files while the sync
+    wrote the new ones, falsely reporting "in sync").
     """
-    from toolkit.scripts.sync_oidc_hashes import FILE_PATHS
+    from toolkit.features import oidc_clients
 
-    return list(FILE_PATHS.values())
+    return [oidc_clients.clients_file(env) for env in ("staging", "prod")]
 
 
 def _run_oidc_sync(env: str) -> int:
-    """Invoke sync_oidc_hashes.main() with the correct sys.argv for argparse.
+    from toolkit.features import oidc_clients
 
-    NOTE: Not thread-safe. sync_oidc_hashes uses argparse which reads sys.argv.
-    """
-    original_argv = sys.argv
-    sys.argv = ["sync_oidc_hashes", "--env", env]
-    try:
-        from toolkit.scripts import sync_oidc_hashes
-
-        return sync_oidc_hashes.main()
-    except SystemExit as e:
-        return e.code if isinstance(e.code, int) else 1
-    finally:
-        sys.argv = original_argv
+    return oidc_clients.sync_env(env)
 
 
 @app.command()
@@ -350,7 +337,7 @@ def oidc(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
 ) -> None:
-    """Sync OIDC client_secret hashes from SOPS to K8s manifests."""
+    """Generate the OIDC client files from the SSOT and the stored SOPS digests (SSOT-017)."""
     if check:
         if not _sops_available():
             logger.warning("oidc: SOPS unavailable — skipping drift check")

@@ -141,64 +141,6 @@ identity_providers:
   oidc:
     hmac_secret: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
     issuer_private_key: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE
-    clients:
-      - client_id: minio
-        client_name: MinIO
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$3PfYn19oBeTXHQDEFGx7qg$TcB0a2yqM/g7QzG7/uHUj3BBKpr3AYq8/iV3iDndqlM'
-        public: false
-        authorization_policy: one_factor
-        token_endpoint_auth_method: 'client_secret_basic'
-        redirect_uris:
-          - https://console.minio.staging.kubelab.live/oauth_callback
-        scopes:
-          - openid
-          - profile
-          - email
-        consent_mode: implicit
-      - client_id: grafana
-        client_name: Grafana
-        # synced via: make sync-oidc-hashes ENV=staging
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$6fPbVdr85IvichQnqrWvSA$yGhbolI/xjAsKhQuYcMSIZZ0/ceOMnfReDP8k9qKV9s'
-        public: false
-        authorization_policy: one_factor
-        token_endpoint_auth_method: 'client_secret_basic'
-        redirect_uris:
-          - https://grafana.staging.kubelab.live/login/generic_oauth
-        scopes:
-          - openid
-          - profile
-          - email
-          - groups
-        consent_mode: implicit
-      - client_id: argocd
-        client_name: Argo CD
-        # synced via: make sync-oidc-hashes ENV=staging
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$ITrEVRiT5s0czAnRKOPviA$00Z6kT5lnb+mbWluVLWZyd5tn7jtDOwJu0qbMhldTA8'
-        public: false
-        authorization_policy: one_factor
-        token_endpoint_auth_method: 'client_secret_post'
-        redirect_uris:
-          - https://argo.kubelab.live/auth/callback
-        scopes:
-          - openid
-          - profile
-          - email
-          - groups
-        consent_mode: implicit
-      - client_id: vikunja-oidc
-        client_name: Vikunja Task Platform
-        # synced via: make sync-oidc-hashes ENV=staging
-        client_secret: '$argon2id$v=19$m=65536,t=3,p=4$QEvFAiioBOII0ZotMvBoGg$sIs++1fvPfvHiyV+OY5pbSPs3fCPyLu74PavhnGjx+s'
-        public: false
-        authorization_policy: one_factor
-        # Unverified default (3 of 4 existing clients use _basic); confirm via a
-        # live login and correct like the gitea entry above if the token
-        # exchange fails with the wrong method.
-        token_endpoint_auth_method: 'client_secret_basic'
-        redirect_uris:
-          - https://tasks.staging.kubelab.live/auth/openid/authelia
-        scopes:
-          - openid
-          - profile
-          - email
-        consent_mode: implicit
+    # clients: generated into oidc-clients.yml by `toolkit sync oidc` from
+    # apps.services.security.authelia.oidc_clients (SSOT-017). The whole list
+    # lives there because Authelia merges config files but not lists across them.

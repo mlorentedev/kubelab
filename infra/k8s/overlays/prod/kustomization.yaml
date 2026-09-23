@@ -31,6 +31,7 @@ configMapGenerator:
     behavior: replace
     files:
       - authelia-config/configuration.yml
+      - authelia-config/oidc-clients.yml
 
   # Route prod's alerts to the push tier (OBS-007). `merge` — not `replace` —
   # so the base's contact-points.yaml and templates.yaml carry through untouched
