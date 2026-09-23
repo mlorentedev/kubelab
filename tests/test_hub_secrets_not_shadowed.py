@@ -73,3 +73,59 @@ def test_no_env_file_shadows_a_hub_key(path: Path) -> None:
         f"config, so generators use this copy while the hub uses common's. Remove them with "
         f"`toolkit secrets unset <key> --env {path.name.split('.')[0]}`."
     )
+
+
+class TestCredentialsGenerateWritesHubKeysToCommon:
+    """The writer half (Codex P1 on #1790): `credentials generate` must not re-create the copy.
+
+    Before this, the Argo CD OIDC pair went into `generated_secrets`, the per-env
+    batch, and only `argocd.admin_password{,_hash}` went to common. So every prod
+    rotation put a fresh shadow pair back into `prod.enc.yaml`. That re-broke
+    Argo CD SSO and turned the guard above red.
+    """
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[dict[str, Any], Path | None]]:
+        from unittest.mock import MagicMock
+
+        from toolkit.features import credentials
+
+        writes: list[tuple[dict[str, Any], Path | None]] = []
+        cm = MagicMock()
+        cm.get_merged_config.return_value = {"apps": {"auth": {"identities": {"operator": "operator"}}}}
+        cm.batch_update_secrets.side_effect = lambda data, secret_file_path=None: writes.append(
+            (dict(data), secret_file_path)
+        ) or True
+        monkeypatch.setattr(credentials, "ConfigurationManager", MagicMock(return_value=cm))
+        answers = iter(["operator", "Passw0rdForTests"])
+        monkeypatch.setattr(credentials.typer, "prompt", lambda *a, **k: next(answers))
+
+        manager = credentials.CredentialsManager()
+        monkeypatch.setattr(manager, "_read_existing_secrets", lambda env: {})
+        monkeypatch.setattr(manager, "generate_argon2_hash", lambda s: "$argon2id$fake")
+        monkeypatch.setattr(manager, "generate_oidc_client_secret_hash", lambda s: "$argon2id$fake")
+        monkeypatch.setattr(manager, "generate_bcrypt_hash", lambda s: "$2b$fake")
+        monkeypatch.setattr(manager, "_generate_htpasswd_bcrypt_hash", lambda u, p: "u:$2y$fake")
+        monkeypatch.setattr(manager, "_reconcile_external_credentials", lambda *a, **k: None)
+
+        def no_jwks(*_: Any, **__: Any) -> str:
+            raise RuntimeError("not in a unit test: nothing may be written to the repo")
+
+        monkeypatch.setattr(manager, "generate_jwks_rsa_key", no_jwks)
+        manager.setup_authelia_secrets("prod", auto_update=True)
+        return writes
+
+    def test_no_hub_key_goes_to_the_env_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        env_writes = [data for data, path in self._run(monkeypatch) if path is None]
+        assert env_writes, "the per-env batch was never written: the test exercised nothing"
+        leaked = sorted(k for data in env_writes for k in data if k in HUB_KEYS)
+        assert not leaked, f"credentials generate writes hub keys to prod.enc.yaml: {leaked}"
+
+    def test_every_generated_hub_key_goes_to_common(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        common = {
+            k
+            for data, path in self._run(monkeypatch)
+            if path is not None and Path(path).name == "common.enc.yaml"
+            for k in data
+        }
+        generated = sorted(s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.HUB_MANAGED)
+        assert set(generated) <= common, f"HUB_MANAGED keys not written to common: {set(generated) - common}"
