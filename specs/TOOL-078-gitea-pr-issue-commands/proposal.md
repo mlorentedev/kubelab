@@ -1,7 +1,7 @@
 ---
 id: "TOOL-078-gitea-pr-issue-commands"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-09-22"
 issue: "kubelab#1792"
 tags: [spec, proposal, gitea, forge, review-loop, migration]
