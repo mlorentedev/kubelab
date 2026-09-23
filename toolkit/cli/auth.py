@@ -27,13 +27,20 @@ EXIT_DECLARED_NONE = 3
 
 
 def _render(env: str) -> list[dict[str, Any]]:
-    out = subprocess.run(
+    """The overlay as the cluster receives it. It renders the repo locally and needs no cluster.
+
+    A failure here means the checkout itself is broken, and the operator is told
+    so in one line rather than handed a traceback in the middle of an incident.
+    """
+    result = subprocess.run(
         ["kubectl", "kustomize", str(PROJECT_ROOT / "infra" / "k8s" / "overlays" / env)],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
-    return [doc for doc in yaml.safe_load_all(out) if doc]
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip().splitlines()[-1:] or ["no output"]
+        raise bg.BreakGlassError(f"could not render the {env} overlay from this checkout: {detail[0]}")
+    return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
 
 
 def _kubectl_json(env: str, *args: str) -> Any:
@@ -110,8 +117,12 @@ def break_glass_cmd(
 
     values = load_values(env)
     decls = bg.declarations(values)
-    bg.validate(decls, values)
-    deps = bg.dependents(env, _render(env), values)
+    try:
+        bg.validate(decls, values)
+        deps = bg.dependents(env, _render(env), values)
+    except bg.BreakGlassError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
     if service not in deps:
         typer.echo(
             f"{service} does not depend on Authelia in {env}, so its normal login is unaffected. "

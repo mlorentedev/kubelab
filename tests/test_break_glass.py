@@ -285,3 +285,22 @@ def test_the_backend_comes_from_the_rule_the_idp_gates() -> None:
     }
     route = bg.routes([doc])["n8n"]
     assert route.forward_auth and route.backend is not None and route.backend.name == "editor"
+
+
+def test_a_broken_render_is_one_line_not_a_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """pr-agent on #1795: a failing `kubectl kustomize` must reach the operator as a sentence."""
+    import types
+
+    from typer.testing import CliRunner
+
+    from toolkit.cli import auth
+    from toolkit.main import app
+
+    def failing_run(*_: Any, **__: Any) -> Any:
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="Error: accumulating resources: boom\n")
+
+    monkeypatch.setattr(auth.subprocess, "run", failing_run)
+    result = CliRunner().invoke(app, ["auth", "break-glass", "grafana", "--env", "staging", "--dry-run"])
+    assert result.exit_code == 1
+    assert "could not render the staging overlay" in result.output and "boom" in result.output
+    assert "Traceback" not in result.output
