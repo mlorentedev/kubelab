@@ -50,7 +50,8 @@ under Kubernetes RBAC, with no Argo CD server login.
 
 ### Gitea
 
-`manu` with its local password, over the private URL, by API or `git` over HTTPS.
+`manu` with its local password, over the private URL (plain HTTP to the Beelink, carried
+inside the tailnet's WireGuard), by API or `git`.
 The web form is not relied on. For credential repair, see
 [gitea-credential-recovery.md](gitea-credential-recovery.md).
 

@@ -1756,13 +1756,16 @@ apps:
           n8n:
             none: >-
               Automations keep running with the IdP down; only the editor needs a login,
-              and editing workflows waits for the IdP (ADR-028).
+              and editing workflows waits for the IdP (ADR-028). The editor's own owner credential
+              is not in SOPS: #1796.
           traefik-dashboard:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
           dev-node:
             none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
           minio-console:
-            none: "Retiring (OPS-023); the console lost OIDC upstream and nothing depends on it."
+            none: >-
+              Retiring (OPS-023). The MinIO console dropped OIDC login upstream (RELEASE.2025-05-24);
+              its client stays registered only until OPS-023 removes it.
 
       crowdsec:
         name: crowdsec

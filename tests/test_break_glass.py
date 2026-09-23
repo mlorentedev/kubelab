@@ -263,3 +263,25 @@ class TestAnnounceUse:
             is False
         )
         assert bg.announce_use("prod", "grafana", who="x", merged_config=self.config, webhook_secret=None) is False
+
+
+def test_the_backend_comes_from_the_rule_the_idp_gates() -> None:
+    doc = {
+        "kind": "IngressRoute",
+        "metadata": {"name": "n8n", "namespace": "kubelab"},
+        "spec": {
+            "routes": [
+                {
+                    "match": "Host(`n.example.test`) && PathPrefix(`/webhook`)",
+                    "services": [{"name": "hooks", "port": 1}],
+                },
+                {
+                    "match": "Host(`n.example.test`)",
+                    "middlewares": [{"name": "authelia"}],
+                    "services": [{"name": "editor", "port": 2}],
+                },
+            ]
+        },
+    }
+    route = bg.routes([doc])["n8n"]
+    assert route.forward_auth and route.backend is not None and route.backend.name == "editor"

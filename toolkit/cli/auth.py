@@ -86,7 +86,11 @@ def break_glass_cmd(
     service: Annotated[str, typer.Argument(help="IngressRoute name of a service that depends on Authelia")],
     env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")] = "prod",
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Resolve and print the path; open nothing, announce nothing")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Resolve and print the path; open no tunnel and announce nothing (read-only checks still run)",
+        ),
     ] = False,
 ) -> None:
     """Open the private way into SERVICE while Authelia is down (ADR-062 D4).

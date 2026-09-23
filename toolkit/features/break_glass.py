@@ -102,34 +102,41 @@ def _lookup(values: Mapping[str, Any], dotted: str) -> Any:
 
 
 def routes(docs: Iterable[Mapping[str, Any]]) -> dict[str, Route]:
-    """Every IngressRoute, by name, with its hosts, ForwardAuth flag and first backend."""
+    """Every IngressRoute, by name, with its hosts, ForwardAuth flag and backend.
+
+    The backend is taken from the rule that carries ForwardAuth when one does,
+    because that rule is the one the IdP gates. Otherwise it comes from the first
+    rule with a backend (OIDC-only routes are gated by the application, not by a
+    rule).
+    """
     found: dict[str, Route] = {}
     for doc in docs:
         if doc.get("kind") != "IngressRoute":
             continue
-        name = doc["metadata"]["name"]
         namespace = doc["metadata"].get("namespace", "kubelab")
         hosts: list[str] = []
-        forward_auth = False
-        backend: Backend | None = None
+        gated: Backend | None = None
+        first: Backend | None = None
         for rule in doc.get("spec", {}).get("routes", []) or []:
             hosts.extend(_HOST.findall(rule.get("match", "")))
+            services = rule.get("services") or []
+            backend = (
+                Backend(
+                    namespace=services[0].get("namespace", namespace),
+                    name=services[0]["name"],
+                    port=services[0].get("port"),
+                    kind=services[0].get("kind", "Service"),
+                )
+                if services
+                else None
+            )
+            first = first or backend
             if any(m.get("name") == FORWARD_AUTH_MIDDLEWARE for m in rule.get("middlewares") or []):
-                forward_auth = True
-            for svc in rule.get("services") or []:
-                if backend is None:
-                    backend = Backend(
-                        namespace=svc.get("namespace", namespace),
-                        name=svc["name"],
-                        port=svc.get("port"),
-                        kind=svc.get("kind", "Service"),
-                    )
-        previous = found.get(name)
-        if previous:  # the same route name in two documents: merge, never drop
-            hosts = [*previous.hosts, *hosts]
-            forward_auth = forward_auth or previous.forward_auth
-            backend = previous.backend or backend
-        found[name] = Route(name=name, hosts=tuple(dict.fromkeys(hosts)), forward_auth=forward_auth, backend=backend)
+                gated = gated or backend or first
+        name = doc["metadata"]["name"]
+        found[name] = Route(
+            name=name, hosts=tuple(dict.fromkeys(hosts)), forward_auth=gated is not None, backend=gated or first
+        )
     return found
 
 
