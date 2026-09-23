@@ -55,10 +55,7 @@ def load_values(env: str, project_root: Path = PROJECT_ROOT) -> dict[str, Any]:
     """`common.yaml` deep-merged with `<env>.yaml` — plaintext values only, no SOPS."""
     from toolkit.features.configuration import ConfigurationManager
 
-    manager = ConfigurationManager(env=env, project_root=project_root)
-    values = manager._load_yaml(manager.values_path / "common.yaml")
-    manager._deep_update(values, manager._load_yaml(manager.values_path / f"{env}.yaml"))
-    return values
+    return ConfigurationManager(env=env, project_root=project_root).get_plaintext_values()
 
 
 def _lookup(values: dict[str, Any], dotted: str) -> Any:

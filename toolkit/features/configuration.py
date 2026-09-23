@@ -137,6 +137,16 @@ class ConfigurationManager:
                 source[key] = value
         return source
 
+    def get_plaintext_values(self) -> Dict[str, Any]:
+        """`common.yaml` deep-merged with `{env}.yaml`: plaintext values only, no SOPS.
+
+        The first two steps of `get_merged_config`, public for callers that must
+        work without a decryption key (SSOT-017's resolver runs in CI).
+        """
+        config = self._load_yaml(self.values_path / "common.yaml")
+        self._deep_update(config, self._load_yaml(self.values_path / f"{self.env}.yaml"))
+        return config
+
     def get_merged_config(self) -> Dict[str, Any]:
         """
         Merge order (later overrides earlier):
@@ -144,12 +154,8 @@ class ConfigurationManager:
 
         Returns the merged config WITHOUT flattening (preserves nested structure).
         """
-        # 1. Load Common Values
-        config = self._load_yaml(self.values_path / "common.yaml")
-
-        # 2. Load Env Values (Deep merge)
-        env_values = self._load_yaml(self.values_path / f"{self.env}.yaml")
-        self._deep_update(config, env_values)
+        # 1-2. Plaintext values: common.yaml, then {env}.yaml deep-merged over it
+        config = self.get_plaintext_values()
 
         # 3. Load Shared Secrets (Decrypt) — infra creds shared across all envs
         common_secrets = self._decrypt_sops(self.secrets_path / "common.enc.yaml")
