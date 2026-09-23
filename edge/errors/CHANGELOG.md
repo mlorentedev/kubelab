@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.2.0...errors-v1.2.1) (2026-09-23)
+
+
+### Miscellaneous
+
+* small correctness fixes and dead code from the 2026-09-07 audit ([#1757](https://github.com/mlorentedev/kubelab/issues/1757)) ([a70a7a5](https://github.com/mlorentedev/kubelab/commit/a70a7a58636e5a01d03140d56951a94cc4304c3a))
+
 ## [1.2.0](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.6...errors-v1.2.0) (2026-09-05)
 
 
