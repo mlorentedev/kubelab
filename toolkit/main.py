@@ -8,6 +8,7 @@ from typer import rich_utils
 
 from toolkit import __version__
 from toolkit.cli import (
+    auth,
     backup,
     board,
     config,
@@ -122,6 +123,7 @@ def info() -> None:
     logger.info(f"Default Environment: {settings.environment}")
 
 
+app.add_typer(auth.app, name="auth")
 app.add_typer(backup.app, name="backup")
 app.add_typer(board.app, name="board")
 app.add_typer(config.app, name="config")

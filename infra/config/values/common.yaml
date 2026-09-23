@@ -1721,6 +1721,49 @@ apps:
           groups:
           - users
 
+        # BREAK-GLASS (AUTH-004 AC7, ADR-062 D4): how each service that depends on
+        # this IdP is reached while it is down. The path never goes through the
+        # public router or Authelia: a port-forward to the Service, its
+        # EndpointSlice address over the tailnet, or the cluster credential.
+        #
+        # Keyed by IngressRoute name. Which services must appear here is DERIVED,
+        # not listed: an OIDC client redirecting to the route's host, or the
+        # `authelia` ForwardAuth middleware on it. WHERE each one is reached is
+        # derived too, from the route's backend and the live Service. This only
+        # says which account opens the door. `tests/test_break_glass.py` fails CI
+        # when a dependent is missing. Use: `make break-glass SVC=<name> ENV=<env>`.
+        #
+        #   {identity, secret}  local account; the password is a SECRET_CATALOG key
+        #   {}                  reachable privately, no account needed
+        #   {cluster: <target>} the kubeconfig is the way in
+        #   {none: <reason>}    no break-glass, on purpose
+        break_glass:
+          grafana:
+            identity: superadmin
+            secret: apps.services.observability.grafana.admin_password
+          gitea:
+            # Via the API and `git` over HTTPS. The web form is not relied on,
+            # because the single-door change disables it.
+            identity: superadmin
+            secret: apps.services.core.gitea.admin_password
+          argocd:
+            # `argocd --core` or kubectl against the hub. The local admin account
+            # is not a break-glass path; it is disabled by design (ADR-062 D4).
+            cluster: hub
+          loki: {}
+          vikunja:
+            none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."
+          n8n:
+            none: >-
+              Automations keep running with the IdP down; only the editor needs a login,
+              and editing workflows waits for the IdP (ADR-028).
+          traefik-dashboard:
+            none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
+          dev-node:
+            none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
+          minio-console:
+            none: "Retiring (OPS-023); the console lost OIDC upstream and nothing depends on it."
+
       crowdsec:
         name: crowdsec
         # ADR028-004: config promotes as ConfigMaps. Owns two PVCs (db + config).

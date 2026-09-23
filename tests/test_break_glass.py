@@ -170,7 +170,14 @@ class TestValidate:
             self._ok(grafana=decl)
 
     def test_a_non_service_backend_cannot_claim_a_reachable_path(self) -> None:
-        docs = [_route("traefik-dashboard", "t.example.test", forward_auth=True, backend={"name": "api@internal", "kind": "TraefikService"})]
+        docs = [
+            _route(
+                "traefik-dashboard",
+                "t.example.test",
+                forward_auth=True,
+                backend={"name": "api@internal", "kind": "TraefikService"},
+            )
+        ]
         deps = bg.dependents("prod", docs, _values())
         assert bg.unreachable_backends(deps, {"traefik-dashboard": {}}) == ["traefik-dashboard"]
         assert bg.unreachable_backends(deps, {"traefik-dashboard": {"none": "diagnostic view"}}) == []
@@ -180,14 +187,21 @@ class TestValidate:
 
 
 class TestPlanAccess:
-    route = bg.Route(name="grafana", hosts=("grafana.example.test",), forward_auth=True, backend=bg.Backend("kubelab", "grafana", 3000, "Service"))
+    route = bg.Route(
+        name="grafana",
+        hosts=("grafana.example.test",),
+        forward_auth=True,
+        backend=bg.Backend("kubelab", "grafana", 3000, "Service"),
+    )
 
     def test_a_service_with_pods_is_port_forwarded(self) -> None:
         plan = bg.plan_access({}, self.route, {"spec": {"selector": {"app": "grafana"}}}, [])
         assert plan == bg.PortForward(namespace="kubelab", service="grafana", port=3000)
 
     def test_a_service_without_pods_is_reached_at_its_endpoint(self) -> None:
-        slices = [{"ports": [{"port": 3000}], "endpoints": [{"addresses": ["100.64.0.3"], "conditions": {"ready": True}}]}]
+        slices = [
+            {"ports": [{"port": 3000}], "endpoints": [{"addresses": ["100.64.0.3"], "conditions": {"ready": True}}]}
+        ]
         plan = bg.plan_access({}, self.route, {"spec": {}}, slices)
         assert plan == bg.Direct(url="http://100.64.0.3:3000")
 
@@ -218,3 +232,34 @@ class TestSecretFile:
         (tmp_path / "common.enc.yaml").write_text("y: 1\n")
         with pytest.raises(bg.BreakGlassError, match="a.b"):
             bg.secret_file("a.b", "prod", tmp_path)
+
+
+class TestAnnounceUse:
+    config = {"apps": {"services": {"automation": {"n8n": {"domain": "n8n.example.test"}}}}}
+
+    def test_every_use_pages_with_the_service_env_and_actor(self) -> None:
+        sent: list[tuple[str, dict[str, Any], dict[str, str]]] = []
+        ok = bg.announce_use(
+            "prod",
+            "grafana",
+            who="manu@msi",
+            merged_config=self.config,
+            webhook_secret="s",
+            post=lambda url, env, headers: sent.append((url, env, headers)) or 200,
+        )
+        assert ok
+        [(url, envelope, headers)] = sent
+        assert url == "https://n8n.example.test/webhook/notify"
+        assert envelope["severity"] == "page"
+        assert "grafana" in envelope["title"] and "prod" in envelope["title"] and "manu@msi" in envelope["body"]
+        assert headers == {"Authorization": "Bearer s"}
+
+    def test_a_failed_announcement_is_reported_not_raised(self) -> None:
+        def boom(*_: Any) -> int:
+            raise OSError("network down")
+
+        assert (
+            bg.announce_use("prod", "grafana", who="x", merged_config=self.config, webhook_secret="s", post=boom)
+            is False
+        )
+        assert bg.announce_use("prod", "grafana", who="x", merged_config=self.config, webhook_secret=None) is False

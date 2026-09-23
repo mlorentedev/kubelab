@@ -627,6 +627,15 @@ _deploy-argocd-helm: _require-hub-reachable
 	@$(MAKE) --no-print-directory argocd-repoint
 	@echo "✓ Argo CD deployed with OIDC. Login via https://argo.kubelab.live"
 
+# AUTH-004 AC7 / ADR-062 D4: the private way into a service while Authelia is
+# down. Which services need one, and where each is, is derived from the rendered
+# routes and the live cluster; `apps.services.security.authelia.break_glass`
+# only says which account opens it. Every real use pages the operator channel.
+.PHONY: break-glass
+break-glass: ## Open the private way into SVC while Authelia is down (DRY_RUN=1 to only resolve)
+	@test -n "$(SVC)" -a -n "$(filter $(ENV),staging prod)" || (echo "Usage: make break-glass SVC=<service> ENV=staging|prod [DRY_RUN=1]" && exit 1)
+	@$(TOOLKIT) auth break-glass $(SVC) --env $(ENV) $(if $(DRY_RUN),--dry-run,)
+
 # Point prod's inbound Argo CD route at wherever gcp1 currently lives.
 #
 # Its own target, and called rather than inlined, because the event that
