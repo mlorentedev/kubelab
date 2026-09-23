@@ -766,3 +766,22 @@ class GiteaBasicAuthClient(GiteaClient):
                 return False
             raise
         return True
+
+    def create_pull(self, owner: str, name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Open a pull request (TOOL-078). Returns Gitea's record, `number` and `html_url` included.
+
+        ON THIS CLASS because opening a PR completes the act a push begins, and the
+        push runs as the superadmin over basic auth (`gitea_git.py`). A token would
+        need `write:repository`, which `admin_token` lacks on purpose, and the bot is
+        the reconciliation identity rather than an author (ADR-065 D1). One act, one
+        identity.
+
+        NOT IDEMPOTENT, and deliberately so: Gitea refuses a second PR for the same
+        head and base with its own message, which surfaces through `GiteaError`
+        instead of being read as success.
+        """
+        return dict(self._request("POST", f"/repos/{owner}/{name}/pulls", json=dict(payload)))
+
+    def create_issue(self, owner: str, name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Open an issue (TOOL-078), as the same authoring identity as `create_pull`."""
+        return dict(self._request("POST", f"/repos/{owner}/{name}/issues", json=dict(payload)))
