@@ -29,7 +29,15 @@ from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SECRETS_DIR = PROJECT_ROOT / "infra/config/secrets"
 
-HUB_KEYS = sorted(s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.HUB_MANAGED)
+# A hub credential is one the catalog marks HUB_MANAGED (written to common by
+# `credentials generate`) OR one delivered to the hub through Secret Manager.
+# The second group includes EXTERNAL keys such as the Argo CD webhooks, and
+# `sync-secret-manager` and `deploy-argocd` both read them from common only.
+# Deriving the set from both flags, not from the kind alone, keeps a future
+# per-env override of any of them from reproducing SSOT-028 unguarded.
+HUB_KEYS = sorted(
+    s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.HUB_MANAGED or s.sync_to_secret_manager
+)
 
 
 def _has_key(doc: dict[str, Any], dotted: str) -> bool:
