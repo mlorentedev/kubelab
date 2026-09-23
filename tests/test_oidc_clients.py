@@ -209,3 +209,29 @@ def test_authelia_config_hash_changes_on_a_client_only_change(tmp_path: Path) ->
     after, _ = _authelia(_kustomize(tmp_path, "prod"))
 
     assert before["metadata"]["name"] != after["metadata"]["name"]
+
+
+class TestSingleResolver:
+    """AC6: the Compose dev renderer gets its clients from the same resolver as the K8s generator."""
+
+    def test_oidc_single_resolver_same_client_set(self) -> None:
+        from toolkit.features import generator_authelia
+
+        merged = oidc_clients.load_values("dev")
+        for client in oidc_clients.resolve_clients(merged, "dev"):
+            key = oidc_clients.digest_key(client["client_id"]).rsplit(".", 1)[1]
+            merged["apps"]["services"]["security"]["authelia"][key] = "$pbkdf2-fake"
+
+        compose = generator_authelia.oidc_clients_for_template(merged, "dev")
+        resolved = oidc_clients.resolve_clients(merged, "dev")
+
+        assert [c["client_id"] for c in compose] == [c["client_id"] for c in resolved]
+        assert all(c["client_secret_hash"] == "$pbkdf2-fake" for c in compose)
+
+    def test_oidc_single_resolver_no_private_digest_derivation(self) -> None:
+        import inspect
+
+        from toolkit.features import generator_authelia
+
+        source = inspect.getsource(generator_authelia)
+        assert "OIDC_CLIENT_SECRET_" not in source, "generator_authelia derives digest keys on its own"

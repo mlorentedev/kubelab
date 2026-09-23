@@ -108,62 +108,8 @@ class AutheliaGenerator(BaseGenerator):
             # Note: config_manager.get_merged_config() already merges secrets into the config dict
             # So we can look for them in the same structure.
 
-            # --- Build OIDC Clients List ---
-            oidc_clients_config = authelia_config.get("oidc_clients", [])
-            processed_oidc_clients = []
-
-            # Use env_vars (flattened) to find secrets, as secrets structure (apps.authelia)
-            # differs from config structure (apps.services.security.authelia)
-
-            if not oidc_clients_config:
-                # ... (Legacy fallback code remains the same) ...
-                legacy_client_id = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_ID")
-                legacy_secret_hash = env_vars.get("APPS_AUTHELIA_OIDC_CLIENT_SECRET_HASH")
-                legacy_redirect_uris = authelia_config.get("oidc_client_redirect_uri", [])
-                if isinstance(legacy_redirect_uris, str):
-                    legacy_redirect_uris = [legacy_redirect_uris]
-
-                if legacy_client_id and legacy_secret_hash:
-                    processed_oidc_clients.append(
-                        {
-                            "client_id": legacy_client_id,
-                            "client_name": "KubeLab OIDC Client (Legacy)",
-                            "client_secret_hash": legacy_secret_hash,
-                            "redirect_uris": legacy_redirect_uris,
-                            "scopes": ["openid", "profile", "email", "groups"],
-                        }
-                    )
-            else:
-                for client in oidc_clients_config:
-                    client_id = client.get("client_id")
-                    secret_suffix = client_id.replace("-oidc", "").replace("-", "_").upper()
-
-                    # Construct expected env var keys for secrets using the LONG prefix found in debug
-                    # Pattern: APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_{SUFFIX}_HASH
-
-                    secret_hash_key = f"APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_{secret_suffix}_HASH"
-                    secret_hash = env_vars.get(secret_hash_key)
-
-                    # Fallback for 'kubelab-oidc' (main) to legacy/main var
-                    if not secret_hash and (secret_suffix == "KUBELAB" or secret_suffix == "MAIN"):
-                        secret_hash = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_OIDC_CLIENT_SECRET_HASH")
-
-                    if not secret_hash:
-                        logger.warning(
-                            f"No secret hash found for OIDC client '{client_id}'. Expected env var: {secret_hash_key}"
-                        )
-                        # Use a placeholder to prevent template error, but log loudly
-                        secret_hash = "hash_not_found_check_secrets"
-
-                    processed_oidc_clients.append(
-                        {
-                            "client_id": client_id,
-                            "client_name": client.get("client_name", client_id),
-                            "client_secret_hash": secret_hash,
-                            "redirect_uris": client.get("redirect_uris", []),
-                            "scopes": client.get("scopes", ["openid", "profile", "email"]),
-                        }
-                    )
+            # --- OIDC clients: the shared SSOT-017 resolver, never a private derivation ---
+            processed_oidc_clients = oidc_clients_for_template(merged_config, env)
 
             # Build users list for template
             authelia_users = []
@@ -280,3 +226,22 @@ class AutheliaGenerator(BaseGenerator):
 
         logger.success("Authelia configuration is valid")
         return True
+
+
+def oidc_clients_for_template(merged_config: dict[str, Any], env: str) -> list[dict[str, Any]]:
+    """`env`'s OIDC clients for the Compose template, from the one SSOT-017 resolver.
+
+    The digest is the stored one, looked up by the shared convention. A missing
+    digest fails the render instead of emitting a placeholder: a placeholder is a
+    client registration that can never authenticate, reported as success.
+    """
+    from toolkit.features import oidc_clients
+
+    rendered = []
+    for client in oidc_clients.resolve_clients(merged_config, env):
+        key = oidc_clients.digest_key(client["client_id"])
+        digest = oidc_clients._lookup(merged_config, key)
+        if not digest:
+            raise oidc_clients.OidcClientError(f"OIDC client '{client['client_id']}': no stored digest at {key}")
+        rendered.append({**client, "client_secret_hash": digest})
+    return rendered

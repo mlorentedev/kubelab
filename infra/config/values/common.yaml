@@ -1507,7 +1507,9 @@ apps:
         image: grafana/grafana-oss
         # Permite que Authelia registre usuarios en Grafana si no existen
         oauth_allow_sign_up: true
-        oauth_client_id: grafana-oidc
+        # Must equal the grafana client_id in authelia.oidc_clients (SSOT-017).
+        # Read by the Compose stack only; the K8s grafana.env carries it literally.
+        oauth_client_id: grafana
 
 
       loki:
@@ -1641,9 +1643,11 @@ apps:
           token_endpoint_auth_method: client_secret_basic
           authorization_policy: one_factor
           consent_mode: implicit
+        # dev: the Compose Grafana enables generic OAuth; the only dev OIDC
+        # consumer (MinIO's compose.dev.yml switches OIDC off). SSOT-017 R8.
         - client_id: grafana
           client_name: Grafana
-          envs: [staging, prod]
+          envs: [dev, staging, prod]
           redirect:
             domain: apps.services.observability.grafana.domain
             path: /login/generic_oauth
