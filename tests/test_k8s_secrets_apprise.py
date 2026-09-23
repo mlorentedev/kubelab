@@ -29,13 +29,7 @@ ENV = "staging"
 
 
 def _slack_cfg(merged: dict) -> dict:
-    return (
-        merged.get("apps", {})
-        .get("services", {})
-        .get("automation", {})
-        .get("apprise", {})
-        .get("slack", {})
-    )
+    return merged.get("apps", {}).get("services", {}).get("automation", {}).get("apprise", {}).get("slack", {})
 
 
 def _urls_for_tag(parsed: dict, tag: str) -> list[str]:
@@ -50,10 +44,7 @@ class TestAppriseConfigGenerator:
     def _build() -> tuple[dict, dict]:
         cm = ConfigurationManager(ENV)
         rendered = _build_apprise_config(cm)
-        assert rendered, (
-            "_build_apprise_config returned empty for staging — "
-            "routing configuration missing in SOPS"
-        )
+        assert rendered, "_build_apprise_config returned empty for staging — routing configuration missing in SOPS"
         return yaml.safe_load(rendered), cm.get_merged_config()
 
     def test_output_is_valid_yaml_with_urls_list(self) -> None:
@@ -65,7 +56,9 @@ class TestAppriseConfigGenerator:
     def test_page_tier_routes_to_alerts_channel(self) -> None:
         parsed, merged = self._build()
         slack = _slack_cfg(merged)
-        assert slack.get("webhook_alerts"), "apps.services.automation.apprise.slack.webhook_alerts must be configured in SOPS"
+        assert slack.get("webhook_alerts"), (
+            "apps.services.automation.apprise.slack.webhook_alerts must be configured in SOPS"
+        )
         page_urls = _urls_for_tag(parsed, "page")
         assert any("#alerts" in u or "slack://" in u for u in page_urls), (
             "the 'page' tier must route to #alerts via Slack webhook in SOPS"
@@ -83,6 +76,7 @@ class TestAppriseConfigGenerator:
     def test_telegram_fallback_when_slack_absent(self) -> None:
         """Verify Telegram fallback works when only telegram is in SOPS."""
         from unittest.mock import MagicMock
+
         mock_cm = MagicMock()
         mock_cm.get_merged_config.return_value = {
             "apps": {
@@ -110,7 +104,10 @@ class TestAppriseConfigGenerator:
         from toolkit.features.k8s_secrets import _normalize_slack_url
 
         # Test URL normalization
-        assert _normalize_slack_url("https://hooks.slack.com/services/T123/B456/789", "alerts") == "slack://T123/B456/789/#alerts"
+        assert (
+            _normalize_slack_url("https://hooks.slack.com/services/T123/B456/789", "alerts")
+            == "slack://T123/B456/789/#alerts"
+        )
         assert _normalize_slack_url("slack://T123/B456/789/#alerts") == "slack://T123/B456/789/#alerts"
 
         # Test config generation

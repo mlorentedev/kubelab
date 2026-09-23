@@ -172,8 +172,7 @@ class TestPolicyHujsonContent:
         """
         rendered_hosts = _load_hujson(_render_policy())["hosts"]
         assert "aws1" not in rendered_hosts, (
-            "the ACL declares an alias for a destroyed host; Headscale will "
-            "reassign its address to some future node"
+            "the ACL declares an alias for a destroyed host; Headscale will reassign its address to some future node"
         )
         assert "aws1" not in _hosts_from_ssot(), "build_hosts re-added the aws1 alias"
 

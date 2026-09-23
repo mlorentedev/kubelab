@@ -110,9 +110,7 @@ class TestSetHubPaused:
         steps = set_hub_paused(_HUB, paused=True, dry_run=True)
         assert len(steps) == 1
 
-    def test_a_failed_scale_raises_rather_than_claiming_a_pause(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_failed_scale_raises_rather_than_claiming_a_pause(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(hp, "_kubectl", lambda _argv: (1, "Error from server (Forbidden)"))
         with pytest.raises(RuntimeError, match="step failed"):
             set_hub_paused(_HUB, paused=True)

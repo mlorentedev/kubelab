@@ -104,8 +104,7 @@ class TestTopLevelIndex:
             row = re.search(rf"\|\s*\[{re.escape(category.name)}\]\([^)]+\)\s*\|\s*(\d+)\s*\|", text)
             assert row, f"docs/lessons/_index.md has no row for category {category.name}"
             assert int(row.group(1)) == len(_lesson_files(category)), (
-                f"top-level index says {row.group(1)} for {category.name}, "
-                f"{len(_lesson_files(category))} files exist"
+                f"top-level index says {row.group(1)} for {category.name}, {len(_lesson_files(category))} files exist"
             )
 
     def test_every_category_directory_appears(self) -> None:

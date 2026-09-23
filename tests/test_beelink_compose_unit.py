@@ -35,9 +35,9 @@ ROLE = REPO / "infra/ansible/roles/beelink_services"
 #: From the SSOT, never a literal (CLAUDE.md). Fixed alongside #1399, where a
 #: reviewer caught the same violation in a new file next door — the rule is
 #: repo-wide and this file predates it being enforced.
-BEELINK_TAILSCALE_IP = yaml.safe_load(
-    (REPO / "infra/config/values/common.yaml").read_text()
-)["networking"]["nodes"]["beelink"]["tailscale_ip"]
+BEELINK_TAILSCALE_IP = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["networking"]["nodes"][
+    "beelink"
+]["tailscale_ip"]
 UNIT_TEMPLATE = "kubelab-compose.service.j2"
 
 

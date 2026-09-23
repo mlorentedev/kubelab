@@ -110,9 +110,10 @@ def grafana_api(env: str) -> Iterator[ProvisioningGet]:
     auth = base64.b64encode(f"{user}:{_secret_value(env, 'password')}".encode()).decode()
 
     proc = subprocess.Popen(
-        ["kubectl", "--kubeconfig", _kubeconfig(env), "port-forward",
-         "-n", "kubelab", "deploy/grafana", ":3000"],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        ["kubectl", "--kubeconfig", _kubeconfig(env), "port-forward", "-n", "kubelab", "deploy/grafana", ":3000"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
     )
     try:
         port = _await_port(proc)
@@ -214,20 +215,14 @@ class TestAlertDelivery:
             f"Expected ones targeting {EXPECTED_APPRISE_URL}."
         )
 
-        urls = [
-            cp.get("settings", {}).get("url")
-            for cp in contact_points
-            if cp.get("type") == "webhook"
-        ]
+        urls = [cp.get("settings", {}).get("url") for cp in contact_points if cp.get("type") == "webhook"]
         assert EXPECTED_APPRISE_URL in urls, (
             f"No webhook contact point targets Apprise in {env}. Found: {urls or 'none'}. "
             f"Expected {EXPECTED_APPRISE_URL} (ADR-044: Apprise owns the tag->URL map, "
             f"so this endpoint needs no credential)."
         )
 
-    def test_policy_routes_to_the_tier_for_this_environment(
-        self, grafana_api: ProvisioningGet, env: str
-    ) -> None:
+    def test_policy_routes_to_the_tier_for_this_environment(self, grafana_api: ProvisioningGet, env: str) -> None:
         """Prod must page and staging must archive — asserted, not assumed.
 
         Two failures are covered here. Grafana ships a default root policy whose
@@ -249,9 +244,7 @@ class TestAlertDelivery:
             f"push tier would interrupt for a non-critical, on-demand environment."
         )
 
-    def test_selected_contact_point_carries_the_right_tag(
-        self, grafana_api: ProvisioningGet, env: str
-    ) -> None:
+    def test_selected_contact_point_carries_the_right_tag(self, grafana_api: ProvisioningGet, env: str) -> None:
         """The receiver name is not enough — Apprise routes on the payload tag.
 
         A contact point could be named `apprise-page` and still carry `tag: log`
@@ -261,9 +254,7 @@ class TestAlertDelivery:
         expected_tag = _expected_tag(env)
         expected_receiver = f"apprise-{expected_tag}"
 
-        selected = [
-            cp for cp in grafana_api("contact-points") if cp.get("name") == expected_receiver
-        ]
+        selected = [cp for cp in grafana_api("contact-points") if cp.get("name") == expected_receiver]
         assert selected, (
             f"No contact point named {expected_receiver!r} exists in {env}, so the root "
             f"policy routes to a receiver that is not there."
@@ -299,9 +290,7 @@ class TestAcmeAlertRule:
             f"renewal is unwatched. Found: {sorted(t for t in titles if t) or 'no rules at all'}."
         )
 
-    def test_acme_rule_treats_no_data_as_healthy(
-        self, grafana_api: ProvisioningGet, env: str
-    ) -> None:
+    def test_acme_rule_treats_no_data_as_healthy(self, grafana_api: ProvisioningGet, env: str) -> None:
         """`noDataState` must be OK, or the rule alerts whenever things are fine.
 
         A LogQL query matching nothing returns no series rather than zero, so the
@@ -309,9 +298,7 @@ class TestAcmeAlertRule:
         continuously while certificates were renewing perfectly — the exact
         inversion that makes people mute an alert channel.
         """
-        rule = next(
-            (r for r in grafana_api("alert-rules") if r.get("title") == EXPECTED_RULE_TITLE), None
-        )
+        rule = next((r for r in grafana_api("alert-rules") if r.get("title") == EXPECTED_RULE_TITLE), None)
         if rule is None:
             pytest.skip(f"{EXPECTED_RULE_TITLE!r} not provisioned in {env} — see the test above")
 
@@ -418,10 +405,10 @@ class TestQuotaUtilizationRules:
             if rule is None:
                 pytest.skip(f"{title!r} not provisioned in {env} — see the test above")
 
-            query = next((d.get("model", {}).get("expr", "") for d in rule.get("data", []) if d.get("refId") == "A"), "")
-            assert "last_over_time" in query, (
-                f"{title!r} in {env} query does not use last_over_time: {query!r}"
+            query = next(
+                (d.get("model", {}).get("expr", "") for d in rule.get("data", []) if d.get("refId") == "A"), ""
             )
+            assert "last_over_time" in query, f"{title!r} in {env} query does not use last_over_time: {query!r}"
             assert "max_over_time" not in query, (
                 f"{title!r} in {env} query still uses max_over_time — this is the exact "
                 f"regression that made the alert fire on a routine deploy restart (2026-08-14)."

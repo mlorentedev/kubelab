@@ -178,7 +178,67 @@ class GiteaAdminPassword(_LoginVerifier):
 
 #: One reconciler per service that declares a break-glass account. A declared
 #: account missing here fails `tests/test_break_glass_rotation.py`.
-RECONCILERS: dict[str, type[_LoginVerifier]] = {
+RECONCILERS: dict[str, Callable[[], PasswordReconciler]] = {
     "grafana": GrafanaAdminPassword,
     "gitea": GiteaAdminPassword,
 }
+
+
+# --------------------------------------------------------------------------- orchestration
+
+
+def break_glass_secret_keys(project_root: Any = None) -> set[str]:
+    """SOPS keys of every declared break-glass account. The declaration lives in common.yaml,
+    so any env's plaintext values carry it; `prod` is read because every account is declared there."""
+    from toolkit.features import break_glass as bg
+    from toolkit.features.oidc_clients import PROJECT_ROOT, load_values
+
+    return {t.secret_key for t in targets(bg.declarations(load_values("prod", project_root or PROJECT_ROOT)))}
+
+
+def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) -> list[Outcome]:
+    """Rotate every break-glass account that exists in ENV, over its own private path."""
+    from toolkit.features import break_glass as bg
+    from toolkit.features.oidc_clients import load_values
+    from toolkit.features.secrets_manager import SecretsManager
+
+    values = load_values(env, project_root)
+    identities = (values.get("apps", {}).get("auth", {}) or {}).get("identities", {}) or {}
+    manager = SecretsManager(project_root)
+    secrets_dir = project_root / "infra" / "config" / "secrets"
+    outcomes: list[Outcome] = []
+    for target in targets(bg.declarations(values)):
+        try:
+            _decl, _route, plan = bg.resolve(env, target.service, project_root)
+        except bg.BreakGlassError as exc:
+            log(f"  {target.service}: skipped -- {exc}")
+            continue
+        file_env = bg.secret_file(target.secret_key, env, secrets_dir)
+        reconciler = RECONCILERS[target.service]()
+        log(f"  {target.service}: rotating {target.secret_key} ({file_env}.enc.yaml)")
+        read, write = _vault(manager, file_env, target.secret_key)
+        with bg.private_url(env, plan) as base_url:
+            outcome = rotate_one(
+                target.service,
+                identities[target.identity],
+                base_url=base_url,
+                reconciler=reconciler,
+                read=read,
+                write=write,
+            )
+        log(f"  {target.service}: {'OK' if outcome.ok else 'FAILED'} -- {outcome.detail}")
+        outcomes.append(outcome)
+    return outcomes
+
+
+def _vault(manager: Any, file_env: str, key: str) -> tuple[Callable[[], str | None], Callable[[str], bool]]:
+    """Read and write one SOPS key, bound to its file."""
+
+    def read() -> str | None:
+        value = manager.show_secret(file_env, key)
+        return str(value) if value else None
+
+    def write(value: str) -> bool:
+        return bool(manager.set_secret(file_env, key, value))
+
+    return read, write

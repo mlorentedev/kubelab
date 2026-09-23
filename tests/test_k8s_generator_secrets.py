@@ -41,8 +41,7 @@ class TestHasSecretVars:
         for app in COMPONENTS.PLATFORM_APPS:
             expected = f"{app}-secrets" in registered
             assert gen._has_secret_vars(app) is expected, (
-                f"{app}: mount decision must equal presence of {app}-secrets in "
-                "SECRET_DEFINITIONS (the secrets SSOT)"
+                f"{app}: mount decision must equal presence of {app}-secrets in SECRET_DEFINITIONS (the secrets SSOT)"
             )
 
     def test_is_sops_independent(self) -> None:

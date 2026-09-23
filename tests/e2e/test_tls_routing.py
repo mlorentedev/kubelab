@@ -17,7 +17,8 @@ pytestmark = pytest.mark.e2e
 
 
 def _testable_domains(
-    services: list[ServiceHealthConfig], env: str,
+    services: list[ServiceHealthConfig],
+    env: str,
 ) -> list[str]:
     """Extract unique domains for services expected to work in this environment.
 
@@ -41,7 +42,9 @@ class TestTLSCertificates:
     """Verify TLS certificates are valid for all service domains."""
 
     def test_all_certificates_valid(
-        self, services: list[ServiceHealthConfig], env: str,
+        self,
+        services: list[ServiceHealthConfig],
+        env: str,
     ) -> None:
         if env == "dev":
             pytest.skip("Dev uses mkcert self-signed certs")
@@ -76,7 +79,9 @@ class TestHTTPSRedirect:
     """Verify HTTP -> HTTPS redirect for all domains."""
 
     def test_http_redirects_to_https(
-        self, services: list[ServiceHealthConfig], env: str,
+        self,
+        services: list[ServiceHealthConfig],
+        env: str,
     ) -> None:
         if env == "dev":
             pytest.skip("Dev Traefik may not enforce HTTP redirect")
@@ -132,9 +137,7 @@ class TestUnknownHostRouting:
             f"https://{target.domain}/",
             headers={"Host": "nonexistent-e2e-probe.invalid"},
         )
-        assert r.status_code in (404, 421, 502), (
-            f"Expected 404/421/502 for unknown host, got {r.status_code}"
-        )
+        assert r.status_code in (404, 421, 502), f"Expected 404/421/502 for unknown host, got {r.status_code}"
 
     def test_unknown_host_shows_custom_error_page(
         self,
@@ -155,9 +158,5 @@ class TestUnknownHostRouting:
         except httpx.ConnectError:
             pytest.skip("Cannot connect to wildcard subdomain — cert may not be ready")
 
-        assert r.status_code == 404, (
-            f"Expected 404 for unknown host, got {r.status_code}"
-        )
-        assert "404" in r.text and "move along" in r.text.lower(), (
-            "Unknown host should show errors custom 404 page"
-        )
+        assert r.status_code == 404, f"Expected 404 for unknown host, got {r.status_code}"
+        assert "404" in r.text and "move along" in r.text.lower(), "Unknown host should show errors custom 404 page"

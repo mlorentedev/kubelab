@@ -83,9 +83,7 @@ class TestItRendersTheSSOTAndNothingElse:
         """Three variables mirror keys OUTSIDE `networking.gcp`. No rule derives
         them, so they are declared -- and that is the honest difference between
         "absent because computed" and "absent because forgotten"."""
-        out = gcp_tfvars.render(
-            config, variable_names={"argocd_chart_version", "helm_version", "deploy_user"}
-        )
+        out = gcp_tfvars.render(config, variable_names={"argocd_chart_version", "helm_version", "deploy_user"})
         assert _assigned(out, "argocd_chart_version") == '"9.5.13"'
         assert _assigned(out, "helm_version") == '"v3.18.4"'
         assert _assigned(out, "deploy_user") == '"deployer"'
@@ -112,9 +110,7 @@ class TestTheOutputIsFormatClean:
         ends the alignment run. Padding it was the first attempt here and fmt
         rewrote it straight back -- so this asserts the measured behaviour, not
         the intuitive one."""
-        out = gcp_tfvars.render(
-            config, variable_names={"spoke_servers", "region", "argocd_chart_version"}
-        )
+        out = gcp_tfvars.render(config, variable_names={"spoke_servers", "region", "argocd_chart_version"})
         block = next(line for line in out.splitlines() if line.startswith("spoke_servers"))
         assert block == "spoke_servers = {", f"block assignment was padded: {block!r}"
 

@@ -31,6 +31,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 CLOUD_INIT = REPO / "infra/terraform/gcp/cloud-init.yml"
 MAIN_TF = REPO / "infra/terraform/gcp/main.tf"
 
+
 # Values shaped like the real ones. `spoke_servers` is JSON-in-a-string exactly
 # as `jsonencode()` produces it, because the bootstrap parses it with jq.
 def _b64(text: str) -> str:

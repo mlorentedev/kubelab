@@ -51,6 +51,7 @@ def hosts(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
             flat[key] = net[key]
     return flat
 
+
 # The four nodes BACKUP-044 covers, from the ratified tiers (#452). Not the whole
 # fleet: ace1/ace2/jetson hold no ratified Tier 1 or Tier 2 state.
 COVERED_NODES = {"beelink", "rpi3", "rpi4", "vps"}
@@ -170,8 +171,7 @@ class TestBackupSources:
         headscale's was 1.35MB against a 118KB database and eight hours newer, so a
         file copy would have captured under 8% of the state while looking valid.
         """
-        for node, name in (("beelink", "gitea"), ("rpi3", "uptime_kuma"),
-                           ("rpi4", "pihole"), ("vps", "headscale")):
+        for node, name in (("beelink", "gitea"), ("rpi3", "uptime_kuma"), ("rpi4", "pihole"), ("vps", "headscale")):
             assert sources[node][name].get("sqlite"), (
                 f"{node}.{name} holds a live SQLite database but declares no `sqlite` key, "
                 "so the capture step would copy the file instead of snapshotting it."
@@ -192,10 +192,7 @@ class TestPvcSources:
     # `Path(__file__)` walk — one definition of where the repo is. `.resolve()`
     # first: COMMON_YAML is built from a relative `__file__`, so without it this
     # only lands on the right file when pytest happens to run from the repo root.
-    CAPTURE = (
-        COMMON_YAML.resolve().parents[3]
-        / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2"
-    )
+    CAPTURE = COMMON_YAML.resolve().parents[3] / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2"
 
     @pytest.fixture(scope="module")
     def sources(self, common: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -214,9 +211,7 @@ class TestPvcSources:
         so the resolution has to happen on the node at capture time.
         """
         script = self.CAPTURE.read_text(encoding="utf-8")
-        assert "kubectl get pv" in script, (
-            "the capture script no longer resolves PVC paths from the cluster"
-        )
+        assert "kubectl get pv" in script, "the capture script no longer resolves PVC paths from the cluster"
         assert "/var/lib/rancher/k3s/storage/pvc-" not in script, (
             "a resolved local-path directory is hardcoded in the capture script; "
             "it embeds a claim UID and dies silently when the PVC is recreated"

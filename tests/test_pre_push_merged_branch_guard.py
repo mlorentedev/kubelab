@@ -79,9 +79,7 @@ def _run(bin_dir: Path | None, stdin: str = RECREATE) -> subprocess.CompletedPro
     # bash itself is invoked by ABSOLUTE path for the same reason: with PATH
     # narrowed this far, resolving "bash" through it fails too.
     env["PATH"] = str(bin_dir) if bin_dir else ""
-    return subprocess.run(
-        [BASH, "-c", script], input=stdin, capture_output=True, text=True, env=env
-    )
+    return subprocess.run([BASH, "-c", script], input=stdin, capture_output=True, text=True, env=env)
 
 
 def test_the_hook_exists_and_defines_the_guard() -> None:
@@ -195,9 +193,7 @@ def _fake_poetry(tmp_path: Path, body: str) -> Path:
 def _run_preflight(bin_dir: Path) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     env["PATH"] = str(bin_dir)
-    return subprocess.run(
-        [BASH, "-c", _preflight_source()], capture_output=True, text=True, env=env
-    )
+    return subprocess.run([BASH, "-c", _preflight_source()], capture_output=True, text=True, env=env)
 
 
 def test_an_uninstalled_toolkit_is_reported_as_unchecked_not_as_stale(tmp_path: Path) -> None:

@@ -556,9 +556,7 @@ def test_every_node_with_declared_sources_is_covered_by_a_play():
         node = net.get("nodes", {}).get(short) or (net.get("vps") if short == "vps" else None)
         assert node is not None, f"backup.sources declares {short!r}, absent from networking.*"
         hostname = node.get("hostname", "kubelab-vps" if short == "vps" else short)
-        assert hostname in targeted, (
-            f"{short!r} declares backup sources but no play targets {hostname!r}"
-        )
+        assert hostname in targeted, f"{short!r} declares backup sources but no play targets {hostname!r}"
 
 
 # --- the install step's own prerequisites -----------------------------------
@@ -576,8 +574,7 @@ def test_the_role_needs_no_external_decompressor():
     a broken apt is a degraded node. Decompression uses Python's stdlib, so the
     role's only apt dependency stays sqlite3."""
     assert _apt_packages() == {"sqlite3"}, (
-        "sqlite3 must remain the role's only apt package — counted across every "
-        "apt task, not just the first one"
+        "sqlite3 must remain the role's only apt package — counted across every apt task, not just the first one"
     )
 
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
@@ -591,9 +588,7 @@ def test_restic_is_decompressed_via_a_temp_path_never_onto_the_install_path():
     even runs, so any failure leaves a broken binary where the capture and
     ship scripts expect a working one."""
     tasks_src = (ROLE / "tasks/main.yml").read_text()
-    decompress = next(
-        t for t in yaml.safe_load(tasks_src) if "bz2" in str(t.get("shell", ""))
-    )
+    decompress = next(t for t in yaml.safe_load(tasks_src) if "bz2" in str(t.get("shell", "")))
     # Anchored to the SSOT variable, not to an expanded path: the folded
     # scalar carries the Jinja reference verbatim, and asserting on it also
     # proves the task never hardcodes the install location.
@@ -604,9 +599,7 @@ def test_restic_is_decompressed_via_a_temp_path_never_onto_the_install_path():
     # The install path must appear ONLY as the move's destination — never as a
     # write target, whether by redirect or as the writer's own argument.
     writes = shell.split("&& mv")[0]
-    assert path not in writes.replace(f"{path}.tmp", ""), (
-        "decompression must never write straight to the install path"
-    )
+    assert path not in writes.replace(f"{path}.tmp", ""), "decompression must never write straight to the install path"
 
 
 def test_a_failing_ship_can_say_why():
@@ -707,9 +700,7 @@ def _capture_receipt_block() -> str:
     about stderr and pass on a script that never writes to it.
     """
     script = _render("node-backup-capture.sh.j2", node_backup_location="on-demand")
-    code = "\n".join(
-        line for line in script.splitlines() if not line.lstrip().startswith("#")
-    )
+    code = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
     start = code.index("previous shutdown snapshot")
     return code[code.rindex("if ", 0, start) : code.index("STAGING=", start)]
 
@@ -764,9 +755,7 @@ def test_an_unclean_power_off_is_not_reported_as_a_failed_backup():
     failed_ship = [b for b in bodies if "did NOT ship" in b]
 
     assert len(unclean) == 1, f"expected exactly one power-cut branch, found {len(unclean)}"
-    assert len(failed_ship) == 1, (
-        f"expected exactly one failed-shutdown-ship branch, found {len(failed_ship)}"
-    )
+    assert len(failed_ship) == 1, f"expected exactly one failed-shutdown-ship branch, found {len(failed_ship)}"
 
     assert ">&2" not in unclean[0], (
         "the no-shutdown-sequence branch writes to stderr. On a smart-plug fleet that "
@@ -813,8 +802,7 @@ def test_the_boot_read_back_clears_what_it_read():
     cleared = " ".join(removal)
     for path in (receipt, marker):
         assert path in cleared, (
-            f"{path} survives the boot read-back, so the next boot can read this "
-            f"boot's outcome as its own"
+            f"{path} survives the boot read-back, so the next boot can read this boot's outcome as its own"
         )
 
 
@@ -837,9 +825,7 @@ def test_the_shutdown_unit_marks_its_attempt_before_it_can_fail():
     touch_at = next((i for i, line in enumerate(stops) if marker in line), None)
     assert touch_at is not None, "the shutdown unit never records that it attempted a ship"
 
-    capture_at = next(
-        i for i, line in enumerate(stops) if str(_defaults()["node_backup_capture_script_path"]) in line
-    )
+    capture_at = next(i for i, line in enumerate(stops) if str(_defaults()["node_backup_capture_script_path"]) in line)
     assert touch_at < capture_at, (
         f"the attempt marker is written at ExecStop position {touch_at}, after capture at "
         f"{capture_at}. A marker that only appears on success cannot distinguish failure."
@@ -879,9 +865,7 @@ def test_reporting_the_schedule_cannot_change_it() -> None:
             f"task {task.get('name')!r} changes timer state unconditionally, so a "
             f"report-only invocation would mutate the thing it was asked to look at"
         )
-        assert "schedule_state" in str(task["when"]), (
-            f"task {task.get('name')!r} is not gated on the requested state"
-        )
+        assert "schedule_state" in str(task["when"]), f"task {task.get('name')!r} is not gated on the requested state"
 
 
 def test_an_unrecognised_state_is_refused_rather_than_ignored() -> None:
@@ -916,6 +900,5 @@ def test_both_timers_move_together() -> None:
     timers = play["vars"]["backup_timers"]
     assert "node-backup-ship.timer" in timers
     assert "node-backup-ship-check.timer" in timers, (
-        "the integrity-check timer is not managed alongside the ship timer, so a "
-        "disarm leaves half a schedule running"
+        "the integrity-check timer is not managed alongside the ship timer, so a disarm leaves half a schedule running"
     )

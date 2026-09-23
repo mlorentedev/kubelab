@@ -34,9 +34,7 @@ PRE_PUSH = REPO_ROOT / ".github" / "hooks" / "pre-push.sh"
 def _tree(root: pathlib.Path, categories: dict[str, int], total: int | None = None) -> pathlib.Path:
     """A miniature lessons tree whose declared numbers are whatever we say."""
     root.mkdir(parents=True, exist_ok=True)
-    rows = "\n".join(
-        f"| [{slug}]({slug}/_index.md) | {n} | Scope for {slug} |" for slug, n in categories.items()
-    )
+    rows = "\n".join(f"| [{slug}]({slug}/_index.md) | {n} | Scope for {slug} |" for slug, n in categories.items())
     stated = sum(categories.values()) if total is None else total
     (root / "_index.md").write_text(
         "# Lessons\n\n"
@@ -183,9 +181,9 @@ class TestTheHookIsWired:
         # And it is NOT declared as a pre-commit pre-push stage, which would be
         # configuration nothing runs: this repo sets `core.hooksPath` and its
         # pre-push is its own script, which never invokes pre-commit.
-        assert not any(
-            "pre-push" in (h.get("stages") or []) for h in hooks.values()
-        ), "a pre-push stage declared here would never execute -- core.hooksPath points at .github/hooks"
+        assert not any("pre-push" in (h.get("stages") or []) for h in hooks.values()), (
+            "a pre-push stage declared here would never execute -- core.hooksPath points at .github/hooks"
+        )
 
         script = PRE_PUSH.read_text()
         assert "toolkit tools lessons-index" in script, (
@@ -413,9 +411,7 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         (lessons / "alpha" / "lesson-440-a-mock.md").write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
         assert lessons_index.removed_lessons(lessons) == []
 
-    def test_an_untouched_file_sharing_the_slug_does_not_excuse_a_deletion(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_an_untouched_file_sharing_the_slug_does_not_excuse_a_deletion(self, tmp_path: pathlib.Path) -> None:
         """The `not in committed` half of the door.
 
         If the excuse were merely "some file on disk has this slug", any other
@@ -448,9 +444,7 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
 
         assert lessons_index.hazards(lessons, allow_removal=True) == []
 
-        result = runner.invoke(
-            tools_app, ["lessons-index", "--root", str(lessons), "--fix", "--allow-removal"]
-        )
+        result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix", "--allow-removal"])
         assert result.exit_code == 1, result.output  # counters rewritten
         assert "1 lessons, one file each" in (lessons / "_index.md").read_text()
 

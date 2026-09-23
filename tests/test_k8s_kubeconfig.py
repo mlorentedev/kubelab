@@ -312,9 +312,7 @@ class TestFetchKubeconfig:
 
     def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         common = tmp_path / "common.yaml"
-        common.write_text(
-            "clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n"
-        )
+        common.write_text("clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n")
         dest = tmp_path / ".kube" / "kubelab-staging-config"
         monkeypatch.setattr(kc, "_common_path", lambda: common)
         monkeypatch.setattr(kc, "output_path", lambda env: dest)
@@ -358,9 +356,7 @@ class TestFetchKubeconfig:
         _common, dest = self._setup(tmp_path, monkeypatch)
         mocker.patch(
             "toolkit.features.k8s_kubeconfig.subprocess.run",
-            return_value=subprocess.CompletedProcess(
-                [], 255, "", "Permission denied (publickey,gssapi-keyex)"
-            ),
+            return_value=subprocess.CompletedProcess([], 255, "", "Permission denied (publickey,gssapi-keyex)"),
         )
         tunnel_mock = mocker.patch.object(kc, "_fetch_via_tunnel")
 

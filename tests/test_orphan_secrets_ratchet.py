@@ -59,8 +59,7 @@ def test_every_baselined_orphan_carries_a_reason() -> None:
     for key, reason in baselined_orphans().items():
         assert reason.strip(), f"{key} has no reason in {ORPHAN_BASELINE_PATH.name}"
         assert len(reason.strip()) > 30, (
-            f"{key}'s reason is too short to say what has to be true before the key "
-            f"can go: {reason!r}"
+            f"{key}'s reason is too short to say what has to be true before the key can go: {reason!r}"
         )
 
 

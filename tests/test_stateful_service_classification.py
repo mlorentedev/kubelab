@@ -123,9 +123,7 @@ def _service_block(config: dict[str, Any], service: str) -> dict[str, Any] | Non
     return shared if isinstance(shared, dict) else None
 
 
-def classification_problems(
-    services: dict[str, list[str]], config: dict[str, Any]
-) -> list[str]:
+def classification_problems(services: dict[str, list[str]], config: dict[str, Any]) -> list[str]:
     """Return one human-readable problem per violation; empty means compliant.
 
     Pure over its two arguments so the negative controls below can feed it a
@@ -145,17 +143,12 @@ def classification_problems(
         if promotion is None:
             problems.append(f"{where}: missing `state_promotion`")
         elif promotion not in STATE_PROMOTION_VALUES:
-            problems.append(
-                f"{where}: `state_promotion: {promotion}` is not one of "
-                f"{sorted(STATE_PROMOTION_VALUES)}"
-            )
+            problems.append(f"{where}: `state_promotion: {promotion}` is not one of {sorted(STATE_PROMOTION_VALUES)}")
 
         if location is None:
             problems.append(f"{where}: missing `location`")
         elif location not in LOCATION_VALUES:
-            problems.append(
-                f"{where}: `location: {location}` is not one of {sorted(LOCATION_VALUES)}"
-            )
+            problems.append(f"{where}: `location: {location}` is not one of {sorted(LOCATION_VALUES)}")
         elif location == "undecided":
             deferral = block.get(DEFERRAL_KEY)
             if not deferral:
@@ -240,9 +233,7 @@ def test_fixture_baseline_is_compliant() -> None:
         ),
     ],
 )
-def test_gate_goes_red_on_each_violation(
-    overrides: dict[str, Any], expected_fragment: str
-) -> None:
+def test_gate_goes_red_on_each_violation(overrides: dict[str, Any], expected_fragment: str) -> None:
     """Every branch of the check must be demonstrably reachable."""
     config = _fixture_config()
     block = config["apps"]["services"]["demo"]["widget"]

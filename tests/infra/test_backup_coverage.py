@@ -87,9 +87,7 @@ class TestBackupCoverage:
     """Every stateful thing on a covered node is declared, or acknowledged as not needing it."""
 
     @pytest.mark.parametrize("node_name", ["beelink", "rpi3", "rpi4", "vps"])
-    def test_no_undeclared_docker_volume(
-        self, inventory: list[NodeInfo], node_name: str
-    ) -> None:
+    def test_no_undeclared_docker_volume(self, inventory: list[NodeInfo], node_name: str) -> None:
         node = next((n for n in inventory if node_name in n.name), None)
         if node is None:
             pytest.skip(f"{node_name} is not in the inventory")
@@ -115,9 +113,7 @@ class TestBackupCoverage:
         )
 
     @pytest.mark.parametrize("node_name", ["beelink", "rpi3", "rpi4", "vps"])
-    def test_declared_sources_actually_exist(
-        self, inventory: list[NodeInfo], node_name: str
-    ) -> None:
+    def test_declared_sources_actually_exist(self, inventory: list[NodeInfo], node_name: str) -> None:
         """The mirror image: a declared source that is not on the node backs up nothing.
 
         `restic backup` on a missing path fails loudly, but only at run time on a node
@@ -141,9 +137,7 @@ class TestBackupCoverage:
                 if check.returncode != 0:
                     missing.append(f"path {source['path']}")
             elif "volume" in source:
-                check = node_ssh_run(
-                    node, f"docker volume inspect {source['volume']} >/dev/null 2>&1", timeout=20
-                )
+                check = node_ssh_run(node, f"docker volume inspect {source['volume']} >/dev/null 2>&1", timeout=20)
                 if check.returncode == 255:
                     pytest.skip(f"{node_name} unreachable — powered off is normal here")
                 if check.returncode != 0:

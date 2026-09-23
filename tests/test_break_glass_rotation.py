@@ -157,7 +157,9 @@ class TestReconcilers:
 
     def test_grafana_changes_its_own_password_with_the_old_one(self) -> None:
         sent: list[tuple[str, str, Any, str]] = []
-        grafana = rot.GrafanaAdminPassword(request=lambda m, u, body, auth: sent.append((m, u, body, auth)) or (200, {}))
+        grafana = rot.GrafanaAdminPassword(
+            request=lambda m, u, body, auth: sent.append((m, u, body, auth)) or (200, {})
+        )
         grafana.set_password("http://g", "manu", "OLD", "NEW")
         [(method, url, body, auth)] = sent
         assert (method, url) == ("PUT", "http://g/api/user/password")

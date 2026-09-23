@@ -329,9 +329,7 @@ class TestApplyAgainstARealInstance:
         # Mirrors what `apply_monitors` itself just computed: the throwaway
         # carries no notifications, and `tmp_path` carries no common.yaml, so
         # `has_default_notification` is False and `muted_tags` is empty.
-        create, edit, delete = diff_monitors(
-            seed, live(), muted_tags=frozenset(), has_default_notification=False
-        )
+        create, edit, delete = diff_monitors(seed, live(), muted_tags=frozenset(), has_default_notification=False)
         assert (len(create), len(edit), len(delete)) == (0, 0, 0), (
             "a converged instance must plan nothing — this is the check that "
             "caught 31 phantom edits the unit fixtures could not"
@@ -558,9 +556,7 @@ class TestPushMonitorRoundTrip:
 
         assert {m["name"]: (m["id"], m["pushToken"]) for m in live()} == before
 
-    def test_a_declared_push_monitor_with_no_token_refuses_the_whole_sync(
-        self, live, apply_seed, monkeypatch
-    ):
+    def test_a_declared_push_monitor_with_no_token_refuses_the_whole_sync(self, live, apply_seed, monkeypatch):
         """Fails closed, and takes nothing with it: Kuma would otherwise mint a
         random token and report a successful create."""
         monkeypatch.setattr(monitoring, "_get_push_tokens", lambda _root: {})

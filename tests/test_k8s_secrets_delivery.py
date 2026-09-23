@@ -88,9 +88,7 @@ class TestYamlBuildersEscape:
                 "services": {
                     "security": {
                         "authelia": {
-                            "users": [
-                                {"username": "bob", "displayname": 'B"ob: the\nbuilder', "groups": ["admins"]}
-                            ],
+                            "users": [{"username": "bob", "displayname": 'B"ob: the\nbuilder', "groups": ["admins"]}],
                             "users_bob_password_hash": "$argon2id$v=19$m=65536,t=3,p=4$abc:def",
                         }
                     }

@@ -51,9 +51,7 @@ MANIFEST_ROOTS = ("infra/k8s/base", "infra/k8s/overlays")
 SKIPPED_PATH_PARTS = frozenset({".rendered"})
 
 #: `command[0]` values that mean "the following is a shell program".
-SHELL_BINARIES = frozenset(
-    {"sh", "/bin/sh", "ash", "/bin/ash", "bash", "/bin/bash", "dash", "/bin/dash"}
-)
+SHELL_BINARIES = frozenset({"sh", "/bin/sh", "ash", "/bin/ash", "bash", "/bin/bash", "dash", "/bin/dash"})
 
 #: Where a container may hold a script.
 CONTAINER_KEYS = ("containers", "initContainers", "ephemeralContainers")
@@ -124,10 +122,7 @@ def _collect():
                 for container in _iter_containers(document):
                     script = _script_of(container)
                     if script:
-                        label = (
-                            f"{manifest.relative_to(REPO_ROOT)}::"
-                            f"{kind}/{name}::{container.get('name', '?')}"
-                        )
+                        label = f"{manifest.relative_to(REPO_ROOT)}::{kind}/{name}::{container.get('name', '?')}"
                         found.append(pytest.param(script, id=label))
     return found
 

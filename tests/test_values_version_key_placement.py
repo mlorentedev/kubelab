@@ -124,16 +124,7 @@ def _stranded_version_keys(label: str, text: str) -> list[str]:
     return offenders
 
 
-_BLOCK = (
-    "apps:\n"
-    "  platform:\n"
-    "    web:\n"
-    "{body}"
-    "\n"
-    "  # Third-party services\n"
-    "  services:\n"
-    "    core: {{}}\n"
-)
+_BLOCK = "apps:\n  platform:\n    web:\n{body}\n  # Third-party services\n  services:\n    core: {{}}\n"
 
 
 class TestPlacementRule:

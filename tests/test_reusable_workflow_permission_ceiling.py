@@ -182,8 +182,7 @@ def _callers() -> list[tuple[pathlib.Path, dict[str, Any]]]:
         if not workflow:
             continue
         if any(
-            isinstance(job, dict) and _local_callee(job.get("uses"))
-            for job in (workflow.get("jobs") or {}).values()
+            isinstance(job, dict) and _local_callee(job.get("uses")) for job in (workflow.get("jobs") or {}).values()
         ):
             found.append((path, workflow))
     return found
@@ -244,9 +243,7 @@ def test_no_nested_job_requests_more_than_its_caller_grants():
     for path, workflow in _callers():
         offenders += _violations_in(
             workflow,
-            resolve=lambda uses: (
-                _load(p) if (p := _local_callee(uses)) and p.exists() else None
-            ),
+            resolve=lambda uses: _load(p) if (p := _local_callee(uses)) and p.exists() else None,
             label=f"{path.name}::",
         )
 
@@ -418,9 +415,7 @@ _TABLE: list[tuple[str, dict[str, Any], dict[str, Any], int]] = [
 
 
 @pytest.mark.parametrize("name,caller,callee,expected", _TABLE, ids=[r[0] for r in _TABLE])
-def test_the_ceiling_semantics(
-    name: str, caller: dict[str, Any], callee: dict[str, Any], expected: int
-) -> None:
+def test_the_ceiling_semantics(name: str, caller: dict[str, Any], callee: dict[str, Any], expected: int) -> None:
     """Counts, not just "zero for the clean cases".
 
     Asserting the number in both directions is what stops a loosened comparison

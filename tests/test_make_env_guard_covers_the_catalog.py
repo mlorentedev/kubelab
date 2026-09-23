@@ -51,7 +51,7 @@ def _filter_envs(target: str) -> set[str]:
     assert guard, (
         f"`{target}` has no `$(filter $(ENV),...)` guard. If the guard was removed, "
         f"this test cannot measure anything — see test_make_env_guard_rejects_dev.py "
-        f"for why the `test -n \"$(ENV)\"` form is dead."
+        f'for why the `test -n "$(ENV)"` form is dead.'
     )
     return set(guard.group(1).split())
 

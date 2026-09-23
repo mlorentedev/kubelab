@@ -85,9 +85,7 @@ class TestQuotaWatcherRBAC:
 
     def test_serviceaccount_exists(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
         result = _kubectl("get serviceaccount quota-watcher -n kubelab -o name", env)
-        assert result.returncode == 0, (
-            f"No ServiceAccount 'quota-watcher' in kubelab ({env}): {result.stderr}"
-        )
+        assert result.returncode == 0, f"No ServiceAccount 'quota-watcher' in kubelab ({env}): {result.stderr}"
 
     def test_role_is_scoped_to_exactly_one_grant(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
         """A wider grant here is a real privilege-escalation risk, not a style nit."""
@@ -101,17 +99,17 @@ class TestQuotaWatcherRBAC:
             f"'get' on the single named 'kubelab-quota' object."
         )
 
-    def test_rolebinding_targets_the_serviceaccount(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+    def test_rolebinding_targets_the_serviceaccount(
+        self, require_vpn: None, require_kubeconfig: None, env: str
+    ) -> None:
         result = _kubectl("get rolebinding quota-watcher -n kubelab -o json", env)
-        assert result.returncode == 0, (
-            f"No RoleBinding 'quota-watcher' in kubelab ({env}): {result.stderr}"
-        )
+        assert result.returncode == 0, f"No RoleBinding 'quota-watcher' in kubelab ({env}): {result.stderr}"
 
         binding = json.loads(result.stdout)
         subjects = binding.get("subjects", [])
-        assert any(
-            s.get("kind") == "ServiceAccount" and s.get("name") == "quota-watcher" for s in subjects
-        ), f"RoleBinding 'quota-watcher' in {env} does not bind the quota-watcher ServiceAccount: {subjects}"
+        assert any(s.get("kind") == "ServiceAccount" and s.get("name") == "quota-watcher" for s in subjects), (
+            f"RoleBinding 'quota-watcher' in {env} does not bind the quota-watcher ServiceAccount: {subjects}"
+        )
         assert binding.get("roleRef", {}).get("name") == "quota-watcher", (
             f"RoleBinding 'quota-watcher' in {env} references the wrong Role: {binding.get('roleRef')}"
         )
@@ -131,7 +129,9 @@ class TestQuotaWatcherEmitter:
             f"(quota-rules.yaml) or the for: window's two-consecutive-sample assumption breaks."
         )
 
-    def test_run_emits_correct_utilization_per_dimension(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
+    def test_run_emits_correct_utilization_per_dimension(
+        self, require_vpn: None, require_kubeconfig: None, env: str
+    ) -> None:
         """Trigger one run on demand and check its output against the live ResourceQuota directly.
 
         Comparing against `kubectl get resourcequota` rather than re-deriving the
@@ -148,15 +148,11 @@ class TestQuotaWatcherEmitter:
         )
 
         job_name = f"quota-watcher-test-{int(time.time())}"
-        create = _kubectl(
-            f"create job {job_name} -n kubelab --from=cronjob/quota-watcher", env
-        )
+        create = _kubectl(f"create job {job_name} -n kubelab --from=cronjob/quota-watcher", env)
         assert create.returncode == 0, f"Could not trigger quota-watcher in {env}: {create.stderr}"
 
         try:
-            wait = _kubectl(
-                f"wait --for=condition=complete job/{job_name} -n kubelab --timeout=60s", env, timeout=70
-            )
+            wait = _kubectl(f"wait --for=condition=complete job/{job_name} -n kubelab --timeout=60s", env, timeout=70)
             assert wait.returncode == 0, f"quota-watcher job did not complete in {env}: {wait.stderr}"
 
             logs = _kubectl(f"logs job/{job_name} -n kubelab", env)

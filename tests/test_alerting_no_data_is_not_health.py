@@ -41,9 +41,7 @@ def _rules_over_cronjob_streams() -> list[tuple[str, str, dict]]:
         doc = yaml.safe_load(path.read_text()) or {}
         for group in doc.get("groups") or []:
             for rule in group.get("rules") or []:
-                queries = "".join(
-                    str((item.get("model") or {}).get("expr", "")) for item in rule.get("data") or []
-                )
+                queries = "".join(str((item.get("model") or {}).get("expr", "")) for item in rule.get("data") or [])
                 if any(f'container="{c}"' in queries for c in CRONJOB_CONTAINERS):
                     found.append((path.name, rule.get("uid", "?"), rule))
     return found

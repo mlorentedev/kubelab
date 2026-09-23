@@ -21,8 +21,8 @@ from toolkit.features import alert_smoke as smoke
 #: value is exactly the detail that made three hand-written regexes silently
 #: match nothing, and a cleaned-up fixture would hide it again.
 REAL_FAILURE = (
-    '\x1b[90m2026-08-09T17:04:00Z\x1b[0m \x1b[31mERR\x1b[0m '
-    '\x1b[1mUnable to obtain ACME certificate for domains\x1b[0m '
+    "\x1b[90m2026-08-09T17:04:00Z\x1b[0m \x1b[31mERR\x1b[0m "
+    "\x1b[1mUnable to obtain ACME certificate for domains\x1b[0m "
     '\x1b[36merror=\x1b[0m\x1b[31m\x1b[1m"unable to generate a certificate"\x1b[0m\x1b[0m '
     '\x1b[36mdomains=\x1b[0m["loki.internal.kubelab.local"]'
 )
@@ -31,8 +31,7 @@ REAL_HEARTBEAT = (
     "\x1b[1mTesting certificate renew...\x1b[0m \x1b[36macmeCA=\x1b[0mhttps://acme-v02"
 )
 REAL_PROVIDER_START = (
-    "\x1b[90m2026-08-09T12:00:00Z\x1b[0m \x1b[32mINF\x1b[0m "
-    "\x1b[1mStarting provider *acme.Provider\x1b[0m"
+    "\x1b[90m2026-08-09T12:00:00Z\x1b[0m \x1b[32mINF\x1b[0m \x1b[1mStarting provider *acme.Provider\x1b[0m"
 )
 
 
@@ -41,9 +40,7 @@ def _proc(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
 
 
 def _rules(state: str) -> str:
-    return json.dumps(
-        {"data": {"groups": [{"rules": [{"name": smoke.RULE_TITLE, "state": state}]}]}}
-    )
+    return json.dumps({"data": {"groups": [{"rules": [{"name": smoke.RULE_TITLE, "state": state}]}]}})
 
 
 class TestLogParsing:
@@ -131,9 +128,7 @@ class TestTeardownAlwaysRuns:
                 return _proc(_rules("inactive"))  # never fires
             return _proc()
 
-        smoke.run_alert_smoke(
-            "staging", kubectl=fake_kubectl, sleep=lambda _: None, now=_fake_clock()
-        )
+        smoke.run_alert_smoke("staging", kubectl=fake_kubectl, sleep=lambda _: None, now=_fake_clock())
 
         deletes = [c for c in calls if c[0] == "delete"]
         assert deletes, "teardown did not run after the rule failed to fire"
@@ -149,12 +144,13 @@ class TestTeardownAlwaysRuns:
                 return _proc(_rules("inactive"))
             return _proc()
 
-        result = smoke.run_alert_smoke(
-            "staging", kubectl=fake_kubectl, sleep=lambda _: None, now=_fake_clock()
-        )
+        result = smoke.run_alert_smoke("staging", kubectl=fake_kubectl, sleep=lambda _: None, now=_fake_clock())
 
         assert (result.fired, result.notified, result.resolved, result.resolve_notified) == (
-            False, False, False, False,
+            False,
+            False,
+            False,
+            False,
         )
         assert not result.ok
 

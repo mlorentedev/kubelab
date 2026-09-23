@@ -79,9 +79,7 @@ def load_inventory(
 ) -> list[NodeInfo]:
     """Parse the Ansible inventory YAML and return a list of NodeInfo."""
     if inventory_path is None:
-        inventory_path = (
-            _REPO_ROOT / "infra" / "ansible" / "inventories" / "homelab.yml"
-        )
+        inventory_path = _REPO_ROOT / "infra" / "ansible" / "inventories" / "homelab.yml"
 
     if not inventory_path.exists():
         return []
@@ -118,9 +116,12 @@ def node_ssh_run(
     return subprocess.run(
         [
             "ssh",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=5",
-            "-o", "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "ConnectTimeout=5",
+            "-o",
+            "BatchMode=yes",
             f"{user}@{host}",
             command,
         ],

@@ -132,9 +132,7 @@ def test_every_client_method_declares_the_scope_it_needs() -> None:
     front of a forge.
     """
     public = {
-        name
-        for name in vars(GiteaClient)
-        if not name.startswith("_") and callable(getattr(GiteaClient, name, None))
+        name for name in vars(GiteaClient) if not name.startswith("_") and callable(getattr(GiteaClient, name, None))
     }
     undeclared = public - set(SCOPE_BY_METHOD)
     assert not undeclared, (
@@ -165,8 +163,7 @@ def test_the_admin_requirement_is_derived_from_the_methods_it_performs() -> None
     )
 
     assert set(ADMIN_METHODS) <= set(SCOPE_BY_METHOD), (
-        f"ADMIN_METHODS names {sorted(set(ADMIN_METHODS) - set(SCOPE_BY_METHOD))}, absent from "
-        f"SCOPE_BY_METHOD."
+        f"ADMIN_METHODS names {sorted(set(ADMIN_METHODS) - set(SCOPE_BY_METHOD))}, absent from SCOPE_BY_METHOD."
     )
 
 

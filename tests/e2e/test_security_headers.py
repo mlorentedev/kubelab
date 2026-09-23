@@ -14,9 +14,7 @@ pytestmark = pytest.mark.e2e
 # Services that manage their own headers (skip Traefik header checks)
 _SELF_MANAGED_HEADERS = {"authelia", "headscale", "crowdsec"}
 
-_HEADER_SERVICES = sorted(
-    k for k in EXPECTATIONS if k not in _SELF_MANAGED_HEADERS
-)
+_HEADER_SERVICES = sorted(k for k in EXPECTATIONS if k not in _SELF_MANAGED_HEADERS)
 
 # Expected security headers from Traefik secure-headers middleware
 _EXPECTED_HEADERS = {
@@ -56,15 +54,11 @@ class TestSecurityHeaders:
         for header, expected_value in _EXPECTED_HEADERS.items():
             actual = r.headers.get(header, "")
             if expected_value.lower() not in actual.lower():
-                errors.append(
-                    f"{header}: expected '{expected_value}', got '{actual or '(missing)'}'"
-                )
+                errors.append(f"{header}: expected '{expected_value}', got '{actual or '(missing)'}'")
 
         if errors:
             if env == "dev":
-                pytest.skip(
-                    f"{svc_name}: security headers not enforced in dev — {errors}"
-                )
+                pytest.skip(f"{svc_name}: security headers not enforced in dev — {errors}")
             pytest.fail(f"{svc_name} security header failures:\n" + "\n".join(errors))
 
     def test_hsts_header(
@@ -93,9 +87,7 @@ class TestSecurityHeaders:
         r = http_client.get(f"https://{svc.domain}{svc.health_path}")
 
         hsts = r.headers.get(_HSTS_HEADER, "")
-        assert "max-age=" in hsts, (
-            f"{svc_name}: missing or invalid HSTS header: '{hsts or '(missing)'}'"
-        )
+        assert "max-age=" in hsts, f"{svc_name}: missing or invalid HSTS header: '{hsts or '(missing)'}'"
 
         # Extract max-age value and verify minimum
         for part in hsts.split(";"):
@@ -107,6 +99,4 @@ class TestSecurityHeaders:
                 )
                 break
 
-        assert "includesubdomains" in hsts.lower(), (
-            f"{svc_name}: HSTS missing includeSubDomains"
-        )
+        assert "includesubdomains" in hsts.lower(), f"{svc_name}: HSTS missing includeSubDomains"

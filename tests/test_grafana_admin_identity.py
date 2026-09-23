@@ -136,9 +136,7 @@ class TestCheckAdminIdentity:
         assert result.reconciled is False
         assert result.actual_login == "admin"
 
-    def test_server_error_is_unavailable_never_drift(
-        self, project_root: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_server_error_is_unavailable_never_drift(self, project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A 5xx means Grafana could not be asked — reporting drift would be a lie.
 
         The distinction this module is built on ("asked, and drifted" vs
@@ -159,9 +157,7 @@ class TestCheckAdminIdentity:
             with pytest.raises(GrafanaIdentityUnavailableError, match="503"):
                 check_admin_identity("prod", project_root)
 
-    def test_rate_limit_is_unavailable_never_drift(
-        self, project_root: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_rate_limit_is_unavailable_never_drift(self, project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """429 is the same category as 5xx: the credential was never judged."""
         monkeypatch.setattr(gai, "kubectl_service_port_forward", _fake_port_forward)
         monkeypatch.setattr(
@@ -229,9 +225,7 @@ class TestReconcileAdminIdentity:
             if login != effective_login["value"]:
                 raise urllib.error.HTTPError(url="", code=401, msg="", hdrs=None, fp=None)
             resp = MagicMock()
-            resp.read.return_value = json.dumps(
-                {"id": 1, "login": effective_login["value"], "email": "a@b.c"}
-            ).encode()
+            resp.read.return_value = json.dumps({"id": 1, "login": effective_login["value"], "email": "a@b.c"}).encode()
             resp.__enter__.return_value = resp
             return resp
 
@@ -263,9 +257,7 @@ class TestReconcileAdminIdentity:
         def fake_urlopen(req, timeout=5):
             raise urllib.error.HTTPError(url="", code=401, msg="", hdrs=None, fp=None)
 
-        monkeypatch.setattr(
-            subprocess, "run", lambda *a, **kw: MagicMock(returncode=1, stderr="boom: pod not found")
-        )
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=1, stderr="boom: pod not found"))
 
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
             with pytest.raises(GrafanaIdentityUnavailableError, match="reset-admin-password failed"):

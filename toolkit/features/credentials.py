@@ -299,6 +299,29 @@ class CredentialsManager:
                 items[key] = v
         return items
 
+    @staticmethod
+    def preserve_break_glass(
+        generated: dict[str, Any], existing: dict[str, Any], keys: set[str] | None = None
+    ) -> dict[str, Any]:
+        """Keep every break-glass account password that already exists (AUTH-004 AC7, #1355).
+
+        This command's single prompt password used to be written into Grafana's
+        admin password among others, so one run collapsed the break-glass accounts
+        back onto one shared value. Those accounts are rotated only by
+        `toolkit secrets rotate --group break-glass`, which also applies the new
+        value to the service and verifies it with a login.
+        """
+        if keys is None:
+            from toolkit.features.break_glass_rotation import break_glass_secret_keys
+
+            keys = break_glass_secret_keys()
+        result = dict(generated)
+        for key in keys:
+            if key in result and existing.get(key):
+                logger.info(f"  Preserving break-glass password: {key} (rotate it with --group break-glass)")
+                result[key] = existing[key]
+        return result
+
     def _preserve_immutable(self, generated: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
         """Replace generated values with existing ones for IMMUTABLE_SECRETS.
 
@@ -564,6 +587,7 @@ class CredentialsManager:
         # Preserve immutable secrets (storage_encryption_key, session_secret, etc.)
         # These MUST NOT be overwritten — doing so destroys Authelia state.
         generated_secrets = self._preserve_immutable(generated_secrets, existing_secrets)
+        generated_secrets = self.preserve_break_glass(generated_secrets, existing_secrets)
 
         if auto_update:
             # Batch update: single decrypt/encrypt cycle

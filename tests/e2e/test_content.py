@@ -51,9 +51,7 @@ class TestContentType:
         r = http_client_follow.get(f"https://{svc.domain}/")
 
         ct = r.headers.get("content-type", "")
-        assert exp.content_type in ct, (
-            f"{svc_name}: expected content-type containing '{exp.content_type}', got '{ct}'"
-        )
+        assert exp.content_type in ct, f"{svc_name}: expected content-type containing '{exp.content_type}', got '{ct}'"
 
 
 @pytest.mark.parametrize("svc_name", _BODY_SERVICES)
@@ -70,9 +68,7 @@ class TestBodyContent:
         svc, exp = _resolve(svc_name, services_by_name, env)
         r = http_client_follow.get(f"https://{svc.domain}/")
 
-        assert exp.body_contains in r.text.lower(), (
-            f"{svc_name}: expected '{exp.body_contains}' in body"
-        )
+        assert exp.body_contains in r.text.lower(), f"{svc_name}: expected '{exp.body_contains}' in body"
 
 
 @pytest.mark.parametrize("svc_name", _API_ENDPOINT_SERVICES)
@@ -116,9 +112,7 @@ class TestAPIJsonKeys:
             if r.status_code in (302, 307, 401):
                 pytest.skip(f"{svc_name} {path}: behind auth ({r.status_code})")
 
-            assert r.status_code == 200, (
-                f"{svc_name} {path}: expected 200, got {r.status_code}"
-            )
+            assert r.status_code == 200, f"{svc_name} {path}: expected 200, got {r.status_code}"
 
             data = r.json()
             for key in expected_keys:

@@ -87,11 +87,7 @@ def test_the_playbook_resolves_the_bot_name_through_the_map() -> None:
     common = yaml.safe_load(COMMON.read_text())
     machine = common["apps"]["auth"]["identities"]["machine"]
 
-    live = [
-        line
-        for line in playbook.splitlines()
-        if machine in line and not line.strip().startswith("#")
-    ]
+    live = [line for line in playbook.splitlines() if machine in line and not line.strip().startswith("#")]
     assert not live, (
         f"the machine account name {machine!r} appears literally in provision-bee.yml:\n  "
         + "\n  ".join(live)
@@ -122,11 +118,7 @@ def test_the_bot_token_is_registered_for_the_environment_that_holds_it() -> None
 
 def test_nothing_that_touches_the_token_can_print_it() -> None:
     """`generate-access-token` shows the value once; that run is the only chance to leak it."""
-    leaky = [
-        name
-        for name in (MINT_TASK, RECORD_TASK)
-        if _task(name).get("no_log") is not True
-    ]
+    leaky = [name for name in (MINT_TASK, RECORD_TASK) if _task(name).get("no_log") is not True]
     assert not leaky, (
         f"these tasks handle the machine token without `no_log: true`: {leaky}. "
         "Ansible echoes a registered command's stdout on failure and under -v, and a "
@@ -248,8 +240,7 @@ def test_a_blocked_account_is_unblocked_so_its_token_can_authenticate(bot_harnes
     assert "PATCH" in calls
     assert '"prohibit_login\\": false' in calls or "prohibit_login" in calls
     assert calls.index("admin user create") < calls.index("PATCH"), (
-        "the login-state PATCH must follow creation — the field is in EditUserOption "
-        "and not in CreateUserOption (R4)"
+        "the login-state PATCH must follow creation — the field is in EditUserOption and not in CreateUserOption (R4)"
     )
 
 

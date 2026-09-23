@@ -348,15 +348,13 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
     folders = sorted(p for p in root.iterdir() if p.is_dir() and p.name != "archive")
 
     assert not spec_gate.undeclared_specs(root), (
-        "specs invisible to the gate: "
-        f"{sorted(spec_gate.undeclared_specs(root))!r} — see the ratchet above"
+        f"specs invisible to the gate: {sorted(spec_gate.undeclared_specs(root))!r} — see the ratchet above"
     )
 
     cross_repo = {
         f.name
         for f in folders
-        if (f / "proposal.md").is_file()
-        and spec_gate.spec_issue(f / "proposal.md", REPO) is None
+        if (f / "proposal.md").is_file() and spec_gate.spec_issue(f / "proposal.md", REPO) is None
     }
     assert cross_repo == {"NOTIFY-001", "TOOL-009-cluster-operator-bootstrap"}, (
         f"the set of specs tracked outside {REPO} changed: {sorted(cross_repo)!r}. "
@@ -422,9 +420,7 @@ def test_a_quoted_waiver_is_not_a_declared_waiver() -> None:
     """
     quoted = "Example of the escape hatch:\n\n```\nSpec-archive-exception: <why>\n```\n"
     assert spec_gate.declared_exception(quoted) is None
-    assert spec_gate.declared_exception("Spec-archive-exception: genuinely not this PR") == (
-        "genuinely not this PR"
-    )
+    assert spec_gate.declared_exception("Spec-archive-exception: genuinely not this PR") == ("genuinely not this PR")
 
 
 def test_pr_1155_shape_passes() -> None:

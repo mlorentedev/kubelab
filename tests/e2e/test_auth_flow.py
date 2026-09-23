@@ -89,9 +89,7 @@ class TestAuthProtected:
             location = r.headers.get("location", "")
             if auth_domain:
                 parsed = urlparse(location)
-                assert auth_domain in parsed.netloc, (
-                    f"{svc_name}: redirects to {parsed.netloc}, expected {auth_domain}"
-                )
+                assert auth_domain in parsed.netloc, f"{svc_name}: redirects to {parsed.netloc}, expected {auth_domain}"
         elif r.status_code == 401:
             pass  # Traefik forwardAuth can return 401 directly
         elif r.status_code == 200 and env == "dev":
@@ -119,9 +117,7 @@ class TestAuthenticatedAccess:
             pytest.skip("Grafana not in config")
 
         r = authenticated_client.get(f"https://{svc.domain}/api/health")
-        assert r.status_code == 200, (
-            f"Grafana /api/health with auth session: expected 200, got {r.status_code}"
-        )
+        assert r.status_code == 200, f"Grafana /api/health with auth session: expected 200, got {r.status_code}"
 
     def test_traefik_dashboard_accessible_with_session(
         self,
@@ -141,9 +137,7 @@ class TestAuthenticatedAccess:
             pytest.skip("Traefik not in config")
 
         r = authenticated_client.get(f"https://{svc.domain}/dashboard/")
-        assert r.status_code == 200, (
-            f"Traefik /dashboard/ with auth session: expected 200, got {r.status_code}"
-        )
+        assert r.status_code == 200, f"Traefik /dashboard/ with auth session: expected 200, got {r.status_code}"
 
     def test_authelia_verify_with_session(
         self,
@@ -162,6 +156,4 @@ class TestAuthenticatedAccess:
             pytest.skip("Authelia not in config")
 
         r = authenticated_client.get(f"https://{svc.domain}/api/verify")
-        assert r.status_code == 200, (
-            f"Authelia /api/verify with auth session: expected 200, got {r.status_code}"
-        )
+        assert r.status_code == 200, f"Authelia /api/verify with auth session: expected 200, got {r.status_code}"

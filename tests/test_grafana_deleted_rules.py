@@ -151,6 +151,4 @@ class TestTheDeletionSurvivesTheRender:
         )
         doc = yaml.safe_load(cm["data"]["deleted-rules.yaml"])
         rendered = {e["uid"] for e in doc.get("deleteRules", [])}
-        assert MUST_STAY_DELETED in rendered, (
-            f"{MUST_STAY_DELETED} is absent from the {env} rendered deletion list."
-        )
+        assert MUST_STAY_DELETED in rendered, f"{MUST_STAY_DELETED} is absent from the {env} rendered deletion list."

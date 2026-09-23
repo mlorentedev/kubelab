@@ -46,23 +46,21 @@ class TestAffectedServiceResolution:
         assert affected == {"traefik"}
 
     def test_grafana_admin_password(self) -> None:
-        affected = self._resolve_affected(
-            ["apps.services.observability.grafana.admin_password"]
-        )
+        affected = self._resolve_affected(["apps.services.observability.grafana.admin_password"])
         assert affected == {"grafana"}
 
     def test_crowdsec_bouncer_key(self) -> None:
-        affected = self._resolve_affected(
-            ["apps.services.security.crowdsec.bouncer_api_key"]
-        )
+        affected = self._resolve_affected(["apps.services.security.crowdsec.bouncer_api_key"])
         assert affected == {"crowdsec"}
 
     def test_multiple_keys_combine(self) -> None:
-        affected = self._resolve_affected([
-            "basic_auth.user",
-            "apps.services.security.authelia.session_secret",
-            "apps.services.data.minio.root_password",
-        ])
+        affected = self._resolve_affected(
+            [
+                "basic_auth.user",
+                "apps.services.security.authelia.session_secret",
+                "apps.services.data.minio.root_password",
+            ]
+        )
         assert affected == {"traefik", "authelia", "minio"}
 
     def test_full_generate_output(self) -> None:
@@ -168,10 +166,12 @@ class TestFlattenDict:
         assert result == {"a.b.c": "val"}
 
     def test_mixed_depth(self) -> None:
-        result = CredentialsManager._flatten_dict({
-            "basic_auth": {"user": "manu"},
-            "apps": {"services": {"security": {"authelia": {"session_secret": "abc"}}}},
-        })
+        result = CredentialsManager._flatten_dict(
+            {
+                "basic_auth": {"user": "manu"},
+                "apps": {"services": {"security": {"authelia": {"session_secret": "abc"}}}},
+            }
+        )
         assert result["basic_auth.user"] == "manu"
         assert result["apps.services.security.authelia.session_secret"] == "abc"
 
@@ -258,9 +258,7 @@ class TestSSOTContactEmail:
         cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config["apps"]["contact"]["email"]
-        admin_email = (
-            config["apps"]["services"]["observability"]["uptime_kuma"]["admin_email"]
-        )
+        admin_email = config["apps"]["services"]["observability"]["uptime_kuma"]["admin_email"]
         assert admin_email == contact, (
             f"uptime_kuma.admin_email ({admin_email!r}) must derive from "
             f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
@@ -290,11 +288,7 @@ class TestSSOTContactEmail:
         cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config["apps"]["contact"]["email"]
-        admin_entries = [
-            u
-            for u in config["apps"]["services"]["security"]["authelia"]["users"]
-            if u.get("identity")
-        ]
+        admin_entries = [u for u in config["apps"]["services"]["security"]["authelia"]["users"] if u.get("identity")]
         assert len(admin_entries) == 1
         assert admin_entries[0]["email"] == contact, (
             f"Authelia admin user email ({admin_entries[0]['email']!r}) must "

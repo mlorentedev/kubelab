@@ -105,9 +105,7 @@ def test_every_lesson_appears_in_its_category_index() -> None:
         for path in _lesson_files()
         if path.name not in (path.parent / "_index.md").read_text(encoding="utf-8")
     ]
-    assert not missing, (
-        "these lessons have no row in their category `_index.md`:\n  " + "\n  ".join(missing)
-    )
+    assert not missing, "these lessons have no row in their category `_index.md`:\n  " + "\n  ".join(missing)
 
 
 def test_every_category_count_matches_its_files_in_both_places() -> None:

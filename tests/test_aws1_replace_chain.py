@@ -128,11 +128,7 @@ def test_replace_does_not_instruct_a_human_to_finish_the_job():
     it named `deploy-argocd` and never `provision-aws1`.
     """
     text = _recipe_text()
-    offenders = [
-        ln
-        for ln in text.splitlines()
-        if re.search(r"then run:|Wait ~|, then\s+make ", ln, re.IGNORECASE)
-    ]
+    offenders = [ln for ln in text.splitlines() if re.search(r"then run:|Wait ~|, then\s+make ", ln, re.IGNORECASE)]
     assert not offenders, f"recipe tells a human to finish the job: {offenders}"
 
 

@@ -94,21 +94,15 @@ def test_external_services_have_no_selector(external_services: list[dict]) -> No
     )
 
 
-def test_external_services_have_exactly_one_populated_endpointslice(
-    external_services: list[dict], env: str
-) -> None:
+def test_external_services_have_exactly_one_populated_endpointslice(external_services: list[dict], env: str) -> None:
     """Two slices with addresses means two backends answering one name."""
     problems: list[str] = []
     for svc in external_services:
         name = svc["metadata"]["name"]
-        slices = _kubectl_json(
-            f"get endpointslice -l kubernetes.io/service-name={name}", env
-        ).get("items", [])
+        slices = _kubectl_json(f"get endpointslice -l kubernetes.io/service-name={name}", env).get("items", [])
 
         populated = {
-            s["metadata"]["name"]: [
-                addr for ep in (s.get("endpoints") or []) for addr in (ep.get("addresses") or [])
-            ]
+            s["metadata"]["name"]: [addr for ep in (s.get("endpoints") or []) for addr in (ep.get("addresses") or [])]
             for s in slices
         }
         populated = {n: a for n, a in populated.items() if a}

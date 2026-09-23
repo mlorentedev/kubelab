@@ -23,9 +23,7 @@ def test_inhibit_rules_structure_and_syntax() -> None:
     assert len(rules) >= 4, f"Expected at least 4 inhibit rules, found {len(rules)}"
 
     # 1. Critical -> Warning/Info suppression
-    sev_rule = next(
-        (r for r in rules if "severity = critical" in r.get("source_matchers", [])), None
-    )
+    sev_rule = next((r for r in rules if "severity = critical" in r.get("source_matchers", [])), None)
     assert sev_rule is not None, "Rule suppressing warning/info on critical must exist"
     assert "severity =~ warning|info" in sev_rule.get("target_matchers", [])
     assert "alertname" in sev_rule.get("equal", [])

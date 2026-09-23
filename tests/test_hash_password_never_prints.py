@@ -141,9 +141,7 @@ def test_a_failed_write_reports_the_key_and_not_the_value(
     assert KEY in captured.out + captured.err
 
 
-def test_an_empty_password_is_refused_before_hashing(
-    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_empty_password_is_refused_before_hashing(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pre-existing behaviour, pinned so the rewrite did not drop it."""
     m = _install(monkeypatch, succeed=True, tmp_path=tmp_path)
     monkeypatch.setattr(typer, "prompt", lambda *a, **k: "")

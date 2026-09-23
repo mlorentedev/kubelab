@@ -31,9 +31,7 @@ class TestCrowdSecBouncer:
             pytest.skip("Web not in config")
 
         r = http_client_follow.get(f"https://{svc.domain}/")
-        assert r.status_code != 403, (
-            "Normal request was blocked by CrowdSec bouncer (403 Forbidden)"
-        )
+        assert r.status_code != 403, "Normal request was blocked by CrowdSec bouncer (403 Forbidden)"
 
     def test_crowdsec_health(
         self,
@@ -51,6 +49,4 @@ class TestCrowdSecBouncer:
             pytest.skip("CrowdSec not in config")
 
         r = http_client.get(f"https://{svc.domain}{svc.health_path}")
-        assert r.status_code in (200, 302), (
-            f"CrowdSec health: expected 200/302, got {r.status_code}"
-        )
+        assert r.status_code in (200, 302), f"CrowdSec health: expected 200/302, got {r.status_code}"

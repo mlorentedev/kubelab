@@ -29,10 +29,7 @@ _RUN = re.compile(r"\$\(TOOLKIT\) infra ansible run -p (?P<playbook>\S+)(?P<rest
 
 
 def _invocations() -> list[tuple[str, str]]:
-    return [
-        (m.group("playbook"), m.group("rest"))
-        for m in _RUN.finditer(MAKEFILE.read_text(encoding="utf-8"))
-    ]
+    return [(m.group("playbook"), m.group("rest")) for m in _RUN.finditer(MAKEFILE.read_text(encoding="utf-8"))]
 
 
 def test_the_scan_finds_the_invocations_it_is_meant_to_guard() -> None:
@@ -56,8 +53,7 @@ def test_every_mutating_ansible_target_threads_the_dry_run_flag() -> None:
         {
             playbook
             for playbook, rest in _invocations()
-            if playbook.replace("$(NODE)", "").replace("$(TARGET)", "").strip("-")
-            not in READ_ONLY
+            if playbook.replace("$(NODE)", "").replace("$(TARGET)", "").strip("-") not in READ_ONLY
             and "$(_CHECK)" not in rest
         }
     )

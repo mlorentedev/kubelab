@@ -40,9 +40,7 @@ TAG_ONE = "sha-aaa1111"
 TAG_TWO = "sha-bbb2222"
 OPEN_PR = "4242"
 
-_needs_bash = pytest.mark.skipif(
-    shutil.which("bash") is None, reason="the step is a bash script"
-)
+_needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="the step is a bash script")
 
 
 def _step() -> dict:
@@ -61,9 +59,7 @@ def _executable_lines() -> str:
     Asserting against the raw `run:` matched `gh pr create` inside the comment
     explaining why it is gone — a guard failing on its own rationale.
     """
-    return "\n".join(
-        line for line in _step()["run"].splitlines() if not line.strip().startswith("#")
-    )
+    return "\n".join(line for line in _step()["run"].splitlines() if not line.strip().startswith("#"))
 
 
 # `gh` replaced entirely, logging every invocation so the ROUTE and the ORDER are
@@ -248,22 +244,18 @@ def test_two_consecutive_dispatches_produce_one_pr_and_one_branch(
     assert first.returncode == 0, first.stderr
 
     # The offer now exists, so the second dispatch's lookup finds it.
-    second, all_calls = _run_step(
-        tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=OPEN_PR
-    )
+    second, all_calls = _run_step(tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=OPEN_PR)
     assert second.returncode == 0, second.stderr
 
     creates = [c for c in all_calls if "-X POST" in c and "/pulls" in c]
     updates = [c for c in all_calls if "-X PATCH" in c and "/pulls/" in c]
     assert len(creates) == 1, (
-        f"two dispatches opened {len(creates)} pull requests. One stable branch "
-        f"must carry one offer: {all_calls!r}"
+        f"two dispatches opened {len(creates)} pull requests. One stable branch must carry one offer: {all_calls!r}"
     )
     assert len(updates) == 1, f"the second dispatch did not update the offer: {all_calls!r}"
 
     assert _remote_branches(remote) == [BRANCH, "master"], (
-        "a second deploy branch was minted. The per-sha branch is exactly what "
-        "produced 104 branches and 68 closes."
+        "a second deploy branch was minted. The per-sha branch is exactly what produced 104 branches and 68 closes."
     )
 
 
@@ -292,9 +284,7 @@ def test_the_update_renames_the_pr_to_the_sha_it_now_offers(
 
     # And the branch really holds the newer promotion, not merely a new title.
     for rel in STAGED_PATHS:
-        assert TAG_TWO in _remote_file(remote, BRANCH, rel), (
-            f"{rel} on the remote branch does not hold {TAG_TWO}"
-        )
+        assert TAG_TWO in _remote_file(remote, BRANCH, rel), f"{rel} on the remote branch does not hold {TAG_TWO}"
 
 
 # --- AC4: an unchanged overlay changes nothing -------------------------------
@@ -334,9 +324,7 @@ def test_a_closed_offer_is_reopened_by_the_next_dispatch(
     _run_step(tmp_path, work, tag=TAG_ONE, calls_path=calls)
 
     # The human closes it. `state=open` now answers empty, as GitHub would.
-    proc, all_calls = _run_step(
-        tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=""
-    )
+    proc, all_calls = _run_step(tmp_path, work, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR="")
 
     assert proc.returncode == 0, proc.stderr
     creates = [c for c in all_calls if "-X POST" in c and "/pulls" in c]

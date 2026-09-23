@@ -35,9 +35,7 @@ SECRETS_DIR = PROJECT_ROOT / "infra/config/secrets"
 # `sync-secret-manager` and `deploy-argocd` both read them from common only.
 # Deriving the set from both flags, not from the kind alone, keeps a future
 # per-env override of any of them from reproducing SSOT-028 unguarded.
-HUB_KEYS = sorted(
-    s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.HUB_MANAGED or s.sync_to_secret_manager
-)
+HUB_KEYS = sorted(s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.HUB_MANAGED or s.sync_to_secret_manager)
 
 
 def _has_key(doc: dict[str, Any], dotted: str) -> bool:
@@ -92,9 +90,9 @@ class TestCredentialsGenerateWritesHubKeysToCommon:
         writes: list[tuple[dict[str, Any], Path | None]] = []
         cm = MagicMock()
         cm.get_merged_config.return_value = {"apps": {"auth": {"identities": {"operator": "operator"}}}}
-        cm.batch_update_secrets.side_effect = lambda data, secret_file_path=None: writes.append(
-            (dict(data), secret_file_path)
-        ) or True
+        cm.batch_update_secrets.side_effect = lambda data, secret_file_path=None: (
+            writes.append((dict(data), secret_file_path)) or True
+        )
         monkeypatch.setattr(credentials, "ConfigurationManager", MagicMock(return_value=cm))
         answers = iter(["operator", "Passw0rdForTests"])
         monkeypatch.setattr(credentials.typer, "prompt", lambda *a, **k: next(answers))

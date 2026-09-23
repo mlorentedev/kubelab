@@ -33,9 +33,7 @@ HOOK = REPO_ROOT / ".github" / "hooks" / "validate-commit-msg.sh"
 
 
 def _git(repo: pathlib.Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=30
-    )
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
 
 
 @pytest.fixture
@@ -75,9 +73,7 @@ class TestHandWrittenMessages:
         "message",
         ["not conventional at all", "Fix: capitalised type", "feat missing colon", ""],
     )
-    def test_non_conventional_message_is_rejected(
-        self, repo: pathlib.Path, message: str
-    ) -> None:
+    def test_non_conventional_message_is_rejected(self, repo: pathlib.Path, message: str) -> None:
         assert _commit(repo, "b.txt", message).returncode != 0
 
     def test_prose_beginning_with_merge_is_still_rejected(self, repo: pathlib.Path) -> None:
@@ -131,9 +127,7 @@ class TestGitAuthoredMessages:
         f.write_text("resolved\n", encoding="utf-8")
         _git(repo, "add", "conflict.txt")
         finish = _git(repo, "commit", "--no-edit")
-        assert finish.returncode == 0, (
-            f"could not finish the revert: {finish.stdout}{finish.stderr}"
-        )
+        assert finish.returncode == 0, f"could not finish the revert: {finish.stdout}{finish.stderr}"
 
     def test_cherry_pick_after_a_conflict_can_be_committed(self, repo: pathlib.Path) -> None:
         """Same shape as the revert case, via CHERRY_PICK_HEAD.
@@ -162,9 +156,7 @@ class TestGitAuthoredMessages:
         f.write_text("resolved\n", encoding="utf-8")
         _git(repo, "add", "pick.txt")
         finish = _git(repo, "commit", "--no-edit")
-        assert finish.returncode == 0, (
-            f"could not finish the cherry-pick: {finish.stdout}{finish.stderr}"
-        )
+        assert finish.returncode == 0, f"could not finish the cherry-pick: {finish.stdout}{finish.stderr}"
 
     def test_fixup_succeeds(self, repo: pathlib.Path) -> None:
         sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -184,6 +176,4 @@ def test_hook_is_executable_and_is_what_the_symlink_targets() -> None:
     assert HOOK.exists(), f"hook not found at {HOOK}"
     link = REPO_ROOT / ".git" / "hooks" / "commit-msg"
     if link.is_symlink():
-        assert link.resolve() == HOOK.resolve(), (
-            f"installed hook points at {link.resolve()}, not the tracked {HOOK}"
-        )
+        assert link.resolve() == HOOK.resolve(), f"installed hook points at {link.resolve()}, not the tracked {HOOK}"

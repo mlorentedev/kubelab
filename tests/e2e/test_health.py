@@ -59,9 +59,7 @@ class TestHealthEndpoint:
         except httpx.TimeoutException:
             pytest.fail(f"{svc_name} ({url}): timeout")
 
-        assert r.status_code in exp.health_status, (
-            f"{svc_name}: expected {exp.health_status}, got {r.status_code}"
-        )
+        assert r.status_code in exp.health_status, f"{svc_name}: expected {exp.health_status}, got {r.status_code}"
 
 
 @pytest.mark.parametrize("svc_name", sorted(EXPECTATIONS.keys()))

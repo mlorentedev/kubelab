@@ -32,9 +32,7 @@ class TestNodeHealth:
                 else:
                     hostname = result.stdout.strip()
                     if node.name not in hostname and hostname not in node.name:
-                        errors.append(
-                            f"{node.name} ({node.host}): hostname mismatch — got '{hostname}'"
-                        )
+                        errors.append(f"{node.name} ({node.host}): hostname mismatch — got '{hostname}'")
             except Exception as exc:
                 errors.append(f"{node.name} ({node.host}): {exc}")
 

@@ -365,7 +365,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Grafana admin password",
         kind=SecretKind.PASSWORD,
         services=("grafana",),
-        rotate_note="Login with new password after restart.",
+        rotate_note=(
+            "Break-glass account: `toolkit secrets rotate --group break-glass --env <env>`. "
+            "GF_SECURITY_ADMIN_PASSWORD only seeds a fresh install, so a restart never changes it."
+        ),
     ),
     SecretSpec(
         key_path="apps.services.observability.grafana.alerts_ro_token",
@@ -512,7 +515,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Gitea admin account password (break-glass; SSO is the human login path)",
         kind=SecretKind.PASSWORD,
         services=("gitea",),
-        rotate_note="Change via Gitea admin UI or CLI.",
+        rotate_note=(
+            "Break-glass account: `toolkit secrets rotate --group break-glass --env prod`. "
+            "gitea-bootstrap.sh sets it only when it creates the account."
+        ),
         envs=("dev", "prod"),
     ),
     SecretSpec(
@@ -1841,6 +1847,16 @@ class SecretsManager:
                 f"{key_path!r} is not in SECRET_CATALOG, the authoritative registry. "
                 "Register it there first: without a spec there are no declared "
                 "consumers, so nothing can tell you what to restart afterwards."
+            )
+
+        from toolkit.features.break_glass_rotation import break_glass_secret_keys
+
+        if key_path in break_glass_secret_keys(self.project_root):
+            raise RotationRefused(
+                f"{key_path!r} is a break-glass account password. Its value lives in the "
+                "application's own database, so writing SOPS alone would leave the two "
+                "disagreeing. Use `toolkit secrets rotate --group break-glass --env <env>`, "
+                "which also applies it to the service and verifies it with a login."
             )
 
         if key_path in IMMUTABLE_SECRETS:

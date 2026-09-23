@@ -39,15 +39,21 @@ class TestHealthCheckResult:
 
     def test_healthy_result(self) -> None:
         r = HealthCheckResult(
-            service="api", url="https://api.kubelab.live/health",
-            status_code=200, healthy=True, reason="OK",
+            service="api",
+            url="https://api.kubelab.live/health",
+            status_code=200,
+            healthy=True,
+            reason="OK",
         )
         assert r.healthy is True
 
     def test_unhealthy_result(self) -> None:
         r = HealthCheckResult(
-            service="minio", url="https://minio.kubelab.live/minio/health/live",
-            status_code=403, healthy=False, reason="HTTP 403",
+            service="minio",
+            url="https://minio.kubelab.live/minio/health/live",
+            status_code=403,
+            healthy=False,
+            reason="HTTP 403",
         )
         assert r.healthy is False
 
@@ -182,31 +188,45 @@ class TestResultInterpretation:
 
     def test_200_is_healthy(self) -> None:
         svc = ServiceHealthConfig(
-            name="api", domain="api.kubelab.live", health_path="/health",
+            name="api",
+            domain="api.kubelab.live",
+            health_path="/health",
         )
         r = HealthCheckResult(
-            service=svc.name, url=f"https://{svc.domain}{svc.health_path}",
-            status_code=200, healthy=True, reason="OK",
+            service=svc.name,
+            url=f"https://{svc.domain}{svc.health_path}",
+            status_code=200,
+            healthy=True,
+            reason="OK",
         )
         assert r.healthy
 
     def test_302_with_auth_is_healthy(self) -> None:
         r = HealthCheckResult(
-            service="grafana", url="https://grafana.kubelab.live/api/health",
-            status_code=302, healthy=True, reason="redirect (auth expected)",
+            service="grafana",
+            url="https://grafana.kubelab.live/api/health",
+            status_code=302,
+            healthy=True,
+            reason="redirect (auth expected)",
         )
         assert r.healthy
 
     def test_403_is_unhealthy(self) -> None:
         r = HealthCheckResult(
-            service="minio", url="https://minio.kubelab.live/",
-            status_code=403, healthy=False, reason="HTTP 403",
+            service="minio",
+            url="https://minio.kubelab.live/",
+            status_code=403,
+            healthy=False,
+            reason="HTTP 403",
         )
         assert not r.healthy
 
     def test_zero_status_is_unhealthy(self) -> None:
         r = HealthCheckResult(
-            service="down-svc", url="https://down.kubelab.live/health",
-            status_code=0, healthy=False, reason="no response",
+            service="down-svc",
+            url="https://down.kubelab.live/health",
+            status_code=0,
+            healthy=False,
+            reason="no response",
         )
         assert not r.healthy

@@ -30,6 +30,7 @@ pytestmark = pytest.mark.infra
 _REPO_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 _COMMON_YAML = os.path.abspath(os.path.join(_REPO_ROOT, "infra/config/values/common.yaml"))
 
+
 def _runner_name() -> str:
     """The runner's identity on the forge, from the SSOT.
 

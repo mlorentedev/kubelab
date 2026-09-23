@@ -142,8 +142,7 @@ class TestTheDeclarationIsInternallyConsistent:
             "expands as an interpolation rather than printing. This breaks "
             "`terraform init` for the whole module -- before any provider is "
             "fetched, so the error names the description, not the resource you "
-            "were changing. Write $${...} to mean the literal.\n  "
-            + "\n  ".join(offenders)
+            "were changing. Write $${...} to mean the literal.\n  " + "\n  ".join(offenders)
         )
 
     def test_the_dr_module_is_not_the_one_being_applied(self) -> None:
@@ -269,8 +268,7 @@ class TestTheFirewallIsLive:
             fw = c.get(f"/firewalls/{entry['id']}").raise_for_status().json()["firewall"]
 
         assert "rules" in fw, (
-            f"The firewall object has no `rules` key; keys present are {sorted(fw)}. "
-            "Fix the accessor."
+            f"The firewall object has no `rules` key; keys present are {sorted(fw)}. Fix the accessor."
         )
 
         # `and r.get("port")` used to filter here, and it was a hole of exactly

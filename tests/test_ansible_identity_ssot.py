@@ -72,11 +72,7 @@ def test_the_playbook_declares_identity_variables_at_all() -> None:
 
 
 def test_no_identity_resolves_from_a_secret_store() -> None:
-    offenders = {
-        name: expr
-        for name, expr in _identity_vars().items()
-        if any(root in expr for root in SECRET_ROOTS)
-    }
+    offenders = {name: expr for name, expr in _identity_vars().items() if any(root in expr for root in SECRET_ROOTS)}
     assert not offenders, (
         "an identity resolved from SOPS is one `credentials generate` may rename: "
         f"{offenders}. Resolve it from `apps.auth.identities` instead."

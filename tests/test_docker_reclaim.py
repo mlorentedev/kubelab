@@ -280,9 +280,7 @@ def test_a_builder_kept_for_age_keeps_its_volume(plan: ReclaimPlan) -> None:
 # --- the gate itself ---------------------------------------------------------
 
 
-def test_a_wider_gate_reclaims_the_young_builder_too(
-    containers: list[Container], volumes: list[str]
-) -> None:
+def test_a_wider_gate_reclaims_the_young_builder_too(containers: list[Container], volumes: list[str]) -> None:
     """An operator watching the plan can lower the gate. At zero everything
     qualifies, which is the emergency case."""
     result = plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=0)
@@ -290,9 +288,7 @@ def test_a_wider_gate_reclaims_the_young_builder_too(
     assert result.kept_containers == ()
 
 
-def test_a_gate_above_every_age_reclaims_nothing(
-    containers: list[Container], volumes: list[str]
-) -> None:
+def test_a_gate_above_every_age_reclaims_nothing(containers: list[Container], volumes: list[str]) -> None:
     result = plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=24 * 365)
     assert result.containers == ()
     assert len(result.kept_containers) == 6
@@ -359,9 +355,7 @@ def test_a_negative_gate_is_refused(containers: list[Container], volumes: list[s
 def test_is_noop_reports_both_halves() -> None:
     assert ReclaimPlan().is_noop
     assert not ReclaimPlan(volumes=("x",)).is_noop
-    assert not ReclaimPlan(
-        containers=(Container("c", datetime(2025, 1, 1, tzinfo=timezone.utc), False, ()),)
-    ).is_noop
+    assert not ReclaimPlan(containers=(Container("c", datetime(2025, 1, 1, tzinfo=timezone.utc), False, ()),)).is_noop
 
 
 # --- remote command construction ---------------------------------------------

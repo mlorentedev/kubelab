@@ -41,9 +41,7 @@ MONITORS = json.loads((REPO / "infra/config/uptime-kuma/monitors.json").read_tex
 TAGS_SEED = json.loads((REPO / "infra/config/uptime-kuma/tags.json").read_text())
 SHIP = REPO / "infra/ansible/roles/node_backup/templates/node-backup-ship.sh.j2"
 
-MUTED = frozenset(
-    COMMON["apps"]["services"]["observability"]["uptime_kuma"]["muted_notification_tags"]
-)
+MUTED = frozenset(COMMON["apps"]["services"]["observability"]["uptime_kuma"]["muted_notification_tags"])
 BACKUP_NODES = sorted(COMMON["backup"]["sources"])
 
 
@@ -53,9 +51,7 @@ def _location(node: str) -> str:
 
 
 def _heartbeat_monitors() -> dict[str, dict]:
-    return {
-        m["key"]: m for m in MONITORS if str(m.get("key", "")).startswith("ops-backup-node-")
-    }
+    return {m["key"]: m for m in MONITORS if str(m.get("key", "")).startswith("ops-backup-node-")}
 
 
 def test_every_backed_up_node_has_a_coverage_monitor() -> None:
@@ -143,8 +139,7 @@ def test_every_tag_the_monitors_use_exists_in_the_tag_seed() -> None:
     declared = {t["name"] for t in TAGS_SEED}
     used = {t for m in _heartbeat_monitors().values() for t in (m.get("tags") or [])}
     assert used <= declared, (
-        f"these tags are used by a coverage monitor and declared in no tag seed: "
-        f"{sorted(used - declared)}"
+        f"these tags are used by a coverage monitor and declared in no tag seed: {sorted(used - declared)}"
     )
 
 
@@ -177,9 +172,7 @@ def _heartbeat_block() -> str:
     """
     import jinja2
 
-    defaults = yaml.safe_load(
-        (REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text()
-    )
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
     ctx = {
         **defaults,
         "ansible_managed": "Ansible managed",
@@ -187,9 +180,7 @@ def _heartbeat_block() -> str:
         "node_backup_heartbeat_domain": "status.kubelab.live",
         "node_backup_r2_repository": "s3:x",
     }
-    rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(
-        SHIP.read_text()
-    ).render(**ctx)
+    rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text()).render(**ctx)
     marker = "# --- coverage heartbeat"
     assert marker in rendered, "the heartbeat block is gone from the ship script"
     return rendered[rendered.index(marker) :]
@@ -213,9 +204,7 @@ def test_a_failed_heartbeat_never_fails_the_ship(tmp_path: pathlib.Path, curl_ex
     token = tmp_path / "token"
     token.write_text("Abc-123_xyz")
 
-    block = _heartbeat_block().replace(
-        "/opt/node-backup-heartbeat-token", str(token)
-    )
+    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     proc = subprocess.run(
         ["bash", "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,
@@ -260,8 +249,7 @@ def test_the_token_never_reaches_curls_argv(tmp_path: pathlib.Path) -> None:
     )
     argv = seen.read_text()
     assert "SECRETTOKENVALUE" not in argv, (
-        f"the push token is in curl's argv, readable via ps for the life of the "
-        f"call:\n{argv}"
+        f"the push token is in curl's argv, readable via ps for the life of the call:\n{argv}"
     )
     assert "--config" in argv, "the token must reach curl through a config on stdin"
 
@@ -277,7 +265,7 @@ def test_an_implausible_token_is_refused_rather_than_posted(tmp_path: pathlib.Pa
     bindir.mkdir()
     called = tmp_path / "called"
     stub = bindir / "curl"
-    stub.write_text(f'#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n')
+    stub.write_text(f"#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n")
     stub.chmod(0o755)
     token = tmp_path / "token"
     token.write_text("../../evil?x=")
@@ -311,11 +299,9 @@ def test_the_domain_has_no_default_so_a_missing_one_fails_the_apply() -> None:
     """
     import jinja2
 
-    defaults = yaml.safe_load(
-        (REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text()
-    )
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
     assert "node_backup_heartbeat_domain" not in defaults, (
-        "the heartbeat domain has a role default again. Any value here — `\"\"` "
+        'the heartbeat domain has a role default again. Any value here — `""` '
         "included — makes the variable defined, so StrictUndefined cannot catch a "
         "playbook that forgot to pass it."
     )
@@ -324,9 +310,7 @@ def test_the_domain_has_no_default_so_a_missing_one_fails_the_apply() -> None:
     # the ship template with the role's own defaults must raise, because that is
     # the whole protection.
     with pytest.raises(jinja2.exceptions.UndefinedError):
-        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(
-            SHIP.read_text()
-        ).render(
+        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text()).render(
             # The role's own defaults, plus only what Ansible supplies at runtime.
             # Anything the defaults already carry is left alone — overriding it
             # here would be this test inventing a context the apply never has.
@@ -350,19 +334,12 @@ def test_a_manual_run_takes_the_same_path_the_timer_does() -> None:
     Being the real path is also what makes it useful for AC9: it is how an
     operator makes a heartbeat arrive without waiting for a 4h window.
     """
-    playbook = yaml.safe_load(
-        (REPO / "infra/ansible/playbooks/backup-node.yml").read_text()
-    )
+    playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text())
     [play] = playbook
     assert play["vars"]["backup_unit"] == "node-backup-ship.service", (
-        "the manual trigger must start the ship unit; starting capture instead "
-        "would stage a snapshot and never send it"
+        "the manual trigger must start the ship unit; starting capture instead would stage a snapshot and never send it"
     )
-    starts = [
-        task
-        for task in play["tasks"]
-        if task.get("ansible.builtin.systemd", {}).get("state") == "started"
-    ]
+    starts = [task for task in play["tasks"] if task.get("ansible.builtin.systemd", {}).get("state") == "started"]
     assert len(starts) == 1, "exactly one unit is started, or the topology is bypassed"
 
 
@@ -374,9 +351,7 @@ def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:
     that had never been asked to run. A rehearsal that reports a failure the
     real run would not have is worse than no rehearsal.
     """
-    playbook = yaml.safe_load(
-        (REPO / "infra/ansible/playbooks/backup-node.yml").read_text()
-    )
+    playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text())
     [play] = playbook
     by_name = {t["name"]: t for t in play["tasks"]}
 
@@ -387,9 +362,7 @@ def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:
     # The reads it depends on must run in check mode anyway — a read changes
     # nothing, and skipping it is what empties the assertion's input.
     for name in ("Read the result", "Report what the run actually did"):
-        assert by_name[name].get("check_mode") is False, (
-            f"{name!r} is skipped under --check, so its stdout is empty"
-        )
+        assert by_name[name].get("check_mode") is False, f"{name!r} is skipped under --check, so its stdout is empty"
 
 
 # --- the shutdown receipt: proof that survives the phase with no journal ----
@@ -417,12 +390,10 @@ def test_the_shutdown_path_leaves_proof_and_the_boot_path_reads_it() -> None:
         "too and a boot could read a scheduled run as a shutdown run"
     )
 
-    unit = (
-        REPO / "infra/ansible/roles/node_backup/templates/node-backup-shutdown.service.j2"
-    ).read_text(encoding="utf-8")
-    assert "Environment=SHUTDOWN_RECEIPT=" in unit, (
-        "the shutdown unit does not ask ship for a receipt"
+    unit = (REPO / "infra/ansible/roles/node_backup/templates/node-backup-shutdown.service.j2").read_text(
+        encoding="utf-8"
     )
+    assert "Environment=SHUTDOWN_RECEIPT=" in unit, "the shutdown unit does not ask ship for a receipt"
     # Order matters: clear before capture, so a stale file cannot be read as
     # proof of THIS run.
     clear = unit.index("rm -f")
@@ -433,9 +404,9 @@ def test_the_shutdown_path_leaves_proof_and_the_boot_path_reads_it() -> None:
         "reports a backup that did not happen."
     )
 
-    capture_script = (
-        REPO / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2"
-    ).read_text(encoding="utf-8")
+    capture_script = (REPO / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2").read_text(
+        encoding="utf-8"
+    )
     assert "node_backup_shutdown_receipt" in capture_script, (
         "nothing reads the receipt back. A receipt nobody reads is a file, not a "
         "control — and the boot capture is the first moment anyone can learn whether "
@@ -456,9 +427,7 @@ def test_the_shutdown_path_leaves_proof_and_the_boot_path_reads_it() -> None:
         "sequence that ran and failed to ship is reported identically to a power cut "
         "where no sequence ran at all — and only the first is a defect"
     )
-    assert "did NOT ship" in capture_script, (
-        "the failed-shutdown-ship case is not reported, so absence is silent"
-    )
+    assert "did NOT ship" in capture_script, "the failed-shutdown-ship case is not reported, so absence is silent"
     assert "unclean" in capture_script, (
         "the power-cut case has no branch of its own, so it lands in whichever "
         "branch remains — which is how it came to be reported as a failed backup"
@@ -474,9 +443,7 @@ def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
     """
     import yaml as _yaml
 
-    defaults = _yaml.safe_load(
-        (REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text()
-    )
+    defaults = _yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
     receipt = str(defaults["node_backup_shutdown_receipt"])
     staging = str(defaults["node_backup_staging_dir"])
     assert not receipt.startswith(staging), (
