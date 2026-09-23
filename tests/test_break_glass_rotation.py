@@ -200,3 +200,45 @@ def test_credentials_generate_preserves_break_glass_passwords() -> None:
     key = "apps.services.observability.grafana.admin_password"
     kept = CredentialsManager.preserve_break_glass({key: "prompt-value", "other": "x"}, {key: "rotated-value"})
     assert kept[key] == "rotated-value" and kept["other"] == "x"
+
+
+def test_drift_after_an_interrupted_run_names_the_git_restore(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """Adversarial review of #1797: a SIGKILL between SOPS and the service leaves a local SOPS edit.
+
+    The next run must say so and name the exact restore, not just report generic drift.
+    """
+    import subprocess as sp
+
+    from toolkit.features import break_glass as bg
+
+    monkeypatch.setattr(
+        rot,
+        "targets",
+        lambda decls: [rot.Target("grafana", "superadmin", "apps.services.observability.grafana.admin_password")],
+    )
+    monkeypatch.setattr(bg, "declarations", lambda values: {})
+    monkeypatch.setattr(bg, "resolve", lambda env, service, root: ({}, None, bg.Direct(url="http://x")))
+    monkeypatch.setattr(bg, "secret_file", lambda key, env, d: "staging")
+    monkeypatch.setattr(rot, "RECONCILERS", {"grafana": lambda: FakeService("LIVE")})
+    monkeypatch.setattr(
+        "toolkit.features.oidc_clients.load_values",
+        lambda env, root=None: {"apps": {"auth": {"identities": {"superadmin": "manu"}}}},
+    )
+
+    class Manager:
+        def __init__(self, *_: Any) -> None: ...
+
+        def show_secret(self, *_: Any) -> str:
+            return "STALE"
+
+        def set_secret(self, *_: Any) -> bool:
+            raise AssertionError("drift must write nothing")
+
+    monkeypatch.setattr("toolkit.features.secrets_manager.SecretsManager", Manager)
+    monkeypatch.setattr(
+        sp, "run", lambda *a, **k: sp.CompletedProcess(a, 0, stdout=" M infra/config/secrets/staging.enc.yaml\n")
+    )
+
+    [outcome] = rot.rotate_break_glass("staging", tmp_path, lambda _: None)
+    assert not outcome.ok
+    assert "git checkout -- infra/config/secrets/staging.enc.yaml" in outcome.detail

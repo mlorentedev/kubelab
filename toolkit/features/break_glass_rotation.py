@@ -14,7 +14,11 @@ The order is fixed, and every step after the first can be undone:
 3. the service is changed, authenticating with the old value, over the same
    private path `toolkit auth break-glass` opens;
 4. the new value must open the service and the old one must not;
-5. any failure after step 2 restores SOPS, and the service too if it changed.
+5. any failure after step 2 that Python can catch restores SOPS, and the service
+   too if it changed. A hard kill (SIGKILL, power loss) between steps 2 and 3
+   cannot be caught. What it leaves is an uncommitted local edit to the SOPS file,
+   so the next run reports drift and names the `git checkout` that restores the
+   committed value, which is the one the service still holds.
 
 What gets rotated is derived from the break-glass declaration (every
 `{identity, secret}` entry), and a test fails if a declared account has no
@@ -226,6 +230,15 @@ def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) 
                 read=read,
                 write=write,
             )
+        if not outcome.ok and outcome.detail.startswith("drift") and _uncommitted(project_root, file_env):
+            outcome = Outcome(
+                outcome.service,
+                False,
+                outcome.detail + f". infra/config/secrets/{file_env}.enc.yaml has uncommitted changes, which "
+                "usually means an earlier rotation was interrupted between SOPS and the service: "
+                f"`git checkout -- infra/config/secrets/{file_env}.enc.yaml` restores the committed value, "
+                "then re-run",
+            )
         log(f"  {target.service}: {'OK' if outcome.ok else 'FAILED'} -- {outcome.detail}")
         outcomes.append(outcome)
     return outcomes
@@ -242,3 +255,15 @@ def _vault(manager: Any, file_env: str, key: str) -> tuple[Callable[[], str | No
         return bool(manager.set_secret(file_env, key, value))
 
     return read, write
+
+
+def _uncommitted(project_root: Any, file_env: str) -> bool:
+    """Whether the SOPS file has local changes git has not committed."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "-C", str(project_root), "status", "--porcelain", "--", f"infra/config/secrets/{file_env}.enc.yaml"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())

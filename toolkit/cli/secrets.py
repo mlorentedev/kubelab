@@ -622,12 +622,18 @@ def _rotate_group(group: str, env: str, yes: bool) -> None:
     if not outcomes:
         logger.warning(f"No break-glass account exists in {env}")
         return
-    if all(o.ok for o in outcomes):
+    rotated = [o for o in outcomes if o.ok]
+    if len(rotated) == len(outcomes):
         logger.success(f"Rotated {len(outcomes)} break-glass account(s) in {env}; each verified with a login")
-    logger.warning("The services already hold the new values. SOPS must land now, or the repo is stale:")
-    logger.info("  1. commit the changed infra/config/secrets/*.enc.yaml and open a PR")
-    logger.info(f"  2. make apply-secrets ENV={env}  (refreshes the K8s Secrets that seed a fresh install)")
-    if not all(o.ok for o in outcomes):
+    if rotated:
+        # Only now is there anything to land. A run where every account drifted or
+        # was reverted changed no service, and telling the operator to commit would
+        # be an instruction to publish nothing as if it were a rotation.
+        names = ", ".join(o.service for o in rotated)
+        logger.warning(f"{names} already hold the new values. SOPS must land now, or the repo is stale:")
+        logger.info("  1. commit the changed infra/config/secrets/*.enc.yaml and open a PR")
+        logger.info(f"  2. make apply-secrets ENV={env}  (refreshes the K8s Secrets that seed a fresh install)")
+    if len(rotated) != len(outcomes):
         raise typer.Exit(1)
 
 
