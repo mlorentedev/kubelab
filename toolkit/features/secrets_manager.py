@@ -236,11 +236,12 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("authelia",),
         derived_from="(interactive password prompt)",
         format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
-        # PROD ONLY, and the narrowness is the point. `envs` is the AUDIT
-        # dimension (ANSIBLE-033): declaring all three would make dev and staging
-        # report a gap for a key that was never written there, which is the noise
-        # that trains an operator to stop reading the audit.
-        envs=("prod",),
+        # Staging and prod, the two envs where `manu` is declared in Authelia
+        # (AUTH-004 Part 2, 2026-09-23; it was prod-only while the hash had no
+        # consumer). `envs` is the AUDIT dimension (ANSIBLE-033): dev renders its
+        # users through the Compose path and is left out on purpose, so the audit
+        # does not report a gap for a key that is never written there.
+        envs=("staging", "prod"),
         rotate_note=(
             "The superadmin must know the new password to log in. NOTE: `manu` is "
             "not yet a declared Authelia user (apps.services.security.authelia.users "
