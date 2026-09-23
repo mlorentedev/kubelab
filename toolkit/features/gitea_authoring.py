@@ -59,7 +59,12 @@ def _title(title: str) -> str:
 
 
 def pull_payload(head: str, base: str, title: str, body: str) -> dict[str, str]:
-    """The body of `POST /repos/{o}/{r}/pulls`. Refuses head == base, which Gitea would only reject later."""
+    """The body of `POST /repos/{o}/{r}/pulls`. Refuses head == base, which Gitea would only reject later.
+
+    Branch names are stripped like the title: a whitespace-only name is truthy, so
+    without this it passed the check and reached Gitea as-is (TOOL-078 review, Major).
+    """
+    head, base = head.strip(), base.strip()
     if not head or not base or head == base:
         raise AuthoringError(f"head and base must be two different branches, got head={head!r} base={base!r}")
     return {"head": head, "base": base, "title": _title(title), "body": body}
@@ -81,7 +86,11 @@ def authoring_client(merged: Mapping[str, Any]) -> GiteaBasicAuthClient:
 
 
 def _opened(record: Mapping[str, Any]) -> Opened:
-    return Opened(number=int(record["number"]), url=str(record["html_url"]))
+    """Gitea's 201 record -> `Opened`. A record without `number`/`html_url` is refused by name, not as a KeyError."""
+    try:
+        return Opened(number=int(record["number"]), url=str(record["html_url"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise AuthoringError(f"the forge answered without a usable number and html_url: {sorted(record)}") from exc
 
 
 def open_pull(client: GiteaBasicAuthClient, repo: str, *, head: str, base: str, title: str, body: str) -> Opened:

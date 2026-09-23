@@ -1086,13 +1086,15 @@ def gitea_pr_create(
     basic-auth header only; see `toolkit.features.gitea_authoring` for why it is the
     push credential and not a token.
     """
+    import requests
+
     from toolkit.features import gitea_authoring as ga
     from toolkit.features.gitea_client import GiteaError
 
     try:
         client = ga.authoring_client(_gitea_merged_config(env))
         opened = ga.open_pull(client, repo, head=head, base=base, title=title, body=_read_body(body_file))
-    except (ga.AuthoringError, GiteaError) as exc:
+    except (ga.AuthoringError, GiteaError, requests.RequestException) as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
     console.print(f"#{opened.number} {opened.url}")
@@ -1106,13 +1108,15 @@ def gitea_issue_create(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
 ) -> None:
     """Open an issue as the same authoring identity as `pr create` (TOOL-078). Prints `#<number> <url>`."""
+    import requests
+
     from toolkit.features import gitea_authoring as ga
     from toolkit.features.gitea_client import GiteaError
 
     try:
         client = ga.authoring_client(_gitea_merged_config(env))
         opened = ga.open_issue(client, repo, title=title, body=_read_body(body_file))
-    except (ga.AuthoringError, GiteaError) as exc:
+    except (ga.AuthoringError, GiteaError, requests.RequestException) as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
     console.print(f"#{opened.number} {opened.url}")

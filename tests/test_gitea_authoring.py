@@ -102,6 +102,28 @@ def test_a_pull_request_needs_distinct_head_and_base() -> None:
         pull_payload(head="main", base="main", title="t", body="")
 
 
+@pytest.mark.parametrize(("head", "base"), [("  ", "main"), ("fix/x", "\t"), (" main ", "main")])
+def test_blank_or_padded_branch_names_are_refused_or_normalised(head: str, base: str) -> None:
+    """Review of TOOL-078 (Major): whitespace-only names passed as truthy and reached Gitea.
+
+    Branch names are stripped like the title, so a blank one is refused and a padded
+    one that collapses onto the base is refused as the same branch.
+    """
+    with pytest.raises(AuthoringError, match="head and base"):
+        pull_payload(head=head, base=base, title="t", body="")
+
+
+def test_padding_around_a_valid_branch_is_removed() -> None:
+    assert pull_payload(head=" fix/x ", base=" main", title="t", body="")["head"] == "fix/x"
+
+
+def test_a_response_without_number_or_url_is_a_clean_error() -> None:
+    """Review of TOOL-078 (Minor): a malformed 201 must not surface as a raw KeyError."""
+    client, _ = client_with(_Response(201, {"id": 5}))
+    with pytest.raises(AuthoringError, match="number"):
+        open_issue(client, "personal/resume", title="t", body="")
+
+
 def test_a_title_is_required() -> None:
     with pytest.raises(AuthoringError, match="title"):
         pull_payload(head="fix/x", base="main", title="   ", body="")
@@ -232,3 +254,41 @@ def test_the_command_prints_the_url_and_never_the_password(monkeypatch: pytest.M
     assert PASSWORD not in result.output
     assert seen["body"] == "## Summary\nwhy\n"
     assert seen["repo"] == "personal/resume"
+
+
+def test_the_issue_command_prints_the_url_and_never_the_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review of TOOL-078 (Minor): `issue create` gets its own end-to-end CLI test."""
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+
+    def fake_open_issue(client: Any, repo: str, **kw: Any) -> Opened:
+        return Opened(number=4, url="https://gitea.example.invalid/personal/resume/issues/4")
+
+    monkeypatch.setattr(cli, "_gitea_merged_config", lambda env: merged())
+    monkeypatch.setattr("toolkit.features.gitea_authoring.open_issue", fake_open_issue)
+
+    result = CliRunner().invoke(cli.app, ["gitea", "issue", "create", "--repo", "personal/resume", "--title", "Broken"])
+
+    assert result.exit_code == 0, result.output
+    assert "issues/4" in result.output
+    assert PASSWORD not in result.output
+
+
+def test_an_unreachable_forge_is_a_clean_exit_not_a_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review of TOOL-078 (Minor): a network error exits 1 with a message, like a refusal."""
+    import requests
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+
+    def unreachable(client: Any, repo: str, **kw: Any) -> Opened:
+        raise requests.ConnectionError("forge unreachable")
+
+    monkeypatch.setattr(cli, "_gitea_merged_config", lambda env: merged())
+    monkeypatch.setattr("toolkit.features.gitea_authoring.open_issue", unreachable)
+
+    result = CliRunner().invoke(cli.app, ["gitea", "issue", "create", "--repo", "personal/resume", "--title", "t"])
+
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, requests.ConnectionError)
