@@ -47,6 +47,11 @@ The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets tha
 
 **Ansible grep.** The only Ansible reference is Gitea's plaintext consumer secret, `provision-bee.yml:251`. It is consumer side and unaffected.
 
+**AC5 staging (2026-09-23).** Staging was pointed at the branch (`make argo-set-revision APP=kubelab-staging REV=feat/ssot-017-oidc-client-ssot`) and reached Synced/Healthy at `ebde5beb`. The Deployment mounts `authelia-config-fh52f2hd2f`, the hash rendered locally.
+- Authorization-endpoint probes: `grafana`, `minio` and `vikunja-oidc` return `302` into the login flow, so they are registered, and only the generated file registers them. `argocd` returns `error=invalid_client`, so it is no longer registered in staging.
+- **Grafana: SSO login by the operator succeeded**, which includes the token exchange.
+- **MinIO and Vikunja: not measurable on staging, for a reason that predates SSOT-017 and lies outside it.** Their in-cluster OIDC discovery fails because `coredns-custom` forwards `staging.kubelab.live` to the RPi4, which is off. MinIO has logged `lookup auth.staging.kubelab.live ... server misbehaving` since its pod started on 2026-08-14, and Vikunja was already failing at 23:00Z, before this deploy at 00:40Z. Filed as #1783 (OPS-032). Their full logins are measured in prod after merge; prod has no such dependency.
+
 **Mutation proof (2026-09-22, after commit `b488caf7`).** Each mutant turned its guard red:
 - a hand edit to the generated file (argocd `post` changed to `basic`) turned the AC1 guard red;
 - dropping the second file from `X_AUTHELIA_CONFIG` turned AC2 red;
