@@ -44,7 +44,10 @@ class TestParsing:
 
     def test_it_survives_ansi_colour(self) -> None:
         """headscale colours its table; the parser must not depend on a bare pipe."""
-        coloured = "\x1b[96mID\x1b[0m | Key\n" + "\x1b[0m5 \x1b[0m| hskey-auth-x-*** | true | false | false | 2027-03-13 17:08:18 | 2026-03-13 17:08:18 | work\n"
+        coloured = (
+            "\x1b[96mID\x1b[0m | Key\n"
+            + "\x1b[0m5 \x1b[0m| hskey-auth-x-*** | true | false | false | 2027-03-13 17:08:18 | 2026-03-13 17:08:18 | work\n"
+        )
         assert len(parse_headscale_preauthkeys(coloured)) == 1
 
     def test_it_reads_the_columns_in_the_right_order(self) -> None:

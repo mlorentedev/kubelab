@@ -26,16 +26,19 @@ def _mock_kubectl(*outputs: str) -> MagicMock:
 
 class TestSetRevisionHappyPath:
     def test_returns_old_and_new_revision(self) -> None:
-        before = json.dumps({
-            "spec": {"source": {"targetRevision": "fix/dash-ui-cosmetic"}},
-            "status": {"sync": {"status": "Synced"}},
-        })
-        after = json.dumps({
-            "spec": {"source": {"targetRevision": "master"}},
-            "status": {"sync": {"status": "OutOfSync"}},
-        })
-        with patch("toolkit.features.argo_manager.subprocess.run",
-                   _mock_kubectl(before, after)) as run:
+        before = json.dumps(
+            {
+                "spec": {"source": {"targetRevision": "fix/dash-ui-cosmetic"}},
+                "status": {"sync": {"status": "Synced"}},
+            }
+        )
+        after = json.dumps(
+            {
+                "spec": {"source": {"targetRevision": "master"}},
+                "status": {"sync": {"status": "OutOfSync"}},
+            }
+        )
+        with patch("toolkit.features.argo_manager.subprocess.run", _mock_kubectl(before, after)) as run:
             result = set_revision(
                 app="kubelab-staging",
                 rev="master",
@@ -49,16 +52,19 @@ class TestSetRevisionHappyPath:
         assert run.call_count == 2
 
     def test_patch_payload_is_strategic_merge(self) -> None:
-        before = json.dumps({
-            "spec": {"source": {"targetRevision": "old-branch"}},
-            "status": {"sync": {"status": "Synced"}},
-        })
-        after = json.dumps({
-            "spec": {"source": {"targetRevision": "master"}},
-            "status": {"sync": {"status": "Synced"}},
-        })
-        with patch("toolkit.features.argo_manager.subprocess.run",
-                   _mock_kubectl(before, after)) as run:
+        before = json.dumps(
+            {
+                "spec": {"source": {"targetRevision": "old-branch"}},
+                "status": {"sync": {"status": "Synced"}},
+            }
+        )
+        after = json.dumps(
+            {
+                "spec": {"source": {"targetRevision": "master"}},
+                "status": {"sync": {"status": "Synced"}},
+            }
+        )
+        with patch("toolkit.features.argo_manager.subprocess.run", _mock_kubectl(before, after)) as run:
             set_revision(
                 app="kubelab-staging",
                 rev="master",
@@ -76,16 +82,19 @@ class TestSetRevisionHappyPath:
         assert payload == {"spec": {"source": {"targetRevision": "master"}}}
 
     def test_uses_provided_kubeconfig_and_namespace(self) -> None:
-        before = json.dumps({
-            "spec": {"source": {"targetRevision": "x"}},
-            "status": {"sync": {"status": "Synced"}},
-        })
-        after = json.dumps({
-            "spec": {"source": {"targetRevision": "y"}},
-            "status": {"sync": {"status": "Synced"}},
-        })
-        with patch("toolkit.features.argo_manager.subprocess.run",
-                   _mock_kubectl(before, after)) as run:
+        before = json.dumps(
+            {
+                "spec": {"source": {"targetRevision": "x"}},
+                "status": {"sync": {"status": "Synced"}},
+            }
+        )
+        after = json.dumps(
+            {
+                "spec": {"source": {"targetRevision": "y"}},
+                "status": {"sync": {"status": "Synced"}},
+            }
+        )
+        with patch("toolkit.features.argo_manager.subprocess.run", _mock_kubectl(before, after)) as run:
             set_revision(app="a", rev="y", kubeconfig="/path/kc", namespace="custom-ns")
 
         for call in run.call_args_list:
@@ -99,12 +108,14 @@ class TestSetRevisionHappyPath:
 class TestSetRevisionErrors:
     def test_missing_application_raises(self) -> None:
         import subprocess
+
         err = subprocess.CalledProcessError(
-            1, ["kubectl"], output="",
+            1,
+            ["kubectl"],
+            output="",
             stderr='Error from server (NotFound): applications.argoproj.io "ghost" not found',
         )
-        with patch("toolkit.features.argo_manager.subprocess.run",
-                   MagicMock(side_effect=err)):
+        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=err)):
             with pytest.raises(ApplicationNotFoundError) as exc:
                 set_revision(app="ghost", rev="master", kubeconfig="/tmp/kc")
         assert "ghost" in str(exc.value)
@@ -122,8 +133,7 @@ class TestArgoSetRevisionCLI:
             new_revision="master",
             sync_status="OutOfSync",
         )
-        with patch("toolkit.cli.infra.argo_set_revision_feature",
-                   MagicMock(return_value=fake_result)) as feature:
+        with patch("toolkit.cli.infra.argo_set_revision_feature", MagicMock(return_value=fake_result)) as feature:
             result = runner.invoke(
                 app,
                 ["argo", "set-revision", "--app", "kubelab-staging", "--rev", "master"],
@@ -141,12 +151,11 @@ class TestArgoSetRevisionCLI:
         from toolkit.cli.infra import app
 
         runner = CliRunner()
-        with patch("toolkit.cli.infra.argo_set_revision_feature",
-                   MagicMock(side_effect=ApplicationNotFoundError(
-                       "Application 'ghost' not found in namespace argocd"))):
-            result = runner.invoke(
-                app, ["argo", "set-revision", "--app", "ghost", "--rev", "master"]
-            )
+        with patch(
+            "toolkit.cli.infra.argo_set_revision_feature",
+            MagicMock(side_effect=ApplicationNotFoundError("Application 'ghost' not found in namespace argocd")),
+        ):
+            result = runner.invoke(app, ["argo", "set-revision", "--app", "ghost", "--rev", "master"])
 
         assert result.exit_code != 0
         assert "ghost" in result.stdout

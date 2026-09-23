@@ -63,10 +63,7 @@ def _kustomize(env: str) -> list[dict]:
 def _pihole_objects(env: str) -> list[dict]:
     docs = _kustomize(env)
     return [
-        d
-        for d in docs
-        if d.get("kind") in PIHOLE_KINDS
-        and d.get("metadata", {}).get("name", "").startswith("pihole")
+        d for d in docs if d.get("kind") in PIHOLE_KINDS and d.get("metadata", {}).get("name", "").startswith("pihole")
     ]
 
 

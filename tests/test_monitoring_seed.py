@@ -124,9 +124,7 @@ class TestPushTokenLookupKeys:
             "_decrypt_sops",
             lambda _self, _path: {
                 "apps": {
-                    "services": {
-                        "observability": {"uptime_kuma": {"push_tokens": {"ops_backup_pvc_prod": "tok"}}}
-                    }
+                    "services": {"observability": {"uptime_kuma": {"push_tokens": {"ops_backup_pvc_prod": "tok"}}}}
                 }
             },
         )
@@ -138,9 +136,7 @@ class TestPushTokenLookupKeys:
         monkeypatch.setattr(
             ConfigurationManager,
             "_decrypt_sops",
-            lambda _self, _path: {
-                "apps": {"services": {"observability": {"uptime_kuma": {"push_tokens": {"a": ""}}}}}
-            },
+            lambda _self, _path: {"apps": {"services": {"observability": {"uptime_kuma": {"push_tokens": {"a": ""}}}}}},
         )
         assert _get_push_tokens(REPO_ROOT) == {}
 

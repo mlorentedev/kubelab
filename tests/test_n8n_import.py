@@ -94,12 +94,8 @@ class TestPlaceholderResolution:
         "config",
         [
             pytest.param({}, id="path-absent"),
-            pytest.param(
-                {"apps": {"services": {"core": {"vikunja": {"default_project": ""}}}}}, id="empty-string"
-            ),
-            pytest.param(
-                {"apps": {"services": {"core": {"vikunja": {"default_project": "   "}}}}}, id="whitespace"
-            ),
+            pytest.param({"apps": {"services": {"core": {"vikunja": {"default_project": ""}}}}}, id="empty-string"),
+            pytest.param({"apps": {"services": {"core": {"vikunja": {"default_project": "   "}}}}}, id="whitespace"),
             pytest.param({"apps": {"services": {"core": {"vikunja": {}}}}}, id="key-absent"),
         ],
     )

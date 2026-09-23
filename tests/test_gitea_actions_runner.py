@@ -73,62 +73,60 @@ def _template_vars(runner: dict) -> dict:
     common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
     gitea = common["apps"]["services"]["core"]["gitea"]
     return dict(
-
-            ansible_managed="Ansible managed",
-            restart_policy="unless-stopped",
-            beelink_deploy_dir="/opt/kubelab",
-            beelink_gitea_data_dir="/opt/gitea/data",
-            beelink_runner_work_dir="/opt/runner/_work",
-            tailscale_ip=common["networking"]["nodes"]["beelink"]["tailscale_ip"],
-            gitea_image=gitea["image"],
-            gitea_domain=gitea["domain"],
-            gitea_ssh_host=gitea["domain"],
-            gitea_ssh_port=2222,
-            gitea_http_port=3000,
-            gitea_bot_user="hefesto",
-            gitea_bot_email="bot@example.com",
-            gitea_admin_user="manu",
-            gitea_admin_email="ops@example.com",
-            gitea_admin_password="x",
-            gitea_secret_key="x",
-            gitea_oidc_client_secret="x",
-            gitea_lfs_jwt_secret="x",
-            gitea_internal_token="x",
-            gitea_health_path=gitea["health_path"],
-            gitea_oidc_discovery_url="https://auth.kubelab.live/.well-known/openid-configuration",
-            gitea_cpu_limit=gitea["resources"]["cpu_limit"],
-            gitea_memory_limit=gitea["resources"]["memory_limit"],
-            beelink_minio_data_dir="/opt/minio/data",
-            minio_image="minio/minio",
-            minio_api_port=9000,
-            minio_console_port=9001,
-            minio_root_user="x",
-            minio_root_password="x",
-            minio_data_dir="/opt/minio/data",
-            minio_cpu_limit="1",
-            minio_memory_limit="1G",
-            runner_image="myoung34/github-runner",
-            runner_repo_url="https://github.com/mlorentedev/kubelab",
-            runner_access_token="x",
-            runner_group="default",
-            runner_labels="self-hosted,linux,docker",
-            runner_cpu_limit="2",
-            runner_memory_limit="2G",
-            # From the SSOT rather than literals: the label mapping is the thing
-            # under test, so a copy here would assert the test against itself.
-            act_runner_enabled=runner["enabled"],
-            act_runner_name=runner["name"],
-            act_runner_runner_name=runner["runner_name"],
-            act_runner_image=runner["image"],
-            act_runner_token="x",
-            act_runner_cpu_limit=runner["resources"]["cpu_limit"],
-            act_runner_memory_limit=runner["resources"]["memory_limit"],
-            act_runner_labels=runner["labels"],
-            act_runner_log_retention_days=runner["log_retention_days"],
-            act_runner_artifact_retention_days=runner["artifact_retention_days"],
-            act_runner_run_retention_days=runner["run_retention_days"],
-            docker_dns_servers=["100.100.100.100", "1.1.1.1"],
-
+        ansible_managed="Ansible managed",
+        restart_policy="unless-stopped",
+        beelink_deploy_dir="/opt/kubelab",
+        beelink_gitea_data_dir="/opt/gitea/data",
+        beelink_runner_work_dir="/opt/runner/_work",
+        tailscale_ip=common["networking"]["nodes"]["beelink"]["tailscale_ip"],
+        gitea_image=gitea["image"],
+        gitea_domain=gitea["domain"],
+        gitea_ssh_host=gitea["domain"],
+        gitea_ssh_port=2222,
+        gitea_http_port=3000,
+        gitea_bot_user="hefesto",
+        gitea_bot_email="bot@example.com",
+        gitea_admin_user="manu",
+        gitea_admin_email="ops@example.com",
+        gitea_admin_password="x",
+        gitea_secret_key="x",
+        gitea_oidc_client_secret="x",
+        gitea_lfs_jwt_secret="x",
+        gitea_internal_token="x",
+        gitea_health_path=gitea["health_path"],
+        gitea_oidc_discovery_url="https://auth.kubelab.live/.well-known/openid-configuration",
+        gitea_cpu_limit=gitea["resources"]["cpu_limit"],
+        gitea_memory_limit=gitea["resources"]["memory_limit"],
+        beelink_minio_data_dir="/opt/minio/data",
+        minio_image="minio/minio",
+        minio_api_port=9000,
+        minio_console_port=9001,
+        minio_root_user="x",
+        minio_root_password="x",
+        minio_data_dir="/opt/minio/data",
+        minio_cpu_limit="1",
+        minio_memory_limit="1G",
+        runner_image="myoung34/github-runner",
+        runner_repo_url="https://github.com/mlorentedev/kubelab",
+        runner_access_token="x",
+        runner_group="default",
+        runner_labels="self-hosted,linux,docker",
+        runner_cpu_limit="2",
+        runner_memory_limit="2G",
+        # From the SSOT rather than literals: the label mapping is the thing
+        # under test, so a copy here would assert the test against itself.
+        act_runner_enabled=runner["enabled"],
+        act_runner_name=runner["name"],
+        act_runner_runner_name=runner["runner_name"],
+        act_runner_image=runner["image"],
+        act_runner_token="x",
+        act_runner_cpu_limit=runner["resources"]["cpu_limit"],
+        act_runner_memory_limit=runner["resources"]["memory_limit"],
+        act_runner_labels=runner["labels"],
+        act_runner_log_retention_days=runner["log_retention_days"],
+        act_runner_artifact_retention_days=runner["artifact_retention_days"],
+        act_runner_run_retention_days=runner["run_retention_days"],
+        docker_dns_servers=["100.100.100.100", "1.1.1.1"],
     )
 
 
@@ -386,11 +384,7 @@ def test_the_mint_is_gated_on_the_secret_being_absent() -> None:
     same file already carry this gate; this asserts the third one does too.
     """
     tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    minting = [
-        t
-        for t in tasks
-        if "act_runner" in yaml.safe_dump(t) and ("generate-runner-token" in yaml.safe_dump(t))
-    ]
+    minting = [t for t in tasks if "act_runner" in yaml.safe_dump(t) and ("generate-runner-token" in yaml.safe_dump(t))]
 
     assert minting, "no task mints the runner registration token"
     for task in minting:

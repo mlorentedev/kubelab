@@ -71,9 +71,7 @@ class TestPromote:
         assert "# top-of-file comment must survive a round-trip edit" in text
         assert "# inline comment must survive too" in text
 
-    def test_first_promotion_does_not_land_under_a_following_comment(
-        self, env_patched, monkeypatch
-    ) -> None:
+    def test_first_promotion_does_not_land_under_a_following_comment(self, env_patched, monkeypatch) -> None:
         """A brand-new pin goes inside its block, not below the next section's comment.
 
         ruamel attaches a comment that follows a block to the block's LAST key, so
@@ -104,9 +102,7 @@ class TestPromote:
         version_at = next(i for i, line in enumerate(lines) if line.strip() == "version: 1.2.0")
         comment_at = next(i for i, line in enumerate(lines) if "Third-party services" in line)
 
-        assert version_at < comment_at, (
-            "the new pin rendered below the next section's comment:\n" + "\n".join(lines)
-        )
+        assert version_at < comment_at, "the new pin rendered below the next section's comment:\n" + "\n".join(lines)
         # And it is inside the app block, not promoted a level out.
         assert lines[version_at].startswith("      "), lines[version_at]
         assert lines[comment_at + 1].strip() == "services:", (

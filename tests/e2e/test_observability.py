@@ -50,9 +50,7 @@ class TestGrafanaAPI:
         if r.status_code in (401, 403):
             pytest.skip("Grafana datasources API requires admin — testuser may lack access")
 
-        assert r.status_code == 200, (
-            f"Grafana /api/datasources: expected 200, got {r.status_code}"
-        )
+        assert r.status_code == 200, f"Grafana /api/datasources: expected 200, got {r.status_code}"
 
         datasources = r.json()
         loki_sources = [ds for ds in datasources if ds.get("type") == "loki"]
@@ -76,9 +74,7 @@ class TestLokiReadiness:
 
         r = http_client.get(f"https://{svc.domain}/ready")
         # Loki may be behind auth (302) depending on environment config
-        assert r.status_code in (200, 302), (
-            f"Loki /ready: expected 200 or 302 (auth redirect), got {r.status_code}"
-        )
+        assert r.status_code in (200, 302), f"Loki /ready: expected 200 or 302 (auth redirect), got {r.status_code}"
 
     def test_loki_query_recent_logs(
         self,
@@ -100,6 +96,4 @@ class TestLokiReadiness:
             params={"query": '{namespace="kubelab"}', "limit": "1"},
         )
         # Accept 200 (results found) or auth-redirects
-        assert r.status_code in (200, 302, 401), (
-            f"Loki query: expected 200/302/401, got {r.status_code}"
-        )
+        assert r.status_code in (200, 302, 401), f"Loki query: expected 200/302/401, got {r.status_code}"

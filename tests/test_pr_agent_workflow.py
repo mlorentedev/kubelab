@@ -163,7 +163,9 @@ def test_credential_material_is_excluded_from_the_model_call() -> None:
     config = tomllib.loads((REPO_ROOT / ".pr_agent.toml").read_text(encoding="utf-8"))
     globs = config.get("ignore", {}).get("glob", [])
     for required in ("infra/config/secrets/**", "**/*.pem"):
-        assert required in globs, f"{required} is not excluded; SOPS ciphertext and private keys would be sent for review"
+        assert required in globs, (
+            f"{required} is not excluded; SOPS ciphertext and private keys would be sent for review"
+        )
 
 
 def test_the_action_is_pinned_by_sha_not_by_tag() -> None:
@@ -288,8 +290,7 @@ def test_an_unreviewed_pr_does_not_fail_the_gate_job() -> None:
     condition = re.search(r"if (.+); then\n\s*exit 0", run)
     assert condition, "no exit-0 guard found at all"
     assert condition.group(1) == '[ "$CODE" = "0" ] || [ "$CODE" = "1" ]', (
-        "codes 0 and 1 are verdicts and must not fail the job; anything else "
-        f"must. Found: {condition.group(1)}"
+        f"codes 0 and 1 are verdicts and must not fail the job; anything else must. Found: {condition.group(1)}"
     )
 
 
@@ -333,9 +334,7 @@ def test_the_pr_number_is_uploaded_under_the_name_the_gate_reads() -> None:
     skips. The reference is not lost in transit, it never enters it — which is
     why the fix is on the SENDING side and why this assertion lives here.
     """
-    uploads = [
-        s for s in _review_steps() if str(s.get("uses", "")).startswith("actions/upload-artifact@")
-    ]
+    uploads = [s for s in _review_steps() if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
     assert len(uploads) == 1, (
         f"expected exactly one upload-artifact step in pr-agent.yml, found "
         f"{len(uploads)}. The gate downloads one artifact by name; two would make "
@@ -369,9 +368,7 @@ def test_the_upload_precedes_the_reviewer_so_a_cancelled_run_still_carries_it() 
     )
 
 
-_needs_bash = pytest.mark.skipif(
-    shutil.which("bash") is None, reason="these steps are bash scripts"
-)
+_needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="these steps are bash scripts")
 
 
 # --- CI-GATE-017 (#1527): a diff entirely inside .pr_agent.toml's [ignore] ---
@@ -488,9 +485,7 @@ esac
 # real API's `--jq`-filtered output would, not as the raw JSON would.
 
 
-def _run_reviewable_step(
-    tmp_path: pathlib.Path, toml_text: str, files: list[str]
-) -> tuple[str | None, list[str]]:
+def _run_reviewable_step(tmp_path: pathlib.Path, toml_text: str, files: list[str]) -> tuple[str | None, list[str]]:
     bindir = tmp_path / "bin"
     bindir.mkdir()
     stub = bindir / "gh"
@@ -510,9 +505,7 @@ def _run_reviewable_step(
     step = _reviewer_step("Determine whether the diff has anything to review")
     env = {
         **os.environ,
-        "PATH": os.pathsep.join(
-            [str(bindir), str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]
-        ),
+        "PATH": os.pathsep.join([str(bindir), str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]),
         "GITHUB_OUTPUT": str(output),
         "GITHUB_REPOSITORY": "mlorentedev/kubelab",
         "GH_CALLS": str(calls),
@@ -531,12 +524,9 @@ def _run_reviewable_step(
         timeout=60,
     )
     assert proc.returncode == 0, (
-        f"the reviewable step exited {proc.returncode}.\n"
-        f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+        f"the reviewable step exited {proc.returncode}.\n--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
     )
-    parsed = dict(
-        line.split("=", 1) for line in output.read_text().splitlines() if "=" in line
-    )
+    parsed = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
     calls_made = calls.read_text().splitlines()
     return parsed.get("any"), calls_made
 
@@ -550,9 +540,7 @@ def test_reviewable_step_says_false_when_every_file_is_ignored(
 ) -> None:
     """The measured case: #1514 and #1523 each touched exactly
     infra/config/secrets/prod.enc.yaml and nothing else."""
-    any_, _ = _run_reviewable_step(
-        tmp_path, _TOML_ONE_GLOB, ["infra/config/secrets/prod.enc.yaml"]
-    )
+    any_, _ = _run_reviewable_step(tmp_path, _TOML_ONE_GLOB, ["infra/config/secrets/prod.enc.yaml"])
     assert any_ == "false"
 
 
@@ -595,9 +583,7 @@ def test_reviewable_step_fetches_the_ignore_list_from_base_ref(
     """Behavioural half of test_the_reviewable_check_does_not_read_an_attacker_influenced_ref:
     proves the URL actually built at runtime carries BASE_REF, not merely that
     the YAML env block claims it will."""
-    _, calls = _run_reviewable_step(
-        tmp_path, _TOML_ONE_GLOB, ["infra/config/secrets/prod.enc.yaml"]
-    )
+    _, calls = _run_reviewable_step(tmp_path, _TOML_ONE_GLOB, ["infra/config/secrets/prod.enc.yaml"])
     assert any("contents/.pr_agent.toml?ref=master" in c for c in calls), (
         f"the ignore list was not fetched from BASE_REF=master: {calls!r}"
     )
@@ -694,7 +680,6 @@ esac
 # by the string assertion above.
 
 
-
 def _zip_holding(tmp_path: pathlib.Path, label: str, payload: str) -> str:
     """A stand-in for what `actions/upload-artifact` stores: one zipped file."""
     path = tmp_path / f"{label}.zip"
@@ -725,9 +710,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
     # scenario supplies those below. Seeding from the file means a new literal
     # the step comes to depend on arrives here automatically, instead of this
     # harness passing while the real job fails on an unset variable.
-    literal_env = {
-        k: str(v) for k, v in (step.get("env") or {}).items() if "${{" not in str(v)
-    }
+    literal_env = {k: str(v) for k, v in (step.get("env") or {}).items() if "${{" not in str(v)}
 
     env = {
         **os.environ,
@@ -736,9 +719,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
         # `actions/setup-python` puts on PATH in the job and a bare `python3`
         # environment would not have. Absent it this fails for a reason that has
         # nothing to do with what is under test.
-        "PATH": os.pathsep.join(
-            [str(bindir), str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]
-        ),
+        "PATH": os.pathsep.join([str(bindir), str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]),
         "GITHUB_OUTPUT": str(output),
         "GITHUB_REPOSITORY": "mlorentedev/kubelab",
         "GH_CALLS": str(calls),
@@ -769,9 +750,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
         f"resolution failure — the verdict is `skip`, not a broken job.\n"
         f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
     )
-    parsed = dict(
-        line.split("=", 1) for line in output.read_text().splitlines() if "=" in line
-    )
+    parsed = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
     return parsed, calls.read_text().splitlines()
 
 
@@ -879,8 +858,7 @@ def _review_job() -> dict:
     rather than by its key — a renamed job must not silently skip these."""
     jobs = _load(REVIEWER)["jobs"]
     return next(
-        j for j in jobs.values()
-        if any("pr-agent@" in str(step.get("uses", "")) for step in j.get("steps", []))
+        j for j in jobs.values() if any("pr-agent@" in str(step.get("uses", "")) for step in j.get("steps", []))
     )
 
 
@@ -941,6 +919,5 @@ def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> No
     # it. The guard is in the workflow; until now only the slash half was
     # asserted, so deleting this line left every test green.
     assert (
-        "contains(fromJSON('[\"OWNER\",\"MEMBER\",\"COLLABORATOR\"]'), "
-        "github.event.comment.author_association)"
+        'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association)'
     ) in condition, "the issue_comment path is not restricted to repository members"

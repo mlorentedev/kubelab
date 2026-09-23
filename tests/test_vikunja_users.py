@@ -90,9 +90,7 @@ def test_the_exec_call_is_bounded() -> None:
     half this fleet is on-demand — so an unreachable cluster is an ordinary state.
     A hang is worse than an error here because it produces no verdict at all.
     """
-    assert isinstance(EXEC_TIMEOUT, int) and EXEC_TIMEOUT > 0, (
-        f"EXEC_TIMEOUT={EXEC_TIMEOUT!r} does not bound anything"
-    )
+    assert isinstance(EXEC_TIMEOUT, int) and EXEC_TIMEOUT > 0, f"EXEC_TIMEOUT={EXEC_TIMEOUT!r} does not bound anything"
 
 
 def test_the_make_target_validates_the_env_value_not_its_presence() -> None:
@@ -124,6 +122,5 @@ def test_the_make_target_validates_the_env_value_not_its_presence() -> None:
         "an allow-list the recipe does not consult guards nothing"
     )
     assert "$(words $(ENV))" in recipe, (
-        'ENV="staging prod" passes `filter` alone and is then spliced unquoted '
-        "into the toolkit's argv"
+        'ENV="staging prod" passes `filter` alone and is then spliced unquoted into the toolkit\'s argv'
     )

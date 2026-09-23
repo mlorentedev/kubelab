@@ -88,11 +88,11 @@ def _run_branch(
     marker = tmp_path / "calls.log"
     generate_rc = 1 if generate_fails else 0
     stubs = [
-        f'sh -c \'echo generate >> "{marker}"; exit {generate_rc}\'',
-        f'sh -c \'echo run >> "{marker}"; exit 0\'',
-        f'sh -c \'echo restore >> "{marker}"; exit 0\'',
-        f'sh -c \'echo else_generate >> "{marker}"; exit {generate_rc}\'',
-        f'sh -c \'echo else_run >> "{marker}"; exit 0\'',
+        f"sh -c 'echo generate >> \"{marker}\"; exit {generate_rc}'",
+        f"sh -c 'echo run >> \"{marker}\"; exit 0'",
+        f"sh -c 'echo restore >> \"{marker}\"; exit 0'",
+        f"sh -c 'echo else_generate >> \"{marker}\"; exit {generate_rc}'",
+        f"sh -c 'echo else_run >> \"{marker}\"; exit 0'",
     ]
     # The trailing `&&` / `;` is the thing under test, so the substitution must
     # preserve it. Swallowing it with `.*$` would leave the stubs as separate
@@ -110,9 +110,7 @@ def _run_branch(
     condition = "if true; then" if branch == "bootstrap" else "if false; then"
     shell = shell.replace('if [ -n "" ] || [ -n "" ]; then', condition)
 
-    return subprocess.run(
-        ["sh", "-c", shell], capture_output=True, text=True, cwd=tmp_path, timeout=30
-    )
+    return subprocess.run(["sh", "-c", shell], capture_output=True, text=True, cwd=tmp_path, timeout=30)
 
 
 def _calls(tmp_path: pathlib.Path) -> list[str]:
@@ -130,8 +128,7 @@ def test_failed_generate_does_not_run_the_playbook(tmp_path: pathlib.Path) -> No
         "The generate and the run must be joined with `&&`, not `;`."
     )
     assert result.returncode != 0, (
-        "a failed generate exited 0 — `_exit` is capturing the run's status "
-        "instead of generate's"
+        "a failed generate exited 0 — `_exit` is capturing the run's status instead of generate's"
     )
 
 
@@ -139,8 +136,7 @@ def test_failed_generate_still_restores_the_mesh_inventory(tmp_path: pathlib.Pat
     """Short-circuiting the run must not also skip the restore."""
     _run_branch(tmp_path, generate_fails=True)
     assert "restore" in _calls(tmp_path), (
-        "the mesh inventory was not restored after a failed generate; the "
-        "restore line must stay unconditional"
+        "the mesh inventory was not restored after a failed generate; the restore line must stay unconditional"
     )
 
 
@@ -205,6 +201,5 @@ def test_extraction_found_all_five_toolkit_calls() -> None:
 def test_exit_propagation_still_present(marker: str) -> None:
     """The restore runs between the playbook and the exit, so the code is saved and re-raised."""
     assert marker in _extract_provision_branch(), (
-        f"{marker!r} is gone from the provision branch — the target no longer "
-        "propagates the failure past the restore"
+        f"{marker!r} is gone from the provision branch — the target no longer propagates the failure past the restore"
     )

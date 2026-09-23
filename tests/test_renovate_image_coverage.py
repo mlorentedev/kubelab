@@ -124,11 +124,7 @@ def test_the_unversionable_images_are_the_ignored_ones() -> None:
     for name in ignored:
         image = by_name[name]
         tag = image.split(":")[-1] if ":" in image.split("/")[-1] else ""
-        unversionable = (
-            tag in ("", "latest")
-            or tag.startswith("RELEASE")
-            or not any(ch.isdigit() for ch in tag)
-        )
+        unversionable = tag in ("", "latest") or tag.startswith("RELEASE") or not any(ch.isdigit() for ch in tag)
         assert unversionable, (
             f"{image} is ignored but carries a comparable tag ({tag!r}). If it can be "
             f"versioned it should be tracked; leaving it here makes the ignore list "

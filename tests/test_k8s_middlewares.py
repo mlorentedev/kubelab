@@ -49,9 +49,7 @@ class TestMiddlewareCatalog:
 
     def test_catalog_names_are_unique(self) -> None:
         names = [s.name for s in MIDDLEWARE_CATALOG]
-        assert len(names) == len(set(names)), (
-            f"Duplicate Middleware names in catalog: {names}"
-        )
+        assert len(names) == len(set(names)), f"Duplicate Middleware names in catalog: {names}"
 
     def test_every_entry_is_prod_only_per_adr035_stage1(self) -> None:
         """Stage 1 is prod-only: staging is VPN-gated and carries no API key.
@@ -158,9 +156,7 @@ class TestApplyMiddlewareSecrets:
         decision. What these tests assert is the apply path, so they supply
         their own entry.
         """
-        with patch(
-            "toolkit.features.k8s_middlewares.MIDDLEWARE_CATALOG", [_FAKE_SPEC]
-        ):
+        with patch("toolkit.features.k8s_middlewares.MIDDLEWARE_CATALOG", [_FAKE_SPEC]):
             yield
 
     def _patch_targets(self, sops_data: dict[str, str] | None):
@@ -168,9 +164,7 @@ class TestApplyMiddlewareSecrets:
         and subprocess.run."""
 
         cm_mock = MagicMock()
-        cm_mock.get_secret_by_path.side_effect = lambda path: (
-            sops_data.get(path) if sops_data else None
-        )
+        cm_mock.get_secret_by_path.side_effect = lambda path: sops_data.get(path) if sops_data else None
 
         return cm_mock
 
@@ -180,9 +174,10 @@ class TestApplyMiddlewareSecrets:
         cm = self._patch_targets(self._SOPS_OK)
         run_mock = _mock_kubectl()  # zero outputs, will assert call_count == 0
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             ok = apply_middleware_secrets(env="staging", project_root=fake_project)
 
         assert ok is True, "Skipping is a successful no-op, not a failure"
@@ -196,9 +191,10 @@ class TestApplyMiddlewareSecrets:
             "middleware.traefik.io/api-key-testsvc annotated",
         )
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             ok = apply_middleware_secrets(env="prod", project_root=fake_project)
 
         assert ok is True
@@ -213,14 +209,10 @@ class TestApplyMiddlewareSecrets:
         # body embeds a plaintext secret (would leak into the
         # last-applied-configuration annotation).
         assert "--server-side" in apply_argv
-        assert "--force-conflicts" in apply_argv, (
-            "Required for first-time migration from client-side managed fields"
-        )
+        assert "--force-conflicts" in apply_argv, "Required for first-time migration from client-side managed fields"
         assert "--field-manager" in apply_argv
         fm_idx = apply_argv.index("--field-manager")
-        assert apply_argv[fm_idx + 1] == "kubelab-toolkit", (
-            "Owner tag must be traceable in metadata.managedFields"
-        )
+        assert apply_argv[fm_idx + 1] == "kubelab-toolkit", "Owner tag must be traceable in metadata.managedFields"
         stdin = apply_call.kwargs.get("input", "")
         assert "PROD_KEY_42" in stdin
         assert "api-key-testsvc" in stdin
@@ -243,14 +235,13 @@ class TestApplyMiddlewareSecrets:
         cm = self._patch_targets(self._SOPS_OK)
 
         apply_ok = MagicMock(stdout="serverside-applied", stderr="", returncode=0)
-        scrub_err = subprocess.CalledProcessError(
-            returncode=1, cmd=["kubectl", "annotate"], stderr="forbidden"
-        )
+        scrub_err = subprocess.CalledProcessError(returncode=1, cmd=["kubectl", "annotate"], stderr="forbidden")
         run_mock = MagicMock(side_effect=[apply_ok, scrub_err])
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             ok = apply_middleware_secrets(env="prod", project_root=fake_project)
 
         assert ok is True, "apply succeeded; scrub failure is non-fatal"
@@ -263,9 +254,10 @@ class TestApplyMiddlewareSecrets:
             "middleware.traefik.io/api-key-testsvc annotated",
         )
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             apply_middleware_secrets(env="prod", project_root=fake_project)
 
         audit = fake_project / "infra/k8s/overlays/prod/middlewares/.rendered/api-key-testsvc.yaml"
@@ -278,23 +270,23 @@ class TestApplyMiddlewareSecrets:
         cm = self._patch_targets(None)  # empty SOPS
         run_mock = _mock_kubectl()
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             ok = apply_middleware_secrets(env="prod", project_root=fake_project)
 
         assert ok is False, "Missing SOPS value is a hard failure (no silent skip)"
         assert run_mock.call_count == 0, "kubectl must NOT be invoked when api_key missing"
 
-    def test_dry_run_does_not_invoke_kubectl_but_writes_audit(
-        self, fake_project: Path
-    ) -> None:
+    def test_dry_run_does_not_invoke_kubectl_but_writes_audit(self, fake_project: Path) -> None:
         cm = self._patch_targets(self._SOPS_OK)
         run_mock = _mock_kubectl()
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             ok = apply_middleware_secrets(env="prod", project_root=fake_project, dry_run=True)
 
         assert ok is True
@@ -308,9 +300,10 @@ class TestApplyMiddlewareSecrets:
         cm = self._patch_targets(self._SOPS_OK)
         run_mock = _mock_kubectl()
 
-        with patch(
-            "toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm
-        ), patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock):
+        with (
+            patch("toolkit.features.k8s_middlewares.ConfigurationManager", return_value=cm),
+            patch("toolkit.features.k8s_middlewares.subprocess.run", run_mock),
+        ):
             ok = apply_middleware_secrets(env="prod", project_root=tmp_path)
 
         assert ok is False

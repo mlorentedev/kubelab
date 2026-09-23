@@ -131,8 +131,7 @@ def test_onfailure_target_names_a_unit_the_role_actually_installs():
         None,
     )
     assert installer is not None, (
-        f"no task in node_notify renders {template_unit}.j2; the unit OnFailure names "
-        f"would never reach the node"
+        f"no task in node_notify renders {template_unit}.j2; the unit OnFailure names would never reach the node"
     )
     assert "node_notify_unit_name" in installer["template"]["dest"], (
         "the install path is a literal rather than the declared variable, so the unit "
@@ -236,9 +235,7 @@ def _encode_via_rendered_script(journal_bytes: bytes, result: str = "exit-code")
     "journal_bytes",
     [
         pytest.param(b"", id="empty-journal"),
-        pytest.param(
-            b'systemd[1]: Failed with result "exit-code".', id="double-quotes"
-        ),
+        pytest.param(b'systemd[1]: Failed with result "exit-code".', id="double-quotes"),
         pytest.param(b"line1\nline2\ttabbed", id="newlines-and-tabs"),
         pytest.param(rb"apt: could not read C:\temp\x", id="backslashes"),
         pytest.param("journalctl: unidad iniciada — café".encode(), id="valid-utf8"),
@@ -310,9 +307,7 @@ def _executable_lines(script: str) -> str:
     trap is called out in test_notify_domain_is_a_literal below — a test that
     breaks when you document a decision teaches you not to document it.
     """
-    return "\n".join(
-        line for line in script.splitlines() if not line.lstrip().startswith("#")
-    )
+    return "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
 
 
 def test_token_is_not_a_curl_argv_element():
@@ -356,9 +351,7 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
 
     captured: list[bytes] = []
     port = _serve_one_request(captured)
-    block = block.replace(
-        f"https://{_defaults()['node_notify_domain']}", f"http://127.0.0.1:{port}"
-    )
+    block = block.replace(f"https://{_defaults()['node_notify_domain']}", f"http://127.0.0.1:{port}")
 
     proc = subprocess.run(
         ["bash", "-c", f'TOKEN="$1"\nPAYLOAD=\'{{"probe":1}}\'\n{block}', "bash", token],
@@ -374,9 +367,7 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
         for line in captured[0].decode("utf-8", "replace").split("\r\n")
         if line.lower().startswith("authorization:")
     ]
-    assert sent == [f"Authorization: Bearer {token}"], (
-        f"token corrupted in transit: {sent!r}"
-    )
+    assert sent == [f"Authorization: Bearer {token}"], f"token corrupted in transit: {sent!r}"
 
 
 def test_the_envelope_names_the_unit_that_actually_failed() -> None:
@@ -475,9 +466,7 @@ def test_retry_is_in_curl_not_in_the_unit():
 
     unit = _render("kubelab-notify@.service.j2")
     directives = re.findall(r"^(Restart)=", unit, re.MULTILINE)
-    assert not directives, (
-        "Restart= on the unit duplicates the retry curl already performs"
-    )
+    assert not directives, "Restart= on the unit duplicates the retry curl already performs"
 
 
 def test_token_value_is_not_shell_interpreted():
@@ -491,9 +480,7 @@ def test_token_value_is_not_shell_interpreted():
     """
     hostile = "$(touch /tmp/kubelab-notify-pwned)`touch /tmp/kubelab-notify-pwned2`"
     probe = 'TOKEN="$1"\nprintf "%s" "Authorization: Bearer ${TOKEN}"\n'
-    proc = subprocess.run(
-        ["bash", "-c", probe, "bash", hostile], capture_output=True, text=True
-    )
+    proc = subprocess.run(["bash", "-c", probe, "bash", hostile], capture_output=True, text=True)
     assert proc.returncode == 0
     assert proc.stdout == f"Authorization: Bearer {hostile}"
     assert not Path("/tmp/kubelab-notify-pwned").exists()
@@ -547,8 +534,7 @@ def test_the_derived_consumer_set_is_not_empty() -> None:
     coverage it does not have. So the scan asserts on itself first.
     """
     assert _notifier_consumers(), (
-        "no role template declares `OnFailure=kubelab-notify@`, so the pairing "
-        "guard below checks nothing at all"
+        "no role template declares `OnFailure=kubelab-notify@`, so the pairing guard below checks nothing at all"
     )
 
 
@@ -640,9 +626,7 @@ def test_the_envelope_does_not_cry_failure_over_a_healthy_unit() -> None:
     assert "node-backup-ship.service" in healthy["title"], "the unit must still be named"
 
     failed = _encode_via_rendered_script(b"boom", result="exit-code")
-    assert "failed" in failed["title"], (
-        f"a genuinely failed unit must say so; got {failed['title']!r}"
-    )
+    assert "failed" in failed["title"], f"a genuinely failed unit must say so; got {failed['title']!r}"
 
 
 def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
@@ -653,6 +637,4 @@ def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
     positive failure signal takes the neutral wording.
     """
     envelope = _encode_via_rendered_script(b"", result="")
-    assert "failed" not in envelope["title"], (
-        f"an unknown unit is announced as {envelope['title']!r}"
-    )
+    assert "failed" not in envelope["title"], f"an unknown unit is announced as {envelope['title']!r}"

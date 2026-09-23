@@ -31,9 +31,7 @@ def _render() -> str:
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     env.filters["bool"] = lambda v: str(v).lower() in ("true", "yes", "1")
     tpl = (ROLE / "templates/kubelab-maintenance.sh.j2").read_text(encoding="utf-8")
-    return env.from_string(tpl).render(
-        {**_defaults(), "ansible_managed": "am", "inventory_hostname": "kubelab-vps"}
-    )
+    return env.from_string(tpl).render({**_defaults(), "ansible_managed": "am", "inventory_hostname": "kubelab-vps"})
 
 
 def test_patching_runs_before_the_cleanup_that_wipes_the_package_lists() -> None:
@@ -87,8 +85,7 @@ def test_it_patches_the_security_pocket_only() -> None:
     script = _render()
     assert "-security" in script, "the upgrade is not restricted to the security pocket"
     assert "dist-upgrade" not in script, (
-        "an unattended dist-upgrade can pull in new packages and new kernel lines "
-        "on a node with nobody watching"
+        "an unattended dist-upgrade can pull in new packages and new kernel lines on a node with nobody watching"
     )
 
 
@@ -141,9 +138,7 @@ def test_both_implementations_of_this_role_patch() -> None:
         "the Ansible path does not patch, so `make maintain` cleans disk and leaves "
         "the node unpatched while reporting success"
     )
-    assert any("reboot" in n.lower() for n in names), (
-        "the Ansible path never reports a pending reboot"
-    )
+    assert any("reboot" in n.lower() for n in names), "the Ansible path never reports a pending reboot"
     # And the two must agree on WHAT is held.
     script = _render()
     for pkg in _defaults()["maintenance_patch_blacklist"]:
@@ -163,8 +158,7 @@ def test_neither_path_reboots_the_node() -> None:
     assert "systemctl reboot" not in script and "shutdown -r" not in script
     tasks_text = (ROLE / "tasks/main.yml").read_text(encoding="utf-8")
     assert "reboot: " not in tasks_text and "ansible.builtin.reboot" not in tasks_text, (
-        "the Ansible path reboots the node; on the VPS that removes the VPN used to "
-        "reach it if it does not come back"
+        "the Ansible path reboots the node; on the VPS that removes the VPN used to reach it if it does not come back"
     )
 
 
@@ -238,9 +232,7 @@ def test_an_operators_existing_hold_survives_the_run() -> None:
         "shipped without patching at all."
     )
     assert "apt-mark unhold" in script
-    assert "for pkg in $HELD_BY_US" in script, (
-        "the timer path releases more than it took"
-    )
+    assert "for pkg in $HELD_BY_US" in script, "the timer path releases more than it took"
 
 
 def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
@@ -267,8 +259,7 @@ def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
         "either it stops on every node missing docker or it never stops at all"
     )
     assert "ansible_facts.packages" not in expr, (
-        "this role never gathers package_facts, so a filter on it matches nothing "
-        "and produces a guard that cannot fire"
+        "this role never gathers package_facts, so a filter on it matches nothing and produces a guard that cannot fire"
     )
 
     upgrade = by_name["Apply security updates"]
@@ -279,9 +270,7 @@ def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
 
     script = _render()
     assert "Unable to locate package" in script, "the timer path lacks the distinction"
-    assert "PATCH_STATUS=\"unprotected\"" in script, (
-        "the timer path does not report the skip, so the node looks patched"
-    )
+    assert 'PATCH_STATUS="unprotected"' in script, "the timer path does not report the skip, so the node looks patched"
 
 
 def test_the_gating_conditionals_yield_booleans() -> None:

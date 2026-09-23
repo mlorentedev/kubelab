@@ -144,9 +144,7 @@ class TestTheErrorSaysSomethingUseful:
         self._stub_hostname(monkeypatch)
         assert kc.host_key_hint("vps", "Host key verification failed.\n") is not None
 
-    def test_after_a_failed_purge_the_hint_does_not_lie_about_the_ssot(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_after_a_failed_purge_the_hint_does_not_lie_about_the_ssot(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The node IS marked ephemeral and the purge ran anyway — say that.
 
         Found by review on #1455. `forget_host_key`'s return was discarded, so a

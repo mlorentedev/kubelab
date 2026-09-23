@@ -80,11 +80,7 @@ def test_no_published_port_binds_to_a_tailscale_address():
     world-facing publish, so #959's protection is kept rather than traded away.
     """
     text = _compose_text()
-    offenders = [
-        line.strip()
-        for line in text.splitlines()
-        if re.search(r'-\s*"\{\{\s*node_ips\.\w+\s*\}\}:', line)
-    ]
+    offenders = [line.strip() for line in text.splitlines() if re.search(r'-\s*"\{\{\s*node_ips\.\w+\s*\}\}:', line)]
     assert not offenders, (
         "a published port is bound to a Tailscale address:\n  "
         + "\n  ".join(offenders)
@@ -103,7 +99,7 @@ def test_the_lan_address_the_compose_relies_on_exists_in_the_ssot():
     common = yaml.safe_load(COMMON.read_text())
     lan_ip = common["networking"]["nodes"]["rpi4"]["lan_ip"]
     assert lan_ip, "networking.nodes.rpi4.lan_ip is the SSOT this compose must read"
-    assert not re.search(rf'\b{re.escape(lan_ip)}\b', _compose_text()), (
+    assert not re.search(rf"\b{re.escape(lan_ip)}\b", _compose_text()), (
         f"the LAN address {lan_ip} is hardcoded in the compose template. It must "
         "arrive as a variable from deploy-dns.yml, which reads common.yaml."
     )
@@ -124,7 +120,7 @@ def test_the_pihole_healthcheck_exercises_the_coredns_chain():
     pinning one here would break the next time the Corefile's hosts block moves.
     """
     text = _compose_text()
-    match = re.search(r'test:\s*\[([^\]]*)\]', text)
+    match = re.search(r"test:\s*\[([^\]]*)\]", text)
     assert match, "the pihole healthcheck disappeared; this guard must be updated with it"
     probe = match.group(1)
 

@@ -55,7 +55,9 @@ CA_PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
 def _cluster_secret(server: str = "https://100.64.0.11:6443") -> dict:
     """The shape Argo CD stores, base64 exactly where Kubernetes does."""
-    config = json.dumps({"bearerToken": TOKEN, "tlsClientConfig": {"caData": base64.b64encode(CA_PEM.encode()).decode()}})
+    config = json.dumps(
+        {"bearerToken": TOKEN, "tlsClientConfig": {"caData": base64.b64encode(CA_PEM.encode()).decode()}}
+    )
     return {
         "data": {
             "server": base64.b64encode(server.encode()).decode(),
@@ -86,9 +88,7 @@ class TestTheVerdictComesFromTheHubsOwnCredential:
         assert result.ok is True
         assert result.status == sr.Status.OK
 
-    def test_an_unreachable_spoke_is_distinct_from_a_refused_credential(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_an_unreachable_spoke_is_distinct_from_a_refused_credential(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Collapsing these two loses the only information a migration needs."""
         monkeypatch.setattr(sr, "_read_cluster_secret", lambda env, kc: _cluster_secret())
 
@@ -146,8 +146,7 @@ class TestTheMakefileNoLongerAsksTheWrongQuestion:
         """No inline scripts in Makefiles, and this one needs TLS and base64."""
         recipe = _recipe("check-spokes")
         assert "infra argo check-spokes" in recipe, (
-            "check-spokes should call the toolkit command that probes with the "
-            "hub's stored credential."
+            "check-spokes should call the toolkit command that probes with the hub's stored credential."
         )
 
 
@@ -195,8 +194,9 @@ class TestAnAbsentRegistrationIsAStateNotAFault:
         from toolkit.features import spoke_reachability
         from toolkit.main import app
 
-        with patch.object(spoke_reachability, "check_all", return_value=results), patch(
-            "toolkit.features.argocd_spokes.spoke_envs", return_value=[r.env for r in results]
+        with (
+            patch.object(spoke_reachability, "check_all", return_value=results),
+            patch("toolkit.features.argocd_spokes.spoke_envs", return_value=[r.env for r in results]),
         ):
             return CliRunner().invoke(app, ["infra", "argo", "check-spokes"])
 

@@ -253,9 +253,7 @@ class TestKubectlServicePortForward:
             with kubectl_service_port_forward("staging", "grafana", 3000):
                 pass
 
-    def test_yields_local_port_and_terminates_on_exit(
-        self, tmp_path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_yields_local_port_and_terminates_on_exit(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_kubeconfig = tmp_path / "kubelab-staging-config"
         fake_kubeconfig.write_text("")
         monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
@@ -298,9 +296,7 @@ class TestReadClusterSecretKey:
         fake_kubeconfig.write_text("")
         monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
         encoded = base64.b64encode(b"glsa_secrettoken").decode()
-        monkeypatch.setattr(
-            subprocess, "run", lambda *a, **kw: MagicMock(returncode=0, stdout=encoded)
-        )
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=0, stdout=encoded))
         assert read_cluster_secret_key("staging", "grafana-admin", "alerts-ro-token") == "glsa_secrettoken"
 
     def test_nonzero_exit_returns_none(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -327,9 +323,7 @@ class TestGrafanaClientTransportSelection:
         with cli_obs._grafana_client("prod") as client:
             assert client.base_url == "http://mock-grafana:3000"
 
-    def test_without_grafana_url_wraps_port_forward_and_reads_the_token(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_without_grafana_url_wraps_port_forward_and_reads_the_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from contextlib import contextmanager
 
         from toolkit.cli import observability as cli_obs
@@ -556,9 +550,7 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
     unrelated local Loki, so the wrong answer was the machine's default state.
     """
 
-    def test_triage_port_forwards_to_the_named_env_for_both_sources(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_triage_port_forwards_to_the_named_env_for_both_sources(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import contextlib
 
         import toolkit.cli.observability as obs_cli
@@ -585,9 +577,7 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
             f"port-forward rather than a default URL; got {calls!r}"
         )
 
-    def test_an_unreachable_loki_is_an_error_not_a_verdict_of_health(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_an_unreachable_loki_is_an_error_not_a_verdict_of_health(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The defect this ticket exists for, asserted directly.
 
         Before the fix an unreached Loki produced `severity: INFO` and "no active
@@ -620,9 +610,7 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
         assert parsed["report"] is None
         assert "no kubeconfig for prod" in parsed["error"]
 
-    def test_a_grafana_failure_is_not_reported_as_a_loki_failure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_grafana_failure_is_not_reported_as_a_loki_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Measured against prod 2026-09-02, on the first real run of the fix.
 
         `ObservabilityUnavailableError` subclasses `RuntimeError`, and
@@ -669,9 +657,7 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
             "debugs the wrong backend."
         )
 
-    def test_an_engine_bug_is_not_relabelled_as_an_unreachable_backend(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_an_engine_bug_is_not_relabelled_as_an_unreachable_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Raised in adversarial review of this PR (gemini-3.1-pro-high, Major).
 
         The first fix for the sibling test above added `except
@@ -714,16 +700,13 @@ class TestTriageNeverDiagnosesFromASourceItDidNotReach:
             f"inside the triage engine must not be dressed as one. Got: {result.exception!r}"
         )
         assert "could not reach" not in result.output, (
-            "an engine-side failure must not be reported as a transport failure; "
-            f"got: {result.output!r}"
+            f"an engine-side failure must not be reported as a transport failure; got: {result.output!r}"
         )
         assert isinstance(result.exception, RuntimeError), (
             f"the engine's own error must surface unaltered; got {result.exception!r}"
         )
 
-    def test_the_human_output_says_it_is_not_a_clean_bill_of_health(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_human_output_says_it_is_not_a_clean_bill_of_health(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A non-JSON operator must not read the failure as 'nothing wrong'."""
         import contextlib
 
@@ -762,9 +745,7 @@ class TestLogsAsksTheEnvironmentYouNamed:
     environment rather than a default port.
     """
 
-    def test_logs_port_forwards_to_the_named_env_rather_than_localhost(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_logs_port_forwards_to_the_named_env_rather_than_localhost(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import contextlib
 
         import toolkit.cli.observability as obs_cli
@@ -778,9 +759,7 @@ class TestLogsAsksTheEnvironmentYouNamed:
 
         monkeypatch.delenv("LOKI_URL", raising=False)
         monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
-        monkeypatch.setattr(
-            obs_cli.LokiClient, "query_service_logs", lambda self, **kw: []
-        )
+        monkeypatch.setattr(obs_cli.LokiClient, "query_service_logs", lambda self, **kw: [])
 
         result = runner.invoke(app, ["obs", "logs", "--env", "prod", "--service", "crowdsec"])
 
@@ -802,9 +781,7 @@ class TestLogsAsksTheEnvironmentYouNamed:
 
         monkeypatch.delenv("LOKI_URL", raising=False)
         monkeypatch.setattr(obs_cli, "kubectl_service_port_forward", fake_forward)
-        monkeypatch.setattr(
-            obs_cli.LokiClient, "query_service_logs", lambda self, **kw: []
-        )
+        monkeypatch.setattr(obs_cli.LokiClient, "query_service_logs", lambda self, **kw: [])
 
         result = runner.invoke(app, ["obs", "logs", "--env", "prod", "--service", "crowdsec"])
 

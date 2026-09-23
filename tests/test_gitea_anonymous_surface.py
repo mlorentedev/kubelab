@@ -49,6 +49,7 @@ def _beelink_tailscale_ip() -> str:
     common = yaml.safe_load(COMMON.read_text())
     return common["networking"]["nodes"]["beelink"]["tailscale_ip"]
 
+
 #: Values Ansible supplies from outside the role. The rest render as empty via
 #: ChainableUndefined, and that is SAFE HERE for a reason worth stating rather
 #: than assuming: every assertion below is on a LITERAL in the template
@@ -107,8 +108,7 @@ def test_registration_stays_closed():
     env = _gitea_environment()
     assert env.get("GITEA__service__DISABLE_REGISTRATION") == "true"
     assert env.get("GITEA__openid__ENABLE_OPENID_SIGNUP") == "false", (
-        "OpenID signup would re-open self-registration through a different door than "
-        "DISABLE_REGISTRATION closes"
+        "OpenID signup would re-open self-registration through a different door than DISABLE_REGISTRATION closes"
     )
 
 
@@ -176,9 +176,7 @@ def test_the_healthcheck_does_not_use_an_endpoint_the_hardening_closes():
     compose = yaml.safe_load(rendered)
     test_cmd = " ".join(compose["services"]["gitea"]["healthcheck"]["test"])
 
-    assert "/api/healthz" in test_cmd, (
-        f"the gitea healthcheck is {test_cmd!r}; it must use the SSOT's health_path"
-    )
+    assert "/api/healthz" in test_cmd, f"the gitea healthcheck is {test_cmd!r}; it must use the SSOT's health_path"
     assert "/api/v1/" not in test_cmd, (
         f"the gitea healthcheck is {test_cmd!r}, which REQUIRE_SIGNIN_VIEW closes — "
         "the container would report unhealthy forever"

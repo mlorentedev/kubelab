@@ -25,9 +25,7 @@ class TestBuildExtraRoutes:
         """The port is never restated in the route entry — it is looked up."""
         routes = K8sGenerator()._build_extra_routes(WEB_ENV, "web")
 
-        assert routes == [
-            {"path_prefix": "/api", "service": "api", "port": 8080, "priority": 100}
-        ]
+        assert routes == [{"path_prefix": "/api", "service": "api", "port": 8080, "priority": 100}]
 
     def test_app_without_extra_routes_gets_an_empty_list(self) -> None:
         """Every other app must keep rendering exactly one host rule."""
@@ -55,9 +53,7 @@ class TestBuildExtraRoutes:
 
     def test_explicit_priority_overrides_the_default(self) -> None:
         env = {
-            "APPS_PLATFORM_WEB_EXTRA_ROUTES": [
-                {"path_prefix": "/api", "service": "api", "priority": 50}
-            ],
+            "APPS_PLATFORM_WEB_EXTRA_ROUTES": [{"path_prefix": "/api", "service": "api", "priority": 50}],
             "APPS_PLATFORM_API_DEFAULT_PORT": "8080",
         }
 

@@ -86,9 +86,7 @@ def cm() -> FakeConfigurationManager:
 class TestAdminIdentityResolvesFromTheSSOT:
     """C6: assert on the GENERATED Secret, so the guard survives a refactor of the plumbing."""
 
-    def test_grafana_admin_user_resolves_from_the_identity_ssot(
-        self, cm: FakeConfigurationManager
-    ) -> None:
+    def test_grafana_admin_user_resolves_from_the_identity_ssot(self, cm: FakeConfigurationManager) -> None:
         """RED until `grafana-admin.admin-user` stops coming from `BASIC_AUTH_USER`.
 
         Grafana is the clearest case because its mapping names the alias
@@ -107,9 +105,7 @@ class TestAdminIdentityResolvesFromTheSSOT:
             f"expected the declared superadmin {SUPERADMIN!r}."
         )
 
-    def test_minio_root_user_resolves_from_the_identity_ssot(
-        self, cm: FakeConfigurationManager
-    ) -> None:
+    def test_minio_root_user_resolves_from_the_identity_ssot(self, cm: FakeConfigurationManager) -> None:
         """RED until MinIO's root user stops being an independently-stored SOPS value.
 
         MinIO's failure mode differs from Grafana's and is worth naming: its
@@ -129,9 +125,7 @@ class TestAdminIdentityResolvesFromTheSSOT:
             f"expected the declared superadmin {SUPERADMIN!r}."
         )
 
-    def test_no_generated_secret_carries_the_basic_auth_account(
-        self, cm: FakeConfigurationManager
-    ) -> None:
+    def test_no_generated_secret_carries_the_basic_auth_account(self, cm: FakeConfigurationManager) -> None:
         """The anti-assertion, and the one that would have caught #1352 before it shipped.
 
         The two tests above say where the identity MUST come from. This one says
@@ -206,9 +200,7 @@ class TestTheCatalogKeyFollowsTheIdentity:
         report on it, and find it missing — reading as "the secret was never
         set" rather than "the catalog is looking in the wrong place".
         """
-        common = yaml.safe_load(
-            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
-        )
+        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
         operator = common["apps"]["auth"]["identities"]["operator"]
         expected = f"apps.services.security.authelia.users_{operator}_password_hash"
 
@@ -232,9 +224,7 @@ class TestTheOldSSOTIsGone:
         future consumer to pick whichever it finds first, which is how one
         identity acquires two resolution paths again.
         """
-        common = yaml.safe_load(
-            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
-        )
+        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
         auth = common["apps"]["auth"]
         assert "admin_username" not in auth, (
             "apps.auth.admin_username is back. The identity is declared once, in "
@@ -251,9 +241,7 @@ class TestTheOldSSOTIsGone:
         resolve to no identity and be skipped with a warning — a user silently
         absent from Authelia, which fails as a login nobody can explain.
         """
-        common = yaml.safe_load(
-            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
-        )
+        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
         users = common["apps"]["services"]["security"]["authelia"]["users"]
         offenders = [u for u in users if "is_admin" in u]
         assert not offenders, (
@@ -269,9 +257,7 @@ class TestTheOldSSOTIsGone:
         is skipped by both generators, so it disappears from the users database
         without failing anything.
         """
-        common = yaml.safe_load(
-            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text()
-        )
+        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
         users = common["apps"]["services"]["security"]["authelia"]["users"]
         unresolved = [u for u in users if not resolve_user_identity(u, common)]
         assert not unresolved, (

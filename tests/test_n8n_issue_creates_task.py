@@ -277,8 +277,16 @@ def test_the_pull_request_chain_still_ends_where_it_did() -> None:
 # ── Idempotence (AC2) ─────────────────────────────────────────────────────────
 
 
-PARSED = {"Parse Forge Event": {"taskKey": "TOOL-035", "title": "TOOL-035: forge", "issueUrl": "u",
-                                "repoOwner": "kubelab", "repoName": "kubelab", "issueNumber": 7}}
+PARSED = {
+    "Parse Forge Event": {
+        "taskKey": "TOOL-035",
+        "title": "TOOL-035: forge",
+        "issueUrl": "u",
+        "repoOwner": "kubelab",
+        "repoName": "kubelab",
+        "issueNumber": 7,
+    }
+}
 
 
 def test_an_existing_task_is_matched_exactly_not_by_substring() -> None:
@@ -334,14 +342,16 @@ def test_a_failed_search_is_not_an_empty_search() -> None:
     result = run_node(node_js("Extract Issue Task Match"), ERROR_ITEM, PARSED)
     assert result["searchFailed"] is True
 
-    picked = run_node(node_js("Pick Project for Repo"), split_items([{"id": 3, "title": "kubelab"}]),
-                      {"Extract Issue Task Match": result})
+    picked = run_node(
+        node_js("Pick Project for Repo"),
+        split_items([{"id": 3, "title": "kubelab"}]),
+        {"Extract Issue Task Match": result},
+    )
     assert picked["readyToCreate"] is False
 
 
 def test_a_failed_project_lookup_blocks_the_create() -> None:
-    prior = {"Extract Issue Task Match": {"repoOwner": "kubelab", "repoName": "kubelab",
-                                          "searchFailed": False}}
+    prior = {"Extract Issue Task Match": {"repoOwner": "kubelab", "repoName": "kubelab", "searchFailed": False}}
     picked = run_node(node_js("Pick Project for Repo"), ERROR_ITEM, prior)
     assert picked["projectLookupFailed"] is True
     assert picked["readyToCreate"] is False
@@ -350,9 +360,16 @@ def test_a_failed_project_lookup_blocks_the_create() -> None:
 def test_the_created_title_carries_the_key_as_a_prefix() -> None:
     """AC1 by construction. The key can be extracted from mid-title, so the task
     title is built rather than copied."""
-    prior_mid = {"Parse Forge Event": {"taskKey": "TOOL-035", "title": "fix the TOOL-035 thing",
-                                       "issueUrl": "u", "repoOwner": "kubelab", "repoName": "kubelab",
-                                       "issueNumber": 7}}
+    prior_mid = {
+        "Parse Forge Event": {
+            "taskKey": "TOOL-035",
+            "title": "fix the TOOL-035 thing",
+            "issueUrl": "u",
+            "repoOwner": "kubelab",
+            "repoName": "kubelab",
+            "issueNumber": 7,
+        }
+    }
     assert run_node(node_js("Extract Issue Task Match"), EMPTY_ITEM, prior_mid)["taskTitle"].startswith("TOOL-035")
     assert run_node(node_js("Extract Issue Task Match"), EMPTY_ITEM, PARSED)["taskTitle"] == "TOOL-035: forge"
 
@@ -364,8 +381,7 @@ def test_an_unmatched_repository_does_not_fall_back_to_a_default_project() -> No
     """`slack-task-capture` defaults to project 1 because a human sees where the
     task landed. Nothing watches a webhook, so the same default files issues into
     an arbitrary project invisibly and forever."""
-    prior = {"Extract Issue Task Match": {"repoOwner": "teledyne", "repoName": "fae-brain",
-                                          "searchFailed": False}}
+    prior = {"Extract Issue Task Match": {"repoOwner": "teledyne", "repoName": "fae-brain", "searchFailed": False}}
     for shape in (split_items, wrapped_array, wrapped_data):
         result = run_node(node_js("Pick Project for Repo"), shape([{"id": 1, "title": "Inbox"}]), prior)
         assert result["projectId"] is None, shape.__name__
@@ -385,12 +401,17 @@ def test_every_repository_routes_to_the_one_declared_board() -> None:
     ]
     projects = [{"id": 1, "title": "Inbox"}, {"id": 2, "title": declared}, {"id": 3, "title": "kubelab"}]
 
-    for repo in ({"repoOwner": "teledyne", "repoName": "fae-brain"},
-                 {"repoOwner": "kubelab", "repoName": "kubelab"},
-                 {"repoOwner": "personal", "repoName": "resume"}):
+    for repo in (
+        {"repoOwner": "teledyne", "repoName": "fae-brain"},
+        {"repoOwner": "kubelab", "repoName": "kubelab"},
+        {"repoOwner": "personal", "repoName": "resume"},
+    ):
         for shape in (split_items, wrapped_array, wrapped_data):
-            result = run_node(node_js("Pick Project for Repo"),
-                              shape(projects), {"Extract Issue Task Match": {**repo, "searchFailed": False}})
+            result = run_node(
+                node_js("Pick Project for Repo"),
+                shape(projects),
+                {"Extract Issue Task Match": {**repo, "searchFailed": False}},
+            )
             assert result["projectId"] == 2, f"{repo['repoName']}/{shape.__name__}"
             assert result["readyToCreate"] is True
 
@@ -404,8 +425,9 @@ def test_the_declared_board_is_matched_case_insensitively_by_title() -> None:
     ]
     prior = {"Extract Issue Task Match": {"repoOwner": "kubelab", "repoName": "kubelab", "searchFailed": False}}
 
-    result = run_node(node_js("Pick Project for Repo"),
-                      split_items([{"id": 7, "title": f"  {declared.upper()}  "}]), prior)
+    result = run_node(
+        node_js("Pick Project for Repo"), split_items([{"id": 7, "title": f"  {declared.upper()}  "}]), prior
+    )
     assert result["projectId"] == 7
 
 

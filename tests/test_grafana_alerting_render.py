@@ -99,8 +99,7 @@ def _alerting_configmap(env: str) -> dict:
     cms = [
         d
         for d in docs
-        if d.get("kind") == "ConfigMap"
-        and d.get("metadata", {}).get("name", "").startswith("grafana-alerting")
+        if d.get("kind") == "ConfigMap" and d.get("metadata", {}).get("name", "").startswith("grafana-alerting")
     ]
     assert len(cms) == 1, (
         f"Expected exactly one grafana-alerting ConfigMap in the {env} render, found "

@@ -116,9 +116,7 @@ esac
             "GITEA_BOOTSTRAP_STATE": str(marker),
             **extra,
         }
-        return subprocess.run(
-            ["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60
-        )
+        return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
 
     return type(
         "Harness",
@@ -179,9 +177,7 @@ def test_a_first_run_reports_a_change_and_records_the_state(harness):
 
     result = harness.run()
 
-    assert "Updated" in result.stdout, (
-        f"a run with no recorded state must report a change; got:\n{result.stdout}"
-    )
+    assert "Updated" in result.stdout, f"a run with no recorded state must report a change; got:\n{result.stdout}"
     assert harness.marker.read_text().strip() == _expected_hash()
 
 

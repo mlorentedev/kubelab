@@ -86,8 +86,7 @@ class TestTheSwallowSurvives:
         assert scales, "the scale-to-zero lines vanished"
         for line in scales:
             assert "|| true" in line, (
-                "scale-to-zero lost its `|| true`; an empty argocd namespace would "
-                "now fail the deploy outright"
+                "scale-to-zero lost its `|| true`; an empty argocd namespace would now fail the deploy outright"
             )
 
 

@@ -17,7 +17,7 @@ import getpass
 import os
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Optional
 
 import typer
 
@@ -531,9 +531,17 @@ def set_secret(
 
 @app.command("rotate")
 def rotate_secret(
-    key: Annotated[str, typer.Argument(help="Dot-separated key path from SECRET_CATALOG")],
+    key: Annotated[Optional[str], typer.Argument(help="Dot-separated key path from SECRET_CATALOG")] = None,
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt")] = False,
+    group: Annotated[
+        Optional[str],
+        typer.Option(
+            "--group",
+            help="Rotate a declared group instead of one key. `break-glass`: every break-glass "
+            "account, applied to its service and verified with a login (AUTH-004 AC7).",
+        ),
+    ] = None,
 ) -> None:
     """Rotate ONE credential, and stop before the cluster.
 
@@ -556,6 +564,13 @@ def rotate_secret(
       toolkit secrets rotate argocd.admin_password --env common
     """
     from toolkit.features.secrets_manager import RotationRefused
+
+    if group is not None:
+        _rotate_group(group, env, yes)
+        return
+    if key is None:
+        logger.error("Name a KEY, or pass --group break-glass")
+        raise typer.Exit(1)
 
     valid_envs = ("common", "dev", "staging", "prod")
     if env not in valid_envs:
@@ -580,6 +595,46 @@ def rotate_secret(
     logger.warning("NOT applied to the cluster. It is not rotated until it is merged:")
     for index, step in enumerate(plan.next_steps, start=1):
         logger.info(f"  {index}. {step}")
+
+
+def _rotate_group(group: str, env: str, yes: bool) -> None:
+    """`--group break-glass`: SOPS first, then the service, then a login; undone on failure.
+
+    Unlike a single-key rotation this DOES touch the running service. It has to:
+    these passwords live in the application's own database, not in anything Argo
+    CD applies, so stopping at SOPS would leave SOPS and the service disagreeing.
+    """
+    from toolkit.features.break_glass_rotation import rotate_break_glass
+
+    if group != "break-glass":
+        logger.error(f"Unknown group {group!r}. Known: break-glass")
+        raise typer.Exit(1)
+    if env not in ("staging", "prod"):
+        logger.error("--group break-glass rotates a live service: --env must be staging or prod")
+        raise typer.Exit(1)
+    if not yes and not typer.confirm(f"Rotate every break-glass account in {env}, live?"):
+        logger.info("Aborted -- nothing was written")
+        raise typer.Exit(1)
+
+    from toolkit.config.settings import settings as _settings
+
+    outcomes = rotate_break_glass(env, _settings.project_root, logger.info)
+    if not outcomes:
+        logger.warning(f"No break-glass account exists in {env}")
+        return
+    rotated = [o for o in outcomes if o.ok]
+    if len(rotated) == len(outcomes):
+        logger.success(f"Rotated {len(outcomes)} break-glass account(s) in {env}; each verified with a login")
+    if rotated:
+        # Only now is there anything to land. A run where every account drifted or
+        # was reverted changed no service, and telling the operator to commit would
+        # be an instruction to publish nothing as if it were a rotation.
+        names = ", ".join(o.service for o in rotated)
+        logger.warning(f"{names} already hold the new values. SOPS must land now, or the repo is stale:")
+        logger.info("  1. commit the changed infra/config/secrets/*.enc.yaml and open a PR")
+        logger.info(f"  2. make apply-secrets ENV={env}  (refreshes the K8s Secrets that seed a fresh install)")
+    if len(rotated) != len(outcomes):
+        raise typer.Exit(1)
 
 
 # =============================================================================

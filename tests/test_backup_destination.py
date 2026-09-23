@@ -37,9 +37,7 @@ class FakeConfig:
     def __init__(self, dest=_DEST, secrets=None):
         self._dest = dest
         self._secrets = (
-            secrets
-            if secrets is not None
-            else {"backup.r2.access_key_id": "AKI", "backup.r2.secret_access_key": "SEC"}
+            secrets if secrets is not None else {"backup.r2.access_key_id": "AKI", "backup.r2.secret_access_key": "SEC"}
         )
 
     def get_merged_config(self):
@@ -184,9 +182,7 @@ def test_repo_prefix_agrees_with_the_derived_repository_url():
     r2 = common["backup"]["r2"]
 
     derived = repo_url(
-        DestinationConfig(
-            account_id=r2["account_id"], bucket=r2["bucket"], endpoint=r2["endpoint"]
-        ),
+        DestinationConfig(account_id=r2["account_id"], bucket=r2["bucket"], endpoint=r2["endpoint"]),
         node="",
     ).rstrip("/")
 

@@ -59,11 +59,7 @@ def _recipe_lines() -> list[tuple[int, str]]:
     tell a warning from an instance would forbid the repo from documenting its
     own bug.
     """
-    return [
-        (n, line)
-        for n, line in enumerate(MAKEFILE.read_text().splitlines(), start=1)
-        if line.startswith("\t")
-    ]
+    return [(n, line) for n, line in enumerate(MAKEFILE.read_text().splitlines(), start=1) if line.startswith("\t")]
 
 
 class TestNoTargetUsesTheUnreachableDefault:

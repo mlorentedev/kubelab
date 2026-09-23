@@ -199,7 +199,7 @@ class TestExempt:
         for sig in registry["exempt"]["signatures"]:
             payload = pr(files=[{"path": p} for p in sig["files"]])
             v = classify(payload, registry)
-            assert v.state == "exempt", f'{sig["name"]} classified as {v.state}'
+            assert v.state == "exempt", f"{sig['name']} classified as {v.state}"
 
     def test_the_release_shapes_actually_observed_are_all_covered(self, registry: dict) -> None:
         """Release tooling here opens PER-APP releases, so the file set varies.
@@ -265,12 +265,12 @@ class TestExempt:
         """
         for sig in registry["exempt"]["signatures"]:
             files = sorted(sig["files"])
-            assert len(files) >= 2, f'{sig["name"]} has one file; a proper subset is empty'
+            assert len(files) >= 2, f"{sig['name']} has one file; a proper subset is empty"
             for dropped in range(len(files)):
                 partial = [f for i, f in enumerate(files) if i != dropped]
                 v = classify(pr(files=[{"path": p} for p in partial]), registry)
                 assert v.state == "pending", (
-                    f'{sig["name"]} minus {files[dropped]!r} classified as {v.state}. '
+                    f"{sig['name']} minus {files[dropped]!r} classified as {v.state}. "
                     f"A partial match is not a match: exemption requires the whole "
                     f"declared set, or a half-finished change rides in on it."
                 )
@@ -349,7 +349,7 @@ class TestExempt:
 class TestDisclosed:
     def test_label_and_section_together_disclose(self, registry: dict) -> None:
         e = registry["escape"]
-        payload = pr(labels=[{"name": e["label"]}], body=f'{e["section"]}\n\nQuota exhausted; shipping anyway.')
+        payload = pr(labels=[{"name": e["label"]}], body=f"{e['section']}\n\nQuota exhausted; shipping anyway.")
         assert classify(payload, registry).state == "disclosed"
 
     def test_the_label_alone_does_not(self, registry: dict) -> None:
@@ -358,12 +358,12 @@ class TestDisclosed:
 
     def test_the_section_alone_does_not(self, registry: dict) -> None:
         e = registry["escape"]
-        assert classify(pr(body=f'{e["section"]}\n\nreason'), registry).ok is False
+        assert classify(pr(body=f"{e['section']}\n\nreason"), registry).ok is False
 
     def test_an_empty_section_is_not_a_disclosure(self, registry: dict) -> None:
         """A heading with nothing under it records the intent to disclose."""
         e = registry["escape"]
-        payload = pr(labels=[{"name": e["label"]}], body=f'{e["section"]}\n\n\n## Next heading\n\nunrelated')
+        payload = pr(labels=[{"name": e["label"]}], body=f"{e['section']}\n\n\n## Next heading\n\nunrelated")
         assert classify(payload, registry).ok is False
 
 
@@ -451,11 +451,7 @@ def test_a_clean_coderabbit_review_attests(registry: dict) -> None:
     blocks the clean PRs and passes the ones with findings. A clean bill of
     health was indistinguishable from silence.
     """
-    payload = pr(
-        comments=[
-            comment("coderabbitai", "No actionable comments were generated in the recent review. 🎉")
-        ]
-    )
+    payload = pr(comments=[comment("coderabbitai", "No actionable comments were generated in the recent review. 🎉")])
     assert classify(payload, registry).state == "attested"
 
 

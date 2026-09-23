@@ -144,8 +144,7 @@ def test_the_forge_credential_comes_from_the_forges_own_vault() -> None:
                 "credential while reporting failed=0."
             )
         assert FORGE_SECRET_ROOT in expr, (
-            f"{name} does not resolve from the forge's own vault fact "
-            f"(`{FORGE_SECRET_ROOT}`): {expr!r}"
+            f"{name} does not resolve from the forge's own vault fact (`{FORGE_SECRET_ROOT}`): {expr!r}"
         )
 
 

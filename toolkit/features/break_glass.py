@@ -29,7 +29,8 @@ account opens the door, in one of four forms:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -296,3 +297,128 @@ def announce_use(
         return 200 <= send(url, envelope, {"Authorization": f"Bearer {webhook_secret}"}) < 300
     except Exception:  # noqa: BLE001 -- an unannounced use is reported, never fatal
         return False
+
+
+# --------------------------------------------------------------------------- live resolution
+
+
+def render(env: str, project_root: Path) -> list[dict[str, Any]]:
+    """The env's overlay as the cluster would receive it."""
+    import subprocess
+
+    result = subprocess.run(
+        ["kubectl", "kustomize", str(project_root / "infra" / "k8s" / "overlays" / env)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # It renders the checkout locally and needs no cluster, so a failure means the
+        # checkout is broken. Say so in one line rather than a traceback mid-incident.
+        detail = (result.stderr or "").strip().splitlines()[-1:] or ["no output"]
+        raise BreakGlassError(f"could not render the {env} overlay from this checkout: {detail[0]}")
+    return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+
+
+def _kubectl_json(kubeconfig: Path, *args: str) -> Any:
+    import json
+    import subprocess
+
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", str(kubeconfig), *args, "-o", "json"], capture_output=True, text=True
+    )
+    return json.loads(result.stdout) if result.returncode == 0 and result.stdout else None
+
+
+def resolve(env: str, service: str, project_root: Path) -> tuple[dict[str, Any], Route, Plan]:
+    """Declaration, route and concrete plan for SERVICE in ENV, read from the repo and the live cluster.
+
+    Raises BreakGlassError when SERVICE does not depend on Authelia in ENV, or
+    declares nothing.
+    """
+    from toolkit.features.k8s_kubeconfig import output_path as kubeconfig_path
+    from toolkit.features.oidc_clients import load_values
+
+    values = load_values(env, project_root)
+    decls = declarations(values)
+    validate(decls, values)
+    deps = dependents(env, render(env, project_root), values)
+    if service not in deps:
+        raise BreakGlassError(
+            f"{service} does not depend on Authelia in {env}, so its normal login is unaffected. "
+            f"Services that do: {', '.join(sorted(deps))}"
+        )
+    if service not in decls:
+        raise BreakGlassError(f"{service} declares no break-glass path in {DECLARATION_PATH}")
+    decl, route = decls[service], deps[service]
+    service_json: Any = None
+    slices: list[Any] = []
+    if not ({"none", "cluster"} & set(decl)) and route.backend is not None:
+        kubeconfig = kubeconfig_path(env)
+        backend = route.backend
+        service_json = _kubectl_json(kubeconfig, "-n", backend.namespace, "get", "service", backend.name)
+        found = _kubectl_json(
+            kubeconfig,
+            "-n",
+            backend.namespace,
+            "get",
+            "endpointslices",
+            "-l",
+            f"kubernetes.io/service-name={backend.name}",
+        )
+        slices = (found or {}).get("items", [])
+    return decl, route, plan_access(decl, route, service_json, slices)
+
+
+def free_local_port() -> int:
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+@contextmanager
+def private_url(env: str, plan: Plan, *, ready_timeout_s: float = 15.0) -> Iterator[str]:
+    """Yield a base URL that reaches the service privately; close any tunnel on exit.
+
+    Only for plans that reach an HTTP endpoint (PortForward, Direct).
+    """
+    import socket
+    import subprocess
+    import time
+
+    from toolkit.features.k8s_kubeconfig import output_path as kubeconfig_path
+
+    if isinstance(plan, Direct):
+        yield plan.url
+        return
+    if not isinstance(plan, PortForward):
+        raise BreakGlassError(f"{type(plan).__name__} has no HTTP endpoint to open")
+    local = free_local_port()
+    proc = subprocess.Popen(
+        [
+            "kubectl",
+            "--kubeconfig",
+            str(kubeconfig_path(env)),
+            "-n",
+            plan.namespace,
+            "port-forward",
+            f"svc/{plan.service}",
+            f"{local}:{plan.port}",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + ready_timeout_s
+        while True:
+            with socket.socket() as sock:
+                if sock.connect_ex(("127.0.0.1", local)) == 0:
+                    break
+            if proc.poll() is not None or time.monotonic() > deadline:
+                raise BreakGlassError(f"port-forward to {plan.namespace}/{plan.service} did not come up")
+            time.sleep(0.2)
+        yield f"http://127.0.0.1:{local}"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)

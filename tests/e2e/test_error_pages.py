@@ -63,9 +63,7 @@ class TestCustomErrorPages:
 
         # error-pages does NOT intercept 404 — backend response passes through
         # Verify the response is NOT our custom error page (which contains "move along")
-        assert "move along" not in r.text.lower(), (
-            "404 should NOT be intercepted by error-pages middleware"
-        )
+        assert "move along" not in r.text.lower(), "404 should NOT be intercepted by error-pages middleware"
 
     def test_catch_all_returns_error_page(
         self,

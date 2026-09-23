@@ -69,9 +69,7 @@ class TestItRefusesWhatItMustNot:
     def test_an_immutable_secret_is_refused_as_a_migration(self, mgr) -> None:
         """Overwriting storage_encryption_key does not rotate, it orphans a database."""
         with pytest.raises(RotationRefused, match="immutable|migration"):
-            mgr.rotate_secret(
-                "prod", "apps.services.security.authelia.storage_encryption_key"
-            )
+            mgr.rotate_secret("prod", "apps.services.security.authelia.storage_encryption_key")
 
     def test_an_externally_minted_secret_is_refused_with_its_procedure(self, mgr) -> None:
         """Refusing is useless unless it prints the procedure that does work."""
@@ -139,22 +137,15 @@ class TestInitCannotDestroyImmutableState:
 
     def test_the_guard_reads_the_shared_list_not_a_copy(self) -> None:
         """One list, imported. A second copy drifts the moment either side changes."""
-        source = (
-            __import__("inspect")
-            .getsource(SecretsManager.init_machine_secrets)
-            .replace(" ", "")
-        )
+        source = __import__("inspect").getsource(SecretsManager.init_machine_secrets).replace(" ", "")
         assert "IMMUTABLE_SECRETS" in source, (
-            "the guard must consult credentials.IMMUTABLE_SECRETS rather than "
-            "re-listing the keys here"
+            "the guard must consult credentials.IMMUTABLE_SECRETS rather than re-listing the keys here"
         )
 
 
 class TestItRotatesAndPropagates:
     def test_a_generatable_secret_is_written_to_the_vault(self, mgr) -> None:
-        spec = _first_of_kind(
-            SecretKind.RANDOM_HEX, SecretKind.RANDOM_TOKEN, SecretKind.OIDC_CLIENT_SECRET
-        )
+        spec = _first_of_kind(SecretKind.RANDOM_HEX, SecretKind.RANDOM_TOKEN, SecretKind.OIDC_CLIENT_SECRET)
         plan = mgr.rotate_secret("prod", spec.key_path)
         assert isinstance(plan, RotationPlan)
         written = [call.args[1] for call in mgr.set_secret.call_args_list]
@@ -178,25 +169,19 @@ class TestItRotatesAndPropagates:
         )
         if source is None:
             pytest.skip("no generatable secret with a derived hash in prod")
-        expected = [
-            d.key_path
-            for d in SECRET_CATALOG
-            if d.derived_from == source.key_path and "prod" in d.envs
-        ]
+        expected = [d.key_path for d in SECRET_CATALOG if d.derived_from == source.key_path and "prod" in d.envs]
         plan = mgr.rotate_secret("prod", source.key_path)
         for path in expected:
-            assert path in plan.derived or path in [
-                c.args[1] for c in mgr.set_secret.call_args_list
-            ], f"derived key {path} was not regenerated"
+            assert path in plan.derived or path in [c.args[1] for c in mgr.set_secret.call_args_list], (
+                f"derived key {path} was not regenerated"
+            )
 
 
 class TestItStopsBeforeTheCluster:
     def test_rotation_never_applies_to_kubernetes(self, mgr, mocker) -> None:
         """The whole point. Applying unlanded values is what took prod SSO down."""
         apply_spy = mocker.patch.object(mgr, "apply_to_k8s")
-        spec = _first_of_kind(
-            SecretKind.RANDOM_HEX, SecretKind.RANDOM_TOKEN, SecretKind.OIDC_CLIENT_SECRET
-        )
+        spec = _first_of_kind(SecretKind.RANDOM_HEX, SecretKind.RANDOM_TOKEN, SecretKind.OIDC_CLIENT_SECRET)
         mgr.rotate_secret("prod", spec.key_path)
         apply_spy.assert_not_called()
 
@@ -222,8 +207,6 @@ class TestItStopsBeforeTheCluster:
 
     def test_consumers_to_restart_come_from_the_catalog_not_a_literal(self, mgr) -> None:
         """`services` already declares who reads each secret; deriving beats duplicating."""
-        spec = _first_of_kind(
-            SecretKind.RANDOM_HEX, SecretKind.RANDOM_TOKEN, SecretKind.OIDC_CLIENT_SECRET
-        )
+        spec = _first_of_kind(SecretKind.RANDOM_HEX, SecretKind.RANDOM_TOKEN, SecretKind.OIDC_CLIENT_SECRET)
         plan = mgr.rotate_secret("prod", spec.key_path)
         assert plan.restart_services == spec.services

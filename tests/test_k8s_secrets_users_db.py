@@ -61,9 +61,7 @@ class TestUsersDatabaseGenerator:
         parsed, merged = self._build(env)
         admin_username = merged["apps"]["auth"]["identities"]["operator"]
         admin_entry = parsed["users"][admin_username]
-        assert "admins" in admin_entry.get("groups", []), (
-            f"Admin '{admin_username}' in {env} must have 'admins' group"
-        )
+        assert "admins" in admin_entry.get("groups", []), f"Admin '{admin_username}' in {env} must have 'admins' group"
 
     def test_admin_has_password_hash(self, env: str) -> None:
         parsed, merged = self._build(env)

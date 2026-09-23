@@ -90,7 +90,9 @@ class TestTheThreeBranches:
         # DESTROY, not disable: a disabled version still bills. That is the trap
         # named in docs/architecture/infra/gcp-cost-envelope.md.
         fake.stored = "an-older-value"
-        fake.enabled_versions = '[{"name": "projects/p/secrets/s/versions/4"}, {"name": "projects/p/secrets/s/versions/3"}]'
+        fake.enabled_versions = (
+            '[{"name": "projects/p/secrets/s/versions/4"}, {"name": "projects/p/secrets/s/versions/3"}]'
+        )
         result = sync.sync_item(_item(), PROJECT, dry_run=False)
         assert result.action == "updated"
         joined = " ".join(fake.subcommands())
@@ -251,9 +253,7 @@ class TestTheSpokeTokenIsStoredInTheShapeArgoCDReads:
             "decoding it here is the mirror image of the token bug."
         )
 
-    def test_a_token_that_is_not_valid_base64_fails_instead_of_shipping(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_token_that_is_not_valid_base64_fails_instead_of_shipping(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A success-shaped failure is the one that costs a day.
 
         Shipping an undecodable value would reproduce the original defect with a

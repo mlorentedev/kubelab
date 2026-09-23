@@ -21,9 +21,7 @@ COMMON_YAML = REPO_ROOT / "infra/config/values/common.yaml"
 def _load_manifest() -> dict:
     docs = list(yaml.safe_load_all(MANIFEST.read_text(encoding="utf-8")))
     middlewares = [d for d in docs if d and d.get("kind") == "Middleware"]
-    assert len(middlewares) == 1, (
-        f"Expected exactly one Middleware doc in {MANIFEST}, found {len(middlewares)}"
-    )
+    assert len(middlewares) == 1, f"Expected exactly one Middleware doc in {MANIFEST}, found {len(middlewares)}"
     return middlewares[0]
 
 

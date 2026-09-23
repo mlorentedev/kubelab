@@ -175,9 +175,7 @@ def _resolve(tmp_path: pathlib.Path, **env_overrides: str) -> tuple[int, dict[st
         text=True,
         timeout=60,
     )
-    parsed = dict(
-        line.split("=", 1) for line in output.read_text().splitlines() if "=" in line
-    )
+    parsed = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
     return proc.returncode, parsed, proc.stdout + proc.stderr
 
 
@@ -193,9 +191,7 @@ def test_a_release_dispatch_resolves_web_and_its_version(tmp_path: pathlib.Path)
 def test_a_manual_dispatch_still_resolves_its_own_inputs(tmp_path: pathlib.Path) -> None:
     """And `api` must still be promotable by hand — the app is only pinned to
     web on the dispatch path, which is what the event type means."""
-    code, out, _ = _resolve(
-        tmp_path, EVENT="workflow_dispatch", INPUT_APP="api", INPUT_VERSION="1.1.1"
-    )
+    code, out, _ = _resolve(tmp_path, EVENT="workflow_dispatch", INPUT_APP="api", INPUT_VERSION="1.1.1")
     assert code == 0
     assert out == {"app": "api", "version": "1.1.1"}
 
@@ -227,9 +223,7 @@ def test_a_dispatch_carrying_no_version_fails_loudly(tmp_path: pathlib.Path) -> 
         "../../etc/passwd",
     ],
 )
-def test_a_version_that_is_not_an_immutable_semver_tag_is_refused(
-    tmp_path: pathlib.Path, version: str
-) -> None:
+def test_a_version_that_is_not_an_immutable_semver_tag_is_refused(tmp_path: pathlib.Path, version: str) -> None:
     code, out, log = _resolve(tmp_path, EVENT="repository_dispatch", PAYLOAD_VERSION=version)
     assert code != 0, f"{version!r} was accepted as a version to promote to production"
     assert out == {}
@@ -247,9 +241,7 @@ def test_a_newline_cannot_smuggle_a_second_line_past_the_pattern(
     whole string, which is why the step uses it — asserted here rather than left
     to the reader to notice.
     """
-    code, out, _ = _resolve(
-        tmp_path, EVENT="repository_dispatch", PAYLOAD_VERSION="1.12.0\nrm -rf /"
-    )
+    code, out, _ = _resolve(tmp_path, EVENT="repository_dispatch", PAYLOAD_VERSION="1.12.0\nrm -rf /")
     assert code != 0, "a multi-line version passed validation"
     assert out == {}
 
@@ -258,9 +250,7 @@ def test_a_newline_cannot_smuggle_a_second_line_past_the_pattern(
 def test_an_unknown_app_on_the_manual_path_is_refused(tmp_path: pathlib.Path) -> None:
     """`workflow_dispatch` renders a choice box, but the API accepts arbitrary
     strings for it — the UI is not the validation."""
-    code, out, log = _resolve(
-        tmp_path, EVENT="workflow_dispatch", INPUT_APP="errors", INPUT_VERSION="1.1.1"
-    )
+    code, out, log = _resolve(tmp_path, EVENT="workflow_dispatch", INPUT_APP="errors", INPUT_VERSION="1.1.1")
     assert code != 0
     assert out == {}
     assert "::error::" in log

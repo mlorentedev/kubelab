@@ -57,11 +57,7 @@ _WAITS_FOR_ADDRESS = re.compile(r"wait-for-tailscale-addr\.sh")
 
 
 def _compose_templates() -> list[Path]:
-    return sorted(
-        p
-        for p in ROLES.rglob("*.j2")
-        if "compose" in p.name.lower() and "service" not in p.name.lower()
-    )
+    return sorted(p for p in ROLES.rglob("*.j2") if "compose" in p.name.lower() and "service" not in p.name.lower())
 
 
 def _roles_binding_tailscale() -> list[tuple[str, Path, list[str]]]:

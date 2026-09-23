@@ -189,8 +189,7 @@ class TestBothHubsCoexistInTheInventory:
         net = _networking()
 
         assert net["aws"].get("retired") is True, (
-            "aws must be absent because it is declared retired, not because its "
-            "address or block was quietly removed"
+            "aws must be absent because it is declared retired, not because its address or block was quietly removed"
         )
         assert net["aws"]["hostname"] not in self._hub_hosts()
 
@@ -260,7 +259,6 @@ class TestRetiredCloudNodes:
         hosts = _hosts(AnsibleGenerator()._build_inventory(net))
 
         assert [h for h in hosts if "gcp" in h], "the running hub must still be in the inventory"
-
 
     def test_skipping_a_retired_node_is_announced(self, capsys) -> None:
         """Raised by the reviewer on #1391: the flag removes a host with nothing

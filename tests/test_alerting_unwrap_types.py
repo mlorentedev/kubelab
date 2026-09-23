@@ -32,6 +32,7 @@ RULES_DIR = SERVICES / "grafana-alerting"
 # `| unwrap <field>` — the field whose type has to be a number.
 _UNWRAP = re.compile(r"\|\s*unwrap\s+([a-z_][a-z0-9_]*)", re.IGNORECASE)
 
+
 # A jq object entry whose value is a bare comparison: `healthy: (.x == "y")`.
 # jq renders that as a JSON boolean. `if ... then 1 else 0 end` does not match,
 # which is the correction this guard exists to keep in place.
@@ -104,6 +105,5 @@ def test_the_no_data_case_is_admitted_in_the_summary() -> None:
 
     assert "noDataState: Alerting" in pvc_rule, "if this rule stops alerting on no data, revisit the summary too"
     assert "no data" in summary or "stopped reporting" in summary, (
-        "the summary asserts a storage failure without admitting the rule also fires when the "
-        "watcher goes silent"
+        "the summary asserts a storage failure without admitting the rule also fires when the watcher goes silent"
     )

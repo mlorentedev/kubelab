@@ -65,10 +65,9 @@ def _dispatched(proc: subprocess.CompletedProcess[str]) -> bool:
 def test_a_released_version_dispatches_the_promotion_workflow() -> None:
     proc = _make("promote-prod", "APP=web", "VERSION=1.12.0")
     assert proc.returncode == 0, proc.stderr
-    assert (
-        "workflow run promote-prod.yml --repo mlorentedev/kubelab "
-        "-f app=web -f version=1.12.0"
-    ) in proc.stdout, proc.stdout
+    assert ("workflow run promote-prod.yml --repo mlorentedev/kubelab -f app=web -f version=1.12.0") in proc.stdout, (
+        proc.stdout
+    )
 
 
 def test_the_operator_is_told_that_nothing_deploys_yet() -> None:

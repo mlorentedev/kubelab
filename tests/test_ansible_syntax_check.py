@@ -100,13 +100,10 @@ def test_include_files_are_not_mistaken_for_playbooks():
         default=len(body),
     )
     body = body[:end]
-    assert 'playbook_dir.glob("*.yml")' in body, (
-        "the gate no longer uses a non-recursive glob over playbooks/"
-    )
+    assert 'playbook_dir.glob("*.yml")' in body, "the gate no longer uses a non-recursive glob over playbooks/"
     for recursive in ("rglob", "**/*.yml"):
         assert recursive not in body, (
-            f"the gate uses {recursive!r}, which reaches _includes/ and would feed "
-            "task files to ansible-playbook"
+            f"the gate uses {recursive!r}, which reaches _includes/ and would feed task files to ansible-playbook"
         )
 
 

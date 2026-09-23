@@ -310,12 +310,7 @@ class TestTheDrillWatchesTheRuleThatExists:
 
     def _titles(self) -> set[str]:
         doc = yaml.safe_load(DISK_RULES.read_text())
-        return {
-            rule["title"]
-            for group in doc["groups"]
-            for rule in group["rules"]
-            if "title" in rule
-        }
+        return {rule["title"] for group in doc["groups"] for rule in group["rules"] if "title" in rule}
 
     def test_the_drill_alert_name_is_a_title_the_repo_declares(self) -> None:
         titles = self._titles()
@@ -327,11 +322,7 @@ class TestTheDrillWatchesTheRuleThatExists:
     def test_the_drilled_rule_is_the_pvc_rule_by_uid_too(self) -> None:
         """Title equality alone would survive two rules swapping titles."""
         doc = yaml.safe_load(DISK_RULES.read_text())
-        by_title = {
-            rule["title"]: rule["uid"]
-            for group in doc["groups"]
-            for rule in group["rules"]
-        }
+        by_title = {rule["title"]: rule["uid"] for group in doc["groups"] for rule in group["rules"]}
         assert by_title[pvc_drill.DRILL_ALERT_NAME] == "obs015-pvc-unbound-failure"
 
 

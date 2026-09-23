@@ -36,9 +36,7 @@ class TestAPIValidation:
     ) -> None:
         base = self._get_api_url(services_by_name, env)
         r = http_client.post(f"{base}{path}", json={})
-        assert r.status_code == 400, (
-            f"POST {path} with empty body: expected 400, got {r.status_code}"
-        )
+        assert r.status_code == 400, f"POST {path} with empty body: expected 400, got {r.status_code}"
 
     @pytest.mark.parametrize(
         "path",
@@ -53,9 +51,7 @@ class TestAPIValidation:
     ) -> None:
         base = self._get_api_url(services_by_name, env)
         r = http_client.post(f"{base}{path}", json={"email": "not-an-email"})
-        assert r.status_code == 400, (
-            f"POST {path} with invalid email: expected 400, got {r.status_code}"
-        )
+        assert r.status_code == 400, f"POST {path} with invalid email: expected 400, got {r.status_code}"
 
 
 class TestAPIHealthStructure:
@@ -95,6 +91,4 @@ class TestAPIHealthStructure:
         checks = data.get("checks", [])
         component_names = {c["component"] for c in checks}
         expected = {"database", "external_services", "email", "cache"}
-        assert expected.issubset(component_names), (
-            f"Missing health check components: {expected - component_names}"
-        )
+        assert expected.issubset(component_names), f"Missing health check components: {expected - component_names}"

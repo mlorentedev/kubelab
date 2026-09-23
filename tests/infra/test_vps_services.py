@@ -106,9 +106,12 @@ class TestTLSCertificate:
     def test_wildcard_cert_valid(self, require_vpn: None) -> None:
         result = subprocess.run(
             [
-                "openssl", "s_client",
-                "-servername", "grafana.kubelab.live",
-                "-connect", f"{VPS_IP}:443",
+                "openssl",
+                "s_client",
+                "-servername",
+                "grafana.kubelab.live",
+                "-connect",
+                f"{VPS_IP}:443",
             ],
             input="",
             capture_output=True,

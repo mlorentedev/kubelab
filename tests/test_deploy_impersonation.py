@@ -57,8 +57,7 @@ class TestSpokeServiceAccountResolution:
         manifest = tmp_path / infra.SPOKE_RBAC_MANIFEST
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text(
-            "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n"
-            "  name: renamed-manager\n  namespace: elsewhere\n",
+            "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: renamed-manager\n  namespace: elsewhere\n",
             encoding="utf-8",
         )
         monkeypatch.setattr(infra.settings, "project_root", tmp_path)
@@ -132,9 +131,7 @@ class TestDeployUsesImpersonation:
 
         commands = _run_deploy(mocker, monkeypatch)
 
-        assert not any("--as=" in c for c in commands), (
-            "with the escape hatch set, no command may impersonate"
-        )
+        assert not any("--as=" in c for c in commands), "with the escape hatch set, no command may impersonate"
 
     def test_rollout_status_is_not_impersonated(self, mocker, monkeypatch) -> None:
         """Reads stay as the operator: the spoke's read grants are wildcarded, but
