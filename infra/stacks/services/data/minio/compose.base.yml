@@ -19,7 +19,7 @@ services:
       # OIDC Configuration (Authelia)
       MINIO_IDENTITY_OPENID_CONFIG_URL:
         "https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/.well-known/openid-configuration"
-      MINIO_IDENTITY_OPENID_CLIENT_ID: "minio-oidc"
+      MINIO_IDENTITY_OPENID_CLIENT_ID: "minio"
       MINIO_IDENTITY_OPENID_CLIENT_SECRET: ${APPS_SERVICES_DATA_MINIO_OIDC_CLIENT_SECRET}
       MINIO_IDENTITY_OPENID_DISPLAY_NAME: "SSO Login"
       MINIO_IDENTITY_OPENID_SCOPES: "openid,profile,email,groups"
