@@ -21,30 +21,30 @@ created: "2026-09-22"
 
 > Commit before every red-proof mutation (CLAUDE.md, "Commit before mutating").
 
-- [ ] [AC1] Write a failing test: for staging and prod, the client set and every non-secret field in the committed Authelia config equal what the SSOT derives. It needs no SOPS. It is red against today's files: the ids differ, `gitea` and `argocd` are absent from the SSOT, and `kubelab-oidc` has no registration.
-- [ ] [P] [AC4] Write a failing test: an SSOT client without `token_endpoint_auth_method` or `authorization_policy` fails generation, and the error names the client.
-- [ ] [AC1] [AC4] Extend the SSOT schema in `common.yaml`:
+- [x] [AC1] Write a failing test: for staging and prod, the client set and every non-secret field in the committed Authelia config equal what the SSOT derives. It needs no SOPS. It is red against today's files: the ids differ, `gitea` and `argocd` are absent from the SSOT, and `kubelab-oidc` has no registration. ✓ 2026-09-22
+- [x] [P] [AC4] Write a failing test: an SSOT client without `token_endpoint_auth_method` or `authorization_policy` fails generation, and the error names the client. ✓ 2026-09-22
+- [x] [AC1] [AC4] Extend the SSOT schema in `common.yaml`:
   - align the ids (`grafana`, `minio`, `gitea`, `argocd`, `vikunja-oidc`);
   - drop `kubelab-oidc`;
   - add `envs`, `token_endpoint_auth_method`, `authorization_policy`, `consent_mode` and `redirect` (domain reference plus callback path) to each client;
   - add `argocd.domain`.
-  Every value is copied from the live prod file, not typed from memory (R1).
-- [ ] [P] [AC6] Write a failing test: the K8s generator and the Compose renderer (`generator_authelia.py`) resolve the same `client_id` set per environment through one shared resolver. It is red because the Compose renderer derives digest keys itself (`:138`).
-- [ ] [AC6] Measure R8: is any dev Compose service configured as an Authelia OIDC client? Record the answer and set `dev` in `envs` accordingly.
-- [ ] [AC1] [AC4] [AC6] Implement the shared resolver: env filter, host from the domain reference, and the digest-key convention from `generator_authelia.py:138` (proposal What). `public: false` is fixed there.
-- [ ] [AC1] [AC4] Implement the K8s generator on top of the resolver, and move the Compose renderer onto it as well. It renders `oidc-clients.yml` per environment from the SSOT and the stored SOPS digests (R7). It fails on a missing required field and on a missing digest. The tests turn green.
-- [ ] [AC2] Split the config:
+  Every value is copied from the live prod file, not typed from memory (R1). ✓ 2026-09-22
+- [x] [P] [AC6] Write a failing test: the K8s generator and the Compose renderer (`generator_authelia.py`) resolve the same `client_id` set per environment through one shared resolver. It is red because the Compose renderer derives digest keys itself (`:138`). ✓ 2026-09-22
+- [x] [AC6] Measure R8: is any dev Compose service configured as an Authelia OIDC client? Record the answer and set `dev` in `envs` accordingly. ✓ 2026-09-22
+- [x] [AC1] [AC4] [AC6] Implement the shared resolver: env filter, host from the domain reference, and the digest-key convention from `generator_authelia.py:138` (proposal What). `public: false` is fixed there. ✓ 2026-09-22
+- [x] [AC1] [AC4] Implement the K8s generator on top of the resolver, and move the Compose renderer onto it as well. It renders `oidc-clients.yml` per environment from the SSOT and the stored SOPS digests (R7). It fails on a missing required field and on a missing digest. The tests turn green. ✓ 2026-09-22
+- [x] [AC2] Split the config:
   - remove `clients:` from both `configuration.yml` files;
   - add `oidc-clients.yml` to the `authelia-config` configMapGenerator in base and in the prod overlay (`behavior: replace` carries both files);
-  - mount both files and name them via `--config` / `X_AUTHELIA_CONFIG` (R4).
-- [ ] [AC2] Verify the emitted objects with `kubectl kustomize infra/k8s/overlays/{staging,prod}`. The ConfigMap holds both files. A change to `oidc-clients.yml` alone changes the name hash, which means the Authelia pod rolls. Evidence goes to `verification.md`.
-- [ ] [AC3] Rewire the writers:
+  - mount both files and name them via `--config` / `X_AUTHELIA_CONFIG` (R4). ✓ 2026-09-22
+- [x] [AC2] Verify the emitted objects with `kubectl kustomize infra/k8s/overlays/{staging,prod}`. The ConfigMap holds both files. A change to `oidc-clients.yml` alone changes the name hash, which means the Authelia pod rolls. Evidence goes to `verification.md`. ✓ 2026-09-22
+- [x] [AC3] Rewire the writers:
   - `toolkit sync oidc` and `sync all` call the generator;
   - `_get_oidc_output_files` returns the generated files;
   - `make credentials-generate` inherits this through `sync all`;
   - delete `toolkit/scripts/sync_oidc_hashes.py` and replace `tests/test_sync_oidc_hashes.py` with the generator's tests;
-  - `--check` reports drift when a stored digest changed but the file was not regenerated. That last point is shown red first.
-- [ ] [AC1] Re-grep for consumers of every removed or renamed id (`kubelab-oidc`, `grafana-oidc`, `minio-oidc`) and of staging `argocd` before the first apply (R5). Record the result.
+  - `--check` reports drift when a stored digest changed but the file was not regenerated. That last point is shown red first. ✓ 2026-09-22
+- [x] [AC1] Re-grep for consumers of every removed or renamed id (`kubelab-oidc`, `grafana-oidc`, `minio-oidc`) and of staging `argocd` before the first apply (R5). Record the result. ✓ 2026-09-22
 - [ ] [AC5] Staging validation:
   - repoint the staging Application `targetRevision` to the branch (R3, lesson-256);
   - `make deploy-k8s ENV=staging`;
@@ -55,9 +55,9 @@ created: "2026-09-22"
 
 ## Closing
 
-- [ ] Amendment note in ADR-040 §1: the target state is built, and it reads stored digests, not recomputed ones (R7).
-- [ ] CLAUDE.md gotchas that name `sync-oidc-hashes` as the writer of `configuration.yml` are updated. So is the "rotating is not landing" note: the command now writes `oidc-clients.yml`.
-- [ ] File a ticket: the Argo CD Helm values hardcode `argo.kubelab.live` instead of reading `argocd.domain` (R6).
+- [x] Amendment note in ADR-040 §1: the target state is built, and it reads stored digests, not recomputed ones (R7). ✓ 2026-09-22
+- [x] CLAUDE.md gotchas that name `sync-oidc-hashes` as the writer of `configuration.yml` are updated. So is the "rotating is not landing" note: the command now writes `oidc-clients.yml`. ✓ 2026-09-22
+- [x] File a ticket: the Argo CD Helm values hardcode `argo.kubelab.live` instead of reading `argocd.domain` (R6). Filed as #1782 (SSOT-027), widened to every consumer-side literal `client_id`. ✓ 2026-09-22
 - [ ] Every acceptance criterion is covered by at least one test or recorded measurement, with a matching `features.json` entry.
 - [ ] `make test` green, lint green, no unrelated changes in the diff.
 - [ ] `verification.md` filled in.

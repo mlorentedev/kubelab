@@ -30,6 +30,21 @@ Scoping, 2026-09-22, decided with the operator:
 - **Stored digests, not recomputed ones.** This deviates from ADR-040 §1's wording; see proposal R7.
 - **#1332's body was stale on the auth method.** gitea is `basic`, measured 2026-08-23, and argocd is the `post` client. Corrected on the issue: <https://github.com/mlorentedev/kubelab/issues/1332#issuecomment-5786621926>.
 
+**R5 re-grep (2026-09-22).** No K8s consumer references a removed or renamed id:
+- `kubelab-oidc` appears only as the name of a Gitea bootstrap marker file;
+- `grafana-oidc` appears in `docs/runbooks/sops-and-secrets.md:334`, already listed by audit D14;
+- `minio-oidc` appears in the Compose `compose.base.yml`, which dev blanks. It was added to #1782.
+The staging `argocd` registration has no consumer, because the hub's issuer is prod.
+
+**R8 measurement (2026-09-22).** The only dev OIDC consumer is Grafana: the Compose stack enables generic OAuth. MinIO's `compose.dev.yml` blanks its OpenID config. `dev.yaml` carried a third copy of the client list, in the old schema; it was deleted, and `grafana` declares `dev`.
+
+**R1 verified.** After the schema migration, the resolver's output for prod equals the five running prod clients field for field, auth methods included. The generated digests equal the previously committed ones for every client in both envs, so nothing was rotated.
+
+**Mutation proof (2026-09-22, after commit `b488caf7`).** Each mutant turned its guard red:
+- a hand edit to the generated file (argocd `post` changed to `basic`) turned the AC1 guard red;
+- dropping the second file from `X_AUTHELIA_CONFIG` turned AC2 red;
+- a generator hardcoding the auth method turned AC1 red.
+
 `/spec check` on 2026-09-22 (agent judgment, deterministic path): **PASS**. AC1 through AC6 are each covered by `[AC<n>]`-tagged Implementation tasks, and there are no orphan tasks.
 
 ## Promotion candidates

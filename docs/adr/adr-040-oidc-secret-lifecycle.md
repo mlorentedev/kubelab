@@ -7,6 +7,14 @@ created: "2026-05-29"
 
 # ADR-040 — OIDC client-secret lifecycle: generate the provider side, verify the consumer side
 
+## Amendment — 2026-09-22 (§1 built by SSOT-017, reading stored digests)
+
+**§1's target state exists.** `apps.services.security.authelia.oidc_clients` in `common.yaml` is the only declaration of an OIDC client. `toolkit/features/oidc_clients.py` resolves it per environment and renders `oidc-clients.yml` beside each Authelia `configuration.yml`. It is the one writer of the client list, and it feeds the K8s configs and the Compose dev config alike. `sync_oidc_hashes` is gone, as §1 intended.
+
+**One deliberate deviation from §1's wording.** §1 says rendering "computes each client's argon2 hash from the SOPS plaintext inline". argon2 is salted, so recomputing on every render yields a new digest each time, every render becomes a diff, and a drift gate can never be green. The generator therefore reads the digest already **stored** in SOPS (`oidc_client_secret_<id>_hash`, produced when the secret is minted). §1's intent holds: one pass, one writer, and no path-drift class. Minting the stored digest from the client list, rather than from a hardcoded sequence, is #1777.
+
+**Amended, not superseded**: §2 (consumer-side verification) and §3 (rotation) are unchanged. See `specs/SSOT-017-oidc-client-ssot/`.
+
 ## Status
 
 **Accepted** — 2026-05-29. Gates the design of OIDC-SYNC-002 (atomic rotation): this ADR
