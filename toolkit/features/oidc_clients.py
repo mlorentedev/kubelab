@@ -162,3 +162,37 @@ def render_clients(clients: list[dict[str, Any]], digests: dict[str, str]) -> st
         width=1000,
     )
     return header + "---\n" + body
+
+
+def build_clients_file(env: str, merged_config: dict[str, Any]) -> str:
+    """Render `env`'s client file from a config already merged with its SOPS secrets."""
+    clients = resolve_clients(merged_config, env)
+    digests = {client["client_id"]: _lookup(merged_config, digest_key(client["client_id"])) for client in clients}
+    return render_clients(clients, digests)
+
+
+def sync_env(env: str, project_root: Path = PROJECT_ROOT) -> int:
+    """Regenerate `env`'s `oidc-clients.yml`. The sole writer of the client list (AC3).
+
+    Fails loud on an unresolvable client or a missing digest rather than skipping
+    it: a skipped client is a registration silently dropped (lesson-022).
+    """
+    from toolkit.core.io import write_text_lf
+    from toolkit.core.logging import logger
+    from toolkit.features.configuration import ConfigurationManager
+
+    if env not in _CONFIG_DIRS:
+        logger.info(f"oidc: {env} has no K8s Authelia config; its clients render through the Compose path")
+        return 0
+    try:
+        content = build_clients_file(env, ConfigurationManager(env=env, project_root=project_root).get_merged_config())
+    except OidcClientError as exc:
+        logger.error(f"oidc: {exc}")
+        return 1
+    target = clients_file(env)
+    if target.exists() and target.read_text(encoding="utf-8") == content:
+        logger.info(f"oidc: {target.name} for {env} already current")
+        return 0
+    write_text_lf(target, content)
+    logger.success(f"oidc: regenerated {target}")
+    return 0

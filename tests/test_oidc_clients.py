@@ -117,3 +117,46 @@ def test_oidc_clients_match_ssot(env: str) -> None:
     assert sorted(actual) == sorted(expected), f"{env}: registered client set differs from the SSOT"
     for client_id, fields in expected.items():
         assert actual[client_id] == fields, f"{env}: {client_id} differs from the SSOT"
+
+
+class TestSoleWriter:
+    """AC3: the generator is the only writer, and `--check` sees a stale digest."""
+
+    def _merged(self, env: str, digest: str) -> dict[str, Any]:
+        values = oidc_clients.load_values(env)
+        auth = values["apps"]["services"]["security"]["authelia"]
+        for client in oidc_clients.resolve_clients(values, env):
+            auth[oidc_clients.digest_key(client["client_id"]).rsplit(".", 1)[1]] = f"$pbkdf2-fake-{digest}"
+        return values
+
+    def test_oidc_check_detects_stale_digest(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from toolkit.cli.sync import _run_with_check
+        from toolkit.features import configuration
+
+        monkeypatch.setitem(oidc_clients._CONFIG_DIRS, "prod", tmp_path)
+        digest = {"value": "a"}
+        monkeypatch.setattr(
+            configuration.ConfigurationManager,
+            "get_merged_config",
+            lambda self: self_merged(self.env),
+        )
+
+        def self_merged(env: str) -> dict[str, Any]:
+            return self._merged(env, digest["value"])
+
+        assert oidc_clients.sync_env("prod", project_root=PROJECT_ROOT) == 0
+        target = oidc_clients.clients_file("prod")
+        assert _run_with_check([target], lambda: oidc_clients.sync_env("prod"), "oidc") is True
+
+        digest["value"] = "b"  # the stored digest rotated; the file was not regenerated
+        assert _run_with_check([target], lambda: oidc_clients.sync_env("prod"), "oidc") is False
+
+    def test_a_missing_digest_fails_instead_of_skipping(self) -> None:
+        values = oidc_clients.load_values("prod")
+        with pytest.raises(oidc_clients.OidcClientError, match="no stored digest"):
+            oidc_clients.build_clients_file("prod", values)
+
+    def test_check_snapshots_exactly_the_files_the_generator_writes(self) -> None:
+        from toolkit.cli.sync import _get_oidc_output_files
+
+        assert set(_get_oidc_output_files()) == {oidc_clients.clients_file(e) for e in ("staging", "prod")}

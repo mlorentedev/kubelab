@@ -69,6 +69,7 @@ configMapGenerator:
     namespace: kubelab
     files:
       - services/authelia-config/configuration.yml
+      - services/authelia-config/oidc-clients.yml
 
   # Vikunja's env vars, same rationale as authelia-config above (lesson-404):
   # nothing re-reads a plain ConfigMap after container start. This is also
