@@ -51,7 +51,7 @@ def _account_guidance(env: str, decl: dict[str, Any], identities: dict[str, str]
     where = bg.secret_file(decl["secret"], env, _SECRETS_DIR)
     typer.echo(f"  user:     {identities[decl['identity']]}")
     typer.echo(f"  password: run in YOUR terminal: make secrets-show KEY={decl['secret']} SECRETS_ENV={where}")
-    typer.echo(f"  after:    rotate it -- toolkit secrets rotate {decl['secret']} --env {where}")
+    typer.echo(f"  after:    rotate it -- toolkit secrets rotate --group break-glass --env {env}")
 
 
 @app.command("break-glass")

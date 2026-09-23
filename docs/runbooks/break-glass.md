@@ -62,9 +62,10 @@ restart, or `make flush-sessions ENV=<env>` after a secret rotation.
 
 ## After every use
 
-1. Rotate each credential you used. The command prints the exact
-   `toolkit secrets rotate <key> --env <file>`. Rotation lands through a PR, never by
-   applying straight to prod (`selfHeal: true`).
+1. Rotate the accounts: `toolkit secrets rotate --group break-glass --env <env>`. It changes
+   each service, verifies the new password with a login, and restores everything if a step
+   fails. Then commit the changed `*.enc.yaml` in a PR at once, because the services already
+   hold the new values, and run `make apply-secrets ENV=<env>`.
 2. Record the use and its cause on the incident ticket.
 
 ## Drill
