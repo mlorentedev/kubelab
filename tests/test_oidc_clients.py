@@ -160,3 +160,52 @@ class TestSoleWriter:
         from toolkit.cli.sync import _get_oidc_output_files
 
         assert set(_get_oidc_output_files()) == {oidc_clients.clients_file(e) for e in ("staging", "prod")}
+
+
+def _kustomize(root: Path, env: str) -> list[dict[str, Any]]:
+    """Render an overlay, or skip loudly: a skip means CANNOT CHECK, never OK."""
+    import shutil
+    import subprocess
+
+    if shutil.which("kubectl") is None:
+        pytest.skip("kubectl not on PATH: the rendered Authelia config was NOT checked")
+    out = subprocess.run(
+        ["kubectl", "kustomize", str(root / "infra/k8s/overlays" / env)], capture_output=True, text=True, check=True
+    ).stdout
+    return [doc for doc in yaml.safe_load_all(out) if doc]
+
+
+def _authelia(docs: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+    [cm] = [d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"].startswith("authelia-config")]
+    [dep] = [d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "authelia"]
+    return cm, dep
+
+
+@pytest.mark.parametrize("env", ["staging", "prod"])
+def test_authelia_config_split(env: str) -> None:
+    """AC2: read from the EMITTED objects, never from the patches (lesson-404)."""
+    cm, dep = _authelia(_kustomize(PROJECT_ROOT, env))
+    main = yaml.safe_load(cm["data"]["configuration.yml"])
+    clients = yaml.safe_load(cm["data"][oidc_clients.CLIENTS_FILE_NAME])
+
+    assert "clients" not in main["identity_providers"]["oidc"], "clients must live only in the generated file"
+    assert clients["identity_providers"]["oidc"]["clients"], "the generated client file is empty"
+
+    container = dep["spec"]["template"]["spec"]["containers"][0]
+    [config_env] = [e["value"] for e in container["env"] if e["name"] == "X_AUTHELIA_CONFIG"]
+    mounted = {m["mountPath"] for m in container["volumeMounts"] if m["name"] == "config"}
+    assert config_env.split(",") == ["/config/configuration.yml", f"/config/{oidc_clients.CLIENTS_FILE_NAME}"]
+    assert set(config_env.split(",")) <= mounted, "Authelia is told to load a file that is not mounted"
+
+
+def test_authelia_config_hash_changes_on_a_client_only_change(tmp_path: Path) -> None:
+    """A client-file change must roll the pod: Authelia does not reload configuration (lesson-404)."""
+    import shutil
+
+    shutil.copytree(PROJECT_ROOT / "infra/k8s", tmp_path / "infra/k8s")
+    before, _ = _authelia(_kustomize(tmp_path, "prod"))
+    clients_path = tmp_path / "infra/k8s/overlays/prod/authelia-config" / oidc_clients.CLIENTS_FILE_NAME
+    clients_path.write_text(clients_path.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
+    after, _ = _authelia(_kustomize(tmp_path, "prod"))
+
+    assert before["metadata"]["name"] != after["metadata"]["name"]
