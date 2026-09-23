@@ -61,7 +61,8 @@ created: "2026-09-22"
 - [ ] Every acceptance criterion is covered by at least one test or recorded measurement, with a matching `features.json` entry.
 - [ ] `make test` green, lint green, no unrelated changes in the diff.
 - [ ] `verification.md` filled in.
-- [ ] PR opened referencing this spec folder, with `Closes #1332`. Record the `--force-no-gate` scaffold and the reason.
+- [ ] PR #1780 merges with **`Refs #1332`, never `Closes`**. The spec gate refuses a PR that closes a spec's issue without archiving it, and archiving needs AC5-prod, which can only be measured after merge, because Argo CD syncs prod from master. Record the `--force-no-gate` scaffold and the reason.
+- [ ] Follow-up docs PR after the prod logins: prod AC5 evidence, then the adversarial review (`review.md`), then `/spec archive`. It carries `Closes #1332`.
 - [ ] Independent adversarial review (`review.md`) before `/spec archive`.
 
 ## Machine-readable features

@@ -23,7 +23,7 @@
   {
     "id": "SSOT-017-oidc-client-ssot-f4",
     "behavior": "AC4: a client missing token_endpoint_auth_method or authorization_policy fails generation naming the client",
-    "verification": "poetry run pytest -q --no-cov -k oidc_client_required_fields",
+    "verification": "poetry run pytest -q --no-cov -k a_missing_required_field_fails_naming_the_client",
     "state": "pending",
     "evidence": ""
   },

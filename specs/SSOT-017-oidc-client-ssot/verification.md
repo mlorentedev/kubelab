@@ -40,6 +40,13 @@ The staging `argocd` registration has no consumer, because the hub's issuer is p
 
 **R1 verified.** After the schema migration, the resolver's output for prod equals the five running prod clients field for field, auth methods included. The generated digests equal the previously committed ones for every client in both envs, so nothing was rotated.
 
+**Authelia loads the second file: proven by consequence, not by reading the manifest (2026-09-22).** The `authelia/authelia:4.39.15` image has no `CMD`, and its `entrypoint.sh` passes no `--config`. Its default `X_AUTHELIA_CONFIG=/config/configuration.yml` is replaced by the container env. I ran `authelia validate-config` on the rendered staging ConfigMap:
+- with `configuration.yml` alone, it fails with `identity_providers: oidc: option 'clients' must have one or more clients configured`;
+- with both files, that error is gone.
+The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets that the pod mounts, and they are absent from the isolated container.
+
+**Ansible grep.** The only Ansible reference is Gitea's plaintext consumer secret, `provision-bee.yml:251`. It is consumer side and unaffected.
+
 **Mutation proof (2026-09-22, after commit `b488caf7`).** Each mutant turned its guard red:
 - a hand edit to the generated file (argocd `post` changed to `basic`) turned the AC1 guard red;
 - dropping the second file from `X_AUTHELIA_CONFIG` turned AC2 red;
