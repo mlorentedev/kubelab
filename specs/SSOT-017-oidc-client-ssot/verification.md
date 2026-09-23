@@ -51,6 +51,7 @@ The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets tha
 - Authorization-endpoint probes: `grafana`, `minio` and `vikunja-oidc` return `302` into the login flow, so they are registered, and only the generated file registers them. `argocd` returns `error=invalid_client`, so it is no longer registered in staging.
 - **Grafana: SSO login by the operator succeeded**, which includes the token exchange.
 - **Vikunja:** discovery had failed at 22:59–23:00Z on 2026-09-22, before this deploy, during a window in which in-cluster DNS could not resolve staging names. It never retried. After `make restart-service SVC=vikunja ENV=staging` it advertises the provider again. The underlying cause is #1783 (OPS-032). *Corrected:* an earlier version of this note said the RPi4 was off. That came from a malformed `tailscale ping` and was wrong; the RPi4 answers.
+- **Vikunja: after the restart, SSO login by the operator succeeded (2026-09-23).** This measures `vikunja-oidc`'s `token_endpoint_auth_method`: `client_secret_basic` works. The SSOT's "UNVERIFIED" note can be removed.
 - **MinIO: SSO login is impossible by upstream design.** The community console lost OIDC login in `RELEASE.2025-05-24` (minio/minio#21324), and we run `RELEASE.2025-09-07`. `loginStrategy: "form"` is expected. The `minio` registration is proven only by the authorization probe. Filed as #1784.
 
 **Mutation proof (2026-09-22, after commit `b488caf7`).** Each mutant turned its guard red:

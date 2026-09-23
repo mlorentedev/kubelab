@@ -1678,8 +1678,7 @@ apps:
           token_endpoint_auth_method: client_secret_post
           authorization_policy: one_factor
           consent_mode: implicit
-        # token_endpoint_auth_method UNVERIFIED for this client: confirmed by a live
-        # login during SSOT-017 AC5, not before.
+        # client_secret_basic measured by a live staging SSO login, 2026-09-23 (SSOT-017 AC5).
         - client_id: vikunja-oidc
           client_name: Vikunja Task Platform
           envs: [staging, prod]
