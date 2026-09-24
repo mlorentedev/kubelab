@@ -1,0 +1,58 @@
+[
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f1",
+    "behavior": "AC1: A PR opened on personal/resume gets a PR Reviewer Guide comment authored by the reviewer account within 10 minutes",
+    "verification": "echo 'by effect: see verification.md AC1' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f2",
+    "behavior": "AC2: A push to an open PR updates the same review comment instead of adding a second one",
+    "verification": "echo 'by effect: see verification.md AC2' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f3",
+    "behavior": "AC3: An unsigned or wrongly signed POST to the webhook endpoint is refused and produces no review; the Secret key is required",
+    "verification": "poetry run pytest -q tests/test_pr_agent_manifest.py -k secret",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f4",
+    "behavior": "AC4: Reviewing never edits the PR: PR_COMMANDS and PUSH_COMMANDS are exactly [\"/review\"]",
+    "verification": "poetry run pytest -q tests/test_pr_agent_manifest.py -k commands",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f5",
+    "behavior": "AC5: The reviewer token carries only the measured scopes, no write:repository, and the account owns nothing",
+    "verification": "poetry run pytest -q tests/test_gitea_token_scopes.py -k reviewer",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f6",
+    "behavior": "AC6: The three SOPS keys are catalogued and mapped; apply-secrets fails closed without them",
+    "verification": "poetry run pytest -q tests/test_secrets_orphan_audit.py tests/test_k8s_secrets_apply.py -k pr_agent",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f7",
+    "behavior": "AC7: After gitea-reconcile APPLY every declared repo carries both hooks and a second run changes nothing",
+    "verification": "poetry run pytest -q tests/test_gitea_repo_reconcile.py -k webhooks",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "TOOL-080-forge-pr-reviewer-f8",
+    "behavior": "AC8: A PR with no reviewer comment after N minutes raises an alert",
+    "verification": "poetry run pytest -q tests/test_pr_review_watcher.py",
+    "state": "pending",
+    "evidence": ""
+  }
+]
