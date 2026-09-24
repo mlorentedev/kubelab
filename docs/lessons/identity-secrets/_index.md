@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-60 lessons, newest first. Back to [all categories](../_index.md).
+61 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 456 | [A session cookie on a parent domain shadows a same-named cookie in a child environment, so login succeeds and access is anonymous](lesson-456-a-parent-domain-cookie-shadows-a-same-named-cookie-in-a-child-environment.md) | 2026-09-24 |
 | 454 | [A SOPS file conflict is resolved by re-setting the key on upstream's file, never by merging the text](lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text.md) | 2026-09-23 |
 | 447 | [A trusted identity header is as wide as whatever can reach the port](lesson-447-a-trusted-identity-header-is-as-wide-as-whatever-can-reach-the-port.md) | 2026-08-26 |
 | 425 | [A capability probe can stop at the first authorization layer and report the whole answer](lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer.md) | 2026-09-04 |
