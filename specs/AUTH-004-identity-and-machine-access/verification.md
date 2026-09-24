@@ -754,3 +754,43 @@ Verified today against prod — the only `*_password_hash` keys present are
 `users_operator_password_hash` and `users_testuser_password_hash`. Part 1 is not
 complete until that lands, and per BACKUP-EPIC #1090 it is the sole remaining gate
 on TOOL-035's forge population.
+
+## 2026-09-24 — Part 2 identity half live in prod: SSO onboarding for Gitea, and the superadmin in Authelia
+
+Shipped by #1809. Two defects were found on the way and fixed first: #1806 (`apply-secrets` now restarts the readers of a changed Secret, because Authelia's users-file watch never fires on a Secret volume) and #1807 (staging read prod's `authelia_session` cookie).
+
+### Authelia
+
+- `make apply-secrets ENV=prod` → `secret/authelia-users configured`, then `Restarted kubelab/deployment/authelia`. No manual step. A second run changed nothing.
+
+### Gitea (`make provision NODE=bee ENV=prod TAGS=gitea`)
+
+- Run 1: `changed=7`: the compose `oauth2_client` settings, the bootstrap script, and the bootstrap itself, which reported a change because of the group flags now in its recorded state. The `Restart gitea` handler then fired.
+- Run 2: `ok=43 changed=0`.
+
+### The four checks the amended task named
+
+| Check | How | Result |
+|---|---|---|
+| (a) `manu` links, not duplicates | Operator: "Sign in with Authelia" as `manu`. Then list users over the break-glass path | One `manu` (`manu@mlorente.dev`, admin). Break-glass login as `manu` with the local password over `100.64.0.3` → success |
+| (b) An account appears with no step in Gitea | Operator's existing prod SSO session as `operator` | `operator` created (`info@kubelab.live`), admin because it is still in `admins` (the AC2 task below). Not linked to `manu`: distinct emails |
+| (c) `testuser` refused | First factor as `testuser`, then the SSO walk (`r1_signup_probe.py`'s path) | Callback page **"Sign-In Prohibited"**. User list identical before and after (`hefesto`, `manu`) |
+| (d) AC4 re-demonstrated | `r1_signup_probe.py prod`, part B | `POST /user/sign_up` → **403**, `AC4 (anonymous registration refused): HOLDS` |
+
+(c) with (a)/(b) also settles the one claim the adversarial review left PLAUSIBLE: the `groups` claim does reach Gitea's `RawData`. Without it the required-claim check would refuse everyone, and `manu` and `operator` got in.
+
+Probe A (`link_account_signup`) now aborts by design. With auto-registration there is no `link_account` page to post to, so its question (which R1 candidate implements AC3) is answered by (b).
+
+### The same identity everywhere else in prod
+
+In the same browser session, now authenticated to Authelia as `manu`, with no password asked again:
+
+- **Grafana**: "Sign in with Authelia" → `manu`, with Administration visible. The SSO login linked to the existing local admin, as in staging.
+- **Argo CD**: "Log in via Authelia" → `manu` in `admins`, role:admin.
+- **Vikunja**: "Authelia" → a new `manu` user, separate from `operator` (Loki: `Error syncing avatar for user manu: no picture URL provided`, which is harmless, since Authelia sends no `picture`). The page at first showed "Administrator", because the tab still held `operator`'s earlier Vikunja session; after logging out and back in it showed `manu`. The name cannot be edited in Vikunja because it comes from the IdP's `displayname` on every login. Rename in `common.yaml`, once.
+
+"Sign in with Authelia as `manu`" is now the one way into every service. `operator` remains an admin in Argo CD, Grafana and Gitea until the AC2 task takes it out of `admins`.
+
+### Staging
+
+The operator logged in to Grafana and Vikunja staging as `manu`. Grafana linked the SSO login to the existing local admin (still one `manu`), and the email moved to `manu@mlorente.dev`. It could not have been `apps.contact.email`: `operator` holds that address, and Grafana keeps email unique across users.
