@@ -529,6 +529,10 @@ def branch_protection(
         str,
         typer.Option("--repo", help="owner/name of the repository to reconcile"),
     ] = "mlorentedev/kubelab",
+    all_repos: Annotated[
+        bool,
+        typer.Option("--all", help="Reconcile every repository `ci.branch_protection` declares"),
+    ] = False,
     apply: Annotated[
         bool,
         typer.Option("--apply/--check", help="Write the declaration, or only report what disagrees"),
@@ -536,10 +540,11 @@ def branch_protection(
 ) -> None:
     """Reconcile GitHub branch protection with `ci.branch_protection` in common.yaml.
 
-    The declaration covers `strict` and the required contexts and nothing else.
-    Everything else on the protection object is read from GitHub and written back
-    unchanged, because the API's PUT is a whole-object replace: a body carrying
-    only the status checks silently clears `enforce_admins` and answers 200.
+    The declaration is keyed by repository, then branch, and covers `strict` and
+    the required contexts and nothing else. Everything else on the protection
+    object is read from GitHub and written back unchanged, because the API's PUT
+    is a whole-object replace: a body carrying only the status checks silently
+    clears `enforce_admins` and answers 200.
 
     `--apply` re-reads after writing and asserts the fields took, so a second run
     reports no changes. That is the `changed=0` the standing order asks for.
@@ -554,40 +559,55 @@ def branch_protection(
     from toolkit.features.configuration import ConfigurationManager
 
     config = ConfigurationManager("dev", settings.project_root).get_merged_config()
-    declared = load_declared(config)
+    try:
+        declared = load_declared(config)
+    except BranchProtectionError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
     if not declared:
         logger.error("no `ci.branch_protection` declared in common.yaml — nothing to reconcile")
         raise typer.Exit(1)
 
-    client = GitHubBranchProtectionClient(repo)
+    if all_repos:
+        targets = list(declared)
+    elif repo in declared:
+        targets = [repo]
+    else:
+        # Never fall back to another repository's entry: comparing a repository
+        # against someone else's required contexts reports their difference as drift.
+        logger.error(f"{repo} has no entry in `ci.branch_protection`; declared: {', '.join(sorted(declared))}")
+        raise typer.Exit(1)
+
     pending_total = 0
 
-    for branch, wanted in declared.items():
-        try:
-            if apply:
-                applied = ensure_protection(client, branch, wanted)
-                for field, was, now in applied:
-                    logger.info(f"{repo}@{branch}  {field}: {was!r} -> {now!r}")
-                if applied:
-                    pending_total += len(applied)
-                    logger.success(f"{repo}@{branch}: applied {len(applied)} change(s), verified by re-read")
-                else:
-                    logger.success(f"{repo}@{branch}: already matches the declaration")
-                continue
+    for target in targets:
+        client = GitHubBranchProtectionClient(target)
+        for branch, wanted in declared[target].items():
+            try:
+                if apply:
+                    applied = ensure_protection(client, branch, wanted)
+                    for field, was, now in applied:
+                        logger.info(f"{target}@{branch}  {field}: {was!r} -> {now!r}")
+                    if applied:
+                        pending_total += len(applied)
+                        logger.success(f"{target}@{branch}: applied {len(applied)} change(s), verified by re-read")
+                    else:
+                        logger.success(f"{target}@{branch}: already matches the declaration")
+                    continue
 
-            live = client.get_protection(branch)
-            if live is None:
-                logger.error(f"{repo}@{branch} is not protected at all")
-                raise typer.Exit(1)
-            changes = protection_changes(live, wanted)
-            for field, was, now in changes:
-                logger.info(f"{repo}@{branch}  {field}: live {was!r}, declared {now!r}")
-            pending_total += len(changes)
-            if not changes:
-                logger.success(f"{repo}@{branch}: already matches the declaration")
-        except BranchProtectionError as exc:
-            logger.error(str(exc))
-            raise typer.Exit(1) from exc
+                live = client.get_protection(branch)
+                if live is None:
+                    logger.error(f"{target}@{branch} is not protected at all")
+                    raise typer.Exit(1)
+                changes = protection_changes(live, wanted)
+                for field, was, now in changes:
+                    logger.info(f"{target}@{branch}  {field}: live {was!r}, declared {now!r}")
+                pending_total += len(changes)
+                if not changes:
+                    logger.success(f"{target}@{branch}: already matches the declaration")
+            except BranchProtectionError as exc:
+                logger.error(str(exc))
+                raise typer.Exit(1) from exc
 
     if not apply and pending_total:
         logger.error(f"{pending_total} protection setting(s) disagree with the declaration — run with --apply")

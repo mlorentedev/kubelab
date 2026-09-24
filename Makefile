@@ -1764,8 +1764,8 @@ lint-ansible: ## Parse every Ansible playbook without running it (needs Galaxy c
 	@$(TOOLKIT) infra ansible syntax-check
 
 .PHONY: branch-protection-check
-branch-protection-check: ## Report where master's GitHub protection differs from common.yaml
-	@$(TOOLKIT) tools branch-protection --check
+branch-protection-check: ## Report where each declared repository's protection differs from common.yaml
+	@$(TOOLKIT) tools branch-protection --check --all
 
 .PHONY: branch-protection-apply
 branch-protection-apply: ## Apply ci.branch_protection to GitHub, verified by re-read

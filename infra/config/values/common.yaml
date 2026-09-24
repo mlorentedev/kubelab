@@ -487,35 +487,53 @@ deploy:
 # ===========================================================================
 # CI / FORGE POLICY
 # ===========================================================================
-# Reconciled by `toolkit tools branch-protection` (#1678). ONLY the two keys
-# below are managed: everything else on GitHub's protection object is carried
-# through verbatim from the live read, because the API's PUT is a whole-object
-# replace that clears what it does not receive. Adding a key here that nothing
-# reconciles would be worse than leaving it out — it would read as managed.
+# Reconciled by `toolkit tools branch-protection` (#1678). Keyed by repository,
+# then branch: `--repo` picks one entry and `--all` checks every entry. ONLY the
+# two keys under each branch are managed: everything else on GitHub's protection
+# object is carried through verbatim from the live read, because the API's PUT
+# is a whole-object replace that clears what it does not receive. Adding a key
+# here that nothing reconciles would be worse than leaving it out — it would
+# read as managed.
 ci:
   branch_protection:
-    master:
-      # False deliberately. `strict` requires a branch be current before it can
-      # merge, and the one-click way to make it current is GitHub's "Update
-      # branch" button — a merge executed on GitHub's servers, where no
-      # pre-commit and no pre-push hook can run. It fired repeatedly on
-      # 2026-09-05, and on one branch the resulting tree was missing a table row
-      # present in one of its parents, with no conflict raised. Removing the
-      # requirement removes the incentive; `Tests` below is what replaces the
-      # assurance it was buying.
-      strict: false
-      # Exact check-run / commit-status names, verified against a real head sha
-      # rather than transcribed from the workflow: a required context that never
-      # reports blocks every merge forever. `review-attestation` is a commit
-      # STATUS, the rest are check-runs; both kinds are matched by name here.
-      # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
-      # and no paths filter on it), so requiring it costs no extra CI minutes —
-      # only the latency of waiting for a job that was already running.
-      required_contexts:
-        - Validate
-        - Detect Changes
-        - review-attestation
-        - Tests
+    mlorentedev/kubelab:
+      master:
+        # False deliberately. `strict` requires a branch be current before it can
+        # merge, and the one-click way to make it current is GitHub's "Update
+        # branch" button — a merge executed on GitHub's servers, where no
+        # pre-commit and no pre-push hook can run. It fired repeatedly on
+        # 2026-09-05, and on one branch the resulting tree was missing a table row
+        # present in one of its parents, with no conflict raised. Removing the
+        # requirement removes the incentive; `Tests` below is what replaces the
+        # assurance it was buying.
+        strict: false
+        # Exact check-run / commit-status names, verified against a real head sha
+        # rather than transcribed from the workflow: a required context that never
+        # reports blocks every merge forever. `review-attestation` is a commit
+        # STATUS, the rest are check-runs; both kinds are matched by name here.
+        # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
+        # and no paths filter on it), so requiring it costs no extra CI minutes —
+        # only the latency of waiting for a job that was already running.
+        required_contexts:
+          - Validate
+          - Detect Changes
+          - review-attestation
+          - Tests
+    # web (mlorentedev/web) is a product repository (ADR-053) whose protection
+    # was hand-set and recorded only in its own ADR-057. The values are that
+    # ADR's, verified against the live object on 2026-09-23:
+    #   - `strict: false`, re-read and declined twice there, and for kubelab's
+    #     own reason above.
+    #   - `PR gate` is the single job that depends on every other PR job, so the
+    #     required list never has to track a job being added or renamed.
+    #   - `GitGuardian Security Checks` comes from the GitGuardian app, not a
+    #     workflow, so it cannot be verified against web's workflows from here.
+    mlorentedev/web:
+      master:
+        strict: false
+        required_contexts:
+          - PR gate
+          - GitGuardian Security Checks
 
 # ===========================================================================
 # K3S CLUSTER

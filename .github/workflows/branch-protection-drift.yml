@@ -1,0 +1,70 @@
+---
+name: Branch protection drift
+
+# Reads GitHub branch protection for every repository `ci.branch_protection`
+# declares (kubelab and web today) and fails on any difference. Before this the
+# check existed only as `make branch-protection-check`, run when someone
+# remembered; web's protection was not declared anywhere at all.
+#
+# NOT SCHEDULED YET, deliberately. Reading a protection object needs
+# `administration: read` on each repository. GITHUB_TOKEN cannot be granted it,
+# and the non-admin view of a branch lists the required contexts but not
+# `strict`, so it cannot back the declaration. The identity meant to carry this
+# is the CI GitHub App from the machine-identity decision (dotfiles ADR,
+# pending). Until it exists this runs by hand and fails closed without a token;
+# when it lands, the token below is minted from the App and a `schedule:` is
+# added here. Scheduling it now would not skip — the first step fails closed —
+# but it would be red every day for a reason nobody can act on, and an alarm
+# that is always red is one people learn to ignore.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Branch protection matches common.yaml
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The token is set on the two steps that need it, never on the job: the
+    # install steps run dependency code, and this token can read every declared
+    # repository's administration settings.
+    steps:
+      - name: Require a token that can read branch protection
+        env:
+          GH_TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::BRANCH_PROTECTION_TOKEN is not set." \
+              "Reading branch protection needs administration:read on every declared repository," \
+              "which GITHUB_TOKEN cannot have."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+
+      - name: Install project deps
+        # Not `--no-root`: toolkit/__init__.py reads its own package version.
+        run: poetry install --only main
+
+      - name: Compare every declared repository with its entry
+        env:
+          GH_TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN }}
+        run: poetry run toolkit tools branch-protection --check --all

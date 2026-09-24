@@ -225,11 +225,40 @@ class TestTheDeclaration:
         with pytest.raises(BranchProtectionError, match="declared explicitly"):
             DeclaredProtection.from_config({"required_contexts": ["Validate"]})
 
-    def test_the_real_common_yaml_declares_master(self) -> None:
+    def test_the_real_common_yaml_declares_master_for_each_repository(self) -> None:
         config = yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))
         declared = load_declared(config)
-        assert "master" in declared, "ci.branch_protection.master is the declaration this repo reconciles"
-        assert declared["master"].required_contexts, "an empty context list matches nothing and requires nothing"
+        assert set(declared) == {"mlorentedev/kubelab", "mlorentedev/web"}
+        for repo, branches in declared.items():
+            assert "master" in branches, f"{repo}: master is the branch this repository reconciles"
+            assert branches["master"].required_contexts, "an empty context list matches nothing and requires nothing"
+
+    def test_web_declares_what_its_adr_057_records(self) -> None:
+        """web's values live in web's ADR-057; this entry is the one place they are reconciled.
+
+        Pinned here so an edit to either side is a visible diff, not a quiet
+        disagreement between the ADR and what the check enforces.
+        """
+        config = yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))
+        web = load_declared(config)["mlorentedev/web"]["master"]
+        assert web.strict is False
+        assert sorted(web.required_contexts) == ["GitGuardian Security Checks", "PR gate"]
+
+    def test_the_old_branch_keyed_shape_is_refused_not_read_as_kubelab(self) -> None:
+        """Before #374 on web, `ci.branch_protection.<branch>` was implicitly kubelab's.
+
+        Reading that shape now would attribute it to whichever repository was
+        asked about, which is the defect the re-key removes. It fails instead.
+        """
+        old = {"ci": {"branch_protection": {"master": {"strict": False, "required_contexts": ["Tests"]}}}}
+        with pytest.raises(BranchProtectionError, match="keyed by repository"):
+            load_declared(old)
+
+    def test_a_repository_key_must_be_owner_slash_name(self) -> None:
+        for key in ("kubelab", "a/b/c"):
+            bad = {"ci": {"branch_protection": {key: {"master": {"strict": False, "required_contexts": ["x"]}}}}}
+            with pytest.raises(BranchProtectionError, match="not a repository"):
+                load_declared(bad)
 
     def test_every_required_context_is_produced_by_a_workflow(self) -> None:
         """A required context that never reports blocks every merge on the branch, forever.
@@ -241,7 +270,9 @@ class TestTheDeclaration:
         commit status.
         """
         config = yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))
-        declared = load_declared(config)["master"]
+        # kubelab's own entry only: web's contexts are produced by web's
+        # workflows and by an app, neither of which is visible from this tree.
+        declared = load_declared(config)["mlorentedev/kubelab"]["master"]
 
         job_names: set[str] = set()
         for path in WORKFLOWS.glob("*.yml"):
@@ -258,3 +289,69 @@ class TestTheDeclaration:
             f"no workflow produces these required contexts: {unproduced}. A required context is "
             f"matched by name; one that never reports leaves master permanently unmergeable."
         )
+
+
+class TestTheCommandComparesEachRepositoryWithItsOwnEntry:
+    """`--repo` used to change only the target, against kubelab's one declaration.
+
+    Pointed at web, it compared web with kubelab's required contexts and called
+    the difference drift. Each repository is now read against its own entry, an
+    undeclared one is refused, and `--all` walks every entry.
+    """
+
+    CONFIG = {
+        "ci": {
+            "branch_protection": {
+                "o/one": {"master": {"strict": False, "required_contexts": ["A"]}},
+                "o/two": {"master": {"strict": False, "required_contexts": ["B"]}},
+            }
+        }
+    }
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch, live: dict[str, dict[str, Any]], *args: str) -> tuple[Any, list[str]]:
+        from typer.testing import CliRunner
+
+        from toolkit.cli import tools as cli
+
+        asked: list[str] = []
+
+        class Config:
+            def __init__(self, *_: Any) -> None:
+                pass
+
+            def get_merged_config(self) -> dict[str, Any]:
+                return TestTheCommandComparesEachRepositoryWithItsOwnEntry.CONFIG
+
+        class Client(FakeClient):
+            def __init__(self, repo: str) -> None:
+                super().__init__(live[repo])
+                asked.append(repo)
+
+        monkeypatch.setattr("toolkit.features.configuration.ConfigurationManager", Config)
+        monkeypatch.setattr("toolkit.features.branch_protection.GitHubBranchProtectionClient", Client)
+        return CliRunner().invoke(cli.app, ["branch-protection", *args]), asked
+
+    @staticmethod
+    def _live(*contexts: str) -> dict[str, Any]:
+        obj = live_object()
+        obj["required_status_checks"] = {**obj["required_status_checks"], "strict": False, "contexts": list(contexts)}
+        return obj
+
+    def test_each_repository_is_checked_against_its_own_entry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        live = {"o/one": self._live("A"), "o/two": self._live("B")}
+        result, asked = self._run(monkeypatch, live, "--check", "--all")
+        assert result.exit_code == 0, result.output
+        assert asked == ["o/one", "o/two"]
+
+    def test_drift_in_one_repository_fails_the_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        live = {"o/one": self._live("A"), "o/two": self._live("A")}
+        result, _ = self._run(monkeypatch, live, "--check", "--repo", "o/two")
+        assert result.exit_code == 1
+
+    def test_an_undeclared_repository_is_refused_not_compared_with_another_entry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        live = {"o/one": self._live("A")}
+        result, asked = self._run(monkeypatch, live, "--check", "--repo", "o/three")
+        assert result.exit_code == 1
+        assert asked == [], "nothing may be read for a repository with no entry"
