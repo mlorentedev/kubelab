@@ -88,7 +88,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: docker.io/mlorentedev/kubelab-web:sha-ffa069d
+          image: docker.io/mlorentedev/kubelab-web:sha-ec80540
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
