@@ -75,6 +75,10 @@ apps:
         domain: auth.staging.kubelab.live
         issuer_domain: staging.kubelab.live
         default_domain_root: staging.kubelab.live
+        # Not common.yaml's `authelia_session`: prod's cookie of that name is
+        # scoped to kubelab.live and reaches every staging host (#1805).
+        # tests/test_authelia_session_cookies.py ties this to the K8s config.
+        session_name: authelia_session_staging
         disable_require_tls: false
       crowdsec:
         domain: crowdsec.staging.kubelab.live

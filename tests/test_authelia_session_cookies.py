@@ -58,3 +58,27 @@ def test_no_browser_receives_two_session_cookies_with_one_name() -> None:
         "A browser holding one session sends both cookies, and the other instance reads the wrong one "
         "and treats a logged-in user as anonymous. Give each environment its own `session.name`."
     )
+
+
+#: Which Authelia config each environment actually loads: base is staging, prod
+#: ships its own. The values SSOT feeds the Compose path, so the two must agree
+#: or one of them serves a name the collision check above never saw.
+K8S_CONFIG = {
+    "staging": REPO / "infra/k8s/base/services/authelia-config/configuration.yml",
+    "prod": REPO / "infra/k8s/overlays/prod/authelia-config/configuration.yml",
+}
+
+
+def test_the_values_ssot_names_the_cookie_each_environment_serves() -> None:
+    """Raised in review of #1807: renaming the K8s cookie alone left
+    `session_name` in the values saying `authelia_session` for staging, so
+    anything rendered from the SSOT would reintroduce the collision."""
+    from toolkit.features.oidc_clients import load_values
+
+    for env, config in K8S_CONFIG.items():
+        declared = load_values(env, REPO)["apps"]["services"]["security"]["authelia"]["session_name"]
+        served = yaml.safe_load(config.read_text())["session"]["name"]
+        assert declared == served, (
+            f"{env}: values say session_name={declared!r} but Authelia serves {served!r}. "
+            "Change both, or the next render from the SSOT brings the other name back."
+        )
