@@ -1120,3 +1120,79 @@ def gitea_issue_create(
         logger.error(str(exc))
         raise typer.Exit(1) from exc
     console.print(f"#{opened.number} {opened.url}")
+
+
+@gitea_app.command("actions-secrets")
+def gitea_actions_secrets(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
+    apply: Annotated[bool, typer.Option("--apply", help="Actually write. Without it, plan only.")] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Re-push secrets the forge already has: the only way a rotation lands.")
+    ] = False,
+) -> None:
+    """Deliver catalog-declared Actions secrets from SOPS to forge repositories (TOOL-062).
+
+    PLAN-ONLY BY DEFAULT, like `gitea reconcile`. The declaration is
+    `SecretSpec.forge_actions` in the secrets catalog; each value is read from SOPS
+    and written with `PUT /repos/{o}/{r}/actions/secrets/{name}`. Nothing is ever
+    deleted, and no value is ever printed.
+
+    EXITS 1 WHEN THE DECLARATION CANNOT BE MET -- a declared secret with no SOPS
+    value, or a repository the forge does not hold -- in plan mode as well as apply
+    mode. "Nothing to write" is not "converged" when the reason is a missing
+    source, and a zero exit there would be the silent pass this command replaces.
+    """
+    import requests
+
+    from toolkit.features import gitea_authoring as ga
+    from toolkit.features.gitea_actions_secrets import (
+        delivery_targets,
+        execute_actions_secrets,
+        format_actions_secrets_plan,
+        plan_actions_secrets,
+        sops_value,
+    )
+    from toolkit.features.gitea_client import GiteaError
+    from toolkit.features.secrets_manager import secrets_delivered_to_forge
+
+    merged = _gitea_merged_config(env)
+    targets = delivery_targets(secrets_delivered_to_forge())
+    if not targets:
+        logger.warning("no catalog entry declares `forge_actions` — nothing to deliver")
+        return
+
+    try:
+        client = ga.authoring_client(merged)
+        live: dict[str, set[str] | None] = {}
+        for repo in sorted({t.repo for t in targets}):
+            owner, name = repo.split("/", 1)
+            live[repo] = client.list_actions_secret_names(owner, name)
+    except (ga.AuthoringError, GiteaError, requests.RequestException) as exc:
+        logger.error(f"could not read Actions secrets from the forge: {exc}")
+        raise typer.Exit(1) from exc
+
+    valued = {t.key_path for t in targets if sops_value(merged, t.key_path)}
+    plan = plan_actions_secrets(targets, live, valued, force=force)
+    console.print(f"\n[bold]Gitea Actions secrets[/bold] ({env})\n")
+    console.print(format_actions_secrets_plan(plan))
+
+    if plan.is_noop:
+        if plan.is_complete:
+            logger.success("every declared secret exists on the forge — values unverifiable; --force re-pushes")
+            return
+        logger.error("declared secrets cannot be delivered (listed above with !)")
+        raise typer.Exit(1)
+
+    if not apply:
+        console.print("\n[dim]plan only — re-run with --apply to write[/dim]")
+        if not plan.is_complete:
+            raise typer.Exit(1)
+        return
+
+    report = execute_actions_secrets(plan, client, lambda key_path: sops_value(merged, key_path))
+    for target in report.written:
+        console.print(f"  [green]written[/green]  {target.repo}  {target.name}")
+    for target, reason in report.failed:
+        console.print(f"  [red]failed[/red]   {target.repo}  {target.name}: {reason}")
+    if report.failed or not plan.is_complete:
+        raise typer.Exit(1)

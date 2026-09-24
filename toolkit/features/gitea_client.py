@@ -785,3 +785,40 @@ class GiteaBasicAuthClient(GiteaClient):
     def create_issue(self, owner: str, name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Open an issue (TOOL-078), as the same authoring identity as `create_pull`."""
         return dict(self._request("POST", f"/repos/{owner}/{name}/issues", json=dict(payload)))
+
+    def list_actions_secret_names(self, owner: str, name: str) -> set[str] | None:
+        """The NAMES of a repository's Actions secrets (TOOL-062). None for an absent repository.
+
+        Names are all there is. Measured 2026-09-04 (#1626): the listing returns
+        `name`, `description` and `created_at`, and no value and no `updated_at` --
+        so a caller can prove a secret exists and never that it is current.
+
+        ON THIS CLASS because the route is gated on repository ownership
+        (`reqOwner()`, #1781), which the superadmin passes and `admin_token` -- scoped
+        without `write:repository` -- and the bot do not. Read on 2026-09-23:
+        `GET /repos/personal/resume/actions/secrets` as superadmin basic auth -> 200.
+
+        None rather than an empty set on a 404, because the two mean opposite
+        things to a planner: an empty set says "create everything here", a
+        missing repository says "there is nowhere to create it".
+        """
+        try:
+            return {str(s["name"]) for s in self._paginate(f"/repos/{owner}/{name}/actions/secrets")}
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+
+    def put_actions_secret(self, owner: str, name: str, secret_name: str, value: str) -> None:
+        """Create or replace one repository Actions secret (TOOL-062).
+
+        `PUT` is create-or-update on this route, so the same call serves a first
+        delivery and a forced re-push after a rotation. Measured on 2026-09-04 with a
+        throwaway `PROBE_SCOPE_CHECK` (#1626): basic auth -> ok, then deleted.
+
+        THE VALUE TRAVELS IN THE BODY AND NOWHERE ELSE -- not the URL, not a log
+        line, not anything this method raises. A refusal surfaces as `GiteaError`
+        with Gitea's own response text and the route, which names the secret; the
+        caller records that per secret and never the value.
+        """
+        self._request("PUT", f"/repos/{owner}/{name}/actions/secrets/{secret_name}", json={"data": value})
