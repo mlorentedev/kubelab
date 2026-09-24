@@ -346,8 +346,11 @@ def test_the_mapped_groups_are_the_ones_authelia_declares():
     """The group names are literals in the script. This ties them to the IdP.
 
     Rename `users` in common.yaml and every SSO login to Gitea is refused, while
-    the provision still reports success. Rename `admins` and Gitea demotes the
-    superadmin at their next login. Both would show only at the login.
+    the provision still reports success. Rename `admins` and the admin tier stops
+    following the IdP. Gitea demotes every admin at their next SSO login except
+    the last one: `UpdateUser` skips a synced demotion of the last admin
+    (services/user/update.go, v1.25.5). The failure is quiet either way, and it
+    shows only at the login.
     """
     text = SCRIPT.read_text()
     declared = {

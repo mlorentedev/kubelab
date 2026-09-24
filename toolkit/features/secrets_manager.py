@@ -243,13 +243,13 @@ SECRET_CATALOG: list[SecretSpec] = [
         # does not report a gap for a key that is never written there.
         envs=("staging", "prod"),
         rotate_note=(
-            "The superadmin must know the new password to log in. NOTE: `manu` is "
-            "not yet a declared Authelia user (apps.services.security.authelia.users "
-            "holds `identity: operator` and `testuser`), so this hash has NO consumer "
-            "today -- it is AUTH-004 Part 1 preparation, deliberate rather than "
-            "forgotten. Declaring the user is coupled to R1b, which stays parked: "
-            "`manu` has no OIDC linkage, so its first SSO login is one-shot on the "
-            "sole admin account."
+            "The superadmin must know the new password to log in. `manu` is an "
+            "Authelia user in staging and prod (AUTH-004 Part 2), and this hash is "
+            "its SSO password for every service. Set it with `toolkit credentials "
+            "hash-password <key> --env <env>`, then `make apply-secrets ENV=<env>`, "
+            "which restarts Authelia so the change is live (#1804). It is NOT the "
+            "break-glass password: that is each app's own local account, rotated "
+            "with `toolkit secrets rotate --group break-glass`."
         ),
     ),
     SecretSpec(
