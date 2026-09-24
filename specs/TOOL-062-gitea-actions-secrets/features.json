@@ -3,43 +3,43 @@
     "id": "TOOL-062-f1",
     "behavior": "plan-only writes nothing and lists creations",
     "verification": "pytest tests/test_gitea_actions_secrets.py -k plan_only_writes_nothing",
-    "state": "passing",
-    "evidence": "32 passed"
+    "state": "pending",
+    "evidence": ""
   },
   {
     "id": "TOOL-062-f2",
     "behavior": "--apply creates; a re-run changes nothing",
     "verification": "pytest tests/test_gitea_actions_secrets.py -k second_run_has_nothing_to_do",
-    "state": "passing",
-    "evidence": "32 passed"
+    "state": "pending",
+    "evidence": ""
   },
   {
     "id": "TOOL-062-f3",
     "behavior": "--force re-pushes existing secrets",
     "verification": "pytest tests/test_gitea_actions_secrets.py -k force",
-    "state": "passing",
-    "evidence": "32 passed"
+    "state": "pending",
+    "evidence": ""
   },
   {
     "id": "TOOL-062-f4",
     "behavior": "a missing or placeholder SOPS value is never written and fails the run",
     "verification": "pytest tests/test_gitea_actions_secrets.py -k 'missing or placeholder'",
-    "state": "passing",
-    "evidence": "32 passed"
+    "state": "pending",
+    "evidence": ""
   },
   {
     "id": "TOOL-062-f5",
     "behavior": "undeclared live secrets are reported, never removed",
     "verification": "pytest tests/test_gitea_actions_secrets.py -k undeclared",
-    "state": "passing",
-    "evidence": "32 passed"
+    "state": "pending",
+    "evidence": ""
   },
   {
     "id": "TOOL-062-f6",
     "behavior": "no secret value in plan, output or repr",
     "verification": "pytest tests/test_gitea_actions_secrets.py -k 'no_values or never_prints or body_only'",
-    "state": "passing",
-    "evidence": "32 passed"
+    "state": "pending",
+    "evidence": ""
   },
   {
     "id": "TOOL-062-f7",

@@ -422,3 +422,49 @@ def test_a_placeholder_is_not_a_value(monkeypatch: pytest.MonkeyPatch) -> None:
     result = _invoke(monkeypatch, _merged(**{leaf: placeholder for leaf in LEAVES}), forge, "--apply")
     assert result.exit_code == 1
     assert forge.puts == []
+
+
+# --- review of #1816 ------------------------------------------------------------
+
+
+def test_execute_refuses_a_value_that_is_empty_at_write_time() -> None:
+    """The planner and the writer read SOPS at different moments. A target the plan
+    says to create must still not be sent if its value is empty when written."""
+    from toolkit.features.gitea_actions_secrets import ActionsSecretsPlan
+
+    target = _t("gdrive_folder_id")
+    forge = _FakeForge()
+    report = execute_actions_secrets(ActionsSecretsPlan(to_create=(target,)), forge, lambda _k: "")
+    assert forge.calls == []
+    assert [t for t, _ in report.failed] == [target]
+
+
+def test_a_forge_error_that_echoes_the_value_is_redacted_in_the_report() -> None:
+    class _EchoingForge(_FakeForge):
+        def put_actions_secret(self, owner: str, repo: str, name: str, value: str) -> None:
+            raise RuntimeError(f"422 invalid data {value!r}")
+
+    target = _t("gdrive_oauth_refresh_token")
+    plan = plan_actions_secrets((target,), live={RESUME: set()}, valued={target.key_path})
+    report = execute_actions_secrets(plan, _EchoingForge(), lambda _k: VALUE)
+    assert [t for t, _ in report.failed] == [target]
+    assert VALUE not in repr(report)
+    assert "<redacted>" in report.failed[0][1]
+
+
+def test_a_repository_the_forge_cannot_list_is_reported_not_a_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolkit.features.gitea_client import GiteaError
+
+    class _BrokenListing(_CliForge):
+        def list_actions_secret_names(self, owner: str, name: str) -> set[str]:
+            raise GiteaError("Gitea API GET /repos/personal/resume/actions/secrets -> 500: boom", 500)
+
+    forge = _BrokenListing()
+    result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply")
+    assert result.exit_code == 1
+    # Counted by the row marker, not the reason: Rich wraps long rows at the test
+    # runner's width, so a phrase can straddle a line break.
+    assert result.output.count("! personal/resume") == 4
+    assert "could not list" in result.output
+    assert forge.puts == []
+    assert not isinstance(result.exception, GiteaError)

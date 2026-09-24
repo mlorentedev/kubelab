@@ -171,7 +171,7 @@ def format_actions_secrets_plan(plan: ActionsSecretsPlan) -> str:
     for t in plan.missing_values:
         lines.append(f"  ! {t.repo}  {t.name}  NO VALUE at {t.key_path} in SOPS -- not written")
     for t in plan.unreachable:
-        lines.append(f"  ! {t.repo}  {t.name}  the forge has no such repository -- not written")
+        lines.append(f"  ! {t.repo}  {t.name}  the forge could not list this repository -- not written")
     for repo, name in plan.undeclared:
         lines.append(f"  ? {repo}  {name}  not declared in the catalog -- reported, never deleted")
     return "\n".join(lines) if lines else "  (no Actions secrets declared)"
@@ -209,7 +209,10 @@ def execute_actions_secrets(
         try:
             forge.put_actions_secret(target.owner, target.repo_name, target.name, value)
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
-            report.failed.append((target, str(exc)))
+            # Redacted at the source rather than trusted: the message is the forge's
+            # own response text, and nothing guarantees an error body never echoes
+            # the `data` it was sent. The report is printed; the value must not be.
+            report.failed.append((target, str(exc).replace(value, "<redacted>")))
             continue
         report.written.append(target)
     return report
