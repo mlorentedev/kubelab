@@ -76,6 +76,17 @@ class SecretSpec:
     # of "secrets to sync" would be a second declaration of a fact this catalog
     # already owns, free to disagree with it silently.
     sync_to_secret_manager: bool = False
+    # The forge repositories (`org/name`) that receive this value as a repository
+    # Actions secret (TOOL-062, #1626). Delivery, exactly as `sync_to_secret_manager`
+    # is: SOPS stays the only place a value is authored, the forge holds a one-way
+    # copy, and `toolkit services gitea actions-secrets` is the only writer.
+    #
+    # On the catalog rather than in a list under `gitea.organizations`, for the
+    # reason the flag above gives: a second list of "what to push where" would be a
+    # second declaration of a fact this entry already owns. The secret's NAME is
+    # not declared at all -- `forge_actions_secret_name` derives it from the key
+    # path, so the SOPS key and the name a workflow reads cannot drift apart.
+    forge_actions: tuple[str, ...] = ()
     # WHEN this secret stops working, as a category -- never as a date.
     #
     # The catalog already says how to rotate every secret and said nothing about
@@ -97,6 +108,15 @@ class SecretSpec:
 
 # -- Authelia base path shortcut --
 _AUTH = "apps.services.security.authelia"
+
+# -- Forge Actions secrets (TOOL-062) --
+_FORGE_RESUME = "apps.services.core.gitea.actions_secrets.personal.resume"
+_GDRIVE_ROTATE = (
+    "Re-mint with resume's `scripts/get_drive_refresh_token.py` (browser consent; the consent "
+    "screen must be In production or the token dies in 7 days), `toolkit secrets set <key> --env "
+    "prod --stdin`, then `toolkit services gitea actions-secrets --apply --force`. Without --force "
+    "the forge keeps the old value: it returns names only, so a stale secret looks present."
+)
 
 SECRET_CATALOG: list[SecretSpec] = [
     # Registered on 2026-08-26 by the reverse audit (#833), which is what showed
@@ -631,6 +651,61 @@ SECRET_CATALOG: list[SecretSpec] = [
         # prod, matching `bot_token` above: the forge's identity environment is
         # prod, and `envs` is the audit dimension rather than the file (ANSIBLE-033).
         envs=("prod",),
+    ),
+    # --- Actions secrets delivered to forge repositories (TOOL-062) ---------
+    #
+    # personal/resume's Google Drive publish (resume#272). The three OAuth values
+    # were minted on GitHub in 2026-05 and could not be carried over: neither forge
+    # returns a secret's value (#1626), so they were re-minted with the repo's own
+    # `scripts/get_drive_refresh_token.py` and recorded here, the first time they
+    # have had a source anyone can re-push from.
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.gdrive_oauth_client_id",
+        description="Google OAuth client id resume's publish-drive exchanges for a Drive access token",
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note=_GDRIVE_ROTATE,
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.gdrive_oauth_client_secret",
+        description="Google OAuth client secret paired with gdrive_oauth_client_id",
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note=_GDRIVE_ROTATE,
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.gdrive_oauth_refresh_token",
+        description="Long-lived Drive refresh token (scope drive.file) minted by scripts/get_drive_refresh_token.py",
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note=_GDRIVE_ROTATE,
+        # NEVER in the module's sense: no issuer schedule to ask. It is not
+        # immortal -- Google revokes a refresh token unused for six months, or
+        # after seven days while the consent screen is still in "Testing" -- and
+        # both surface as the workflow's `invalid_grant`, which the rotate note
+        # answers.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.gdrive_folder_id",
+        description="Drive folder id the resume PDFs are uploaded into (the `resumes` folder)",
+        # Not a credential -- it is where uploads land, not what authorises them
+        # (resume runbook guide-gdrive-publish-setup.md, "Blast radius"). Delivered
+        # as a secret only because the workflow has always read it as one.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note="Changes only if the folder moves: set the new id, then push with `--force`.",
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
     ),
     # =========================================================================
     # Vikunja (IDP-035)
@@ -1257,6 +1332,42 @@ def secrets_synced_to_secret_manager() -> tuple[SecretSpec, ...]:
     the same or it will report a false gap.
     """
     return tuple(s for s in SECRET_CATALOG if s.sync_to_secret_manager)
+
+
+#: Gitea's documented rule for an Actions secret name (docs, "Secrets"): letters,
+#: digits and underscores, not starting with a digit. Upper-case only here because
+#: the name is derived from a lower-case SOPS leaf.
+_FORGE_SECRET_NAME = re.compile(r"[A-Z_][A-Z0-9_]*")
+#: Prefixes Gitea reserves for the variables it injects itself.
+_FORGE_RESERVED_PREFIXES = ("GITHUB_", "GITEA_")
+
+
+def forge_actions_secret_name(key_path: str) -> str:
+    """The Actions secret name a SOPS key is delivered under, by rule.
+
+    The key path's last segment, upper-cased: `...personal.resume.gdrive_folder_id`
+    is read by the workflow as `secrets.GDRIVE_FOLDER_ID`. Deriving it means the
+    name exists once. Declaring it per entry would let the SOPS key and the name a
+    workflow asks for disagree, and on the forge that disagreement is silent -- an
+    unknown secret resolves to an empty string.
+
+    A name Gitea would refuse is rejected HERE, when the catalog entry is written,
+    rather than as a 400 at apply time. Only the leaf is kept, so two entries whose
+    leaves match collide in one repository; the test suite asserts none do.
+    """
+    name = key_path.rsplit(".", 1)[-1].upper()
+    if not _FORGE_SECRET_NAME.fullmatch(name) or name.startswith(_FORGE_RESERVED_PREFIXES):
+        raise ValueError(
+            f"{key_path!r} maps to Actions secret {name!r}, which Gitea refuses: names are "
+            f"[A-Za-z0-9_], may not start with a digit, and may not start with "
+            f"{' or '.join(_FORGE_RESERVED_PREFIXES)}"
+        )
+    return name
+
+
+def secrets_delivered_to_forge() -> tuple[SecretSpec, ...]:
+    """Every catalog entry some forge repository receives as an Actions secret (TOOL-062)."""
+    return tuple(s for s in SECRET_CATALOG if s.forge_actions)
 
 
 # =============================================================================
