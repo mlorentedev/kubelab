@@ -146,7 +146,9 @@ def review_cmd(
     Gitea and Grafana keep the tier in their own database and apply the group rule
     only at login, so a demotion changes nothing until it is reconciled here. With
     --apply, an open session loses the privilege on its next request. Exits 1
-    while any drift, undeclared account or unreadable app remains.
+    while any drift, undeclared account or unreadable app remains, and when the
+    declaration disagrees with the break-glass account, which the review refuses
+    to edit and a human has to resolve.
     """
     from toolkit.features.access_review import review_env
 
@@ -159,7 +161,7 @@ def review_cmd(
         declared = f.declared if f.declared is not None else "-"
         detail = f"  {f.detail}" if f.detail else ""
         typer.echo(f"  {f.service:<8} {f.user:<10} declared={declared:<7} live={f.live:<12} {f.status.upper()}{detail}")
-    blocking = [f for f in findings if f.status in ("drift", "undeclared", "failed")]
+    blocking = [f for f in findings if f.status in ("drift", "undeclared", "failed", "refused")]
     if blocking:
         hint = "" if apply else " Re-run with --apply to set the declared tiers."
         typer.echo(f"{len(blocking)} finding(s) need action.{hint}", err=True)

@@ -225,3 +225,25 @@ def test_argo_cd_is_judged_on_the_live_hub_config(live_cm: str, enforced: bool) 
     assert bound.startswith("groups from UserInfo") is enforced
     if enforced:
         assert "5m" in bound
+
+
+@pytest.mark.parametrize(
+    ("status", "exit_code"),
+    [("ok", 0), ("fixed", 0), ("bounded", 0), ("drift", 1), ("undeclared", 1), ("failed", 1), ("refused", 1)],
+)
+def test_the_command_exits_1_on_every_finding_a_human_must_act_on(
+    monkeypatch: pytest.MonkeyPatch, status: str, exit_code: int
+) -> None:
+    """A refused finding is a declaration that lost the break-glass account: the review
+    will not fix it, so a green exit would hide the one thing only a human can repair."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.auth import app
+    from toolkit.features import access_review
+    from toolkit.features.access_review import Finding
+
+    monkeypatch.setattr(
+        access_review, "review_env", lambda *a, **k: [Finding("gitea", "manu", "admin", "user", status)]
+    )
+    result = CliRunner().invoke(app, ["review", "--env", "staging"])
+    assert result.exit_code == exit_code, result.output
