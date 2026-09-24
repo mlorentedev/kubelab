@@ -1163,13 +1163,21 @@ def gitea_actions_secrets(
 
     try:
         client = ga.authoring_client(merged)
-        live: dict[str, set[str] | None] = {}
-        for repo in sorted({t.repo for t in targets}):
-            owner, name = repo.split("/", 1)
-            live[repo] = client.list_actions_secret_names(owner, name)
-    except (ga.AuthoringError, GiteaError, requests.RequestException) as exc:
-        logger.error(f"could not read Actions secrets from the forge: {exc}")
+    except ga.AuthoringError as exc:
+        logger.error(str(exc))
         raise typer.Exit(1) from exc
+
+    # Per repository, so one that cannot be read is reported as unreachable -- a state
+    # the plan already models -- and the others still converge. A single try around
+    # the loop would let one repository's outage abort delivery to every other.
+    live: dict[str, set[str] | None] = {}
+    for repo in sorted({t.repo for t in targets}):
+        owner, name = repo.split("/", 1)
+        try:
+            live[repo] = client.list_actions_secret_names(owner, name)
+        except (GiteaError, requests.RequestException) as exc:
+            logger.warning(f"could not list Actions secrets on {repo}: {exc}")
+            live[repo] = None
 
     valued = {t.key_path for t in targets if sops_value(merged, t.key_path)}
     plan = plan_actions_secrets(targets, live, valued, force=force)

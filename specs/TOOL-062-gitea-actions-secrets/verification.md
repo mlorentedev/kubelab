@@ -35,7 +35,8 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 
 ## Test status
 
-- `pytest tests/test_gitea_actions_secrets.py`: 32 passed.
+- `pytest tests/test_gitea_actions_secrets.py`: 35 passed after the review fixes (32 before).
+- Secrets and Gitea subset (`-k "secret or gitea or catalog or expiry"`): 554 passed.
 - Full suite: `pytest -q --no-cov`: 2587 passed, 15 skipped, 155 deselected (4m10s).
 - `ruff check`, `ruff format --check` and `mypy` on the four changed modules and the test file: clean.
 - Live read on 2026-09-23: superadmin basic auth
@@ -54,6 +55,11 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
   a credential at all; it is not merely filtered out of the output.
 - **An incomplete declaration exits 1 in plan mode too.** "Nothing to write" because a source is
   missing is not convergence.
+- **Review of #1816, all applied:**
+  - `features.json` states went back to `pending`: only the harness may write `passing`.
+  - The write-time empty-value refusal now has a test.
+  - One repository failing to list becomes `unreachable` instead of aborting the run.
+  - A forge error that echoes the value is redacted before it is recorded.
 - **Placeholder values count as missing.** A `CHANGEME` would pass the workflow's empty-input
   guard and then fail at the provider's API, which does not say which input was wrong.
 
