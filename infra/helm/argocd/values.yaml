@@ -197,7 +197,8 @@ configs:
         hs.status = "Progressing"
       end
       return hs
-    # Admin local account: API key only (CLI fallback), no web login
+    # Admin local account. NOT apiKey-only: v3.4.1 creates `admin` with `login`
+    # and appends these capabilities. Its removal is the single-door change.
     accounts.admin: apiKey
     # Custom branding CSS (ADR-032)
     ui.cssurl: "https://assets.kubelab.live/brand/brand.css"
@@ -213,6 +214,15 @@ configs:
         - profile
         - email
         - groups
+      # Authelia 4.39 sends `groups` in UserInfo, not in the ID token, so the
+      # RBAC below matched nobody and every SSO user fell to policy.default
+      # (role:readonly). Measured 2026-09-24: User Info showed no groups.
+      # The cache bounds how long a changed group goes unseen here; it is what
+      # `make auth-review` reports for Argo CD. It needs the SSO access token,
+      # which Argo CD keeps in its Redis: a Redis restart signs every SSO user out.
+      enableUserInfoGroups: true
+      userInfoPath: /api/oidc/userinfo
+      userInfoCacheExpiration: 5m
   rbac:
     policy.csv: |
       g, admins, role:admin
