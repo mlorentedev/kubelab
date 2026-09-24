@@ -96,7 +96,12 @@ access_control:
 
 # ---- Session ----
 session:
-  name: authelia_session
+  # NOT `authelia_session`, which is prod's. Prod's cookie is scoped to
+  # `kubelab.live`, so a browser sends it to every *.staging.kubelab.live host
+  # too. With a shared name, staging reads prod's session, finds nothing in its
+  # own store, and treats a user who just logged in as anonymous (#1805).
+  # tests/test_authelia_session_cookies.py fails if two envs collide again.
+  name: authelia_session_staging
   same_site: lax
   inactivity: 1h
   expiration: 8h
