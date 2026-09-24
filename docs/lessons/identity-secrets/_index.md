@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-59 lessons, newest first. Back to [all categories](../_index.md).
+60 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 454 | [A SOPS file conflict is resolved by re-setting the key on upstream's file, never by merging the text](lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text.md) | 2026-09-23 |
 | 447 | [A trusted identity header is as wide as whatever can reach the port](lesson-447-a-trusted-identity-header-is-as-wide-as-whatever-can-reach-the-port.md) | 2026-08-26 |
 | 425 | [A capability probe can stop at the first authorization layer and report the whole answer](lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer.md) | 2026-09-04 |
 | 421 | [A secret read from the wrong SOPS store resolves to `''`, so a presence gate on it is open forever](lesson-421-secret-written-to-one-sops-store-read-from-another.md) | 2026-09-02 |

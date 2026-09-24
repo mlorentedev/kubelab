@@ -1708,6 +1708,27 @@ apps:
           # Entries that are NOT declared identities keep `username:` (see
           # testuser). The two are mutually exclusive by design: a user is
           # either a person the platform declares, or a fixture.
+          #
+          # EVERY ENTRY NEEDS ITS OWN EMAIL. Apps key accounts on it: Grafana keeps
+          # it unique across users, so a second user with the same email fails to
+          # log in there. Gitea is worse. With `ACCOUNT_LINKING=auto` it
+          # links an SSO login to an existing account with the same username or
+          # email, so a shared email would log one identity in as another.
+          # `tests/test_admin_identity_ssot.py` fails CI on a duplicate. An
+          # identity entry with no `email:` gets `apps.contact.email`, so at most
+          # one entry may omit it.
+          #
+          # `groups` decide access: `admins` is the admin tier in Grafana, Argo CD
+          # and Gitea, and Gitea admits only members of `users`.
+        - identity: superadmin
+          displayname: Manu
+          # The address the superadmin's Gitea account already holds, which is
+          # also where the Gitea bootstrap takes the admin's email from.
+          email: manu@mlorente.dev
+          disabled: false
+          groups:
+          - admins
+          - users
         - identity: operator
           displayname: Administrator
             # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
@@ -1715,11 +1736,13 @@ apps:
           groups:
           - admins
           - users
+        # A fixture, not a person. It sits in its own group so that no app
+        # granting access by group admits it: prod e2e logs in with it.
         - username: testuser
           displayname: "E2E Test User"
           email: "testuser@kubelab.test"
           groups:
-          - users
+          - e2e
 
         # BREAK-GLASS (AUTH-004 AC7, ADR-062 D4): how each service that depends on
         # this IdP is reached while it is down. The path never goes through the

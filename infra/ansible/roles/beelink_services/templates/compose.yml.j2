@@ -53,6 +53,24 @@ services:
       # no SSH_LISTEN_PORT: that configures the built-in server, which is off.
       GITEA__server__SSH_PORT: "{{ gitea_ssh_port }}"
       GITEA__service__DISABLE_REGISTRATION: "true"
+      # AUTH-004 AC3: accounts come from the IdP. The first SSO login of someone
+      # Authelia admits creates their account, with nothing to do by hand in
+      # Gitea. DISABLE_REGISTRATION above still closes the sign-up form: Gitea
+      # 1.25.5 checks only ALLOW_ONLY_INTERNAL_REGISTRATION on this path
+      # (routers/web/auth/oauth.go, SignInOAuthCallback), and the form's own
+      # handler still refuses (AC4). Who gets in is decided by the auth source
+      # that gitea-bootstrap.sh configures: only the `users` group, with admin
+      # rights following `admins`.
+      GITEA__oauth2_client__ENABLE_AUTO_REGISTRATION: "true"
+      # Gitea's default is `nickname`, which Authelia does not send.
+      GITEA__oauth2_client__USERNAME: "preferred_username"
+      # An SSO login whose username or email matches an existing account is
+      # linked to it, username first (auth.go, createUserInContext). This is how
+      # the superadmin's local account, which is also the break-glass account,
+      # gains its SSO login without being recreated, and it stays a local account
+      # (break-glass keeps working). It is also why every Authelia user must have
+      # a distinct email: see the users list in common.yaml.
+      GITEA__oauth2_client__ACCOUNT_LINKING: "auto"
       # SEC-GITEA-001 (#1389). Gitea's default is `false`, and `gitea.kubelab.live`
       # has a public Cloudflare A record whose IngressRoute carries no network
       # restriction — so without this, everything a repository marks public is

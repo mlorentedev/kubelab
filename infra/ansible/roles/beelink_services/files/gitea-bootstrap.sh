@@ -92,6 +92,17 @@ fi
 
 OIDC_SCOPES="openid,profile,email,groups"
 
+# AUTH-004 AC3/AC2: who the IdP lets in, and who is admin. Gitea reads the
+# `groups` claim on every SSO login. It refuses anyone outside `users` (the e2e
+# fixture is in its own group for this reason), and sets or clears the admin
+# flag from membership of `admins`, so the tier lives in Authelia rather than
+# in Gitea's database. The names are the groups declared on
+# apps.services.security.authelia.users in common.yaml.
+# tests/test_gitea_bootstrap_idempotence.py fails if they stop matching.
+OIDC_GROUP_CLAIM="groups"
+OIDC_ADMIN_GROUP="admins"
+OIDC_REQUIRED_GROUP="users"
+
 # Where the last successfully-written configuration is fingerprinted. On /data,
 # so it survives container recreation the way the database it describes does.
 # Overridable for tests, same shape as GITEA_HEALTH_PATH above: if the default
@@ -115,7 +126,8 @@ OIDC_STATE="${GITEA_BOOTSTRAP_STATE:-/data/gitea/.kubelab-oidc-bootstrap.sha256}
 # the secret generator happens to use. Raised in review of #1421.
 OIDC_DESIRED=$(
   for _field in "authelia" "openidConnect" "gitea" \
-    "$GITEA_OIDC_CLIENT_SECRET" "$GITEA_OIDC_DISCOVERY_URL" "$OIDC_SCOPES"; do
+    "$GITEA_OIDC_CLIENT_SECRET" "$GITEA_OIDC_DISCOVERY_URL" "$OIDC_SCOPES" \
+    "$OIDC_GROUP_CLAIM" "$OIDC_ADMIN_GROUP" "$OIDC_REQUIRED_GROUP"; do
     printf '%s:%s|' "${#_field}" "$_field"
   done | sha256sum | awk '{print $1}'
 )
@@ -141,7 +153,11 @@ if [ -n "$AUTH_ID" ]; then
     --key gitea \
     --secret $GITEA_OIDC_CLIENT_SECRET \
     --auto-discover-url $GITEA_OIDC_DISCOVERY_URL \
-    --scopes $OIDC_SCOPES"
+    --scopes $OIDC_SCOPES \
+    --group-claim-name $OIDC_GROUP_CLAIM \
+    --admin-group $OIDC_ADMIN_GROUP \
+    --required-claim-name $OIDC_GROUP_CLAIM \
+    --required-claim-value $OIDC_REQUIRED_GROUP"
   if [ "$OIDC_DESIRED" = "$OIDC_RECORDED" ]; then
     # Neither "Created" nor "Updated": the words the Ansible guard matches on.
     log "OIDC provider already matches recorded state (ID=$AUTH_ID)"
@@ -156,7 +172,11 @@ else
     --key gitea \
     --secret $GITEA_OIDC_CLIENT_SECRET \
     --auto-discover-url $GITEA_OIDC_DISCOVERY_URL \
-    --scopes $OIDC_SCOPES"
+    --scopes $OIDC_SCOPES \
+    --group-claim-name $OIDC_GROUP_CLAIM \
+    --admin-group $OIDC_ADMIN_GROUP \
+    --required-claim-name $OIDC_GROUP_CLAIM \
+    --required-claim-value $OIDC_REQUIRED_GROUP"
   record_oidc_state
   log "Created OIDC provider"
 fi

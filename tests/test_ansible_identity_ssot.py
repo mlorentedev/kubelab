@@ -84,3 +84,30 @@ def test_every_identity_resolves_from_the_declared_map() -> None:
     a literal, or a third alias, would pass the test above and fail this one."""
     for name, expr in _identity_vars().items():
         assert "apps.auth.identities." in expr, f"{name} does not resolve from the identity map: {expr!r}"
+
+
+def test_the_gitea_admin_email_is_the_superadmins() -> None:
+    """AUTH-004 AC3. Rendered, not grepped: the expression must produce the email.
+
+    It was `apps.contact.email`, which is also the operator's Authelia email. The
+    live admin happened to hold another address because it predates that line.
+    But a rebuilt forge would create the admin with the operator's email, and
+    `ACCOUNT_LINKING=auto` would then link the operator's first SSO login to the
+    admin account.
+    """
+    import jinja2
+
+    expr = None
+    for doc in yaml.safe_load_all(BEELINK_PLAYBOOK.read_text()):
+        for play in doc if isinstance(doc, list) else [doc]:
+            for role in (play or {}).get("roles") or [] if isinstance(play, dict) else []:
+                if isinstance(role, dict) and "gitea_admin_email" in (role.get("vars") or {}):
+                    expr = role["vars"]["gitea_admin_email"]
+    assert expr, "provision-bee.yml no longer sets gitea_admin_email"
+
+    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+    rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(expr).render(gitea_config=common).strip()
+    users = common["apps"]["services"]["security"]["authelia"]["users"]
+    superadmin = next(u for u in users if u.get("identity") == "superadmin")
+    assert rendered == superadmin["email"]
+    assert rendered != common["apps"]["contact"]["email"]
