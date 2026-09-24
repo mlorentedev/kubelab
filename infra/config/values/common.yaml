@@ -1709,9 +1709,9 @@ apps:
           # testuser). The two are mutually exclusive by design: a user is
           # either a person the platform declares, or a fixture.
           #
-          # EVERY ENTRY NEEDS ITS OWN EMAIL. Apps key accounts on it: Grafana and
-          # Vikunja keep it unique per user, so a second user with the same email
-          # fails to log in there. Gitea is worse. With `ACCOUNT_LINKING=auto` it
+          # EVERY ENTRY NEEDS ITS OWN EMAIL. Apps key accounts on it: Grafana keeps
+          # it unique across users, so a second user with the same email fails to
+          # log in there. Gitea is worse. With `ACCOUNT_LINKING=auto` it
           # links an SSO login to an existing account with the same username or
           # email, so a shared email would log one identity in as another.
           # `tests/test_admin_identity_ssot.py` fails CI on a duplicate. An

@@ -318,8 +318,8 @@ class TestApplyRefusesWithoutTheIdentity:
 class TestEveryIdentityHasItsOwnEmail:
     """AUTH-004 AC3. An email identifies exactly one account, in every app.
 
-    Apps key accounts on the email claim. Grafana and Vikunja keep it unique, so a
-    second Authelia user with the same email fails to log in there. Gitea is the
+    Apps key accounts on the email claim. Grafana keeps it unique across users, so
+    a second Authelia user with the same email fails to log in there. Gitea is the
     dangerous one: with `ACCOUNT_LINKING=auto`, an SSO login whose email matches
     an existing account is linked to that account, so a shared email logs one
     identity in as another. The loader gives every `identity:` entry with no
