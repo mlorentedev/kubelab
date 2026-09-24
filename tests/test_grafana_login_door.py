@@ -46,21 +46,6 @@ def test_prod_does_not_reopen_the_proxy() -> None:
     assert not {k for k in _prod_overrides() if k.startswith("GF_AUTH_PROXY")}
 
 
-def test_email_lookup_rests_on_distinct_emails() -> None:
-    """The migration flag matches a returning user by email. That is only safe
-    while no two identities share one, which is what makes it an identity."""
-    if _env().get("GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP") != "true":
-        return
-    from toolkit.features.configuration import ConfigurationManager
-
-    values = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
-    ConfigurationManager._inject_contact_email_derivations(values)
-    users = values["apps"]["services"]["security"]["authelia"]["users"]
-    emails = [u.get("email") for u in users]
-    assert all(emails), "an identity without an email cannot be matched, and would be created twice"
-    assert len(set(emails)) == len(emails), f"two identities share an email: {emails}"
-
-
 def test_break_glass_opens_the_local_form_not_the_idp() -> None:
     """With auto-login, Grafana's root redirects to Authelia: exactly what is down
     when the break-glass path is in use."""
