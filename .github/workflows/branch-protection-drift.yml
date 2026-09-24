@@ -13,8 +13,9 @@ name: Branch protection drift
 # is the CI GitHub App from the machine-identity decision (dotfiles ADR,
 # pending). Until it exists this runs by hand and fails closed without a token;
 # when it lands, the token below is minted from the App and a `schedule:` is
-# added here. A scheduled job that skipped for want of a token would read as a
-# control while checking nothing.
+# added here. Scheduling it now would not skip — the first step fails closed —
+# but it would be red every day for a reason nobody can act on, and an alarm
+# that is always red is one people learn to ignore.
 
 on:
   workflow_dispatch:
