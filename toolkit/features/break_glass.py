@@ -32,6 +32,9 @@ treats an SSO-linked account as external and refuses every password change on it
 so the emergency account there must be one no IdP login can ever link. Its login
 and email must match no Authelia user, because Grafana finds an existing account
 by email when the migration flag is on.
+
+A reachable form (an account, or `{}`) may add `path`, the page to open instead
+of the root. Grafana needs it: its root sends the browser to the IdP.
 """
 
 from __future__ import annotations
@@ -51,6 +54,8 @@ FORWARD_AUTH_MIDDLEWARE = "authelia"
 CLUSTER_TARGETS = ("staging", "prod", "hub")
 _FORMS = ("identity", "login", "email", "secret", "cluster", "none")
 _ACCOUNT = ("identity", "login", "email", "secret")
+#: Fields that refine a form rather than choose one.
+_EXTRAS = ("path",)
 _HOST = re.compile(r"Host\(`([^`]+)`\)")
 
 
@@ -186,7 +191,7 @@ def validate(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) 
     identities = _lookup(values, "apps.auth.identities") or {}
     problems: list[str] = []
     for name, decl in decls.items():
-        unknown = sorted(set(decl) - set(_FORMS))
+        unknown = sorted(set(decl) - set(_FORMS) - set(_EXTRAS))
         if unknown:
             problems.append(f"{name}: unknown field(s) {unknown}")
             continue
@@ -198,6 +203,11 @@ def validate(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) 
             continue
         if "none" in decl and not str(decl["none"]).strip():
             problems.append(f"{name}: `none` needs a reason")
+        if "path" in decl:
+            if forms and forms != ["account"]:
+                problems.append(f"{name}: `path` only applies to a reachable form, not {forms}")
+            elif not str(decl["path"]).startswith("/"):
+                problems.append(f"{name}: `path` must start with '/'")
         if "cluster" in decl and decl["cluster"] not in CLUSTER_TARGETS:
             problems.append(f"{name}: cluster '{decl['cluster']}' is not one of {CLUSTER_TARGETS}")
         if forms == ["account"]:

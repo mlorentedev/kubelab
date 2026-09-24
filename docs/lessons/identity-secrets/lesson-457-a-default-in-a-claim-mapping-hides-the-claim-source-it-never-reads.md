@@ -27,8 +27,8 @@ Two apps assumed the ID token:
 - **Argo CD** read groups from the ID token only, so `g, admins, role:admin`
   matched nobody and every SSO user fell to `policy.default: role:readonly`.
 
-Configs and ADRs said the tier was enforced (#951 was closed on the config),
-and nobody had measured it.
+Configs and ADRs said the tier was enforced (#951 was counted as done on the
+config), and nobody had measured it.
 
 **Solution**: Grafana's path returns null when `groups` is absent
 (`groups != null && (...) || null`), which sends it on to UserInfo. Argo CD sets
@@ -36,6 +36,15 @@ and nobody had measured it.
 changed group goes unseen. `tests/test_access_review.py` evaluates every role
 path in the repo with a real JMESPath engine against an ID token with no groups.
 `make auth-review` keeps measuring the live tier.
+
+**Correction (2026-09-24, same day)**: the Grafana half of this diagnosis was
+incomplete. The role-path defect was real, but it is not what produced the
+measured `Viewer`. Through the public route Grafana never ran an OAuth login at
+all: its auth proxy logged every user in from Authelia's `Remote-User` header,
+and the proxy maps no role. Fixing the path changed nothing a user could see.
+It took a real login after the fix to show it: the profile said "Synced via
+Auth Proxy". See lesson-458. The Argo CD half stands, measured after deploy as
+`argocd BOUNDED` with `admins` in User Info.
 
 **Rule**: In a claim mapping evaluated over several sources in order, a default
 turns "not here" into an answer and stops the search. Return empty when the

@@ -3,8 +3,9 @@
 Two defects this pins, both measured on 2026-09-24 by the first `make auth-review`:
 
 - Grafana's role path returned 'Viewer' from the ID token, which carries no
-  `groups` under Authelia 4.39, so Grafana never read UserInfo and every SSO user
-  was Viewer, admins included.
+  `groups` under Authelia 4.39, so Grafana would never read UserInfo. The Viewer
+  actually measured had a second cause that hid this one: the auth proxy logged
+  users in before OAuth ran (lesson-458, tests/test_grafana_login_door.py).
 - Argo CD read `groups` from the ID token only, so `g, admins, role:admin` matched
   nobody and every SSO user fell to `role:readonly`.
 

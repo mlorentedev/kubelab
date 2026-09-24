@@ -110,12 +110,15 @@ def break_glass_cmd(
         raise typer.Exit(0 if reachable else 1)
 
     if isinstance(plan, bg.Direct):
-        typer.echo(f"  way in:   {plan.url}  (over the tailnet, bypassing the router and the IdP)")
+        typer.echo(
+            f"  way in:   {plan.url}{decl.get('path', '')}  (over the tailnet, bypassing the router and the IdP)"
+        )
         _account_guidance(env, decl, values)
         return
 
     local = bg.free_local_port()
-    typer.echo(f"  way in:   http://127.0.0.1:{local}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
+    way_in = f"http://127.0.0.1:{local}{decl.get('path', '')}"
+    typer.echo(f"  way in:   {way_in}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
     _account_guidance(env, decl, values)
     if dry_run:
         return
