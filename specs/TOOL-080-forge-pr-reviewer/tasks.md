@@ -31,19 +31,20 @@ created: "2026-09-23"
 ## PR 4 — the server in the cluster
 
 - [ ] [P] [AC6] Failing tests: catalog and mapping for `nan_api_key` and `webhook_secret`, and required keys only (no `optional: true` on any `secretKeyRef`).
-- [ ] [P] [AC4] Failing test: the rendered prod ConfigMap has `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` equal to `["/review"]` and `GITEA__HANDLE_PUSH_TRIGGER=true`.
+- [ ] [P] [AC4] Failing test: the rendered prod ConfigMap has `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` equal to `["/review"]`, `GITEA__HANDLE_PUSH_TRIGGER=true`, and no `GITEA__REPO_SETTING`, which would let a PR's head rewrite the reviewer's config.
 - [ ] [AC6] SOPS: generate `webhook_secret` (RANDOM_HEX). Copy `nan_api_key` from Bitwarden through a pipe (`dotf secrets run --only NAN_API_KEY -- sh -c 'printf %s "$NAN_API_KEY" | toolkit secrets set … --stdin'`), never through argv or stdout. Add `rotate_note` naming that re-copy, and add `k8s:kubelab/pr-agent` to the dotfiles registry consumers.
 - [ ] [AC1] `pr-agent.yaml` in the prod overlay: Deployment (limits, `enableServiceLinks: false`, standard labels), ClusterIP Service, IngressRoute (`secure-headers`, `rate-limit`, `crowdsec-bouncer`), and `configMapGenerator`. Image in `common.yaml` plus `make sync-k8s-images`, with Renovate coverage.
 - [ ] Measure non-root. If it works, set `runAsNonRoot`, `readOnlyRootFilesystem` and an `emptyDir` on `/tmp`. If not, record why in the manifest.
 - [ ] DNS row `pr-agent` in `infra/terraform/dns/services.json`, with no `target`.
 - [ ] Live: `make apply-secrets ENV=prod`, Argo sync, flip the hook to `active: true`, reconcile.
+- [ ] [AC1] [AC2] Write `tests/infra/test_pr_agent_review_live.py`, marked like the other `tests/infra/*_live.py` tests. Given the PR number recorded in `verification.md`, it asserts exactly one reviewer-authored `PR Reviewer Guide` comment on that PR, and that its `updated_at` is later than the latest push.
 - [ ] [AC1] [AC2] [AC4] By effect: open a test PR on `personal/resume`, push once, and record the comment id, its author, and that the title and body are unchanged.
 - [ ] [AC3] By effect: an unsigned POST and a wrongly signed POST are both refused.
 - [ ] Measure a burst (at least 3 PRs at once). Decide whether to pin gunicorn `workers`.
 
 ## PR 5 — the silence detector
 
-- [ ] [AC8] Failing test for the watcher's selection logic: head older than N minutes, and no reviewer comment updated after it.
+- [ ] [AC8] Failing tests for the watcher's selection logic. Silence is measured from the PR's creation or its latest `pull_push` timeline event, never from the head commit's date. Cases: an old-dated head on a fresh push must not page, a future-dated head must still page after N minutes, and a reviewer comment updated after the event clears it.
 - [ ] [AC8] CronJob (r2-backup-watcher pattern) emitting one JSON line per unreviewed PR, and a Grafana rule on it through `apprise-log`. Register it in the `grafana-alerting` generator.
 - [ ] [AC8] By effect: scale the server to 0, open a PR, and see the alert fire.
 

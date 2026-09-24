@@ -2,14 +2,14 @@
   {
     "id": "TOOL-080-forge-pr-reviewer-f1",
     "behavior": "AC1: A PR opened on personal/resume gets a PR Reviewer Guide comment authored by the reviewer account within 10 minutes",
-    "verification": "echo 'by effect: see verification.md AC1' && exit 1",
+    "verification": "poetry run pytest -q tests/infra/test_pr_agent_review_live.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "TOOL-080-forge-pr-reviewer-f2",
     "behavior": "AC2: A push to an open PR updates the same review comment instead of adding a second one",
-    "verification": "echo 'by effect: see verification.md AC2' && exit 1",
+    "verification": "poetry run pytest -q tests/infra/test_pr_agent_review_live.py",
     "state": "pending",
     "evidence": ""
   },
@@ -22,7 +22,7 @@
   },
   {
     "id": "TOOL-080-forge-pr-reviewer-f4",
-    "behavior": "AC4: Reviewing never edits the PR: PR_COMMANDS and PUSH_COMMANDS are exactly [\"/review\"]",
+    "behavior": "AC4: Reviewing never edits the PR: PR_COMMANDS and PUSH_COMMANDS are exactly [\"/review\"] and GITEA__REPO_SETTING is unset",
     "verification": "poetry run pytest -q tests/test_pr_agent_manifest.py -k commands",
     "state": "pending",
     "evidence": ""

@@ -45,7 +45,7 @@ The components:
    - `GITEA__HANDLE_PUSH_TRIGGER=true` with `GITEA__PUSH_COMMANDS=["/review"]`. Upstream ignores `synchronized` unless this is set, so a push would otherwise go unreviewed.
    - `PR_REVIEWER__PERSISTENT_COMMENT=true`.
 
-   A repository's own `.pr_agent.toml` on its default branch still applies (`apply_repo_settings`). That is where per-repository instructions live.
+   `GITEA__REPO_SETTING` stays **unset**, so PR-Agent reads no repository-level `.pr_agent.toml`. Where the 0.45.0 Gitea provider does read one (`get_repo_settings`, only when that key names a path), it reads it at the pull request's **head SHA**. That would let the PR author rewrite the reviewer's own configuration in the change under review. All configuration therefore comes from this ConfigMap.
 3. **Secrets**, one K8s Secret produced by `make apply-secrets` from three new SOPS keys. All three are required, none optional:
 
    | SOPS key | Env var | Kind |
@@ -64,13 +64,15 @@ The components:
 6. **Ingress.** An IngressRoute on `Host(pr-agent.kubelab.live) && Path(/api/v1/gitea_webhooks)`, on the `websecure` entry point with Let's Encrypt.
    - Middlewares: `secure-headers`, `rate-limit`, `crowdsec-bouncer`. There is no `authelia`: the HMAC signature is the authentication, as with n8n's `/webhook/`.
    - DNS gets a row in `infra/terraform/dns/services.json` with no `target`. That is the same public-IP path `n8n.kubelab.live` already uses successfully under Gitea's default `ALLOWED_HOST_LIST`.
-7. **Detector.** A CronJob in the r2-backup-watcher style lists open pull requests on the declared repositories. For each one whose head commit is older than N minutes and has no reviewer-authored comment updated after it, it emits one JSON line. A Grafana rule on that line pages through `apprise-log`.
+7. **Detector.** A CronJob in the r2-backup-watcher style lists open pull requests on the declared repositories. It measures silence from the event that introduced the current head: the PR's creation, or its latest `pull_push` timeline entry. It never uses the head commit's date, which the author controls, so an old commit would page at once and a future-dated one would hide the silence. A PR that is more than N minutes past that event, with no reviewer-authored comment updated after it, produces one JSON line. A Grafana rule on that line pages through `apprise-log`.
 
 ## Out of scope
 
 - **Slash commands** (`/review`, `/ask` and the rest in comments). The upstream Gitea server runs any comment starting with `/` from any author (`handle_comment_event`). It has no equivalent of the OWNER/MEMBER/COLLABORATOR gate `pr-agent.yml` applies on GitHub, and OAuth auto-registration is on. So the hook subscribes to `pull_request` only. A follow-up can add `issue_comment` behind an author filter.
 - **A review check or merge gate.** The forge has no branch protection (TOOL-063 #1633), and `review-attestation.yml` depends on `workflow_run`, which is unmeasured on Gitea 1.25.
 - **Porting `dotf pr triage-queue` to the forge** (mlorentedev/dotfiles#1622).
+  Until it ports, dispositions stay a `## Review triage` comment posted by hand on each forge PR, which is today's practice.
+- **Per-repository PR-Agent instructions.** They need a settings read from the base branch, which the upstream Gitea provider does not offer. A follow-up either upstreams that or reads the file in a wrapper.
 - **Staging.** The Gitea route and the singleton-forge hooks exist in prod only.
 - **Keeping one NaN credential across Bitwarden and SOPS.** Manu accepted the copy. See Risks.
 
@@ -81,6 +83,7 @@ The components:
 - **NaN concurrency.** NaN allows 5 concurrent requests, shared across every consumer (#1203). gunicorn starts 2–4 workers depending on the CPU limit, and each can run several background reviews. Five rebased PRs at once (measured on resume, 2026-09-24) would be five concurrent calls. The fallback model absorbs a 429. Pinning `workers` via a small gunicorn config override is decided in the manifests PR, after one burst has been measured.
 - **To measure in the identity PR:** whether a read-team member with a `write:issue` token can comment on a pull request, and whether PR-Agent's Gitea provider needs any other scope (for example `read:user` for `/user`). Scopes are declared from the measurement, not guessed.
 - **To measure in the manifests PR:** whether the image runs as non-root with a read-only root filesystem plus an `emptyDir` on `/tmp`. The image declares no user, so it runs as root. If it works, `securityContext` gets `runAsNonRoot`; if not, the reason is recorded in the manifest.
+- **Correction to #1823.** The probe logged `get_repo_settings: Repository settings not found`, and #1823 read that as the repository having no `.pr_agent.toml`. The source says otherwise: that line means `GITEA.REPO_SETTING` is unset, so no settings file was ever looked for.
 - **The reviewer is a third machine identity.** AUTH-007 (#1781) is already amending ADR-062 D1 for a second machine class. This spec extends the same amendment, rather than starting a parallel one, and lands after or together with it.
 - **Cross-repository refs.** PR-Agent on GitHub reads `resume#N` in a kubelab PR as kubelab#N. On the forge each PR reviews only itself, so this does not apply. Forge issues in this spec are linked by full URL anyway.
 
