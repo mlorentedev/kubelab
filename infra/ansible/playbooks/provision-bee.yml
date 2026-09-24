@@ -244,9 +244,17 @@
         # already relies on exactly that.
         gitea_admin_user: "{{ gitea_config.apps.auth.identities.superadmin }}"
         gitea_admin_password: "{{ gitea_secrets.apps.services.core.gitea.admin_password }}"
-        # SSOT-014c: the config loader injects this for K8s, but Ansible reads the
-        # raw values file, where only apps.contact.email exists.
-        gitea_admin_email: "{{ gitea_config.apps.contact.email }}"
+        # The superadmin's own email, from its Authelia entry (the loader derives
+        # the same for K8s, but Ansible reads the raw values file). It was
+        # apps.contact.email, which is also the operator's email. With SSO
+        # auto-linking on, a fresh Gitea whose admin held that address would link
+        # the operator's first SSO login to the admin account. Used only when the
+        # account is created. Fails loudly if the superadmin's entry has no email.
+        gitea_admin_email: >-
+          {{ (gitea_config.apps.services.security.authelia.users
+              | selectattr('identity', 'defined')
+              | selectattr('identity', 'equalto', 'superadmin')
+              | first).email }}
         gitea_secret_key: "{{ gitea_secrets.apps.services.core.gitea.secret_key }}"
         gitea_oidc_client_secret: "{{ gitea_secrets.apps.services.core.gitea.oidc_client_secret }}"
         # Must be PROD Authelia: the client secret above is prod's, and the issuer

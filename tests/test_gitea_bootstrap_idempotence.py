@@ -57,10 +57,12 @@ DISCOVERY = "https://auth.kubelab.live/.well-known/openid-configuration"
 #: restatement rather than imported from the script, so a change to the recipe
 #: has to be made deliberately in two places instead of silently agreeing with
 #: itself.
-FIELDS = ("authelia", "openidConnect", "gitea", SECRET, DISCOVERY, "openid,profile,email,groups")
+SCOPES = "openid,profile,email,groups"
+#: The auth source's group mapping (AUTH-004 AC3): claim, admin group, required group.
+GROUP_FIELDS = ("groups", "admins", "users")
 
 
-def _expected_hash(secret: str = SECRET, discovery: str = DISCOVERY) -> str:
+def _expected_hash(secret: str = SECRET, discovery: str = DISCOVERY, *, groups: tuple[str, ...] = GROUP_FIELDS) -> str:
     """Length-prefixed, not merely separated — see the script's own comment.
 
     A bare delimiter is ambiguous for any field that can contain it, and two
@@ -68,7 +70,7 @@ def _expected_hash(secret: str = SECRET, discovery: str = DISCOVERY) -> str:
     no change: the lying report this whole ticket removes, reintroduced through
     the encoding. Raised in review of #1421.
     """
-    fields = ("authelia", "openidConnect", "gitea", secret, discovery, "openid,profile,email,groups")
+    fields = ("authelia", "openidConnect", "gitea", secret, discovery, SCOPES, *groups)
     encoded = "".join(f"{len(f)}:{f}|" for f in fields)
     return hashlib.sha256(encoded.encode()).hexdigest()
 
@@ -297,3 +299,74 @@ def test_the_state_encoding_cannot_confuse_two_configurations(harness):
         "change would have been announced as none"
     )
     assert harness.marker.read_text().strip() != first
+
+
+def test_the_group_mapping_is_part_of_the_recorded_state(harness):
+    """A marker written before the group mapping existed must read as a change.
+
+    `update-oauth` writes SQLite, and the running web process keeps the auth
+    source it parsed at startup, so only the restart that `Updated` triggers makes
+    Gitea act on the group claim. Leave a field out of the hash and the first
+    provision after adding it reports "already matches": the flags are stored,
+    Gitea ignores them, and the provision reports success.
+    """
+    harness.marker.write_text(_expected_hash(groups=()) + "\n")
+
+    assert "Updated" in harness.run().stdout, (
+        "the group mapping is not in the recorded state; adding or changing it would "
+        "not restart Gitea, so the running process would keep the old auth source"
+    )
+
+
+@pytest.mark.parametrize("verb", ["update-oauth", "add-oauth"])
+def test_both_writes_carry_the_group_mapping(harness, verb):
+    """Gitea admits only `users` and derives admin from `admins`, on either path.
+
+    The create path runs once per database, so a flag missing from it would only
+    show up on a rebuilt forge, which admits everyone the IdP knows, e2e fixture
+    included.
+    """
+    if verb == "add-oauth":
+        stub = (harness.tmp / "bin" / "su").read_text().replace("7\\tauthelia", "7\\tgithub")
+        (harness.tmp / "bin" / "su").write_text(stub)
+    harness.run()
+    calls = [c for c in harness.calls.read_text().splitlines() if verb in c]
+    assert calls, f"the script never ran {verb}; the harness is not driving this path"
+    flags = " ".join(calls[-1].split())
+    for expected in (
+        "--group-claim-name groups",
+        "--admin-group admins",
+        "--required-claim-name groups",
+        "--required-claim-value users",
+    ):
+        assert expected in flags, f"{verb} does not pass {expected!r}: {flags}"
+
+
+def test_the_mapped_groups_are_the_ones_authelia_declares():
+    """The group names are literals in the script. This ties them to the IdP.
+
+    Rename `users` in common.yaml and every SSO login to Gitea is refused, while
+    the provision still reports success. Rename `admins` and Gitea demotes the
+    superadmin at their next login. Both would show only at the login.
+    """
+    text = SCRIPT.read_text()
+    declared = {
+        name: text.split(f'{name}="', 1)[1].split('"', 1)[0]
+        for name in ("OIDC_GROUP_CLAIM", "OIDC_ADMIN_GROUP", "OIDC_REQUIRED_GROUP")
+    }
+    assert (declared["OIDC_GROUP_CLAIM"], declared["OIDC_ADMIN_GROUP"], declared["OIDC_REQUIRED_GROUP"]) == GROUP_FIELDS
+
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    users = common["apps"]["services"]["security"]["authelia"]["users"]
+    by_identity = {u.get("identity") or u.get("username"): set(u.get("groups") or []) for u in users}
+
+    assert declared["OIDC_ADMIN_GROUP"] in by_identity["superadmin"], (
+        "the superadmin is not in the group Gitea maps to admin, so Gitea would demote them at their next SSO login"
+    )
+    for person in ("superadmin", "operator"):
+        assert declared["OIDC_REQUIRED_GROUP"] in by_identity[person], (
+            f"{person} is not in {declared['OIDC_REQUIRED_GROUP']!r}, so Gitea refuses their SSO login"
+        )
+    assert declared["OIDC_REQUIRED_GROUP"] not in by_identity["testuser"], (
+        "the e2e fixture is in the group Gitea admits, so it would get a forge account"
+    )

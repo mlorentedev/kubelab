@@ -313,3 +313,47 @@ class TestApplyRefusesWithoutTheIdentity:
             f"apply_secrets applied {applied} before refusing; the guard must run BEFORE "
             "anything reaches the cluster, not partway through"
         )
+
+
+class TestEveryIdentityHasItsOwnEmail:
+    """AUTH-004 AC3. An email identifies exactly one account, in every app.
+
+    Apps key accounts on the email claim. Grafana and Vikunja keep it unique, so a
+    second Authelia user with the same email fails to log in there. Gitea is the
+    dangerous one: with `ACCOUNT_LINKING=auto`, an SSO login whose email matches
+    an existing account is linked to that account, so a shared email logs one
+    identity in as another. The loader gives every `identity:` entry with no
+    `email:` the contact address, so two such entries collide without anyone
+    writing a duplicate. Asserted after that derivation, on the real config.
+    """
+
+    @staticmethod
+    def _derived() -> dict[str, Any]:
+        from toolkit.features.configuration import ConfigurationManager
+
+        config = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
+        ConfigurationManager._inject_contact_email_derivations(config)
+        return config
+
+    def test_no_two_authelia_users_share_an_email(self) -> None:
+        users = self._derived()["apps"]["services"]["security"]["authelia"]["users"]
+        by_email: dict[str, list[str]] = {}
+        for user in users:
+            by_email.setdefault(user.get("email", ""), []).append(user.get("identity") or user.get("username"))
+        shared = {email: who for email, who in by_email.items() if len(who) > 1}
+        assert not shared, (
+            f"these Authelia users share an email: {shared}. Give each an explicit `email:`. "
+            "Gitea would link one's SSO login to the other's account."
+        )
+        assert "" not in by_email, f"an Authelia user has no email: {by_email['']}"
+
+    def test_the_gitea_admin_is_created_with_the_superadmins_email(self) -> None:
+        """Gitea's local admin IS the superadmin. On a rebuilt forge, an admin
+        created with anyone else's email would receive that person's SSO login."""
+        config = self._derived()
+        users = config["apps"]["services"]["security"]["authelia"]["users"]
+        superadmin = next(u for u in users if u.get("identity") == "superadmin")
+        others = {u["email"] for u in users if u is not superadmin}
+        gitea_email = config["apps"]["services"]["core"]["gitea"]["admin_email"]
+        assert gitea_email == superadmin["email"]
+        assert gitea_email not in others
