@@ -13,6 +13,7 @@ from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.k8s_kubeconfig import output_path
+from toolkit.features.secret_consumers import restart_consumers
 
 
 @dataclass
@@ -247,11 +248,20 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
 
     # 4. Apply each secret
     all_ok = True
+    changed: set[tuple[str, str]] = set()
     for mapping in SECRET_DEFINITIONS:
         extra = dynamic_literals.get(mapping.name, {})
-        ok = _apply_single_secret(mapping, env_vars, extra, dry_run, env=env, namespace=mapping.namespace)
+        ok = _apply_single_secret(
+            mapping, env_vars, extra, dry_run, env=env, namespace=mapping.namespace, changed=changed
+        )
         if not ok:
             all_ok = False
+
+    # 5. A changed Secret is not in use until its consumers restart (#1804):
+    # env vars are read once at start, and Authelia's users-file watch never
+    # fires on a Secret volume. Restart whatever reads each changed Secret.
+    if changed:
+        all_ok = restart_consumers(changed, kubectl=lambda ns: _kubectl_base(env, ns)) and all_ok
 
     if all_ok:
         logger.success("All K8s secrets applied successfully")
@@ -467,8 +477,13 @@ def _apply_single_secret(
     dry_run: bool,
     env: str = "staging",
     namespace: str = "kubelab",
+    changed: set[tuple[str, str]] | None = None,
 ) -> bool:
-    """Create or update a single K8s Secret. Returns True on success."""
+    """Create or update a single K8s Secret. Returns True on success.
+
+    When kubectl reports the Secret `configured` or `created`, adds
+    `(namespace, name)` to CHANGED, so the caller can restart its consumers.
+    """
     ns_label = f" ({namespace})" if namespace != "kubelab" else ""
     logger.info(f"Processing secret: {mapping.name}{ns_label}")
 
@@ -518,6 +533,8 @@ def _apply_single_secret(
             check=True,
         )
         logger.success(f"  {apply_result.stdout.strip()}")
+        if changed is not None and apply_result.stdout.strip().endswith(("configured", "created")):
+            changed.add((namespace, mapping.name))
         return True
 
     except subprocess.CalledProcessError as e:

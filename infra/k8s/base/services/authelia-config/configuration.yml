@@ -18,8 +18,10 @@ log:
 # ---- Authentication Backend ----
 authentication_backend:
   file:
-    # Mounted as a directory (no subPath) so K8s propagates Secret updates;
-    # Authelia's `watch: true` then reloads users_database.yml without restart.
+    # Mounted as a directory (no subPath) so K8s propagates Secret updates.
+    # `watch: true` does NOT pick them up: it waits for an event naming
+    # users_database.yml, and the kubelet only swaps the `..data` symlink.
+    # `make apply-secrets` restarts Authelia when this Secret changes (#1804).
     path: /config/users/users_database.yml
     watch: true
     password:
