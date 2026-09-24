@@ -11,8 +11,9 @@ This reads the live tier of every account over the break-glass private path,
 compares it with the declaration, and with `apply` corrects the difference through
 each app's API. Both apps check the privilege on every request, so a session that
 is already open loses it on its next request. Argo CD keeps no user database: it
-reads the groups inside the ID token on each request, so its gap closes when the
-token expires, and it is reported rather than reconciled.
+reads the groups from Authelia's UserInfo and caches them for
+`userInfoCacheExpiration`, so its gap closes within that bound without any edit.
+It is reported, from the live hub config, rather than reconciled.
 
 Accounts that exist in an app but belong to no declared identity are reported and
 never touched: removing an account is a decision, not a reconciliation.
