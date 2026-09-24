@@ -215,15 +215,18 @@ class TestSSOTAdminUsername:
         config = cm.get_merged_config()
         users = config["apps"]["services"]["security"]["authelia"]["users"]
         declared = [u for u in users if u.get("identity")]
-        assert len(declared) == 1, "Exactly one user must name a declared identity"
-        assert "username" not in declared[0], (
-            "A user that names an identity must NOT also carry `username` — it resolves "
-            "through apps.auth.identities (SSOT)"
-        )
-        assert resolve_user_identity(declared[0], config), (
-            f"`identity: {declared[0]['identity']!r}` resolves to nothing — it must name a key "
-            "of apps.auth.identities, and an unresolvable entry is silently skipped by both generators"
-        )
+        # Both human tiers log in through the IdP (ADR-062 D1); the machine
+        # identity never does (AUTH-004 AC5), and no identity appears twice.
+        assert sorted(u["identity"] for u in declared) == ["operator", "superadmin"]
+        for entry in declared:
+            assert "username" not in entry, (
+                "A user that names an identity must NOT also carry `username` — it resolves "
+                "through apps.auth.identities (SSOT)"
+            )
+            assert resolve_user_identity(entry, config), (
+                f"`identity: {entry['identity']!r}` resolves to nothing — it must name a key "
+                "of apps.auth.identities, and an unresolvable entry is silently skipped by both generators"
+            )
 
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
@@ -264,8 +267,9 @@ class TestSSOTContactEmail:
             f"apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
         )
 
-    def test_loader_injects_gitea_admin_email_from_contact(self, env: str) -> None:
-        """SSOT-019: apps.services.core.gitea.admin_email derives from apps.contact.email.
+    def test_loader_injects_gitea_admin_email_from_the_superadmin(self, env: str) -> None:
+        """SSOT-019, amended by AUTH-004 AC3: Gitea's admin is the superadmin, so it
+        takes the superadmin's email, not the contact address the operator holds.
 
         Surfaced 2026-05-26 during Phase B prod smoke (apply-secrets warning) and confirmed
         2026-05-26 in staging (gitea pod CreateContainerConfigError — missing ADMIN_EMAIL key
@@ -275,11 +279,11 @@ class TestSSOTContactEmail:
 
         cm = ConfigurationManager(env)
         config = cm.get_merged_config()
-        contact = config["apps"]["contact"]["email"]
+        users = config["apps"]["services"]["security"]["authelia"]["users"]
+        superadmin = next(u for u in users if u.get("identity") == "superadmin")
         admin_email = config["apps"]["services"]["core"]["gitea"]["admin_email"]
-        assert admin_email == contact, (
-            f"gitea.admin_email ({admin_email!r}) must derive from "
-            f"apps.contact.email ({contact!r}) via loader injection (SSOT-019)"
+        assert admin_email == superadmin["email"], (
+            f"gitea.admin_email ({admin_email!r}) must be the superadmin's email ({superadmin['email']!r})"
         )
 
     def test_loader_injects_authelia_admin_email_from_contact(self, env: str) -> None:
@@ -288,9 +292,12 @@ class TestSSOTContactEmail:
         cm = ConfigurationManager(env)
         config = cm.get_merged_config()
         contact = config["apps"]["contact"]["email"]
-        admin_entries = [u for u in config["apps"]["services"]["security"]["authelia"]["users"] if u.get("identity")]
-        assert len(admin_entries) == 1
-        assert admin_entries[0]["email"] == contact, (
-            f"Authelia admin user email ({admin_entries[0]['email']!r}) must "
+        # Only an identity entry with no explicit `email:` derives it; the
+        # superadmin declares its own, because two entries may not share one.
+        operator = next(
+            u for u in config["apps"]["services"]["security"]["authelia"]["users"] if u.get("identity") == "operator"
+        )
+        assert operator["email"] == contact, (
+            f"Authelia operator email ({operator['email']!r}) must "
             f"derive from apps.contact.email ({contact!r}) via loader injection (SSOT-014c)"
         )

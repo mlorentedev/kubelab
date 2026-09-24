@@ -179,8 +179,10 @@ class ConfigurationManager:
         Reads `apps.contact.email` and uses it as the default for:
           - edge.traefik.acme_email
           - apps.services.observability.uptime_kuma.admin_email
-          - apps.services.core.gitea.admin_email
-          - any Authelia user with `is_admin: true` and no explicit `email`
+          - any Authelia user that names an `identity:` and has no explicit `email`
+          - apps.services.core.gitea.admin_email, via the superadmin's entry above:
+            Gitea's local admin IS the superadmin, and a Gitea account sharing its
+            email with another identity is one SSO login away from being linked to it
 
         Per ADR-036 / SSOT-014 master plan: single declaration, multiple
         consumer paths preserved (zero downstream code changes). NOT applied
@@ -206,11 +208,6 @@ class ConfigurationManager:
         if not uptime_kuma.get("admin_email"):
             uptime_kuma["admin_email"] = contact_email
 
-        # apps.services.core.gitea.admin_email (SSOT-019 follow-up to 014c)
-        gitea = config.setdefault("apps", {}).setdefault("services", {}).setdefault("core", {}).setdefault("gitea", {})
-        if not gitea.get("admin_email"):
-            gitea["admin_email"] = contact_email
-
         # Declared identities (AUTH-004 C1) with no explicit email. Was keyed on
         # `is_admin: true`; an entry that names an identity is the same set, and
         # the flag no longer exists.
@@ -220,6 +217,14 @@ class ConfigurationManager:
         for user in authelia_users:
             if user.get("identity") and not user.get("email"):
                 user["email"] = contact_email
+
+        # apps.services.core.gitea.admin_email (SSOT-019 follow-up to 014c). The
+        # superadmin's own email, so Gitea's admin account and the superadmin's
+        # SSO identity agree, and no other identity's SSO login can match it.
+        superadmin: Dict[str, Any] = next((u for u in authelia_users if u.get("identity") == "superadmin"), {})
+        gitea = config.setdefault("apps", {}).setdefault("services", {}).setdefault("core", {}).setdefault("gitea", {})
+        if not gitea.get("admin_email"):
+            gitea["admin_email"] = superadmin.get("email") or contact_email
 
     def get_env_vars(self) -> Dict[str, str]:
         """
