@@ -1,9 +1,10 @@
 # Cluster, workloads and manifests
 
-52 lessons, newest first. Back to [all categories](../_index.md).
+53 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 455 | [A file watch keyed on the file's name never fires on a Secret volume, so "no restart needed" was never true](lesson-455-a-watch-on-a-file-name-never-fires-on-a-secret-volume.md) | 2026-09-24 |
 | 410 | [A healthy pod does not prove an app read its config — an unrecognized env var can fail silently](lesson-410-a-healthy-pod-does-not-prove-an-app-read-its-config.md) | 2026-08-31 |
 | 387 | [A shell program embedded in a manifest is a second language, and nothing in the delivery path reads it as one](lesson-387-a-shell-program-inside-a-manifest-is-a-second-language-nothing-validates.md) | 2026-08-25 |
 | 351 | [A manual `kubectl apply` annexes the fields it touches, and the bill arrives months later](lesson-351-a-manual-kubectl-apply-annexes-the-fields-it-touches.md) | 2026-08-19 |
