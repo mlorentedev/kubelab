@@ -91,6 +91,7 @@ GUARDED: dict[str, str] = {
     "configure-oidc": "staging",
     "apply-secrets": "staging",
     "restart-service": "staging",
+    "auth-review": "staging",
     "apply-middleware-secrets": "staging",
     "import-n8n": "staging",
     "notify-smoke": "staging",

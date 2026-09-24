@@ -15,7 +15,7 @@ from toolkit.core.logging import logger
 from toolkit.features import break_glass as bg
 from toolkit.features.k8s_kubeconfig import output_path as kubeconfig_path
 
-app = typer.Typer(help="Identity operations (AUTH-004): break-glass access while the IdP is down.")
+app = typer.Typer(help="Identity operations (AUTH-004): access review, and break-glass while the IdP is down.")
 
 _ENVS = ("staging", "prod")
 _SECRETS_DIR = PROJECT_ROOT / "infra" / "config" / "secrets"
@@ -132,3 +132,35 @@ def break_glass_cmd(
             f"{local}:{plan.port}",
         ]
     )
+
+
+@app.command("review")
+def review_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")] = "prod",
+    apply: Annotated[
+        bool, typer.Option("--apply", help="Set every drifted account to its declared tier, then read it back")
+    ] = False,
+) -> None:
+    """Access review: each app's live privilege against the declared groups (ADR-062 D2, D5).
+
+    Gitea and Grafana keep the tier in their own database and apply the group rule
+    only at login, so a demotion changes nothing until it is reconciled here. With
+    --apply, an open session loses the privilege on its next request. Exits 1
+    while any drift, undeclared account or unreadable app remains.
+    """
+    from toolkit.features.access_review import review_env
+
+    if env not in _ENVS:
+        typer.echo(f"--env must be one of {_ENVS}", err=True)
+        raise typer.Exit(1)
+    findings = review_env(env, PROJECT_ROOT, apply, typer.echo)
+    typer.echo(f"access review: {env}{' (applied)' if apply else ''}")
+    for f in findings:
+        declared = f.declared if f.declared is not None else "-"
+        detail = f"  {f.detail}" if f.detail else ""
+        typer.echo(f"  {f.service:<8} {f.user:<10} declared={declared:<7} live={f.live:<12} {f.status.upper()}{detail}")
+    blocking = [f for f in findings if f.status in ("drift", "undeclared", "failed")]
+    if blocking:
+        hint = "" if apply else " Re-run with --apply to set the declared tiers."
+        typer.echo(f"{len(blocking)} finding(s) need action.{hint}", err=True)
+        raise typer.Exit(1)
