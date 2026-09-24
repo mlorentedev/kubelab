@@ -26,8 +26,8 @@ GET answers `enforce_admins: {"enabled": true}`; PUT wants `enforce_admins: true
 Feeding a GET body straight back into a PUT is rejected or, worse, coerced.
 `put_body` is the one place that translation lives.
 
-DECLARE ONLY WHAT IS RECONCILED. `ci.branch_protection.<branch>` carries
-`strict` and `required_contexts` and nothing else. Everything else on the
+DECLARE ONLY WHAT IS RECONCILED. `ci.branch_protection.<owner/name>.<branch>`
+carries `strict` and `required_contexts` and nothing else. Everything else on the
 object is passthrough, preserved verbatim from the live read. Modelling
 reviewers, restrictions or rulesets here would be a redesign, and an
 unreconciled field in a declaration is worse than an absent one: it reads as
@@ -82,10 +82,28 @@ class DeclaredProtection:
         return cls(strict=bool(raw["strict"]), required_contexts=tuple(contexts))
 
 
-def load_declared(config: dict[str, Any]) -> dict[str, DeclaredProtection]:
-    """Read `ci.branch_protection` out of the merged configuration."""
+def load_declared(config: dict[str, Any]) -> dict[str, dict[str, DeclaredProtection]]:
+    """Read `ci.branch_protection` out of the merged configuration: repository, then branch.
+
+    KEYED BY REPOSITORY because `--repo` used to change only the target. The one
+    declaration was kubelab's, so pointing the command at another repository
+    compared that repository against kubelab's required contexts, and reported
+    the difference as drift. A repository now has its own entry or none.
+
+    The earlier shape (`ci.branch_protection.<branch>`) is refused rather than
+    read as kubelab's: a key that is not `owner/name` fails loudly, so an old
+    declaration cannot be silently attributed to a repository.
+    """
     declared = (config.get("ci") or {}).get("branch_protection") or {}
-    return {branch: DeclaredProtection.from_config(raw) for branch, raw in declared.items()}
+    repos: dict[str, dict[str, DeclaredProtection]] = {}
+    for repo, branches in declared.items():
+        if repo.count("/") != 1 or not isinstance(branches, dict):
+            raise BranchProtectionError(
+                f"`ci.branch_protection` is keyed by repository (`owner/name`), then branch; "
+                f"`{repo}` is not a repository"
+            )
+        repos[repo] = {branch: DeclaredProtection.from_config(raw) for branch, raw in branches.items()}
+    return repos
 
 
 def protection_changes(live: dict[str, Any], declared: DeclaredProtection) -> list[tuple[str, Any, Any]]:
