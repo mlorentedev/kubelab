@@ -151,7 +151,7 @@ class FakeClient:
     def get_team(self, org: str, name: str) -> dict[str, Any] | None:
         return self._teams.get((org, name))
 
-    def create_team(self, org: str, name: str, permission: str) -> dict[str, Any]:
+    def create_team(self, org: str, name: str, permission: str, *, can_create_org_repo: bool = True) -> dict[str, Any]:
         self.calls.append(("create_team", f"{org}/{name}"))
         # The measured Gitea behaviour: what comes back is not what was asked for.
         # `permission` is HARDCODED to "none" because that is what a correct team
@@ -190,7 +190,9 @@ class FakeClient:
             units["repo.code"] = self._code_permission
         return units
 
-    def edit_team(self, team_id: int, name: str, permission: str) -> dict[str, Any]:
+    def edit_team(
+        self, team_id: int, name: str, permission: str, *, can_create_org_repo: bool = True
+    ) -> dict[str, Any]:
         """Applies the whole grant, the way `PATCH /teams/{id}` does.
 
         THE REAL CALL SENDS EVERY FIELD, not only the one that happened to be
@@ -211,7 +213,7 @@ class FakeClient:
             if team.get("id") == team_id:
                 self._teams[key] = {
                     **team,
-                    "can_create_org_repo": True,
+                    "can_create_org_repo": can_create_org_repo,
                     "units_map": {unit: permission for unit in TEAM_UNITS},
                     "includes_all_repositories": True,
                 }
@@ -233,7 +235,7 @@ class FakeClient:
         what keeps the guards under test.
         """
 
-        def _refuse(team_id: int, name: str, permission: str) -> dict[str, Any]:
+        def _refuse(team_id: int, name: str, permission: str, *, can_create_org_repo: bool = True) -> dict[str, Any]:
             self.calls.append(("edit_team", name))
             for team in self._teams.values():
                 if team.get("id") == team_id:
@@ -555,7 +557,9 @@ def test_the_team_is_read_back_rather_than_trusted() -> None:
     """
 
     class LyingClient(FakeClient):
-        def create_team(self, org: str, name: str, permission: str) -> dict[str, Any]:
+        def create_team(
+            self, org: str, name: str, permission: str, *, can_create_org_repo: bool = True
+        ) -> dict[str, Any]:
             self.calls.append(("create_team", f"{org}/{name}"))
             self._teams[(org, name)] = {
                 "id": 7,

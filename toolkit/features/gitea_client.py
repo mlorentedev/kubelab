@@ -424,7 +424,7 @@ class GiteaClient:
                 return team
         return None
 
-    def create_team(self, org: str, name: str, permission: str) -> dict[str, Any]:
+    def create_team(self, org: str, name: str, permission: str, *, can_create_org_repo: bool = True) -> dict[str, Any]:
         """Create a team that can actually create repositories in `org`.
 
         THREE MEASUREMENTS GOT US HERE, and each looked like a complete answer:
@@ -464,6 +464,11 @@ class GiteaClient:
         -- with push only on the repository it had created itself, where creation
         conferred access directly rather than through the team. Every field this
         function had learned to set was correct and the grant covered nothing.
+
+        `can_create_org_repo` defaults to the write team's value and is a parameter
+        only because a second grant exists: the PR reviewer's read team (TOOL-080),
+        which must NOT create repositories. Read access is what contains that
+        account, measured in `specs/TOOL-080-forge-pr-reviewer/verification.md`.
         """
         return self._request(
             "POST",
@@ -471,7 +476,7 @@ class GiteaClient:
             json={
                 "name": name,
                 "permission": permission,
-                "can_create_org_repo": True,
+                "can_create_org_repo": can_create_org_repo,
                 "units_map": {unit: permission for unit in TEAM_UNITS},
                 # The scope the units apply TO. Without it the team is created
                 # covering zero repositories and every other field is decoration.
@@ -479,7 +484,9 @@ class GiteaClient:
             },
         )
 
-    def edit_team(self, team_id: int, name: str, permission: str) -> dict[str, Any]:
+    def edit_team(
+        self, team_id: int, name: str, permission: str, *, can_create_org_repo: bool = True
+    ) -> dict[str, Any]:
         """Bring an existing team up to the grant `create_team` would give it now.
 
         Needed because `ensure_team` only ever created: a team that predates a
@@ -492,6 +499,11 @@ class GiteaClient:
         own team and the declaration says what it should hold. Narrowing someone's
         access from a config edit is the kind of change that should require a
         human noticing, so nothing here removes a unit or a repository.
+
+        THE ONE EXCEPTION IS THE READ TEAM, and it is the caller that decides it, not
+        this method: this sends exactly the grant it is given. For `reviewers` the
+        narrowness is the declared property (TOOL-080 AC5), so a team someone widened
+        to write is converged back to read by the same PATCH.
         """
         return self._request(
             "PATCH",
@@ -499,7 +511,7 @@ class GiteaClient:
             json={
                 "name": name,
                 "permission": permission,
-                "can_create_org_repo": True,
+                "can_create_org_repo": can_create_org_repo,
                 "units_map": {unit: permission for unit in TEAM_UNITS},
                 "includes_all_repositories": True,
             },
@@ -508,6 +520,15 @@ class GiteaClient:
     def add_team_member(self, team_id: int, username: str) -> dict[str, Any]:
         """Add an account to a team. Idempotent on Gitea's side -- re-adding answers 204."""
         return self._request("PUT", f"/teams/{team_id}/members/{username}")
+
+    def list_team_members(self, team_id: int) -> list[str]:
+        """The logins in a team.
+
+        Read for the reviewer's team, where membership IS the grant: a converged
+        `reviewers` team without the reviewer in it lets the reviewer read nothing, and
+        a plan that compared only the team's fields would call that forge converged.
+        """
+        return [str(member["login"]) for member in self._request("GET", f"/teams/{team_id}/members") or []]
 
     def list_runners(self) -> list[dict[str, Any]]:
         """Every Actions runner registered on the instance.

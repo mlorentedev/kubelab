@@ -406,8 +406,11 @@ def _gitea_clients(env: str) -> tuple["GiteaClient", "GiteaClient", str, str]:
     )
 
 
-def _report_machine_ownership(admin: "GiteaClient", bot_username: str) -> None:
+def _report_machine_ownership(admin: "GiteaClient", bot_username: str, criterion: str = "AC4") -> None:
     """Print what the machine identity owns — ADR-065 D1 / TOOL-035 AC4, every run.
+
+    Called for the PR reviewer too (TOOL-080 AC5, `criterion` names it): the same
+    property -- an account that owns nothing -- checked by the same consequence.
 
     ON THE RECONCILE PATH RATHER THAN IN A TEST, deliberately. The property is
     about the LIVE forge, and the repo's live suites cannot decrypt SOPS, so a
@@ -428,7 +431,7 @@ def _report_machine_ownership(admin: "GiteaClient", bot_username: str) -> None:
         owned = sorted(admin.list_owned_repos(bot_username))
     except GiteaError as exc:
         console.print(
-            f"\n[yellow]AC4 unchecked[/yellow] — could not read what {bot_username} owns: "
+            f"\n[yellow]{criterion} unchecked[/yellow] — could not read what {bot_username} owns: "
             f"{exc.status_code}. This is 'I did not look', not 'it owns nothing'. "
             f"A 403 here means the admin token predates `read:user` in "
             f"`apps.services.core.gitea.token_scopes.admin`; rotate and re-provision."
@@ -437,13 +440,13 @@ def _report_machine_ownership(admin: "GiteaClient", bot_username: str) -> None:
 
     if owned:
         console.print(
-            f"\n[red]AC4 VIOLATED[/red] — {bot_username} owns {owned}. ADR-065 D1 requires the "
+            f"\n[red]{criterion} VIOLATED[/red] — {bot_username} owns {owned}. ADR-065 D1 requires the "
             f"machine identity to own nothing, so that retiring it is a membership deletion "
             f"rather than a data migration."
         )
         return
 
-    console.print(f"\n[dim]AC4 ok — {bot_username} owns: (none)[/dim]")
+    console.print(f"\n[dim]{criterion} ok — {bot_username} owns: (none)[/dim]")
 
 
 @gitea_app.command("reconcile")
@@ -462,6 +465,7 @@ def gitea_reconcile(
     """
     from toolkit.features.gitea_client import GiteaError
     from toolkit.features.gitea_repos import (
+        READ_TEAM,
         TEAM_NAME,
         execute,
         format_plan,
@@ -474,13 +478,22 @@ def gitea_reconcile(
     admin, bot, bot_username, base_url = _gitea_clients(env)
     merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
     declared = load_declaration(merged)
+    # The PR reviewer (TOOL-080), resolved through the identity map like the bot.
+    # Absent until its row is declared, and then the plan carries its read team.
+    reviewer = merged["apps"]["auth"]["identities"].get("reviewer")
+
+    def report_ownership() -> None:
+        _report_machine_ownership(admin, bot_username)
+        if reviewer:
+            _report_machine_ownership(admin, str(reviewer), criterion="TOOL-080 AC5")
+
     if not declared:
         logger.warning("no `gitea.organizations` declared in common.yaml — nothing to reconcile")
         # Checked even here. AC4 is a property of the FORGE, not of the declaration:
         # an empty declaration is exactly the state in which nobody would think to
         # look, and a machine identity that has acquired a repository is worth
         # hearing about whether or not this run had anything to reconcile.
-        _report_machine_ownership(admin, bot_username)
+        report_ownership()
         raise typer.Exit(0)
 
     # BEFORE the forge reads, not after: a malformed or absent `repository_settings`
@@ -521,6 +534,16 @@ def gitea_reconcile(
             for org, specs in declared.items()
             for spec in specs
         }
+        # The reviewer's read team per declared organization, with its members:
+        # membership is half of that grant, so a team read without it would let a
+        # converged team the reviewer is not in pass for a working one.
+        existing_review_teams = None
+        if reviewer:
+            existing_review_teams = {}
+            for org in declared:
+                review_team = admin.get_team(org, READ_TEAM.name) if org in existing_orgs else None
+                members = tuple(admin.list_team_members(int(review_team["id"]))) if review_team else ()
+                existing_review_teams[org] = (review_team, members)
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
@@ -534,12 +557,14 @@ def gitea_reconcile(
         declared_settings,
         existing_repo_hooks,
         declared_webhook,
+        reviewer=str(reviewer) if reviewer else None,
+        existing_review_teams=existing_review_teams,
     )
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
 
     if plan.is_noop:
-        _report_machine_ownership(admin, bot_username)
+        report_ownership()
         # Drift does not make the plan non-idempotent -- nothing here would act on
         # it -- but it must not be reported as a match either. "Nothing to create"
         # is the honest claim; "forge matches the declaration" was not, and was
@@ -559,7 +584,7 @@ def gitea_reconcile(
 
     if not apply:
         console.print("\n[dim]plan only — re-run with --apply to create[/dim]")
-        _report_machine_ownership(admin, bot_username)
+        report_ownership()
         return
 
     # Read only when a migration is actually planned. Its absence is a hard error
@@ -625,6 +650,8 @@ def gitea_reconcile(
     # call asserted a grant rather than changing one.
     for ensured in report.teams_ensured:
         logger.success(f"team ensured: {ensured}/{TEAM_NAME}")
+    for ensured in report.review_teams_ensured:
+        logger.success(f"team ensured: {ensured}/{READ_TEAM.name} (member {reviewer})")
     # "settings applied" and not "settings set": each of these was PATCHed and then
     # read back, so the line reports a verified end state rather than an accepted
     # request. `ensure_settings` raises if the two disagree, which is why a name in
@@ -660,7 +687,7 @@ def gitea_reconcile(
     # -- so on `--apply` it reported PRE-reconcile state and an ownership violation
     # created by the very run being reported could not appear in its own output.
     # Reported by review on #1562.
-    _report_machine_ownership(admin, bot_username)
+    report_ownership()
 
     if not report.ok:
         raise typer.Exit(1)

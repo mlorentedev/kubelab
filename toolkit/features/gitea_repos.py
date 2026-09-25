@@ -468,6 +468,11 @@ class ReconcilePlan:
     repos_to_create: tuple[DeclaredRepo, ...] = ()
     repos_to_migrate: tuple[DeclaredRepo, ...] = ()
     teams_to_converge: tuple[str, ...] = ()
+    # The PR reviewer's read team (TOOL-080), per declared organization, and the
+    # account that must be in it. Empty and None while no reviewer is declared, so
+    # a forge without one plans exactly as it did before the field existed.
+    review_teams_to_converge: tuple[str, ...] = ()
+    reviewer: str | None = None
     repos_to_configure: tuple[SettingsChange, ...] = ()
     repos_to_hook: tuple[WebhookChange, ...] = ()
     undeclared_orgs: tuple[str, ...] = ()
@@ -503,6 +508,7 @@ class ReconcilePlan:
             and not self.repos_to_create
             and not self.repos_to_migrate
             and not self.teams_to_converge
+            and not self.review_teams_to_converge
             and not self.repos_to_configure
             and not self.repos_to_hook
         )
@@ -530,6 +536,9 @@ def plan_reconcile(
     # against `list[Mapping[...]]`. Covariance is the point, not a workaround.
     existing_repo_hooks: Mapping[str, Sequence[Mapping[str, Any]] | None],
     declared_webhook: WebhookSpec,
+    *,
+    reviewer: str | None = None,
+    existing_review_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -601,7 +610,20 @@ def plan_reconcile(
     Required and complete for the fourth time in this signature, for the reason that
     has not changed: a missing key raises, and a missing key treated as "fine" is how
     a comparison silently stops comparing.
+
+    `reviewer` and `existing_review_teams` are the one optional pair here, and they
+    are optional because the IDENTITY is: until `apps.auth.identities.reviewer` is
+    declared there is no account to put in a team, and the plan must be what it was.
+    Once it is declared the pair is required and complete like every other read --
+    a reviewer without its reads raises rather than planning nothing, and an
+    organization missing from the reads raises `KeyError`. Each entry is the org's
+    `reviewers` team (None when absent) and that team's member logins.
     """
+    if reviewer and existing_review_teams is None:
+        raise ValueError(
+            f"a reviewer ({reviewer!r}) is declared but existing_review_teams was not read. Planning "
+            "nothing for it would report a forge where it can review no PR as converged."
+        )
     declared_orgs = set(declared)
     declared_repos = {f"{org}/{spec.name}" for org, specs in declared.items() for spec in specs}
 
@@ -634,6 +656,24 @@ def plan_reconcile(
     # Sorted over the DECLARED organizations, so the plan reads in the same order
     # every run and a diff between two runs is a real change rather than dict order.
     teams_to_converge = tuple(sorted(org for org in declared_orgs if team_needs_convergence(existing_teams[org])))
+
+    # Over every declared organization too, `teledyne/` included and `kubelab/`
+    # while it is empty: the reviewer covers the whole forge (Manu, 2026-09-24), and
+    # an organization declared later inherits the team on its first reconcile.
+    review_teams_to_converge: tuple[str, ...] = ()
+    if reviewer and existing_review_teams is not None:
+        review_teams_to_converge = tuple(
+            sorted(
+                org
+                for org in declared_orgs
+                if team_needs_convergence(
+                    existing_review_teams[org][0],
+                    READ_TEAM,
+                    members=existing_review_teams[org][1],
+                    member=reviewer,
+                )
+            )
+        )
 
     # OVER EVERY DECLARED REPOSITORY, INCLUDING THE ONES THIS RUN IS ABOUT TO
     # CREATE. A repository arrives with Gitea's permissive defaults whether it was
@@ -698,6 +738,8 @@ def plan_reconcile(
         repos_to_create=repos_to_create,
         repos_to_migrate=repos_to_migrate,
         teams_to_converge=teams_to_converge,
+        review_teams_to_converge=review_teams_to_converge,
+        reviewer=reviewer,
         repos_to_configure=repos_to_configure,
         repos_to_hook=repos_to_hook,
         undeclared_orgs=undeclared_orgs,
@@ -909,6 +951,13 @@ def format_plan(plan: ReconcilePlan) -> str:
     # is restricted to, so the line also says what will NOT happen.
     for team_org in plan.teams_to_converge:
         lines.append(f"  ~ team {team_org}/{TEAM_NAME}   widen to the full grant over all repositories")
+    # "converge", not "widen": this team is corrected in both directions, and a
+    # reviewer's team widened to write is narrowed back. The member is printed
+    # because membership is half of this grant.
+    for team_org in plan.review_teams_to_converge:
+        lines.append(
+            f"  ~ team {team_org}/{READ_TEAM.name}   converge to read over all repositories, member {plan.reviewer}"
+        )
     # Field by field, because this is the line an operator approves `--apply` on and
     # "settings differ" is not a basis for approving anything. A repository that does
     # not exist yet gets a count instead of nine `None -> x` rows, so the one
@@ -1095,14 +1144,46 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
 # The I/O half. Everything above is pure; everything below talks to Gitea.
 # =============================================================================
 
+
+@dataclass(frozen=True)
+class TeamGrant:
+    """A team the reconciler keeps in every declared organization, and what it grants.
+
+    A grant is what may be done (`permission` on every unit of `TEAM_UNITS`,
+    `can_create_org_repo`) and to what (every repository, always). Two exist, and
+    their difference is the whole point of having two.
+    """
+
+    name: str
+    permission: str
+    can_create_org_repo: bool
+
+
 #: The team the bot is added to in every declared organization. It exists because
 #: ADR-065 D1 keeps the bot out of `Owners`: without a write team the bot is a
 #: non-member and cannot create repositories in an organization it does not own.
-TEAM_NAME = "reconcilers"
-TEAM_PERMISSION = "write"
+WRITE_TEAM = TeamGrant(name="reconcilers", permission="write", can_create_org_repo=True)
+
+#: The PR reviewer's team (TOOL-080). Read on every unit and no repository creation,
+#: because read access is what contains the reviewer: measured 2026-09-24 in a local
+#: Gitea 1.25.5, a read-team member's token is refused labels, PR reviews and PR
+#: edits, all of which a write-team member may do
+#: (`specs/TOOL-080-forge-pr-reviewer/verification.md`).
+READ_TEAM = TeamGrant(name="reviewers", permission="read", can_create_org_repo=False)
+
+#: The write team's fields under their original names, which the CLI and the test
+#: suite address directly.
+TEAM_NAME = WRITE_TEAM.name
+TEAM_PERMISSION = WRITE_TEAM.permission
 
 
-def team_needs_convergence(team: Mapping[str, Any] | None) -> bool:
+def team_needs_convergence(
+    team: Mapping[str, Any] | None,
+    grant: TeamGrant = WRITE_TEAM,
+    *,
+    members: Sequence[str] | None = None,
+    member: str | None = None,
+) -> bool:
     """Does this team fall short of the grant `create_team`/`edit_team` would give it?
 
     ONE PREDICATE, TWO CALLERS, AND THAT IS THE POINT. `plan_reconcile` asks it to
@@ -1130,15 +1211,23 @@ def team_needs_convergence(team: Mapping[str, Any] | None) -> bool:
 
     An absent team needs convergence too. `create_team` is the repair in that case,
     and the caller that acts on this does not need to know which of the two it is.
+
+    EQUALITY, NOT A FLOOR, on every field. For `reconcilers` that was always true of
+    the units and made no difference in practice; for `reviewers` it is the point: a
+    read team widened to write, or able to create repositories, is drift. `members`
+    and `member` are passed for the read team only, where the account being in the
+    team is half the grant -- a correct team the reviewer is not in grants it nothing.
     """
     if team is None:
         return True
     if not team.get("includes_all_repositories"):
         return True
-    if not team.get("can_create_org_repo"):
+    if bool(team.get("can_create_org_repo")) != grant.can_create_org_repo:
         return True
     units = team.get("units_map") or {}
-    return any(units.get(unit) != TEAM_PERMISSION for unit in TEAM_UNITS)
+    if any(units.get(unit) != grant.permission for unit in TEAM_UNITS):
+        return True
+    return member is not None and members is not None and member not in members
 
 
 class RepoSettingsError(Exception):
@@ -1188,6 +1277,7 @@ class ExecutionReport:
     repos_created: list[str] = field(default_factory=list)
     repos_migrated: list[str] = field(default_factory=list)
     teams_ensured: list[str] = field(default_factory=list)
+    review_teams_ensured: list[str] = field(default_factory=list)
     repos_configured: list[str] = field(default_factory=list)
     repos_hooked: list[str] = field(default_factory=list)
     failures: list[tuple[str, str]] = field(default_factory=list)
@@ -1197,8 +1287,10 @@ class ExecutionReport:
         return not self.failures
 
 
-def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict[str, Any]:
-    """Ensure `org` has the write team, and that it genuinely grants write.
+def ensure_team(
+    admin: GiteaClient, org: str, member: str | None = None, grant: TeamGrant = WRITE_TEAM
+) -> dict[str, Any]:
+    """Ensure `org` has the team `grant` names, and that it genuinely grants that.
 
     READS THE TEAM BACK RATHER THAN TRUSTING THE RESPONSE, and this is still the
     whole point of the function. What changed on 2026-09-02 is WHICH FIELD it
@@ -1221,16 +1313,22 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     Still a field check, not a live one: asserting by consequence here would mean
     creating a probe repository on every reconcile. The fields checked are now
     the ones that actually govern, which is the property the old check lacked.
+
+    `grant` is the write team unless a caller says otherwise; the PR reviewer's read
+    team (TOOL-080) is the other. Every post-condition below compares against the
+    grant rather than against write, so for the read team `can_create_org_repo` must
+    read back FALSE and `repo.code` must read back `read`.
     """
-    team = admin.get_team(org, TEAM_NAME)
+    name = grant.name
+    team = admin.get_team(org, name)
     if team is None:
-        admin.create_team(org, TEAM_NAME, TEAM_PERMISSION)
+        admin.create_team(org, name, grant.permission, can_create_org_repo=grant.can_create_org_repo)
         # Deliberately re-fetched rather than using the create response: the
         # create response is exactly the artefact measured to be unreliable.
-        team = admin.get_team(org, TEAM_NAME)
+        team = admin.get_team(org, name)
 
     if team is None:
-        raise TeamPermissionError(f"team {org}/{TEAM_NAME} was created but does not read back")
+        raise TeamPermissionError(f"team {org}/{name} was created but does not read back")
 
     # CONVERGE A TEAM THAT PREDATES THE CURRENT GRANT, then re-read. `ensure_team`
     # only ever created, so a team born before `includes_all_repositories` was set
@@ -1242,15 +1340,21 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     # The condition is `team_needs_convergence` and not an inline field test, so
     # that the plan's decision to schedule this org and this function's decision to
     # act cannot disagree. They did, in the other direction, until 2026-09-03.
-    if team_needs_convergence(team):
-        admin.edit_team(int(team["id"]), TEAM_NAME, TEAM_PERMISSION)
-        team = admin.get_team(org, TEAM_NAME)
+    if team_needs_convergence(team, grant):
+        admin.edit_team(int(team["id"]), name, grant.permission, can_create_org_repo=grant.can_create_org_repo)
+        team = admin.get_team(org, name)
         if team is None:
-            raise TeamPermissionError(f"team {org}/{TEAM_NAME} does not read back after being widened")
+            raise TeamPermissionError(f"team {org}/{name} does not read back after being converged")
 
-    if not team.get("can_create_org_repo"):
+    if grant.can_create_org_repo is False and team.get("can_create_org_repo"):
         raise TeamPermissionError(
-            f"team {org}/{TEAM_NAME} has can_create_org_repo unset. Repository creation inside an "
+            f"team {org}/{name} can create repositories, and it must not: it is a read team, and "
+            "read access is what contains its member. A member of a team with can_create_org_repo set "
+            "creates repositories it then owns, which is the opposite of what this grant declares."
+        )
+    if grant.can_create_org_repo and not team.get("can_create_org_repo"):
+        raise TeamPermissionError(
+            f"team {org}/{name} has can_create_org_repo unset. Repository creation inside an "
             "organization is governed by that boolean, NOT by the repo.code unit: measured 2026-09-02, "
             "a team with units_map at write and the flag unset refused the bot with 'Given user is not "
             "allowed to create repository in organization'. Note the coarse `permission` field reads "
@@ -1258,12 +1362,12 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
         )
 
     units = team.get("units_map") or {}
-    if units.get("repo.code") != TEAM_PERMISSION:
+    if units.get("repo.code") != grant.permission:
         raise TeamPermissionError(
-            f"team {org}/{TEAM_NAME} grants repo.code {units.get('repo.code')!r}, expected "
-            f"{TEAM_PERMISSION!r}. The team can create repositories but could not push to them, and "
-            "the resulting refusal is the same 403 as a missing token scope -- the trap AUTH-004 AC5 "
-            "already recorded once."
+            f"team {org}/{name} grants repo.code {units.get('repo.code')!r}, expected "
+            f"{grant.permission!r}. For the write team that means it can create repositories but could "
+            "not push to them, and the refusal is the same 403 as a missing token scope -- the trap "
+            "AUTH-004 AC5 already recorded once. For the read team it means its member can write."
         )
 
     # THE SCOPE, WHICH EVERY CHECK ABOVE TAKES FOR GRANTED. A permission is a pair
@@ -1277,7 +1381,7 @@ def ensure_team(admin: GiteaClient, org: str, member: str | None = None) -> dict
     # field-level check. Asserted last because it is the value the others depend on.
     if not team.get("includes_all_repositories"):
         raise TeamPermissionError(
-            f"team {org}/{TEAM_NAME} has includes_all_repositories unset, so its units apply to no "
+            f"team {org}/{name} has includes_all_repositories unset, so its units apply to no "
             "repository. Every other field on it can be correct and the bot still cannot push: "
             "measured 2026-09-03, `repo.code -> write` and `can_create_org_repo -> True` alongside "
             "`repos attached: NONE`, with push available only on the one repository the bot had "
@@ -1471,6 +1575,17 @@ def execute(
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             failed_orgs.add(org)
             _handle_failure(report, f"team {org}/{TEAM_NAME}", exc)
+
+    # The reviewer's read team, after the organizations exist and independently of
+    # the write team: a failure here costs the reviewer its access in that
+    # organization and nothing else, so it is recorded without marking the org
+    # failed -- repositories still get created, configured and hooked.
+    for org in sorted(set(plan.review_teams_to_converge) - failed_orgs):
+        try:
+            ensure_team(admin, org, member=plan.reviewer, grant=READ_TEAM)
+            report.review_teams_ensured.append(org)
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            _handle_failure(report, f"team {org}/{READ_TEAM.name}", exc)
 
     for repo in plan.repos_to_create:
         if repo.org in failed_orgs:
