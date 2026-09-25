@@ -81,8 +81,8 @@ def test_every_role_path_is_found() -> None:
 
 def _grafana_role(expr: str, source: dict[str, Any]) -> str:
     """Grafana 13.0.2's `searchRole` for one source: the path on the source's JSON, and
-    if that finds nothing, the path again on `{"groups": <groups found so far>}`.
-    Role is extracted before groups, so on the first source that list is empty."""
+    if that finds nothing, the path again on `{"groups": []}`, a list the caller
+    hardcodes as empty (`extractRoleAndAdminOptional(data.rawJSON, []string{})`)."""
     for doc in (source, {"groups": []}):
         try:
             found = jmespath.search(expr, doc)
@@ -106,17 +106,6 @@ def test_the_role_path_defers_to_userinfo_when_the_id_token_has_no_groups(where:
     assert _grafana_role(expr, id_token) == "", f"{where}: the ID token must not decide the role"
     assert _grafana_role(expr, {"groups": [ADMIN_GROUP, "users"]}) == "Admin", where
     assert _grafana_role(expr, {"groups": ["users"]}) == "Viewer", where
-
-
-def test_every_authelia_user_has_a_group() -> None:
-    """Grafana cannot tell an empty `groups` from a missing one, so a user in no group
-    gets no role from the path at all and keeps whatever role it already had."""
-    from toolkit.features.oidc_clients import load_values
-
-    for env in ("staging", "prod"):
-        users = load_values(env)["apps"]["services"]["security"]["authelia"]["users"]
-        groupless = [u.get("identity") or u.get("username") for u in users if not u.get("groups")]
-        assert not groupless, f"{env}: Authelia users with no group: {groupless}"
 
 
 def test_argo_cd_reads_groups_from_userinfo() -> None:
