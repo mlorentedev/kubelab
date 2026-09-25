@@ -64,7 +64,7 @@ The components:
    - an entry in `ROTATABLE_TOKENS`.
 
    It gets no write access to code, and it owns nothing.
-5. **Webhook.** The per-repository reconciler learns a list of hooks (`gitea.webhooks`), matched by URL as today, with the n8n hook as the first entry. The second entry is `https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, with the PR-Agent secret and events `[pull_request_only, pull_request_sync]`. That is opened, reopened and edited, plus pushes, and nothing else.
+5. **Webhook.** The per-repository reconciler learns a list of hooks (`gitea.webhooks`), matched by URL as today, with the n8n hook as the first entry. The second entry is `https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, with the PR-Agent secret and events `[pull_request_only, pull_request_sync]`. That is opened, closed, reopened and edited, plus pushes, and nothing else. `closed` reaches the server and is ignored there: `handle_request` acts only on opened, reopened and synchronized.
    - Not `pull_request`: the API expands it into every PR sub-event, comments included, and that turns slash commands on (measured, see Out of scope).
    - Gitea stores the pair as `[pull_request, pull_request_sync]`. So this hook's events are compared for **set equality** against those stored names, not as the superset the n8n hook uses. A surplus event there is dropped by n8n; here it would reach a server that acts on it. Each hook reads its own secret, and the list stays backward-compatible with the singular key until the migration lands.
 6. **Ingress.** An IngressRoute on `Host(pr-agent.kubelab.live) && Path(/api/v1/gitea_webhooks)`, on the `websecure` entry point with Let's Encrypt.

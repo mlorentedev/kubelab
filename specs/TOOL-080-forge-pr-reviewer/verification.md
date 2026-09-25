@@ -26,10 +26,15 @@ The probe from #1823:
 
 ## Scope and delivery measurement (2026-09-24, local lab)
 
-`scope-lab.py` in this folder, run with `dotf secrets run --only NAN_API_KEY -- .venv/bin/python specs/TOOL-080-forge-pr-reviewer/scope-lab.py`.
+`scope-lab.py` in this folder. Two runs, each with the same command:
+`dotf secrets run --only NAN_API_KEY -- .venv/bin/python specs/TOOL-080-forge-pr-reviewer/scope-lab.py`.
+- **Run A** uses the defaults: hook `["pull_request"]`, upstream `final_update_message`, and the per-scope table.
+- **Run B** adds `LAB_HOOK_EVENTS='["pull_request_only","pull_request_sync"]' LAB_FINAL_UPDATE=false LAB_SKIP_SCOPES=1`.
 
 - **Nothing touched the prod forge.** A prod probe was considered and dropped: the only non-admin account there, `hefesto`, is in `reconcilers`, a team with per-unit **write** on every `personal/` repo (`includes_all_repositories: true`), so a probe with it measures a writer, not a reader. Minting a throwaway token on prod would also be a manual operation.
-- **Topology.** `gitea/gitea:1.25.5` (`sha256:f846d26a…`, the prod pin) and `pragent/pr-agent:0.45.0-gitea_app` (`sha256:750c6cf8…`) on a private Docker network. A public org `personal`, public repo `resume`, `REQUIRE_SIGNIN_VIEW=true`. `reviewer` is a plain user in a team with `repo.code`, `repo.issues` and `repo.pulls` at `read`. The server is configured as `proposal.md` lists, and the webhook is signed.
+- **Topology.** `gitea/gitea:1.25.5` (`sha256:f846d26a…`, the prod pin) and `pragent/pr-agent:0.45.0-gitea_app` (`sha256:750c6cf8…`) on a private Docker network. A public org `personal`, public repo `resume`, `REQUIRE_SIGNIN_VIEW=true`. `reviewer` is a plain user in a team with `repo.code`, `repo.issues` and `repo.pulls` at `read`. The server gets `proposal.md`'s original settings: `CONFIG__GIT_PROVIDER`, `GITEA__URL`, the NaN base and models, `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` = `["/review"]`, `GITEA__HANDLE_PUSH_TRIGGER=true`, and `PR_REVIEWER__PERSISTENT_COMMENT=true`. The webhook is signed.
+  - The lab does **not** set the keys this measurement then added to the proposal: both `ENABLE_REVIEW_LABELS_*` keep upstream's `true`, which is how the label 403s were observed, and `REPO_CONTEXT_FROM_DEFAULT_BRANCH` keeps its upstream default, `true`.
+  - `FINAL_UPDATE_MESSAGE` is upstream's `true` in run A and `false` in run B.
 - **Reading back.** Calls were read from Gitea's access log (`[log].logger.access.MODE=console`; the older `ENABLE_ACCESS_LOG` is ignored in 1.25). The lab removes its containers and network on exit.
 
 ### Scopes. The requirement is `write:issue` + `read:repository`
