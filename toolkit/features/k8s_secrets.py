@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -166,6 +168,16 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     ),
 ]
 
+# Secrets this module used to render, as (namespace, name). `apply-secrets`
+# creates Secrets outside git, so Argo CD never prunes one whose mapping is
+# removed: it stops being updated and keeps its last value in etcd. Every apply
+# deletes these, idempotently. A name leaves this list only once no cluster can
+# still hold it.
+RETIRED_SECRETS: tuple[tuple[str, str], ...] = (
+    # OPS-023: held the MinIO root password and OIDC client secret.
+    ("kubelab", "minio-secrets"),
+)
+
 
 def _get_kubeconfig(env: str) -> str:
     """Get kubeconfig path for the given environment."""
@@ -174,6 +186,27 @@ def _get_kubeconfig(env: str) -> str:
 
 def _kubectl_base(env: str, namespace: str = "kubelab") -> list[str]:
     return ["kubectl", "--kubeconfig", _get_kubeconfig(env), "-n", namespace]
+
+
+def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., Any] = subprocess.run) -> bool:
+    """Delete every `RETIRED_SECRETS` entry. False if any delete failed."""
+    all_ok = True
+    for namespace, name in RETIRED_SECRETS:
+        if dry_run:
+            logger.info(f"  [DRY-RUN] Would delete retired secret '{namespace}/{name}'")
+            continue
+        try:
+            run(
+                [*_kubectl_base(env, namespace), "delete", "secret", name, "--ignore-not-found"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.success(f"  retired secret {namespace}/{name} absent")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"  Failed to delete retired secret {namespace}/{name}: {e.stderr}")
+            all_ok = False
+    return all_ok
 
 
 def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
@@ -245,6 +278,9 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
         )
         if not ok:
             all_ok = False
+
+    # 4b. Remove what used to be rendered here; Argo CD never will.
+    all_ok = delete_retired_secrets(env, dry_run) and all_ok
 
     # 5. A changed Secret is not in use until its consumers restart (#1804):
     # env vars are read once at start, and Authelia's users-file watch never
