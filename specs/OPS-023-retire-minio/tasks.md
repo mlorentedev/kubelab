@@ -41,7 +41,7 @@ created: "2026-09-22"
 - [x] [AC1] Remove `minio` and `console.minio` from `infra/terraform/dns/services.json` and from the CoreDNS `Corefile.j2` split-DNS hosts. The Terraform plan must show exactly those records destroyed and nothing else.
 - [ ] [AC1] Delete the `minio-secrets` Secret in both envs. `apply-secrets` creates it outside git, so Argo CD never prunes it, and removing the code leaves the root password in etcd (the TOOL-025 shape). Decided 2026-09-24: `RETIRED_SECRETS` in `k8s_secrets.py`, which every `make apply-secrets` deletes with `--ignore-not-found` (`tests/test_retired_secrets.py`). Record the run for each env in `verification.md`.
 - [ ] [AC1] **Before merge:** sync the Uptime Kuma monitors to the RPi3, so the prune does not page for a planned change.
-- [ ] [AC1] Staging validation: `targetRevision` on the branch, then read the before and after state with `kubectl get deploy,svc,pvc,cronjob,ingressroute | grep -i minio`. Point `targetRevision` back after merge.
+- [x] [AC1] Staging validation (✓ 2026-09-25, evidence in `verification.md`): `targetRevision` on the branch, then read the before and after state with `kubectl get deploy,svc,pvc,cronjob,ingressroute | grep -i minio`. Point `targetRevision` back after merge.
 - [ ] [AC1] [AC6] Prod after merge: Argo CD prunes, and the before/after `kubectl get` output is recorded. `make backup-coverage` stays fully covered. An authorization request for `client_id=minio` returns `invalid_client` in both envs (AC3).
 
 ### PR 2: the Beelink
