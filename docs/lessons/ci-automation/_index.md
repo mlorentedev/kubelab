@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-32 lessons, newest first. Back to [all categories](../_index.md).
+33 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 458 | [A Gitea hook subscribed to `pull_request` also delivers PR comments, and the narrow name is `pull_request_only`](lesson-458-a-gitea-pull-request-hook-also-delivers-comments.md) | 2026-09-24 |
 | 446 | [A Dependabot pull request reads an empty secret store, so a reviewer that needs a credential must say it cannot run — not fail](lesson-446-a-dependabot-pull-request-reads-an-empty-secret-store-so-a-reviewer-that-needs-one-must-say-it-cannot-run.md) | 2026-08-24 |
 | 445 | [A hint step guarded by a bare `failure()` names a cause it never observed — and a named cause gets acted on](lesson-445-a-hint-guarded-by-a-bare-failure-names-a-cause-it-never-observed.md) | 2026-08-25 |
 | 441 | [A reusable workflow has no runs of its own, so a monitor pointed at one is red forever — and the ticket said to point one at it](lesson-441-a-reusable-workflow-has-no-runs-so-a-watcher-pointed-at-one-is-red-forever.md) | 2026-09-06 |

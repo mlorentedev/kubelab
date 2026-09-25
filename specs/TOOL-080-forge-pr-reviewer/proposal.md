@@ -43,7 +43,11 @@ The components:
    Three settings are set on purpose, because the upstream defaults differ:
    - `GITEA__PR_COMMANDS=["/review"]`. Upstream's default includes `/describe`, which rewrites the PR's title and body, and `/improve`. `pr-agent.yml` turns both off on GitHub.
    - `GITEA__HANDLE_PUSH_TRIGGER=true` with `GITEA__PUSH_COMMANDS=["/review"]`. Upstream ignores `synchronized` unless this is set, so a push would otherwise go unreviewed.
-   - `PR_REVIEWER__PERSISTENT_COMMENT=true`.
+   - `PR_REVIEWER__PERSISTENT_COMMENT=true` with `PR_REVIEWER__FINAL_UPDATE_MESSAGE=false`. Upstream's default posts a second "updated" comment on every push, next to the edited one (measured, `verification.md`).
+
+   Three more are pinned, each from the 2026-09-24 lab:
+   - `PR_REVIEWER__ENABLE_REVIEW_LABELS_EFFORT=false` and `PR_REVIEWER__ENABLE_REVIEW_LABELS_SECURITY=false`. Labelling needs write, so for a read-only reviewer every review ends in a refused `POST issues/{n}/labels`.
+   - `CONFIG__REPO_CONTEXT_FROM_DEFAULT_BRANCH=true`. It is the upstream default, pinned so the property it carries is declared and tested: `AGENTS.md` enters the prompt from the default branch only, never from the PR under review.
 
    `GITEA__REPO_SETTING` stays **unset**, so PR-Agent reads no repository-level `.pr_agent.toml`. Where the 0.45.0 Gitea provider does read one (`get_repo_settings`, only when that key names a path), it reads it at the pull request's **head SHA**. That would let the PR author rewrite the reviewer's own configuration in the change under review. All configuration therefore comes from this ConfigMap.
 3. **Secrets**, one K8s Secret produced by `make apply-secrets` from three new SOPS keys. All three are required, none optional:
@@ -55,12 +59,14 @@ The components:
    | `apps.services.core.gitea.reviewer_token` | `GITEA__PERSONAL_ACCESS_TOKEN` | EXTERNAL, minted by Ansible |
 4. **Reviewer identity.** A new row in `apps.auth.identities`. It gets:
    - an account created by `gitea-bootstrap.sh`, with `prohibit_login=false`, because `true` kills API tokens;
-   - a token minted by Ansible, gated on its SOPS key being absent, the same as `bot_token`. Its scopes are declared under `token_scopes` and tied to a requirement by `tests/test_gitea_token_scopes.py`;
+   - a token minted by Ansible, gated on its SOPS key being absent, the same as `bot_token`. Its scopes are `write:issue` and `read:repository`, measured as the minimum (`verification.md`). They are declared under `token_scopes` and tied to a requirement by `tests/test_gitea_token_scopes.py`;
    - membership in a **read** team in each declared organization;
    - an entry in `ROTATABLE_TOKENS`.
 
    It gets no write access to code, and it owns nothing.
-5. **Webhook.** The per-repository reconciler learns a list of hooks (`gitea.webhooks`), matched by URL as today, with the n8n hook as the first entry. The second entry is `https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, with events `[pull_request]` and the PR-Agent secret. Each hook reads its own secret, and the list stays backward-compatible with the singular key until the migration lands.
+5. **Webhook.** The per-repository reconciler learns a list of hooks (`gitea.webhooks`), matched by URL as today, with the n8n hook as the first entry. The second entry is `https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, with the PR-Agent secret and events `[pull_request_only, pull_request_sync]`. That is opened, reopened and edited, plus pushes, and nothing else.
+   - Not `pull_request`: the API expands it into every PR sub-event, comments included, and that turns slash commands on (measured, see Out of scope).
+   - Gitea stores the pair as `[pull_request, pull_request_sync]`. So this hook's events are compared for **set equality** against those stored names, not as the superset the n8n hook uses. A surplus event there is dropped by n8n; here it would reach a server that acts on it. Each hook reads its own secret, and the list stays backward-compatible with the singular key until the migration lands.
 6. **Ingress.** An IngressRoute on `Host(pr-agent.kubelab.live) && Path(/api/v1/gitea_webhooks)`, on the `websecure` entry point with Let's Encrypt.
    - Middlewares: `secure-headers`, `rate-limit`, `crowdsec-bouncer`. There is no `authelia`: the HMAC signature is the authentication, as with n8n's `/webhook/`.
    - DNS gets a row in `infra/terraform/dns/services.json` with no `target`. That is the same public-IP path `n8n.kubelab.live` already uses successfully under Gitea's default `ALLOWED_HOST_LIST`.
@@ -68,7 +74,7 @@ The components:
 
 ## Out of scope
 
-- **Slash commands** (`/review`, `/ask` and the rest in comments). The upstream Gitea server runs any comment starting with `/` from any author (`handle_comment_event`). It has no equivalent of the OWNER/MEMBER/COLLABORATOR gate `pr-agent.yml` applies on GitHub, and OAuth auto-registration is on. So the hook subscribes to `pull_request` only. A follow-up can add `issue_comment` behind an author filter.
+- **Slash commands** (`/review`, `/ask` and the rest in comments). The upstream Gitea server runs any comment starting with `/` from any author (`handle_comment_event`). It has no equivalent of the OWNER/MEMBER/COLLABORATOR gate `pr-agent.yml` applies on GitHub, and OAuth auto-registration is on. Subscribing to `pull_request` would not keep them out: in the 2026-09-24 lab, a `pull_request` hook delivered the author's `/ask`, and the reviewer answered it. So the hook subscribes to `pull_request_only` and `pull_request_sync`, which deliver no comments. A follow-up can add comment events behind an author filter.
 - **A review check or merge gate.** The forge has no branch protection (TOOL-063 #1633), and `review-attestation.yml` depends on `workflow_run`, which is unmeasured on Gitea 1.25.
 - **Porting `dotf pr triage-queue` to the forge** (mlorentedev/dotfiles#1622).
   Until it ports, dispositions stay a `## Review triage` comment posted by hand on each forge PR, which is today's practice.
@@ -81,7 +87,10 @@ The components:
 - **Two copies of one credential.** `NAN_API_KEY` rotates every 90 days in Bitwarden (dotfiles `secrets/registry.yaml`), and the SOPS copy does not follow on its own. Mitigation: the catalog entry's `rotate_note` names the one-line re-copy, `dotf secrets run --only NAN_API_KEY -- sh -c 'printf %s "$NAN_API_KEY" | toolkit secrets set apps.services.automation.pr_agent.nan_api_key --env prod --stdin'`, and the registry comment gains `k8s:kubelab/pr-agent` as a consumer. If the copies drift, NaN returns 401 and the detector catches the silence. That is the backstop, not the fix.
 - **Upstream accepts unsigned requests when `webhook_secret` is empty** (`get_body`). The Secret key is required, so the pod cannot start without it, and a test asserts the manifest's `secretKeyRef` has no `optional: true`. An AC measures that an unsigned POST is refused.
 - **NaN concurrency.** NaN allows 5 concurrent requests, shared across every consumer (#1203). gunicorn starts 2–4 workers depending on the CPU limit, and each can run several background reviews. Five rebased PRs at once (measured on resume, 2026-09-24) would be five concurrent calls. The fallback model absorbs a 429. Pinning `workers` via a small gunicorn config override is decided in the manifests PR, after one burst has been measured.
-- **To measure in the identity PR:** whether a read-team member with a `write:issue` token can comment on a pull request, and whether PR-Agent's Gitea provider needs any other scope (for example `read:user` for `/user`). Scopes are declared from the measurement, not guessed.
+- **Measured, 2026-09-24 (local lab, `verification.md`):**
+  - A read-team member's token needs `write:issue` + `read:repository`. `write:issue` alone comments but cannot read the PR, and `/user` is never called.
+  - Read access contains the reviewer: labelling, PR reviews and PR edits all return 403.
+  - `prohibit_login=true` makes every API token of the account 403, so the reviewer keeps the flag off and has no usable password instead. AUTH-007's pusher has the same constraint.
 - **To measure in the manifests PR:** whether the image runs as non-root with a read-only root filesystem plus an `emptyDir` on `/tmp`. The image declares no user, so it runs as root. If it works, `securityContext` gets `runAsNonRoot`; if not, the reason is recorded in the manifest.
 - **Correction to #1823.** The probe logged `get_repo_settings: Repository settings not found`, and #1823 read that as the repository having no `.pr_agent.toml`. The source says otherwise: that line means `GITEA.REPO_SETTING` is unset, so no settings file was ever looked for.
 - **The reviewer is a third machine identity.** AUTH-007 (#1781) is already amending ADR-062 D1 for a second machine class. This spec extends the same amendment, rather than starting a parallel one, and lands after or together with it.

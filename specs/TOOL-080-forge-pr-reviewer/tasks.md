@@ -15,7 +15,8 @@ created: "2026-09-23"
 
 ## PR 2 — reviewer identity (lands with, or after, AUTH-007 #1781's ADR-062 D1 amendment)
 
-- [ ] [AC5] Measure first, record in `verification.md`. Does a read-team member's `write:issue` token post a PR comment on the forge? What else does the PR-Agent Gitea provider call (`/user`, repo settings)? The scopes come from this measurement.
+- [x] [AC5] Measure first, record in `verification.md`. Does a read-team member's `write:issue` token post a PR comment on the forge? What else does the PR-Agent Gitea provider call (`/user`, repo settings)? The scopes come from this measurement.
+      Measured 2026-09-24 in a local Gitea 1.25.5 lab (`scope-lab.py`): `write:issue` + `read:repository`, no `read:user`. The live check with the real identity is AC1, in PR 4.
 - [ ] [AC5] Failing tests: `test_gitea_token_scopes.py` covers the reviewer grant and requirement, `test_gitea_machine_identity.py` / `test_ansible_identity_ssot.py` cover the new identity row, and `ROTATABLE_TOKENS` gets a reviewer entry.
 - [ ] [AC5] `apps.auth.identities.reviewer` and `token_scopes.reviewer` in `common.yaml`. Account block in `gitea-bootstrap.sh` (`prohibit_login=false`). Mint and record tasks gated on `apps.services.core.gitea.reviewer_token`.
 - [ ] [AC6] `SECRET_CATALOG` entry for `reviewer_token` (EXTERNAL, `Expiry.NEVER`, prod), modelled on `bot_token`.
@@ -25,13 +26,14 @@ created: "2026-09-23"
 ## PR 3 — a list of webhooks in the reconciler
 
 - [ ] [P] [AC7] Failing tests: `gitea.webhooks` holds a list and matches by URL, each hook reads its own secret key, the singular `gitea.webhook` still loads, and n8n stays first and pinned to prod (sibling of `test_gitea_repo_reconcile.py:1423-1436`).
+- [ ] [P] [AC7] Failing tests for per-hook event matching. The PR-Agent hook is created with `[pull_request_only, pull_request_sync]` and compared for set equality against the stored `[pull_request, pull_request_sync]`. A live surplus such as `pull_request_comment` is drift to correct, and a second run converges. n8n keeps its superset rule.
 - [ ] [AC7] Implement `load_webhooks` and per-hook `ensure_webhook` in `gitea_repos.py`, and read each secret in `services.py`.
-- [ ] [AC7] Declare the PR-Agent hook (`events: [pull_request]`). It stays `active: false` until PR 4 is live, so no delivery goes to a host that does not answer yet.
+- [ ] [AC7] Declare the PR-Agent hook (`events: [pull_request_only, pull_request_sync]`). It stays `active: false` until PR 4 is live, so no delivery goes to a host that does not answer yet.
 
 ## PR 4 — the server in the cluster
 
 - [ ] [P] [AC6] Failing tests: catalog and mapping for `nan_api_key` and `webhook_secret`, and required keys only (no `optional: true` on any `secretKeyRef`).
-- [ ] [P] [AC4] Failing test: the rendered prod ConfigMap has `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` equal to `["/review"]`, `GITEA__HANDLE_PUSH_TRIGGER=true`, and no `GITEA__REPO_SETTING`, which would let a PR's head rewrite the reviewer's config.
+- [ ] [P] [AC4] Failing test: the rendered prod ConfigMap has `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` equal to `["/review"]`, `GITEA__HANDLE_PUSH_TRIGGER=true`, and no `GITEA__REPO_SETTING`, which would let a PR's head rewrite the reviewer's config. It also has `PR_REVIEWER__FINAL_UPDATE_MESSAGE=false`, both `PR_REVIEWER__ENABLE_REVIEW_LABELS_*=false`, and `CONFIG__REPO_CONTEXT_FROM_DEFAULT_BRANCH=true` (the 2026-09-24 lab).
 - [ ] [AC6] SOPS: generate `webhook_secret` (RANDOM_HEX). Copy `nan_api_key` from Bitwarden through a pipe (`dotf secrets run --only NAN_API_KEY -- sh -c 'printf %s "$NAN_API_KEY" | toolkit secrets set … --stdin'`), never through argv or stdout. Add `rotate_note` naming that re-copy, and add `k8s:kubelab/pr-agent` to the dotfiles registry consumers.
 - [ ] [AC1] `pr-agent.yaml` in the prod overlay: Deployment (limits, `enableServiceLinks: false`, standard labels), ClusterIP Service, IngressRoute (`secure-headers`, `rate-limit`, `crowdsec-bouncer`), and `configMapGenerator`. Image in `common.yaml` plus `make sync-k8s-images`, with Renovate coverage.
 - [ ] Measure non-root. If it works, set `runAsNonRoot`, `readOnlyRootFilesystem` and an `emptyDir` on `/tmp`. If not, record why in the manifest.
