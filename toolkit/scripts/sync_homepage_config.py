@@ -243,7 +243,6 @@ def build_service_tables(
         crowdsec = services.get("security", {}).get("crowdsec", {})
         traefik = services.get("core", {}).get("traefik", {})
         n8n = services.get("automation", {}).get("n8n", {})
-        minio = services.get("data", {}).get("minio", {})
         grafana = services.get("observability", {}).get("grafana", {})
         loki = services.get("observability", {}).get("loki", {})
 
@@ -307,26 +306,6 @@ def build_service_tables(
                 nd,
                 "Automation",
                 version=_ver(n8n.get("image", "")),
-            ),
-            _svc(
-                "MinIO API",
-                f"https://minio.{prefix}",
-                f"https://minio.{prefix}" + minio.get("health_path", "/minio/health/live"),
-                "Built-in",
-                "Data",
-                nd,
-                "S3 API",
-                version=_ver(minio.get("image", "")),
-            ),
-            _svc(
-                "MinIO Console",
-                f"https://console.minio.{prefix}",
-                f"https://console.minio.{prefix}",
-                "Built-in (OIDC)",
-                "Data",
-                nd,
-                "Console UI",
-                version=_ver(minio.get("image", "")),
             ),
             _svc(
                 "Grafana",

@@ -194,7 +194,7 @@ def hash_secrets(
     """Generate Argon2 hashes for all OIDC client secrets.
 
     Reads plaintext OIDC secrets from SOPS, generates hashes, writes back.
-    This handles: general OIDC, Grafana OIDC, MinIO OIDC client secrets.
+    This handles every OIDC client secret registered in SECRET_CATALOG.
 
     Example: toolkit secrets hash --env staging
     """

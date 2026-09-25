@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-25T01:16:54Z",
-  "source_commit": "b4985d8a29c26b919f599753701ef525a6cb6553",
+  "generated_at": "2026-09-25T03:07:33Z",
+  "source_commit": "ffd33e9c643c6565306fc1ac4096451988938800",
   "cluster": {
     "name": "KubeLab Hybrid Cloud & Edge Platform",
     "version": "K3s v1.34.4+k3s1",
     "gitops": "Argo CD v3.4.1 · 2 applications synced",
     "uptime": "99.9% (90d, Uptime Kuma)",
     "activeNodes": 8,
-    "totalServices": 39,
+    "totalServices": 35,
     "kubernetesClusters": 3,
     "kubernetesNodes": 3
   },

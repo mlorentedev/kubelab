@@ -13,6 +13,8 @@ owner: manu
 
 Accepted (2026-03-22). **The Backblaze B2 leg is superseded by [ADR-049](adr-049-edge-object-storage-placement-doctrine.md)** (2026-06-19): the off-site `tier-offsite` is Hetzner Storage Box + Borg (bulk) + Cloudflare R2 (critical subset); B2 is retired.
 
+**The `pvc-backup` CronJob is retired** (OPS-023, 2026-09-24), along with `make backup-pvc` and the in-cluster MinIO it wrote to. The PVCs it covered, Authelia and n8n, are `pvc:` sources in `backup.sources` and are shipped to R2 by `node_backup` (BACKUP-044, #1236). The CronJob had failed every night since 2026-08-25 with nothing reporting it, which is the failure mode the node-path heartbeat exists to prevent. The Phase 5 Velero direction below is not being pursued (#1090).
+
 ## Context
 
 KubeLab is approaching production cutover (ADR-023 Phase 2). Four PVCs contain critical stateful data:
