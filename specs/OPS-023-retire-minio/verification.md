@@ -10,6 +10,7 @@ created: "2026-09-22"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
 - [ ] AC1 (K8s half, in the repo): `f798464b`. `kubectl kustomize` 2026-09-24: staging 96 objects, prod 99, with **0** MinIO and **0** `pvc-backup` references in either. Live before/after is pending staging validation and the prod prune.
+  - Staging, partial (2026-09-25). Before, at 02:30:54Z: `deployment/minio`, `service/minio`, `pvc/minio-data`, `ingressroute/minio-api`, `ingressroute/minio-console` and `configmap/minio-config`; no `minio-secrets` Secret exists in staging. With `targetRevision` on this branch, Argo CD pruned the Deployment and the PVC within about 60 s. The run was cut short: staging belonged to #1825's lane, so the revision was restored and the other branch recreated MinIO (see #1825 and #1083). The full before/after run waits until staging is free.
 - [ ] AC2: PR 2.
 - [ ] AC3 (repo half): `minio` is absent from both generated `oidc-clients.yml` (`make sync-oidc-hashes ENV=staging|prod`). The `invalid_client` probe is pending deployment.
 - [ ] AC4 (OIDC half): `oidc_client_secret` and `oidc_client_secret_minio_hash` unset in dev, staging and prod. `make secrets-audit` exits 0 with no new orphan. `root_password` and `root_user` are PR 3.
