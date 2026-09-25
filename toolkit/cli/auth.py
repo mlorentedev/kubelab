@@ -44,12 +44,12 @@ def _announce(env: str, service: str) -> None:
         logger.warning("  could NOT announce this use (notify webhook unreachable); continuing -- access wins")
 
 
-def _account_guidance(env: str, decl: dict[str, Any], identities: dict[str, str]) -> None:
-    if "identity" not in decl:
+def _account_guidance(env: str, decl: dict[str, Any], values: dict[str, Any]) -> None:
+    if "secret" not in decl:
         typer.echo("  account:  none needed")
         return
     where = bg.secret_file(decl["secret"], env, _SECRETS_DIR)
-    typer.echo(f"  user:     {identities[decl['identity']]}")
+    typer.echo(f"  user:     {bg.account_login(decl, values)}")
     typer.echo(f"  password: run in YOUR terminal: make secrets-show KEY={decl['secret']} SECRETS_ENV={where}")
     typer.echo(f"  after:    rotate it -- toolkit secrets rotate --group break-glass --env {env}")
 
@@ -91,7 +91,7 @@ def break_glass_cmd(
         typer.echo(f"{service} ({env}) has no break-glass path, by design: {plan.reason}")
         raise typer.Exit(EXIT_DECLARED_NONE)
 
-    identities = (load_values(env).get("apps", {}).get("auth", {}) or {}).get("identities", {}) or {}
+    values = load_values(env)
     typer.echo(f"break-glass: {service} ({env})")
     if not dry_run:
         _announce(env, service)
@@ -111,12 +111,12 @@ def break_glass_cmd(
 
     if isinstance(plan, bg.Direct):
         typer.echo(f"  way in:   {plan.url}  (over the tailnet, bypassing the router and the IdP)")
-        _account_guidance(env, decl, identities)
+        _account_guidance(env, decl, values)
         return
 
     local = bg.free_local_port()
     typer.echo(f"  way in:   http://127.0.0.1:{local}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
-    _account_guidance(env, decl, identities)
+    _account_guidance(env, decl, values)
     if dry_run:
         return
     typer.echo("  Ctrl-C closes the tunnel.")

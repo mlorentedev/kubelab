@@ -135,18 +135,26 @@ class TestTargets:
 
     def test_only_account_declarations_are_rotated(self) -> None:
         decls: dict[str, Any] = {
-            "grafana": {"identity": "superadmin", "secret": "apps.services.observability.grafana.admin_password"},
+            "grafana": {
+                "login": "breakglass",
+                "email": "bg@x",
+                "secret": "apps.services.observability.grafana.admin_password",
+            },
+            "gitea": {"identity": "superadmin", "secret": "apps.services.core.gitea.admin_password"},
             "argocd": {"cluster": "hub"},
             "loki": {},
             "vikunja": {"none": "x"},
         }
-        assert [t.service for t in rot.targets(decls)] == ["grafana"]
+        values = {"apps": {"auth": {"identities": {"superadmin": "manu"}}}}
+        got = [(t.service, t.login) for t in rot.targets(decls, values)]
+        assert got == [("gitea", "manu"), ("grafana", "breakglass")]
 
     def test_every_account_declaration_has_a_reconciler(self) -> None:
         from toolkit.features import break_glass as bg
         from toolkit.features.oidc_clients import load_values
 
-        accounts = [t.service for t in rot.targets(bg.declarations(load_values("prod")))]
+        values = load_values("prod")
+        accounts = [t.service for t in rot.targets(bg.declarations(values), values)]
         assert accounts, "no break-glass account is declared: this test would pass vacuously"
         missing = [service for service in accounts if service not in rot.RECONCILERS]
         assert not missing, f"break-glass accounts with no way to rotate them: {missing}"
@@ -214,7 +222,7 @@ def test_drift_after_an_interrupted_run_names_the_git_restore(monkeypatch: pytes
     monkeypatch.setattr(
         rot,
         "targets",
-        lambda decls: [rot.Target("grafana", "superadmin", "apps.services.observability.grafana.admin_password")],
+        lambda decls, values: [rot.Target("grafana", "manu", "apps.services.observability.grafana.admin_password")],
     )
     monkeypatch.setattr(bg, "declarations", lambda values: {})
     monkeypatch.setattr(bg, "resolve", lambda env, service, root: ({}, None, bg.Direct(url="http://x")))

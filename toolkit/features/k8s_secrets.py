@@ -241,8 +241,8 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
         logger.error(
             "Refusing to apply — these keys resolve from the identity SSOT and it is not "
             "declared: " + ", ".join(missing_identity) + ". Set `apps.auth.identities.superadmin` "
-            "in common.yaml (ADR-062 D3). Applying without it writes Secrets whose workloads "
-            "cannot start."
+            "(MinIO, ADR-062 D3) and Grafana's account in `apps.services.security.authelia.break_glass` "
+            "in common.yaml. Applying without them writes Secrets whose workloads cannot start."
         )
         return False
 
@@ -291,6 +291,21 @@ def _resolve_superadmin(cm: ConfigurationManager) -> str:
     return superadmin
 
 
+def _resolve_grafana_admin(cm: ConfigurationManager) -> str:
+    """Grafana's local admin is its break-glass account, not the superadmin (#951, option A).
+
+    Once SSO is Grafana's only login, the superadmin's SSO login would take over an
+    account named after them, and Grafana refuses every password change on an
+    SSO-linked account. So row id 1, which `GF_SECURITY_ADMIN_USER` seeds, belongs
+    to nobody in Authelia, and its login comes from the break-glass declaration.
+    """
+    from toolkit.features import break_glass as bg
+
+    values = cm.get_merged_config()
+    decl = bg.declarations(values).get("grafana") or {}
+    return bg.account_login(decl, values) if "secret" in decl else ""
+
+
 def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str]]:
     """Build pre-rendered secret values that require config + SOPS merging.
 
@@ -298,10 +313,11 @@ def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str
     """
     result: dict[str, dict[str, str]] = {}
 
-    # AUTH-004 C1/C6 (ADR-062 D3): every service's admin identity resolves from
-    # ONE declaration, `apps.auth.identities.superadmin`. It is plaintext config
-    # rather than a SOPS value, which is why it arrives as a `literal` here
-    # instead of through `SecretMapping.keys`.
+    # AUTH-004 C1/C6 (ADR-062 D3): a service's admin identity resolves from ONE
+    # declaration, `apps.auth.identities.superadmin`. Grafana is the exception
+    # since #951: its admin is the break-glass account, see `_resolve_grafana_admin`.
+    # Both are plaintext config rather than SOPS values, which is why they arrive
+    # as `literal`s here instead of through `SecretMapping.keys`.
     #
     # What this replaces, and why it is not a tidy-up. `grafana-admin.admin-user`
     # was mapped to BASIC_AUTH_USER — the *Traefik basic-auth account* — and
@@ -312,8 +328,10 @@ def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str
     # 378/379). An identity is a declaration, not a credential.
     superadmin = _resolve_superadmin(cm)
     if superadmin:
-        result["grafana-admin"] = {"admin-user": superadmin}
         result["minio-secrets"] = {"MINIO_ROOT_USER": superadmin}
+    grafana_admin = _resolve_grafana_admin(cm)
+    if grafana_admin:
+        result["grafana-admin"] = {"admin-user": grafana_admin}
 
     users_db = _build_users_database(cm)
     if users_db:

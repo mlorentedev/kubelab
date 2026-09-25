@@ -57,12 +57,23 @@ def _route(name: str, host: str, *, forward_auth: bool = False, backend: dict[st
 
 
 def _values(**break_glass: Any) -> dict[str, Any]:
+    # `operator` has no email of its own, so it gets `apps.contact.email`: a collision
+    # with it is only caught if validation resolves emails the way the generators do.
+    users = [
+        {"identity": "superadmin", "email": "manu@example.test", "groups": ["admins"]},
+        {"identity": "operator", "groups": ["admins"]},
+        {"username": "testuser", "email": "test@example.test", "groups": ["e2e"]},
+    ]
     return {
         "apps": {
+            "contact": {"email": "info@example.test"},
             "auth": {"identities": {"superadmin": "manu", "operator": "operator"}},
-            "services": {"security": {"authelia": {"break_glass": break_glass, "oidc_clients": []}}},
+            "services": {"security": {"authelia": {"break_glass": break_glass, "oidc_clients": [], "users": users}}},
         }
     }
+
+
+_GRAFANA_SECRET = "apps.services.observability.grafana.admin_password"
 
 
 # --------------------------------------------------------------------------- coverage
@@ -146,7 +157,8 @@ class TestValidate:
 
     def test_the_four_forms_are_accepted(self) -> None:
         self._ok(
-            grafana={"identity": "superadmin", "secret": "apps.services.observability.grafana.admin_password"},
+            grafana={"login": "breakglass", "email": "breakglass@example.test", "secret": _GRAFANA_SECRET},
+            gitea={"identity": "superadmin", "secret": "apps.services.core.gitea.admin_password"},
             argocd={"cluster": "hub"},
             loki={},
             vikunja={"none": "not a 3 AM service (ADR-028)"},
@@ -163,11 +175,26 @@ class TestValidate:
             ({"cluster": "moon"}, "moon"),
             ({"none": "x", "cluster": "hub"}, "exactly one"),
             ({"typo": 1}, "typo"),
+            # A local account (#951): nobody's in Authelia, and provably so.
+            ({"identity": "superadmin", "login": "bg", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "exactly one"),
+            ({"identity": "superadmin", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "local `login`"),
+            ({"login": "bg", "secret": _GRAFANA_SECRET}, "own `email`"),
+            ({"login": "operator", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "'operator' is an Authelia"),
+            ({"login": "testuser", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "'testuser' is an Authelia"),
+            ({"login": "bg", "email": "Manu@Example.test", "secret": _GRAFANA_SECRET}, "adopt"),
+            ({"login": "bg", "email": "info@example.test", "secret": _GRAFANA_SECRET}, "adopt"),
         ],
     )
     def test_invalid_declarations_fail_naming_the_service(self, decl: dict[str, Any], fragment: str) -> None:
         with pytest.raises(bg.BreakGlassError, match=rf"grafana.*{fragment}|{fragment}.*grafana"):
             self._ok(grafana=decl)
+
+    def test_an_account_signs_in_as_its_own_login_or_its_identity(self) -> None:
+        values = _values()
+        assert bg.account_login({"identity": "superadmin", "secret": _GRAFANA_SECRET}, values) == "manu"
+        assert (
+            bg.account_login({"login": "breakglass", "email": "b@x", "secret": _GRAFANA_SECRET}, values) == "breakglass"
+        )
 
     def test_a_non_service_backend_cannot_claim_a_reachable_path(self) -> None:
         docs = [

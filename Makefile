@@ -644,6 +644,15 @@ auth-review: ## Compare live app privileges with the declared groups (APPLY=1 to
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make auth-review ENV=staging|prod [APPLY=1]" && exit 1)
 	@$(TOOLKIT) auth review --env $(ENV) $(if $(APPLY),--apply,)
 
+# Grafana's row id 1 is its break-glass account (#951): a local login and email no
+# SSO login can adopt, declared at `apps.services.security.authelia.break_glass`.
+# GF_SECURITY_ADMIN_USER/EMAIL only seed a fresh database, so this renames an
+# existing row and sets its email. CHECK=1 only reports, and exits 1 on drift.
+.PHONY: grafana-admin-reconcile
+grafana-admin-reconcile: ## Make Grafana's row id 1 the declared break-glass account (CHECK=1 to only detect)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make grafana-admin-reconcile ENV=staging|prod [CHECK=1]" && exit 1)
+	@$(TOOLKIT) credentials reconcile-grafana-admin --env $(ENV) $(if $(CHECK),--check-only,)
+
 # Point prod's inbound Argo CD route at wherever gcp1 currently lives.
 #
 # Its own target, and called rather than inlined, because the event that

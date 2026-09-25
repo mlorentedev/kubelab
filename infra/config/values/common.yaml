@@ -1774,13 +1774,24 @@ apps:
         # says which account opens the door. `tests/test_break_glass.py` fails CI
         # when a dependent is missing. Use: `make break-glass SVC=<name> ENV=<env>`.
         #
-        #   {identity, secret}  local account; the password is a SECRET_CATALOG key
-        #   {}                  reachable privately, no account needed
-        #   {cluster: <target>} the kubeconfig is the way in
-        #   {none: <reason>}    no break-glass, on purpose
+        #   {identity, secret}       the app's local account of a declared identity;
+        #                            the password is a SECRET_CATALOG key
+        #   {login, email, secret}   a local account that belongs to nobody in Authelia
+        #   {}                       reachable privately, no account needed
+        #   {cluster: <target>}      the kubeconfig is the way in
+        #   {none: <reason>}         no break-glass, on purpose
         break_glass:
           grafana:
-            identity: superadmin
+            # A local account of nobody (#951, option A). Grafana treats an SSO-linked
+            # account as external and refuses every password change on it
+            # (`errOnExternalUser`), so an emergency account that SSO can link could
+            # never be rotated again. The login and email match no Authelia user, so
+            # no SSO login can adopt it; `break_glass.py` refuses a collision. It is
+            # Grafana's row id 1 and its Server Admin: `make grafana-admin-reconcile
+            # ENV=<env>` renames that row to this, and `GF_SECURITY_ADMIN_EMAIL` in
+            # grafana.env seeds a fresh install with the same email.
+            login: breakglass
+            email: breakglass@kubelab.live
             secret: apps.services.observability.grafana.admin_password
           gitea:
             # Via the API and `git` over HTTPS. The web form is not relied on,

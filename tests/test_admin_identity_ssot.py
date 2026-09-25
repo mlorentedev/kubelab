@@ -43,8 +43,12 @@ from toolkit.features.configuration import resolve_user_identity
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, _build_dynamic_literals
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
-#: The declared superadmin. What every service's admin identity must resolve to.
+#: The declared superadmin. What a service's admin identity must resolve to.
 SUPERADMIN = "declared-superadmin"
+
+#: Grafana's break-glass account (#951, option A), which is Grafana's admin row
+#: rather than the superadmin: the superadmin's SSO login would otherwise adopt it.
+GRAFANA_BREAK_GLASS = "declared-breakglass"
 
 #: The Traefik basic-auth account. A machine credential that the credential
 #: generator rewrites on rotation — deliberately unlike a person's name, so that
@@ -76,7 +80,19 @@ def cm() -> FakeConfigurationManager:
                     # a service's admin identity comes from.
                     "admin_username": "declared-operator",
                 },
-                "services": {"security": {"authelia": {}}},
+                "services": {
+                    "security": {
+                        "authelia": {
+                            "break_glass": {
+                                "grafana": {
+                                    "login": GRAFANA_BREAK_GLASS,
+                                    "email": "breakglass@example.test",
+                                    "secret": "apps.services.observability.grafana.admin_password",
+                                }
+                            }
+                        }
+                    }
+                },
             },
             "basic_auth": {"user": BASIC_AUTH_ACCOUNT},
         }
@@ -86,23 +102,26 @@ def cm() -> FakeConfigurationManager:
 class TestAdminIdentityResolvesFromTheSSOT:
     """C6: assert on the GENERATED Secret, so the guard survives a refactor of the plumbing."""
 
-    def test_grafana_admin_user_resolves_from_the_identity_ssot(self, cm: FakeConfigurationManager) -> None:
+    def test_grafana_admin_user_resolves_from_its_break_glass_account(self, cm: FakeConfigurationManager) -> None:
         """RED until `grafana-admin.admin-user` stops coming from `BASIC_AUTH_USER`.
 
-        Grafana is the clearest case because its mapping names the alias
-        outright (`k8s_secrets.py:53`). Nothing about Grafana requires the
-        Traefik account; the two coincided by history.
+        Grafana is the clearest case because its mapping named the alias
+        outright. Nothing about Grafana requires the Traefik account; the two
+        coincided by history. Since #951 its admin row is the break-glass account,
+        not the superadmin: once SSO is Grafana's only login, the superadmin's
+        login would adopt a row named after them, and Grafana refuses every
+        password change on an SSO-linked account.
         """
         literals = _build_dynamic_literals(cm)
 
         assert "grafana-admin" in literals, (
             "grafana-admin has no dynamic literal, so its admin-user still comes from the "
-            "static SECRET_DEFINITIONS mapping to BASIC_AUTH_USER. The admin identity must "
-            "be resolved from apps.auth.identities.superadmin and injected here."
+            "static SECRET_DEFINITIONS mapping to BASIC_AUTH_USER. It must be resolved from "
+            "the break-glass declaration and injected here."
         )
-        assert literals["grafana-admin"]["admin-user"] == SUPERADMIN, (
+        assert literals["grafana-admin"]["admin-user"] == GRAFANA_BREAK_GLASS, (
             f"grafana-admin.admin-user is {literals['grafana-admin']['admin-user']!r}, "
-            f"expected the declared superadmin {SUPERADMIN!r}."
+            f"expected Grafana's break-glass account {GRAFANA_BREAK_GLASS!r}."
         )
 
     def test_minio_root_user_resolves_from_the_identity_ssot(self, cm: FakeConfigurationManager) -> None:
