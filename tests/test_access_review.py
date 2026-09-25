@@ -3,8 +3,9 @@
 Two defects this pins, both measured on 2026-09-24 by the first `make auth-review`:
 
 - Grafana's role path returned 'Viewer' from the ID token, which carries no
-  `groups` under Authelia 4.39, so Grafana never read UserInfo and every SSO user
-  was Viewer, admins included.
+  `groups` under Authelia 4.39, so Grafana would never read UserInfo. The Viewer
+  actually measured had a second cause that hid this one: the auth proxy logged
+  users in before OAuth ran (lesson-458, tests/test_grafana_login_door.py).
 - Argo CD read `groups` from the ID token only, so `g, admins, role:admin` matched
   nobody and every SSO user fell to `role:readonly`.
 
@@ -78,17 +79,33 @@ def test_every_role_path_is_found() -> None:
     assert len(_role_paths()) >= 2, _role_paths()
 
 
+def _grafana_role(expr: str, source: dict[str, Any]) -> str:
+    """Grafana 13.0.2's `searchRole` for one source: the path on the source's JSON, and
+    if that finds nothing, the path again on `{"groups": []}`, a list the caller
+    hardcodes as empty (`extractRoleAndAdminOptional(data.rawJSON, []string{})`)."""
+    for doc in (source, {"groups": []}):
+        try:
+            found = jmespath.search(expr, doc)
+        except jmespath.exceptions.JMESPathError:
+            found = None  # Grafana treats an evaluation error as "not found"
+        if isinstance(found, str) and found:
+            return found
+    return ""
+
+
 @pytest.mark.parametrize(("where", "expr"), _role_paths())
 def test_the_role_path_defers_to_userinfo_when_the_id_token_has_no_groups(where: str, expr: str) -> None:
     """Grafana evaluates the ID token first and moves on only when the result is empty.
 
     An expression that ends in a default returns it from the ID token, and UserInfo,
-    where Authelia puts `groups`, is never read.
+    where Authelia puts `groups`, is never read. Grafana also re-runs the path on an
+    EMPTY groups list, so an expression that answers `[]` with 'Viewer' does the same
+    (lesson-461): every SSO user was Viewer in staging on 2026-09-24.
     """
-    assert jmespath.search(expr, {"sub": "x", "email": "a@b"}) in (None, ""), where
-    assert jmespath.search(expr, {"groups": [ADMIN_GROUP, "users"]}) == "Admin", where
-    assert jmespath.search(expr, {"groups": ["users"]}) == "Viewer", where
-    assert jmespath.search(expr, {"groups": []}) == "Viewer", where
+    id_token = {"sub": "x", "email": "a@b"}
+    assert _grafana_role(expr, id_token) == "", f"{where}: the ID token must not decide the role"
+    assert _grafana_role(expr, {"groups": [ADMIN_GROUP, "users"]}) == "Admin", where
+    assert _grafana_role(expr, {"groups": ["users"]}) == "Viewer", where
 
 
 def test_argo_cd_reads_groups_from_userinfo() -> None:
@@ -110,10 +127,11 @@ def test_argo_cd_reads_groups_from_userinfo() -> None:
 class FakeApp:
     """A tier store that answers reads and records edits, like an app's API."""
 
-    def __init__(self, tiers: Any, accounts: list[Account], accept: bool = True) -> None:
-        self.tiers, self.accounts, self.accept = tiers, {a.user: a for a in accounts}, accept
+    def __init__(self, tiers: Any, accounts: list[Account], accept: bool = True, answer: bool = True) -> None:
+        self.tiers, self.accounts, self.accept, self.answer = tiers, {a.user: a for a in accounts}, accept, answer
         self.edits: list[tuple[str, str]] = []
         self.admin_tier, self.user_tier = tiers.admin_tier, tiers.user_tier
+        self.settles_on_next_login = getattr(tiers, "settles_on_next_login", False)
 
     def read(self, base_url: str, auth: str) -> list[Account]:
         return list(self.accounts.values())
@@ -122,7 +140,7 @@ class FakeApp:
         self.edits.append((account.user, tier))
         if self.accept:
             self.accounts[account.user] = Account(account.user, tier, account.ref)
-        return True  # a 200 either way: the read-back is what decides
+        return self.answer  # a 200 unless told otherwise: the read-back is what decides
 
 
 DECLARED = {"manu": True, "operator": False, "hefesto": False}
@@ -178,10 +196,28 @@ def test_gitea_edit_sends_back_the_live_login_name() -> None:
     assert body == {"login_name": "d439346a-sub", "source_id": 1, "admin": False}
 
 
-def test_grafana_edit_sets_the_org_role_by_user_id() -> None:
+def test_grafana_revokes_the_sessions_instead_of_editing_the_role() -> None:
+    """With OIDC as the only login, Grafana writes the role from `groups` at each login
+    and refuses to edit it (`ErrCannotChangeRoleForExternallySyncedUser`). Revoking the
+    sessions makes the next request sign in again, which is when the role changes."""
     request = Recorder()
     GrafanaTiers(request).set_tier("http://gr", "a:b", Account("operator", "Admin", {"user_id": 7}), "Viewer")
-    assert request.calls == [("PATCH", "http://gr/api/org/users/7", {"role": "Viewer"})]
+    assert request.calls == [("POST", "http://gr/api/admin/users/7/logout", None)]
+
+
+def test_a_revoked_grafana_session_is_bounded_not_fixed() -> None:
+    """The stored role still reads Admin after the revoke: `fixed` would be false,
+    and `failed` would fail a review that did the only thing Grafana allows."""
+    app = FakeApp(GrafanaTiers, [Account("operator", "Admin", {"user_id": 7})], accept=False)
+    [finding] = reconcile("grafana", DECLARED, app, "http://x", "a:b", apply=True)
+    assert finding.status == "bounded" and finding.live == "Admin"
+    assert "revoked" in finding.detail
+
+
+def test_a_refused_revoke_is_a_failure() -> None:
+    app = FakeApp(GrafanaTiers, [Account("operator", "Admin", {"user_id": 7})], accept=False, answer=False)
+    [finding] = reconcile("grafana", DECLARED, app, "http://x", "a:b", apply=True)
+    assert finding.status == "failed"
 
 
 def test_the_break_glass_account_is_never_edited() -> None:
@@ -192,6 +228,17 @@ def test_the_break_glass_account_is_never_edited() -> None:
     assert findings["manu"].status == "refused"
     assert ("manu", "user") not in app.edits
     assert findings["operator"].status == "fixed"
+
+
+def test_a_local_break_glass_account_is_admin_not_undeclared() -> None:
+    """Grafana's break-glass account belongs to nobody in Authelia (#951). Reported as
+    undeclared, it would fail every review; it is the admin the review runs as."""
+    app = FakeApp(GrafanaTiers, [Account("breakglass", "Admin"), Account("operator", "Viewer")])
+    findings = {f.user: f for f in reconcile("grafana", DECLARED, app, "u", "a", False, "breakglass")}
+    assert findings["breakglass"].status == "ok" and findings["breakglass"].declared == "Admin"
+    demoted = FakeApp(GrafanaTiers, [Account("breakglass", "Viewer")])
+    [finding] = reconcile("grafana", DECLARED, demoted, "u", "a", True, "breakglass")
+    assert finding.status == "refused" and demoted.edits == []
 
 
 def test_gitea_read_takes_the_link_fields_from_the_api_payload_and_pages() -> None:

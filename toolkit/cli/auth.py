@@ -44,12 +44,12 @@ def _announce(env: str, service: str) -> None:
         logger.warning("  could NOT announce this use (notify webhook unreachable); continuing -- access wins")
 
 
-def _account_guidance(env: str, decl: dict[str, Any], identities: dict[str, str]) -> None:
-    if "identity" not in decl:
+def _account_guidance(env: str, decl: dict[str, Any], values: dict[str, Any]) -> None:
+    if "secret" not in decl:
         typer.echo("  account:  none needed")
         return
     where = bg.secret_file(decl["secret"], env, _SECRETS_DIR)
-    typer.echo(f"  user:     {identities[decl['identity']]}")
+    typer.echo(f"  user:     {bg.account_login(decl, values)}")
     typer.echo(f"  password: run in YOUR terminal: make secrets-show KEY={decl['secret']} SECRETS_ENV={where}")
     typer.echo(f"  after:    rotate it -- toolkit secrets rotate --group break-glass --env {env}")
 
@@ -91,7 +91,7 @@ def break_glass_cmd(
         typer.echo(f"{service} ({env}) has no break-glass path, by design: {plan.reason}")
         raise typer.Exit(EXIT_DECLARED_NONE)
 
-    identities = (load_values(env).get("apps", {}).get("auth", {}) or {}).get("identities", {}) or {}
+    values = load_values(env)
     typer.echo(f"break-glass: {service} ({env})")
     if not dry_run:
         _announce(env, service)
@@ -110,13 +110,16 @@ def break_glass_cmd(
         raise typer.Exit(0 if reachable else 1)
 
     if isinstance(plan, bg.Direct):
-        typer.echo(f"  way in:   {plan.url}  (over the tailnet, bypassing the router and the IdP)")
-        _account_guidance(env, decl, identities)
+        typer.echo(
+            f"  way in:   {plan.url}{decl.get('path', '')}  (over the tailnet, bypassing the router and the IdP)"
+        )
+        _account_guidance(env, decl, values)
         return
 
     local = bg.free_local_port()
-    typer.echo(f"  way in:   http://127.0.0.1:{local}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
-    _account_guidance(env, decl, identities)
+    way_in = f"http://127.0.0.1:{local}{decl.get('path', '')}"
+    typer.echo(f"  way in:   {way_in}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
+    _account_guidance(env, decl, values)
     if dry_run:
         return
     typer.echo("  Ctrl-C closes the tunnel.")
@@ -138,14 +141,20 @@ def break_glass_cmd(
 def review_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")] = "prod",
     apply: Annotated[
-        bool, typer.Option("--apply", help="Set every drifted account to its declared tier, then read it back")
+        bool,
+        typer.Option(
+            "--apply",
+            help="Correct every drifted account (Gitea: edit its tier; Grafana: revoke its sessions), read it back",
+        ),
     ] = False,
 ) -> None:
     """Access review: each app's live privilege against the declared groups (ADR-062 D2, D5).
 
     Gitea and Grafana keep the tier in their own database and apply the group rule
     only at login, so a demotion changes nothing until it is reconciled here. With
-    --apply, an open session loses the privilege on its next request. Exits 1
+    --apply, an open session loses the privilege on its next request: Gitea's tier
+    is edited, and Grafana's sessions are revoked so the next request signs in again
+    and takes the tier from `groups` (reported `bounded`). Exits 1
     while any drift, undeclared account or unreadable app remains, and when the
     declaration disagrees with the break-glass account, which the review refuses
     to edit and a human has to resolve.

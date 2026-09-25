@@ -279,13 +279,15 @@ def reconcile_grafana_admin(
         typer.Option("--check-only", help="Report drift and exit non-zero; never mutates Grafana"),
     ] = False,
 ) -> None:
-    """Detect (and optionally fix) Grafana's admin login drifting from apps.auth.identities.superadmin.
+    """Detect (and optionally fix) Grafana's admin row drifting from its break-glass declaration.
 
-    AUTH-002 (#951): Grafana only honours GF_SECURITY_ADMIN_USER on first
-    database creation, so a later identity change never reaches an existing
-    installation. `--check-only` is the permanent detector; without it, the
-    command renames the login to match — credential-independent, since it
-    resets the password via `grafana cli admin reset-admin-password` first.
+    AUTH-002 (#951): row id 1 is the break-glass account declared at
+    `apps.services.security.authelia.break_glass.grafana`, a local account no SSO
+    login can adopt. Grafana only honours GF_SECURITY_ADMIN_USER/EMAIL on first
+    database creation, so a later change never reaches an existing installation.
+    `--check-only` is the permanent detector; without it, the command renames the
+    row and sets its email — credential-independent, since it resets the password
+    via `grafana cli admin reset-admin-password` first.
     """
     logger.section(f"Grafana admin identity — {env}")
     try:
@@ -299,15 +301,18 @@ def reconcile_grafana_admin(
 
     if result.reconciled:
         if result.changed:
-            logger.success(f"Reset the password and renamed the admin login to '{result.declared_login}'.")
+            logger.success(f"Row id 1 is now the break-glass account '{result.declared_login}', as declared.")
         else:
-            logger.success(f"Admin identity is '{result.declared_login}', matching the SSOT — nothing to do.")
+            logger.success(
+                f"Row id 1 is the break-glass account '{result.declared_login}', as declared — nothing to do."
+            )
         return
 
     if check_only:
         actual = repr(result.actual_login) if result.actual_login else "unknown"
         logger.warning(
-            f"Drift: declared identity '{result.declared_login}' cannot log in; the working login is {actual}."
+            f"Drift: row id 1 is not the break-glass account '{result.declared_login}': {result.drift} "
+            f"(working login: {actual})."
         )
         raise typer.Exit(1)
 

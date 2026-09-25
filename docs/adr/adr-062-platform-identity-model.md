@@ -24,6 +24,8 @@ Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* aut
 
 Supersedes the single-identity decision recorded on #1013 earlier the same day — see [D0](#d0--what-this-reverses-and-why).
 
+**Amended 2026-09-24 ([#951](https://github.com/mlorentedev/kubelab/issues/951)):** D4 does not hold for Grafana, which gets a separate local break-glass account. See [the amendment under D4](#amendment-2026-09-24-grafana-gets-a-second-account).
+
 ## Date
 
 2026-08-14
@@ -91,6 +93,19 @@ The alternative — a distinct `breakglass` account per service — was rejected
 
 This does not weaken the existing rule that machine credentials (OIDC client secrets, service admin passwords) remain reversible in SOPS by design.
 
+#### Amendment 2026-09-24: Grafana gets a second account
+
+D4 assumes that linking an SSO login to an account leaves its local password usable and rotatable. Gitea keeps that promise, because linking leaves `LoginType` local. Grafana 13.0.2 does not. It marks an SSO-linked account as external, and `errOnExternalUser` then refuses both `PUT /api/user/password` and `PUT /api/admin/users/{id}/password`. Password login still works, since `AuthenticatePassword` has no such guard, but no API call can ever rotate that password again. Grafana is also the only service where the SSO login finds an existing account by email, which it does under the migration flag `oauth_allow_insecure_email_lookup`. So once OIDC is Grafana's only login, "one account, two auth paths" leaves a break-glass credential that cannot be rotated. The account would also stay federated, so an IdP compromise or a wrong group edit would change it at the next login.
+
+For Grafana only, the break-glass is therefore a **second account**. Row id 1 is the local account `breakglass`, whose login and email match no Authelia user, so no SSO login can adopt it. `manu` reaches Grafana through SSO like everyone else. The declaration form is `{login, email, secret}`, in `apps.services.security.authelia.break_glass`.
+
+What D4 rejected per-service accounts for does not apply here:
+- **Rotation:** the account is rotated by the same `secrets rotate --group break-glass` as every other.
+- **Audit:** the access review runs as it and judges it on every run.
+- **Use:** every use pages the operator channel.
+
+Every other service keeps D4.
+
 ### D5 — Enforcement is per service, and must be verified live
 
 "Superadmin everywhere via Authelia" is only true where the service actually consumes the group claim. Verified today: Argo CD does; Grafana does not ([#951](https://github.com/mlorentedev/kubelab/issues/951)); Gitea and MinIO are unverified.
@@ -105,7 +120,7 @@ Every claim about a service's group→role mapping is settled by testing against
 
 **A third `operators` group between `admins` and `users`.** Rejected as premature: no permission need has appeared that the existing two groups cannot express. Revisit when one does.
 
-**Per-service `breakglass` accounts.** Rejected — see D4.
+**Per-service `breakglass` accounts.** Rejected — see D4. Except for Grafana, since 2026-09-24: see the amendment under D4.
 
 **An LDAP backend to hold the identity model.** Rejected for now. The model is two humans and a small set of bots; a directory service adds an always-on dependency in front of the IdP for a set that fits in a declared map.
 

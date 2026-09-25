@@ -216,10 +216,12 @@ spec:
   tls:
     certResolver: letsencrypt
 ---
-# SEC-014: GF_AUTH_PROXY_ENABLED trusts whatever presents the Remote-User
-# header — Authelia's ForwardAuth is supposed to be the only thing that can,
-# but the Service is ClusterIP with no restriction of its own, so any pod (or
-# anyone with services/proxy RBAC) can forge it and become any Grafana user.
+# SEC-014: only Traefik may reach Grafana. Written while Grafana trusted the
+# `Remote-User` header (the auth proxy), which any pod able to reach the Service
+# could forge. The proxy is off since the single-door change (AUTH-004), so no
+# header is trusted now; the policy stays because the route, with its Authelia
+# perimeter, is the only in-cluster way in that anything needs. The break-glass
+# port-forward goes through the kubelet and does not cross it.
 # Label-based, not IP-based: Traefik's pod IP is not stable across a rebuild.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

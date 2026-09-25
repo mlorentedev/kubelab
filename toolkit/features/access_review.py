@@ -8,9 +8,16 @@ nothing in an app until they next log in there, and a session already open keeps
 the old privilege. A demotion is not done until the live tier matches.
 
 This reads the live tier of every account over the break-glass private path,
-compares it with the declaration, and with `apply` corrects the difference through
-each app's API. Both apps check the privilege on every request, so a session that
-is already open loses it on its next request. Argo CD keeps no user database: it
+compares it with the declaration, and with `apply` corrects the difference. Both
+apps check the stored privilege on every request, so a corrected value reaches a
+session that is already open on its next request. How it is corrected differs:
+Gitea's `is_admin` is edited through its API, but Grafana's role cannot be. With
+OIDC as Grafana's only login, the role is written from `groups` at each login and
+the API refuses to change it (`ErrCannotChangeRoleForExternallySyncedUser`). So
+for Grafana, correcting means revoking the account's sessions: the next request
+signs in again through Authelia and takes the declared tier. That is reported as
+`bounded`, not `fixed`, because the stored role only changes at that next login.
+Argo CD keeps no user database: it
 reads the groups from Authelia's UserInfo and caches them for
 `userInfoCacheExpiration`, so its gap closes within that bound without any edit.
 It is reported, from the live hub config, rather than reconciled.
@@ -124,10 +131,14 @@ class GiteaTiers:
 
 
 class GrafanaTiers:
-    """Grafana's org role, which it re-reads on every request. Non-admins are `Viewer`,
-    as `GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH` maps them."""
+    """Grafana's org role, checked on every request and written from `groups` at each
+    login. Non-admins are `Viewer`, as `GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH` maps
+    them. The API refuses to edit a role that OAuth syncs, so `set_tier` revokes the
+    account's sessions instead, and the role changes at the login that follows."""
 
     admin_tier, user_tier = "Admin", "Viewer"
+    #: The stored tier changes at the account's next login, not when `set_tier` answers.
+    settles_on_next_login = True
 
     def __init__(self, request: Request = _http) -> None:
         self._request = request
@@ -139,8 +150,10 @@ class GrafanaTiers:
         return [Account(u["login"], u.get("role", ""), {"user_id": u["userId"]}) for u in body]
 
     def set_tier(self, base_url: str, auth: str, account: Account, tier: str) -> bool:
-        body = {"role": tier}
-        status, _ = self._request("PATCH", f"{base_url}/api/org/users/{account.ref['user_id']}", body, auth)
+        # `AdminLogoutUser` revokes every session of the account (13.0.2, no external
+        # guard; Server Admin only, which the break-glass account is). With auto-login
+        # and a live Authelia session the user notices nothing but the new tier.
+        status, _ = self._request("POST", f"{base_url}/api/admin/users/{account.ref['user_id']}/logout", None, auth)
         return status == 200
 
 
@@ -184,8 +197,14 @@ def reconcile(
 
     PROTECTED is the break-glass account the review runs as. It is never edited:
     a declaration that lost it from `admins` (a typo, a bad rebase) would otherwise
-    have the review demote the only credential that can undo the mistake.
+    have the review demote the only credential that can undo the mistake. A local
+    break-glass account (Grafana's, #951) belongs to no Authelia user, so the
+    declaration says nothing of it; being the break-glass account is what puts it
+    in the admin tier. An identity keeps its declared tier, so dropping it from
+    `admins` still surfaces as `refused` instead of being re-declared here.
     """
+    if protected:
+        declared = {protected: True, **declared}
     accounts = {a.user: a for a in tiers.read(base_url, auth)}
     findings = [
         Finding(
@@ -197,9 +216,11 @@ def reconcile(
     ]
     if not apply or not any(f.status == "drift" for f in findings):
         return findings
-    for f in findings:
-        if f.status == "drift" and f.declared is not None:
-            tiers.set_tier(base_url, auth, accounts[f.user], f.declared)
+    accepted = {
+        f.user: tiers.set_tier(base_url, auth, accounts[f.user], f.declared)
+        for f in findings
+        if f.status == "drift" and f.declared is not None
+    }
     # A 200 says the request was accepted, not that the tier changed: read it back.
     after = {a.user: a.tier for a in tiers.read(base_url, auth)}
     result = []
@@ -208,6 +229,9 @@ def reconcile(
             result.append(f)
         elif after.get(f.user) == f.declared:
             result.append(Finding(service, f.user, f.declared, after[f.user], "fixed", f"was {f.live}"))
+        elif getattr(tiers, "settles_on_next_login", False) and accepted.get(f.user):
+            detail = "sessions revoked; the next request signs in again and takes the tier from `groups`"
+            result.append(Finding(service, f.user, f.declared, after.get(f.user, "?"), "bounded", detail))
         else:
             result.append(Finding(service, f.user, f.declared, after.get(f.user, "?"), "failed", f"was {f.live}"))
     return result
@@ -265,7 +289,6 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
 
     values = load_values(env, project_root)
     declared = declared_admins(values)
-    identities = values["apps"]["auth"]["identities"]
     decls = bg.declarations(values)
     manager = SecretsManager(project_root)
     findings: list[Finding] = []
@@ -279,8 +302,8 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
             log(f"  {service}: skipped -- {exc}")
             continue
         file_env = bg.secret_file(decl["secret"], env, project_root / "infra" / "config" / "secrets")
-        auth = f"{identities[decl['identity']]}:{manager.show_secret(file_env, decl['secret'])}"
-        protected = identities[decl["identity"]]
+        protected = bg.account_login(decl, values)
+        auth = f"{protected}:{manager.show_secret(file_env, decl['secret'])}"
         with bg.private_url(env, plan) as base_url:
             try:
                 findings += reconcile(service, declared, make(), base_url, auth, apply, protected)
