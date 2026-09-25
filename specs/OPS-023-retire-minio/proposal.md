@@ -1,7 +1,7 @@
 ---
 id: "OPS-023-retire-minio"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-09-22"
 issue: "mlorentedev/kubelab#972"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, minio, backup, retirement]

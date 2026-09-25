@@ -16,8 +16,8 @@ created: "2026-09-22"
 - [x] Branch `feat/ops-023-retire-minio`, worktree `~/Projects/kubelab-ops023-wt` ✓ 2026-09-23
 - [x] Proposal written; R1 (data destruction) and R2 (order after #1780) resolved by the operator ✓ 2026-09-23
 - [x] Full-repo inventory: 135 files, grouped by category, in `verification.md` ✓ 2026-09-23
-- [ ] #1780 (SSOT-017) merged, and this branch rebased on it (R2). **No implementation before this.**
-- [ ] BACKUP-049 (#1171) closed or re-scoped by the operator. Its draft spec instruments the CronJob this spec deletes.
+- [x] #1780 (SSOT-017) merged, and this branch rebased on it (R2). **No implementation before this.** ✓ 2026-09-24
+- [x] BACKUP-049 (#1171) closed or re-scoped by the operator. Its draft spec instruments the CronJob this spec deletes. ✓ 2026-09-24 (closed as superseded)
 
 ## Implementation
 
@@ -26,12 +26,12 @@ created: "2026-09-22"
 
 ### PR 1: the K8s runtime and everything that points at it
 
-- [ ] [AC5] Write the guard first and show it red: a test fails if a live file references MinIO. Live means outside ADRs, lessons, archived specs, audits, CHANGELOG, and this spec.
+- [ ] [AC5] Write the guard first and show it red: a test fails if a live file references MinIO. Live means outside ADRs, lessons, archived specs, audits, CHANGELOG, and this spec. It lands as `xfail(strict=True)` so PR 1 and PR 2 stay green; PR 3 removes the marker, and `strict` makes an early pass fail, forcing that removal. The red run is recorded in `verification.md`.
 - [ ] [AC1] Remove the 3 Uptime Kuma monitors from `infra/config/uptime-kuma/monitors.json`: `services-data-minio-prod`, `services-data-minio-console-prod` and `staging-web-minio-staging`. Remove the homepage tiles via `toolkit/scripts/sync_homepage_config.py`, then regenerate.
 - [ ] [AC1] Delete the `pvc-backup` CronJob (`overlays/prod/backup.yaml`) and `make backup-pvc`. Mark ADR-024's CronJob as retired.
 - [ ] [AC1] Delete `base/services/minio.yaml`, meaning the PVC, ConfigMap, Deployment, Service and both IngressRoutes. Also delete its `kustomization.yaml` entry and image pin, the prod `patches.yaml` block, `renovate.json`'s pin, and the `SERVICES_DATA` special case in `generator_traefik.py`.
 - [ ] [AC3] Delete the `minio` client from `oidc_clients` and regenerate `oidc-clients.yml`. Delete the `console.minio` / `minio` domain rules in both Authelia `configuration.yml` files.
-- [ ] [AC4] Retire the SOPS keys through the frozen-orphan path (#1513):
+- [ ] [AC4] Retire the SOPS keys. This shrinks the orphan baseline (#1513); it never adds to it. Remove the catalog entries and `toolkit secrets unset` the same keys in every vault in one change, so no orphan ever exists. Order: remove the client from `oidc_clients`, run `toolkit sync oidc` for both envs, and only then unset the hash. The keys:
   - `apps.services.data.minio.{root_password,oidc_client_secret}`;
   - `authelia.oidc_client_secret_minio_hash`;
   - the existing `root_user` baseline entry.
@@ -42,6 +42,8 @@ created: "2026-09-22"
   - remove it from `sync_k8s_images.py`'s key list.
 - [ ] [AC1] Tests: update the suites that assert MinIO exists (the inventory's category 5) so they assert its absence or drop the case. **Keep** `test_secrets_orphan_audit.py`'s worked example on a different key.
 - [ ] [AC1] Remove `minio` and `console.minio` from `infra/terraform/dns/services.json` and from the CoreDNS `Corefile.j2` split-DNS hosts. The Terraform plan must show exactly those records destroyed and nothing else.
+- [ ] [AC1] Delete the `minio-secrets` Secret in both envs. `apply-secrets` creates it outside git, so Argo CD never prunes it, and removing the code leaves the root password in etcd (the TOOL-025 shape). Delete it through a supported path and record it in `verification.md`.
+- [ ] [AC1] **Before merge:** sync the Uptime Kuma monitors to the RPi3, so the prune does not page for a planned change.
 - [ ] [AC1] Staging validation: `targetRevision` on the branch, then read the before and after state with `kubectl get deploy,svc,pvc,cronjob,ingressroute | grep -i minio`. Point `targetRevision` back after merge.
 - [ ] [AC1] [AC6] Prod after merge: Argo CD prunes, and the before/after `kubectl get` output is recorded. `make backup-coverage` stays fully covered. An authorization request for `client_id=minio` returns `invalid_client` in both envs (AC3).
 
@@ -58,7 +60,7 @@ created: "2026-09-22"
 ### PR 3: the local dev stack, docs, and the guard going green
 
 - [ ] [AC5] Delete `infra/stacks/services/data/minio/` and remove its entries from the stack README and the Makefile dev targets (cert hosts, `services up` lists, login hint).
-- [ ] [AC5] Docs that describe current state (inventory category 8): delete `docs/runbooks/pvc-backup-restore.md`, and rewrite the rest to drop MinIO. Historical ADRs get a retirement note, not a rewrite: ADR-061 D4 records the decision, and ADR-023, 024 and 028 point to it. Update CLAUDE.md and README.
+- [ ] [AC5] Docs that describe current state (inventory category 8): delete `docs/runbooks/pvc-backup-restore.md`, and rewrite the rest to drop MinIO. Include `docs/runbooks/runbook-disaster-recovery.md`, which predates restic. Historical ADRs get a retirement note, not a rewrite: ADR-061 D4 records the decision, and ADR-023, 024 and 028 point to it. Update CLAUDE.md and README.
 - [ ] [AC5] The guard from PR 1 turns green. Mutation proof: re-adding one live reference turns it red.
 
 ## Closing
