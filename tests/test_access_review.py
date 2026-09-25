@@ -111,10 +111,11 @@ def test_argo_cd_reads_groups_from_userinfo() -> None:
 class FakeApp:
     """A tier store that answers reads and records edits, like an app's API."""
 
-    def __init__(self, tiers: Any, accounts: list[Account], accept: bool = True) -> None:
-        self.tiers, self.accounts, self.accept = tiers, {a.user: a for a in accounts}, accept
+    def __init__(self, tiers: Any, accounts: list[Account], accept: bool = True, answer: bool = True) -> None:
+        self.tiers, self.accounts, self.accept, self.answer = tiers, {a.user: a for a in accounts}, accept, answer
         self.edits: list[tuple[str, str]] = []
         self.admin_tier, self.user_tier = tiers.admin_tier, tiers.user_tier
+        self.settles_on_next_login = getattr(tiers, "settles_on_next_login", False)
 
     def read(self, base_url: str, auth: str) -> list[Account]:
         return list(self.accounts.values())
@@ -123,7 +124,7 @@ class FakeApp:
         self.edits.append((account.user, tier))
         if self.accept:
             self.accounts[account.user] = Account(account.user, tier, account.ref)
-        return True  # a 200 either way: the read-back is what decides
+        return self.answer  # a 200 unless told otherwise: the read-back is what decides
 
 
 DECLARED = {"manu": True, "operator": False, "hefesto": False}
@@ -179,10 +180,28 @@ def test_gitea_edit_sends_back_the_live_login_name() -> None:
     assert body == {"login_name": "d439346a-sub", "source_id": 1, "admin": False}
 
 
-def test_grafana_edit_sets_the_org_role_by_user_id() -> None:
+def test_grafana_revokes_the_sessions_instead_of_editing_the_role() -> None:
+    """With OIDC as the only login, Grafana writes the role from `groups` at each login
+    and refuses to edit it (`ErrCannotChangeRoleForExternallySyncedUser`). Revoking the
+    sessions makes the next request sign in again, which is when the role changes."""
     request = Recorder()
     GrafanaTiers(request).set_tier("http://gr", "a:b", Account("operator", "Admin", {"user_id": 7}), "Viewer")
-    assert request.calls == [("PATCH", "http://gr/api/org/users/7", {"role": "Viewer"})]
+    assert request.calls == [("POST", "http://gr/api/admin/users/7/logout", None)]
+
+
+def test_a_revoked_grafana_session_is_bounded_not_fixed() -> None:
+    """The stored role still reads Admin after the revoke: `fixed` would be false,
+    and `failed` would fail a review that did the only thing Grafana allows."""
+    app = FakeApp(GrafanaTiers, [Account("operator", "Admin", {"user_id": 7})], accept=False)
+    [finding] = reconcile("grafana", DECLARED, app, "http://x", "a:b", apply=True)
+    assert finding.status == "bounded" and finding.live == "Admin"
+    assert "revoked" in finding.detail
+
+
+def test_a_refused_revoke_is_a_failure() -> None:
+    app = FakeApp(GrafanaTiers, [Account("operator", "Admin", {"user_id": 7})], accept=False, answer=False)
+    [finding] = reconcile("grafana", DECLARED, app, "http://x", "a:b", apply=True)
+    assert finding.status == "failed"
 
 
 def test_the_break_glass_account_is_never_edited() -> None:

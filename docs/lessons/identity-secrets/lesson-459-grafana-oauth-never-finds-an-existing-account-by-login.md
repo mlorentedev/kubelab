@@ -35,7 +35,9 @@ step. The first OAuth login finds the account by email, and
 userAuth == nil`). Every later login uses the link. The flag is safe here while
 it is on: Authelia's users file is declared by the operator, no user can change
 their own email, and CI requires every identity to have a distinct one. It is
-still a migration flag. Remove it once every account shows the OAuth label.
+safe only once row id 1, the break-glass account, no longer carries an Authelia
+user's email; otherwise it links that row to the user's SSO login for good
+(lesson-460). It is still a migration flag. Remove it once every account shows the OAuth label.
 Deleting the proxy-created accounts would lose their state, and account 1 is the
 break-glass admin. Writing `user_auth` rows by hand is a manual operation on a
 live system.
