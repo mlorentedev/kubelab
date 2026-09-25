@@ -197,6 +197,14 @@ fi
 # keeps, and the login flag driven OFF so their API token authenticates. What
 # differs between them is the token's grant and the team they join, and neither of
 # those lives here -- the grant is minted by Ansible, the team by the reconciler.
+# curl reads `user = "name:password"` from its config; double quotes and
+# backslashes are escaped so any password survives the round trip.
+admin_curl_config() {
+  printf 'user = "%s:%s"\n' \
+    "$(printf '%s' "$GITEA_ADMIN_USER" | sed 's/[\\"]/\\&/g')" \
+    "$(printf '%s' "$GITEA_ADMIN_PASSWORD" | sed 's/[\\"]/\\&/g')"
+}
+
 ensure_machine_account() {
   _machine_user="$1"
   _machine_email="$2"
@@ -243,14 +251,17 @@ ensure_machine_account() {
   # The PATCH below therefore drives the flag to FALSE, and does so by
   # comparison so a converged run reports nothing — an unconditional write would
   # be ANSIBLE-054 in a new place, in the role that just finished removing it.
-  _machine_state=$(curl -sf -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
+  # The admin credential goes to curl as a config on STDIN (`-K -`), never as
+  # `-u user:password`: an argument is readable in /proc/<pid>/cmdline for the life
+  # of the process, and `printf` is a shell builtin, so it never spawns one either.
+  _machine_state=$(admin_curl_config | curl -sf -K - \
     "http://localhost:3000/api/v1/users/$_machine_user" 2>/dev/null || true)
   case "$_machine_state" in
     *'"prohibit_login":false'*)
       log "Machine account login state already correct ($_machine_user)"
       ;;
     *)
-      curl -sf -X PATCH -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
+      admin_curl_config | curl -sf -K - -X PATCH \
         -H "Content-Type: application/json" \
         -d "{\"prohibit_login\": false, \"login_name\": \"$_machine_user\", \"source_id\": 0}" \
         "http://localhost:3000/api/v1/admin/users/$_machine_user" >/dev/null

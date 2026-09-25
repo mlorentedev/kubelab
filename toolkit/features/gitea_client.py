@@ -531,8 +531,11 @@ class GiteaClient:
         Read for the reviewer's team, where membership IS the grant: a converged
         `reviewers` team without the reviewer in it lets the reviewer read nothing, and
         a plan that compared only the team's fields would call that forge converged.
+
+        Paginated like every other listing here: a reviewer on page two is still a
+        member, and a first-page read would report it missing and re-add it forever.
         """
-        return [str(member["login"]) for member in self._request("GET", f"/teams/{team_id}/members") or []]
+        return [str(member["login"]) for member in self._paginate(f"/teams/{team_id}/members")]
 
     def list_runners(self) -> list[dict[str, Any]]:
         """Every Actions runner registered on the instance.

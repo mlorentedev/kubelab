@@ -154,15 +154,22 @@ def test_the_write_payload_still_creates_repositories_by_default() -> None:
     assert client.sent[0][2]["can_create_org_repo"] is True
 
 
-def test_team_members_are_read_as_logins() -> None:
+def test_team_members_are_read_across_every_page() -> None:
+    """Review of #1832: Gitea pages this listing, so a reviewer on page two must still be found."""
+    from toolkit.features.gitea_client import PAGE_SIZE
+
+    first = [{"login": f"user-{i}", "id": i} for i in range(PAGE_SIZE)]
+    pages = [first, [{"login": "mentor", "id": 999}]]
+
     class _Members(_CapturingClient):
         def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
             super()._request(method, endpoint, **kwargs)
-            return [{"login": "mentor", "id": 3}, {"login": "hefesto", "id": 2}]
+            return pages.pop(0)
 
     client = _Members()
-    assert client.list_team_members(11) == ["mentor", "hefesto"]
-    assert client.sent[0][:2] == ("GET", "/teams/11/members")
+    members = client.list_team_members(11)
+    assert "mentor" in members and len(members) == PAGE_SIZE + 1
+    assert all(endpoint.startswith("/teams/11/members?") for _, endpoint, _ in client.sent)
 
 
 # --------------------------------------------------------------------------- ensure_team

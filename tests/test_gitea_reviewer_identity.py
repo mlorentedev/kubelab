@@ -193,3 +193,16 @@ def test_no_reviewer_is_provisioned_when_none_is_declared(harness: Any) -> None:
     result = harness.run(GITEA_BOT_USER="hefesto", GITEA_BOT_EMAIL="hefesto@example.test")
     assert result.returncode == 0, result.stderr
     assert "mentor" not in harness.calls.read_text()
+
+
+def test_the_admin_password_never_reaches_curl_argv(harness: Any) -> None:
+    """Review of #1832: `-u user:password` puts the admin password in /proc/<pid>/cmdline.
+
+    The credential is handed to curl as a config on stdin (`-K -`) instead, so the
+    only argv it appears in is none. The stub records argv, which is what `ps` shows.
+    """
+    harness.build(existing=("mentor",), prohibited=True)
+    harness.run(GITEA_BOT_USER="hefesto", GITEA_BOT_EMAIL="hefesto@example.test", **REVIEWER_ENV)
+    calls = harness.calls.read_text()
+    assert "PATCH" in calls, "the fixture must drive the PATCH path too"
+    assert "operator:pw" not in calls
