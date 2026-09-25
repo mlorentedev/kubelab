@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-65 lessons, newest first. Back to [all categories](../_index.md).
+66 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 461 | [Grafana re-runs the role path on an empty groups list, so a null guard on `groups` alone still answers from the ID token](lesson-461-grafana-re-runs-the-role-path-on-an-empty-groups-list.md) | 2026-09-24 |
 | 460 | [An SSO-linked Grafana account is external: the API refuses its password and its role](lesson-460-an-sso-linked-grafana-account-is-external-and-the-api-refuses-its-password.md) | 2026-09-24 |
 | 459 | [Grafana OAuth never finds an existing account by login, so switching an account to OAuth fails with "user sync failed"](lesson-459-grafana-oauth-never-finds-an-existing-account-by-login.md) | 2026-09-24 |
 | 458 | [A second login door that answers first replaces the one you configured, and yours never runs](lesson-458-a-second-login-door-that-answers-first-replaces-the-one-you-configured.md) | 2026-09-24 |

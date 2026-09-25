@@ -46,6 +46,11 @@ It took a real login after the fix to show it: the profile said "Synced via
 Auth Proxy". See lesson-458. The Argo CD half stands, measured after deploy as
 `argocd BOUNDED` with `admins` in User Info.
 
+**Second correction (2026-09-24)**: the Grafana path itself was also wrong. Once
+OAuth did run, `admins` still came out Viewer, because Grafana re-runs the path
+on `{"groups": []}` when a source yields nothing, and `groups != null` answers
+that with 'Viewer'. See lesson-461.
+
 **Rule**: In a claim mapping evaluated over several sources in order, a default
 turns "not here" into an answer and stops the search. Return empty when the
 claim is missing, put the default where the last source is read, and verify the
