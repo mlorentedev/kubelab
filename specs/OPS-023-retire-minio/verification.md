@@ -9,13 +9,16 @@ created: "2026-09-22"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 (K8s half, in the repo): `f798464b`. `kubectl kustomize` 2026-09-24: staging 96 objects, prod 99, with **0** MinIO and **0** `pvc-backup` references in either. Live before/after is pending staging validation and the prod prune.
+- [ ] AC2: PR 2.
+- [ ] AC3 (repo half): `minio` is absent from both generated `oidc-clients.yml` (`make sync-oidc-hashes ENV=staging|prod`). The `invalid_client` probe is pending deployment.
+- [ ] AC4 (OIDC half): `oidc_client_secret` and `oidc_client_secret_minio_hash` unset in dev, staging and prod. `make secrets-audit` exits 0 with no new orphan. `root_password` and `root_user` are PR 3.
+- [ ] AC5: red on 2026-09-24. `pytest --runxfail tests/test_no_live_minio_references.py` fails with **93** live files, and lands as `xfail(strict=True)` (`6a6dbefb`).
+- [ ] AC6: pending, after the prod prune.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
+- Test suite: `make test` on 2026-09-24 -> `2645 passed, 15 skipped, 155 deselected, 1 xfailed` (the xfail is the AC5 guard).
 - Manual smoke test: what was exercised, what was observed
 - No regressions in existing test suite: yes / no (if no, document)
 
@@ -42,8 +45,9 @@ Repo: 135 files, by category:
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- **PR order changed (2026-09-24).** The plan removed `apps.services.data.minio` and `root_password` in PR 1, but `provision-bee.yml` and the dev Compose stack read both, so `make provision NODE=bee` would have broken between merges. PR 1 now removes only what K8s reads. The SSOT block, `root_password` and the Renovate and `generator_traefik` bits move to PR 3.
+- **The public `domain`/`console_domain` left `common.yaml` in PR 1.** `test_declared_domains_are_served` requires a DNS record for every declared public domain, and the records are gone. Nothing outside K8s read those keys; dev has its own `.test` values.
+- **`docs/runbooks/pvc-backup-restore.md` was deleted in PR 1, not PR 3.** `test_runbook_targets_exist` fails on a runbook that names a removed `make` target.
 
 ## Promotion candidates
 
