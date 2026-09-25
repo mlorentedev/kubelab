@@ -280,6 +280,14 @@
         # Empty on the run that mints it; present on every run after. The mint and
         # record tasks are gated on this, so provisioning converges to no-op.
         gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
+        # TOOL-080 -- the PR reviewer, a second machine identity (ADR-062 D1 as
+        # amended 2026-09-24). Resolved through the identity map like the bot, and
+        # its grant read from common.yaml, where `tests/test_gitea_token_scopes.py`
+        # pins it to the measured requirement by equality.
+        gitea_reviewer_user: "{{ gitea_config.apps.auth.identities.reviewer | default('') }}"
+        gitea_reviewer_email: "{{ gitea_config.apps.auth.identities.reviewer | default('') }}@{{ gitea_config.apps.services.core.gitea.domain }}"
+        gitea_reviewer_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.reviewer }}"
+        gitea_reviewer_token: "{{ gitea_secrets.apps.services.core.gitea.reviewer_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so

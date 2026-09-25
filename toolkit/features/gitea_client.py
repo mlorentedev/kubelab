@@ -79,6 +79,9 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     "whoami": frozenset({"read:user"}),
     "list_owned_repos": frozenset({"read:user"}),
     "get_team": frozenset({"read:organization"}),
+    # The reviewer's team is read with its members, because for that team the
+    # membership is half the grant (TOOL-080). Same endpoint family as `get_team`.
+    "list_team_members": frozenset({"read:organization"}),
     # `/admin/actions/runners` sits under the same admin router as `list_orgs`, so
     # `read:admin` covers it. Measured 200 with that grant before this line existed.
     "list_runners": frozenset({"read:admin"}),
@@ -118,6 +121,7 @@ ADMIN_METHODS: tuple[str, ...] = (
     "whoami",
     "list_owned_repos",
     "get_team",
+    "list_team_members",
     "create_org",
     "create_team",
     "edit_team",

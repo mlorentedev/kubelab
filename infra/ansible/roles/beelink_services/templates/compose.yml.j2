@@ -129,6 +129,10 @@ services:
       # gitea-bootstrap.sh, not by Gitea itself.
       GITEA_BOT_USER: "{{ gitea_bot_user }}"
       GITEA_BOT_EMAIL: "{{ gitea_bot_email }}"
+      # TOOL-080. The PR reviewer's NAME, from apps.auth.identities.reviewer, for the
+      # same script. Empty when the row is absent, and the script then skips it.
+      GITEA_REVIEWER_USER: "{{ gitea_reviewer_user }}"
+      GITEA_REVIEWER_EMAIL: "{{ gitea_reviewer_email }}"
     volumes:
       - {{ beelink_gitea_data_dir }}:/data
       - {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro

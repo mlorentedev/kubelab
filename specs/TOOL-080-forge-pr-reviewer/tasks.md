@@ -17,11 +17,14 @@ created: "2026-09-23"
 
 - [x] [AC5] Measure first, record in `verification.md`. Does a read-team member's `write:issue` token post a PR comment on the forge? What else does the PR-Agent Gitea provider call (`/user`, repo settings)? The scopes come from this measurement.
       Measured 2026-09-24 in a local Gitea 1.25.5 lab (`scope-lab.py`): `write:issue` + `read:repository`, no `read:user`. The live check with the real identity is AC1, in PR 4.
-- [ ] [AC5] Failing tests: `test_gitea_token_scopes.py` covers the reviewer grant and requirement, `test_gitea_machine_identity.py` / `test_ansible_identity_ssot.py` cover the new identity row, and `ROTATABLE_TOKENS` gets a reviewer entry.
-- [ ] [AC5] `apps.auth.identities.reviewer` and `token_scopes.reviewer` in `common.yaml`. Account block in `gitea-bootstrap.sh` (`prohibit_login=false`). Mint and record tasks gated on `apps.services.core.gitea.reviewer_token`.
-- [ ] [AC6] `SECRET_CATALOG` entry for `reviewer_token` (EXTERNAL, `Expiry.NEVER`, prod), modelled on `bot_token`.
-- [ ] [AC5] Reconciler: a read team per declared org with the reviewer as member (`ensure_team` generalised beyond one member and one permission).
-- [ ] Live: `make provision NODE=bee ENV=prod TAGS=gitea`, then `make gitea-reconcile ENV=prod APPLY=1`, re-run shows no changes, and `GET /users/<reviewer>/repos` is empty.
+- [x] [AC5] Failing tests: `test_gitea_token_scopes.py` covers the reviewer grant and requirement, `test_gitea_machine_identity.py` / `test_ansible_identity_ssot.py` cover the new identity row, and `ROTATABLE_TOKENS` gets a reviewer entry.
+      Written as `test_gitea_token_scopes.py::test_the_reviewer_grant_is_exactly_the_measured_requirement` (equality, not superset) and a new `test_gitea_reviewer_identity.py`, which covers the row, the playbook, the catalog, the mint and record tasks, the compose env, and the bootstrap script's behaviour. Each was red first.
+- [x] [AC5] `apps.auth.identities.reviewer` (`mentor`) and `token_scopes.reviewer` in `common.yaml`. Account block in `gitea-bootstrap.sh` (`prohibit_login=false`). Mint and record tasks gated on `apps.services.core.gitea.reviewer_token`.
+- [x] [AC6] `SECRET_CATALOG` entry for `reviewer_token` (EXTERNAL, `Expiry.NEVER`, prod), modelled on `bot_token`.
+- [x] [AC5] Reconciler: a read team per declared org with the reviewer as member (`ensure_team` generalised beyond one member and one permission).
+      `TeamGrant` (`WRITE_TEAM`, `READ_TEAM`). The read team is converged in both directions, and membership is part of its plan (`tests/test_gitea_review_team.py`, red first).
+- [x] The ADR-062 D1 amendment: what "login prohibited" means for a machine account, AUTH-007's owner-level pusher (#1781), and this reviewer.
+- [ ] Live, after Manu decides between running it from the branch and running it after merge: `make provision NODE=bee ENV=prod TAGS=gitea`, then `make gitea-reconcile ENV=prod APPLY=1`, re-run shows no changes, and `GET /users/<reviewer>/repos` is empty.
 
 ## PR 3 — a list of webhooks in the reconciler
 
