@@ -67,6 +67,11 @@ On a push, it made the same reads, then `PATCH issues/comments/{id}` → 200.
 
 Two runs of the same lab, differing only in the webhook `events` and `PR_REVIEWER__FINAL_UPDATE_MESSAGE`:
 
+B changes two variables at once, so the table is not a single-variable A/B. Each effect still has one mechanism.
+- Comment delivery depends only on the events the hook stores. That is Gitea's `pullHook`, read at v1.25.5.
+- The extra "updated" comment depends only on `final_update_message`. That is PR-Agent's `publish_persistent_comment`, `git_provider.py:547` in 0.45.0.
+Neither setting reaches the other's code path.
+
 | | A: `["pull_request"]`, upstream default | B: `["pull_request_only", "pull_request_sync"]`, `false` |
 |---|---|---|
 | Events Gitea stores | all 8 PR sub-events, `pull_request_comment` and `pull_request_review` included | `pull_request`, `pull_request_sync` |
