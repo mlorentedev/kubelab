@@ -1,4 +1,4 @@
-"""SEC-014: Grafana's auth-proxy header must only be reachable from Traefik.
+"""SEC-014: Grafana must only be reachable from Traefik, and trusts no identity header.
 
 Static, not live: a live probe (curl from a throwaway pod, from port-forward)
 was run by hand against staging when this shipped — see the PR. This guards
@@ -61,10 +61,11 @@ class TestAuthProxyHeaderIsGatedByNetworkPolicy:
         assert source["namespaceSelector"]["matchLabels"] == {"kubernetes.io/metadata.name": "kube-system"}
         assert source["podSelector"]["matchLabels"] == {"app.kubernetes.io/name": "traefik"}
 
-    def test_auto_sign_up_is_off(self) -> None:
-        """Auto-provisioning an account for whatever username arrives compounds
-        an unrestricted proxy header into an unrestricted *account creator*."""
-        assert _load_env()["GF_AUTH_PROXY_AUTO_SIGN_UP"] == "false"
+    def test_no_header_is_trusted_as_an_identity(self) -> None:
+        """The auth proxy is off (AUTH-004 single door). If it came back, the
+        header would again be an identity anyone reaching the pod could forge,
+        and this policy its only guard."""
+        assert _load_env()["GF_AUTH_PROXY_ENABLED"] == "false"
 
     def test_grafana_config_is_generated_so_a_change_rolls_the_pod(self) -> None:
         """A plain ConfigMap here is a silent no-op, not a visible failure.

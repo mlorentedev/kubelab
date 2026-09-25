@@ -637,12 +637,23 @@ break-glass: ## Open the private way into SVC while Authelia is down (DRY_RUN=1 
 	@$(TOOLKIT) auth break-glass $(SVC) --env $(ENV) $(if $(DRY_RUN),--dry-run,)
 
 # Access review (AUTH-004 AC2): each app's live privilege against the declared
-# Authelia groups. APPLY=1 sets every drifted account to its declared tier, which
-# is what makes a demotion take effect in a session that is already open.
+# Authelia groups. APPLY=1 corrects every drifted account, which is what makes a
+# demotion take effect in a session that is already open: Gitea's tier is edited,
+# and Grafana's sessions are revoked, so its next request signs in again and takes
+# the tier from `groups` (Grafana refuses to edit a role that OAuth syncs).
 .PHONY: auth-review
 auth-review: ## Compare live app privileges with the declared groups (APPLY=1 to reconcile)
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make auth-review ENV=staging|prod [APPLY=1]" && exit 1)
 	@$(TOOLKIT) auth review --env $(ENV) $(if $(APPLY),--apply,)
+
+# Grafana's row id 1 is its break-glass account (#951): a local login and email no
+# SSO login can adopt, declared at `apps.services.security.authelia.break_glass`.
+# GF_SECURITY_ADMIN_USER/EMAIL only seed a fresh database, so this renames an
+# existing row and sets its email. CHECK=1 only reports, and exits 1 on drift.
+.PHONY: grafana-admin-reconcile
+grafana-admin-reconcile: ## Make Grafana's row id 1 the declared break-glass account (CHECK=1 to only detect)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make grafana-admin-reconcile ENV=staging|prod [CHECK=1]" && exit 1)
+	@$(TOOLKIT) credentials reconcile-grafana-admin --env $(ENV) $(if $(CHECK),--check-only,)
 
 # Point prod's inbound Argo CD route at wherever gcp1 currently lives.
 #

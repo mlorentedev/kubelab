@@ -20,9 +20,9 @@ The order is fixed, and every step after the first can be undone:
    so the next run reports drift and names the `git checkout` that restores the
    committed value, which is the one the service still holds.
 
-What gets rotated is derived from the break-glass declaration (every
-`{identity, secret}` entry), and a test fails if a declared account has no
-reconciler below. No password is ever printed or logged.
+What gets rotated is derived from the break-glass declaration (every account
+entry, `{identity, secret}` or `{login, email, secret}`), and a test fails if a
+declared account has no reconciler below. No password is ever printed or logged.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class PasswordReconciler(Protocol):
 @dataclass(frozen=True)
 class Target:
     service: str
-    identity: str
+    login: str
     secret_key: str
 
 
@@ -67,12 +67,14 @@ class Outcome:
     detail: str
 
 
-def targets(decls: Mapping[str, Mapping[str, Any]]) -> list[Target]:
+def targets(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) -> list[Target]:
     """Every break-glass account, from the declaration. Other forms have no password."""
+    from toolkit.features.break_glass import account_login
+
     return [
-        Target(service=name, identity=str(decl["identity"]), secret_key=str(decl["secret"]))
+        Target(service=name, login=account_login(decl, values), secret_key=str(decl["secret"]))
         for name, decl in sorted(decls.items())
-        if "identity" in decl and "secret" in decl
+        if "secret" in decl
     ]
 
 
@@ -197,7 +199,8 @@ def break_glass_secret_keys(project_root: Any = None) -> set[str]:
     from toolkit.features import break_glass as bg
     from toolkit.features.oidc_clients import PROJECT_ROOT, load_values
 
-    return {t.secret_key for t in targets(bg.declarations(load_values("prod", project_root or PROJECT_ROOT)))}
+    values = load_values("prod", project_root or PROJECT_ROOT)
+    return {t.secret_key for t in targets(bg.declarations(values), values)}
 
 
 def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) -> list[Outcome]:
@@ -207,11 +210,10 @@ def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) 
     from toolkit.features.secrets_manager import SecretsManager
 
     values = load_values(env, project_root)
-    identities = (values.get("apps", {}).get("auth", {}) or {}).get("identities", {}) or {}
     manager = SecretsManager(project_root)
     secrets_dir = project_root / "infra" / "config" / "secrets"
     outcomes: list[Outcome] = []
-    for target in targets(bg.declarations(values)):
+    for target in targets(bg.declarations(values), values):
         try:
             _decl, _route, plan = bg.resolve(env, target.service, project_root)
         except bg.BreakGlassError as exc:
@@ -224,7 +226,7 @@ def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) 
         with bg.private_url(env, plan) as base_url:
             outcome = rotate_one(
                 target.service,
-                identities[target.identity],
+                target.login,
                 base_url=base_url,
                 reconciler=reconciler,
                 read=read,
