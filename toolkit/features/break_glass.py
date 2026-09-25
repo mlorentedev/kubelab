@@ -20,10 +20,18 @@ Three things are derived rather than declared, so nothing here can go stale:
 The declaration at `apps.services.security.authelia.break_glass` only says which
 account opens the door, in one of four forms:
 
-    grafana: {identity: superadmin, secret: <SECRET_CATALOG key>}  # local account
+    gitea: {identity: superadmin, secret: <SECRET_CATALOG key>}    # account of a declared identity
+    grafana: {login: breakglass, email: <address>, secret: <key>}  # account of nobody in Authelia
     loki: {}                                                       # reachable, no account
     argocd: {cluster: hub}                                         # the kubeconfig is the path
     vikunja: {none: "<reason>"}                                    # no break-glass, on purpose
+
+An account is either a declared identity's or a local one, never both. A local
+account exists where an SSO login would take the identity's account over: Grafana
+treats an SSO-linked account as external and refuses every password change on it,
+so the emergency account there must be one no IdP login can ever link. Its login
+and email must match no Authelia user, because Grafana finds an existing account
+by email when the migration flag is on.
 """
 
 from __future__ import annotations
@@ -41,7 +49,8 @@ DECLARATION_PATH = "apps.services.security.authelia.break_glass"
 FORWARD_AUTH_MIDDLEWARE = "authelia"
 #: Kubeconfigs a `cluster:` path may name (`~/.kube/kubelab-<target>-config`).
 CLUSTER_TARGETS = ("staging", "prod", "hub")
-_FORMS = ("identity", "secret", "cluster", "none")
+_FORMS = ("identity", "login", "email", "secret", "cluster", "none")
+_ACCOUNT = ("identity", "login", "email", "secret")
 _HOST = re.compile(r"Host\(`([^`]+)`\)")
 
 
@@ -182,7 +191,7 @@ def validate(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) 
             problems.append(f"{name}: unknown field(s) {unknown}")
             continue
         forms = [f for f in ("cluster", "none") if f in decl]
-        if {"identity", "secret"} & set(decl):
+        if set(_ACCOUNT) & set(decl):
             forms.append("account")
         if len(forms) > 1:
             problems.append(f"{name}: declares {forms}; exactly one of account, cluster, none, or {{}}")
@@ -196,12 +205,52 @@ def validate(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) 
                 problems.append(f"{name}: an account needs its `secret`")
             elif decl["secret"] not in catalog:
                 problems.append(f"{name}: secret '{decl['secret']}' is not in SECRET_CATALOG")
-            if "identity" not in decl:
-                problems.append(f"{name}: an account needs its `identity`")
-            elif decl["identity"] not in identities:
-                problems.append(f"{name}: identity '{decl['identity']}' is not in apps.auth.identities")
+            problems += [f"{name}: {p}" for p in _account_problems(decl, identities, values)]
     if problems:
         raise BreakGlassError("invalid break-glass declaration: " + "; ".join(problems))
+
+
+def _account_problems(decl: Mapping[str, Any], identities: Mapping[str, Any], values: Mapping[str, Any]) -> list[str]:
+    """Whose account it is: a declared identity's, or a local one that no Authelia user can claim."""
+    if ("identity" in decl) == ("login" in decl):
+        return ["an account names exactly one of `identity` (a declared person) or `login` (a local account)"]
+    if "identity" in decl:
+        if "email" in decl:
+            return ["`email` belongs to a local `login`; an identity's email is Authelia's"]
+        if decl["identity"] not in identities:
+            return [f"identity '{decl['identity']}' is not in apps.auth.identities"]
+        return []
+    names, emails = _authelia_claims(values)
+    problems = []
+    if not str(decl.get("email") or "").strip():
+        problems.append("a local `login` needs its own `email`")
+    if str(decl["login"]).lower() in {n.lower() for n in names}:  # Grafana compares logins case-insensitively
+        problems.append(f"login '{decl['login']}' is an Authelia user, so it is not a local account")
+    if str(decl.get("email") or "").lower() in emails:
+        problems.append(f"email '{decl.get('email')}' belongs to an Authelia user, whose SSO login would adopt it")
+    return problems
+
+
+def _authelia_claims(values: Mapping[str, Any]) -> tuple[set[str], set[str]]:
+    """Every username and email an Authelia login can present, resolved the way the generators do."""
+    import copy
+
+    from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
+
+    resolved = copy.deepcopy(dict(values))
+    ConfigurationManager._inject_contact_email_derivations(resolved)
+    users = _lookup(resolved, "apps.services.security.authelia.users") or []
+    identities = _lookup(resolved, "apps.auth.identities") or {}
+    names = {str(v) for v in identities.values()} | {resolve_user_identity(u, resolved) for u in users}
+    emails = {str(u["email"]).lower() for u in users if u.get("email")}
+    return names - {""}, emails
+
+
+def account_login(decl: Mapping[str, Any], values: Mapping[str, Any]) -> str:
+    """The login a declared break-glass account signs in with: its own, or its identity's."""
+    if "login" in decl:
+        return str(decl["login"])
+    return str((_lookup(values, "apps.auth.identities") or {})[decl["identity"]])
 
 
 def coverage_gaps(deps: Mapping[str, Route], decls: Mapping[str, Any]) -> list[str]:

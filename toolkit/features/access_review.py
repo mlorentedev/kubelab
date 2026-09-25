@@ -184,8 +184,14 @@ def reconcile(
 
     PROTECTED is the break-glass account the review runs as. It is never edited:
     a declaration that lost it from `admins` (a typo, a bad rebase) would otherwise
-    have the review demote the only credential that can undo the mistake.
+    have the review demote the only credential that can undo the mistake. A local
+    break-glass account (Grafana's, #951) belongs to no Authelia user, so the
+    declaration says nothing of it; being the break-glass account is what puts it
+    in the admin tier. An identity keeps its declared tier, so dropping it from
+    `admins` still surfaces as `refused` instead of being re-declared here.
     """
+    if protected:
+        declared = {protected: True, **declared}
     accounts = {a.user: a for a in tiers.read(base_url, auth)}
     findings = [
         Finding(
@@ -265,7 +271,6 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
 
     values = load_values(env, project_root)
     declared = declared_admins(values)
-    identities = values["apps"]["auth"]["identities"]
     decls = bg.declarations(values)
     manager = SecretsManager(project_root)
     findings: list[Finding] = []
@@ -279,8 +284,8 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
             log(f"  {service}: skipped -- {exc}")
             continue
         file_env = bg.secret_file(decl["secret"], env, project_root / "infra" / "config" / "secrets")
-        auth = f"{identities[decl['identity']]}:{manager.show_secret(file_env, decl['secret'])}"
-        protected = identities[decl["identity"]]
+        protected = bg.account_login(decl, values)
+        auth = f"{protected}:{manager.show_secret(file_env, decl['secret'])}"
         with bg.private_url(env, plan) as base_url:
             try:
                 findings += reconcile(service, declared, make(), base_url, auth, apply, protected)

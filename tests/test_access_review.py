@@ -194,6 +194,17 @@ def test_the_break_glass_account_is_never_edited() -> None:
     assert findings["operator"].status == "fixed"
 
 
+def test_a_local_break_glass_account_is_admin_not_undeclared() -> None:
+    """Grafana's break-glass account belongs to nobody in Authelia (#951). Reported as
+    undeclared, it would fail every review; it is the admin the review runs as."""
+    app = FakeApp(GrafanaTiers, [Account("breakglass", "Admin"), Account("operator", "Viewer")])
+    findings = {f.user: f for f in reconcile("grafana", DECLARED, app, "u", "a", False, "breakglass")}
+    assert findings["breakglass"].status == "ok" and findings["breakglass"].declared == "Admin"
+    demoted = FakeApp(GrafanaTiers, [Account("breakglass", "Viewer")])
+    [finding] = reconcile("grafana", DECLARED, demoted, "u", "a", True, "breakglass")
+    assert finding.status == "refused" and demoted.edits == []
+
+
 def test_gitea_read_takes_the_link_fields_from_the_api_payload_and_pages() -> None:
     """The fields the edit sends back come from the real payload shape, across pages."""
     pages = {
