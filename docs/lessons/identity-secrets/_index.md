@@ -1,9 +1,13 @@
 # Identity, auth and secret material
 
-62 lessons, newest first. Back to [all categories](../_index.md).
+66 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 461 | [Grafana re-runs the role path on an empty groups list, so a null guard on `groups` alone still answers from the ID token](lesson-461-grafana-re-runs-the-role-path-on-an-empty-groups-list.md) | 2026-09-24 |
+| 460 | [An SSO-linked Grafana account is external: the API refuses its password and its role](lesson-460-an-sso-linked-grafana-account-is-external-and-the-api-refuses-its-password.md) | 2026-09-24 |
+| 459 | [Grafana OAuth never finds an existing account by login, so switching an account to OAuth fails with "user sync failed"](lesson-459-grafana-oauth-never-finds-an-existing-account-by-login.md) | 2026-09-24 |
+| 458 | [A second login door that answers first replaces the one you configured, and yours never runs](lesson-458-a-second-login-door-that-answers-first-replaces-the-one-you-configured.md) | 2026-09-24 |
 | 457 | [A default in a claim mapping hides the claim source it never reads, so the admin tier was never enforced](lesson-457-a-default-in-a-claim-mapping-hides-the-claim-source-it-never-reads.md) | 2026-09-24 |
 | 456 | [A session cookie on a parent domain shadows a same-named cookie in a child environment, so login succeeds and access is anonymous](lesson-456-a-parent-domain-cookie-shadows-a-same-named-cookie-in-a-child-environment.md) | 2026-09-24 |
 | 454 | [A SOPS file conflict is resolved by re-setting the key on upstream's file, never by merging the text](lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text.md) | 2026-09-23 |

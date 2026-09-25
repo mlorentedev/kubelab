@@ -637,8 +637,10 @@ break-glass: ## Open the private way into SVC while Authelia is down (DRY_RUN=1 
 	@$(TOOLKIT) auth break-glass $(SVC) --env $(ENV) $(if $(DRY_RUN),--dry-run,)
 
 # Access review (AUTH-004 AC2): each app's live privilege against the declared
-# Authelia groups. APPLY=1 sets every drifted account to its declared tier, which
-# is what makes a demotion take effect in a session that is already open.
+# Authelia groups. APPLY=1 corrects every drifted account, which is what makes a
+# demotion take effect in a session that is already open: Gitea's tier is edited,
+# and Grafana's sessions are revoked, so its next request signs in again and takes
+# the tier from `groups` (Grafana refuses to edit a role that OAuth syncs).
 .PHONY: auth-review
 auth-review: ## Compare live app privileges with the declared groups (APPLY=1 to reconcile)
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make auth-review ENV=staging|prod [APPLY=1]" && exit 1)

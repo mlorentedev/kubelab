@@ -110,12 +110,15 @@ def break_glass_cmd(
         raise typer.Exit(0 if reachable else 1)
 
     if isinstance(plan, bg.Direct):
-        typer.echo(f"  way in:   {plan.url}  (over the tailnet, bypassing the router and the IdP)")
+        typer.echo(
+            f"  way in:   {plan.url}{decl.get('path', '')}  (over the tailnet, bypassing the router and the IdP)"
+        )
         _account_guidance(env, decl, values)
         return
 
     local = bg.free_local_port()
-    typer.echo(f"  way in:   http://127.0.0.1:{local}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
+    way_in = f"http://127.0.0.1:{local}{decl.get('path', '')}"
+    typer.echo(f"  way in:   {way_in}  (port-forward to {plan.namespace}/{plan.service}:{plan.port})")
     _account_guidance(env, decl, values)
     if dry_run:
         return
@@ -138,14 +141,20 @@ def break_glass_cmd(
 def review_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")] = "prod",
     apply: Annotated[
-        bool, typer.Option("--apply", help="Set every drifted account to its declared tier, then read it back")
+        bool,
+        typer.Option(
+            "--apply",
+            help="Correct every drifted account (Gitea: edit its tier; Grafana: revoke its sessions), read it back",
+        ),
     ] = False,
 ) -> None:
     """Access review: each app's live privilege against the declared groups (ADR-062 D2, D5).
 
     Gitea and Grafana keep the tier in their own database and apply the group rule
     only at login, so a demotion changes nothing until it is reconciled here. With
-    --apply, an open session loses the privilege on its next request. Exits 1
+    --apply, an open session loses the privilege on its next request: Gitea's tier
+    is edited, and Grafana's sessions are revoked so the next request signs in again
+    and takes the tier from `groups` (reported `bounded`). Exits 1
     while any drift, undeclared account or unreadable app remains, and when the
     declaration disagrees with the break-glass account, which the review refuses
     to edit and a human has to resolve.

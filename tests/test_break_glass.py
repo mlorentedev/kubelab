@@ -164,6 +164,16 @@ class TestValidate:
             vikunja={"none": "not a 3 AM service (ADR-028)"},
         )
 
+    def test_a_reachable_form_may_name_the_page_to_open(self) -> None:
+        self._ok(
+            grafana={
+                "identity": "superadmin",
+                "secret": "apps.services.observability.grafana.admin_password",
+                "path": "/login?disableAutoLogin=true",
+            },
+            loki={"path": "/ready"},
+        )
+
     @pytest.mark.parametrize(
         ("decl", "fragment"),
         [
@@ -184,6 +194,9 @@ class TestValidate:
             ({"login": "Operator", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "'Operator' is an Authelia"),
             ({"login": "bg", "email": "Manu@Example.test", "secret": _GRAFANA_SECRET}, "adopt"),
             ({"login": "bg", "email": "info@example.test", "secret": _GRAFANA_SECRET}, "adopt"),
+            ({"cluster": "hub", "path": "/login"}, "reachable"),
+            ({"none": "x", "path": "/login"}, "reachable"),
+            ({"identity": "superadmin", "secret": "apps.services.observability.grafana.admin_password", "path": "login"}, "'/'"),
         ],
     )
     def test_invalid_declarations_fail_naming_the_service(self, decl: dict[str, Any], fragment: str) -> None:

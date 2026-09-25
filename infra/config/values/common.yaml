@@ -1793,6 +1793,9 @@ apps:
             login: breakglass
             email: breakglass@kubelab.live
             secret: apps.services.observability.grafana.admin_password
+            # Grafana's root auto-redirects to the IdP (GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN),
+            # which is down when this path is used; this page shows the local form.
+            path: /login?disableAutoLogin=true
           gitea:
             # Via the API and `git` over HTTPS. The web form is not relied on,
             # because the single-door change disables it.

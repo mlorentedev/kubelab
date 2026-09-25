@@ -21,9 +21,10 @@ services:
       - GF_AUTH_GENERIC_OAUTH_API_URL=https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/api/oidc/userinfo
       - GF_AUTH_GENERIC_OAUTH_USE_PKCE=true
       # Same rule and same reason as the K8s grafana.env: `groups` arrives in
-      # UserInfo, not the ID token, so the path must return null without it.
+      # UserInfo, not the ID token, so the path must return null without it, and
+      # for an empty list too (Grafana re-runs it on `{"groups": []}`, lesson-461).
       - >-
-        GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=groups != `null` &&
+        GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=length(groups || `[]`) > `0` &&
         (contains(groups, 'admins') && 'Admin' || 'Viewer') || `null`
     extra_hosts:
       # Mapea el dominio al gateway del host (Traefik)

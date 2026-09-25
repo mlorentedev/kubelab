@@ -50,14 +50,19 @@ under Kubernetes RBAC, with no Argo CD server login.
 
 ### Grafana
 
-`breakglass` with its local password, over a port-forward. This is a local account
-that belongs to nobody in Authelia, and it is Grafana's row id 1 and its Server Admin.
-It is not `manu`: Grafana refuses every password change on an SSO-linked account, so
-an emergency account that SSO could link could never be rotated again (#951, ADR-062
-D4 amendment). If the command's login is refused, check that row id 1 is still the
-declared account with `make grafana-admin-reconcile ENV=<env> CHECK=1`. Without
-`CHECK=1`, the same command renames the row and sets its email; it works with no
-credential, because it resets the password inside the pod first.
+`breakglass` with its local password, over the port-forward the command opens. The
+command prints `/login?disableAutoLogin=true` as the way in, because Grafana's
+root auto-redirects to Authelia, the service that is down. The API takes the
+same account with basic auth.
+
+This is a local account that belongs to nobody in Authelia, and it is Grafana's
+row id 1 and its Server Admin. It is not `manu`: Grafana refuses every password
+change on an SSO-linked account, so an emergency account that SSO could link
+could never be rotated again (#951, ADR-062 D4 amendment). If the command's
+login is refused, check that row id 1 is still the declared account with
+`make grafana-admin-reconcile ENV=<env> CHECK=1`. Without `CHECK=1`, the same
+command renames the row and sets its email; it works with no credential,
+because it resets the password inside the pod first.
 
 ### Gitea
 
