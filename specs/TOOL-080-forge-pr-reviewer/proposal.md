@@ -57,7 +57,7 @@ The components:
    | `apps.services.automation.pr_agent.nan_api_key` | `OPENAI__KEY` | EXTERNAL. A copy of the Bitwarden `NAN_API_KEY` (Manu, 2026-09-24) |
    | `apps.services.automation.pr_agent.webhook_secret` | `GITEA__WEBHOOK_SECRET` | RANDOM_HEX |
    | `apps.services.core.gitea.reviewer_token` | `GITEA__PERSONAL_ACCESS_TOKEN` | EXTERNAL, minted by Ansible |
-4. **Reviewer identity.** A new row in `apps.auth.identities`. It gets:
+4. **Reviewer identity.** A new row in `apps.auth.identities`, account **`mentor`**: one account for the whole forge, separate from `hefesto` (Manu, 2026-09-24; reasons in `verification.md`). It gets:
    - an account created by `gitea-bootstrap.sh`, with `prohibit_login=false`, because `true` kills API tokens;
    - a token minted by Ansible, gated on its SOPS key being absent, the same as `bot_token`. Its scopes are `write:issue` and `read:repository`, measured as the minimum (`verification.md`). They are declared under `token_scopes` and tied to a requirement by `tests/test_gitea_token_scopes.py`;
    - membership in a **read** team in each declared organization;
@@ -93,7 +93,8 @@ The components:
   - `prohibit_login=true` makes every API token of the account 403, so the reviewer keeps the flag off and has no usable password instead. AUTH-007's pusher has the same constraint.
 - **To measure in the manifests PR:** whether the image runs as non-root with a read-only root filesystem plus an `emptyDir` on `/tmp`. The image declares no user, so it runs as root. If it works, `securityContext` gets `runAsNonRoot`; if not, the reason is recorded in the manifest.
 - **Correction to #1823.** The probe logged `get_repo_settings: Repository settings not found`, and #1823 read that as the repository having no `.pr_agent.toml`. The source says otherwise: that line means `GITEA.REPO_SETTING` is unset, so no settings file was ever looked for.
-- **The reviewer is a third machine identity.** AUTH-007 (#1781) is already amending ADR-062 D1 for a second machine class. This spec extends the same amendment, rather than starting a parallel one, and lands after or together with it.
+- **The reviewer is a third machine identity.** AUTH-007 (#1781) decided on 2026-09-22 to amend ADR-062 D1 for a second machine class, but has no PR. Manu decided on 2026-09-24 that this spec's PR 2 writes the one amendment for both: AUTH-007's pusher, as #1781 states it, and this reviewer. AUTH-007 then implements its identity against an ADR that already allows it.
+- **Third-party code reaches NaN.** The scope is every declared organization, `teledyne/` included. So a PR on `teledyne/fae-brain` or `teledyne/openkm-brain` sends its diff to NaN, and `mentor` can read that code. ADR-065 D2 asks for a deliberate decision about where a third party's material goes. Manu took it on 2026-09-24 and accepted both. A later wish to exclude an organization needs an explicit exclusion in the declaration, not a silent default.
 - **Cross-repository refs.** PR-Agent on GitHub reads `resume#N` in a kubelab PR as kubelab#N. On the forge each PR reviews only itself, so this does not apply. Forge issues in this spec are linked by full URL anyway.
 
 ## Acceptance criteria

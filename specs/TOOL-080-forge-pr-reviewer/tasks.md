@@ -13,7 +13,7 @@ created: "2026-09-23"
 - [ ] `proposal.md`, `tasks.md`, `verification.md`, `features.json` (every feature `pending`)
 - [ ] Manu approves the design
 
-## PR 2 — reviewer identity (lands with, or after, AUTH-007 #1781's ADR-062 D1 amendment)
+## PR 2 — reviewer identity, and the ADR-062 D1 amendment it shares with AUTH-007 #1781 (Manu, 2026-09-24: this PR writes it)
 
 - [x] [AC5] Measure first, record in `verification.md`. Does a read-team member's `write:issue` token post a PR comment on the forge? What else does the PR-Agent Gitea provider call (`/user`, repo settings)? The scopes come from this measurement.
       Measured 2026-09-24 in a local Gitea 1.25.5 lab (`scope-lab.py`): `write:issue` + `read:repository`, no `read:user`. The live check with the real identity is AC1, in PR 4.

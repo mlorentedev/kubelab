@@ -92,6 +92,12 @@ Two runs of the same lab, differing only in the webhook `events` and `PR_REVIEWE
 ## Decisions made during implementation
 
 - 2026-09-24, Manu: run it in the cluster, copy `NAN_API_KEY` into SOPS, and write the spec before any code.
+- 2026-09-24, Manu: PR 2 carries the ADR-062 D1 amendment for both machine exceptions. That is AUTH-007's owner-level pusher, with the content decided on #1781 on 2026-09-22, and this read-only reviewer. It is one amendment, not two in parallel on the same section.
+- 2026-09-24, Manu: the reviewer account is **`mentor`**, separate from `hefesto`. Three reasons:
+  - `hefesto` holds per-unit write on every `personal/` repo, and read-only access is what contained the reviewer in the lab.
+  - The token lives in an internet-facing pod that reads untrusted diffs, so it should not share a blast radius with the reconciler, or its rotation.
+  - Separate authorship lets a triage tell a review from reconciler output.
+- 2026-09-24, Manu: the scope is **the whole forge, `teledyne/` included**. `teledyne/` holds a third party's material (ADR-065 D2), so this is the deliberate decision that ADR asks for, not an inherited one. Manu accepts that its PR diffs go to NaN and that `mentor` holds read access to its code.
 - Hook events are `pull_request_only` and `pull_request_sync` (corrected 2026-09-24 from `pull_request`, which the lab showed also delivers comments). Slash commands stay out until an author filter exists (proposal, Out of scope).
 
 ## Promotion candidates
