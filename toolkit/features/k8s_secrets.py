@@ -285,7 +285,7 @@ def _resolve_superadmin(cm: ConfigurationManager) -> str:
     superadmin = str(identities.get("superadmin", "") or "")
     if not superadmin:
         logger.warning(
-            "apps.auth.identities.superadmin is not declared — Grafana and MinIO will keep "
+            "apps.auth.identities.superadmin is not declared — MinIO will keep "
             "whatever admin identity the cluster already holds (ADR-062 D3)"
         )
     return superadmin

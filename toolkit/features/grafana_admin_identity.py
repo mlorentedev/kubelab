@@ -82,14 +82,18 @@ def _resolve_declared_account(project_root: Path) -> tuple[str, str]:
 
 
 def _previous_logins(project_root: Path, declared_login: str) -> list[str]:
-    """Logins row id 1 may still carry: Grafana's bootstrap default, or one an earlier
-    declaration gave it. Until #951 that was the superadmin, so every declared identity
-    is a candidate; a login that does not authenticate costs one 401."""
+    """Logins row id 1 may still carry: one an earlier declaration gave it, or Grafana's
+    bootstrap default. Until #951 that was the superadmin, so it comes first, then the
+    other declared identities, then the bootstrap default.
+
+    Every login that does not authenticate is a failed attempt, and Grafana blocks a
+    login for 5 minutes after 5 consecutive ones (`brute_force_login_protection_max_attempts`).
+    The likeliest candidate goes first so that a run costs the fewest failures."""
     with open(project_root / "infra/config/values/common.yaml") as f:
         common = yaml.safe_load(f) or {}
     identities = (common.get("apps", {}).get("auth", {}) or {}).get("identities", {}) or {}
-    candidates = [_BOOTSTRAP_LOGIN, *(str(v) for v in identities.values())]
-    return [c for c in dict.fromkeys(candidates) if c != declared_login]
+    candidates = [str(identities.get("superadmin") or ""), *(str(v) for v in identities.values()), _BOOTSTRAP_LOGIN]
+    return [c for c in dict.fromkeys(candidates) if c and c != declared_login]
 
 
 def _account_drift(user: dict[str, Any], login: str, email: str) -> str:
@@ -103,7 +107,23 @@ def _account_drift(user: dict[str, Any], login: str, email: str) -> str:
         problems.append(f"its email is {user.get('email')!r}, not {email!r}")
     if not user.get("isGrafanaAdmin"):
         problems.append("it is not a Server Admin")
+    linked = _linked_providers(user)
+    if linked:
+        problems.append(
+            f"it is linked to {', '.join(linked)}, so Grafana refuses to change its password or rename it (#951)"
+        )
     return "; ".join(problems)
+
+
+#: The one link that leaves an account editable: `errOnExternalUser` does not count
+#: the auth proxy as a provider (13.0.2, `pkg/api/login.go`), so its rows stay local.
+_EDITABLE_LINK = "Auth Proxy"
+
+
+def _linked_providers(user: dict[str, Any]) -> list[str]:
+    """Providers whose link makes Grafana treat the row as external. `/api/user` names the
+    newest link in `authLabels`, which is the one `errOnExternalUser` reads."""
+    return [label for label in user.get("authLabels") or [] if label != _EDITABLE_LINK]
 
 
 def _http_get_user(port: int, login: str, password: str) -> dict[str, Any] | None:
@@ -209,7 +229,10 @@ def reconcile_admin_identity(env: str, project_root: Path) -> IdentityCheckResul
 
     with kubectl_service_port_forward(env, "grafana", 3000) as port:
         user = None
-        for candidate in [declared_login, *_previous_logins(project_root, declared_login)]:
+        # The check already found which login row id 1 answers to; try it first, so the
+        # reconcile adds no failed attempt towards Grafana's login lockout.
+        known = [result.actual_login] if result.actual_login else []
+        for candidate in dict.fromkeys([*known, declared_login, *_previous_logins(project_root, declared_login)]):
             user = _http_get_user(port, candidate, declared_password)
             if user is not None:
                 break
@@ -225,6 +248,12 @@ def reconcile_admin_identity(env: str, project_root: Path) -> IdentityCheckResul
         if not user.get("isGrafanaAdmin"):
             raise GrafanaIdentityUnavailableError(
                 "row id 1 is not a Server Admin; no API call can restore that without another Server Admin"
+            )
+        linked = _linked_providers(user)
+        if linked:
+            raise GrafanaIdentityUnavailableError(
+                f"row id 1 is linked to {', '.join(linked)}: Grafana refuses to rename it or change its password, "
+                "and no API call removes the link (#951)"
             )
 
         if user["login"] != declared_login or str(user.get("email") or "").lower() != declared_email.lower():
@@ -249,10 +278,13 @@ def reconcile_admin_identity(env: str, project_root: Path) -> IdentityCheckResul
                 raise GrafanaIdentityUnavailableError(
                     f"renaming row id 1 to {declared_login!r} failed: HTTP {e.code}"
                 ) from e
+            except urllib.error.URLError as e:
+                raise GrafanaIdentityUnavailableError(f"renaming row id 1 could not reach Grafana: {e}") from e
 
         final = _http_get_user(port, declared_login, declared_password)
         drift = (
-            "the declared login still cannot log in"
+            "the declared login still cannot log in. If CHECK=1 ran several times just before, Grafana may be "
+            "blocking that login for 5 minutes after 5 failed attempts; wait, then re-run with CHECK=1"
             if final is None
             else _account_drift(final, declared_login, declared_email)
         )

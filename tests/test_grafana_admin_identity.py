@@ -51,9 +51,18 @@ BREAK_GLASS = {
 }
 
 
-def _row(login: str, *, email: str = BREAK_GLASS["email"], id: int = 1, server_admin: bool = True) -> bytes:
+def _row(
+    login: str,
+    *,
+    email: str = BREAK_GLASS["email"],
+    id: int = 1,
+    server_admin: bool = True,
+    labels: tuple[str, ...] = ("Auth Proxy",),
+) -> bytes:
     """What Grafana's `/api/user` answers for the authenticated row."""
-    return json.dumps({"id": id, "login": login, "email": email, "isGrafanaAdmin": server_admin}).encode()
+    return json.dumps(
+        {"id": id, "login": login, "email": email, "isGrafanaAdmin": server_admin, "authLabels": list(labels)}
+    ).encode()
 
 
 @contextmanager
@@ -105,6 +114,7 @@ class TestCheckAdminIdentity:
             (_row("breakglass", email="info@example.test"), "email"),
             (_row("breakglass", server_admin=False), "Server Admin"),
             (_row("breakglass", id=7), "row id 7"),
+            (_row("breakglass", labels=("Generic OAuth",)), "linked to Generic OAuth"),
         ],
     )
     def test_the_login_alone_is_not_the_account(self, project_root: Path, row: bytes, reason: str) -> None:
@@ -218,6 +228,7 @@ class TestReconcileAdminIdentity:
         """The #951 migration: row id 1 is `manu`, with manu's email, and must become `breakglass`."""
         row = {"login": "manu", "email": "info@example.test"}
         renamed = {}
+        rejected: list[str] = []
 
         def fake_urlopen(req, timeout=5):
             if req.get_method() == "PUT":
@@ -226,6 +237,7 @@ class TestReconcileAdminIdentity:
                 row.update(login=renamed["body"]["login"], email=renamed["body"]["email"])
                 return _answer(b"{}")
             if _basic_auth_login(req) != row["login"]:
+                rejected.append(_basic_auth_login(req))
                 raise _rejected()
             return _answer(_row(row["login"], email=row["email"]))
 
@@ -247,6 +259,31 @@ class TestReconcileAdminIdentity:
         assert result.changed is True
         assert renamed["body"]["login"] == "breakglass"
         assert renamed["body"]["email"] == BREAK_GLASS["email"], "the email is what keeps SSO from adopting the row"
+        # Grafana blocks a login for 5 minutes after 5 consecutive failures. The check
+        # tries the declared login once; the reconcile then reuses what it found.
+        assert rejected == ["breakglass"], f"failed attempts: {rejected}"
+
+    @pytest.mark.parametrize(
+        ("row", "reason"),
+        [
+            (_row("manu", server_admin=False), "Server Admin"),
+            (_row("manu", labels=("Generic OAuth",)), "linked to Generic OAuth"),
+        ],
+    )
+    def test_a_row_the_api_cannot_fix_is_never_renamed(
+        self, project_root: Path, monkeypatch: pytest.MonkeyPatch, row: bytes, reason: str
+    ) -> None:
+        def fake_urlopen(req, timeout=5):
+            assert req.get_method() != "PUT", "a row the API refuses must not be sent a rename"
+            if _basic_auth_login(req) != "manu":
+                raise _rejected()
+            return _answer(row)
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=0, stderr=""))
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            with pytest.raises(GrafanaIdentityUnavailableError, match=reason):
+                reconcile_admin_identity("prod", project_root)
 
     def test_a_row_other_than_one_is_never_renamed(self, project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The reset wrote row id 1. Another row answering to a candidate login is not the one to rename."""

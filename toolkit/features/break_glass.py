@@ -224,7 +224,7 @@ def _account_problems(decl: Mapping[str, Any], identities: Mapping[str, Any], va
     problems = []
     if not str(decl.get("email") or "").strip():
         problems.append("a local `login` needs its own `email`")
-    if str(decl["login"]) in names:
+    if str(decl["login"]).lower() in {n.lower() for n in names}:  # Grafana compares logins case-insensitively
         problems.append(f"login '{decl['login']}' is an Authelia user, so it is not a local account")
     if str(decl.get("email") or "").lower() in emails:
         problems.append(f"email '{decl.get('email')}' belongs to an Authelia user, whose SSO login would adopt it")

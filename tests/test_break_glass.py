@@ -181,6 +181,7 @@ class TestValidate:
             ({"login": "bg", "secret": _GRAFANA_SECRET}, "own `email`"),
             ({"login": "operator", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "'operator' is an Authelia"),
             ({"login": "testuser", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "'testuser' is an Authelia"),
+            ({"login": "Operator", "email": "bg@x.test", "secret": _GRAFANA_SECRET}, "'Operator' is an Authelia"),
             ({"login": "bg", "email": "Manu@Example.test", "secret": _GRAFANA_SECRET}, "adopt"),
             ({"login": "bg", "email": "info@example.test", "secret": _GRAFANA_SECRET}, "adopt"),
         ],
