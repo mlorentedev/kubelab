@@ -131,8 +131,3 @@ apps:
       # FAIL forever, and it invites someone to "fix" that by publishing the
       # very surface #1389 and #675 argue should stay unexposed.
       # Guarded by tests/test_declared_domains_are_served.py.
-
-    data:
-      minio:
-        domain: minio.kubelab.live
-        console_domain: console.minio.kubelab.live

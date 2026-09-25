@@ -50,7 +50,7 @@ webauthn:
 # Service distribution per ADR-012:
 #   PUBLIC (bypass): mlorente.dev, api, status, wiki
 #   PROTECTED (one_factor): grafana, traefik
-#   OWN AUTH (bypass): gitea, n8n, console.minio
+#   OWN AUTH (bypass): gitea, n8n
 #   INTERNAL (no ingress): loki, vector, redis, crowdsec
 access_control:
   default_policy: deny
@@ -81,10 +81,6 @@ access_control:
       policy: bypass
 
     # OIDC-enabled services (bypass forward-auth — OIDC handles login)
-    - domain: 'console.minio.kubelab.live'
-      policy: bypass
-    - domain: 'minio.kubelab.live'
-      policy: bypass
     - domain: 'gitea.kubelab.live'
       policy: bypass
 
@@ -147,7 +143,7 @@ notifier:
       server_name: smtp.gmail.com
       skip_verify: false
 
-# ---- OIDC Identity Provider (MinIO SSO) ----
+# ---- OIDC Identity Provider ----
 identity_providers:
   oidc:
     hmac_secret: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE

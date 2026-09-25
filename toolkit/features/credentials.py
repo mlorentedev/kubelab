@@ -476,20 +476,6 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             grafana_oidc_client_secret_hash = self.generate_argon2_hash(grafana_oidc_client_secret)
 
-        # 11. Generate MinIO OIDC Client Secret and its hash
-        logger.info("Generating MinIO OIDC Client Secret...")
-        minio_oidc_client_secret = secrets.token_urlsafe(64)
-        logger.success("MinIO OIDC Client Secret generated.")
-
-        logger.info("Generating MinIO OIDC Client Secret hash...")
-        try:
-            minio_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(minio_oidc_client_secret)
-            logger.success("MinIO OIDC Client Secret hash generated.")
-        except Exception as e:
-            logger.warning(f"Could not generate MinIO OIDC client secret hash via Docker: {e}")
-            logger.warning("Using Argon2 hash from local library instead...")
-            minio_oidc_client_secret_hash = self.generate_argon2_hash(minio_oidc_client_secret)
-
         # 11b. Generate Gitea OIDC Client Secret and its hash
         logger.info("Generating Gitea OIDC Client Secret...")
         gitea_oidc_client_secret = secrets.token_urlsafe(64)
@@ -551,19 +537,16 @@ class CredentialsManager:
             f"{_auth}.oidc_client_secret_hash": oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_grafana": grafana_oidc_client_secret,
             f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
-            f"{_auth}.oidc_client_secret_minio_hash": minio_oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_gitea_hash": gitea_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
             # MinIO secrets. No `root_user` here: the root account's NAME
-            # resolves from `apps.auth.identities.superadmin` on both delivery
-            # paths (`k8s_secrets._build_dynamic_literals` and
-            # `provision-bee.yml`), so seeding it from `common_username` would
+            # resolves from `apps.auth.identities.superadmin` in
+            # `provision-bee.yml`, so seeding it from `common_username` would
             # make an identity something this command is entitled to rename —
             # ADR-062 D3, and the shape that took prod SSO down on 2026-08-23.
             "apps.services.data.minio.root_password": common_password,
-            "apps.services.data.minio.oidc_client_secret": minio_oidc_client_secret,
             # Gitea secrets
             "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
@@ -728,7 +711,6 @@ class CredentialsManager:
         print("        data:")
         print("            minio:")
         print(f'                root_password: "{secrets_dict["apps.services.data.minio.root_password"]}"')
-        print(f'                oidc_client_secret: "{secrets_dict["apps.services.data.minio.oidc_client_secret"]}"')
         print("        observability:")
         print("            grafana:")
         admin_user = secrets_dict["apps.services.observability.grafana.admin_user"]
@@ -766,8 +748,6 @@ class CredentialsManager:
         print(f'                oidc_client_secret_grafana: "{grafana_secret}"')
         grafana_hash = secrets_dict[f"{_a}.oidc_client_secret_grafana_hash"]
         print(f'                oidc_client_secret_grafana_hash: "{grafana_hash}"')
-        minio_hash = secrets_dict[f"{_a}.oidc_client_secret_minio_hash"]
-        print(f'                oidc_client_secret_minio_hash: "{minio_hash}"')
         gitea_hash = secrets_dict[f"{_a}.oidc_client_secret_gitea_hash"]
         print(f'                oidc_client_secret_gitea_hash: "{gitea_hash}"')
         print("        core:")

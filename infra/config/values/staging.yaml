@@ -82,7 +82,3 @@ apps:
         disable_require_tls: false
       crowdsec:
         domain: crowdsec.staging.kubelab.live
-    data:
-      minio:
-        domain: minio.staging.kubelab.live
-        console_domain: console.minio.staging.kubelab.live

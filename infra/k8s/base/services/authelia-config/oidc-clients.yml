@@ -5,19 +5,6 @@
 identity_providers:
   oidc:
     clients:
-    - client_id: minio
-      client_secret: $argon2id$v=19$m=65536,t=3,p=4$3PfYn19oBeTXHQDEFGx7qg$TcB0a2yqM/g7QzG7/uHUj3BBKpr3AYq8/iV3iDndqlM
-      client_name: MinIO
-      public: false
-      authorization_policy: one_factor
-      token_endpoint_auth_method: client_secret_basic
-      redirect_uris:
-      - https://console.minio.staging.kubelab.live/oauth_callback
-      scopes:
-      - openid
-      - profile
-      - email
-      consent_mode: implicit
     - client_id: grafana
       client_secret: $argon2id$v=19$m=65536,t=3,p=4$6fPbVdr85IvichQnqrWvSA$yGhbolI/xjAsKhQuYcMSIZZ0/ceOMnfReDP8k9qKV9s
       client_name: Grafana

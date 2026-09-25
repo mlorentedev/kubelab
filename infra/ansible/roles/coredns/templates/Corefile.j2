@@ -14,8 +14,6 @@
         {{ node_ips.ace1 }} auth.{{ staging_domain }}
         {{ node_ips.ace1 }} gitea.{{ staging_domain }}
         {{ node_ips.ace1 }} n8n.{{ staging_domain }}
-        {{ node_ips.ace1 }} minio.{{ staging_domain }}
-        {{ node_ips.ace1 }} console.minio.{{ staging_domain }}
         {{ node_ips.ace1 }} loki.{{ staging_domain }}
         fallthrough
     }
@@ -58,8 +56,6 @@
         {{ node_ips.vps }} loki.{{ base_domain }}
         {{ node_ips.vps }} gitea.{{ base_domain }}
         {{ node_ips.vps }} n8n.{{ base_domain }}
-        {{ node_ips.vps }} minio.{{ base_domain }}
-        {{ node_ips.vps }} console.minio.{{ base_domain }}
         # Headscale MUST use public IP — bootstrap dependency
         {{ vps_public_ip }} {{ service_domains.vpn }}
         fallthrough

@@ -565,68 +565,6 @@
     "expiryNotification": true
   },
   {
-    "key": "services-data-minio-prod",
-    "name": "Services · Data · MinIO Prod",
-    "type": "http",
-    "url": "https://minio.kubelab.live/minio/health/live",
-    "hostname": null,
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": "MinIO object storage health (prod). SSOT: apps.services.data.minio.domain + health_path.",
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      "prod",
-      "data",
-      "service"
-    ],
-    "expiryNotification": true
-  },
-  {
-    "key": "services-data-minio-console-prod",
-    "name": "Services · Data · MinIO Console Prod",
-    "type": "http",
-    "url": "https://console.minio.kubelab.live",
-    "hostname": null,
-    "port": null,
-    "interval": 300,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": false,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": "MinIO web console (prod). SSOT: apps.services.data.minio.console_domain.",
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      "prod",
-      "data",
-      "service"
-    ],
-    "expiryNotification": true
-  },
-  {
     "key": "services-data-n8n-prod",
     "name": "Services · Data · n8n Prod",
     "type": "http",
@@ -824,36 +762,6 @@
       "200-299"
     ],
     "description": "n8n workflow automation health (staging). VPN-only. SSOT: apps.services.automation.n8n.health_path.",
-    "active": true,
-    "httpBodyEncoding": "json",
-    "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
-    "parent": null,
-    "tags": [
-      "staging",
-      "data"
-    ],
-    "expiryNotification": true
-  },
-  {
-    "key": "staging-web-minio-staging",
-    "name": "Staging · Web · MinIO Staging",
-    "type": "http",
-    "url": "https://minio.staging.kubelab.live/minio/health/live",
-    "hostname": null,
-    "port": null,
-    "interval": 120,
-    "maxretries": 3,
-    "method": "GET",
-    "keyword": null,
-    "ignoreTls": true,
-    "upsideDown": false,
-    "accepted_statuscodes": [
-      "200-299"
-    ],
-    "description": "MinIO object storage health (staging). VPN-only. SSOT: apps.services.data.minio.health_path.",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,

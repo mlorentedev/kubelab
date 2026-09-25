@@ -1,0 +1,44 @@
+[
+  {
+    "id": "OPS-023-retire-minio-f1",
+    "behavior": "AC1: no MinIO workload/Service/IngressRoute/PVC/CronJob in staging or prod",
+    "verification": "set -o pipefail; for e in staging prod; do out=$(kubectl --kubeconfig ~/.kube/kubelab-$e-config -n kubelab get deploy,svc,pvc,cronjob,ingressroute -o name) || exit 1; if printf '%s\\n' \"$out\" | grep -i -E 'minio|pvc-backup'; then exit 1; fi; done",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-023-retire-minio-f2",
+    "behavior": "AC2: no MinIO container or data dir on the Beelink; re-provision changed=0",
+    "verification": "ssh bee 'names=$(docker ps -a --format {{.Names}}) || exit 1; ! printf \"%s\\n\" \"$names\" | grep -qx minio && test ! -e /opt/minio'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-023-retire-minio-f3",
+    "behavior": "AC3: client_id=minio is invalid_client in both envs",
+    "verification": "for h in auth.staging.kubelab.live auth.kubelab.live; do curl -s -o /dev/null -w '%{redirect_url}' \"https://$h/api/oidc/authorization?client_id=minio&response_type=code&scope=openid&state=probe12345678&redirect_uri=https://x/cb\" | grep -q invalid_client || exit 1; done",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-023-retire-minio-f4",
+    "behavior": "AC4: MinIO SOPS keys retired, secrets-audit green",
+    "verification": "make secrets-audit",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-023-retire-minio-f5",
+    "behavior": "AC5: no live file references MinIO",
+    "verification": "poetry run pytest -q --no-cov --runxfail -k no_live_minio_reference",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-023-retire-minio-f6",
+    "behavior": "AC6: every node still covered in R2 after removal",
+    "verification": "make backup-coverage",
+    "state": "pending",
+    "evidence": ""
+  }
+]

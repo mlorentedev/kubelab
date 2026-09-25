@@ -73,12 +73,6 @@ access_control:
     - domain: 'api.staging.kubelab.live'
       policy: bypass
 
-    # Services with own auth (protected by Authelia until OIDC SSO is configured)
-    - domain: 'console.minio.staging.kubelab.live'
-      policy: one_factor
-    - domain: 'minio.staging.kubelab.live'
-      policy: bypass  # S3 API — programmatic access
-
     # n8n: own auth (2.x built-in user management, OIDC is enterprise-only)
     - domain: 'n8n.staging.kubelab.live'
       policy: bypass
@@ -143,7 +137,7 @@ notifier:
       server_name: smtp.gmail.com
       skip_verify: false
 
-# ---- OIDC Identity Provider (MinIO SSO) ----
+# ---- OIDC Identity Provider ----
 identity_providers:
   oidc:
     hmac_secret: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE

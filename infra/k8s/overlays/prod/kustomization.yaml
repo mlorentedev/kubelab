@@ -10,7 +10,6 @@ resources:
   - generated/configmaps.yaml
   - generated/ingress.yaml
   - redirect-kubelab.yaml
-  - backup.yaml
   - traefik-dashboard.yaml
   - headscale.yaml
   - gitea.yaml

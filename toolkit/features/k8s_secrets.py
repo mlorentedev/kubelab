@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -103,17 +105,6 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         # The raw bot_token / chat_* values stay in SOPS, read at render time.
     ),
     SecretMapping(
-        name="minio-secrets",
-        keys={
-            # `MINIO_ROOT_USER` is NOT here: it was a SECOND copy of the admin
-            # identity stored in SOPS, and one identity stored twice drifts —
-            # #1355 facet 3 records exactly that happening. It now arrives as a
-            # literal resolved from apps.auth.identities.superadmin.
-            "MINIO_ROOT_PASSWORD": "APPS_SERVICES_DATA_MINIO_ROOT_PASSWORD",
-            "MINIO_IDENTITY_OPENID_CLIENT_SECRET": "APPS_SERVICES_DATA_MINIO_OIDC_CLIENT_SECRET",
-        },
-    ),
-    SecretMapping(
         name="homepage-secrets",
         keys={
             "HOMEPAGE_VAR_CLOUDFLARE_TOKEN": "APPS_SERVICES_DASHBOARD_HOMEPAGE_CLOUDFLARE_TOKEN",
@@ -177,6 +168,16 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     ),
 ]
 
+# Secrets this module used to render, as (namespace, name). `apply-secrets`
+# creates Secrets outside git, so Argo CD never prunes one whose mapping is
+# removed: it stops being updated and keeps its last value in etcd. Every apply
+# deletes these, idempotently. A name leaves this list only once no cluster can
+# still hold it.
+RETIRED_SECRETS: tuple[tuple[str, str], ...] = (
+    # OPS-023: held the MinIO root password and OIDC client secret.
+    ("kubelab", "minio-secrets"),
+)
+
 
 def _get_kubeconfig(env: str) -> str:
     """Get kubeconfig path for the given environment."""
@@ -185,6 +186,30 @@ def _get_kubeconfig(env: str) -> str:
 
 def _kubectl_base(env: str, namespace: str = "kubelab") -> list[str]:
     return ["kubectl", "--kubeconfig", _get_kubeconfig(env), "-n", namespace]
+
+
+def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., Any] = subprocess.run) -> bool:
+    """Delete every `RETIRED_SECRETS` entry. False if any delete failed."""
+    all_ok = True
+    for namespace, name in RETIRED_SECRETS:
+        if dry_run:
+            logger.info(f"  [DRY-RUN] Would delete retired secret '{namespace}/{name}'")
+            continue
+        try:
+            run(
+                [*_kubectl_base(env, namespace), "delete", "secret", name, "--ignore-not-found"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.success(f"  retired secret {namespace}/{name} absent")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"  Failed to delete retired secret {namespace}/{name}: {e.stderr}")
+            all_ok = False
+        except FileNotFoundError:
+            logger.error(f"  Failed to delete retired secret {namespace}/{name}: kubectl not found")
+            all_ok = False
+    return all_ok
 
 
 def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
@@ -224,7 +249,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
 
     # 3b. Pre-deploy guard, same posture as the placeholder check above. Raised
     # in review of #1390: with the identity SSOT undeclared, `_resolve_superadmin`
-    # returns "" and the Grafana and MinIO literals are simply omitted — so
+    # returns "" and the Grafana literal is simply omitted — so
     # `apply-secrets` would report success while writing a `grafana-admin`
     # Secret with no `admin-user` key.
     #
@@ -233,16 +258,16 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # operator debugs Grafana rather than the config that broke it. A guard that
     # already exists two lines up for placeholders belongs here for the same
     # reason — refuse to hand the cluster something that cannot start.
-    _IDENTITY_BACKED = {"grafana-admin": "admin-user", "minio-secrets": "MINIO_ROOT_USER"}
+    _IDENTITY_BACKED = {"grafana-admin": "admin-user"}
     missing_identity = sorted(
         f"{secret}.{key}" for secret, key in _IDENTITY_BACKED.items() if not dynamic_literals.get(secret, {}).get(key)
     )
     if missing_identity:
         logger.error(
             "Refusing to apply — these keys resolve from the identity SSOT and it is not "
-            "declared: " + ", ".join(missing_identity) + ". Set `apps.auth.identities.superadmin` "
-            "(MinIO, ADR-062 D3) and Grafana's account in `apps.services.security.authelia.break_glass` "
-            "in common.yaml. Applying without them writes Secrets whose workloads cannot start."
+            "declared: " + ", ".join(missing_identity) + ". Set Grafana's account in "
+            "`apps.services.security.authelia.break_glass` in common.yaml. Applying "
+            "without them writes Secrets whose workloads cannot start."
         )
         return False
 
@@ -257,6 +282,9 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
         if not ok:
             all_ok = False
 
+    # 4b. Remove what used to be rendered here; Argo CD never will.
+    all_ok = delete_retired_secrets(env, dry_run) and all_ok
+
     # 5. A changed Secret is not in use until its consumers restart (#1804):
     # env vars are read once at start, and Authelia's users-file watch never
     # fires on a Secret volume. Restart whatever reads each changed Secret.
@@ -269,26 +297,6 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
         logger.error("Some secrets failed to apply")
 
     return all_ok
-
-
-def _resolve_superadmin(cm: ConfigurationManager) -> str:
-    """The declared superadmin, from `apps.auth.identities` and nowhere else.
-
-    Deliberately has no fallback to `apps.auth.admin_username` or to
-    `basic_auth.user`. A fallback would make the map optional, and an optional
-    SSOT is the state this closes: `apps.auth.identities` was declared on
-    2026-08-23 and read by nothing for a day, while the alias kept resolving —
-    a catalog nothing acts on (lesson-380). Returning "" makes the omission
-    loud at apply time rather than silently reinstating the alias.
-    """
-    identities = cm.get_merged_config().get("apps", {}).get("auth", {}).get("identities", {})
-    superadmin = str(identities.get("superadmin", "") or "")
-    if not superadmin:
-        logger.warning(
-            "apps.auth.identities.superadmin is not declared — MinIO will keep "
-            "whatever admin identity the cluster already holds (ADR-062 D3)"
-        )
-    return superadmin
 
 
 def _resolve_grafana_admin(cm: ConfigurationManager) -> str:
@@ -314,21 +322,17 @@ def _build_dynamic_literals(cm: ConfigurationManager) -> dict[str, dict[str, str
     result: dict[str, dict[str, str]] = {}
 
     # AUTH-004 C1/C6 (ADR-062 D3): a service's admin identity resolves from ONE
-    # declaration, `apps.auth.identities.superadmin`. Grafana is the exception
-    # since #951: its admin is the break-glass account, see `_resolve_grafana_admin`.
-    # Both are plaintext config rather than SOPS values, which is why they arrive
-    # as `literal`s here instead of through `SecretMapping.keys`.
+    # declaration. Grafana's is the break-glass account since #951, see
+    # `_resolve_grafana_admin`. It is plaintext config rather than a SOPS value,
+    # which is why it arrives as a `literal` here instead of through
+    # `SecretMapping.keys`.
     #
     # What this replaces, and why it is not a tidy-up. `grafana-admin.admin-user`
-    # was mapped to BASIC_AUTH_USER — the *Traefik basic-auth account* — and
-    # MinIO kept a second copy of the identity in SOPS. Both are identities that
-    # something else is entitled to rewrite: on 2026-08-23 a routine rotation
-    # rewrote `basic_auth.user`, silently renamed the only admin of a live
-    # service, and broke the repair path in the same run (#1352, lessons
-    # 378/379). An identity is a declaration, not a credential.
-    superadmin = _resolve_superadmin(cm)
-    if superadmin:
-        result["minio-secrets"] = {"MINIO_ROOT_USER": superadmin}
+    # was mapped to BASIC_AUTH_USER — the *Traefik basic-auth account* — an
+    # identity that something else is entitled to rewrite: on 2026-08-23 a
+    # routine rotation rewrote `basic_auth.user`, silently renamed the only
+    # admin of a live service, and broke the repair path in the same run
+    # (#1352, lessons 378/379). An identity is a declaration, not a credential.
     grafana_admin = _resolve_grafana_admin(cm)
     if grafana_admin:
         result["grafana-admin"] = {"admin-user": grafana_admin}

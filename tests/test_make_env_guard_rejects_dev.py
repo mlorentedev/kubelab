@@ -84,7 +84,6 @@ GUARDED: dict[str, str] = {
     "unregister-spoke": "staging",
     "rotate-spoke-token": "staging",
     "deploy": "staging",
-    "backup-pvc": "prod",
     "sync-oidc-hashes": "staging",
     "sync-vikunja": "staging",
     "provision-postgres-tenant": "staging",

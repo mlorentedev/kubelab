@@ -203,7 +203,9 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         skip_in_envs=("dev", "staging"),  # VPN on VPS only
     ),
     # -- Data --
-    "minio": ServiceExpectation(),
+    # OPS-023 removed MinIO from K8s. The SSOT block stays until the dev
+    # Compose stack goes too, so only dev can still serve it.
+    "minio": ServiceExpectation(skip_in_envs=("staging", "prod")),
     # -- AI / ML -- (empty since AI-007 retired Ollama; see ADR-029)
     # -- Network (bare-metal, external to K3s) --
     "pihole": ServiceExpectation(

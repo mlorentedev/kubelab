@@ -44,8 +44,8 @@ sudo systemctl status k3s
 sudo k3s kubectl get nodes
 sudo k3s kubectl get pods -n kubelab
 
-# Back up PVCs (if K3s is partially functional)
-make backup-pvc ENV=prod
+# Take a fresh offsite snapshot of the VPS, PVCs included (BACKUP-044)
+make backup-node NODE=vps ENV=prod
 
 # Back up etcd snapshot
 sudo k3s etcd-snapshot save --name emergency-rollback
@@ -152,4 +152,4 @@ Once the root cause is fixed:
 - ADR-015: Headscale stays in Docker Compose (bootstrap dependency)
 - ADR-020: IaC lifecycle — Pattern C side-by-side migration
 - ADR-023: Hub-and-Spoke Multi-Cloud GitOps
-- `40-runbooks/pvc-backup-restore.md`: PVC backup/restore procedure
+- `docs/runbooks/offsite-backup-restore.md`: restore from the R2 snapshots

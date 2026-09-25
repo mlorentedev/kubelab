@@ -42,18 +42,6 @@
     "environments": ["prod"]
   },
   {
-    "name": "minio",
-    "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
-    "name": "console.minio",
-    "zone": "kubelab",
-    "proxied": false,
-    "environments": ["prod"]
-  },
-  {
     "name": "traefik",
     "zone": "kubelab",
     "proxied": false,
