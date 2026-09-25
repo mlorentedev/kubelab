@@ -38,16 +38,24 @@ AUTHELIA = _workload(
 GRAFANA = _workload(
     "Deployment",
     "grafana",
-    {"containers": [{"name": "grafana", "env": [{"name": "U", "valueFrom": {"secretKeyRef": {"name": "grafana-admin"}}}]}]},
+    {
+        "containers": [
+            {"name": "grafana", "env": [{"name": "U", "valueFrom": {"secretKeyRef": {"name": "grafana-admin"}}}]}
+        ]
+    },
 )
-N8N = _workload("StatefulSet", "n8n", {"containers": [{"name": "n8n", "envFrom": [{"secretRef": {"name": "n8n-secrets"}}]}]})
+N8N = _workload(
+    "StatefulSet", "n8n", {"containers": [{"name": "n8n", "envFrom": [{"secretRef": {"name": "n8n-secrets"}}]}]}
+)
 MIGRATOR = _workload(
     "Deployment",
     "api",
     {
         "initContainers": [{"name": "migrate", "envFrom": [{"secretRef": {"name": "api-secrets"}}]}],
         "containers": [{"name": "api"}],
-        "volumes": [{"name": "p", "projected": {"sources": [{"secret": {"name": "api-tls"}}, {"configMap": {"name": "x"}}]}}],
+        "volumes": [
+            {"name": "p", "projected": {"sources": [{"secret": {"name": "api-tls"}}, {"configMap": {"name": "x"}}]}}
+        ],
     },
 )
 
@@ -142,13 +150,15 @@ def test_apply_secrets_restarts_the_consumers_of_what_it_changed(monkeypatch) ->
             return {"X": "1"}
 
         def get_merged_config(self):
-            return {"apps": {"auth": {"identities": {"superadmin": "manu"}}, "services": {"security": {"authelia": {}}}}}
+            return {
+                "apps": {"auth": {"identities": {"superadmin": "manu"}}, "services": {"security": {"authelia": {}}}}
+            }
 
     monkeypatch.setattr(k8s_secrets, "ConfigurationManager", lambda *a, **k: CM())
     monkeypatch.setattr(
         k8s_secrets,
         "_build_dynamic_literals",
-        lambda cm: {"grafana-admin": {"admin-user": "manu"}, "minio-secrets": {"MINIO_ROOT_USER": "manu"}},
+        lambda cm: {"grafana-admin": {"admin-user": "manu"}},
     )
     monkeypatch.setattr(k8s_secrets, "SECRET_DEFINITIONS", [SecretMapping(name="authelia-users", keys={})])
 
@@ -160,5 +170,11 @@ def test_apply_secrets_restarts_the_consumers_of_what_it_changed(monkeypatch) ->
     restarted: list[set] = []
     monkeypatch.setattr(k8s_secrets, "restart_consumers", lambda changed, **k: restarted.append(set(changed)) or True)
 
+    # Never let a unit test reach a cluster: the retired-secret delete is real
+    # kubectl against the env's kubeconfig. Asserting it ran proves the wiring.
+    retired_for: list[str] = []
+    monkeypatch.setattr(k8s_secrets, "delete_retired_secrets", lambda env, dry_run: retired_for.append(env) or True)
+
     assert k8s_secrets.apply_secrets("staging", Path("/nonexistent")) is True
     assert restarted == [{("kubelab", "authelia-users")}]
+    assert retired_for == ["staging"]

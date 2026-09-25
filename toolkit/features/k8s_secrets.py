@@ -206,6 +206,9 @@ def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., A
         except subprocess.CalledProcessError as e:
             logger.error(f"  Failed to delete retired secret {namespace}/{name}: {e.stderr}")
             all_ok = False
+        except FileNotFoundError:
+            logger.error(f"  Failed to delete retired secret {namespace}/{name}: kubectl not found")
+            all_ok = False
     return all_ok
 
 

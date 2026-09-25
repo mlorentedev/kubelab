@@ -66,3 +66,10 @@ def test_a_failed_delete_fails_the_apply() -> None:
     # A delete that did not happen must not read as a clean apply: the value
     # it was meant to remove is still in the cluster.
     assert k8s_secrets.delete_retired_secrets("prod", dry_run=False, run=_Recorder(fail=True)) is False
+
+
+def test_a_missing_kubectl_fails_the_apply_instead_of_crashing() -> None:
+    def no_kubectl(argv, **kwargs):
+        raise FileNotFoundError("kubectl")
+
+    assert k8s_secrets.delete_retired_secrets("prod", dry_run=False, run=no_kubectl) is False

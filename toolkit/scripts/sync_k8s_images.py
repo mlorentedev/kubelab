@@ -34,7 +34,6 @@ IMAGE_SOURCES = [
     "apps.services.security.authelia.image",
     "apps.services.security.authelia.redis_image",
     "apps.services.security.crowdsec.image",
-    "apps.services.data.minio.image",
     "infra.postgres.image",
 ]
 
