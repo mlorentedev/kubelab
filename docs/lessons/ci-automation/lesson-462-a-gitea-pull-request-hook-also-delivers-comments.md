@@ -1,5 +1,5 @@
 ---
-id: lesson-458-a-gitea-pull-request-hook-also-delivers-comments
+id: lesson-462-a-gitea-pull-request-hook-also-delivers-comments
 type: lesson
 status: active
 created: "2026-09-24"
