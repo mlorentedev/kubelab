@@ -58,3 +58,22 @@ def test_a_new_source_changes_the_render() -> None:
     mutated = yaml.safe_load(yaml.safe_dump(COMMON))
     mutated["backup"]["sources"]["rpi3"]["canary"] = {"path": "/opt/canary"}
     assert "canary" in _rows(render_watcher_targets(mutated))["rpi3"]
+
+
+def test_the_watcher_reads_with_the_restic_that_writes() -> None:
+    """BACKUP-055 AC5: one restic version on both sides of the bucket.
+
+    The nodes install the static binary at `backup.r2.restic_version`; the
+    watcher runs the `restic/restic` image. Renovate tracks only the image, so a
+    bump there alone turns this red instead of shipping a reader newer than
+    every writer.
+    """
+    from toolkit.scripts.sync_k8s_images import IMAGE_SOURCES
+
+    image = COMMON["backup"]["watcher"]["image"]
+    name, tag = image.rsplit(":", 1)
+    assert name == "restic/restic"
+    assert tag == COMMON["backup"]["r2"]["restic_version"]
+    assert "backup.watcher.image" in IMAGE_SOURCES
+    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
+    assert {"name": name, "newTag": tag} in kustomization["images"]
