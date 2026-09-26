@@ -11,7 +11,7 @@ created: "2026-09-23"
 - [ ] AC2: the same comment id after a push, with `updated_at` later than the push
 - [ ] AC3: HTTP status for an unsigned and a wrongly signed POST; test `<name>`
 - [ ] AC4: title and body byte-identical before and after; test `<name>`
-- [ ] AC5: measured scope requirement (below); test `<name>`; `GET /users/<reviewer>/repos` returns `[]`
+- [x] AC5: measured scope requirement (below); test `test_gitea_token_scopes.py::test_the_reviewer_grant_is_exactly_the_measured_requirement`; `mentor owns: (none)` on prod (Live provision, below)
 - [ ] AC6: tests `<names>`; orphan audit output
 - [ ] AC7: reconcile apply output, then a second run with no changes
 - [ ] AC8: alert fired, and its timestamp
@@ -93,6 +93,17 @@ Neither setting reaches the other's code path.
 
 - Unsigned POST → 400 (`Missing signature header`). Wrongly signed → 401 (`Invalid signature`).
 - **`prohibit_login=true` kills the account's API tokens.** The same token gave 200 on `GET /user`, then 403 after the flag was set (`This account is prohibited from signing in…`, `api.go:818`). So a machine identity that must call the API cannot carry the flag. "Login prohibited" can only mean no usable password. This applies to AUTH-007's pusher as much as to this reviewer.
+
+## Live provision (2026-09-26 UTC, prod, after #1828 and #1832 merged)
+
+Run from master `3f46c450` on a branch, so that the recorded token lands through a PR and not on master directly.
+
+- `make provision NODE=bee ENV=prod TAGS=gitea CHECK=1`: `ok=35 changed=2 failed=0`. The two changes are the compose template (`GITEA_REVIEWER_USER` / `GITEA_REVIEWER_EMAIL`) and `gitea-bootstrap.sh`. Check mode skips the mint and record `command` tasks.
+- `make provision NODE=bee ENV=prod TAGS=gitea`: `ok=50 changed=8 failed=0`. The changes are the compose template, the bootstrap script, `Start services`, the bootstrap (it creates `mentor`), `Mint the reviewer account's scoped token`, `Record the reviewer token in SOPS` and the two restart handlers. The handler recreates the whole bee stack (`--force-recreate`); no forge or GitHub job was running (runner `kubelab-bee` idle). The only change to `prod.enc.yaml` is the new `apps.services.core.gitea.reviewer_token` key, plus SOPS's `mac` and `lastmodified`.
+- Second `make provision NODE=bee ENV=prod TAGS=gitea`: `ok=45 changed=0 failed=0`. The mint gate closed on the recorded key.
+- `make gitea-reconcile ENV=prod`, the plan: `~ team {kubelab,personal,teledyne}/reviewers converge to read over all repositories, member mentor`, and nothing else.
+- `make gitea-reconcile ENV=prod APPLY=1`: `team ensured` for all three, then `AC4 ok — hefesto owns: (none)` and `TOOL-080 AC5 ok — mentor owns: (none)`.
+- Second `APPLY=1`: `(nothing to do — forge matches the declaration)`, and the same two ownership lines.
 
 ## Test status
 
