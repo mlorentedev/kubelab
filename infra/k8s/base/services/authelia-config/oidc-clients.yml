@@ -19,6 +19,7 @@ identity_providers:
       - email
       - groups
       consent_mode: implicit
+      access_token_signed_response_alg: RS256
     - client_id: vikunja-oidc
       client_secret: $argon2id$v=19$m=65536,t=3,p=4$QEvFAiioBOII0ZotMvBoGg$sIs++1fvPfvHiyV+OY5pbSPs3fCPyLu74PavhnGjx+s
       client_name: Vikunja Task Platform

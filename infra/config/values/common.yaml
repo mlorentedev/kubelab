@@ -1710,6 +1710,10 @@ apps:
           token_endpoint_auth_method: client_secret_basic
           authorization_policy: one_factor
           consent_mode: implicit
+          # SEC-021 (#1840): Grafana 13.0.2 parses every access token as a JWT and,
+          # when it is opaque, logs the token itself at warn. A signed (RFC 9068)
+          # token is parsed instead. The role still comes from UserInfo's groups.
+          access_token_signed_response_alg: RS256
         # Prod only: Gitea is a singleton (ADR-061).
         - client_id: gitea
           client_name: Gitea

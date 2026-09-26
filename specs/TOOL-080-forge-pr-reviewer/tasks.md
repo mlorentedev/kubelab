@@ -24,7 +24,8 @@ created: "2026-09-23"
 - [x] [AC5] Reconciler: a read team per declared org with the reviewer as member (`ensure_team` generalised beyond one member and one permission).
       `TeamGrant` (`WRITE_TEAM`, `READ_TEAM`). The read team is converged in both directions, and membership is part of its plan (`tests/test_gitea_review_team.py`, red first).
 - [x] The ADR-062 D1 amendment: what "login prohibited" means for a machine account, AUTH-007's owner-level pusher (#1781), and this reviewer.
-- [ ] Live, **after #1828 and #1832 merge** (Manu, 2026-09-24: not from the branch, so no real token sits in SOPS on an unmerged branch): `make provision NODE=bee ENV=prod TAGS=gitea`, then `make gitea-reconcile ENV=prod APPLY=1`, re-run shows no changes, and `GET /users/<reviewer>/repos` is empty.
+- [x] Live, **after #1828 and #1832 merge** (Manu, 2026-09-24: not from the branch, so no real token sits in SOPS on an unmerged branch): `make provision NODE=bee ENV=prod TAGS=gitea`, then `make gitea-reconcile ENV=prod APPLY=1`, re-run shows no changes, and `GET /users/<reviewer>/repos` is empty.
+      Done 2026-09-26 UTC: provision twice (the second `changed=0`), reconcile apply twice (the second "nothing to do"), and `TOOL-080 AC5 ok — mentor owns: (none)`. See `verification.md`, Live provision.
 
 ## PR 3 — a list of webhooks in the reconciler
 

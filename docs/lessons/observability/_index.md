@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-20 lessons, newest first. Back to [all categories](../_index.md).
+21 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 464 | [Vector interpolates every `${...}` in its config file, comments included, and refuses to start on an unset one](lesson-464-vector-interpolates-every-dollar-in-its-config-comments-included.md) | 2026-09-26 |
 | 444 | [A drill that asks "is the alert firing?" tests a level when the property under test is an edge — refuse before, rather than mis-attribute after](lesson-444-a-drill-that-asks-is-the-alert-firing-tests-a-level-when-the-property-is-an-edge.md) | 2026-09-04 |
 | 443 | [A range query carries a lookback per point, so "window plus interval" is half the real resolve latency](lesson-443-a-range-query-carries-a-lookback-per-point-so-resolve-latency-is-not-window-plus-interval.md) | 2026-09-04 |
 | 442 | [Removing a rule's provisioning file is not deleting the rule — Grafana keeps evaluating it, and every repo-side signal says it is gone](lesson-442-removing-a-rules-provisioning-file-does-not-delete-the-rule.md) | 2026-09-03 |

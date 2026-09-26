@@ -64,6 +64,9 @@ identity_providers:
         authorization_policy: '{{ client.authorization_policy }}'
         token_endpoint_auth_method: '{{ client.token_endpoint_auth_method }}'
         consent_mode: '{{ client.consent_mode }}'
+        {% if client.access_token_signed_response_alg %}
+        access_token_signed_response_alg: '{{ client.access_token_signed_response_alg }}'
+        {% endif %}
         redirect_uris:
           {% for uri in client.redirect_uris %}
           - '{{ uri }}'

@@ -1,10 +1,10 @@
 # Lessons
 
-461 lessons, one file each. Newest: 2026-09-24. Open a category for its list.
+463 lessons, one file each. Newest: 2026-09-26. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
-| [identity-secrets](identity-secrets/_index.md) | 66 | Authelia, OIDC, SOPS, credentials |
+| [identity-secrets](identity-secrets/_index.md) | 67 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 53 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 46 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 49 | Roles, playbooks, IaC, node setup |
@@ -13,7 +13,7 @@
 | [toolkit-tooling](toolkit-tooling/_index.md) | 38 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 29 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 33 | CI workflows, gates, GitHub |
-| [observability](observability/_index.md) | 20 | Metrics, logs, alerting |
+| [observability](observability/_index.md) | 21 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 14 | Docker, Compose, image builds |
 | [storage-backup](storage-backup/_index.md) | 9 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
