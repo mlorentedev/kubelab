@@ -1926,11 +1926,18 @@ backup:
     # not hardcoded per node — a Pi reimaged to a different bitness must not
     # silently pull the wrong binary. No distro package: absent from the
     # RPi3's apt candidates, and a package loses the same version-pin control
-    # every other image in this file has. No container: nothing here runs on
-    # Kubernetes and none of the four backup targets are containerized
-    # workloads a Helm chart could reach — restic is node state, same layer
-    # as the systemd timer that invokes it.
+    # every other image in this file has. On the nodes restic is node state,
+    # same layer as the systemd timer that invokes it; the one containerized
+    # restic is the in-cluster reader below (`backup.watcher.image`), which must
+    # carry this same version (tests/test_r2_watcher_targets.py).
     restic_version: "0.19.1"  # tag is v0.19.1; release asset names drop the "v"
+  # The in-cluster R2 watcher (BACKUP-055): reads every node's repository with a
+  # read-only token and reports readable / non-empty / complete / whole-capture.
+  # Its tag must equal `r2.restic_version` so the reader is never newer than the
+  # writers. Renovate bumps this line only, and the test above then fails until
+  # `restic_version` is bumped with it, which is the coordination it forces.
+  watcher:
+    image: restic/restic:0.19.1
   # Every named Docker volume on a covered node is either backed up above or
   # excluded HERE, with its reason. Enforced by tests/test_backup_volume_coverage.py
   # over the compose template, so a volume added in a future change fails a test
