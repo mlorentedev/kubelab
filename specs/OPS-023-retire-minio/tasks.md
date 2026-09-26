@@ -52,7 +52,7 @@ created: "2026-09-22"
   - the firewall ports in `provision-bee.yml` are closed;
   - the `minio_*` vars and the compose block are deleted.
   Run `make provision NODE=bee ENV=prod` twice; the second run must report `changed=0`.
-- [ ] [AC2] Remove the Headscale `tag:hermes → beelink:9000` grant (a live `accept`, not only a comment; `tests/test_headscale_role.py` pins it) and deploy the policy. Leave the `VPNACL-001` draft's `tag:hermes → MinIO` rule a note on that spec. The rule's target no longer exists.
+- [x] [AC2] (✓ 2026-09-26, deployed, `changed=0` on run 3) Remove the Headscale `tag:hermes → beelink:9000` grant (a live `accept`, not only a comment; `tests/test_headscale_role.py` pins it) and deploy the policy. Leave the `VPNACL-001` draft's `tag:hermes → MinIO` rule a note on that spec. The rule's target no longer exists.
 
 ### PR 3: the local dev stack, docs, and the guard going green
 
