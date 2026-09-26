@@ -30,6 +30,11 @@ The token is `kubelab-r2-watcher`, an account token with "Workers R2 Storage Buc
   - A delete control was deliberately not run: the only real object to aim it at is a repository file, and a mistaken grant would have destroyed that repository.
 - Conclusion: R2 is resolved. `--no-lock` is both required and sufficient, and AC2's refusal half is observed.
 
+### AC4: generated targets (2026-09-26, `bc5996dd`)
+
+- `make sync-r2-watcher-targets` writes `infra/k8s/base/services/r2-backup-watcher/targets.txt` on the first run and reports `unchanged` on the second. The render (`beelink beelink gitea`, `rpi3 rpi3 uptime_kuma`, `rpi4 rpi4 pihole`, `vps kubelab-vps authelia headscale n8n`) matches the repositories and directories measured in R2 in task 1.
+- `tests/test_r2_watcher_targets.py`: 4 passed. Mutation: appending a line to the committed file turns `test_the_committed_targets_match_the_ssot` red with `... is stale. Regenerate it with make sync-r2-watcher-targets`. Restored from HEAD, it is green again. `toolkit sync r2-watcher-targets --check` reports `is current`.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
