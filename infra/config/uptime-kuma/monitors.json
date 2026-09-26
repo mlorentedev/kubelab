@@ -190,7 +190,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "On-demand platform node (ADR-028): MinIO + GH Runner + Glances. SSOT: networking.nodes.beelink.tailscale_ip (100.64.0.3).",
+    "description": "On-demand platform node (ADR-028): Gitea + GH runners + Glances. SSOT: networking.nodes.beelink.tailscale_ip (100.64.0.3).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,

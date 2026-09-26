@@ -166,7 +166,7 @@
   loop: "{{ firewall_allowed_ports }}"
   when: firewall_enabled and not (legacy_python | default(false))
 
-# Tailnet-only service ports (Glances, MinIO, etc.) — allowed on the
+# Tailnet-only service ports (Glances, Gitea, etc.) — allowed on the
 # tailscale0 interface only, never fleet-wide like firewall_allowed_ports
 # above. NOTE what this does NOT cover: a Docker-published port bypasses
 # these rules entirely. Docker's DNAT happens in PREROUTING, before ufw's

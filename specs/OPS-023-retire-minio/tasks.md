@@ -39,10 +39,10 @@ created: "2026-09-22"
 - [x] [AC1] SSOT, K8s side only: remove the per-env `domain`/`console_domain` overrides in `staging.yaml` and `prod.yaml`, which only K8s routes read. **The `apps.services.data.minio` block in `common.yaml`, `dev.yaml` and the `root_password` key stay until PR 3.** `provision-bee.yml` (PR 2) and the dev Compose stack (PR 3) still read them, so removing them here would break `make provision NODE=bee` between merges. Reordered 2026-09-24.
 - [x] [AC1] Tests: update the suites that assert MinIO exists (the inventory's category 5) so they assert its absence or drop the case. **Keep** `test_secrets_orphan_audit.py`'s worked example on a different key.
 - [x] [AC1] Remove `minio` and `console.minio` from `infra/terraform/dns/services.json` and from the CoreDNS `Corefile.j2` split-DNS hosts. The Terraform plan must show exactly those records destroyed and nothing else.
-- [ ] [AC1] Delete the `minio-secrets` Secret in both envs. `apply-secrets` creates it outside git, so Argo CD never prunes it, and removing the code leaves the root password in etcd (the TOOL-025 shape). Decided 2026-09-24: `RETIRED_SECRETS` in `k8s_secrets.py`, which every `make apply-secrets` deletes with `--ignore-not-found` (`tests/test_retired_secrets.py`). Record the run for each env in `verification.md`.
-- [ ] [AC1] **Before merge:** sync the Uptime Kuma monitors to the RPi3, so the prune does not page for a planned change.
+- [x] [AC1] Delete the `minio-secrets` Secret in both envs (✓ 2026-09-26, staging and prod, evidence in `verification.md`). `apply-secrets` creates it outside git, so Argo CD never prunes it, and removing the code leaves the root password in etcd (the TOOL-025 shape). Decided 2026-09-24: `RETIRED_SECRETS` in `k8s_secrets.py`, which every `make apply-secrets` deletes with `--ignore-not-found` (`tests/test_retired_secrets.py`). Record the run for each env in `verification.md`.
+- [x] [AC1] **Before merge:** sync the Uptime Kuma monitors to the RPi3, so the prune does not page for a planned change. (✓ 2026-09-26, done after the merge instead; no alert fired in between, per `make alerts`.)
 - [x] [AC1] Staging validation (✓ 2026-09-25, evidence in `verification.md`): `targetRevision` on the branch, then read the before and after state with `kubectl get deploy,svc,pvc,cronjob,ingressroute | grep -i minio`. Point `targetRevision` back after merge.
-- [ ] [AC1] [AC6] Prod after merge: Argo CD prunes, and the before/after `kubectl get` output is recorded. `make backup-coverage` stays fully covered. An authorization request for `client_id=minio` returns `invalid_client` in both envs (AC3).
+- [x] [AC1] [AC6] (✓ 2026-09-26) Prod after merge: Argo CD prunes, and the before/after `kubectl get` output is recorded. `make backup-coverage` stays fully covered. An authorization request for `client_id=minio` returns `invalid_client` in both envs (AC3).
 
 ### PR 2: the Beelink
 
@@ -52,10 +52,11 @@ created: "2026-09-22"
   - the firewall ports in `provision-bee.yml` are closed;
   - the `minio_*` vars and the compose block are deleted.
   Run `make provision NODE=bee ENV=prod` twice; the second run must report `changed=0`.
-- [ ] [AC2] Update the Headscale ACL comment and the `VPNACL-001` draft's `tag:hermes → MinIO` rule as a note on that spec. The rule's target no longer exists.
+- [ ] [AC2] Remove the Headscale `tag:hermes → beelink:9000` grant (a live `accept`, not only a comment; `tests/test_headscale_role.py` pins it) and deploy the policy. Leave the `VPNACL-001` draft's `tag:hermes → MinIO` rule a note on that spec. The rule's target no longer exists.
 
 ### PR 3: the local dev stack, docs, and the guard going green
 
+- [ ] [AC2] Remove PR 2's MinIO teardown from `beelink_services` (and `beelink_minio_dir`, and the three `minio_*` vars in `provision-bee.yml` that only it reads), **only after** AC2's `changed=0` run is in `verification.md`. Leave the Ollama cleanup as it is.
 - [ ] [AC1] SSOT and generated artifacts, moved here from PR 1 (2026-09-24):
   - remove `apps.services.data.minio.*` from `common` and `dev.yaml`;
   - remove MinIO from `platform_manifest.py` and regenerate `platform.json`;

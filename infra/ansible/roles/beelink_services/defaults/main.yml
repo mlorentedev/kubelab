@@ -1,6 +1,7 @@
 ---
 beelink_deploy_dir: /opt/kubelab
-beelink_minio_data_dir: /opt/minio/data
+# Retired by OPS-023; only the teardown in tasks/main.yml reads it.
+beelink_minio_dir: /opt/minio
 beelink_runner_work_dir: /opt/runner/_work
 # Gitea's repos + SQLite live here. Not backed up yet — the PVC backup CronJob
 # that covered Gitea on K3s does not follow it here, and its replacement is

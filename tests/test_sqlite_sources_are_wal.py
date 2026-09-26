@@ -72,11 +72,12 @@ def test_the_declaration_is_read_from_a_real_render() -> None:
     services, one step before the assertion consumes them.
     """
     services = _beelink_compose().get("services") or {}
-    assert len(services) >= 3, (
-        f"only {len(services)} services parsed from the beelink compose render; "
+    # Named rather than counted: the stack shrank when OPS-023 retired its object
+    # store, and a count floor would have to follow every such change.
+    assert {"gitea", "github-runner"} <= set(services), (
+        f"parsed services {sorted(services)} from the beelink compose render; "
         f"the render is broken and the WAL assertion above proves nothing"
     )
-    assert "gitea" in services
 
 
 def test_every_declared_sqlite_source_is_accounted_for() -> None:

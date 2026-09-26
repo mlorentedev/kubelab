@@ -16,7 +16,7 @@
 #
 # Deliberately NOT the "Restart beelink services" handler above: that one runs
 # `compose up -d --force-recreate` across the whole stack, so a change to one
-# service's auth source would also bounce MinIO and the GitHub runner. Blast
+# service's auth source would also bounce the GitHub runners. Blast
 # radius should match the change.
 - name: Restart gitea
   command: docker restart gitea
@@ -44,7 +44,7 @@
 
 # Deliberately NOT "Restart beelink services", for the same blast-radius reason
 # the gitea handler above gives: a change to the runner's config must not bounce
-# Gitea, MinIO and the GitHub runner alongside it. Hence the service argument.
+# Gitea and the GitHub runner alongside it. Hence the service argument.
 #
 # `compose up -d --force-recreate <service>` rather than `docker restart`, and
 # the difference is load-bearing twice over:

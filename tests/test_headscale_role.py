@@ -195,7 +195,7 @@ class TestPolicyHujsonContent:
         acls = _load_hujson(_render_policy())["acls"]
         hermes = [a for a in acls if a["src"] == ["tag:hermes"]]
         assert hermes, "tag:hermes must have an egress rule"
-        assert set(hermes[0]["dst"]) == {"vps:443", "beelink:9000"}
+        assert set(hermes[0]["dst"]) == {"vps:443"}
 
     def test_crown_jewels_excluded_from_hermes(self) -> None:
         acls = _load_hujson(_render_policy())["acls"]

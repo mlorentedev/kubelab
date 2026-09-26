@@ -1,5 +1,5 @@
 # {{ ansible_managed }}
-# Beelink Platform Services — Gitea + MinIO + GitHub Actions Runner + Glances (ADR-028)
+# Beelink Platform Services — Gitea + GitHub Actions Runner (ADR-028)
 # This file contains rendered secrets — mode 0600, owned by root.
 services:
   # Gitea — the platform's git singleton (ADR-061: state_promotion=singleton,
@@ -151,32 +151,6 @@ services:
     networks:
       - kubelab
 
-  minio:
-    image: {{ minio_image }}
-    container_name: minio
-    command: server /data --console-address ":{{ minio_console_port }}"
-    restart: {{ restart_policy }}
-    ports:
-      - "{{ tailscale_ip }}:{{ minio_api_port }}:{{ minio_api_port }}"
-      - "{{ tailscale_ip }}:{{ minio_console_port }}:{{ minio_console_port }}"
-    environment:
-      MINIO_ROOT_USER: "{{ minio_root_user }}"
-      MINIO_ROOT_PASSWORD: "{{ minio_root_password }}"
-    volumes:
-      - {{ beelink_minio_data_dir }}:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:{{ minio_api_port }}/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: "{{ minio_cpu_limit }}"
-          memory: "{{ minio_memory_limit }}"
-    networks:
-      - kubelab
-
 {% if act_runner_enabled | bool %}
   {{ act_runner_name }}:
     image: {{ act_runner_image }}
@@ -245,8 +219,8 @@ services:
       - kubelab
 
 # Glances extracted to the shared `roles/glances/` role (DASH-DT-014b).
-# Invoked from provision-bee.yml separately so this role only owns MinIO
-# and the GitHub Actions Runner.
+# Invoked from provision-bee.yml separately so this role only owns Gitea
+# and the GitHub Actions runners.
 
 volumes:
   act_runner_data:
