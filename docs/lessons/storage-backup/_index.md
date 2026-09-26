@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-9 lessons, newest first. Back to [all categories](../_index.md).
+10 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 465 | [A read-only object-store token cannot run restic's read commands unless they skip the lock](lesson-465-a-read-only-restic-token-needs-no-lock-even-to-read.md) | 2026-09-26 |
 | 427 | [A default nobody chose is not a decision, and four backups were relying on one](lesson-427-the-property-everything-relied-on-was-never-declared.md) | 2026-09-04 |
 | 361 | [CI green is not the same claim as "this runs on real hardware"](lesson-361-ci-green-is-not-the-same-claim-as-this-runs-on-real-hardware.md) | 2026-08-21 |
 | 332 | [A retired PVC stays pinned by *completed* Job pods — and the CronJob's retention setting is what pins it](lesson-332-a-retired-pvc-stays-pinned-by-completed-job-p.md) | 2026-08-15 |
