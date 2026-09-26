@@ -18,6 +18,7 @@ tests/e2e/
 ├── test_security_headers.py # Traefik security headers (X-Frame-Options, HSTS, etc.)
 ├── test_error_pages.py      # Custom errors service 404 page validation
 ├── test_observability.py    # Grafana API, Loki readiness
+├── test_grafana_sso.py      # OAuth login to Grafana gives the declared tier
 ├── test_crowdsec.py         # CrowdSec bouncer pass-through and health
 └── README.md
 ```
