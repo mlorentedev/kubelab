@@ -116,6 +116,27 @@ dig @100.64.0.10 -p 5353 status.kubelab.live +short
 curl -k https://status.kubelab.live
 ```
 
+### After restoring Grafana's database: check each account's sign-in link
+
+Grafana matches a returning SSO login only by the OAuth link stored in its
+database. It never matches by login, and it no longer matches by email, since
+the email-lookup migration flag was removed (#1842). So a restored or partial
+database that holds a row without that link locks the row's owner out of SSO,
+and the login fails with `user sync failed`. Check it over the break-glass path,
+which needs no SSO login:
+
+```bash
+make auth-review ENV=prod
+```
+
+Every Authelia identity must read `sign-in: Generic OAuth`. `breakglass` reads
+`Auth Proxy`, which is correct: it is the local account. If an identity reads
+anything else, re-adopt it with a reviewed PR that sets
+`GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP=true` in
+`infra/k8s/base/services/grafana-config/grafana.env`. Have that user log in
+once, confirm `Generic OAuth`, then remove the flag again. Never leave it on:
+while it is on, an IdP email that matches a local row takes that row over.
+
 ## Step 7: Reconnect K3s (if needed)
 
 K3s nodes connect via Tailscale. Once Headscale is back:
