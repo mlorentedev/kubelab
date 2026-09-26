@@ -59,7 +59,7 @@ def test_each_retired_secret_is_deleted_idempotently() -> None:
 def test_dry_run_deletes_nothing() -> None:
     run = _Recorder()
     assert k8s_secrets.delete_retired_secrets("prod", dry_run=True, run=run) is True
-    assert run.calls == []
+    assert all("delete" not in argv for argv in run.calls)
 
 
 def test_a_failed_delete_fails_the_apply() -> None:

@@ -71,7 +71,7 @@ help:
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
 	@echo "  make sync-oidc-hashes ENV=x  Generate oidc-clients.yml from the SSOT + SOPS digests"
 	@echo "  make validate-sync      Check for drift in generated files (ADR-027)"
-	@echo "  make apply-secrets ENV=x  Apply SOPS secrets to K8s cluster"
+	@echo "  make apply-secrets ENV=x [DRY_RUN=1]  Apply SOPS secrets to K8s cluster"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo "  make flush-sessions ENV=x  Flush Authelia sessions (Redis FLUSHDB)"
@@ -1543,9 +1543,9 @@ configure-oidc:
 	@echo "✓ OIDC providers configured for $(ENV)"
 
 .PHONY: apply-secrets
-apply-secrets:
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make apply-secrets ENV=staging|prod" && exit 1)
-	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV)
+apply-secrets: ## Apply SOPS secrets to K8s (DRY_RUN=1: which Secrets would change and what would restart)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make apply-secrets ENV=staging|prod [DRY_RUN=1]" && exit 1)
+	@$(TOOLKIT) infra k8s apply-secrets --env $(ENV) $(if $(DRY_RUN),--dry-run,)
 
 # Restart any K8s deployment via the toolkit (rollout restart + wait). Generic over
 # service + namespace (NS defaults to kubelab). E.g. make a pod re-read a changed

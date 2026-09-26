@@ -846,7 +846,13 @@ def k8s_render_apply(
 @k8s_app.command("apply-secrets")
 def k8s_apply_secrets(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be applied")] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Ask the cluster which Secrets would change and which workloads would restart; apply nothing",
+        ),
+    ] = False,
 ) -> None:
     """Decrypt SOPS secrets and apply as K8s Secrets.
 

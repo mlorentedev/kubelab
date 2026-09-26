@@ -71,11 +71,13 @@ def restart_consumers(
     kubectl: Kubectl,
     run: Run = subprocess.run,
     timeout: int = 180,
+    dry_run: bool = False,
 ) -> bool:
     """Restart and wait for every consumer of the (namespace, secret) pairs in CHANGED.
 
     Returns False if any restart or rollout fails: a Secret that is applied but
     not in use is the defect this exists to prevent, so it must not read as success.
+    With DRY_RUN, names the workloads a real run would restart and touches none.
     """
     ok = True
     for namespace in sorted({ns for ns, _ in changed}):
@@ -94,6 +96,13 @@ def restart_consumers(
         if not targets:
             logger.info(f"  No workload in {namespace} reads {', '.join(sorted(secrets))}; nothing to restart")
         for target in targets:
+            if namespace == "kube-system":
+                # Traefik reads the CrowdSec bouncer key and is the only ingress:
+                # its restart interrupts every route for the rollout (#1810).
+                logger.warning(f"  Restarting {namespace}/{target} interrupts cluster ingress while it rolls out")
+            if dry_run:
+                logger.info(f"  [DRY-RUN] a real run would restart {namespace}/{target}")
+                continue
             ok = _restart(target, namespace, kubectl, run, timeout) and ok
     return ok
 

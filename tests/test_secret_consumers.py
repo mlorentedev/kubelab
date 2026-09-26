@@ -126,7 +126,7 @@ class TestOnlyAChangedSecretCounts:
     def test_kubectl_verdict_decides(self, mocker, stdout: str, counted: bool) -> None:
         """`unchanged` must not count, or every re-run would bounce every service."""
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
-        run.return_value = mocker.Mock(stdout=stdout, returncode=0)
+        run.return_value = mocker.Mock(stdout=stdout, stderr="", returncode=0)
         changed: set[tuple[str, str]] = set()
 
         ok = _apply_single_secret(
