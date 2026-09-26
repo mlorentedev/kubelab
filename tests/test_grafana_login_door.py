@@ -77,3 +77,14 @@ def test_break_glass_opens_the_local_form_not_the_idp() -> None:
     when the break-glass path is in use."""
     decl = COMMON["apps"]["services"]["security"]["authelia"]["break_glass"]["grafana"]
     assert "disableAutoLogin=true" in decl.get("path", "")
+
+
+@pytest.mark.parametrize("overlay", ["staging", "prod"])
+def test_no_login_adopts_an_account_by_email(overlay: str) -> None:
+    """`GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP` was a migration flag (AUTH-004,
+    #951): it let each account the auth proxy had created be adopted by its first
+    OAuth login, matched by email. Every SSO identity is linked now (`make auth-review`
+    reads `sign-in: Generic OAuth` for each, 2026-09-25), so a login finds its row by
+    the stored link. Left on, an IdP email that matched a local row, the break-glass
+    account included, would take that row over and make it external for good."""
+    assert _rendered(overlay).get("GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP", "false") == "false"

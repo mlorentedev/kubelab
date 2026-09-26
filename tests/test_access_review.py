@@ -307,12 +307,17 @@ def test_grafana_reports_how_each_account_signs_in() -> None:
     users = [
         {"login": "testuser", "role": "Viewer", "userId": 4, "authLabels": ["Auth Proxy"]},
         {"login": "operator", "role": "Admin", "userId": 3, "authLabels": ["Generic OAuth"]},
-        {"login": "breakglass", "role": "Admin", "userId": 1, "authLabels": []},
+        # The live break-glass row: seeded by the auth proxy, and still local, because
+        # `errOnExternalUser` does not count the proxy as a provider (#951).
+        {"login": "breakglass", "role": "Admin", "userId": 1, "authLabels": ["Auth Proxy"]},
+        {"login": "seeded", "role": "Viewer", "userId": 9, "authLabels": []},
     ]
     accounts = {a.user: a for a in GrafanaTiers(Recorder((200, users))).read("http://gr", "a:b")}
-    findings = {f.user: f for f in review("grafana", {"testuser": False, "operator": True}, list(accounts.values()), GrafanaTiers)}
+    declared = {"testuser": False, "operator": True}
+    findings = {f.user: f for f in review("grafana", declared, list(accounts.values()), GrafanaTiers)}
 
     assert findings["testuser"].detail == "sign-in: Auth Proxy"
     assert findings["operator"].detail == "sign-in: Generic OAuth"
-    assert findings["breakglass"].detail == "sign-in: local"
+    assert findings["breakglass"].detail == "sign-in: Auth Proxy"
+    assert findings["seeded"].detail == "sign-in: local", "a row with no link at all"
     assert findings["testuser"].status == "ok", "the link is information, never a verdict"
