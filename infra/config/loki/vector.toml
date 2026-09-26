@@ -1,9 +1,25 @@
 [sources.docker_logs]
 type = "docker_logs"
 
+# SEC-021 (#1840): no Authelia credential reaches Loki, in dev as in K8s. The
+# same redaction as infra/k8s/base/services/vector-config/vector.yaml, which
+# explains the doubled dollar: Vector interpolates environment variables over
+# the whole file, and a single one would stop it starting.
+[transforms.redact_tokens]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+if is_string(.message) {
+  .message = replace(string!(.message), r'(authelia_(?:at|rt|ac))_[A-Za-z0-9._~-]+', "$${1}_REDACTED")
+}
+'''
+
 [sinks.loki]
 type = "loki"
-inputs = ["docker_logs"]
+inputs = ["redact_tokens"]
 endpoint = "http://loki:3100"
+# Required by the sink since before 0.43; without it Vector refuses the config and
+# the dev container never shipped a line. Same codec as the K8s pipeline.
+encoding.codec = "text"
 labels.container = "{{ container_name }}"
 labels.image = "{{ image }}"
