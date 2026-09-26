@@ -318,13 +318,29 @@ def find_declared_hook(hooks: Iterable[Mapping[str, Any]], declared: WebhookSpec
     return None
 
 
-def webhook_changes(live: Mapping[str, Any] | None, declared: WebhookSpec) -> tuple[tuple[str, Any, Any], ...]:
+#: Gitea's own renaming, measured 2026-09-24 (lesson-462, TOOL-080): a hook created
+#: with `pull_request_only` is stored and returned as `pull_request`. Applied ONLY
+#: inside the comparison below -- `to_api_payload` must keep SENDING
+#: `pull_request_only`, which is the narrow name that actually excludes comment and
+#: review events; sending the stored name back would ask Gitea for the whole family
+#: again, undoing the one thing this hook exists to avoid.
+_GITEA_STORED_EVENT_NAMES: dict[str, str] = {"pull_request_only": "pull_request"}
+
+
+def _as_stored_events(events: Iterable[str]) -> set[str]:
+    return {_GITEA_STORED_EVENT_NAMES.get(event, event) for event in events}
+
+
+def webhook_changes(
+    live: Mapping[str, Any] | None, declared: WebhookSpec, *, event_comparison: str = "floor"
+) -> tuple[tuple[str, Any, Any], ...]:
     """`(field, live_value, declared_value)` for every field that falls short.
 
-    EVENTS ARE COMPARED AS A SUPERSET, NOT FOR EQUALITY, and this is measured rather
-    than chosen. Gitea EXPANDS `pull_request` into its sub-events and returns the
-    result in a non-deterministic order. Sending `["push", "pull_request"]` to
-    `personal/resume` on 2026-09-04 and reading it straight back:
+    `event_comparison` PICKS THE PREDICATE `events` IS HELD TO. `"floor"`, the
+    default and n8n's, is measured rather than chosen. Gitea EXPANDS `pull_request`
+    into its sub-events and returns the result in a non-deterministic order. Sending
+    `["push", "pull_request"]` to `personal/resume` on 2026-09-04 and reading it
+    straight back:
 
         sent      push, pull_request
         returned  pull_request_assign, pull_request, pull_request_sync, push,
@@ -339,11 +355,11 @@ def webhook_changes(live: Mapping[str, Any] | None, declared: WebhookSpec) -> tu
     on a webhook that was entirely correct. A sorted comparison fixes the ordering
     and still fails on the expansion.
 
-    So the honest predicate is the one the forge can actually satisfy: **the live
-    events must include every declared event.** That is the same floor-not-copy shape
-    as the token scope guard (lesson-416), and for the same reason -- an expansion is
-    a legitimate widening, and a test that fails on legitimate widening is a test
-    somebody loosens.
+    So the honest predicate for a receiver that fails closed is the one the forge can
+    actually satisfy: **the live events must include every declared event.** That is
+    the same floor-not-copy shape as the token scope guard (lesson-416), and for the
+    same reason -- an expansion is a legitimate widening, and a test that fails on
+    legitimate widening is a test somebody loosens.
 
     Its cost, stated rather than hidden: NARROWING the declaration does not converge.
     Remove `push` from the YAML and the hook keeps firing on pushes. That is
@@ -352,9 +368,20 @@ def webhook_changes(live: Mapping[str, Any] | None, declared: WebhookSpec) -> tu
     without hardcoding Gitea's expansion table, which is a copy of the forge's
     internals wearing a declaration's clothes.
 
-    The `live_value` slot for `events` carries WHAT IS MISSING, not the whole live
-    list. Printing nine entries to say one is absent buries the finding, and the plan
-    is what an operator approves `--apply` on.
+    `"equality"` IS FOR A RECEIVER THAT DOES NOT FAIL CLOSED (PR-Agent, TOOL-080). A
+    surplus there is not a legitimate widening, it is `handle_comment_event` running
+    a slash command from any author -- measured 2026-09-24, lesson-462. So a surplus
+    is drift to correct, not a floor to tolerate, and the comparison names it as
+    `events_surplus` rather than folding it into `events_missing`; the two are
+    different repairs and an operator approving `--apply` should see which one this
+    is. The declared side is normalised through `_as_stored_events` first, or this
+    could never converge at all: `pull_request_only` never comes back under its own
+    name (see that helper).
+
+    The `live_value` slot for `events`/`events_missing` carries WHAT IS MISSING, not
+    the whole live list, in both modes. Printing nine entries under the floor to say
+    one is absent buries the finding, and the plan is what an operator approves
+    `--apply` on.
     """
     if live is None:
         return tuple((name, None, getattr(declared, name)) for name, _ in _HOOK_SCALARS) + (
@@ -370,13 +397,34 @@ def webhook_changes(live: Mapping[str, Any] | None, declared: WebhookSpec) -> tu
         if cursor != expected:
             changes.append((name, cursor, expected))
 
-    missing = tuple(sorted(set(declared.events) - set(live.get("events") or ())))
-    if missing:
-        changes.append(("events", missing, tuple(sorted(declared.events))))
+    # Aliased in BOTH modes, not only equality's: the alias is a fact about what
+    # name Gitea echoes back for a given declared one, independent of how strictly
+    # the comparison holds `events` to it. n8n has never declared `pull_request_only`
+    # so this changed nothing for the floor until now, but a floor left unaliased
+    # would misreport it as permanently missing the moment anything did -- the same
+    # failure equality mode exists to avoid, one field over.
+    live_events = set(live.get("events") or ())
+    declared_events = _as_stored_events(declared.events)
+    if event_comparison == "equality":
+        missing = tuple(sorted(declared_events - live_events))
+        surplus = tuple(sorted(live_events - declared_events))
+        if missing:
+            changes.append(("events_missing", (), missing))
+        if surplus:
+            changes.append(("events_surplus", surplus, ()))
+    else:
+        missing = tuple(sorted(declared_events - live_events))
+        if missing:
+            # The declared VALUE shown here is the raw names `to_api_payload` sends,
+            # not the aliased ones -- an operator approving `--apply` should see what
+            # the declaration says, and the alias is this function's own bookkeeping.
+            changes.append(("events", missing, tuple(sorted(declared.events))))
     return tuple(changes)
 
 
-def webhook_needs_convergence(live: Mapping[str, Any] | None, declared: WebhookSpec) -> bool:
+def webhook_needs_convergence(
+    live: Mapping[str, Any] | None, declared: WebhookSpec, *, event_comparison: str = "floor"
+) -> bool:
     """Does this repository's webhook fall short of the declaration?
 
     `bool(webhook_changes(...))` and nothing else, for the third time in this module
@@ -384,7 +432,7 @@ def webhook_needs_convergence(live: Mapping[str, Any] | None, declared: WebhookS
     executor's decision to perform it were separate expressions, they disagreed, and
     a correct repair sat in a function nothing ever reached (lesson-424).
     """
-    return bool(webhook_changes(live, declared))
+    return bool(webhook_changes(live, declared, event_comparison=event_comparison))
 
 
 @dataclass(frozen=True)
@@ -414,7 +462,12 @@ class WebhookChange:
 
 
 def _plan_webhook(
-    org: str, name: str, hooks: Iterable[Mapping[str, Any]] | None, declared: WebhookSpec
+    org: str,
+    name: str,
+    hooks: Iterable[Mapping[str, Any]] | None,
+    declared: WebhookSpec,
+    *,
+    event_comparison: str = "floor",
 ) -> WebhookChange:
     """One repository's webhook plan entry, whether or not the repository exists yet.
 
@@ -424,13 +477,17 @@ def _plan_webhook(
     same instruction to `execute` -- POST a new hook -- so `absent` says "there is no
     hook", not "there is no repository". Keeping them apart would put a distinction
     in the plan that no consumer could act on differently.
+
+    `event_comparison` travels straight from the caller's `HookDeclaration` into
+    `webhook_changes` and nowhere else: this function does not know or care which
+    hook it is planning, only how strictly its `events` are held.
     """
     live = None if hooks is None else find_declared_hook(hooks, declared)
     return WebhookChange(
         org=org,
         name=name,
         hook_id=None if live is None else live.get("id"),
-        changes=webhook_changes(live, declared),
+        changes=webhook_changes(live, declared, event_comparison=event_comparison),
         absent=live is None,
         url=declared.url,
     )
@@ -535,7 +592,7 @@ def plan_reconcile(
     # `list[dict[str, Any]]` that `list_hooks` actually returns would not typecheck
     # against `list[Mapping[...]]`. Covariance is the point, not a workaround.
     existing_repo_hooks: Mapping[str, Sequence[Mapping[str, Any]] | None],
-    declared_webhook: WebhookSpec,
+    declared_webhooks: Sequence[HookDeclaration],
     *,
     reviewer: str | None = None,
     existing_review_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
@@ -610,6 +667,14 @@ def plan_reconcile(
     Required and complete for the fourth time in this signature, for the reason that
     has not changed: a missing key raises, and a missing key treated as "fine" is how
     a comparison silently stops comparing.
+
+    `declared_webhooks` IS A LIST (TOOL-080), not the one hook this parameter used to
+    be. Every declared repository gets every declared hook -- the loop below is
+    `repos x declared_webhooks`, flattened -- and each hook is planned with its own
+    `event_comparison`, carried on its own `HookDeclaration`. `existing_repo_hooks`
+    does not grow a matching dimension: it already holds the repository's WHOLE hook
+    list, and `find_declared_hook` picks the right one out of it by URL for each
+    declared hook in turn, exactly as it always has for one.
 
     `reviewer` and `existing_review_teams` are the one optional pair here, and they
     are optional because the IDENTITY is: until `apps.auth.identities.reviewer` is
@@ -702,12 +767,25 @@ def plan_reconcile(
     # scoping convergence to the set that already exists is exactly lesson-424.
     # `existing_repo_hooks` holds None for those, which `find_declared_hook` never
     # sees -- the hook is absent because the repository is.
+    #
+    # `repos x declared_webhooks`, FLATTENED, not one plan entry per repository
+    # (TOOL-080). The hook loop is innermost and iterates `declared_webhooks` in
+    # DECLARATION ORDER -- not sorted -- so the printed plan groups by repository
+    # and lists n8n before PR-Agent within it, matching the order the SSOT declares
+    # them rather than an alphabetical one nobody chose.
     repos_to_hook = tuple(
         change
         for change in (
-            _plan_webhook(org, spec.name, existing_repo_hooks[f"{org}/{spec.name}"], declared_webhook)
+            _plan_webhook(
+                org,
+                spec.name,
+                existing_repo_hooks[f"{org}/{spec.name}"],
+                hook.spec,
+                event_comparison=hook.event_comparison,
+            )
             for org, specs in sorted(declared.items())
             for spec in sorted(specs, key=lambda s: s.name)
+            for hook in declared_webhooks
         )
         if change.changes
     )
@@ -885,26 +963,150 @@ def load_webhook(common: Mapping[str, Any]) -> WebhookSpec:
             "been active in prod for days and had never received an event."
         )
 
+    # The rest of the validation is shared with the list form's per-entry parsing
+    # (`load_webhooks` -> `_parse_webhook_block`), so the two loaders cannot report
+    # an unknown or missing key in different words for the same mistake.
+    return _parse_webhook_block(block, label="webhook")
+
+
+#: The only secret the singular `gitea.webhook` block has ever named. `load_webhooks`
+#: falls back to this when a config declares that block and no `gitea.webhooks` list
+#: -- see its docstring. Kept as a constant rather than inlined so the one call site
+#: that relies on it is greppable.
+_LEGACY_WEBHOOK_SECRET_KEY = "apps.services.automation.n8n.forge_webhook_secret"
+
+
+@dataclass(frozen=True)
+class HookDeclaration:
+    """One webhook as the SSOT declares it: Gitea's own hook shape, plus the two
+    facts about it that Gitea has no field for.
+
+    KEPT OFF `WebhookSpec` DELIBERATELY. That class's own docstring states its
+    invariant: "field names are Gitea's own `EditRepoOption`/hook-body names,
+    deliberately, so the YAML key, this attribute and the PATCH body are one
+    vocabulary." `secret_key` and `event_comparison` are ours alone -- Gitea never
+    sees either -- so folding them in would break that invariant for every reader
+    of `WebhookSpec`, and would force `test_every_declared_webhook_field_is_compared`
+    (parametrised over `dataclasses.fields(WebhookSpec)`) to grow a case for a field
+    the forge is never asked about. `TeamGrant`/`WRITE_TEAM`/`READ_TEAM` already keep
+    policy apart from the API body the same way, one object over.
+
+    `secret_key` IS THE DOTTED SOPS PATH, not the value -- `apps.services.core.gitea`
+    already keeps every credential out of a plan (`WebhookSpec` docstring: "the
+    secret is not a field here"), and a declaration is exactly the layer that must
+    stay printable. `format_plan` never sees this dataclass.
+
+    `event_comparison` PICKS THE PREDICATE `webhook_changes` APPLIES TO `events`:
+    `"floor"` (the default, and n8n's) treats a live surplus as Gitea's own
+    expansion and never as drift; `"equality"` treats it as drift to correct,
+    because this receiver (PR-Agent, TOOL-080) acts on events a floor would let
+    through unnoticed -- lesson-462. Validated eagerly so a typo'd value fails at
+    load time, not the first time a plan is formatted.
+    """
+
+    spec: WebhookSpec
+    secret_key: str
+    event_comparison: str = "floor"
+
+    def __post_init__(self) -> None:
+        if self.event_comparison not in {"floor", "equality"}:
+            raise ValueError(
+                f"{self.spec.url}: event_comparison={self.event_comparison!r}, must be 'floor' or "
+                f"'equality'. 'floor' is a live surplus is Gitea's own expansion and never drift; "
+                f"'equality' is a live surplus is corrected, because this receiver acts on events a "
+                f"floor would let through unnoticed."
+            )
+
+
+def _parse_webhook_block(block: Mapping[str, Any], *, label: str) -> WebhookSpec:
+    """The validation `load_webhook` performs, shared with `load_webhooks`.
+
+    ONE VALIDATOR, TWO CALLERS, for the same reason every `_needs_convergence`
+    predicate in this module has exactly one implementation: a second copy is free
+    to drift, and the drift that matters here is a message that stops naming the
+    block it is actually complaining about. `label` is the only thing that varies.
+    """
     known = {f.name for f in fields(WebhookSpec)}
     unknown = sorted(set(block) - known)
     if unknown:
         raise ValueError(
-            f"`webhook` contains unknown key(s) {unknown}. Field names map onto Gitea's own hook "
+            f"`{label}` contains unknown key(s) {unknown}. Field names map onto Gitea's own hook "
             f"body, so a misspelling is a field left unmanaged rather than a new one. "
             f"Known: {sorted(known)}."
         )
     missing = sorted(known - set(block))
     if missing:
         raise ValueError(
-            f"`webhook` is missing {missing}. Every field is declared explicitly: one omitted here "
+            f"`{label}` is missing {missing}. Every field is declared explicitly: one omitted here "
             f"is one whose value is whatever the forge happens to hold."
         )
-
     values = dict(block)
-    # The only shape conversion in this loader. `events` is a YAML list and the spec
-    # is frozen, so it has to be hashable; everything else passes through as written.
     values["events"] = tuple(values["events"])
     return WebhookSpec(**values)
+
+
+def load_webhooks(common: Mapping[str, Any]) -> tuple[HookDeclaration, ...]:
+    """Read `gitea.webhooks` out of a parsed common.yaml -- the list-of-hooks form (TOOL-080).
+
+    MATCHED BY URL, LIKE THE REST OF THIS MODULE. `find_declared_hook` already
+    identifies a repository's hook by `config.url` and nothing else; this loader
+    carries that identity one level up and refuses two declared hooks that share a
+    URL, because `execute` looks a `WebhookChange` up in `{hook.spec.url: hook}` and
+    a duplicate would silently shadow one of the two secrets.
+
+    EACH ENTRY IS A `WebhookSpec` BLOCK PLUS `secret_key` (required) AND
+    `event_comparison` (optional, default `"floor"`) -- see `HookDeclaration`. The
+    two extra keys are popped before `_parse_webhook_block` sees the rest, so an
+    unknown key in the REMAINING fields is still refused exactly as `load_webhook`
+    refuses one, and only these two names are special.
+
+    BACKWARD COMPATIBLE WITH THE SINGULAR BLOCK, and this is the branch that makes
+    it so: when `gitea.webhooks` is absent, this reads `gitea.webhook` through the
+    unmodified `load_webhook` and wraps it as the one-hook list that block has ever
+    meant, defaulting `secret_key` to n8n's -- the only secret that block has ever
+    named -- and `event_comparison` to `"floor"`, its only behaviour to date. A
+    config that has not migrated to the list therefore keeps loading and keeps
+    meaning exactly what it meant before this function existed.
+
+    REFUSES AN ABSENT `webhooks` ENTRY IN THE LIST FORM, for the same reason
+    `load_webhook` refuses an absent block: an empty list is indistinguishable from
+    a forge with no trigger at all, which is the exact failure #503 was filed about.
+    """
+    gitea = (common.get("apps", {}).get("services", {}).get("core", {}).get("gitea", {})) or {}
+    blocks = gitea.get("webhooks")
+
+    if blocks is None:
+        return (HookDeclaration(spec=load_webhook(common), secret_key=_LEGACY_WEBHOOK_SECRET_KEY),)
+
+    if not blocks:
+        raise ValueError(
+            "`apps.services.core.gitea.webhooks` is present and empty. It is required rather than "
+            "defaulted, for the same reason the singular `webhook` block is: an empty list is the "
+            "only trigger integrations here have, going silent with nothing to show for it."
+        )
+
+    declared: list[HookDeclaration] = []
+    seen_urls: dict[str, int] = {}
+    for index, block in enumerate(blocks):
+        if "secret_key" not in block:
+            raise ValueError(
+                f"`webhooks[{index}]` (url={block.get('url', '?')!r}) has no `secret_key`. Every hook "
+                f"reads its own secret from its own SOPS key -- there is no shared default in the "
+                f"list form, unlike the singular block's legacy fallback."
+            )
+        secret_key = str(block["secret_key"])
+        event_comparison = str(block.get("event_comparison", "floor"))
+        spec_block = {k: v for k, v in block.items() if k not in {"secret_key", "event_comparison"}}
+        spec = _parse_webhook_block(spec_block, label=f"webhooks[{index}]")
+        if spec.url in seen_urls:
+            raise ValueError(
+                f"`webhooks[{index}]` and `webhooks[{seen_urls[spec.url]}]` both declare "
+                f"{spec.url!r}. Identity is the URL (`find_declared_hook`), so a duplicate would "
+                f"leave one of the two secrets unreachable by silently shadowing the other."
+            )
+        seen_urls[spec.url] = index
+        declared.append(HookDeclaration(spec=spec, secret_key=secret_key, event_comparison=event_comparison))
+    return tuple(declared)
 
 
 def declared_full_names(declaration: Mapping[str, Iterable[RepoSpec]]) -> set[str]:
@@ -981,9 +1183,21 @@ def format_plan(plan: ReconcilePlan) -> str:
             # `events` reports what is MISSING in the live slot, not the live list --
             # Gitea expands `pull_request` into nine, so printing them all would bury
             # the one that is absent. Spelled out here so the line cannot be misread
-            # as "the hook fires on exactly these".
+            # as "the hook fires on exactly these". `events_missing`/`events_surplus`
+            # are the equality-mode pair (TOOL-080): a surplus there is drift this
+            # receiver acts on, not Gitea's own expansion, so it gets its own line
+            # rather than folding into the floor's wording.
             if key == "events":
                 lines.append(f"  ~ hook {hook.full_name}   events: missing {list(live_value)}")
+                continue
+            if key == "events_missing":
+                lines.append(f"  ~ hook {hook.full_name}   events: missing {list(declared_value)}")
+                continue
+            if key == "events_surplus":
+                lines.append(
+                    f"  ~ hook {hook.full_name}   events: surplus {list(live_value)}   "
+                    "(this hook acts on events, so a surplus is corrected rather than tolerated)"
+                )
                 continue
             lines.append(f"  ~ hook {hook.full_name}   {key}: {live_value!r} -> {declared_value!r}")
     # Distinct names from the loops above, and not only for style: the created
@@ -1432,7 +1646,12 @@ def ensure_settings(configurator: GiteaBasicAuthClient, repo: SettingsChange, de
 
 
 def ensure_webhook(
-    configurator: GiteaBasicAuthClient, change: WebhookChange, declared: WebhookSpec, secret: str
+    configurator: GiteaBasicAuthClient,
+    change: WebhookChange,
+    declared: WebhookSpec,
+    secret: str,
+    *,
+    event_comparison: str = "floor",
 ) -> Mapping[str, Any]:
     """Create or update the declared webhook, then READ IT BACK and assert it took.
 
@@ -1458,6 +1677,12 @@ def ensure_webhook(
     correctly SHAPED, never that it is correctly SIGNED. Only a real delivery that
     changes something downstream proves that, which is why #503 AC4 is worded as a
     Vikunja bucket change rather than as a 2xx in the delivery log.
+
+    `event_comparison`, passed straight to `webhook_changes`, is why this
+    post-condition can converge AT ALL on a hook declared `"equality"`: writing
+    `pull_request_only` and reading the same name back would never match what
+    Gitea stores (lesson-462), so the comparison -- not this function -- carries
+    the alias.
     """
     payload = declared.to_api_payload(secret)
     if change.hook_id is None:
@@ -1472,16 +1697,22 @@ def ensure_webhook(
             f"The write was accepted, so this is not a permission problem — the hook was created "
             f"against a different URL, or something removed it between the write and the read."
         )
-    remaining = webhook_changes(live, declared)
+    remaining = webhook_changes(live, declared, event_comparison=event_comparison)
     if remaining:
         detail = ", ".join(
             f"{key}: live {live_value!r}, declared {declared_value!r}" for key, live_value, declared_value in remaining
         )
+        note = (
+            "Gitea expands `pull_request` into its sub-events, so a live hook legitimately carries "
+            "more than was declared and only a shortfall is a failure."
+            if event_comparison == "floor"
+            else "this hook is held to EQUALITY, not a floor: it acts on events a floor would let "
+            "through unnoticed (lesson-462), so a live surplus is drift the write should have "
+            "corrected, not a legitimate widening."
+        )
         raise WebhookError(
             f"{change.full_name}'s webhook was written and did not converge — {detail}. Note that "
-            f"`events` reports what is MISSING, not the whole live list: Gitea expands "
-            f"`pull_request` into its sub-events, so a live hook legitimately carries more than was "
-            f"declared and only a shortfall is a failure."
+            f"`events`/`events_missing` report what is MISSING, not the whole live list: {note}"
         )
     return live
 
@@ -1518,9 +1749,9 @@ def execute(
     bot: GiteaClient,
     bot_username: str,
     declared_settings: RepoSettings,
-    declared_webhook: WebhookSpec,
+    declared_webhooks: Sequence[HookDeclaration],
     migration_token: str | None = None,
-    webhook_secret: str | None = None,
+    webhook_secrets: Mapping[str, str | None] | None = None,
     migrator: GiteaClient | None = None,
     configurator: GiteaBasicAuthClient | None = None,
 ) -> ExecutionReport:
@@ -1540,6 +1771,19 @@ def execute(
     practice -- one `GiteaBasicAuthClient` on one credential -- and are separate
     parameters because they are separate capabilities, and a later change that
     narrows one should not silently widen the other.
+
+    `declared_webhooks` MUST BE THE SAME LIST `plan_reconcile` WAS GIVEN (TOOL-080).
+    Each `WebhookChange` in `plan.repos_to_hook` carries a `url` and nothing else
+    that names which hook it is; this function rebuilds `{url: declaration}` from
+    `declared_webhooks` to look up the matching `HookDeclaration` -- its `spec`, its
+    `secret_key` and its `event_comparison` -- for each change. A caller that passed
+    plan and execute two different lists would plan against one hook and write
+    another, silently.
+
+    `webhook_secrets` maps a hook's URL to its secret, never a hook's SOPS path to
+    the value -- see `HookDeclaration.secret_key` for why the path itself is the only
+    thing a declaration may carry. Absent or falsy for a URL is "no secret", handled
+    exactly as the single-hook code always has: refused rather than written unsigned.
 
     Nothing here deletes. `plan.undeclared_*` is carried into the report by the
     caller's formatting, never into a call.
@@ -1694,8 +1938,15 @@ def execute(
     # have run, and a POST to its hooks endpoint would 404 on a repository the plan
     # correctly scheduled. `failed_repos` is re-used rather than recomputed, so a
     # repository whose migration failed produces one reported failure and not three.
-    for hook in plan.repos_to_hook:
-        full_name = hook.full_name
+    # Rebuilt here rather than passed in, so `execute` never trusts a caller's own
+    # bookkeeping about which declaration a `WebhookChange` belongs to -- the URL on
+    # the change is the only fact it is handed, and this is the one place that
+    # resolves it back to a declaration, the same way `find_declared_hook` is the
+    # one place that resolves a URL back to a live hook.
+    declared_by_url = {hook.spec.url: hook for hook in declared_webhooks}
+
+    for hook_change in plan.repos_to_hook:
+        full_name = hook_change.full_name
         if full_name in failed_repos:
             continue
         if configurator is None:
@@ -1713,25 +1964,48 @@ def execute(
                 ),
             )
             continue
-        if not webhook_secret:
-            # Refused rather than written unsigned, which is the whole point. An
-            # unsigned hook delivers, n8n rejects the signature, and n8n's rejection
-            # path answers HTTP 200 and drops the event — so the forge would record
-            # a successful delivery for every event it failed to deliver. A missing
-            # secret must stop the write, not degrade it.
+        declaration = declared_by_url.get(hook_change.url)
+        if declaration is None:
+            # Only reachable when `plan` and `declared_webhooks` disagree about what
+            # was declared -- plan_reconcile's own `declared_webhooks` produced this
+            # change's `url`, so an execute called with a different list is the one
+            # way to reach this branch. Named loudly rather than treated as absent,
+            # because the alternative is silently skipping a hook the plan committed
+            # to.
             _handle_failure(
                 report,
                 f"hook {full_name}",
                 RuntimeError(
-                    "no webhook secret was supplied. "
-                    "`apps.services.automation.n8n.forge_webhook_secret` must be present in SOPS "
-                    "for this environment. Writing the hook without it would register an endpoint "
-                    "whose every delivery n8n drops silently while answering 200."
+                    f"no declaration for {hook_change.url!r} was passed to execute. `plan_reconcile` "
+                    f"and `execute` must be given the same `declared_webhooks` list — a plan built "
+                    f"from one and carried out against another silently drops this hook."
+                ),
+            )
+            continue
+        secret = (webhook_secrets or {}).get(hook_change.url)
+        if not secret:
+            # Refused rather than written unsigned, which is the whole point. An
+            # unsigned hook delivers, and a receiver that fails closed (n8n) rejects
+            # the signature and answers HTTP 200 anyway — so the forge would record
+            # a successful delivery for every event it failed to deliver. A receiver
+            # that does NOT fail closed is worse, not better: it would act on an
+            # unauthenticated request. A missing secret must stop the write, not
+            # degrade it, for every declared hook.
+            _handle_failure(
+                report,
+                f"hook {full_name}",
+                RuntimeError(
+                    f"no webhook secret was supplied for {hook_change.url}. `{declaration.secret_key}` "
+                    f"must be present in SOPS for this environment. Writing the hook without it would "
+                    f"register an endpoint that is either dropped silently by a receiver failing "
+                    f"closed, or accepted unsigned by one that does not."
                 ),
             )
             continue
         try:
-            ensure_webhook(configurator, hook, declared_webhook, webhook_secret)
+            ensure_webhook(
+                configurator, hook_change, declaration.spec, secret, event_comparison=declaration.event_comparison
+            )
             report.repos_hooked.append(full_name)
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             _handle_failure(report, f"hook {full_name}", exc)
