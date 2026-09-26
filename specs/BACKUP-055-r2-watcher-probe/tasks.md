@@ -15,11 +15,11 @@ created: "2026-09-25"
 
 - [x] Branch `feat/backup-055-r2-watcher-probe` from master (✓ 2026-09-26)
 - [ ] The operator approves `proposal.md`
-- [ ] **Manual (operator):** create the Cloudflare R2 token, Object Read only, scoped to `kubelab-backups`. Store both halves with `toolkit secrets set backup.r2.readonly_{access_key_id,secret_access_key} --env common --stdin`. Steps in `docs/runbooks/offsite-backup-restore.md` (task 9).
+- [x] (✓ 2026-09-26) **Manual (operator):** create the Cloudflare R2 token, Object Read only, scoped to `kubelab-backups`. Store both halves with `toolkit secrets set backup.r2.readonly_{access_key_id,secret_access_key} --env common --stdin`. Steps in `docs/runbooks/offsite-backup-restore.md` (task 9).
 
 ## Implementation
 
-1. [ ] [AC2] **Measure first (R2).** With the read-only token: `restic --no-lock --no-cache snapshots` and `ls latest /opt/node-backup/staging` succeed on all four repositories, and an `aws s3 cp` into the bucket is refused. Record the output in `verification.md`. If `--no-lock` is not enough, stop and revise the proposal.
+1. [x] (✓ 2026-09-26) [AC2] **Measure first (R2).** With the read-only token: `restic --no-lock --no-cache snapshots` and `ls latest /opt/node-backup/staging` succeed on all four repositories, and an `aws s3 cp` into the bucket is refused. Record the output in `verification.md`. If `--no-lock` is not enough, stop and revise the proposal.
 2. [ ] [P] [AC4] Test first, `tests/test_r2_watcher_targets.py`: the committed `infra/k8s/base/services/r2-backup-watcher/targets.txt` equals the render from `backup.sources` plus `repository_name()`, one `<node> <repository> <service>...` line per node. Watch it fail.
 3. [ ] [AC4] Add the renderer (`toolkit/features/backup_destination.py`, `watcher_targets()`) and `toolkit sync r2-watcher-targets`, generate the file, and serve it through `configMapGenerator` `files:`. The hash is kept: each Job pod reads it fresh, but a hash is never wrong. Green.
 4. [ ] [P] [AC5] Test first: `backup.watcher_image` is in `IMAGE_SOURCES`, its tag equals `backup.r2.restic_version`, and `kustomization.yaml` `images:` carries it. Then add the SSOT key and run `make sync-k8s-images`. Green.
