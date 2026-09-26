@@ -32,6 +32,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
     - Run 1: rc=0, `changed=5`. Config and policy templated, Headscale restarted and healthy, SIGHUP reload, and `Probe preserved mesh flows from the controller` ok.
     - Run 2: `changed=1`, all of it `Back up current ACL policy (for auto-revert)`, which copies the live policy over `.prev` on every run and so reports once after any policy change. Fixed in this PR (`changed_when: false`, the template task is what reports a policy change). Run 3, with the fix: rc=0, **`changed=0`**.
     - Live afterwards: `headscale` `healthy` (started 01:22:06Z); `headscale policy get` → `{ "action": "accept", "src": ["tag:hermes"], "dst": ["vps:443"] }`; no `ollama` in `config.yaml`. `tailscale ping` from the workstation answered from beelink, rpi3 and rpi4.
+  - Uptime Kuma: the Beelink monitor's description dropped MinIO. `make monitoring-apply` from the branch: `0 create, 1 edit, 0 delete`; re-run `0/0/0`.
 - [x] AC3: `minio` is absent from both generated `oidc-clients.yml` (`make sync-oidc-hashes ENV=staging|prod`), and `client_id=minio` → `invalid_client` in staging and prod (AC1 lines above).
 - [ ] AC4 (OIDC half): `oidc_client_secret` and `oidc_client_secret_minio_hash` unset in dev, staging and prod. `make secrets-audit` exits 0 with no new orphan. `root_password` and `root_user` are PR 3.
 - [ ] AC5: red on 2026-09-24. `pytest --runxfail tests/test_no_live_minio_references.py` fails with **93** live files, and lands as `xfail(strict=True)` (`6a6dbefb`).
