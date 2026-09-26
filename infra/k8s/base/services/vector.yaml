@@ -39,53 +39,6 @@ metadata:
     app.kubernetes.io/component: observability
     app.kubernetes.io/part-of: kubelab
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vector-config
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: vector
-    app.kubernetes.io/component: observability
-    app.kubernetes.io/part-of: kubelab
-data:
-  vector.yaml: |
-    data_dir: /vector-data-dir
-
-    sources:
-      kubernetes_logs:
-        type: kubernetes_logs
-        self_node_name: "${VECTOR_SELF_NODE_NAME}"
-
-    transforms:
-      parse_logs:
-        type: remap
-        inputs:
-          - kubernetes_logs
-        source: |
-          .namespace = .kubernetes.pod_namespace
-          .pod = .kubernetes.pod_name
-          .container = .kubernetes.container_name
-          .node = .kubernetes.pod_node_name
-          del(.kubernetes)
-          del(.file)
-          del(.source_type)
-
-    sinks:
-      loki:
-        type: loki
-        inputs:
-          - parse_logs
-        endpoint: http://loki.kubelab.svc.cluster.local:3100
-        encoding:
-          codec: text
-        labels:
-          namespace: "{{ namespace }}"
-          pod: "{{ pod }}"
-          container: "{{ container }}"
-          node: "{{ node }}"
-        remove_label_fields: true
----
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

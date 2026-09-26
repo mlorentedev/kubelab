@@ -1,0 +1,49 @@
+# Vector pipeline: every pod's logs to Loki. Generated into the `vector-config`
+# ConfigMap with a hash suffix (base kustomization.yaml): Vector runs without
+# --watch-config, so the DaemonSet must roll when this file changes (lesson-404).
+data_dir: /vector-data-dir
+
+sources:
+  kubernetes_logs:
+    type: kubernetes_logs
+    self_node_name: "${VECTOR_SELF_NODE_NAME}"
+
+transforms:
+  parse_logs:
+    type: remap
+    inputs:
+      - kubernetes_logs
+    source: |
+      .namespace = .kubernetes.pod_namespace
+      .pod = .kubernetes.pod_name
+      .container = .kubernetes.container_name
+      .node = .kubernetes.pod_node_name
+      del(.kubernetes)
+      del(.file)
+      del(.source_type)
+      # SEC-021 (#1840): no Authelia credential reaches Loki. Grafana logged
+      # access tokens, Vikunja and Authelia log authorization codes. The kind
+      # stays readable; the value does not. The replacement is VRL's braced
+      # group reference, because the bare form would read `1_REDACTED` as the
+      # group name. It is written with a doubled dollar: Vector interpolates
+      # environment variables in the whole file, comments included, and a
+      # single dollar would make Vector refuse to start. Guarded, so a
+      # non-string message passes on untouched instead of aborting the event.
+      if is_string(.message) {
+        .message = replace(string!(.message), r'(authelia_(?:at|rt|ac))_[A-Za-z0-9._~-]+', "$${1}_REDACTED")
+      }
+
+sinks:
+  loki:
+    type: loki
+    inputs:
+      - parse_logs
+    endpoint: http://loki.kubelab.svc.cluster.local:3100
+    encoding:
+      codec: text
+    labels:
+      namespace: "{{ namespace }}"
+      pod: "{{ pod }}"
+      container: "{{ container }}"
+      node: "{{ node }}"
+    remove_label_fields: true

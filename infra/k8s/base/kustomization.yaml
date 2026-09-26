@@ -60,6 +60,14 @@ configMapGenerator:
         # durable fix.
         argocd.argoproj.io/sync-options: ServerSideApply=true
 
+  # Vector pipeline — hash suffix rolls the DaemonSet on a pipeline change: Vector runs
+  # without --watch-config, so a plain ConfigMap would change and nothing would read it
+  # (lesson-404). Carries the SEC-021 token redaction (#1840).
+  - name: vector-config
+    namespace: kubelab
+    files:
+      - services/vector-config/vector.yaml
+
   # Authelia config — hash suffix triggers auto rolling restart on configuration.yml change
   # (SECRET-RELOAD-001a fix: configuration.yml is mounted via subPath so updates would otherwise
   # freeze at mount time, AND Authelia does not hot-reload configuration.yml).
