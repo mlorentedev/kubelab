@@ -46,7 +46,7 @@ created: "2026-09-22"
 
 ### PR 2: the Beelink
 
-- [ ] [AC2] In `beelink_services`, the role that still owns the node, add a teardown on the pattern of the act_runner removal:
+- [x] [AC2] (✓ 2026-09-26, `changed=0` on run 2) In `beelink_services`, the role that still owns the node, add a teardown on the pattern of the act_runner removal:
   - the container stops and is removed from the compose project;
   - `/opt/minio/data` is removed;
   - the firewall ports in `provision-bee.yml` are closed;
