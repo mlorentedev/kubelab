@@ -1511,8 +1511,9 @@ apps:
         location: undecided
         location_deferred_to: "#972"
         image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        domain: minio.kubelab.live
-        console_domain: console.minio.kubelab.live
+        # No public domain: OPS-023 removed the K8s instance and its DNS
+        # records. The Beelink and dev instances left are reached by port,
+        # and the whole block goes when they do.
         enable_auth: false
         auth_level: bypass
         default_port_api: 9000
@@ -1665,18 +1666,8 @@ apps:
         # secret digest is read from SOPS at oidc_client_secret_<id>_hash, where
         # <id> is client_id minus a trailing `-oidc`, with `-` as `_`.
         oidc_clients:
-        - client_id: minio
-          client_name: MinIO
-          envs: [staging, prod]
-          redirect:
-            domain: apps.services.data.minio.console_domain
-            path: /oauth_callback
-          scopes: [openid, profile, email]
-          token_endpoint_auth_method: client_secret_basic
-          authorization_policy: one_factor
-          consent_mode: implicit
         # dev: the Compose Grafana enables generic OAuth; the only dev OIDC
-        # consumer (MinIO's compose.dev.yml switches OIDC off). SSOT-017 R8.
+        # consumer. SSOT-017 R8.
         - client_id: grafana
           client_name: Grafana
           envs: [dev, staging, prod]
@@ -1831,10 +1822,6 @@ apps:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
           dev-node:
             none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
-          minio-console:
-            none: >-
-              Retiring (OPS-023). The MinIO console dropped OIDC login upstream (RELEASE.2025-05-24);
-              its client stays registered only until OPS-023 removes it.
 
       crowdsec:
         name: crowdsec

@@ -333,15 +333,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Auto-derived from oidc_client_secret_grafana.",
     ),
     SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret_minio_hash",
-        description="Argon2 hash of MinIO OIDC client secret",
-        kind=SecretKind.ARGON2_HASH,
-        services=("authelia",),
-        derived_from="apps.services.data.minio.oidc_client_secret",
-        format_hint="$argon2id$v=19$...",
-        rotate_note="Auto-derived from minio.oidc_client_secret.",
-    ),
-    SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_gitea_hash",
         description="Argon2 hash of Gitea OIDC client secret",
         kind=SecretKind.ARGON2_HASH,
@@ -809,10 +800,9 @@ SECRET_CATALOG: list[SecretSpec] = [
     # MinIO
     # =========================================================================
     # No `root_user` entry: MinIO's root account NAME is configuration, not a
-    # credential. It resolves from `apps.auth.identities.superadmin` on both
-    # delivery paths — `k8s_secrets._build_dynamic_literals` for the cluster and
-    # `provision-bee.yml` for the Beelink Compose stack, which is the one that
-    # actually runs. Registering a name here made it a thing `credentials
+    # credential. It resolves from `apps.auth.identities.superadmin` in
+    # `provision-bee.yml`, the Beelink Compose stack and the only instance left
+    # after OPS-023 removed the cluster's. Registering a name here made it a thing `credentials
     # generate` rewrites (ADR-062 D3, AUTH-004 AC1). A value for the old key may
     # still sit in the `.enc.yaml` files; nothing reads it.
     SecretSpec(
@@ -821,13 +811,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.PASSWORD,
         services=("minio",),
         rotate_note="Restart minio. Re-login with new credentials.",
-    ),
-    SecretSpec(
-        key_path="apps.services.data.minio.oidc_client_secret",
-        description="MinIO OIDC client secret for Authelia SSO (plaintext)",
-        kind=SecretKind.OIDC_CLIENT_SECRET,
-        services=("minio", "authelia"),
-        rotate_note="Must also regenerate authelia.oidc_client_secret_minio_hash.",
     ),
     # =========================================================================
     # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]

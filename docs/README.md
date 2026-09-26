@@ -11,7 +11,7 @@ Project-bound knowledge (docs-as-code). The *build/operate* layer lives here, ve
 | Get a build from a merge into staging or prod | [`runbooks/gitops-delivery-promotion.md`](runbooks/gitops-delivery-promotion.md) — canonical deploy/promotion doc |
 | Add a brand-new service to the platform | [`runbooks/new-service.md`](runbooks/new-service.md), [`runbooks/deploy-new-k3s-service.md`](runbooks/deploy-new-k3s-service.md) |
 | Manage SOPS secrets | [`runbooks/sops-and-secrets.md`](runbooks/sops-and-secrets.md) (mechanics), [`runbooks/secrets-reference.md`](runbooks/secrets-reference.md) (catalog) |
-| Restore a backup / PVC | [`runbooks/pvc-backup-restore.md`](runbooks/pvc-backup-restore.md) |
+| Restore a backup / PVC | [`runbooks/offsite-backup-restore.md`](runbooks/offsite-backup-restore.md) |
 | Bootstrap or rotate the AWS ArgoCD hub | [`runbooks/aws1-destroy-replace.md`](runbooks/aws1-destroy-replace.md), [`runbooks/aws1-ebs-resize.md`](runbooks/aws1-ebs-resize.md) |
 | Set up K3s on a node | [`runbooks/k3s-setup.md`](runbooks/k3s-setup.md), [`runbooks/k3s-upgrade.md`](runbooks/k3s-upgrade.md) |
 | Diagnose a symptom (something's broken) | [`troubleshooting/quick-diagnostics.md`](troubleshooting/quick-diagnostics.md) — router into the rest of `troubleshooting/` |

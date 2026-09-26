@@ -74,7 +74,6 @@ help:
 	@echo "  make apply-secrets ENV=x  Apply SOPS secrets to K8s cluster"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"
 	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
-	@echo "  make backup-pvc ENV=x   Trigger manual PVC backup (ADR-024)"
 	@echo "  make flush-sessions ENV=x  Flush Authelia sessions (Redis FLUSHDB)"
 	@echo ""
 	@echo "Hub (Argo CD):"
@@ -1056,10 +1055,8 @@ deploy:
 
 # Run ONE node-path backup now, rather than waiting for its timer (BACKUP-044).
 #
-# `make backup` deploys the pipeline; this makes a backup happen. The PVC class
-# has had that distinction since ADR-024 (`make backup-pvc`) and the node-path
-# class did not, so an operator about to do something risky had no way to take a
-# snapshot first.
+# `make backup` deploys the pipeline; this makes a backup happen. Without it an
+# operator about to do something risky had no way to take a snapshot first.
 #
 # Starts the ship unit, which pulls capture in via `Wants=` — the real scheduled
 # path, so it also posts the AC9 coverage heartbeat.
@@ -1103,16 +1100,6 @@ backup-schedule:
 backup:
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	@$(TOOLKIT) infra ansible run -p backup -e $(or $(filter staging prod,$(ENV)),prod) $(_CHECK)
-
-# K8s PVC backup — triggers a one-off Job from the CronJob (ADR-024)
-# Usage: make backup-pvc ENV=prod
-.PHONY: backup-pvc
-backup-pvc:
-	@test -n "$(filter $(ENV),prod)" || (echo "Usage: make backup-pvc ENV=prod" && exit 1)
-	@echo "=== Triggering PVC backup ($(ENV)) ==="
-	@kubectl create job --from=cronjob/pvc-backup pvc-backup-manual-$$(date +%s) \
-		--namespace kubelab --kubeconfig $(KUBECONFIG_PATH)
-	@echo "✓ Backup job created. Monitor: kubectl get jobs -n kubelab --kubeconfig $(KUBECONFIG_PATH)"
 
 # Bitácora board — the Stream field is derived from harness/board-streams.yaml (GOV-002)
 # Usage: make board-streams          (dry-run)

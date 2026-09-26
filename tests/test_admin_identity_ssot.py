@@ -124,26 +124,6 @@ class TestAdminIdentityResolvesFromTheSSOT:
             f"expected Grafana's break-glass account {GRAFANA_BREAK_GLASS!r}."
         )
 
-    def test_minio_root_user_resolves_from_the_identity_ssot(self, cm: FakeConfigurationManager) -> None:
-        """RED until MinIO's root user stops being an independently-stored SOPS value.
-
-        MinIO's failure mode differs from Grafana's and is worth naming: its
-        root user is not aliased to basic-auth, it is a *separate copy* of the
-        identity in SOPS (`APPS_SERVICES_DATA_MINIO_ROOT_USER`). One identity
-        stored twice drifts, and it already has — #1355 facet 3 records MinIO's
-        root credential diverging from SOPS during the same rotation.
-        """
-        literals = _build_dynamic_literals(cm)
-
-        assert "minio-secrets" in literals, (
-            "minio-secrets has no dynamic literal, so MINIO_ROOT_USER is still a standalone "
-            "SOPS value rather than the declared superadmin. One identity, one declaration."
-        )
-        assert literals["minio-secrets"]["MINIO_ROOT_USER"] == SUPERADMIN, (
-            f"MINIO_ROOT_USER is {literals['minio-secrets']['MINIO_ROOT_USER']!r}, "
-            f"expected the declared superadmin {SUPERADMIN!r}."
-        )
-
     def test_no_generated_secret_carries_the_basic_auth_account(self, cm: FakeConfigurationManager) -> None:
         """The anti-assertion, and the one that would have caught #1352 before it shipped.
 
@@ -291,8 +271,8 @@ class TestApplyRefusesWithoutTheIdentity:
     def test_apply_refuses_when_the_superadmin_is_undeclared(self, monkeypatch) -> None:
         """Raised in review of #1390, and the reviewer was right about the shape.
 
-        With the map undeclared, `_resolve_superadmin` returns "" and
-        `_build_dynamic_literals` simply omits the Grafana and MinIO literals.
+        With the map undeclared, `_resolve_grafana_admin` returns "" and
+        `_build_dynamic_literals` simply omits the Grafana literal.
         Nothing fails: `apply-secrets` reports success and writes a
         `grafana-admin` Secret with no `admin-user` key.
 

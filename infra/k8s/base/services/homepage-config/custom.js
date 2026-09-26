@@ -303,26 +303,6 @@ var KUBELAB_SERVICES_STAGING = [
     "notes": "Automation"
   },
   {
-    "name": "MinIO API",
-    "url": "https://minio.staging.kubelab.live",
-    "health": "https://minio.staging.kubelab.live/minio/health/live",
-    "auth": "Built-in",
-    "category": "Data",
-    "node": "ace1",
-    "version": "2025-09-07",
-    "notes": "S3 API"
-  },
-  {
-    "name": "MinIO Console",
-    "url": "https://console.minio.staging.kubelab.live",
-    "health": "https://console.minio.staging.kubelab.live",
-    "auth": "Built-in (OIDC)",
-    "category": "Data",
-    "node": "ace1",
-    "version": "2025-09-07",
-    "notes": "Console UI"
-  },
-  {
     "name": "Grafana",
     "url": "https://grafana.staging.kubelab.live",
     "health": "https://grafana.staging.kubelab.live/api/health",
@@ -463,26 +443,6 @@ var KUBELAB_SERVICES_PROD = [
     "node": "VPS",
     "version": "2.12.3",
     "notes": "Automation"
-  },
-  {
-    "name": "MinIO API",
-    "url": "https://minio.kubelab.live",
-    "health": "https://minio.kubelab.live/minio/health/live",
-    "auth": "Built-in",
-    "category": "Data",
-    "node": "VPS",
-    "version": "2025-09-07",
-    "notes": "S3 API"
-  },
-  {
-    "name": "MinIO Console",
-    "url": "https://console.minio.kubelab.live",
-    "health": "https://console.minio.kubelab.live",
-    "auth": "Built-in (OIDC)",
-    "category": "Data",
-    "node": "VPS",
-    "version": "2025-09-07",
-    "notes": "Console UI"
   },
   {
     "name": "Grafana",
@@ -1058,7 +1018,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config c60ff5bd";
+    footer.textContent = "KubeLab IDP · config 55ae7538";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);
