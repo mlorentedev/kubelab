@@ -14,7 +14,7 @@ created: "2026-09-25"
 ## Setup
 
 - [x] Branch `feat/backup-055-r2-watcher-probe` from master (✓ 2026-09-26)
-- [ ] The operator approves `proposal.md`
+- [x] (✓ 2026-09-26) The operator approves `proposal.md`, with the sentinel check and the throwaway-Job mutations added
 - [x] (✓ 2026-09-26) **Manual (operator):** create the Cloudflare R2 token, Object Read only, scoped to `kubelab-backups`. Store both halves with `toolkit secrets set backup.r2.readonly_{access_key_id,secret_access_key} --env common --stdin`. Steps in `docs/runbooks/offsite-backup-restore.md` (task 9).
 
 ## Implementation
@@ -26,12 +26,12 @@ created: "2026-09-25"
 5. [ ] [P] [AC1] Catalog `backup.r2.readonly_access_key_id` and `backup.r2.readonly_secret_access_key`: `SecretKind.EXTERNAL`, `envs=("staging","prod")`, stored in common. Add a `SecretMapping` `r2-backup-watcher-secrets` holding `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `RESTIC_PASSWORD`. Test the mapping, following `test_k8s_secrets_vikunja_r2.py`.
 6. [ ] [AC1] [AC3] Test first, `tests/test_r2_backup_watcher_probe.py`: run the probe script under `sh`, with a fake `restic` on PATH, to prove:
    - healthy → 4 node lines plus fleet `healthy:1`;
-   - missing source, no repository, bad password, restic crash or missing env → the failing node's line plus fleet `healthy:0`, never silence (R4).
+   - missing source, no repository, bad password, missing sentinel, restic crash (exit 137), restic hang past the timeout, or missing env → the failing node's line plus fleet `healthy:0`, never silence (R4).
    Watch it fail.
 7. [ ] [AC1] [AC3] Write the probe (`infra/k8s/base/services/r2-backup-watcher/probe.sh`, served by the same generator). Rewrite the CronJob: image, Secret env, targets mount, `RESTIC_CACHE_DIR` on an emptyDir, and `activeDeadlineSeconds` set after task 10's timing. Green. `tests/test_r2_backup_alerting_rules.py` stays green unchanged.
 8. [ ] [P] [AC6] Test that the rule's `runbook_url` names an existing file, then fix it to `offsite-backup-restore.md`.
 9. [ ] [AC6] Runbook section: what the alert means, how to read the per-node lines, and how to rotate the read-only token, including the click-by-click creation.
-10. [ ] [AC1] [AC3] Staging: point `targetRevision` at the branch **after reading it and coordinating with the other lanes**, then `make apply-secrets ENV=staging`. Trigger one Job (`kubectl create job --from=cronjob/...`), time it and read the lines. Run the three mutations from AC3: each turns the fleet line to 0 and fires the rule in staging Grafana. Revert, and set `targetRevision` back to master.
+10. [ ] [AC1] [AC3] Staging: point `targetRevision` at the branch **after reading it and coordinating with the other lanes**, then `make apply-secrets ENV=staging`. Trigger one Job (`kubectl create job --from=cronjob/...`), time it and read the lines. Run the four mutations from AC3 as throwaway Jobs (`kubectl create job --from=cronjob/r2-backup-watcher`, patched targets, env or sentinel), never by editing the Secret or the bucket: each turns the fleet line to 0 and puts the rule in `Alerting` in staging Grafana. Also: `apply-secrets` and `deploy-k8s` twice each, where the second run changes nothing. Revert, and set `targetRevision` back to master.
 11. [ ] [AC1] Prod after merge: `make apply-secrets ENV=prod`, one Job, four healthy lines, rule `Normal`.
 
 ## Closing
