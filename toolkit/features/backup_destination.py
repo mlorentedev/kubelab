@@ -369,7 +369,7 @@ WATCHER_TARGETS_PATH = "infra/k8s/base/services/r2-backup-watcher/targets.txt"
 
 _WATCHER_TARGETS_HEADER = (
     "# Generated from backup.sources in common.yaml by `make sync-r2-watcher-targets`. Do not edit.\n"
-    "# One line per node: <node> <R2 repository> <declared source>...\n"
+    "# One line per node: <node> <restic repository URL> <declared source>...\n"
 )
 
 
@@ -379,9 +379,14 @@ def render_watcher_targets(config: dict[str, Any]) -> str:
     Plain whitespace-separated lines, because the reader is `sh` in a restic
     image that has no YAML or JSON parser.
     """
-    sources = (config.get("backup", {}) or {}).get("sources", {}) or {}
+    backup = config.get("backup", {}) or {}
+    sources = backup.get("sources", {}) or {}
+    # The full URL, not the bare name, so the R2 endpoint reaches the cluster
+    # from the SSOT rather than as a second copy typed into the manifest.
+    prefix = str((backup.get("r2", {}) or {}).get("repo_prefix", "")).rstrip("/")
     lines = [
-        " ".join([node, _repository_name_in(config, node), *sorted(sources[node] or {})]) for node in sorted(sources)
+        " ".join([node, f"{prefix}/{_repository_name_in(config, node)}", *sorted(sources[node] or {})])
+        for node in sorted(sources)
     ]
     return _WATCHER_TARGETS_HEADER + "\n".join(lines) + "\n"
 
