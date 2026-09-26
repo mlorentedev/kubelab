@@ -23,6 +23,8 @@ import pathlib
 import subprocess
 import time
 
+import shutil
+
 import pytest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -68,8 +70,13 @@ def _listing(*services: str, sentinel: bool = True) -> str:
     return "\n".join(lines) + "\n"
 
 
-@pytest.fixture
-def fleet(tmp_path: pathlib.Path):
+# The image runs busybox `sh`, the host usually dash: run every case under both,
+# so a bashism or a dash-only behaviour cannot pass here and fail in the pod.
+SHELLS = [["sh"]] + ([["busybox", "sh"]] if shutil.which("busybox") else [])
+
+
+@pytest.fixture(params=SHELLS, ids=lambda s: " ".join(s))
+def fleet(tmp_path: pathlib.Path, request):
     """A two-node fleet whose repositories are healthy until a test breaks one."""
     fake = tmp_path / "fake"
     fake.mkdir()
@@ -96,12 +103,14 @@ def fleet(tmp_path: pathlib.Path):
         "RESTIC_PASSWORD": "not-a-real-value-fixture",
         "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
         "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
+        "PROBE_SHELL": " ".join(request.param),
     }
     return fake, targets, env
 
 
 def _run(env: dict[str, str]) -> tuple[int, list[dict], list[dict]]:
-    proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    shell = env.get("PROBE_SHELL", "sh").split()
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
     records = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     nodes = [r for r in records if r["metric"] == "r2_backup_node"]
     fleet_lines = [r for r in records if r["metric"] == "r2_backup_health"]
