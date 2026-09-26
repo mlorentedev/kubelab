@@ -199,13 +199,15 @@ def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., A
             all_ok = _preview_retired_secret(env, namespace, name, run) and all_ok
             continue
         try:
-            run(
+            deleted = run(
                 [*_kubectl_base(env, namespace), "delete", "secret", name, "--ignore-not-found"],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            logger.success(f"  retired secret {namespace}/{name} absent")
+            # `--ignore-not-found` prints nothing when there was nothing to delete.
+            outcome = "deleted" if deleted.stdout.strip() else "already absent"
+            logger.success(f"  retired secret {namespace}/{name} {outcome}")
         except subprocess.CalledProcessError as e:
             logger.error(f"  Failed to delete retired secret {namespace}/{name}: {e.stderr}")
             all_ok = False

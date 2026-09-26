@@ -1710,6 +1710,11 @@ drill-pvc-unbound:
 	@$(TOOLKIT) obs drill-pvc-unbound --env $(_ENV) $(if $(TIMEOUT_MINUTES),--timeout-minutes $(TIMEOUT_MINUTES),)
 
 .PHONY: deploy-k8s
+# DRY_RUN=1 would reach only the apply-secrets prerequisite; the rest would run for
+# real. Refuse before any prerequisite starts.
+ifneq ($(and $(DRY_RUN),$(filter deploy-k8s,$(MAKECMDGOALS))),)
+$(error deploy-k8s has no dry run. Preview the Secrets with: make apply-secrets ENV=$(ENV) DRY_RUN=1)
+endif
 deploy-k8s: apply-secrets apply-middleware-secrets provision-postgres-tenant validate-sync
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s deploy --env $(ENV)

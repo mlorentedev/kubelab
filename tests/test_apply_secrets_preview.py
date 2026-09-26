@@ -41,7 +41,7 @@ def _preview(mocker, stdout: str, stderr: str = "") -> tuple[set, object, object
     ok = _apply_single_secret(
         SecretMapping(name="grafana-admin", keys={}),
         {},
-        {"admin-user": "breakglass", "admin-password": "s3cr3t-value"},
+        {"admin-user": "breakglass", "token": "VALUE-THAT-MUST-NOT-LEAK"},
         dry_run=True,
         env="prod",
         changed=changed,
@@ -68,10 +68,10 @@ class TestPerSecretVerdict:
         argv = run.call_args.args[0]
         assert argv[:5] == ["kubectl", "--kubeconfig", "/kube/prod", "-n", "kubelab"]
         assert argv[5:] == ["apply", "--dry-run=server", "-f", "-"]
-        assert "s3cr3t-value" not in " ".join(argv)
+        assert "VALUE-THAT-MUST-NOT-LEAK" not in " ".join(argv)
         logged = " ".join(str(c) for c in log.mock_calls)
-        assert "s3cr3t-value" not in logged
-        assert "czNjcjN0LXZhbHVl" not in logged, "the base64 of a value is the value"
+        assert "VALUE-THAT-MUST-NOT-LEAK" not in logged
+        assert "VkFMVUUtVEhBVC1NVVNULU5PVC1MRUFL" not in logged, "the base64 of a value is the value"
 
     def test_a_secret_kubectl_never_applied_is_flagged_as_ambiguous(self, mocker) -> None:
         """Without the annotation, `configured` does not mean the value changed."""
@@ -79,6 +79,11 @@ class TestPerSecretVerdict:
         assert ("kubelab", "grafana-admin") in changed
         warned = " ".join(str(c.args) for c in log.warning.call_args_list)
         assert "grafana-admin" in warned and "last-applied-configuration" in warned
+
+    @pytest.mark.parametrize("stdout", ["", "secret/grafana-admin"])
+    def test_an_output_without_a_verdict_counts_as_no_change(self, mocker, stdout: str) -> None:
+        changed, _, _ = _preview(mocker, stdout)
+        assert changed == set()
 
     def test_a_refused_preview_fails(self, mocker) -> None:
         import subprocess
