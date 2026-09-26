@@ -1210,49 +1210,81 @@ apps:
           # `apps.auth.identities`, on a forge days old. If that ever stops holding,
           # this is the line to revisit.
           has_projects: false
-        # The trigger for infra/n8n/workflows/multi-forge-sync.json, applied to every
-        # declared repository. It is declared because its absence is invisible: that
-        # workflow had been imported and ACTIVE in prod n8n for days with no webhook
-        # anywhere on either forge, so it had never received a single event — and an
-        # active workflow with no trigger reads exactly like a working integration.
-        webhook:
-          # DECLARED WHOLE, NOT DERIVED from apps.services.automation.n8n.domain,
-          # which is the prod value this must equal (pinned by a committed test, so
-          # the duplication cannot drift quietly). Deriving per environment would be
-          # wrong rather than merely redundant: gitea is `state_promotion: singleton`
-          # — one forge, on the Beelink — so `--env staging` would rewrite the real
-          # forge's hooks to n8n.staging, a wrong value produced by correct code.
-          url: https://n8n.kubelab.live/webhook/multi-forge-sync
-          # The workflow reads `rawBody` and HMACs it. `form` would deliver a body
-          # that no longer matches what was signed.
-          content_type: json
-          # Gitea's payload dialect. Not cosmetic: `slack`/`discord` send an entirely
-          # different body, and `Parse Forge Event` reads pull_request.merged and
-          # head_commit.message out of Gitea's.
-          type: gitea
-          # Compared as a FLOOR, never for equality — Gitea expands `pull_request`
-          # into nine sub-events and returns them unordered, so an equality check
-          # would fail forever on a correct hook. Measured 2026-09-04 on
-          # personal/resume; see `webhook_changes`.
-          #
-          # All three are needed and none is spare: the workflow branches on
-          # pull_request `action` for the In Review / Done buckets, falls back to
-          # head_commit.message on a push, which is the only path that moves a task
-          # for work landing without a pull request, and `issues` is the only
-          # trigger that CREATES a task at all (APP-CONFIG-008).
-          #
-          # `issues` is the event Gitea and GitHub both name for issue lifecycle
-          # actions; the workflow narrows it further to `opened`/`reopened`, which
-          # is exactly what the `add-to-project.yml` it retires fired on. Without
-          # it the create path is unreachable and every issue silently misses the
-          # board -- with a 200 recorded on every delivery, because there is no
-          # delivery to record.
-          events:
-            - push
-            - pull_request
-            - issues
-          branch_filter: "*"
-          active: true
+        # Every webhook a declared repository must carry (TOOL-080 generalised this
+        # from one to a list): the trigger for infra/n8n/workflows/multi-forge-sync.json,
+        # and the read-only PR reviewer's. Matched by URL, not by position — see
+        # `find_declared_hook` — and each reads its own secret from its own
+        # `secret_key`, never a shared one. Declared at all because absence is
+        # invisible: `multi-forge-sync` had been imported and ACTIVE in prod n8n for
+        # days with no webhook anywhere on either forge, so it had never received a
+        # single event, and an active workflow with no trigger reads exactly like a
+        # working integration.
+        webhooks:
+          # n8n. FIRST, AND PINNED TO PROD (a committed test asserts both): `gitea`
+          # is `state_promotion: singleton` — one forge, on the Beelink — so
+          # `--env staging` must not rewrite the real forge's hooks to n8n.staging,
+          # a wrong value produced by correct-looking code.
+          - # DECLARED WHOLE, NOT DERIVED from apps.services.automation.n8n.domain,
+            # which is the prod value this must equal (pinned by the same test).
+            url: https://n8n.kubelab.live/webhook/multi-forge-sync
+            # The workflow reads `rawBody` and HMACs it. `form` would deliver a
+            # body that no longer matches what was signed.
+            content_type: json
+            # Gitea's payload dialect. Not cosmetic: `slack`/`discord` send an
+            # entirely different body, and `Parse Forge Event` reads
+            # pull_request.merged and head_commit.message out of Gitea's.
+            type: gitea
+            # Compared as a FLOOR, never for equality — Gitea expands `pull_request`
+            # into nine sub-events and returns them unordered, so an equality check
+            # would fail forever on a correct hook. Measured 2026-09-04 on
+            # personal/resume; see `webhook_changes`.
+            #
+            # All three are needed and none is spare: the workflow branches on
+            # pull_request `action` for the In Review / Done buckets, falls back to
+            # head_commit.message on a push, which is the only path that moves a
+            # task for work landing without a pull request, and `issues` is the
+            # only trigger that CREATES a task at all (APP-CONFIG-008).
+            #
+            # `issues` is the event Gitea and GitHub both name for issue lifecycle
+            # actions; the workflow narrows it further to `opened`/`reopened`, which
+            # is exactly what the `add-to-project.yml` it retires fired on. Without
+            # it the create path is unreachable and every issue silently misses the
+            # board -- with a 200 recorded on every delivery, because there is no
+            # delivery to record.
+            events:
+              - push
+              - pull_request
+              - issues
+            branch_filter: "*"
+            active: true
+            secret_key: apps.services.automation.n8n.forge_webhook_secret
+          # The PR reviewer's webhook (TOOL-080, #1823). `active: false` until the
+          # server exists in the cluster (PR 4 of the spec), so no delivery goes to
+          # a host that does not answer yet.
+          - url: https://pr-agent.kubelab.live/api/v1/gitea_webhooks
+            content_type: json
+            type: gitea
+            # `pull_request_only`, NOT `pull_request`. Gitea's hook API expands
+            # `pull_request` into every PR sub-event, comments included, and the
+            # upstream Gitea server runs any comment starting with `/` from any
+            # author (`handle_comment_event`) with no OWNER/MEMBER/COLLABORATOR
+            # gate — so subscribing to the family would turn slash commands on for
+            # every PR author rather than exclude them. Measured 2026-09-24 in a
+            # local Gitea 1.25.5 lab (lesson-462,
+            # specs/TOOL-080-forge-pr-reviewer/scope-lab.py): this pair delivers
+            # opened, reopened, closed and edited, plus pushes, and nothing else.
+            events:
+              - pull_request_only
+              - pull_request_sync
+            branch_filter: "*"
+            active: false
+            secret_key: apps.services.automation.pr_agent.webhook_secret
+            # EQUALITY, NOT THE FLOOR n8n GETS ABOVE. n8n fails closed on a surplus
+            # event — dropped, with HTTP 200 recorded regardless — so a surplus is
+            # Gitea's own expansion and never drift. PR-Agent does not fail closed:
+            # a surplus such as `pull_request_comment` reaches a server that acts on
+            # it, so here a live widening is drift to correct (lesson-462).
+            event_comparison: equality
         organizations:
           teledyne:
             repositories:
