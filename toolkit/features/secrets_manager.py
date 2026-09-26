@@ -797,6 +797,27 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Update signing secret in Slack App settings.",
     ),
     # =========================================================================
+    # PR-Agent (TOOL-080) — the forge's read-only PR reviewer
+    # =========================================================================
+    # prod only, like every other Gitea/PR-Agent secret in this catalog
+    # (`reviewer_token`, `admin_token`, `bot_token` below): the forge is
+    # `state_promotion: singleton` and the PR-Agent server is prod-only by design
+    # (proposal, "Out of scope: Staging").
+    SecretSpec(
+        key_path="apps.services.automation.pr_agent.webhook_secret",
+        description="HMAC secret Gitea signs the PR-Agent review server's webhook deliveries with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("gitea", "pr-agent"),
+        rotate_note=(
+            "Rotating this value alone does not converge: `webhook_changes` never compares "
+            "`config.secret` because Gitea never returns it, so `gitea-reconcile --apply` schedules "
+            "no write on the secret alone -- see WebhookSpec's docstring. Rotate together with "
+            "another compared field, or delete the hook and let the next `--apply` recreate it."
+        ),
+        envs=("prod",),
+    ),
+    # =========================================================================
     # MinIO
     # =========================================================================
     # No `root_user` entry: MinIO's root account NAME is configuration, not a

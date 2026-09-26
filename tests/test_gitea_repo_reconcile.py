@@ -1498,6 +1498,22 @@ def test_each_declared_hook_names_its_own_secret_key() -> None:
     assert DECLARED_WEBHOOKS[0].secret_key != DECLARED_WEBHOOKS[1].secret_key
 
 
+def test_the_pr_agent_webhook_secret_is_catalogued_like_n8n_s() -> None:
+    """AC6: the declared `secret_key` must resolve to a real catalog entry, or the
+    audit can never report it missing (modelled on
+    `test_the_reviewer_token_is_catalogued_like_the_bot_token`, TOOL-080 PR 2).
+    """
+    from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
+
+    key = DECLARED_WEBHOOKS[1].secret_key
+    spec = next((s for s in SECRET_CATALOG if s.key_path == key), None)
+    assert spec is not None, f"{key} is not in SECRET_CATALOG, so no audit can report it absent"
+    assert spec.kind is SecretKind.RANDOM_HEX, (
+        "generated here, like n8n's forge_webhook_secret -- Gitea signs with it, nobody issues it"
+    )
+    assert spec.envs == ("prod",), "the PR-Agent server is prod-only (proposal, Out of scope: Staging)"
+
+
 def test_the_singular_block_still_loads_through_the_plural_loader() -> None:
     """Backward compatible: a config that has not migrated to the list keeps
     meaning exactly what it meant before `load_webhooks` existed.
