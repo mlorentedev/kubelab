@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-49 lessons, newest first. Back to [all categories](../_index.md).
+50 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 466 | [A "back up the current file" task before a template reports `changed` on the run after every change](lesson-466-a-backup-copy-before-a-template-reports-changed-on-the-next-run.md) | 2026-09-26 |
 | 397 | [Check mode skips `command:`, so every condition reading its register fails the dry run](lesson-397-check-mode-skips-command-so-every-condition-reading-its-register-fails-the-dry-run.md) | 2026-08-26 |
 | 392 | [`--check` skips `command:`, so a guard reading its rc does not gate](lesson-392-check-mode-skips-command-so-a-guard-reading-its-rc-does-not-gate.md) | 2026-08-24 |
 | 381 | [Handlers chain only by explicit notify, and only forward](lesson-381-handlers-chain-only-by-explicit-notify-and-only-forward.md) | 2026-08-23 |
