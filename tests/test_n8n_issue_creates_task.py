@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from toolkit.features.configuration import ConfigurationManager
-from toolkit.features.gitea_repos import load_webhook
+from toolkit.features.gitea_repos import load_webhooks
 from toolkit.features.n8n_import import PLACEHOLDER_SSOT, resolve_placeholders
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -201,8 +201,12 @@ def test_the_declared_webhook_events_cover_the_create_trigger() -> None:
     Superset, not equality: Gitea expands `pull_request` into its sub-events, so
     an equality assertion fails forever on a correct hook (`webhook_changes`
     makes the same choice for the same reason).
+
+    `[0]`, not the only entry: `gitea.webhooks` is a list since TOOL-080, and n8n --
+    this workflow's own trigger -- is declared first and pinned to prod
+    (`test_the_declared_webhooks_list_puts_n8n_first_and_pinned_to_prod`).
     """
-    declared = set(load_webhook(yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))).events)
+    declared = set(load_webhooks(yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8")))[0].spec.events)
     assert {"push", "pull_request", "issues"} <= declared
 
 

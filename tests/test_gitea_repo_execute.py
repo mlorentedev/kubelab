@@ -45,6 +45,7 @@ from toolkit.features.gitea_repos import (
     TEAM_NAME,
     TEAM_PERMISSION,
     DeclaredRepo,
+    HookDeclaration,
     ReconcilePlan,
     RepoSettings,
     RepoSettingsError,
@@ -98,6 +99,36 @@ DECLARED_WEBHOOK = WebhookSpec(
 #: The secret every `execute` is handed. Not a real one and not read from SOPS: these
 #: tests assert that a secret REACHES the write, never what it contains.
 WEBHOOK_SECRET = "test-secret-not-a-real-one"
+
+#: `declared_webhooks` (TOOL-080) is a list; every test in this file that is about
+#: something other than the list itself is handed exactly one hook, wrapping
+#: `DECLARED_WEBHOOK` above -- so a single-hook test keeps meaning what it always
+#: meant. Multi-hook behaviour gets its own fixtures, below the single-hook section.
+DECLARED_HOOK = HookDeclaration(spec=DECLARED_WEBHOOK, secret_key="apps.services.automation.n8n.forge_webhook_secret")
+DECLARED_WEBHOOKS = (DECLARED_HOOK,)
+WEBHOOK_SECRETS = {DECLARED_WEBHOOK.url: WEBHOOK_SECRET}
+
+#: The PR-Agent-shaped hook (TOOL-080), literal for the same reason `DECLARED_WEBHOOK`
+#: is: these tests are about which client writes, which secret reaches which hook,
+#: and whether the equality mode converges, never about the SSOT (that is covered in
+#: `test_gitea_repo_reconcile.py`, against the real declaration).
+PR_AGENT_WEBHOOK = WebhookSpec(
+    url="https://pr-agent.example/api/v1/gitea_webhooks",
+    content_type="json",
+    events=("pull_request_only", "pull_request_sync"),
+    active=False,
+    branch_filter="*",
+    type="gitea",
+)
+PR_AGENT_SECRET_KEY = "apps.services.automation.pr_agent.webhook_secret"
+PR_AGENT_HOOK = HookDeclaration(spec=PR_AGENT_WEBHOOK, secret_key=PR_AGENT_SECRET_KEY, event_comparison="equality")
+PR_AGENT_SECRET = "pr-agent-test-secret-not-a-real-one"
+
+#: Both hooks, n8n first -- the shape a real `declared_webhooks` has once PR 3
+#: lands. Used only by the multi-hook tests below; every single-hook test keeps
+#: using `DECLARED_WEBHOOKS` above.
+TWO_HOOKS = (DECLARED_HOOK, PR_AGENT_HOOK)
+TWO_SECRETS = {DECLARED_WEBHOOK.url: WEBHOOK_SECRET, PR_AGENT_WEBHOOK.url: PR_AGENT_SECRET}
 
 
 class FakeClient:
@@ -317,10 +348,15 @@ class FakeClient:
     def _store_hook(self, payload: dict[str, Any], hook_id: int) -> dict[str, Any]:
         """What Gitea gives BACK for what it was sent -- which is not what it was sent.
 
-        Two divergences, both measured, both load-bearing:
+        Three divergences, all measured, all load-bearing:
 
         - `events` comes back EXPANDED. `pull_request` becomes nine entries, so a
           reconciler comparing for equality would never converge.
+        - `pull_request_only` comes back renamed to `pull_request` (lesson-462,
+          TOOL-080) -- not expanded, renamed: sending the narrow name still means
+          the narrow subscription, but Gitea never echoes that name back, which is
+          the whole reason `webhook_changes`'s equality mode aliases before it
+          compares.
         - `config.secret` does not come back AT ALL, which is why the post-condition
           can prove the hook's shape and never its signature.
         """
@@ -337,6 +373,8 @@ class FakeClient:
                 "pull_request_comment",
                 "pull_request_review",
             }
+        if "pull_request_only" in events:
+            events = (events - {"pull_request_only"}) | {"pull_request"}
         return {
             "id": hook_id,
             "type": payload.get("type"),
@@ -407,7 +445,7 @@ def test_organizations_are_created_by_the_admin_client(monkeypatch: pytest.Monke
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert ("create_org", "personal") in admin.calls
@@ -427,7 +465,7 @@ def test_repositories_are_created_by_the_bot_client(monkeypatch: pytest.MonkeyPa
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert ("create_repo", "personal/resume") in bot.calls
@@ -447,7 +485,7 @@ def test_the_bot_is_added_to_a_write_team(monkeypatch: pytest.MonkeyPatch) -> No
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert ("add_team_member", "7:hefesto") in admin.calls
@@ -465,7 +503,7 @@ def test_a_report_is_not_a_plan(monkeypatch: pytest.MonkeyPatch) -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert report.orgs_created == ["personal"]
@@ -484,7 +522,12 @@ def test_execute_never_deletes(monkeypatch: pytest.MonkeyPatch) -> None:
     plan = ReconcilePlan(undeclared_orgs=("legacy",), undeclared_repos=("legacy/old",))
 
     execute(
-        plan, admin, bot, bot_username="hefesto", declared_settings=DECLARED_SETTINGS, declared_webhook=DECLARED_WEBHOOK
+        plan,
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert admin.calls == [] and bot.calls == [], (
@@ -641,7 +684,7 @@ def test_one_failed_org_does_not_stop_the_others() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert ("create_org", "teledyne") in admin.calls, "a later organization was skipped after an earlier one failed"
@@ -664,7 +707,7 @@ def test_a_failed_orgs_repositories_are_skipped_not_failed() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert ("create_repo", "personal/resume") not in bot.calls
@@ -687,7 +730,7 @@ def test_the_failure_message_keeps_gitea_s_own_diagnostics() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     _, reason = report.failures[0]
@@ -704,7 +747,7 @@ def test_a_run_with_no_failures_reports_ok() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert report.ok and report.failures == []
@@ -749,7 +792,7 @@ def test_a_migration_is_performed_by_the_migrator_never_by_a_token_client():
         migration_token="TOKEN",
         migrator=migrator,
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert report.repos_migrated == ["personal/resume"]
@@ -780,7 +823,7 @@ def test_a_migration_without_a_migrator_is_refused_rather_than_attempted_with_a_
         migration_token="TOKEN",
         migrator=None,
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert not report.ok
@@ -809,7 +852,7 @@ def test_a_migration_without_a_credential_fails_loudly_rather_than_running_open(
         migration_token=None,
         migrator=FakeClient("m"),
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert not report.ok
@@ -839,7 +882,7 @@ def test_an_organization_receiving_only_a_migration_still_gets_the_write_team():
         migration_token="TOKEN",
         migrator=FakeClient("m"),
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert report.teams_ensured == ["personal"]
@@ -865,7 +908,7 @@ def test_an_unknown_migration_service_is_refused_before_the_call():
         migration_token="TOKEN",
         migrator=FakeClient("m"),
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert not report.ok
@@ -1004,7 +1047,7 @@ def test_a_team_repair_runs_on_an_organization_receiving_nothing() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert report.ok, f"the repair failed: {report.failures}"
@@ -1036,7 +1079,7 @@ def test_a_team_repair_is_skipped_when_its_organization_could_not_be_created() -
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
     )
 
     assert not report.ok
@@ -1087,7 +1130,7 @@ def test_settings_are_applied_by_the_configurator_never_by_a_token_client(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         configurator=configurator,
     )
 
@@ -1117,7 +1160,7 @@ def test_the_whole_declaration_is_sent_not_only_the_fields_that_drifted(
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         configurator=configurator,
     )
 
@@ -1139,7 +1182,7 @@ def test_settings_without_a_configurator_are_refused_rather_than_attempted_with_
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         configurator=None,
     )
 
@@ -1166,7 +1209,7 @@ def test_a_patch_that_is_accepted_and_does_nothing_is_a_failure() -> None:
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         configurator=configurator,
     )
 
@@ -1220,7 +1263,7 @@ def test_a_repository_whose_migration_failed_is_not_configured() -> None:
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         migration_token="TOKEN",
         migrator=migrator,
         configurator=configurator,
@@ -1253,7 +1296,7 @@ def test_a_repository_created_by_this_run_is_configured_by_this_run(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         configurator=configurator,
     )
 
@@ -1276,7 +1319,7 @@ def test_the_report_distinguishes_configured_from_created() -> None:
         FakeClient("bot"),
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=DECLARED_WEBHOOKS,
         configurator=configurator,
     )
 
@@ -1326,8 +1369,8 @@ def test_a_webhook_is_written_by_the_configurator_never_by_a_token_client(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
@@ -1351,8 +1394,8 @@ def test_the_secret_reaches_the_write(monkeypatch: pytest.MonkeyPatch) -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
@@ -1378,8 +1421,8 @@ def test_a_webhook_without_a_secret_is_refused_rather_than_written_unsigned() ->
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=None,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=None,
         configurator=configurator,
     )
 
@@ -1397,8 +1440,8 @@ def test_a_webhook_without_a_configurator_is_refused_rather_than_attempted_with_
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=None,
     )
 
@@ -1425,8 +1468,8 @@ def test_an_existing_hook_is_patched_in_place_rather_than_recreated(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
@@ -1453,8 +1496,8 @@ def test_the_full_config_is_sent_on_an_update_not_only_the_field_that_drifted(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
@@ -1486,8 +1529,8 @@ def test_a_write_that_is_accepted_and_stores_nothing_is_a_failure() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
@@ -1517,8 +1560,8 @@ def test_gitea_s_event_expansion_is_not_read_as_a_failed_write(
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
@@ -1567,8 +1610,8 @@ def test_a_repository_whose_migration_failed_gets_no_webhook() -> None:
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         migration_token=None,
         migrator=None,
         configurator=configurator,
@@ -1589,10 +1632,182 @@ def test_the_report_distinguishes_hooked_from_configured(monkeypatch: pytest.Mon
         bot,
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
-        webhook_secret=WEBHOOK_SECRET,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
         configurator=configurator,
     )
 
     assert report.repos_hooked == ["personal/resume"]
     assert report.repos_configured == [] and report.repos_created == []
+
+
+# ── webhooks: the list (TOOL-080) ──────────────────────────────────────────────
+#
+# Everything above is the single-hook behaviour, unchanged and re-proven by the
+# mechanical `declared_webhook` -> `declared_webhooks` rename. What follows is
+# specific to `declared_webhooks` holding MORE than one entry: each hook writing
+# with its own secret, a missing secret on one not blocking the other, and the
+# equality-mode hook converging a live surplus in one write -- the proposal's own
+# claim ("a live surplus... is drift to correct, and a second run converges"),
+# exercised end to end through the fake's aliasing rather than asserted in the
+# abstract.
+
+
+def _two_hook_plan(*, pr_agent_surplus: bool = False) -> ReconcilePlan:
+    """Both declared hooks for one repository, mirroring `_hook_plan` for one."""
+    n8n_change = WebhookChange(
+        org="personal",
+        name="resume",
+        changes=(("url", None, DECLARED_WEBHOOK.url),),
+        absent=True,
+        url=DECLARED_WEBHOOK.url,
+    )
+    pr_agent_change = (
+        WebhookChange(
+            org="personal",
+            name="resume",
+            hook_id=2,
+            changes=(("events_surplus", ("pull_request_comment",), ()),),
+            absent=False,
+            url=PR_AGENT_WEBHOOK.url,
+        )
+        if pr_agent_surplus
+        else WebhookChange(
+            org="personal",
+            name="resume",
+            changes=(("url", None, PR_AGENT_WEBHOOK.url),),
+            absent=True,
+            url=PR_AGENT_WEBHOOK.url,
+        )
+    )
+    return ReconcilePlan(repos_to_hook=(n8n_change, pr_agent_change))
+
+
+def test_each_declared_hook_is_written_with_its_own_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two hooks, two secrets, and neither write may see the other's."""
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    report = execute(
+        _two_hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhooks=TWO_HOOKS,
+        webhook_secrets=TWO_SECRETS,
+        configurator=configurator,
+    )
+
+    assert report.ok
+    assert report.repos_hooked.count("personal/resume") == 2
+    n8n_call = next(
+        c for c in configurator.calls if c[0] == "create_hook" and c[2]["config"]["url"] == DECLARED_WEBHOOK.url
+    )
+    pr_agent_call = next(
+        c for c in configurator.calls if c[0] == "create_hook" and c[2]["config"]["url"] == PR_AGENT_WEBHOOK.url
+    )
+    assert n8n_call[2]["config"]["secret"] == WEBHOOK_SECRET
+    assert pr_agent_call[2]["config"]["secret"] == PR_AGENT_SECRET
+
+
+def test_a_missing_secret_for_one_hook_does_not_block_the_other() -> None:
+    """The conservative refusal is per hook, not per run: n8n still gets written.
+
+    Open decision this PR stops on (see the build report): before PR 4 adds
+    `apps.services.automation.pr_agent.webhook_secret` to SOPS, this is exactly the
+    shape a real `--apply` hits for the PR-Agent hook on every declared repository.
+    """
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+
+    report = execute(
+        _two_hook_plan(),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhooks=TWO_HOOKS,
+        webhook_secrets={DECLARED_WEBHOOK.url: WEBHOOK_SECRET},  # PR-Agent's is absent
+        configurator=configurator,
+    )
+
+    assert not report.ok
+    assert report.repos_hooked == ["personal/resume"], "n8n must still be written"
+    failure = next(msg for _target, msg in report.failures if PR_AGENT_SECRET_KEY in msg)
+    assert PR_AGENT_WEBHOOK.url in failure
+
+
+def test_the_equality_mode_hook_converges_a_live_surplus_in_one_write(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The proposal's own claim, exercised end to end rather than asserted in the abstract.
+
+    The fake models BOTH of Gitea's measured divergences at once: `create_hook`/
+    `edit_hook` alias `pull_request_only` to `pull_request` on the way in, exactly as
+    the real forge does (lesson-462). This is the one test in this file that would
+    fail if `webhook_changes`'s equality mode compared the declared side unaliased --
+    every other webhook test here uses the floor, which never needed the alias.
+    """
+    monkeypatch.setattr("toolkit.features.gitea_repos._handle_failure", _no_failures)
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+    seeded = configurator.seed_hook(
+        "personal",
+        "resume",
+        type=PR_AGENT_WEBHOOK.type,
+        active=PR_AGENT_WEBHOOK.active,
+        branch_filter=PR_AGENT_WEBHOOK.branch_filter,
+        # Already in STORED form -- a widened hook as Gitea would hand it back, not
+        # a payload someone is about to send. `pull_request_comment` is the surplus
+        # this hook acts on and the floor would have let through unnoticed.
+        events=["pull_request", "pull_request_sync", "pull_request_comment"],
+        config={"url": PR_AGENT_WEBHOOK.url, "content_type": PR_AGENT_WEBHOOK.content_type},
+    )
+    change = WebhookChange(
+        org="personal",
+        name="resume",
+        hook_id=seeded["id"],
+        changes=(("events_surplus", ("pull_request_comment",), ()),),
+        absent=False,
+        url=PR_AGENT_WEBHOOK.url,
+    )
+
+    report = execute(
+        ReconcilePlan(repos_to_hook=(change,)),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhooks=(PR_AGENT_HOOK,),
+        webhook_secrets={PR_AGENT_WEBHOOK.url: PR_AGENT_SECRET},
+        configurator=configurator,
+    )
+
+    assert report.ok, "a hook the equality mode can converge must not be reported as a failure"
+    assert report.repos_hooked == ["personal/resume"]
+    stored_events = set(configurator._hooks[("personal", "resume")][0]["events"])
+    assert "pull_request_comment" not in stored_events, "the surplus must be gone after the write, not merely reported"
+
+
+def test_execute_refuses_a_hook_change_whose_declaration_is_missing() -> None:
+    """`plan_reconcile` and `execute` must be given the same `declared_webhooks` list.
+
+    Reachable only when a caller passes `execute` a shorter list than the one that
+    produced the plan -- a real mismatch, not a state the CLI can put a run into
+    by itself, but a silent drop is the wrong failure mode for it either way.
+    """
+    admin, bot, configurator = FakeClient("admin"), FakeClient("bot"), FakeClient("configurator")
+    change = WebhookChange(org="personal", name="resume", url="https://unknown.example/hook", absent=True)
+
+    report = execute(
+        ReconcilePlan(repos_to_hook=(change,)),
+        admin,
+        bot,
+        bot_username="hefesto",
+        declared_settings=DECLARED_SETTINGS,
+        declared_webhooks=DECLARED_WEBHOOKS,
+        webhook_secrets=WEBHOOK_SECRETS,
+        configurator=configurator,
+    )
+
+    assert not report.ok
+    assert "create_hook" not in configurator.kinds()
+    message = next(msg for target, msg in report.failures if target == "hook personal/resume")
+    assert "same `declared_webhooks` list" in message
