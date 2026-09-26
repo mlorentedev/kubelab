@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# Beelink Services — MinIO + GH Runner (ADR-028: on-demand platform).
+# Beelink Services — Gitea + GH Runner (ADR-028: on-demand platform).
 # Glances was extracted to the shared `roles/glances/` role (DASH-DT-014b).
 # Replaces the bare-metal Ollama that once ran here. It moved to ace2 in 2026
 # and was retired outright by AI-007; the cleanup below stays because it guards
@@ -58,6 +58,68 @@
   when: (_ollama_check.rc | default(1)) == 0
   tags: [cleanup]
 
+# --- Retire MinIO (OPS-023) ---
+# Removing the service from compose.yml stops rendering it and does nothing to
+# the container already running, so the absence half has to be written. Unlike
+# the Ollama cleanup above, this block is EPHEMERAL by decision (OPS-023,
+# 2026-09-26): it converges the one node that ever ran MinIO, and leaves with the
+# `apps.services.data.minio` SSOT block in the spec's last PR, once AC2's
+# `changed=0` run is recorded. Nothing installs MinIO afterwards, so a re-imaged
+# node never needs it.
+#
+# Probe-then-act rather than `docker rm -f` with `changed_when: rc == 0`: whether
+# `rm -f` of a missing container exits 0 depends on the Docker version, and a
+# teardown that reports `changed` on every run fails the idempotence it exists to
+# prove. The probes read only, so they run in check mode too.
+- name: Check for the retired MinIO container
+  command: docker inspect --format '{% raw %}{{.Id}}{% endraw %}' minio
+  register: _minio_container
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  tags: [cleanup]
+
+- name: Remove the retired MinIO container
+  command: docker rm -f minio
+  when: (_minio_container.rc | default(1)) == 0
+  tags: [cleanup]
+
+- name: Check for the retired MinIO image
+  command: docker image inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ minio_image }}
+  register: _minio_image
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  tags: [cleanup]
+
+- name: Remove the retired MinIO image
+  command: docker image rm {{ minio_image }}
+  when: (_minio_image.rc | default(1)) == 0
+  tags: [cleanup]
+
+# R1 of the spec authorised deleting this data (88 KB, nothing in use).
+- name: Remove the retired MinIO data directory
+  file:
+    path: "{{ beelink_minio_dir }}"
+    state: absent
+  tags: [cleanup]
+
+# Mirrors base_system's "Allow tailnet-only service ports" rule field for field:
+# ufw deletes only a rule that matches exactly, and a mismatch reports `ok`
+# while the port stays open. One family-agnostic delete removes both the v4 and
+# the v6 rule.
+- name: Close the retired MinIO tailnet ports
+  community.general.ufw:
+    rule: allow
+    interface_in: tailscale0
+    port: "{{ item | string }}"
+    proto: tcp
+    delete: true
+  loop:
+    - "{{ minio_api_port }}"
+    - "{{ minio_console_port }}"
+  tags: [cleanup]
+
 # --- Create directories ---
 - name: Create deployment directories
   file:
@@ -68,7 +130,6 @@
     mode: "0755"
   loop:
     - "{{ beelink_deploy_dir }}"
-    - "{{ beelink_minio_data_dir }}"
     - "{{ beelink_runner_work_dir }}"
     - "{{ beelink_gitea_data_dir }}"
 
@@ -230,29 +291,6 @@
   changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 
 # --- Health checks ---
-- name: Wait for MinIO container to be running
-  command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' minio
-  register: _minio_state
-  # Read-only probe whose result is consumed by a condition, so check mode must
-  # not skip it: a skipped `command:` registers no stdout, and the condition then
-  # reads a value nothing measured. Same defect as the Ollama probe above
-  # (ANSIBLE-054, #1400) — `until` never matches, so it retries to exhaustion and
-  # fails a dry run on a node where the real run is clean.
-  check_mode: false
-  until: _minio_state.stdout == "running"
-  retries: 12
-  delay: 5
-  changed_when: false
-
-- name: Verify MinIO health
-  uri:
-    url: "http://{{ tailscale_ip }}:{{ minio_api_port }}/minio/health/live"
-    method: GET
-    status_code: 200
-    timeout: 10
-  retries: 5
-  delay: 5
-
 - name: Verify GitHub Runner container is running
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
   register: _runner_state
@@ -616,4 +654,4 @@
     msg: >-
       Gitea {{ _gitea_version.json.version | default('?') }} on
       {{ tailscale_ip }}:{{ gitea_http_port }} (ssh {{ gitea_ssh_port }}),
-      MinIO on {{ minio_api_port }}/{{ minio_console_port }}, GH Runner running
+      GH Runner running

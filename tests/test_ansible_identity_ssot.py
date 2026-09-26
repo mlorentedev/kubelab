@@ -68,7 +68,9 @@ def test_the_playbook_declares_identity_variables_at_all() -> None:
     empty result makes the whole file vacuously green — the failure mode
     lesson-380 describes, and worth one line to close.
     """
-    assert len(_identity_vars()) >= 3
+    # Named rather than counted: a count floor broke when OPS-023 retired
+    # `minio_root_user`, which says nothing about whether the match still works.
+    assert {"gitea_admin_user", "gitea_bot_user"} <= set(_identity_vars())
 
 
 def test_no_identity_resolves_from_a_secret_store() -> None:

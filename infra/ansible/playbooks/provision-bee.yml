@@ -3,7 +3,7 @@
 # Beelink Provisioning — On-Demand Platform Node (ADR-028)
 #
 # Deploys: base system, SSH hardening, Docker, Tailscale,
-# then MinIO (object storage) + GitHub Actions Runner + Glances.
+# then Gitea + GitHub Actions runners + Glances.
 # Removes legacy bare-metal Ollama (retired outright by AI-007; the idempotent
 # cleanup stays to guard a re-imaged node).
 #
@@ -127,7 +127,7 @@
     # Separate vault AND values tree for the one service on this node whose
     # environment identity is not deploy_env. Built into their own facts rather
     # than merged over `config`/`secrets`, so they cannot silently change what
-    # MinIO or the runner resolve.
+    # the runners resolve.
     - name: Load Gitea's environment overrides (SSOT)
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ gitea_identity_env }}.yaml"
@@ -180,8 +180,6 @@
         netplan_address: "{{ config.networking.nodes.beelink.lan_ip }}/24"
         netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
         firewall_tailnet_ports:
-          - "{{ config.apps.services.data.minio.default_port_api }}"
-          - "{{ config.apps.services.data.minio.default_port_console }}"
           - "{{ config.apps.services.observability.glances.default_port }}"
           - "{{ config.apps.services.core.gitea.default_port }}"
           - "{{ config.apps.services.core.gitea.ssh_port }}"
@@ -206,7 +204,7 @@
         tailscale_auth_key: "{{ _tailscale_auth_key | default('') }}"
 
     - role: ../roles/beelink_services
-      tags: [services, minio, runner, gitea]
+      tags: [services, runner, gitea]
       vars:
         restart_policy: "{{ config.global.restart_policy }}"
         tailscale_ip: "{{ config.networking.nodes.beelink.tailscale_ip }}"
@@ -300,25 +298,11 @@
         # argument for the grant living next to its rationale in common.yaml.
         gitea_admin_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.admin }}"
         gitea_admin_token: "{{ gitea_secrets.apps.services.core.gitea.admin_token | default('') }}"
-        # MinIO
+        # Read only by the OPS-023 teardown in beelink_services, and removed with
+        # it and the `apps.services.data.minio` SSOT block in the spec's last PR.
         minio_image: "{{ config.apps.services.data.minio.image }}"
         minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
         minio_console_port: "{{ config.apps.services.data.minio.default_port_console }}"
-        # ADR-062 D3 / AUTH-004 AC1, and the same fix as `gitea_admin_user`
-        # above — this is the second of the two delivery paths that leg named.
-        # Was `secrets.apps.services.data.minio.root_user`, a SOPS key that
-        # `credentials generate` seeded from the same `common_username` that
-        # feeds `basic_auth.user`. Its live value equalled the declared
-        # superadmin by COINCIDENCE, not by resolution, so nothing looked
-        # broken while the next rotation was entitled to rename MinIO's root
-        # account — the shape that took prod SSO down on 2026-08-23 via Gitea.
-        #
-        # `config` is `common.yaml` merged with the env overrides (set_fact
-        # above), so the plaintext identity map resolves here.
-        minio_root_user: "{{ config.apps.auth.identities.superadmin }}"
-        minio_root_password: "{{ secrets.apps.services.data.minio.root_password }}"
-        minio_cpu_limit: "{{ config.apps.services.data.minio.resources.cpu_limit }}"
-        minio_memory_limit: "{{ config.apps.services.data.minio.resources.memory_limit }}"
         # GitHub Actions Runner
         runner_image: "{{ config.apps.services.automation.github_runner.image }}"
         runner_repo_url: "{{ config.apps.services.automation.github_runner.repo_url }}"

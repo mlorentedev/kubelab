@@ -32,6 +32,11 @@
     mode: "0644"
   when: headscale_policy_path | length > 0
   failed_when: false
+  # Bookkeeping, not a change to what Headscale enforces: the template task below
+  # reports that. Left reporting, it made the run AFTER every policy change show
+  # `changed=1` (the copy catching `.prev` up), so `changed=0` needed a third run
+  # (measured during OPS-023, 2026-09-26).
+  changed_when: false
 
 # ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
 # config dir (appears at headscale_policy_path inside the container). Dormant
