@@ -34,7 +34,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
@@ -343,7 +343,11 @@ def repository_name(cm: ConfigurationManager, node: str) -> str:
     find nothing, and report the VPS as UNCOVERED while its backup ran nightly.
     The same regex the backup playbook uses, in reverse.
     """
-    config = cm.get_merged_config()
+    return _repository_name_in(cm.get_merged_config(), node)
+
+
+def _repository_name_in(config: dict[str, Any], node: str) -> str:
+    """`repository_name()` over an already-merged config, so a renderer needs no SOPS."""
     networking = config.get("networking", {})
     nodes = networking.get("nodes", {})
     # `networking.<node>` for cloud nodes (vps, aws, gcp), `networking.nodes.<node>`
@@ -356,6 +360,41 @@ def repository_name(cm: ConfigurationManager, node: str) -> str:
     # — reporting the VPS as UNCOVERED with a nightly backup sitting in R2.
     # Caught by running it, not by reading it.
     return str((entry or {}).get("hostname") or node)
+
+
+# Where the in-cluster watcher's targets live (BACKUP-055). Served to the
+# CronJob through `configMapGenerator`; `render_watcher_targets` is the only
+# writer, and `tests/test_r2_watcher_targets.py` fails on a stale copy.
+WATCHER_TARGETS_PATH = "infra/k8s/base/services/r2-backup-watcher/targets.txt"
+
+_WATCHER_TARGETS_HEADER = (
+    "# Generated from backup.sources in common.yaml by `make sync-r2-watcher-targets`. Do not edit.\n"
+    "# One line per node: <node> <R2 repository> <declared source>...\n"
+)
+
+
+def render_watcher_targets(config: dict[str, Any]) -> str:
+    """What the watcher must find in R2: per node, its repository and declared sources.
+
+    Plain whitespace-separated lines, because the reader is `sh` in a restic
+    image that has no YAML or JSON parser.
+    """
+    sources = (config.get("backup", {}) or {}).get("sources", {}) or {}
+    lines = [
+        " ".join([node, _repository_name_in(config, node), *sorted(sources[node] or {})]) for node in sorted(sources)
+    ]
+    return _WATCHER_TARGETS_HEADER + "\n".join(lines) + "\n"
+
+
+def write_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
+    """Write the targets file. True if it changed."""
+    target = project_root / WATCHER_TARGETS_PATH
+    rendered = render_watcher_targets(config)
+    if target.exists() and target.read_text() == rendered:
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered)
+    return True
 
 
 def coverage(

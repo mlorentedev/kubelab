@@ -1,0 +1,6 @@
+# Generated from backup.sources in common.yaml by `make sync-r2-watcher-targets`. Do not edit.
+# One line per node: <node> <R2 repository> <declared source>...
+beelink beelink gitea
+rpi3 rpi3 uptime_kuma
+rpi4 rpi4 pihole
+vps kubelab-vps authelia headscale n8n
