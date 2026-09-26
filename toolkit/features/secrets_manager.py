@@ -1007,14 +1007,48 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="restic repository password — the only key to every offsite backup",
         kind=SecretKind.RANDOM_TOKEN,
         length=48,
-        services=("backup",),
         format_hint="URL-safe random token",
         rotate_note=(
             "Use `restic key add` on every repository BEFORE changing this value — a "
             "rotation that replaces it first locks you out of existing snapshots. Update "
-            "the Bitwarden escrow copy in the same pass, or recovery silently regresses."
+            "the Bitwarden escrow copy in the same pass, or recovery silently regresses. "
+            "Then `make apply-secrets` in staging and prod for the R2 watcher."
         ),
-        envs=("prod",),
+        # Staging too since BACKUP-055: the R2 watcher lives in base/ and reads
+        # every repository from both clusters.
+        services=("backup", "r2-backup-watcher"),
+        envs=("staging", "prod"),
+    ),
+    # BACKUP-055: the R2 watcher's credential. Object Read only on the
+    # kubelab-backups bucket, measured refusing a PutObject and a restic lock.
+    # Deliberately a second token rather than the nodes' read-write one above:
+    # the cluster must never hold anything that can `forget --prune`
+    # (tests/test_k8s_secrets_r2_watcher.py). Throwaway by nature — losing it
+    # loses no data — so it has no escrow copy.
+    SecretSpec(
+        key_path="backup.r2.readonly_access_key_id",
+        expiry=Expiry.NEVER,
+        description="Cloudflare R2 read-only access key id — the in-cluster backup watcher",
+        kind=SecretKind.EXTERNAL,
+        services=("r2-backup-watcher",),
+        format_hint="R2 API token Access Key ID (Object Read only, kubelab-backups)",
+        rotate_note=(
+            "R2 > Manage R2 API Tokens: create a new account token, Object Read only, "
+            "bucket kubelab-backups; set both halves with `toolkit secrets set ... --stdin`; "
+            "`make apply-secrets` in staging and prod; then revoke the old token. No restart: "
+            "the next watcher Job reads the new Secret."
+        ),
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path="backup.r2.readonly_secret_access_key",
+        expiry=Expiry.NEVER,
+        description="Cloudflare R2 read-only secret access key — the in-cluster backup watcher",
+        kind=SecretKind.EXTERNAL,
+        services=("r2-backup-watcher",),
+        format_hint="R2 API token Secret Access Key; shown once, not recoverable",
+        rotate_note="Rotated together with backup.r2.readonly_access_key_id — they are one credential.",
+        envs=("staging", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.automation.github_runner.token",

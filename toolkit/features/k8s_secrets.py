@@ -166,6 +166,19 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "VIKUNJA_FILES_S3_SECRETKEY": "APPS_SERVICES_CORE_VIKUNJA_R2_SECRET_KEY",
         },
     ),
+    # BACKUP-055: the in-cluster R2 watcher. restic reads the S3 credential from
+    # AWS_* and the repository password from RESTIC_PASSWORD. The READ-ONLY token,
+    # never the nodes' read-write one (tests/test_k8s_secrets_r2_watcher.py).
+    # No `optional_keys`: without any of the three every run reports the whole
+    # fleet unreadable, so the apply refuses instead.
+    SecretMapping(
+        name="r2-backup-watcher-secrets",
+        keys={
+            "AWS_ACCESS_KEY_ID": "BACKUP_R2_READONLY_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_READONLY_SECRET_ACCESS_KEY",
+            "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
+        },
+    ),
 ]
 
 # Secrets this module used to render, as (namespace, name). `apply-secrets`
