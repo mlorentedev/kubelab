@@ -1,0 +1,44 @@
+# Vector unit tests for SEC-021 (#1840), run by tests/test_oauth_tokens_not_logged.py
+# against the shipped config with the pinned image. The token values are fakes.
+tests:
+  - name: grafana's access-token warning keeps the kind and loses the value
+    inputs:
+      - insert_at: parse_logs
+        type: log
+        log_fields:
+          message: "logger=oauth.generic_oauth level=warn msg=\"Error retrieving access token payload\" \
+            error=\"token is not in JWT format: authelia_at_FAKEfakeFAKE.fake-VALUE_1\""
+    outputs:
+      - extract_from: parse_logs
+        conditions:
+          - type: vrl
+            source: |
+              assert!(contains(string!(.message), "authelia_at_REDACTED"))
+              assert!(!contains(string!(.message), "FAKEfakeFAKE"))
+              assert!(contains(string!(.message), "Error retrieving access token payload"))
+
+  - name: refresh tokens and authorization codes are redacted too, all in one line
+    inputs:
+      - insert_at: parse_logs
+        type: log
+        log_fields:
+          message: 'GET /callback?code=authelia_ac_FAKEcode~1&state=x refresh=authelia_rt_FAKErefresh.2 done'
+    outputs:
+      - extract_from: parse_logs
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.message, "GET /callback?code=authelia_ac_REDACTED&state=x refresh=authelia_rt_REDACTED done")
+
+  - name: a line with no token is untouched
+    inputs:
+      - insert_at: parse_logs
+        type: log
+        log_fields:
+          message: 'level=info msg="Request completed" status=200 path=/api/health'
+    outputs:
+      - extract_from: parse_logs
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.message, "level=info msg=\"Request completed\" status=200 path=/api/health")

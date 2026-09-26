@@ -36,6 +36,11 @@ REQUIRED_FIELDS = (
     "consent_mode",
 )
 
+#: Fields a client may declare and Authelia's default covers when it does not.
+#: `access_token_signed_response_alg` other than `none` issues RFC 9068 JWT access
+#: tokens; the `grafana` client needs it so Grafana stops logging opaque ones (SEC-021).
+OPTIONAL_FIELDS = ("access_token_signed_response_alg",)
+
 _AUTHELIA = "apps.services.security.authelia"
 
 # The Authelia config files each K8s environment mounts. Prod replaces the base
@@ -107,6 +112,8 @@ def resolve_clients(values: dict[str, Any], env: str) -> list[dict[str, Any]]:
                 "redirect_uris": [f"https://{host}{redirect['path']}"],
                 "scopes": list(client["scopes"]),
                 "consent_mode": client["consent_mode"],
+                # Optional: absent means Authelia's default, an opaque token.
+                **{k: client[k] for k in OPTIONAL_FIELDS if k in client},
             }
         )
     return resolved
