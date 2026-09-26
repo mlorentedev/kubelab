@@ -20,6 +20,7 @@ Two layers, each tested here:
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -106,17 +107,44 @@ def test_vector_rolls_when_its_config_changes(overlay: str) -> None:
     assert config["metadata"]["name"] in mounted
 
 
+def test_dev_vector_loads_the_mounted_config() -> None:
+    """The image's default config is a bundled demo, not the file Compose mounts, so a
+    redaction written there is dead unless the service points Vector at it."""
+    compose = yaml.safe_load((REPO / "infra/stacks/services/observability/loki/compose.base.yml").read_text())
+    vector = compose["services"]["vector"]
+    mounted = {v.split(":")[1] for v in vector["volumes"] if v.split(":")[0].endswith("config/loki/vector.toml")}
+    assert mounted, "the dev Vector config is not mounted"
+    command = vector.get("command") or []
+    assert "--config" in command and command[command.index("--config") + 1] in mounted
+
+
 def _vector_image() -> str:
     kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
     pin = next(i for i in kustomization["images"] if i["name"] == "timberio/vector")
     return f"{pin.get('newName', pin['name'])}:{pin['newTag']}"
 
 
+#: Each shipped Vector config and the transform that must redact in it. Dev Compose
+#: ships Docker's logs to its own Loki through the same rule.
+VECTOR_CONFIGS = {
+    "k8s": (VECTOR_DIR / "vector.yaml", "parse_logs"),
+    "dev": (REPO / "infra/config/loki/vector.toml", "redact_tokens"),
+}
+
+
 @pytest.mark.integration
-def test_vector_redacts_every_token_kind_and_nothing_else() -> None:
-    """Runs Vector's own unit-test runner on the shipped config, with the pinned image."""
+@pytest.mark.parametrize("target", sorted(VECTOR_CONFIGS))
+def test_vector_redacts_every_token_kind_and_nothing_else(target: str, tmp_path: Path) -> None:
+    """Runs Vector's own unit-test runner on each shipped config, with the pinned image."""
     if shutil.which("docker") is None:
+        # The only proof the redaction works: in CI a missing docker is a failure,
+        # or a runner-image change would turn this security test into a quiet skip.
+        if os.environ.get("CI"):
+            pytest.fail("docker not on PATH in CI: the Vector redaction went untested")
         pytest.skip("docker not on PATH: cannot run Vector (a skip is CANNOT CHECK, not OK)")
+    config, transform = VECTOR_CONFIGS[target]
+    tests = tmp_path / "tests.yaml"
+    tests.write_text(VECTOR_TESTS.read_text().replace("parse_logs", transform))
     out = subprocess.run(
         [
             "docker",
@@ -128,12 +156,12 @@ def test_vector_redacts_every_token_kind_and_nothing_else() -> None:
             "-e",
             "VECTOR_SELF_NODE_NAME=unit-test",
             "-v",
-            f"{VECTOR_DIR / 'vector.yaml'}:/etc/vector/vector.yaml:ro",
+            f"{config}:/etc/vector/{config.name}:ro",
             "-v",
-            f"{VECTOR_TESTS}:/etc/vector/tests.yaml:ro",
+            f"{tests}:/etc/vector/tests.yaml:ro",
             _vector_image(),
             "test",
-            "/etc/vector/vector.yaml",
+            f"/etc/vector/{config.name}",
             "/etc/vector/tests.yaml",
         ],
         capture_output=True,

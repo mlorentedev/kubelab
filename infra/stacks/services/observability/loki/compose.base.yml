@@ -24,6 +24,10 @@ services:
     image: ${APPS_SERVICES_OBSERVABILITY_LOKI_VECTOR_IMAGE}
     container_name: ${APPS_SERVICES_OBSERVABILITY_LOKI_NAME}-vector
     restart: ${RESTART_POLICY}
+    # Without it the image loads its bundled /etc/vector/vector.yaml, a demo that
+    # prints synthetic events to the console, and ignores the file mounted below:
+    # dev Vector shipped nothing to Loki (found 2026-09-26, SEC-021 follow-up).
+    command: ["--config", "/etc/vector/vector.toml"]
     volumes:
       - ../../../../config/loki/vector.toml:/etc/vector/vector.toml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
