@@ -107,6 +107,17 @@ def test_vector_rolls_when_its_config_changes(overlay: str) -> None:
     assert config["metadata"]["name"] in mounted
 
 
+def test_dev_vector_loads_the_mounted_config() -> None:
+    """The image's default config is a bundled demo, not the file Compose mounts, so a
+    redaction written there is dead unless the service points Vector at it."""
+    compose = yaml.safe_load((REPO / "infra/stacks/services/observability/loki/compose.base.yml").read_text())
+    vector = compose["services"]["vector"]
+    mounted = {v.split(":")[1] for v in vector["volumes"] if v.split(":")[0].endswith("config/loki/vector.toml")}
+    assert mounted, "the dev Vector config is not mounted"
+    command = vector.get("command") or []
+    assert "--config" in command and command[command.index("--config") + 1] in mounted
+
+
 def _vector_image() -> str:
     kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
     pin = next(i for i in kustomization["images"] if i["name"] == "timberio/vector")
