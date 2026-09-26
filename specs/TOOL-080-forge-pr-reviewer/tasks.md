@@ -28,10 +28,14 @@ created: "2026-09-23"
 
 ## PR 3 — a list of webhooks in the reconciler
 
-- [ ] [P] [AC7] Failing tests: `gitea.webhooks` holds a list and matches by URL, each hook reads its own secret key, the singular `gitea.webhook` still loads, and n8n stays first and pinned to prod (sibling of `test_gitea_repo_reconcile.py:1423-1436`).
-- [ ] [P] [AC7] Failing tests for per-hook event matching. The PR-Agent hook is created with `[pull_request_only, pull_request_sync]` and compared for set equality against the stored `[pull_request, pull_request_sync]`. A live surplus such as `pull_request_comment` is drift to correct, and a second run converges. n8n keeps its superset rule.
-- [ ] [AC7] Implement `load_webhooks` and per-hook `ensure_webhook` in `gitea_repos.py`, and read each secret in `services.py`.
-- [ ] [AC7] Declare the PR-Agent hook (`events: [pull_request_only, pull_request_sync]`). It stays `active: false` until PR 4 is live, so no delivery goes to a host that does not answer yet.
+- [x] [P] [AC7] Failing tests: `gitea.webhooks` holds a list and matches by URL, each hook reads its own secret key, the singular `gitea.webhook` still loads, and n8n stays first and pinned to prod.
+      Written as `load_webhooks`'s loader tests (`test_gitea_repo_reconcile.py`, "webhooks: the list" section): position/pin, per-hook `secret_key`, the singular-block fallback, an empty list refused, a missing `secret_key` refused, a missing field refused, and a duplicate URL refused. Each was red (`ImportError`/`AttributeError`, then a real assertion) before `HookDeclaration`/`load_webhooks` existed.
+- [x] [P] [AC7] Failing tests for per-hook event matching. The PR-Agent hook is created with `[pull_request_only, pull_request_sync]` and compared for set equality against the stored `[pull_request, pull_request_sync]`. A live surplus such as `pull_request_comment` is drift to correct, and a second run converges. n8n keeps its superset rule.
+      Written against `webhook_changes` directly (equality-mode tests, same file) plus one end-to-end test in `test_gitea_repo_execute.py` (`test_the_equality_mode_hook_converges_a_live_surplus_in_one_write`) through a fake that models Gitea's `pull_request_only` -> `pull_request` rename. Confirmed red for the right reason by temporarily removing the alias and re-running (see build report).
+- [x] [AC7] Implement `load_webhooks` and per-hook `ensure_webhook` in `gitea_repos.py`, and read each secret in `services.py`.
+      `plan_reconcile`/`execute` now take `declared_webhooks: Sequence[HookDeclaration]` (was one `WebhookSpec`); `repos_to_hook` is `repos x declared_webhooks`, flattened. `services.py` resolves each hook's `secret_key` via `gitea_actions_secrets.sops_value`, keyed by URL.
+- [x] [AC7] Declare the PR-Agent hook (`events: [pull_request_only, pull_request_sync]`). It stays `active: false` until PR 4 is live, so no delivery goes to a host that does not answer yet.
+      In `infra/config/values/common.yaml`, second entry of `gitea.webhooks`, `event_comparison: equality`, `secret_key: apps.services.automation.pr_agent.webhook_secret` (not yet in SOPS or `SECRET_CATALOG` -- PR 4's scope; open decision below).
 
 ## PR 4 — the server in the cluster
 
