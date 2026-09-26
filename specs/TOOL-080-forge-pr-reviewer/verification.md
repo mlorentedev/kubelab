@@ -122,6 +122,7 @@ Neither setting reaches the other's code path.
   - Verified by consequence, not by reading it back: the value is present, and is 64 hex characters (checked in a child process that printed only those two facts). `toolkit secrets audit --env prod` does not list it among the missing keys.
   - No dotfiles registry entry: that registry tracks secrets with an EXTERNAL counterpart (Bitwarden, a provider) to copy from, per `NAN_API_KEY`'s entry there. This value has none — it is generated and owned entirely by this repository — so there is nothing to register.
   - With this closed, `gitea-reconcile --apply` creates the PR-Agent hook on every declared repository, signed with this secret. Until PR 4 flips it, `active: false` keeps Gitea from delivering anything to it.
+  - Read-only plan against prod from this branch, 2026-09-26: `make gitea-reconcile ENV=prod` lists `+ hook` for `personal/resume`, `teledyne/fae-brain` and `teledyne/openkm-brain`, all `-> https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, and no change to any n8n hook. So the list form reads the live n8n hooks exactly as the singular block did.
 
 ## Promotion candidates
 
