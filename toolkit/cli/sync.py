@@ -351,6 +351,32 @@ def oidc(
             raise typer.Exit(result)
 
 
+@app.command("r2-watcher-targets")
+def r2_watcher_targets(
+    check: Annotated[bool, typer.Option("--check", help="Fail if the committed file is stale")] = False,
+) -> None:
+    """Render the R2 watcher's per-node targets from backup.sources (BACKUP-055)."""
+    import yaml
+
+    from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, write_watcher_targets
+
+    root = Path(__file__).resolve().parents[2]
+    # common.yaml only: `backup.sources` and the node hostnames are not per-env,
+    # and the file lives in base/, so both clusters read the same render.
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    if check:
+        from toolkit.features.backup_destination import render_watcher_targets
+
+        current = root / WATCHER_TARGETS_PATH
+        if not current.exists() or current.read_text() != render_watcher_targets(config):
+            logger.error(f"{WATCHER_TARGETS_PATH} is stale; run `make sync-r2-watcher-targets`")
+            raise typer.Exit(1)
+        logger.success(f"{WATCHER_TARGETS_PATH} is current")
+        return
+    changed = write_watcher_targets(root, config)
+    logger.success(f"{WATCHER_TARGETS_PATH} {'written' if changed else 'unchanged'}")
+
+
 @app.command("vikunja")
 def sync_vikunja_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",

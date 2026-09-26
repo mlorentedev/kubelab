@@ -1617,6 +1617,12 @@ backup-verify-destination:
 backup-verify-restic:
 	@$(TOOLKIT) backup verify-restic --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Regenerate the R2 watcher's per-node targets from backup.sources (BACKUP-055).
+# Run after declaring or removing a backup source; the test suite fails until you do.
+.PHONY: sync-r2-watcher-targets
+sync-r2-watcher-targets:
+	@$(TOOLKIT) sync r2-watcher-targets
+
 # BACKUP-044 AC1: does every declared node actually HAVE a backup, and how old
 # is it — asked from this workstation rather than from the nodes themselves.
 # Every other backup control runs on the node it checks, so it shares that
