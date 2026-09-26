@@ -20,10 +20,42 @@ owner: manu
 
 Accepted — 2026-08-14. Tracks [#1013](https://github.com/mlorentedev/kubelab/issues/1013) (AUTH-004).
 
+Amended 2026-09-24: D1's machine class. See the amendment below.
+
 Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* authentication is delivered (OIDC / forward-auth / bypass tiers) but never decides *who* the identities are or what privilege each one carries. This ADR fills that gap and does not supersede it.
 
 Supersedes the single-identity decision recorded on #1013 earlier the same day — see [D0](#d0--what-this-reverses-and-why).
 
+## Amendment — 2026-09-24 (D1: what "login prohibited" means, and two machine exceptions)
+
+D1 gives the machine class "scoped token only; login prohibited". This amendment changes three things about that row. Decided by the operator: AUTH-007's content on 2026-09-22 ([#1781](https://github.com/mlorentedev/kubelab/issues/1781)), and TOOL-080's reviewer and the one-amendment scope on 2026-09-24.
+
+**1. "Login prohibited" means no usable password and no web session. It does not mean Gitea's `prohibit_login` flag.**
+- **The flag kills the token.** `prohibit_login=true` makes every API token of the account return 403 (lesson-400, 2026-08-26). This was re-measured on Gitea 1.25.5 on 2026-09-24: the same token went from 200 to 403 on `GET /api/v1/user`. The check is `verifyAuthWithOptions` in `routers/api/v1/api.go`.
+- **So the row, read literally, was already violated.** The bot `hefesto` runs with the flag off. `gitea-bootstrap.sh` records that as a named gap under D5.
+- **For a machine account, "login prohibited" means three things:**
+  - a password generated at creation and never stored;
+  - no Authelia entry, so SSO cannot resolve it;
+  - a grant bounded by its token's scopes.
+
+  An admin can still set a password on it, as on any account. That is the gap D5 asks to name rather than hide.
+
+**2. Exception: an owner-level pusher per organization (AUTH-007, #1781).** In Gitea 1.25.5, setting a repository's Actions secrets is gated by `reqOwner()`, and an organization's by `reqOrgOwnership()`. No team grant reaches either. So one machine identity per declared organization is a member of that organization's `Owners` team.
+- **Single purpose:** pushing Actions secrets, and nothing else.
+- **Login prohibited**, in the sense of point 1.
+- **One per organization, never shared.** ADR-065 D2 splits organizations by provenance, and one pusher across them would erase that boundary.
+- **Compensating control.** Rotation is driven by the reconciler, with a *declared rotation date* in `make secrets-audit`, because Gitea tokens carry no issuer-side expiry. An overdue date is an error.
+- **Revisit trigger.** Gitea ships job OIDC (go-gitea/gitea#39052 or later), or the forge moves to Forgejo v15+. Then no stored pusher credential is needed.
+
+The identities' names are agreed with the operator before minting, per D3.
+
+**3. Exception: a read-only PR reviewer (TOOL-080).** One machine identity, `mentor`, posts PR-Agent's reviews on every declared organization. `teledyne/` is included by the operator's explicit decision, which accepts that third-party diffs reach the NaN model and that `mentor` reads that code.
+- **Grant:** a `reviewers` team per organization, read on every unit, no repository creation. Its token scopes are exactly `write:issue` + `read:repository`.
+- **Why read access is the containment.** Both were measured on 2026-09-24 in a local Gitea 1.25.5. A read-team member is refused labels, PR reviews and PR edits. `write:issue` alone cannot read the PR under review.
+- **Separate from the bot, not a second token on it.** The bot writes to every `personal/` repository, and the reviewer's token lives in an internet-facing pod that reads untrusted diffs. Separate accounts also keep reviews and reconciler output apart by author.
+- **Expiry.** The reviewer keeps the bot's `Expiry.NEVER` rather than the pusher's declared date. Its compromise is bounded by read access to code, not by organization ownership.
+
+**Amended, not superseded.** D1's four classes, D2's two groups and D3's identity map stand. The machine class gains a precise reading of "login prohibited" and two bounded exceptions, each with its own row in `apps.auth.identities`.
 **Amended 2026-09-24 ([#951](https://github.com/mlorentedev/kubelab/issues/951)):** D4 does not hold for Grafana, which gets a separate local break-glass account. See [the amendment under D4](#amendment-2026-09-24-grafana-gets-a-second-account).
 
 ## Date
@@ -58,7 +90,7 @@ The original diagnosis survives intact and is what D3 fixes: the defect was neve
 |---|---|---|---|
 | **Named human** | `manu` | `admins` | Superadmin, per service |
 | **Role account** | `operator` | `users` | Day-to-day operation; no administrative rights |
-| **Machine** | `<agent>-bot` | none | Scoped token only; login prohibited |
+| **Machine** | `<agent>-bot` | none | Scoped token only; login prohibited (as defined in the 2026-09-24 amendment, which also adds two exceptions) |
 | **Break-glass** | (see D4) | none | The IdP-unavailable path, and no other |
 
 A named human account is personal and carries accountability: actions attributable to a person belong to an account named after that person. A role account is impersonal by design and therefore must not hold administrative power, because power without attribution is what makes a shared account dangerous.

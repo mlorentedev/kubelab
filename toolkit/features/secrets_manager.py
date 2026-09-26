@@ -611,6 +611,31 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.reviewer_token",
+        description=(
+            "Scoped Gitea API token for the PR reviewer (apps.auth.identities.reviewer); "
+            "write:issue + read:repository, consumed by the PR-Agent webhook server (TOOL-080)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: Gitea mints it and only Gitea
+        # honours it, so a generated string would pass every audit and authenticate
+        # nothing.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "pr-agent"),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=reviewer ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make apply-secrets "
+            "ENV=prod` so the PR-Agent pod reads the new value. The mint task is gated on this key "
+            "being absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API carries no
+        # expiry field. The ADR-062 D1 amendment of 2026-09-24 gives AUTH-007's
+        # owner-level pusher a declared rotation date as its compensating control; this
+        # token is read-only on code, like the bot's is admin-free, and follows the
+        # bot's rule instead.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.github_migration_token",
         description=(
             "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "

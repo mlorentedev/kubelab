@@ -96,8 +96,8 @@ Neither setting reaches the other's code path.
 
 ## Test status
 
-- Test suite: `<command> -> <output>`
-- No regressions in the existing suite: yes / no
+- PR 2 (reviewer identity), 2026-09-24: `poetry run pytest -q tests/` → 2661 passed, 15 skipped. The new files are `tests/test_gitea_review_team.py` (24) and `tests/test_gitea_reviewer_identity.py` (10), plus `test_the_reviewer_grant_is_exactly_the_measured_requirement`. Each was red before its implementation.
+- No regressions in the existing suite: yes. The reconciler's fakes gained the `can_create_org_repo` keyword, and the compose render test gained the two reviewer variables. No assertion changed.
 
 ## Decisions made during implementation
 
@@ -107,6 +107,9 @@ Neither setting reaches the other's code path.
   - `hefesto` holds per-unit write on every `personal/` repo, and read-only access is what contained the reviewer in the lab.
   - The token lives in an internet-facing pod that reads untrusted diffs, so it should not share a blast radius with the reconciler, or its rotation.
   - Separate authorship lets a triage tell a review from reconciler output.
+- 2026-09-24, implementation: the reviewer's `reviewers` team is converged in **both** directions. A team widened to write is narrowed back, unlike `reconcilers`, which only widens. The reviewer's membership is part of the plan, because a correct team it is not in grants it nothing.
+- 2026-09-24, implementation: `reviewer_token` keeps `Expiry.NEVER`, like `bot_token`. The declared-rotation-date control the amendment gives AUTH-007's owner-level pusher is for organization ownership. The reviewer is bounded by read access to code.
+- 2026-09-24, implementation: `gitea-bootstrap.sh`'s machine account block became `ensure_machine_account`, called for the bot and the reviewer. The log lines are unchanged apart from the account name, so the bot's tests and `changed_when` still match.
 - 2026-09-24, Manu: the scope is **the whole forge, `teledyne/` included**. `teledyne/` holds a third party's material (ADR-065 D2), so this is the deliberate decision that ADR asks for, not an inherited one. Manu accepts that its PR diffs go to NaN and that `mentor` holds read access to its code.
 - Hook events are `pull_request_only` and `pull_request_sync` (corrected 2026-09-24 from `pull_request`, which the lab showed also delivers comments). Slash commands stay out until an author filter exists (proposal, Out of scope).
 

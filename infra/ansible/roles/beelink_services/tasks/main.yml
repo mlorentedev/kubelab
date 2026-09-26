@@ -376,6 +376,49 @@
   no_log: true
   tags: [gitea]
 
+# --- PR reviewer: the token (TOOL-080, ADR-062 D1 as amended 2026-09-24) -------
+# The same two steps as the machine token above, for the second machine account.
+# Its grant is narrower (`write:issue,read:repository`) and it joins each
+# organization's read team, not `reconcilers` -- the team is the reconciler's job.
+# Skipped entirely while `apps.auth.identities.reviewer` is undeclared.
+
+- name: Mint the reviewer account's scoped token
+  # Gated on the recorded secret being absent, for the reason the machine token's
+  # task gives: generate-access-token always mints a NEW token. `argv` for the
+  # quoting reason recorded there, whose failure minted a token with the DEFAULT
+  # scopes ("all") while reporting failure.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_reviewer_user }}
+        --token-name kubelab-reviewer
+        --scopes {{ gitea_reviewer_scopes }}
+        --raw
+  register: _gitea_reviewer_token
+  when: gitea_reviewer_user | length > 0 and not gitea_reviewer_token
+  changed_when: _gitea_reviewer_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the reviewer token in SOPS
+  # Controller-side, over STDIN, never argv -- as the machine token's record task.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.reviewer_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_reviewer_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: gitea_reviewer_user | length > 0 and not gitea_reviewer_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
 - name: Mint the Gitea Actions runner registration token
   # GATED, and the gate is load-bearing in a way the bot token's is not.
   #

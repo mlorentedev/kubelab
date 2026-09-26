@@ -49,7 +49,7 @@ from toolkit.features.gitea_client import (
     GiteaClient,
     expand_grant,
 )
-from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
+from toolkit.features.gitea_tokens import REVIEWER_SCOPES, ROTATABLE_TOKENS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMON = REPO_ROOT / "infra/config/values/common.yaml"
@@ -58,7 +58,7 @@ PLAYBOOK = REPO_ROOT / "infra/ansible/playbooks/provision-bee.yml"
 #: `gitea_bot_scopes: "write:repository,..."` — a literal, which is the state this
 #: whole file exists to prevent returning to. A Jinja lookup has no bare quote
 #: after the colon, so the pattern only matches the inlined form.
-INLINE_SCOPE_RE = re.compile(r"^\s*gitea_(?:bot|admin)_scopes:\s*[\"'][a-z]", re.MULTILINE)
+INLINE_SCOPE_RE = re.compile(r"^\s*gitea_(?:bot|admin|reviewer)_scopes:\s*[\"'][a-z]", re.MULTILINE)
 
 
 @pytest.fixture(scope="module")
@@ -103,6 +103,30 @@ def test_bot_grant_covers_the_scope_its_client_declares(declared_scopes: dict[st
         f"include ({sorted(declared_scopes['bot'])}). Measured 2026-08-27: without it, creating a "
         f"repository inside an organization the bot does not own returns 403."
     )
+
+
+def test_the_reviewer_grant_is_exactly_the_measured_requirement(declared_scopes: dict[str, set[str]]) -> None:
+    """EQUALITY for the PR reviewer (TOOL-080 AC5), where the grants above use a superset.
+
+    The superset rule exists so a legitimate widening does not fail a correct change.
+    For this token a widening is never legitimate: it lives in an internet-facing pod
+    that reads untrusted diffs, and read access is what contains it. So the grant is
+    pinned to the measurement in both directions.
+
+    `REVIEWER_SCOPES` is the requirement, and it comes from a measurement, not from
+    code: PR-Agent makes the calls, not this repository. Measured 2026-09-24 in a local
+    Gitea 1.25.5 against the 0.45.0 server (`specs/TOOL-080-forge-pr-reviewer/
+    verification.md`): `write:issue` alone cannot read the PR under review,
+    `write:issue` + `read:repository` serves every call `/review` makes, and `/user`
+    is never called, so `read:user` is not needed.
+    """
+    assert declared_scopes["reviewer"] == set(REVIEWER_SCOPES), (
+        f"the reviewer's grant is {sorted(declared_scopes['reviewer'])}, the measured requirement is "
+        f"{sorted(REVIEWER_SCOPES)}. Narrower and reviews stop; wider and the internet-facing reviewer "
+        f"holds a capability nothing it does needs."
+    )
+    writes_code = {"write:repository", "write:organization", "write:admin", "write:user"}
+    assert not writes_code & declared_scopes["reviewer"]
 
 
 def test_every_client_method_declares_the_scope_it_needs() -> None:

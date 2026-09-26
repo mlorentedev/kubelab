@@ -32,9 +32,9 @@ from __future__ import annotations
 import re
 
 import yaml
-from tests.ansible_jinja import ansible_env
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import StrictUndefined
 
+from tests.ansible_jinja import ansible_env
 from tests.test_beelink_compose_unit import REPO, ROLE
 
 COMPOSE_TEMPLATE = "compose.yml.j2"
@@ -86,6 +86,8 @@ def _template_vars(runner: dict) -> dict:
         gitea_http_port=3000,
         gitea_bot_user="hefesto",
         gitea_bot_email="bot@example.com",
+        gitea_reviewer_user="mentor",
+        gitea_reviewer_email="mentor@example.com",
         gitea_admin_user="manu",
         gitea_admin_email="ops@example.com",
         gitea_admin_password="x",

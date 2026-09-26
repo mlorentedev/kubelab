@@ -191,20 +191,36 @@ fi
 # EditUserOption and NOT in CreateUserOption, so the account cannot be created
 # already blocked. It exists briefly loginable, which is why the block is applied
 # immediately after creation and before any token is minted.
-if [ -n "${GITEA_BOT_USER:-}" ]; then
+# One function, two accounts: the bot (`GITEA_BOT_USER`) and, since TOOL-080, the
+# PR reviewer (`GITEA_REVIEWER_USER`). Both are machine identities under ADR-062 D1
+# as amended 2026-09-24, and both need exactly this: created with a password nobody
+# keeps, and the login flag driven OFF so their API token authenticates. What
+# differs between them is the token's grant and the team they join, and neither of
+# those lives here -- the grant is minted by Ansible, the team by the reconciler.
+# curl reads `user = "name:password"` from its config; double quotes and
+# backslashes are escaped so any password survives the round trip.
+admin_curl_config() {
+  printf 'user = "%s:%s"\n' \
+    "$(printf '%s' "$GITEA_ADMIN_USER" | sed 's/[\\"]/\\&/g')" \
+    "$(printf '%s' "$GITEA_ADMIN_PASSWORD" | sed 's/[\\"]/\\&/g')"
+}
+
+ensure_machine_account() {
+  _machine_user="$1"
+  _machine_email="$2"
   if su git -c "gitea admin user list" 2>/dev/null \
-    | awk 'NR > 1 {print $2}' | grep -qx "$GITEA_BOT_USER"; then
-    log "Machine account '$GITEA_BOT_USER' exists"
+    | awk 'NR > 1 {print $2}' | grep -qx "$_machine_user"; then
+    log "Machine account '$_machine_user' exists"
   else
     # A password is required at creation and this account will never use one: its
     # login is prohibited below and its credential is a scoped API token. So one
     # is generated here, never rendered by Ansible, never stored, and nobody —
     # including this script — retains it after the process exits.
-    su git -c "gitea admin user create --username $GITEA_BOT_USER \
+    su git -c "gitea admin user create --username $_machine_user \
       --password $(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9') \
-      --email $GITEA_BOT_EMAIL \
+      --email $_machine_email \
       --must-change-password=false"
-    log "Created machine account '$GITEA_BOT_USER'"
+    log "Created machine account '$_machine_user'"
   fi
 
   # --- The tier this service cannot enforce, recorded rather than faked ---
@@ -226,26 +242,40 @@ if [ -n "${GITEA_BOT_USER:-}" ]; then
   #   - its password is random, generated above, never rendered by Ansible,
   #     never stored, and discarded when this process exits;
   #   - it is absent from Authelia, so the SSO path cannot resolve it;
-  #   - it holds no administrative scope, so a compromise is bounded by
-  #     write:repository and write:user.
+  #   - it holds no administrative scope, so a compromise is bounded by its
+  #     token's grant: write:repository and write:user for the bot,
+  #     write:issue and read:repository for the reviewer.
   # None of those is Gitea refusing a login. An admin can set a password on this
   # account at any time, exactly as on any other.
   #
   # The PATCH below therefore drives the flag to FALSE, and does so by
   # comparison so a converged run reports nothing — an unconditional write would
   # be ANSIBLE-054 in a new place, in the role that just finished removing it.
-  BOT_STATE=$(curl -sf -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
-    "http://localhost:3000/api/v1/users/$GITEA_BOT_USER" 2>/dev/null || true)
-  case "$BOT_STATE" in
+  # The admin credential goes to curl as a config on STDIN (`-K -`), never as
+  # `-u user:password`: an argument is readable in /proc/<pid>/cmdline for the life
+  # of the process, and `printf` is a shell builtin, so it never spawns one either.
+  _machine_state=$(admin_curl_config | curl -sf -K - \
+    "http://localhost:3000/api/v1/users/$_machine_user" 2>/dev/null || true)
+  case "$_machine_state" in
     *'"prohibit_login":false'*)
-      log "Machine account login state already correct"
+      log "Machine account login state already correct ($_machine_user)"
       ;;
     *)
-      curl -sf -X PATCH -u "$GITEA_ADMIN_USER:$GITEA_ADMIN_PASSWORD" \
+      admin_curl_config | curl -sf -K - -X PATCH \
         -H "Content-Type: application/json" \
-        -d "{\"prohibit_login\": false, \"login_name\": \"$GITEA_BOT_USER\", \"source_id\": 0}" \
-        "http://localhost:3000/api/v1/admin/users/$GITEA_BOT_USER" >/dev/null
-      log "Updated machine account login state"
+        -d "{\"prohibit_login\": false, \"login_name\": \"$_machine_user\", \"source_id\": 0}" \
+        "http://localhost:3000/api/v1/admin/users/$_machine_user" >/dev/null
+      log "Updated machine account login state ($_machine_user)"
       ;;
   esac
+}
+
+if [ -n "${GITEA_BOT_USER:-}" ]; then
+  ensure_machine_account "$GITEA_BOT_USER" "$GITEA_BOT_EMAIL"
+fi
+
+# The PR reviewer (TOOL-080). Absent until `apps.auth.identities.reviewer` is
+# declared, so a node provisioned before then runs exactly as it did.
+if [ -n "${GITEA_REVIEWER_USER:-}" ]; then
+  ensure_machine_account "$GITEA_REVIEWER_USER" "$GITEA_REVIEWER_EMAIL"
 fi

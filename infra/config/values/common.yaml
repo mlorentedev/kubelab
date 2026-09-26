@@ -848,6 +848,11 @@ apps:
       superadmin: manu
       operator: operator
       machine: hefesto
+      # The PR reviewer's account (TOOL-080, ADR-062 D1 amendment of 2026-09-24):
+      # a machine identity with read access only, one account for the whole
+      # forge. Separate from `machine` on purpose -- that account writes to every
+      # `personal/` repository, and read access is what contains this one.
+      reviewer: mentor
 
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
@@ -1053,6 +1058,15 @@ apps:
           # own one, so ADR-065 D1 (the bot owns nothing) still holds. Guarded
           # against `REQUIRED_BOT_SCOPE` in `toolkit/features/gitea_client.py`.
           bot: "write:repository,write:user,write:organization"
+          # The PR reviewer (TOOL-080), and pinned by EQUALITY rather than the floor
+          # the two above get: it runs in an internet-facing pod that reads untrusted
+          # diffs, and read access is what contains it. Measured 2026-09-24 against
+          # PR-Agent 0.45.0 in a local Gitea 1.25.5: `write:issue` alone cannot read
+          # the PR under review, this pair serves every call `/review` makes, and
+          # `/user` is never called. `tests/test_gitea_token_scopes.py` ties it to
+          # `REVIEWER_SCOPES`. Its account is in each organization's `reviewers`
+          # team (read), never in `reconcilers`.
+          reviewer: "write:issue,read:repository"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.

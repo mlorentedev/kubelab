@@ -68,7 +68,20 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         token_name="kubelab-reconciler",
         identity="superadmin",
     ),
+    # The PR reviewer (TOOL-080). Minted by the same role, gated the same way.
+    "reviewer": RotatableToken(
+        secret_key="apps.services.core.gitea.reviewer_token",
+        token_name="kubelab-reviewer",
+        identity="reviewer",
+    ),
 }
+
+#: What the reviewer's token must hold -- exactly, not at least. The requirement is a
+#: measurement, not code in this repository: PR-Agent makes the calls. Measured
+#: 2026-09-24 in a local Gitea 1.25.5 against PR-Agent 0.45.0
+#: (`specs/TOOL-080-forge-pr-reviewer/verification.md`). `write:issue` posts and edits
+#: the review comment; `read:repository` reads the PR, its files, diff and commits.
+REVIEWER_SCOPES: frozenset[str] = frozenset({"write:issue", "read:repository"})
 
 
 @dataclass(frozen=True)
