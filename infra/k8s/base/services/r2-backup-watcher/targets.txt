@@ -1,6 +1,6 @@
 # Generated from backup.sources in common.yaml by `make sync-r2-watcher-targets`. Do not edit.
-# One line per node: <node> <R2 repository> <declared source>...
-beelink beelink gitea
-rpi3 rpi3 uptime_kuma
-rpi4 rpi4 pihole
-vps kubelab-vps authelia headscale n8n
+# One line per node: <node> <restic repository URL> <declared source>...
+beelink s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/beelink gitea
+rpi3 s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/rpi3 uptime_kuma
+rpi4 s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/rpi4 pihole
+vps s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/kubelab-vps authelia headscale n8n

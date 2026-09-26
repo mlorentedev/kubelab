@@ -51,7 +51,13 @@ def test_every_declared_node_and_source_is_a_target() -> None:
 
 
 def test_the_vps_targets_its_real_repository() -> None:
-    assert _rows(render_watcher_targets(COMMON))["vps"][0] == "kubelab-vps"
+    assert _rows(render_watcher_targets(COMMON))["vps"][0] == COMMON["backup"]["r2"]["repo_prefix"] + "/kubelab-vps"
+
+
+def test_every_repository_is_a_restic_s3_url_in_the_backup_bucket() -> None:
+    for node, row in _rows(render_watcher_targets(COMMON)).items():
+        assert row[0].startswith("s3:https://"), node
+        assert f"/{COMMON['backup']['r2']['bucket']}/" in row[0], node
 
 
 def test_a_new_source_changes_the_render() -> None:
