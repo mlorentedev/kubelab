@@ -59,7 +59,7 @@ def test_each_retired_secret_is_deleted_idempotently() -> None:
 def test_dry_run_deletes_nothing() -> None:
     run = _Recorder()
     assert k8s_secrets.delete_retired_secrets("prod", dry_run=True, run=run) is True
-    assert run.calls == []
+    assert all("delete" not in argv for argv in run.calls)
 
 
 def test_a_failed_delete_fails_the_apply() -> None:
@@ -73,3 +73,20 @@ def test_a_missing_kubectl_fails_the_apply_instead_of_crashing() -> None:
         raise FileNotFoundError("kubectl")
 
     assert k8s_secrets.delete_retired_secrets("prod", dry_run=False, run=no_kubectl) is False
+
+
+@pytest.mark.parametrize(
+    ("stdout", "said"),
+    [('secret "minio-secrets" deleted', "deleted"), ("", "already absent")],
+)
+def test_the_run_says_whether_it_deleted_or_found_nothing(mocker, stdout: str, said: str) -> None:
+    """Otherwise the run that removed a value reads the same as a no-op."""
+    log = mocker.patch.object(k8s_secrets, "logger")
+
+    def run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr="")
+
+    assert k8s_secrets.delete_retired_secrets("prod", dry_run=False, run=run) is True
+    reported = " ".join(str(c.args) for c in log.success.call_args_list)
+    assert said in reported
+    assert ("already absent" in reported) is (said == "already absent")

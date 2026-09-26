@@ -41,7 +41,7 @@ class TestApplySingleSecretFailsClosed:
 
     def test_fully_resolved_mapping_applies(self, mocker: "pytest.MonkeyPatch") -> None:
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
-        run.return_value = mocker.Mock(stdout="secret/api-secrets configured", returncode=0)
+        run.return_value = mocker.Mock(stdout="secret/api-secrets configured", stderr="", returncode=0)
         mapping = SecretMapping(name="api-secrets", keys={"A": "ENV_A", "B": "ENV_B"})
         env_vars = {"ENV_A": "value-a", "ENV_B": "value-b"}
 
@@ -53,7 +53,7 @@ class TestApplySingleSecretFailsClosed:
     def test_dynamic_only_secret_with_extra_literals_applies(self, mocker: "pytest.MonkeyPatch") -> None:
         # authelia-users / apprise-secrets style: keys={} and the value comes from a builder.
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
-        run.return_value = mocker.Mock(stdout="secret/authelia-users configured", returncode=0)
+        run.return_value = mocker.Mock(stdout="secret/authelia-users configured", stderr="", returncode=0)
         mapping = SecretMapping(name="authelia-users", keys={})
 
         ok = _apply_single_secret(mapping, {}, {"users_database.yml": "users: {}"}, dry_run=False, env="staging")

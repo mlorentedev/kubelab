@@ -28,7 +28,7 @@ _REQUIRED_ENV = {
 class TestVikunjaR2Wiring:
     def test_r2_keys_resolve_from_the_actual_catalog_env_var_names(self, mocker) -> None:
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
-        run.return_value = mocker.Mock(stdout="secret/vikunja-secrets configured", returncode=0)
+        run.return_value = mocker.Mock(stdout="secret/vikunja-secrets configured", stderr="", returncode=0)
         env_vars = {
             **_REQUIRED_ENV,
             "APPS_SERVICES_CORE_VIKUNJA_R2_ACCESS_KEY": "not-a-real-value-fixture-r2-access",

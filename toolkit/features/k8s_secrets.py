@@ -189,20 +189,25 @@ def _kubectl_base(env: str, namespace: str = "kubelab") -> list[str]:
 
 
 def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., Any] = subprocess.run) -> bool:
-    """Delete every `RETIRED_SECRETS` entry. False if any delete failed."""
+    """Delete every `RETIRED_SECRETS` entry. False if any delete failed.
+
+    With DRY_RUN, reads which of them are still present and deletes nothing.
+    """
     all_ok = True
     for namespace, name in RETIRED_SECRETS:
         if dry_run:
-            logger.info(f"  [DRY-RUN] Would delete retired secret '{namespace}/{name}'")
+            all_ok = _preview_retired_secret(env, namespace, name, run) and all_ok
             continue
         try:
-            run(
+            deleted = run(
                 [*_kubectl_base(env, namespace), "delete", "secret", name, "--ignore-not-found"],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            logger.success(f"  retired secret {namespace}/{name} absent")
+            # `--ignore-not-found` prints nothing when there was nothing to delete.
+            outcome = "deleted" if deleted.stdout.strip() else "already absent"
+            logger.success(f"  retired secret {namespace}/{name} {outcome}")
         except subprocess.CalledProcessError as e:
             logger.error(f"  Failed to delete retired secret {namespace}/{name}: {e.stderr}")
             all_ok = False
@@ -210,6 +215,23 @@ def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., A
             logger.error(f"  Failed to delete retired secret {namespace}/{name}: kubectl not found")
             all_ok = False
     return all_ok
+
+
+def _preview_retired_secret(env: str, namespace: str, name: str, run: Callable[..., Any]) -> bool:
+    found = run(
+        [*_kubectl_base(env, namespace), "get", "secret", name, "--ignore-not-found", "-o", "name"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if found.returncode != 0:
+        logger.error(f"  [DRY-RUN] Could not read retired secret {namespace}/{name}: {found.stderr.strip()}")
+        return False
+    if found.stdout.strip():
+        logger.warning(f"  [DRY-RUN] retired secret {namespace}/{name} is present: a real run would delete it")
+    else:
+        logger.info(f"  [DRY-RUN] retired secret {namespace}/{name} already absent")
+    return True
 
 
 def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
@@ -289,12 +311,12 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # env vars are read once at start, and Authelia's users-file watch never
     # fires on a Secret volume. Restart whatever reads each changed Secret.
     if changed:
-        all_ok = restart_consumers(changed, kubectl=lambda ns: _kubectl_base(env, ns)) and all_ok
+        all_ok = restart_consumers(changed, kubectl=lambda ns: _kubectl_base(env, ns), dry_run=dry_run) and all_ok
 
     if all_ok:
-        logger.success("All K8s secrets applied successfully")
+        logger.success("Preview complete; nothing was applied" if dry_run else "All K8s secrets applied successfully")
     else:
-        logger.error("Some secrets failed to apply")
+        logger.error("Some secrets could not be previewed" if dry_run else "Some secrets failed to apply")
 
     return all_ok
 
@@ -492,6 +514,15 @@ def _render_secret_manifest(name: str, namespace: str, data: dict[str, str]) -> 
     return yaml.safe_dump(manifest, sort_keys=False, default_flow_style=False)
 
 
+_LAST_APPLIED = "kubectl.kubernetes.io/last-applied-configuration"
+
+
+def _apply_verdict(stdout: str) -> str:
+    """`configured` from `secret/x configured`, with or without ` (server dry run)`."""
+    words = stdout.strip().split()
+    return words[1] if len(words) > 1 else ""
+
+
 def _apply_single_secret(
     mapping: SecretMapping,
     env_vars: dict[str, str],
@@ -540,22 +571,30 @@ def _apply_single_secret(
         )
         return False
 
-    if dry_run:
-        logger.info(f"  [DRY-RUN] Would apply secret '{mapping.name}' with keys: {list(data)}")
-        return True
-
-    # Render in-process (no secret in argv) and apply via stdin.
+    # Render in-process (no secret in argv) and apply via stdin. A dry run asks
+    # the API server what a real apply would do (#1810): kubectl answers with a
+    # verdict per object and never echoes a value.
     manifest = _render_secret_manifest(mapping.name, namespace, data)
+    apply_args = ["apply", "--dry-run=server", "-f", "-"] if dry_run else ["apply", "-f", "-"]
     try:
         apply_result = subprocess.run(
-            [*_kubectl_base(env, namespace), "apply", "-f", "-"],
+            [*_kubectl_base(env, namespace), *apply_args],
             input=manifest,
             capture_output=True,
             text=True,
             check=True,
         )
-        logger.success(f"  {apply_result.stdout.strip()}")
-        if changed is not None and apply_result.stdout.strip().endswith(("configured", "created")):
+        verdict = _apply_verdict(apply_result.stdout)
+        if dry_run:
+            logger.info(f"  [DRY-RUN] {mapping.name}: {verdict or apply_result.stdout.strip()} (keys: {list(data)})")
+        else:
+            logger.success(f"  {apply_result.stdout.strip()}")
+        if _LAST_APPLIED in (apply_result.stderr or ""):
+            logger.warning(
+                f"  {mapping.name} has no {_LAST_APPLIED} annotation: kubectl reports it `configured` "
+                "whether or not a value differs, and a real run restarts its consumers either way"
+            )
+        if changed is not None and verdict in ("configured", "created"):
             changed.add((namespace, mapping.name))
         return True
 

@@ -210,14 +210,14 @@ kubectl kustomize infra/k8s/overlays/prod/ | grep -A2 "rule:" | grep "Host"
 ### 3.5 Secrets Pipeline
 
 ```bash
-# SOPS decryption works
-tk infra k8s apply-secrets --env prod --dry-run
-
-# All 5 secrets resolve correctly
-# Expected: authelia-secrets, authelia-users, grafana-admin, crowdsec-bouncer, api-secrets
+# SOPS decrypts, every Secret resolves, and the cluster says what would change.
+# Needs the prod kubeconfig: the preview asks the API server (--dry-run=server).
+make apply-secrets ENV=prod DRY_RUN=1
 ```
 
-**Pass criteria**: All secrets resolve, no missing values.
+**Pass criteria**: rc=0, no missing values, and every Secret reads `unchanged`
+except the ones this release is meant to change. Each `configured` Secret lists
+the workloads a real run would restart; a `kube-system` restart interrupts ingress.
 
 ---
 
