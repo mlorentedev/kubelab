@@ -294,3 +294,25 @@ def test_the_command_exits_1_on_every_finding_a_human_must_act_on(
     )
     result = CliRunner().invoke(app, ["review", "--env", "staging"])
     assert result.exit_code == exit_code, result.output
+
+
+# --------------------------------------------------------------------------- how each account signs in
+
+
+def test_grafana_reports_how_each_account_signs_in() -> None:
+    """`GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP` is a migration flag: it may come out
+    only once every SSO identity is linked to Generic OAuth, or that identity's next
+    login finds no link and no lookup and fails on its own row. The link is what the
+    removal waits for, so the review shows it instead of leaving it to an ad hoc read."""
+    users = [
+        {"login": "testuser", "role": "Viewer", "userId": 4, "authLabels": ["Auth Proxy"]},
+        {"login": "operator", "role": "Admin", "userId": 3, "authLabels": ["Generic OAuth"]},
+        {"login": "breakglass", "role": "Admin", "userId": 1, "authLabels": []},
+    ]
+    accounts = {a.user: a for a in GrafanaTiers(Recorder((200, users))).read("http://gr", "a:b")}
+    findings = {f.user: f for f in review("grafana", {"testuser": False, "operator": True}, list(accounts.values()), GrafanaTiers)}
+
+    assert findings["testuser"].detail == "sign-in: Auth Proxy"
+    assert findings["operator"].detail == "sign-in: Generic OAuth"
+    assert findings["breakglass"].detail == "sign-in: local"
+    assert findings["testuser"].status == "ok", "the link is information, never a verdict"

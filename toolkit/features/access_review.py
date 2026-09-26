@@ -48,6 +48,8 @@ class Account:
     user: str
     tier: str
     ref: Mapping[str, Any] = field(default_factory=dict)
+    #: How the account signs in, where the app says so (Grafana's `authLabels`).
+    link: str = ""
 
 
 @dataclass(frozen=True)
@@ -147,7 +149,14 @@ class GrafanaTiers:
         status, body = self._request("GET", f"{base_url}/api/org/users", None, auth)
         if status != 200 or not isinstance(body, list):
             raise ReviewError(f"Grafana answered {status} listing org users")
-        return [Account(u["login"], u.get("role", ""), {"user_id": u["userId"]}) for u in body]
+        # `authLabels` is what the removal of the email-lookup migration flag waits
+        # for: every SSO identity must read `Generic OAuth` first. None means local.
+        return [
+            Account(
+                u["login"], u.get("role", ""), {"user_id": u["userId"]}, ", ".join(u.get("authLabels") or []) or "local"
+            )
+            for u in body
+        ]
 
     def set_tier(self, base_url: str, auth: str, account: Account, tier: str) -> bool:
         # `AdminLogoutUser` revokes every session of the account (13.0.2, no external
@@ -176,12 +185,16 @@ def review(service: str, declared: Mapping[str, bool], accounts: list[Account], 
     findings = []
     for account in sorted(accounts, key=lambda a: a.user):
         if account.user not in declared:
-            findings.append(Finding(service, account.user, None, account.tier, "undeclared"))
+            findings.append(Finding(service, account.user, None, account.tier, "undeclared", _sign_in(account)))
             continue
         want = tiers.admin_tier if declared[account.user] else tiers.user_tier
         status = "ok" if account.tier == want else "drift"
-        findings.append(Finding(service, account.user, want, account.tier, status))
+        findings.append(Finding(service, account.user, want, account.tier, status, _sign_in(account)))
     return findings
+
+
+def _sign_in(account: Account) -> str:
+    return f"sign-in: {account.link}" if account.link else ""
 
 
 def reconcile(
