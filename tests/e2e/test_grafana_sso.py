@@ -44,6 +44,12 @@ def grafana_sso(
     tests see through the shared one.
     """
     if authenticated_client is None:
+        # This test is the only check of the login that sets the tier, so where the
+        # e2e account exists a failed Authelia login must not read as green: a
+        # rotated password or a brute-force lockout would otherwise skip it quietly.
+        # The retired `ollama_api_key` fixture set the precedent (conftest.py).
+        if env != "dev":
+            pytest.fail(f"no Authelia session for the e2e account in {env}: the SSO login went untested")
         pytest.skip("No authenticated session (testuser not provisioned)")
     svc = services_by_name.get("grafana")
     if not svc:
