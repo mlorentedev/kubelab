@@ -75,7 +75,9 @@ reason_from_stderr() {
     head -n 1 "$errfile" | tr -d '"\\' | cut -c1-160
 }
 
-while read -r node repo services; do
+# `|| [ -n "$node" ]`: `read` fails on a last line with no newline, and that
+# node would silently drop out of a fleet reported healthy.
+while read -r node repo services || [ -n "$node" ]; do
     case "$node" in '' | \#*) continue ;; esac
     nodes=$((nodes + 1))
     readable=0
