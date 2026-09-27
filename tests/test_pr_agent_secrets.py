@@ -109,13 +109,11 @@ class TestPrAgentSecretMapping:
 class TestApplySecretsRefusesAPartialRender:
     """AC6's other half: `apply-secrets` fails closed when any key is missing."""
 
-    def test_a_missing_required_key_refuses_without_calling_kubectl(self, mocker) -> None:
+    @pytest.mark.parametrize("missing", sorted(PR_AGENT_MAPPING.keys.values()))
+    def test_any_one_missing_key_refuses_without_calling_kubectl(self, mocker, missing: str) -> None:
+        # Each of the three, not just one: AC6 says apply fails closed when ANY is absent.
         run = mocker.patch("toolkit.features.k8s_secrets.subprocess.run")
-        env_vars = {
-            "APPS_SERVICES_AUTOMATION_PR_AGENT_NAN_API_KEY": "x",
-            "APPS_SERVICES_AUTOMATION_PR_AGENT_WEBHOOK_SECRET": "y",
-            # GITEA__PERSONAL_ACCESS_TOKEN's source is absent.
-        }
+        env_vars = {source: "x" for source in PR_AGENT_MAPPING.keys.values() if source != missing}
 
         ok = ks._apply_single_secret(PR_AGENT_MAPPING, env_vars, {}, dry_run=False, env="prod")
 

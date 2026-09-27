@@ -115,6 +115,19 @@ class TestDeployment:
             assert "httpGet" not in probe, f"{probe_name} uses httpGet, but GET / returns 404"
             assert "tcpSocket" in probe, f"{probe_name} must be a tcpSocket probe"
 
+    def test_memory_and_cpu_are_bounded(self) -> None:
+        """Presence, not values: the values come from a measurement the burst test
+
+        will revisit (verification.md, Image runtime). Without a memory limit a
+        leaking review can take the node; without a CPU limit gunicorn sizes its
+        workers from the host's cores.
+        """
+        container = _container(_one(_prod_docs(), "Deployment", "pr-agent"), "pr-agent")
+        resources = container.get("resources", {})
+        for bound in ("limits", "requests"):
+            for resource in ("memory", "cpu"):
+                assert resources.get(bound, {}).get(resource), f"resources.{bound}.{resource} is not set"
+
     def test_hardened_security_context(self) -> None:
         """Measured 2026-09-27 (verification.md): non-root + read-only rootfs
 
