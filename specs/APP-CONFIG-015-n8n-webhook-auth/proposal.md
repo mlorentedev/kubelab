@@ -23,7 +23,7 @@ The `n8n.kubelab.live/webhook/*` routes have no Authelia in front of them, so ea
 - `multi-forge-sync` and `slack-task-capture` compute their HMAC over the exact bytes the sender signed, read from the webhook's binary property, and reject any request whose signature does not match.
 - The four IF v2 gates (`Has Task Key & Valid Sig?`, `Found Matched Task in Vikunja?`, `Is Slack Valid?`, `Is Delegable?`) evaluate their condition instead of passing every item. They are migrated to the v2 filter shape (`combinator` plus a `conditions` list), not pinned back to `typeVersion: 1`, so no node is held on a legacy version n8n can retire (operator's decision, 2026-09-26).
 - A signed `opened` issue event from the forge creates the Vikunja task it names; an unsigned or wrongly signed request stops at the gate, with nothing written to Vikunja and no notification sent.
-- A test fails on any `if`/`switch`/`filter` node at `typeVersion >= 2` whose parameters are not the v2 filter shape, and the Code-node tests are fed the item shape Webhook v2 really produces.
+- A test fails on any `if`/`filter` node at `typeVersion >= 2` whose parameters are not the v2 filter shape (a Switch v3 keeps its conditions under `rules.values[]`, and the repo has none), and the Code-node tests are fed the item shape Webhook v2 really produces.
 
 ## Out of scope
 
@@ -43,7 +43,7 @@ The `n8n.kubelab.live/webhook/*` routes have no Authelia in front of them, so ea
 
 - [ ] AC1: a correctly signed forge `opened` event, fed to `Parse Forge Event` in the Webhook v2 item shape, gives `isValidSig: true` and `isCreateCandidate: true`, and the same event with a wrong or missing signature gives `isValidSig: false`. Tested in CI.
 - [ ] AC2: the same holds for `slack-task-capture`'s signature node with a Slack-signed body, including a stale timestamp being rejected. Tested in CI.
-- [ ] AC3: no `if`/`switch`/`filter` node at `typeVersion >= 2` in `infra/n8n/workflows/` lacks the v2 filter shape; the guard test goes red when one of the four original gates is restored (proven by mutation).
+- [ ] AC3: no `if`/`filter` node at `typeVersion >= 2` in `infra/n8n/workflows/` lacks the v2 filter shape; the guard test goes red when one of the four original gates is restored (proven by mutation).
 - [ ] AC4, staging then prod: re-delivering `teledyne/openkm-brain#2` creates its task, read back from the Vikunja API.
 - [ ] AC5, staging then prod: an unsigned POST to each public webhook stops at its gate, shown in the execution data, with no Vikunja write and no Apprise call.
 

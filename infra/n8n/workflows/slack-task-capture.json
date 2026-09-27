@@ -53,13 +53,26 @@
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.isValidSlack }}",
-              "value2": true
+              "id": "e59c157e-372a-5001-b251-3f372f164c8b",
+              "leftValue": "={{ $json.isValidSlack }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "c3000000-0000-4000-8000-000000000007",
       "name": "Is Slack Valid?",

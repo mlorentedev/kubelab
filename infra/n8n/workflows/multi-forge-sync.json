@@ -45,13 +45,26 @@
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.hasTask }}",
-              "value2": true
+              "id": "044ed612-65c4-5f5d-adae-a50e8661ad8c",
+              "leftValue": "={{ $json.hasTask }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000003",
       "name": "Has Task Key & Valid Sig?",
@@ -104,13 +117,26 @@
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.hasMatchedTask }}",
-              "value2": true
+              "id": "d4a25438-4ee7-5069-b5c7-c999fbc2061f",
+              "leftValue": "={{ $json.hasMatchedTask }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000010",
       "name": "Found Matched Task in Vikunja?",

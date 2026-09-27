@@ -15,7 +15,7 @@
   },
   {
     "id": "APP-CONFIG-015-n8n-webhook-auth-f3",
-    "behavior": "AC3: no if/switch/filter node at typeVersion >= 2 lacks the v2 filter shape",
+    "behavior": "AC3: no if/filter node at typeVersion >= 2 lacks the v2 filter shape",
     "verification": "poetry run pytest tests/test_n8n_filter_nodes_v2_shape.py -q",
     "state": "pending",
     "evidence": ""
