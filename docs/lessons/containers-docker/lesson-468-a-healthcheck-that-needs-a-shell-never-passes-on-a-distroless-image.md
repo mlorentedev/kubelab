@@ -34,4 +34,4 @@ tools. A check that can never pass is worse than no check: it measures nothing
 and blocks everything ordered after it. Recreate a long-lived dev container after
 a pin change, or it keeps testing the old image.
 
-**Tags**: `#healthcheck` `#distroless` `#compose` `#pr-1849`
+**Tags**: `#healthcheck` `#distroless` `#compose` `#pr-1850`
