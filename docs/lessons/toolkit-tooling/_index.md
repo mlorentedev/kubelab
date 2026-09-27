@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-38 lessons, newest first. Back to [all categories](../_index.md).
+39 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 469 | [A default argument binds at import, so monkeypatching the module constant misses it](lesson-469-a-default-argument-binds-at-import-so-monkeypatch-misses-it.md) | 2026-09-27 |
 | 450 | [A key appended by ruamel renders below the next block's comment](lesson-450-a-key-appended-by-ruamel-renders-below-the-next-blocks-comment.md) | 2026-09-04 |
 | 448 | [A rebuild recipe is not an inventory of what is running](lesson-448-a-rebuild-recipe-is-not-an-inventory-of-what-is-running.md) | 2026-08-25 |
 | 435 | [A stub's canned answer decides which of your assertions can fail](lesson-435-a-stubs-canned-answer-decides-which-assertions-can-fail.md) | 2026-09-05 |
