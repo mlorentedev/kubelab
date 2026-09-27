@@ -1789,11 +1789,12 @@ apps:
           - admins
           - users
         - identity: operator
-          displayname: Administrator
+          displayname: Operator
             # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
           disabled: false
+          # `users` only: a role account holds no administrative power (ADR-062 D1).
+          # Admin work is done as the superadmin, whose actions carry a name.
           groups:
-          - admins
           - users
         # A fixture, not a person. It sits in its own group so that no app
         # granting access by group admits it: prod e2e logs in with it.
