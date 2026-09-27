@@ -42,6 +42,12 @@
     "environments": ["prod"]
   },
   {
+    "name": "pr-agent",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
+  },
+  {
     "name": "traefik",
     "zone": "kubelab",
     "proxied": false,

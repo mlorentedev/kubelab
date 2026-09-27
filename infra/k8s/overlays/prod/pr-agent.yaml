@@ -1,0 +1,166 @@
+---
+# PR-Agent (TOOL-080, #1823) — the forge's read-only PR reviewer, run as a Gitea
+# webhook server. Prod overlay only, deliberately: the forge is singleton and
+# the reviewer identity/webhook exist once, not per environment (proposal,
+# "Out of scope: Staging").
+#
+# The image tag is the SSOT's `apps.services.automation.pr_agent.image`
+# (common.yaml), mirrored here by `make sync-k8s-images` via this overlay's own
+# `images:` override — a transformer declared in base never reaches a manifest
+# added directly in this overlay.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pr-agent
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pr-agent
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pr-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pr-agent
+        app.kubernetes.io/component: automation
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: pr-agent
+          image: pragent/pr-agent:0.45.0-gitea_app
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: pr-agent-config
+          env:
+            # Measured 2026-09-27 (verification.md): with a read-only rootfs,
+            # importing azure.devops crashes on uid 65534's default $HOME
+            # (`/nonexistent`, not writable) — `OSError: [Errno 30] Read-only
+            # file system`. HOME=/tmp (a writable emptyDir, below) fixes it;
+            # gunicorn's master + 4 workers then start cleanly.
+            - name: HOME
+              value: /tmp
+            - name: OPENAI__KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pr-agent-secrets
+                  key: OPENAI__KEY
+            - name: GITEA__WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pr-agent-secrets
+                  key: GITEA__WEBHOOK_SECRET
+            - name: GITEA__PERSONAL_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pr-agent-secrets
+                  key: GITEA__PERSONAL_ACCESS_TOKEN
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          # `GET /` returns 404 (verification.md) — an HTTP probe on it would
+          # CrashLoop a healthy pod. A TCP probe on the gunicorn/Uvicorn port is
+          # the same shape n8n's `/healthz` gives for free and this image does not.
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            # The CPU limit governs gunicorn's worker count (2-4, scaling with
+            # the cgroup CPU quota — verification.md, pre-spec measurement). 1.0
+            # is a starting point, not a measured ceiling: revisit after the
+            # burst measurement in the live rollout (tasks.md, PR 4 "Measure a
+            # burst").
+            limits:
+              memory: 512Mi
+              cpu: "1.0"
+            requests:
+              memory: 128Mi
+              cpu: "0.1"
+      volumes:
+        # Read-only rootfs (above) needs a writable /tmp, and HOME=/tmp points
+        # there — see the env var's comment for what breaks without it.
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pr-agent
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pr-agent
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pr-agent
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pr-agent
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pr-agent
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # Path-scoped to the one endpoint the Gitea provider serves
+    # (pr_agent/servers/gitea_app.py). No `authelia`: the HMAC signature Gitea
+    # sends (`X-Gitea-Signature`, checked against
+    # apps.services.automation.pr_agent.webhook_secret) is the authentication,
+    # the same posture as n8n's `/webhook/` route.
+    - match: Host(`pr-agent.kubelab.live`) && Path(`/api/v1/gitea_webhooks`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: pr-agent
+          port: 3000
+  tls:
+    certResolver: letsencrypt
