@@ -131,7 +131,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-055-r2-watcher-probe/` -> `specs/archive/BACKUP-055-r2-watcher-probe/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] (✓ 2026-09-27) `proposal.md` frontmatter set to `status: archived`
+- [x] (✓ 2026-09-27) Folder moved: `specs/BACKUP-055-r2-watcher-probe/` -> `specs/archive/BACKUP-055-r2-watcher-probe/`
+- [x] (✓ 2026-09-27, `Closes #1572` in the archive PR) Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
+- [x] (✓ 2026-09-27; lessons 465, 466, 469 are in `docs/lessons/`) Promotions above executed (if any)
