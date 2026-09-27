@@ -1481,12 +1481,13 @@ def test_the_declared_webhooks_list_puts_n8n_first_and_pinned_to_prod() -> None:
 
 
 def test_the_declared_webhooks_list_also_carries_the_pr_agent_hook() -> None:
-    """The second entry: `active: false` until the server exists (PR 4), held to
-    equality rather than the floor, per the proposal's "Webhook" section.
+    """The second entry: active now that the server answers (#1856, verified by
+    effect 2026-09-27), held to equality rather than the floor, per the
+    proposal's "Webhook" section.
     """
     pr_agent = DECLARED_WEBHOOKS[1]
     assert pr_agent.spec.url == "https://pr-agent.kubelab.live/api/v1/gitea_webhooks"
-    assert pr_agent.spec.active is False
+    assert pr_agent.spec.active is True
     assert set(pr_agent.spec.events) == {"pull_request_only", "pull_request_sync"}
     assert pr_agent.event_comparison == "equality"
 
