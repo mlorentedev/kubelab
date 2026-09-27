@@ -354,30 +354,43 @@ def oidc(
             raise typer.Exit(result)
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _sync_r2_watcher_targets(check: bool) -> bool:
+    """Render (or, with check, compare) the watcher's targets; True when current or written."""
+    import yaml
+
+    from toolkit.features.backup_destination import (
+        WATCHER_TARGETS_PATH,
+        render_watcher_targets,
+        write_watcher_targets,
+    )
+
+    root = _repo_root()
+    # common.yaml only: `backup.sources` and the node hostnames are not per-env,
+    # and the file lives in base/, so both clusters read the same render.
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    if check:
+        current = root / WATCHER_TARGETS_PATH
+        if not current.exists() or current.read_text() != render_watcher_targets(config):
+            logger.error(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} is stale; run `make sync-r2-watcher-targets`")
+            return False
+        logger.success(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} is current")
+        return True
+    changed = write_watcher_targets(root, config)
+    logger.success(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} {'written' if changed else 'unchanged'}")
+    return True
+
+
 @app.command("r2-watcher-targets")
 def r2_watcher_targets(
     check: Annotated[bool, typer.Option("--check", help="Fail if the committed file is stale")] = False,
 ) -> None:
     """Render the R2 watcher's per-node targets from backup.sources (BACKUP-055)."""
-    import yaml
-
-    from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, write_watcher_targets
-
-    root = Path(__file__).resolve().parents[2]
-    # common.yaml only: `backup.sources` and the node hostnames are not per-env,
-    # and the file lives in base/, so both clusters read the same render.
-    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
-    if check:
-        from toolkit.features.backup_destination import render_watcher_targets
-
-        current = root / WATCHER_TARGETS_PATH
-        if not current.exists() or current.read_text() != render_watcher_targets(config):
-            logger.error(f"{WATCHER_TARGETS_PATH} is stale; run `make sync-r2-watcher-targets`")
-            raise typer.Exit(1)
-        logger.success(f"{WATCHER_TARGETS_PATH} is current")
-        return
-    changed = write_watcher_targets(root, config)
-    logger.success(f"{WATCHER_TARGETS_PATH} {'written' if changed else 'unchanged'}")
+    if not _sync_r2_watcher_targets(check=check):
+        raise typer.Exit(1)
 
 
 @app.command("vikunja")
@@ -423,7 +436,7 @@ def sync_all(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment for OIDC sync")] = "staging",
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
 ) -> None:
-    """Run all sync operations (homepage + images + oidc)."""
+    """Run all sync operations (homepage, images, oidc, branding, platform-json, r2-watcher-targets)."""
     failures: list[str] = []
 
     logger.section("Sync All" + (" — check mode" if check else ""))
@@ -515,6 +528,14 @@ def sync_all(
     except Exception as e:
         logger.error(f"platform-json sync crashed: {e}")
         failures.append("platform-json")
+
+    # 6. R2 watcher targets (BACKUP-055)
+    try:
+        if not _sync_r2_watcher_targets(check=check):
+            failures.append("r2-watcher-targets")
+    except Exception as e:
+        logger.error(f"r2-watcher-targets sync crashed: {e}")
+        failures.append("r2-watcher-targets")
 
     if failures:
         logger.error(f"Sync failures: {', '.join(failures)}")

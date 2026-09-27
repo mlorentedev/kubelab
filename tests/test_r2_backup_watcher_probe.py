@@ -39,7 +39,10 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #   <repo>.hang   sleep far past any timeout
 #   <repo>.snaps  what `snapshots --json` prints (default: one snapshot)
 #   <repo>.ls     what `ls latest <dir>` prints
+# Any call without --no-lock is refused the way the read-only token refuses it
+# (PutObject AccessDenied on the lock) and logged as `locked <repo>`.
 FAKE_RESTIC = r"""#!/bin/sh
+ORIG_ARGS="$*"
 repo=""; cmd=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,6 +53,11 @@ while [ $# -gt 0 ]; do
 done
 name="${repo##*/}"
 echo "$cmd $name" >> "$FAKE_DIR/calls"
+case " $ORIG_ARGS " in
+  *" --no-lock "*) ;;
+  *) echo "locked $name" >> "$FAKE_DIR/calls"
+     echo "unable to create lock in backend: client.PutObject: Access Denied" >&2; exit 1 ;;
+esac
 [ -f "$FAKE_DIR/$name.fail" ] && { cat "$FAKE_DIR/$name.fail" >&2; exit 1; }
 [ -f "$FAKE_DIR/$name.crash" ] && exit 137
 [ -f "$FAKE_DIR/$name.hang" ] && exec sleep 30
@@ -144,12 +152,18 @@ def test_the_probe_lists_one_directory_not_the_whole_tree(fleet) -> None:
 
 
 def test_the_probe_never_takes_a_lock(fleet) -> None:
-    # The token is read-only; a locking command fails with PutObject AccessDenied.
-    text = PROBE.read_text()
-    assert "--no-lock" in text
-    for line in text.splitlines():
-        if line.strip().startswith("timeout") and "restic" in line:
-            assert "--no-lock" in line or "$RESTIC_ARGS" in line or '"$@"' in line, line
+    """The token is read-only, so every restic call must skip the lock.
+
+    Judged by the calls the probe makes, not by grepping it: a direct `restic`
+    call added outside `restic_read`, even one whose failure is swallowed, shows
+    up here as `locked <repo>`.
+    """
+    fake, _, env = fleet
+    rc, _, (summary,) = _run(env)
+    calls = (fake / "calls").read_text().splitlines()
+    assert calls, "the probe made no restic call at all"
+    assert not [c for c in calls if c.startswith("locked ")], calls
+    assert rc == 0 and summary["healthy"] == 1
 
 
 @pytest.mark.parametrize(
@@ -217,6 +231,21 @@ def test_missing_targets_still_report_unhealthy(fleet) -> None:
     _, targets, env = fleet
     targets.unlink()
     rc, _, (summary,) = _run(env)
+    assert rc != 0 and summary["healthy"] == 0
+
+
+def test_a_last_target_without_a_newline_is_still_probed(fleet) -> None:
+    """`read` returns non-zero on a final line with no newline; that node must not vanish.
+
+    Dropping it would print a healthy fleet with one node fewer and rc=0, a false
+    green nothing in the output would reveal.
+    """
+    fake, targets, env = fleet
+    targets.write_text(targets.read_text().rstrip("\n"))
+    (fake / "kubelab-vps.fail").write_text("Fatal: repository does not exist\n")
+    rc, nodes, (summary,) = _run(env)
+    assert {n["node"] for n in nodes} == {"rpi3", "vps"}
+    assert summary["nodes"] == 2
     assert rc != 0 and summary["healthy"] == 0
 
 

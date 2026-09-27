@@ -290,3 +290,37 @@ class TestRunWithCheck:
             return 0
 
         assert _run_with_check([f1, f2], sync_fn, "test") is False
+
+
+class TestSyncAllCoversR2WatcherTargets:
+    """`sync all --check` is what `deploy-k8s` and CI run; a stale watcher render must fail it."""
+
+    def _invoke(self, targets_ok: bool, mocker):
+        mocker.patch("toolkit.cli.sync._run_with_check", return_value=True)
+        mocker.patch("toolkit.cli.sync._sops_available", return_value=False)
+        helper = mocker.patch("toolkit.cli.sync._sync_r2_watcher_targets", return_value=targets_ok)
+        return runner.invoke(app, ["sync", "all", "--check"]), helper
+
+    def test_a_stale_render_fails_sync_all(self, mocker) -> None:
+        result, helper = self._invoke(False, mocker)
+        helper.assert_called_once_with(check=True)
+        assert result.exit_code == 1
+        assert "r2-watcher-targets" in result.output
+
+    def test_a_current_render_passes_sync_all(self, mocker) -> None:
+        result, helper = self._invoke(True, mocker)
+        helper.assert_called_once_with(check=True)
+        assert result.exit_code == 0
+
+    def test_the_helper_reports_a_stale_file(self, tmp_path: Path, mocker) -> None:
+        from toolkit.cli.sync import _sync_r2_watcher_targets
+        from toolkit.features.backup_destination import WATCHER_TARGETS_PATH
+
+        repo = Path(__file__).resolve().parent.parent
+        (tmp_path / "infra/config/values").mkdir(parents=True)
+        (tmp_path / "infra/config/values/common.yaml").write_text((repo / "infra/config/values/common.yaml").read_text())
+        mocker.patch("toolkit.cli.sync._repo_root", return_value=tmp_path)
+        assert _sync_r2_watcher_targets(check=True) is False
+        assert _sync_r2_watcher_targets(check=False) is True
+        assert (tmp_path / WATCHER_TARGETS_PATH).exists()
+        assert _sync_r2_watcher_targets(check=True) is True
