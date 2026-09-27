@@ -83,11 +83,18 @@ Coordinated with both kubelab lanes (`kubelab-7d`, `kubelab-vikunja-migration-wt
 - The lines reached staging Loki, except the fake-source Job's: the CronJob controller adopts Jobs created `--from` it, and with 4 failed at once `failedJobsHistoryLimit: 3` deleted the oldest Job and its pod within about a minute, before Vector read the file. An artifact of four concurrent failures; a real failed run is kept.
 - **Rule**: `obs015-r2-backup-health` FIRING in staging at 00:50Z (the last bad line at 00:29:34Z; `interval: 10m` plus `for: 10m`), with the new summary and runbook link. After the mutation Jobs were deleted and one healthy Job ran (00:58Z, fleet `healthy:1`), the rule was no longer firing at 01:07:51Z.
 
+### Task 11: prod (2026-09-27, after #1851 merged as `871ffce2`)
+
+- Argo CD synced the merge: the live CronJob carries `restic/restic:0.19.1` and `activeDeadlineSeconds: 600`.
+- `make apply-secrets ENV=prod` (operator): `r2-backup-watcher-secrets` `created`, the other 11 `unchanged`, nothing restarted.
+- One Job (`r2bw-t11-prod`), 01:37:50Z → 01:38:25Z: 4 × `r2_backup_node` `healthy:1` with `sentinel:1` and `missing:[]`, fleet `nodes:4 unhealthy:0 healthy:1`. All five lines in prod Loki (`toolkit obs logs --env prod`), and `make alerts ENV=prod` shows nothing firing.
+- Review coverage of #1851: PR-Agent only. CodeRabbit was rate-limited on every head and Codex had no quota.
+
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test` → 2823 passed, 15 skipped, 1 xfailed (the OPS-023 AC5 guard), rc=0, on the rebased #1851 head.
+- Manual smoke test: tasks 10 and 11 above.
+- No regressions in existing test suite: yes.
 
 ## Decisions made during implementation
 
