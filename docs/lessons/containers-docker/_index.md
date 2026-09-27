@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-14 lessons, newest first. Back to [all categories](../_index.md).
+15 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 468 | [A healthcheck that needs a shell never passes on a distroless image, and blocks whatever waits on it](lesson-468-a-healthcheck-that-needs-a-shell-never-passes-on-a-distroless-image.md) | 2026-09-26 |
 | 396 | [Replacing a bind-mounted file does not replace what the container runs](lesson-396-replacing-a-bind-mounted-file-does-not-replace-what-the-container-runs.md) | 2026-08-26 |
 | 308 | [Containers keep running with no published ports, and every restart reports success](lesson-308-containers-keep-running-with-no-published-por.md) | 2026-08-10 |
 | 290 | [A base-image CVE fixed upstream doesn't need a new base image tag — `apk upgrade` at build time gets it sooner](lesson-290-a-base-image-cve-fixed-upstream-doesn-t-need-.md) | 2026-07-08 |
