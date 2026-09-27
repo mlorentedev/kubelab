@@ -618,6 +618,10 @@ argocd:
   # latest would perform the upgrade while claiming to prevent it. Moving to 10.x
   # is a deliberate change with its own release notes to read (#1209).
   chart_version: "9.5.13"
+  # The Argo CD release that chart ships (its `appVersion`), which the hub runs.
+  # Not a second pin: it is fixed by `chart_version`, and must move with it. Read by
+  # the RBAC test, which asks this image's own evaluator whether each tier may act.
+  app_version: "v3.4.1"
   # Pinned for the same reason one layer down: the GCP hub installs its own helm
   # at boot, and an unattended recreate must not pick up whatever is current.
   helm_version: "v3.18.4"

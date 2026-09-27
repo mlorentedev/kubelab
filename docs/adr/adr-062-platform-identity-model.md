@@ -56,6 +56,7 @@ The identities' names are agreed with the operator before minting, per D3.
 - **Expiry.** The reviewer keeps the bot's `Expiry.NEVER` rather than the pusher's declared date. Its compromise is bounded by read access to code, not by organization ownership.
 
 **Amended, not superseded.** D1's four classes, D2's two groups and D3's identity map stand. The machine class gains a precise reading of "login prohibited" and two bounded exceptions, each with its own row in `apps.auth.identities`.
+**Amended 2026-09-26 ([#1862](https://github.com/mlorentedev/kubelab/issues/1862), AUTH-011):** D2's `users` group maps to an operating tier rather than to the read-only floor. See [the amendment under D2](#amendment-2026-09-26-users-operate).
 **Amended 2026-09-24 ([#951](https://github.com/mlorentedev/kubelab/issues/951)):** D4 does not hold for Grafana, which gets a separate local break-glass account. See [the amendment under D4](#amendment-2026-09-24-grafana-gets-a-second-account).
 
 ## Date
@@ -98,6 +99,22 @@ A named human account is personal and carries accountability: actions attributab
 ### D2 — Groups are the privilege boundary; two of them
 
 `admins` and `users`, the two that already exist. No third group is introduced until a concrete permission need appears that neither expresses. The existing tiers already fit the intended profiles: Argo CD gives non-`admins` `role:readonly`, and a normal Gitea user can own repositories and push — which is exactly the day-to-day profile `operator` needs.
+
+#### Amendment 2026-09-26: `users` operate
+
+**The trigger clause fired.** AUTH-004 AC2 took `operator` out of `admins` in prod on 2026-09-26 (#1853). After that it could look but not act: Argo CD gave it `role:readonly` and Grafana gave it Viewer, the same tier as the `e2e` fixture. The profile D1 describes for the role account is an engineer who operates the platform without administering it, and "operate" includes a Sync. Nothing in the old mapping expressed that.
+
+**Still two groups.** The group set does not change; what changes is what `users` maps to:
+
+| | `admins` | `users` | any other group |
+|---|---|---|---|
+| Argo CD | `role:admin` | `role:operator`: `role:readonly` plus `sync` and `action/*` on applications | `role:readonly` (`policy.default`) |
+| Grafana | Admin | Editor | Viewer |
+| Gitea | admin | user | user |
+
+`role:operator` cannot create, update or delete an application, `exec` into a pod, or touch repositories, clusters, projects or accounts. Argo CD's own evaluator checks each of those against the shipped policy, with the pinned image (`tests/test_access_review.py`). Gitea has no middle tier and needs none: a normal user already owns repositories and pushes.
+
+**Enforced like the rest of D5.** `make auth-review` declares three tiers (admin, operator, viewer) and maps them per app, so a `users` account that is still Viewer in Grafana reports `drift`.
 
 ### D3 — The identity SSOT is a map, and user entries reference it by key
 

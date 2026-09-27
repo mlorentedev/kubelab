@@ -14,7 +14,10 @@ And the reconciliation that makes a demotion take effect in a session already op
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -23,11 +26,15 @@ import pytest
 import yaml
 
 from toolkit.features.access_review import (
+    ADMIN,
     ADMIN_GROUP,
+    OPERATOR,
+    OPERATOR_GROUP,
+    VIEWER,
     Account,
     GiteaTiers,
     GrafanaTiers,
-    declared_admins,
+    declared_tiers,
     reconcile,
     review,
 )
@@ -40,10 +47,12 @@ COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
 
 
 def test_the_declared_tiers_come_from_the_groups() -> None:
-    tiers = declared_admins(COMMON)
-    assert tiers["manu"] is True, "the superadmin is in admins"
-    assert tiers["testuser"] is False, "the e2e fixture is never an admin"
-    assert tiers[COMMON["apps"]["auth"]["identities"]["machine"]] is False, "the machine identity is never an admin"
+    """ADR-062 D2 (amended by AUTH-011): `admins` administer, `users` operate, anyone
+    else only reads."""
+    tiers = declared_tiers(COMMON)
+    assert tiers["manu"] == ADMIN, "the superadmin is in admins"
+    assert tiers["testuser"] == VIEWER, "the e2e fixture is in neither group"
+    assert tiers[COMMON["apps"]["auth"]["identities"]["machine"]] == VIEWER, "the machine identity only reads"
 
 
 def test_every_declared_identity_is_judged_and_the_machine_ones_are_never_admins() -> None:
@@ -54,23 +63,23 @@ def test_every_declared_identity_is_judged_and_the_machine_ones_are_never_admins
     """
     from toolkit.features.configuration import resolve_user_identity
 
-    tiers = declared_admins(COMMON)
+    tiers = declared_tiers(COMMON)
     users = COMMON["apps"]["services"]["security"]["authelia"]["users"]
     humans = {resolve_user_identity(u, COMMON) for u in users}
     for role, name in COMMON["apps"]["auth"]["identities"].items():
         assert name in tiers, f"identity {role}={name} is not declared to the review"
         if name not in humans:
-            assert tiers[name] is False, f"{role}={name} is no Authelia user, so it is never an admin"
+            assert tiers[name] == VIEWER, f"{role}={name} is no Authelia user, so it holds no tier above reading"
 
 
-def test_the_role_account_is_never_an_admin() -> None:
+def test_the_role_account_operates_and_never_administers() -> None:
     """ADR-062 D1: a role account is impersonal, so it holds no administrative power.
 
     `operator` sat in `admins` until AUTH-004 AC2 step 2, which made the tier
-    enforced first and then took it out. This keeps it out.
+    enforced first and then took it out. AUTH-011 gave it the operating tier.
     """
     operator = COMMON["apps"]["auth"]["identities"]["operator"]
-    assert declared_admins(COMMON)[operator] is False, f"the role account {operator!r} is in {ADMIN_GROUP!r}"
+    assert declared_tiers(COMMON)[operator] == OPERATOR, f"the role account {operator!r} must be in {OPERATOR_GROUP!r} only"
 
 
 def test_every_app_spells_the_admin_group_the_same_way() -> None:
@@ -79,7 +88,9 @@ def test_every_app_spells_the_admin_group_the_same_way() -> None:
     argocd = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]["policy.csv"]
     gitea = (REPO / "infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh").read_text()
     assert f"'{ADMIN_GROUP}'" in grafana
+    assert f"'{OPERATOR_GROUP}'" in grafana
     assert re.search(rf"^\s*g,\s*{ADMIN_GROUP},\s*role:admin\s*$", argocd, re.M)
+    assert re.search(rf"^\s*g,\s*{OPERATOR_GROUP},\s*role:operator\s*$", argocd, re.M)
     assert f'OIDC_ADMIN_GROUP="{ADMIN_GROUP}"' in gitea
 
 
@@ -131,8 +142,29 @@ def test_the_role_path_defers_to_userinfo_when_the_id_token_has_no_groups(where:
     """
     id_token = {"sub": "x", "email": "a@b"}
     assert _grafana_role(expr, id_token) == "", f"{where}: the ID token must not decide the role"
-    assert _grafana_role(expr, {"groups": [ADMIN_GROUP, "users"]}) == "Admin", where
-    assert _grafana_role(expr, {"groups": ["users"]}) == "Viewer", where
+    assert _grafana_role(expr, {"groups": []}) == "", f"{where}: an empty list must not decide the role either"
+
+
+@pytest.mark.parametrize(("where", "expr"), _role_paths())
+@pytest.mark.parametrize(
+    ("groups", "role"),
+    [([ADMIN_GROUP, OPERATOR_GROUP], "Admin"), ([OPERATOR_GROUP], "Editor"), (["e2e"], "Viewer")],
+)
+def test_the_role_path_maps_each_tier(where: str, expr: str, groups: list[str], role: str) -> None:
+    """AUTH-011: `users` operate, so they edit dashboards; `admins` wins over `users`."""
+    assert _grafana_role(expr, {"groups": groups}) == role, where
+
+
+@pytest.mark.parametrize(
+    ("tiers", "expected"),
+    [
+        (GiteaTiers, {ADMIN: "admin", OPERATOR: "user", VIEWER: "user"}),
+        (GrafanaTiers, {ADMIN: "Admin", OPERATOR: "Editor", VIEWER: "Viewer"}),
+    ],
+)
+def test_each_app_maps_every_declared_tier(tiers: Any, expected: dict[str, str]) -> None:
+    """Gitea has no tier between admin and user: a normal user already owns and pushes."""
+    assert tiers.tier_map == expected
 
 
 def test_argo_cd_reads_groups_from_userinfo() -> None:
@@ -157,7 +189,7 @@ class FakeApp:
     def __init__(self, tiers: Any, accounts: list[Account], accept: bool = True, answer: bool = True) -> None:
         self.tiers, self.accounts, self.accept, self.answer = tiers, {a.user: a for a in accounts}, accept, answer
         self.edits: list[tuple[str, str]] = []
-        self.admin_tier, self.user_tier = tiers.admin_tier, tiers.user_tier
+        self.tier_map = tiers.tier_map
         self.settles_on_next_login = getattr(tiers, "settles_on_next_login", False)
 
     def read(self, base_url: str, auth: str) -> list[Account]:
@@ -170,7 +202,7 @@ class FakeApp:
         return self.answer  # a 200 unless told otherwise: the read-back is what decides
 
 
-DECLARED = {"manu": True, "operator": False, "hefesto": False}
+DECLARED = {"manu": ADMIN, "operator": OPERATOR, "hefesto": VIEWER}
 
 
 def test_review_judges_each_account() -> None:
@@ -251,7 +283,7 @@ def test_the_break_glass_account_is_never_edited() -> None:
     """A declaration that dropped the superadmin from `admins` must not have the review
     demote the only credential that can repair it."""
     app = FakeApp(GiteaTiers, [Account("manu", "admin"), Account("operator", "admin")])
-    findings = {f.user: f for f in reconcile("gitea", {"manu": False, "operator": False}, app, "u", "a", True, "manu")}
+    findings = {f.user: f for f in reconcile("gitea", {"manu": VIEWER, "operator": VIEWER}, app, "u", "a", True, "manu")}
     assert findings["manu"].status == "refused"
     assert ("manu", "user") not in app.edits
     assert findings["operator"].status == "fixed"
@@ -340,7 +372,7 @@ def test_grafana_reports_how_each_account_signs_in() -> None:
         {"login": "seeded", "role": "Viewer", "userId": 9, "authLabels": []},
     ]
     accounts = {a.user: a for a in GrafanaTiers(Recorder((200, users))).read("http://gr", "a:b")}
-    declared = {"testuser": False, "operator": True}
+    declared = {"testuser": VIEWER, "operator": ADMIN}
     findings = {f.user: f for f in review("grafana", declared, list(accounts.values()), GrafanaTiers)}
 
     assert findings["testuser"].detail == "sign-in: Auth Proxy"
@@ -348,3 +380,75 @@ def test_grafana_reports_how_each_account_signs_in() -> None:
     assert findings["breakglass"].detail == "sign-in: Auth Proxy"
     assert findings["seeded"].detail == "sign-in: local", "a row with no link at all"
     assert findings["testuser"].status == "ok", "the link is information, never a verdict"
+
+
+# --------------------------------------------------------------------------- Argo CD RBAC, by Argo CD itself
+
+
+#: (subject, action, resource, object, allowed). Asked of Argo CD's own evaluator, so
+#: the policy is judged the way the hub judges it, not by reading the CSV.
+ARGO_CD_CASES = [
+    (ADMIN_GROUP, "delete", "applications", "*/*", True),
+    (ADMIN_GROUP, "update", "repositories", "*", True),
+    (OPERATOR_GROUP, "get", "applications", "*/*", True),
+    (OPERATOR_GROUP, "sync", "applications", "*/*", True),
+    (OPERATOR_GROUP, "action/apps/Deployment/restart", "applications", "kubelab/prod", True),
+    (OPERATOR_GROUP, "get", "logs", "*/*", True),
+    (OPERATOR_GROUP, "create", "applications", "*/*", False),
+    (OPERATOR_GROUP, "update", "applications", "*/*", False),
+    (OPERATOR_GROUP, "delete", "applications", "*/*", False),
+    (OPERATOR_GROUP, "exec", "exec", "*/*", False),
+    (OPERATOR_GROUP, "update", "repositories", "*", False),
+    (OPERATOR_GROUP, "update", "clusters", "*", False),
+    (OPERATOR_GROUP, "update", "projects", "*", False),
+    (OPERATOR_GROUP, "update", "accounts", "*", False),
+    ("e2e", "get", "applications", "*/*", True),
+    ("e2e", "sync", "applications", "*/*", False),
+]
+
+#: `argocd admin settings rbac can` builds a Kubernetes client before it reads
+#: `--policy-file`, and prompts for a username when the user entry is empty. It never
+#: connects, so a config that points nowhere is enough.
+_OFFLINE_KUBECONFIG = """apiVersion: v1
+kind: Config
+clusters: [{name: none, cluster: {server: "https://127.0.0.1:1"}}]
+users: [{name: none, user: {token: none}}]
+contexts: [{name: none, context: {cluster: none, user: none, namespace: argocd}}]
+current-context: none
+"""
+
+
+def _argocd_image() -> str:
+    """The image the hub runs: the chart's `appVersion`, declared next to its pin."""
+    return f"quay.io/argoproj/argocd:{COMMON['argocd']['app_version']}"
+
+
+@pytest.mark.integration
+def test_argo_cd_rbac_lets_users_operate_and_never_administer(tmp_path: Path) -> None:
+    """AUTH-011 AC1, asked of Argo CD's own evaluator with the pinned image."""
+    if shutil.which("docker") is None:
+        if os.environ.get("CI"):
+            pytest.fail("docker not on PATH in CI: the Argo CD RBAC went untested")
+        pytest.skip("docker not on PATH: cannot run Argo CD (a skip is CANNOT CHECK, not OK)")
+    rbac = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]
+    (tmp_path / "policy.csv").write_text(rbac["policy.csv"])
+    (tmp_path / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
+    # One container for every case: `can` exits 0 for Yes and 1 for No.
+    script = "".join(
+        f"argocd admin settings rbac can '{s}' '{a}' '{r}' '{o}' --policy-file /w/policy.csv"
+        f" --default-role '{rbac['policy.default']}' >/dev/null 2>&1; echo $?\n"
+        for s, a, r, o, _ in ARGO_CD_CASES
+    )
+    out = subprocess.run(
+        # The image runs as uid 999, which cannot enter pytest's 0700 tmp_path.
+        ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
+        + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{tmp_path}:/w:ro"]
+        + [_argocd_image(), "sh", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    codes = out.stdout.split()
+    assert len(codes) == len(ARGO_CD_CASES), out.stdout + out.stderr
+    wrong = [case for case, code in zip(ARGO_CD_CASES, codes, strict=True) if (code == "0") != case[-1]]
+    assert not wrong, f"Argo CD disagrees with the declared tiers on: {wrong}"

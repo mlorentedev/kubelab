@@ -26,7 +26,7 @@ from typing import Any
 import httpx
 import pytest
 
-from toolkit.features.access_review import GrafanaTiers, declared_admins
+from toolkit.features.access_review import GrafanaTiers, declared_tiers
 from toolkit.features.health_check import ServiceHealthConfig
 
 pytestmark = pytest.mark.e2e
@@ -85,6 +85,6 @@ def test_sso_login_gives_the_declared_tier(
 
     orgs = client.get(f"https://{domain}/api/user/orgs")
     assert orgs.status_code == 200, f"/api/user/orgs: {orgs.status_code}"
-    want = GrafanaTiers.admin_tier if declared_admins(e2e_config)[username] else GrafanaTiers.user_tier
+    want = GrafanaTiers.tier_map[declared_tiers(e2e_config)[username]]
     roles = {o["name"]: o["role"] for o in orgs.json()}
     assert set(roles.values()) == {want}, f"{username} is declared {want}; Grafana gave {roles}"

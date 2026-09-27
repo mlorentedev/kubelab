@@ -1,0 +1,37 @@
+[
+  {
+    "id": "AUTH-011-f1",
+    "behavior": "Argo CD's evaluator on the shipped policy: users operate, cannot administer; e2e reads",
+    "verification": "poetry run pytest -q tests/test_access_review.py -k argo_cd_rbac",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AUTH-011-f2",
+    "behavior": "Grafana role path: admins Admin, users Editor, others Viewer, empty groups defer",
+    "verification": "poetry run pytest -q tests/test_access_review.py -k role_path",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AUTH-011-f3",
+    "behavior": "auth-review declares three tiers and maps them per app",
+    "verification": "poetry run pytest -q tests/test_access_review.py -k tier",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AUTH-011-f4",
+    "behavior": "ADR-062 D2 amended",
+    "verification": "grep -q 'role:operator' docs/adr/adr-062-platform-identity-model.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AUTH-011-f5",
+    "behavior": "prod: no tier drift after the deploy",
+    "verification": "make auth-review ENV=prod",
+    "state": "pending",
+    "evidence": ""
+  }
+]
