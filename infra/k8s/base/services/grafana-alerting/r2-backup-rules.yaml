@@ -20,12 +20,12 @@ groups:
         execErrState: Alerting
         annotations:
           summary: >-
-            Either Cloudflare R2 backup integrity verification or fleet snapshot coverage
-            check failed — one or more nodes unprotected, or the destination bucket
-            unreachable — or r2-backup-watcher stopped reporting, since this rule alerts
-            on no data too. Check `kubectl get cronjob r2-backup-watcher -n kubelab` first:
-            an unrun watcher means backup coverage is unknown, not that it is good.
-          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/backup-restore.md
+            The R2 backup watcher reports a node whose repository is unreadable, empty,
+            missing a declared source or missing the capture sentinel, or it stopped
+            reporting, since this rule alerts on no data too. Read the watcher's
+            `r2_backup_node` lines first (`toolkit obs logs`): they name the node and the
+            reason. No lines at all means coverage is unknown, not that it is good.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#r2-backup-alert
         data:
           - refId: A
             relativeTimeRange:
