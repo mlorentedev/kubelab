@@ -1,0 +1,37 @@
+[
+  {
+    "id": "APP-CONFIG-015-n8n-webhook-auth-f1",
+    "behavior": "AC1: Parse Forge Event, fed the Webhook v2 item shape, validates a correctly signed event and rejects a wrong, missing or bodiless one",
+    "verification": "poetry run pytest tests/test_n8n_multi_forge_sync.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-015-n8n-webhook-auth-f2",
+    "behavior": "AC2: the Slack signature node validates a Slack-signed raw body and rejects a stale timestamp",
+    "verification": "poetry run pytest tests/test_n8n_slack_capture.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-015-n8n-webhook-auth-f3",
+    "behavior": "AC3: no if/switch/filter node at typeVersion >= 2 lacks the v2 filter shape",
+    "verification": "poetry run pytest tests/test_n8n_filter_nodes_v2_shape.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-015-n8n-webhook-auth-f4",
+    "behavior": "AC4: a signed forge opened event creates its Vikunja task (staging, then prod)",
+    "verification": "manual: re-deliver the fixture event and read the task from the Vikunja API; evidence in verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-015-n8n-webhook-auth-f5",
+    "behavior": "AC5: an unsigned POST to each public webhook stops at its gate with no Vikunja write or Apprise call",
+    "verification": "manual: unsigned probe per webhook, then read the execution data; evidence in verification.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
