@@ -15,7 +15,7 @@ Implementation merged in #1851 (`871ffce2`); the staging and prod evidence in #1
 - [x] AC4 -> `bc5996dd` / `tests/test_r2_watcher_targets.py`
 - [x] AC5 -> `05034bb5` / `test_the_watcher_reads_with_the_restic_that_writes`
 - [x] AC6 -> `tests/test_alert_runbook_urls.py`
-- Independent review (reviewer subagent, 2026-09-27, at `313538fc`): all six MET, 73 passed, no blocking defect. Its three minor findings: this block, `features.json` and the Closing list were unfilled (fixed here); the shell count below was misstated (fixed here); the fake-source Loki line lost to GC (already recorded in Task 10, now lesson-469).
+- Pre-review by a Claude reviewer subagent (2026-09-27, at `313538fc`; not the archive gate, which only a pool model may sign): all six MET, 73 passed, no blocking defect. Its three minor findings: this block, `features.json` and the Closing list were unfilled (fixed here); the shell count below was misstated (fixed here); the fake-source Loki line lost to GC (already recorded in Task 10, now lesson-469).
 
 ### Task 1: the read-only token, measured 2026-09-26
 
