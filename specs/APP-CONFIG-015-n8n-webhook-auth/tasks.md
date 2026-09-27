@@ -24,13 +24,13 @@ Order: the gate guard first, because it is static and needs no fixture. Then the
 - [x] [P] [AC3] Write the failing guard (`tests/test_n8n_filter_nodes_v2_shape.py`): every `if`/`filter` node at `typeVersion >= 2` in `infra/n8n/workflows/*.json` carries `conditions.combinator` and a `conditions.conditions` list. It must go red on exactly the four gates named in the proposal. Red on exactly those four ✓ 2026-09-26
 - [x] [AC3] Migrate the four gates to the v2 filter shape, each keeping its original condition (the field and a boolean `true` operator). Also assert per gate that the condition still reads the field it read before, so a correct shape that tests the wrong thing is caught. Executed with n8n 2.12.3's own `executeFilter`: each gate is TRUE for `true` and FALSE for `false` and `undefined` ✓ 2026-09-26
 - [x] [AC3] Mutation: commit, restore one original gate, and see the guard go red. Then `git checkout HEAD --` the file. Restoring `Is Slack Valid?` fails 2 tests ✓ 2026-09-26
-- [ ] [P] [AC1] Capture the Webhook v2 item shape from the pinned `n8nio/n8n:2.12.3` into a fixture, with a script (`tests/fixtures/capture-n8n-webhook-item.*`) rather than by hand. A test asserts the fixture records the same n8n tag as `infra/k8s/base/kustomization.yaml`, so a version bump forces a recapture.
-- [ ] [AC1] Rewrite the `Parse Forge Event` tests on that shape. The harness provides `this.helpers.getBinaryDataBuffer` backed by the fixture's bytes, and drops the `$json.rawBody` string that n8n never produces. Covered: signed `opened` gives `isValidSig` and `isCreateCandidate` true; wrong signature, missing signature and missing binary give `isValidSig` false. Red against the current node.
-- [ ] [AC1] Implement: `Parse Forge Event` reads the body with `getBinaryDataBuffer(0, 'data')`, HMACs the Buffer, compares with `timingSafeEqual`, and fails closed with no binary. The `JSON.stringify(body)` fallback is removed.
-- [ ] [P] [AC2] The same for `slack-task-capture`'s signature node: tests on the fixture shape with the Slack basestring `v0:<ts>:<raw bytes>`, plus a stale timestamp rejected. Red first.
-- [ ] [AC2] Implement the Slack node the same way, keeping the timestamp window.
-- [ ] `test_n8n_code_node_runtime_render.py` still passes: no new `$env` or `require` without the environment declaring it.
-- [ ] `make test` green.
+- [x] [P] [AC1] Capture the Webhook v2 item shape from the pinned `n8nio/n8n:2.12.3` into a fixture, with a script (`tests/fixtures/n8n/capture_webhook_item.py`) rather than by hand. A test asserts the fixture records the same n8n tag as `infra/k8s/base/kustomization.yaml`, so a version bump forces a recapture. The capture posts a JSON body and a form body; both arrive only in `binary.data` ✓ 2026-09-26
+- [x] [AC1] Rewrite the `Parse Forge Event` tests on that shape. The harness provides `this.helpers.getBinaryDataBuffer` backed by the fixture's bytes, and drops the `$json.rawBody` string that n8n never produces. Covered: signed `opened` gives `isValidSig` and `isCreateCandidate` true; wrong signature, missing signature and missing binary give `isValidSig` false. Red against the current node (4 failed) ✓ 2026-09-26
+- [x] [AC1] Implement: `Parse Forge Event` reads the body with `getBinaryDataBuffer(0, 'data')`, HMACs the Buffer, compares with `timingSafeEqual`, and fails closed with no binary. The `JSON.stringify(body)` fallback is removed ✓ 2026-09-26
+- [x] [P] [AC2] The same for `slack-task-capture`'s signature node: tests on the fixture shape with the Slack basestring `v0:<ts>:<raw bytes>`, plus a stale timestamp rejected. Red first (3 failed: delivered bytes, no bytes, tampered) ✓ 2026-09-26
+- [x] [AC2] Implement the Slack node the same way, keeping the timestamp window. The `URLSearchParams` rebuild is removed ✓ 2026-09-26
+- [x] `test_n8n_code_node_runtime_render.py` still passes: no new `$env` or `require` without the environment declaring it (6 passed) ✓ 2026-09-26
+- [x] `make test` green: 2772 passed, 15 skipped, 1 xfailed ✓ 2026-09-26
 
 ## Deploy and verify
 
