@@ -36,7 +36,7 @@ Order: the gate guard first, because it is static and needs no fixture. Then the
 
 - [x] [AC4] [AC5] Codify the probes as `make n8n-probe ENV=<env>` (`toolkit/features/n8n_probe.py`), judged from n8n's execution record. The operator chose this over ad-hoc requests on 2026-09-26 ✓ 2026-09-27
 - [x] Staging: `make import-n8n ENV=staging` (DB-only, so staging's `targetRevision` did not need to move; the BACKUP-055 lane agreed) ✓ 2026-09-27
-- [!] [AC4] Staging: deliver a signed `opened` event and read the created task back from the Vikunja API. The signature gate passes, then Vikunja answers 401: staging SOPS holds the prod-minted token. Blocked by #1699 (APP-CONFIG-012)
+- [x] [AC4] Staging: deliver a signed `opened` event and read the created task back from the Vikunja API. Unblocked by a staging-minted token (#1699); the first run then found the missing `taskId` in the 201, fixed in `d1e22157`. Task 7 read back and deleted ✓ 2026-09-27
 - [x] [AC5] Staging: send an unsigned POST to each public webhook. Each stops at its gate in the execution data, with no Vikunja write and no Apprise call. `make n8n-probe ENV=staging`: executions 45-47 stop at their gate, agent-dispatcher 403 ✓ 2026-09-27
 - [ ] PR, triage, merge by the operator. Then point staging back to `master`.
 - [ ] [AC4] Prod: `make import-n8n ENV=prod`, re-deliver `teledyne/openkm-brain#2`, and read its task from Vikunja.

@@ -448,7 +448,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'ok', created: true, taskKey: $('Pick Project for Repo').first().json.taskKey, taskId: $json.id, projectId: $('Pick Project for Repo').first().json.projectId, projectTitle: $('Pick Project for Repo').first().json.projectTitle }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', created: true, taskKey: $('Pick Project for Repo').first().json.taskKey, taskId: $('Create Task from Issue').first().json.id, projectId: $('Pick Project for Repo').first().json.projectId, projectTitle: $('Pick Project for Repo').first().json.projectTitle }) }}",
         "options": {
           "responseCode": 201
         }
