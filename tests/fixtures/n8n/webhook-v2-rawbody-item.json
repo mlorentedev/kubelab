@@ -5,7 +5,10 @@
   "code_node_saw": {
     "missingPropertyError": {
       "rejected": true,
-      "value": {}
+      "value": {},
+      "isError": false,
+      "name": null,
+      "message": null
     },
     "item": {
       "json": {
@@ -50,7 +53,10 @@
   "code_node_saw_form": {
     "missingPropertyError": {
       "rejected": true,
-      "value": {}
+      "value": {},
+      "isError": false,
+      "name": null,
+      "message": null
     },
     "item": {
       "json": {

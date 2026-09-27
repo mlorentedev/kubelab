@@ -54,7 +54,12 @@ def test_the_harness_runtime_behaves_as_the_capture_measured() -> None:
     let thrown;
     try { await this.helpers.getBinaryDataBuffer(0, 'absent'); } catch (e) {
       rejected = true;
-      thrown = JSON.parse(JSON.stringify(e ?? null));
+      thrown = {
+        value: JSON.parse(JSON.stringify(e ?? null)),
+        isError: e instanceof Error,
+        name: e && e.name !== undefined ? String(e.name) : null,
+        message: e && e.message !== undefined ? String(e.message) : null,
+      };
     }
     return [{ json: { b64: bytes.toString('base64'), rawBodyType: typeof $json.rawBody, rejected, thrown } }];
     """
@@ -63,8 +68,10 @@ def test_the_harness_runtime_behaves_as_the_capture_measured() -> None:
     assert base64.b64decode(out["b64"]) == raw
     assert out["rawBodyType"] == "undefined"
     assert out["rejected"] is True
-    # The same value n8n rejected with, so a node that inspects the error sees what it would in n8n.
-    assert out["thrown"] == FIXTURE["code_node_saw"]["missingPropertyError"]["value"]
+    # What n8n rejected with, described past its JSON: an Error serialises to `{}`
+    # too, so the value alone could not tell the harness's `{}` from an Error.
+    captured = {k: v for k, v in FIXTURE["code_node_saw"]["missingPropertyError"].items() if k != "rejected"}
+    assert out["thrown"] == captured
 
 
 def test_n8n_delivers_a_slack_form_body_as_binary_too() -> None:

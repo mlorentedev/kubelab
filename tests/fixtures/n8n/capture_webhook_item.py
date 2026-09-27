@@ -77,7 +77,15 @@ let missingPropertyError = null;
 try {
   await this.helpers.getBinaryDataBuffer(0, 'absent');
 } catch (e) {
-  missingPropertyError = { rejected: true, value: JSON.parse(JSON.stringify(e ?? null)) };
+  // JSON alone cannot tell an Error from a plain object: an Error's fields are
+  // not enumerable, so both serialise to `{}`. Record what it IS as well.
+  missingPropertyError = {
+    rejected: true,
+    value: JSON.parse(JSON.stringify(e ?? null)),
+    isError: e instanceof Error,
+    name: e && e.name !== undefined ? String(e.name) : null,
+    message: e && e.message !== undefined ? String(e.message) : null,
+  };
 }
 return [{ json: {
   missingPropertyError,
