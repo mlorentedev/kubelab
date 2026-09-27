@@ -83,6 +83,8 @@ Coordinated with both kubelab lanes (`kubelab-7d`, `kubelab-vikunja-migration-wt
 - The lines reached staging Loki, except the fake-source Job's: the CronJob controller adopts Jobs created `--from` it, and with 4 failed at once `failedJobsHistoryLimit: 3` deleted the oldest Job and its pod within about a minute, before Vector read the file. An artifact of four concurrent failures; a real failed run is kept.
 - **Rule**: `obs015-r2-backup-health` FIRING in staging at 00:50Z (the last bad line at 00:29:34Z; `interval: 10m` plus `for: 10m`), with the new summary and runbook link. After the mutation Jobs were deleted and one healthy Job ran (00:58Z, fleet `healthy:1`), the rule was no longer firing at 01:07:51Z.
 
+- **`deploy-k8s` twice: closed as a stated partial.** The operator ran it three times (staging back on master, 871ffce2); only the third was confirmed. `apply-secrets` and `sync all --check` were `unchanged` / in sync on every run. The Kustomize apply is server-side and prints `serverside-applied` for every object whether or not it changed, so its output cannot show a no-op; Argo CD reporting `Synced` at the same revision is the evidence that live already matched. Not re-run, because the target ends with `import-n8n`: that run re-imported master's n8n workflows over a parallel lane's staging import and restarted n8n twice (lane notified).
+
 ### Task 11: prod (2026-09-27, after #1851 merged as `871ffce2`)
 
 - Argo CD synced the merge: the live CronJob carries `restic/restic:0.19.1` and `activeDeadlineSeconds: 600`.
