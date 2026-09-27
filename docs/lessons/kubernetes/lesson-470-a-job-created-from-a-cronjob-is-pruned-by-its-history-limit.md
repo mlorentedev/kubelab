@@ -1,5 +1,5 @@
 ---
-id: lesson-469-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit
+id: lesson-470-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit
 type: lesson
 status: active
 created: "2026-09-27"

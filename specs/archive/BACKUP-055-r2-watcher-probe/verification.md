@@ -15,7 +15,7 @@ Implementation merged in #1851 (`871ffce2`); the staging and prod evidence in #1
 - [x] AC4 -> `bc5996dd` / `tests/test_r2_watcher_targets.py`
 - [x] AC5 -> `05034bb5` / `test_the_watcher_reads_with_the_restic_that_writes`
 - [x] AC6 -> `tests/test_alert_runbook_urls.py`
-- Pre-review by a Claude reviewer subagent (2026-09-27, at `313538fc`; not the archive gate, which only a pool model may sign): all six MET, 73 passed, no blocking defect. Its three minor findings: this block, `features.json` and the Closing list were unfilled (fixed here); the shell count below was misstated (fixed here); the fake-source Loki line lost to GC (already recorded in Task 10, now lesson-469).
+- Pre-review by a Claude reviewer subagent (2026-09-27, at `313538fc`; not the archive gate, which only a pool model may sign): all six MET, 73 passed, no blocking defect. Its three minor findings: this block, `features.json` and the Closing list were unfilled (fixed here); the shell count below was misstated (fixed here); the fake-source Loki line lost to GC (already recorded in Task 10, now lesson-470).
 
 ### Task 1: the read-only token, measured 2026-09-26
 
@@ -125,7 +125,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes - lesson-465 (a read-only restic token needs `--no-lock`), lesson-466 (a backup copy before a template reports changed), lesson-469 (a Job made from a CronJob is pruned by its history limit).
+- [x] Lesson for the repo's `docs/lessons/`? yes - lesson-465 (a read-only restic token needs `--no-lock`), lesson-466 (a backup copy before a template reports changed), lesson-470 (a Job made from a CronJob is pruned by its history limit).
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no - the watcher's shape is a spec-level decision, recorded above.
 - [x] New pattern candidate for `00_meta/patterns/`? no - nothing here has recurred in another project.
 
@@ -134,4 +134,4 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 - [x] (✓ 2026-09-27) `proposal.md` frontmatter set to `status: archived`
 - [x] (✓ 2026-09-27) Folder moved: `specs/BACKUP-055-r2-watcher-probe/` -> `specs/archive/BACKUP-055-r2-watcher-probe/`
 - [x] (✓ 2026-09-27, `Closes #1572` in the archive PR) Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [x] (✓ 2026-09-27; lessons 465, 466, 469 are in `docs/lessons/`) Promotions above executed (if any)
+- [x] (✓ 2026-09-27; lessons 465, 466, 470 are in `docs/lessons/`; the review names 469, the number before a collision with master) Promotions above executed (if any)

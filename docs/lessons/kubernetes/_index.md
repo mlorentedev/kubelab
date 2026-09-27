@@ -4,7 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
-| 469 | [A Job created from a CronJob is pruned by that CronJob's history limit, pod and log included](lesson-469-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit.md) | 2026-09-27 |
+| 470 | [A Job created from a CronJob is pruned by that CronJob's history limit, pod and log included](lesson-470-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit.md) | 2026-09-27 |
 | 455 | [A file watch keyed on the file's name never fires on a Secret volume, so "no restart needed" was never true](lesson-455-a-watch-on-a-file-name-never-fires-on-a-secret-volume.md) | 2026-09-24 |
 | 410 | [A healthy pod does not prove an app read its config — an unrecognized env var can fail silently](lesson-410-a-healthy-pod-does-not-prove-an-app-read-its-config.md) | 2026-08-31 |
 | 387 | [A shell program embedded in a manifest is a second language, and nothing in the delivery path reads it as one](lesson-387-a-shell-program-inside-a-manifest-is-a-second-language-nothing-validates.md) | 2026-08-25 |
