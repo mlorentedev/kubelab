@@ -42,12 +42,23 @@ created: "2026-09-23"
 
 ## PR 4 — the server in the cluster
 
-- [ ] [P] [AC6] Failing test: catalog and mapping for `nan_api_key`, and required keys only (no `optional: true` on any `secretKeyRef`). `webhook_secret`'s catalog entry and value moved into PR 3 (Manu, 2026-09-26).
-- [ ] [P] [AC4] Failing test: the rendered prod ConfigMap has `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` equal to `["/review"]`, `GITEA__HANDLE_PUSH_TRIGGER=true`, and no `GITEA__REPO_SETTING`, which would let a PR's head rewrite the reviewer's config. It also has `PR_REVIEWER__FINAL_UPDATE_MESSAGE=false`, both `PR_REVIEWER__ENABLE_REVIEW_LABELS_*=false`, and `CONFIG__REPO_CONTEXT_FROM_DEFAULT_BRANCH=true` (the 2026-09-24 lab).
+- [x] [P] [AC6] Failing test: catalog and mapping for `nan_api_key`, and required keys only (no `optional: true` on any `secretKeyRef`). `webhook_secret`'s catalog entry and value moved into PR 3 (Manu, 2026-09-26).
+      `tests/test_pr_agent_secrets.py`, red first (`StopIteration` on the `SECRET_DEFINITIONS` lookup, no `pr-agent-secrets` mapping yet).
+- [x] [P] [AC4] Failing test: the rendered prod ConfigMap has `GITEA__PR_COMMANDS` and `GITEA__PUSH_COMMANDS` equal to `["/review"]`, `GITEA__HANDLE_PUSH_TRIGGER=true`, and no `GITEA__REPO_SETTING`, which would let a PR's head rewrite the reviewer's config. It also has `PR_REVIEWER__FINAL_UPDATE_MESSAGE=false`, both `PR_REVIEWER__ENABLE_REVIEW_LABELS_*=false`, and `CONFIG__REPO_CONTEXT_FROM_DEFAULT_BRANCH=true` (the 2026-09-24 lab).
+      `tests/test_pr_agent_config_render.py`, against the kustomize-rendered ConfigMap, red first (no `pr-agent-config` in the output).
 - [ ] [AC6] SOPS: copy `nan_api_key` from Bitwarden through a pipe (`dotf secrets run --only NAN_API_KEY -- sh -c 'printf %s "$NAN_API_KEY" | toolkit secrets set … --stdin'`), never through argv or stdout. Add `rotate_note` naming that re-copy, and add `k8s:kubelab/pr-agent` to the dotfiles registry consumers.
-- [ ] [AC1] `pr-agent.yaml` in the prod overlay: Deployment (limits, `enableServiceLinks: false`, standard labels), ClusterIP Service, IngressRoute (`secure-headers`, `rate-limit`, `crowdsec-bouncer`), and `configMapGenerator`. Image in `common.yaml` plus `make sync-k8s-images`, with Renovate coverage.
-- [ ] Measure non-root. If it works, set `runAsNonRoot`, `readOnlyRootFilesystem` and an `emptyDir` on `/tmp`. If not, record why in the manifest.
-- [ ] DNS row `pr-agent` in `infra/terraform/dns/services.json`, with no `target`.
+      The `rotate_note` is in place (`secrets_manager.py`). The copy itself is Manu's: `toolkit secrets audit --env prod` shows `apps.services.automation.pr_agent.nan_api_key` still under `Missing (5)` (79/84 present) — checked by consequence, the value was never read. The dotfiles registry entry lives in a different repo and is Manu's too.
+- [x] [AC1] `pr-agent.yaml` in the prod overlay: Deployment (limits, `enableServiceLinks: false`, standard labels), ClusterIP Service, IngressRoute (`secure-headers`, `rate-limit`, `crowdsec-bouncer`), and `configMapGenerator`. Image in `common.yaml` plus `make sync-k8s-images`, with Renovate coverage.
+      Renovate needs no config change: its `customManagers` regex already matches any `image: name:tag` line in `common.yaml`.
+- [x] Measure non-root. If it works, set `runAsNonRoot`, `readOnlyRootFilesystem` and an `emptyDir` on `/tmp`. If not, record why in the manifest.
+      Works with `HOME=/tmp` (an emptyDir): without it, uid 65534's default `$HOME` is `/nonexistent`, and importing `azure.devops` under a read-only rootfs crashes with `OSError: [Errno 30] Read-only file system`. Recorded as a comment on the env var in `pr-agent.yaml`.
+- [x] DNS row `pr-agent` in `infra/terraform/dns/services.json`, with no `target`.
+- [x] [AC7] Record the reconcile plan/apply and live hook check. See `verification.md`, "Live reconcile — the PR-Agent hook".
+
+## PR 4b — activation
+
+> Split out of PR 4 (Manu, 2026-09-27): every PR 4 merge is functional on its own — the hook stays `active: false` until this lands. Wording kept as originally written.
+
 - [ ] Live: `make apply-secrets ENV=prod`, Argo sync, flip the hook to `active: true`, reconcile.
 - [ ] [AC1] [AC2] Write `tests/infra/test_pr_agent_review_live.py`, marked like the other `tests/infra/*_live.py` tests. Given the PR number recorded in `verification.md`, it asserts exactly one reviewer-authored `PR Reviewer Guide` comment on that PR, and that its `updated_at` is later than the latest push.
 - [ ] [AC1] [AC2] [AC4] By effect: open a test PR on `personal/resume`, push once, and record the comment id, its author, and that the title and body are unchanged.

@@ -12,8 +12,8 @@ created: "2026-09-23"
 - [ ] AC3: HTTP status for an unsigned and a wrongly signed POST; test `<name>`
 - [ ] AC4: title and body byte-identical before and after; test `<name>`
 - [x] AC5: measured scope requirement (below); test `test_gitea_token_scopes.py::test_the_reviewer_grant_is_exactly_the_measured_requirement`; `mentor owns: (none)` on prod (Live provision, below)
-- [ ] AC6: tests `<names>`; orphan audit output
-- [ ] AC7: reconcile apply output, then a second run with no changes
+- [x] AC6: tests `tests/test_pr_agent_secrets.py` (catalog entry, mapping, fail-closed apply, env scoping); `nan_api_key` still absent from prod (below, Live reconcile)
+- [x] AC7: reconcile apply output, then a second run with no changes (below, Live reconcile — the PR-Agent hook)
 - [ ] AC8: alert fired, and its timestamp
 
 ## Pre-spec measurement (2026-09-24, read-only)
@@ -105,6 +105,32 @@ Run from master `3f46c450` on a branch, so that the recorded token lands through
 - `make gitea-reconcile ENV=prod APPLY=1`: `team ensured` for all three, then `AC4 ok — hefesto owns: (none)` and `TOOL-080 AC5 ok — mentor owns: (none)`.
 - Second `APPLY=1`: `(nothing to do — forge matches the declaration)`, and the same two ownership lines.
 
+## Live reconcile — the PR-Agent hook (2026-09-27 UTC, prod, after #1846 merged)
+
+- `make gitea-reconcile ENV=prod` (plan): exactly three `+ hook` lines —
+  `personal/resume`, `teledyne/fae-brain` and `teledyne/openkm-brain`, each
+  `-> https://pr-agent.kubelab.live/api/v1/gitea_webhooks`.
+- `make gitea-reconcile ENV=prod APPLY=1`: `webhook registered` for all three.
+- Second run: a **read-only plan**, not a second `APPLY=1` (an apply was
+  refused by the agent's permission classifier). It reported
+  `(nothing to do — forge matches the declaration)`, which covers the n8n
+  hook's presence too — the PR-Agent hook converged in one write.
+- Live `GET /repos/{repo}/hooks` on all three repos: hooks 6/7/8, each
+  `active=false`, `type=gitea`, events `[pull_request, pull_request_sync]` — the
+  hook exists and is wired to the right events, and is inert until PR 4b flips
+  it (server is not live yet).
+- `AC4 ok — hefesto owns: (none)` and `TOOL-080 AC5 ok — mentor owns: (none)`
+  held through this reconcile too.
+- The reconcile printed n8n's Vikunja advice against these three hooks as well
+  (an existing message, not something this hook introduced) — filed as
+  kubelab#1849 rather than fixed here (out of scope, the reconciler's message
+  bug).
+- `nan_api_key` is still genuinely absent, checked by consequence and not by
+  reading the value: `toolkit secrets audit --env prod` lists
+  `apps.services.automation.pr_agent.nan_api_key` under `Missing (5)`
+  (79/84 present). The pod stays in `CreateContainerConfigError` until it is
+  copied in and `apply-secrets` runs — both out of scope for this build.
+
 ## Test status
 
 - PR 2 (reviewer identity), 2026-09-24: `poetry run pytest -q tests/` → 2661 passed, 15 skipped. The new files are `tests/test_gitea_review_team.py` (24) and `tests/test_gitea_reviewer_identity.py` (10), plus `test_the_reviewer_grant_is_exactly_the_measured_requirement`. Each was red before its implementation.
@@ -114,6 +140,12 @@ Run from master `3f46c450` on a branch, so that the recorded token lands through
   - New: `HookDeclaration`, `load_webhooks` (list form + singular-block fallback + duplicate-URL and per-entry validation), the equality-mode branch of `webhook_changes` (with the `pull_request_only` -> `pull_request` alias, lesson-462), and the multi-hook paths of `plan_reconcile`/`execute`. Each was red before its implementation existed (`ImportError` for the new names, then a real assertion once they did) — one exception recorded below.
   - The alias was verified by mutation, not merely by a passing test: `_as_stored_events(declared.events)` was replaced with the unaliased `set(declared.events)`, `test_the_equality_mode_hook_converges_a_live_surplus_in_one_write` (`test_gitea_repo_execute.py`) turned red with `WebhookError: ... has no webhook pointing at ... after one was written`, and the fix was restored and re-verified green.
   - One correction made while writing the tests: the alias needed applying in the FLOOR branch too (`webhook_changes`), not only equality's — a declared `pull_request_only` compared unaliased under a floor would report it permanently missing. Currently unreachable (only the equality-mode PR-Agent hook declares that event name), but left unaliased it was a latent duplicate of the exact defect lesson-462 already describes, so it was fixed in this change rather than filed.
+- PR 4 (the server), 2026-09-27: `poetry run pytest -q` → 2776 passed, 15 skipped, 156 deselected, 1 xfailed, 1 error. The error is `test_monitoring_integration.py::TestPushMonitorRoundTrip` (a socketio timeout against a live uptime-kuma container) — pre-existing and unrelated, nothing this change touches has anything to do with monitoring. `ruff check`/`ruff format --check`/`mypy` clean on every touched file; `poetry run toolkit sync all --check` passes (`platform.json` regenerated once, over `common.yaml`'s hash).
+  - New: `tests/test_pr_agent_secrets.py` (9: catalog entry, mapping, fail-closed apply, env scoping), `tests/test_pr_agent_config_render.py` (3: the review-only ConfigMap contract, rendered), `tests/test_pr_agent_manifests.py` (9: image, no `optional:` secretKeyRef, TCP probes, hardened securityContext, Service, IngressRoute), plus 4 in `test_sync_k8s_images.py` for the prod-only image source. Each was red first: `StopIteration` (no `pr-agent-secrets` mapping yet), plain `AssertionError`s against an empty ConfigMap/manifest set, and `AttributeError` for the two new `sync_k8s_images` module constants.
+  - `SecretMapping` gained an `envs` field (mirroring `SecretSpec.envs`, ANSIBLE-033's audit dimension) so a prod-only mapping is excluded from a staging `apply-secrets` rather than raising `StopIteration` — caught before implementation by the advisor, confirmed by a failing test first.
+  - `sync_k8s_images.collect_images`/`sync` gained a `sources`/`include_errors` pair (defaulting to the existing base behaviour) so `make sync-k8s-images` also writes the prod overlay's own `images:` block — a transformer only reaches the resource set assembled at its own layer, and base's block never touched a manifest added directly in `overlays/prod/`. Caught the same way, by the advisor, before writing the manifest.
+  - One bug found and fixed while implementing this: `main()` initially called `sync()` with no arguments, relying on `sync`'s own default parameter values for the base and prod paths — a default value binds once at import time, so a test that `monkeypatch.setattr`s the module's path constants silently missed it, and `main()` re-synced the real repo's base `kustomization.yaml` instead of the test's tmp path. No harm done (the write is idempotent, confirmed by `git diff` showing no change), but caught only because the tmp-path assertion then failed. Fixed by resolving the constants explicitly in `main()`'s body instead of leaning on `sync`'s defaults.
+  - `repo_context_files` disagreement found, not resolved: `.pr_agent.toml` (GitHub side) sets `["AGENTS.md", "CLAUDE.md"]`; the proposal's lab measured only `AGENTS.md` for the Gitea side, and the ConfigMap keeps that. Flagged here rather than picked silently — outside this task's named key list.
 
 ## Decisions made during implementation
 
