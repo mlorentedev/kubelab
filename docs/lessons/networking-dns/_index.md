@@ -1,9 +1,10 @@
 # DNS, VPN mesh and host networking
 
-46 lessons, newest first. Back to [all categories](../_index.md).
+47 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 472 | [A CoreDNS regex rewrite without `answer auto` resolves on musl and fails on glibc](lesson-472-a-coredns-rewrite-without-answer-auto-resolves-on-musl-only.md) | 2026-09-27 |
 | 449 | [A declared public domain nothing serves becomes a ticket to publish it](lesson-449-a-declared-public-domain-nothing-serves-becomes-a-ticket-to-publish-it.md) | 2026-09-02 |
 | 393 | [A public apex name makes an IP allow-list block the legitimate users](lesson-393-a-public-apex-name-makes-an-ip-allowlist-block-the-legitimate-users.md) | 2026-08-24 |
 | 384 | [A predicate testing `== false` against proto3 JSON selects nothing, not "the false ones"](lesson-384-proto3-omits-false-so-the-predicate-selected-nothing.md) | 2026-08-24 |
