@@ -8,6 +8,13 @@
 # Solution: forward staging zones to RPi4 CoreDNS (100.64.0.10) which is
 # already the authoritative resolver for staging domains.
 #
+# Prod zones (kubelab.live, mlorente.dev) are rewritten to Traefik's ClusterIP.
+# `answer auto` is required, not cosmetic: without it the A record comes back
+# owned by `traefik.kube-system.svc.cluster.local`, which musl (Alpine) accepts
+# and glibc (Debian/Ubuntu) silently drops. Until 2026-09-27 the hairpin only
+# worked for musl pods; the PR-Agent server (Debian) could not resolve
+# gitea.kubelab.live (lesson-472, test_coredns_hairpin_answer.py).
+#
 # K3s loads this via: import /etc/coredns/custom/*.server
 # Applied separately (kube-system, NOT via the Kustomize kubelab overlay) by the toolkit
 # through the cluster_bootstrap layer (ADR-047/TOOL-009): `RESOLVE_RPI4_TAILSCALE_IP` is
@@ -27,10 +34,10 @@ data:
       forward . RESOLVE_RPI4_TAILSCALE_IP
     }
     kubelab.live:53 {
-      rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local
+      rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local answer auto
       forward . 10.43.0.10
     }
     mlorente.dev:53 {
-      rewrite name regex (.*)\.mlorente\.dev traefik.kube-system.svc.cluster.local
+      rewrite name regex (.*)\.mlorente\.dev traefik.kube-system.svc.cluster.local answer auto
       forward . 10.43.0.10
     }
