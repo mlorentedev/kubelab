@@ -1,9 +1,44 @@
 [
   {
     "id": "BACKUP-055-r2-watcher-probe-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "AC1: a healthy fleet produces one healthy r2_backup_node line per target and one healthy r2_backup_health line, from the committed probe run by the pinned CronJob",
+    "verification": "poetry run pytest tests/test_r2_backup_watcher_probe.py tests/test_r2_backup_watcher_manifest.py tests/test_k8s_secrets_r2_watcher.py -q",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-09-27 prod, Job from cronjob/r2-backup-watcher after #1851 (871ffce2): 4 r2_backup_node healthy:1 + 1 r2_backup_health healthy:1 in Loki via toolkit obs logs; make alerts ENV=prod shows nothing firing. Independent review run 2026-09-27: 73 passed across the six BACKUP-055 test files."
+  },
+  {
+    "id": "BACKUP-055-r2-watcher-probe-f2",
+    "behavior": "AC2: the probe cannot write; every restic call carries --no-lock and the write credential never reaches the cluster",
+    "verification": "poetry run pytest tests/test_r2_backup_watcher_probe.py::test_the_probe_never_takes_a_lock tests/test_k8s_secrets_r2_watcher.py::test_the_write_credential_never_reaches_the_cluster -q",
+    "state": "pending",
+    "evidence": "2026-09-26 with the read-only token: restic snapshots --no-lock rc=0 on all 4 repositories; restic without --no-lock rc=1 'unable to create lock ... Access Denied'; aws s3 cp rc=1 AccessDenied (verification.md, Task 1)."
+  },
+  {
+    "id": "BACKUP-055-r2-watcher-probe-f3",
+    "behavior": "AC3: each breakage turns its node and the fleet line to healthy:0, and the rule reads the fleet line",
+    "verification": "poetry run pytest tests/test_r2_backup_watcher_probe.py tests/test_r2_backup_alerting_rules.py -q",
+    "state": "pending",
+    "evidence": "2026-09-27 staging: four throwaway Jobs from the CronJob (fake source, fake node, overridden RESTIC_PASSWORD, SENTINEL=.no-such-sentinel), Secret and bucket untouched; each printed r2_backup_health healthy:0. obs015-r2-backup-health FIRING at 00:50Z, no longer firing at 01:07:51Z after one healthy Job. The fake-source Job's Loki line was lost to failedJobsHistoryLimit GC (verification.md, Task 10)."
+  },
+  {
+    "id": "BACKUP-055-r2-watcher-probe-f4",
+    "behavior": "AC4: the targets are generated from backup.sources and a stale committed file fails",
+    "verification": "poetry run pytest tests/test_r2_watcher_targets.py -q",
+    "state": "pending",
+    "evidence": "2026-09-26 (bc5996dd): make sync-r2-watcher-targets writes then reports unchanged; appending a line turns test_the_committed_targets_match_the_ssot red, restored green."
+  },
+  {
+    "id": "BACKUP-055-r2-watcher-probe-f5",
+    "behavior": "AC5: the watcher image is restic/restic pinned through IMAGE_SOURCES to backup.r2.restic_version",
+    "verification": "poetry run pytest tests/test_r2_watcher_targets.py::test_the_watcher_reads_with_the_restic_that_writes tests/test_r2_backup_watcher_manifest.py -k pinned -q",
+    "state": "pending",
+    "evidence": "2026-09-26 (05034bb5): backup.watcher.image restic/restic:0.19.1, synced by make sync-k8s-images; the tag exists for amd64 and arm64."
+  },
+  {
+    "id": "BACKUP-055-r2-watcher-probe-f6",
+    "behavior": "AC6: every alert rule's runbook_url names a committed file and an existing heading",
+    "verification": "poetry run pytest tests/test_alert_runbook_urls.py -q",
+    "state": "pending",
+    "evidence": "2026-09-26: obs015-r2-backup-health -> offsite-backup-restore.md#r2-backup-alert; the test also caught obs015-pvc-unbound-failure pointing at the missing backup-restore.md."
   }
 ]

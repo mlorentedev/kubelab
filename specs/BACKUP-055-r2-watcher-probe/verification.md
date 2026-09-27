@@ -7,11 +7,15 @@ created: "2026-09-25"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+Implementation merged in #1851 (`871ffce2`); the staging and prod evidence in #1857 (`313538fc`). Each criterion's executable check is in `features.json`, all six exit 0 on 2026-09-27.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> `871ffce2` / `tests/test_r2_backup_watcher_probe.py`, `tests/test_r2_backup_watcher_manifest.py`, `tests/test_k8s_secrets_r2_watcher.py`; live in prod (Task 11)
+- [x] AC2 -> `test_the_probe_never_takes_a_lock`, `test_the_write_credential_never_reaches_the_cluster`; the refusals measured by hand (Task 1)
+- [x] AC3 -> `test_each_breakage_fails_its_node_and_the_fleet` and the missing-Secret, missing-targets and empty-fleet cases; four staging mutations fired the rule (Task 10)
+- [x] AC4 -> `bc5996dd` / `tests/test_r2_watcher_targets.py`
+- [x] AC5 -> `05034bb5` / `test_the_watcher_reads_with_the_restic_that_writes`
+- [x] AC6 -> `tests/test_alert_runbook_urls.py`
+- Independent review (reviewer subagent, 2026-09-27, at `313538fc`): all six MET, 73 passed, no blocking defect. Its three minor findings: this block, `features.json` and the Closing list were unfilled (fixed here); the shell count below was misstated (fixed here); the fake-source Loki line lost to GC (already recorded in Task 10, now lesson-469).
 
 ### Task 1: the read-only token, measured 2026-09-26
 
@@ -48,7 +52,7 @@ The token is `kubelab-r2-watcher`, an account token with "Workers R2 Storage Buc
 
 ### AC1/AC3: the probe (2026-09-26, `db9ff02e`)
 
-- `tests/test_r2_backup_watcher_probe.py`: 16 cases × {dash `sh`, busybox 1.37.0 `sh`, the image's shell} = 32 passed. Mutations:
+- `tests/test_r2_backup_watcher_probe.py`: 16 cases × {dash `sh`, busybox 1.37.0 `sh`} = 32 passed. The image's own shell was checked by a separate manual run in the container, not by this parametrisation. Mutations:
   - a fleet verdict that ignores unhealthy nodes → 16 failed;
   - the `EXIT` trap removed → 8 failed (the missing-Secret and missing-targets paths go silent).
 - **Real run** in `restic/restic:0.19.1`, `--read-only` rootfs with `/tmp` tmpfs, the read-only token, and the committed targets: 4 × `r2_backup_node` `healthy:1` with `sentinel:1` and `missing:[]`, then `r2_backup_health` `nodes:4 unhealthy:0 healthy:1`. rc=0, 16.4 s including container start.
@@ -102,16 +106,18 @@ Coordinated with both kubelab lanes (`kubelab-7d`, `kubelab-vikunja-migration-wt
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- The watcher reports; it does not judge age. Freshness stays with each node's own `OnFailure=` path, and the fleet line is healthy only when every node's latest snapshot is readable, holds its sentinel and every declared source.
+- One fleet line plus one line per node, so the Grafana rule did not change and the per-node lines carry the diagnosis.
+- `activeDeadlineSeconds` and `terminationGracePeriodSeconds` are derived from `RESTIC_TIMEOUT` and the targets count, and a test holds both inequalities, because a deadline kill that lands before the trap prints leaves the Job silent for 24 h.
+- PR-Agent's "missing manual trigger" was deferred to #1858 (TOOL-084); `deploy-k8s` re-importing n8n on every run, found during task 10, is #1859 (TOOL-085).
 
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? yes - lesson-465 (a read-only restic token needs `--no-lock`), lesson-466 (a backup copy before a template reports changed), lesson-469 (a Job made from a CronJob is pruned by its history limit).
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no - the watcher's shape is a spec-level decision, recorded above.
+- [x] New pattern candidate for `00_meta/patterns/`? no - nothing here has recurred in another project.
 
 ## Archive checklist
 
