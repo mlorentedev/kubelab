@@ -28,6 +28,7 @@ import yaml
 from toolkit.features.access_review import (
     ADMIN,
     ADMIN_GROUP,
+    ARGOCD_TOKEN_LIFESPAN,
     OPERATOR,
     OPERATOR_GROUP,
     VIEWER,
@@ -79,7 +80,9 @@ def test_the_role_account_operates_and_never_administers() -> None:
     enforced first and then took it out. AUTH-011 gave it the operating tier.
     """
     operator = COMMON["apps"]["auth"]["identities"]["operator"]
-    assert declared_tiers(COMMON)[operator] == OPERATOR, f"the role account {operator!r} must be in {OPERATOR_GROUP!r} only"
+    assert declared_tiers(COMMON)[operator] == OPERATOR, (
+        f"the role account {operator!r} must be in {OPERATOR_GROUP!r} only"
+    )
 
 
 def test_every_app_spells_the_admin_group_the_same_way() -> None:
@@ -177,7 +180,7 @@ def test_argo_cd_reads_groups_from_userinfo() -> None:
     assert match, "Grafana's UserInfo URL is not declared"
     userinfo_path = match.group(1)
     assert oidc.get("userInfoPath") == userinfo_path, "Argo CD must ask the same UserInfo endpoint Grafana does"
-    assert oidc.get("userInfoCacheExpiration"), "the cache bounds how long a changed group goes unseen"
+    assert oidc.get("userInfoCacheExpiration"), "the cache keeps UserInfo from being asked on every request"
 
 
 # --------------------------------------------------------------------------- the review
@@ -283,7 +286,8 @@ def test_the_break_glass_account_is_never_edited() -> None:
     """A declaration that dropped the superadmin from `admins` must not have the review
     demote the only credential that can repair it."""
     app = FakeApp(GiteaTiers, [Account("manu", "admin"), Account("operator", "admin")])
-    findings = {f.user: f for f in reconcile("gitea", {"manu": VIEWER, "operator": VIEWER}, app, "u", "a", True, "manu")}
+    declared = {"manu": VIEWER, "operator": VIEWER}
+    findings = {f.user: f for f in reconcile("gitea", declared, app, "u", "a", True, "manu")}
     assert findings["manu"].status == "refused"
     assert ("manu", "user") not in app.edits
     assert findings["operator"].status == "fixed"
@@ -330,7 +334,28 @@ def test_argo_cd_is_judged_on_the_live_hub_config(live_cm: str, enforced: bool) 
     bound = argocd_group_bound(lambda: live_cm)
     assert bound.startswith("groups from UserInfo") is enforced
     if enforced:
-        assert "5m" in bound
+        assert ARGOCD_TOKEN_LIFESPAN in bound, "the bound is the token lifespan"
+        assert "5m" not in bound, "the UserInfo cache is not the bound (#1861)"
+
+
+def test_the_argo_cd_bound_is_the_token_lifespan_authelia_actually_issues() -> None:
+    """Measured 2026-09-26 (#1861): after `operator` left `admins`, Argo CD kept
+    showing `admins` well past its 5m UserInfo cache. A refetch reuses the stored
+    access token, and Authelia answers with the groups captured when that token was
+    issued, so a demotion reaches Argo CD only when the token expires: 1h later, at
+    the silent re-login. The stated bound is Authelia's default lifespan, which holds
+    only while neither environment configures `lifespans` and the argocd client
+    names none. Set one, and this fails until ARGOCD_TOKEN_LIFESPAN says the same."""
+    for path in (
+        REPO / "infra/k8s/base/services/authelia-config/configuration.yml",
+        REPO / "infra/k8s/overlays/prod/authelia-config/configuration.yml",
+    ):
+        oidc = (yaml.safe_load(path.read_text()).get("identity_providers") or {}).get("oidc") or {}
+        assert "lifespans" not in oidc, f"{path.relative_to(REPO)} sets lifespans: update ARGOCD_TOKEN_LIFESPAN"
+    clients = COMMON["apps"]["services"]["security"]["authelia"]["oidc_clients"]
+    argocd = next(c for c in clients if c["client_id"] == "argocd")
+    assert "lifespan" not in argocd, "the argocd client names a lifespan: update ARGOCD_TOKEN_LIFESPAN"
+    assert ARGOCD_TOKEN_LIFESPAN == "1h", "Authelia 4.39's default access and ID token lifespan"
 
 
 @pytest.mark.parametrize(

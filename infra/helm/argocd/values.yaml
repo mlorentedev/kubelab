@@ -217,9 +217,13 @@ configs:
       # Authelia 4.39 sends `groups` in UserInfo, not in the ID token, so the
       # RBAC below matched nobody and every SSO user fell to policy.default
       # (role:readonly). Measured 2026-09-24: User Info showed no groups.
-      # The cache bounds how long a changed group goes unseen here; it is what
-      # `make auth-review` reports for Argo CD. It needs the SSO access token,
-      # which Argo CD keeps in its Redis: a Redis restart signs every SSO user out.
+      # The cache only spares Authelia a request per call; it does NOT bound how
+      # long a changed group goes unseen. A refetch reuses the stored access token,
+      # and Authelia answers with the groups captured at issue, so a demotion lands
+      # when the token expires (1h, Authelia's default) and the session signs in
+      # again. Measured 2026-09-26, #1861, lesson-471. It needs the SSO access
+      # token, which Argo CD keeps in its Redis: a Redis restart signs every SSO
+      # user out.
       enableUserInfoGroups: true
       userInfoPath: /api/oidc/userinfo
       userInfoCacheExpiration: 5m

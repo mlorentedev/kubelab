@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-67 lessons, newest first. Back to [all categories](../_index.md).
+68 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 471 | [A UserInfo cache does not bound a demotion: the token lifespan does](lesson-471-a-userinfo-cache-does-not-bound-a-demotion-the-token-lifespan-does.md) | 2026-09-26 |
 | 463 | [Grafana logs every opaque OAuth access token it cannot parse, so each SSO login wrote a live bearer token to Loki](lesson-463-grafana-logs-every-opaque-oauth-access-token-it-cannot-parse.md) | 2026-09-26 |
 | 461 | [Grafana re-runs the role path on an empty groups list, so a null guard on `groups` alone still answers from the ID token](lesson-461-grafana-re-runs-the-role-path-on-an-empty-groups-list.md) | 2026-09-24 |
 | 460 | [An SSO-linked Grafana account is external: the API refuses its password and its role](lesson-460-an-sso-linked-grafana-account-is-external-and-the-api-refuses-its-password.md) | 2026-09-24 |

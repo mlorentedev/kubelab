@@ -32,8 +32,8 @@ config), and nobody had measured it.
 
 **Solution**: Grafana's path returns null when `groups` is absent
 (`groups != null && (...) || null`), which sends it on to UserInfo. Argo CD sets
-`enableUserInfoGroups` with a 5-minute cache, which also bounds how long a
-changed group goes unseen. `tests/test_access_review.py` evaluates every role
+`enableUserInfoGroups` with a 5-minute cache. (That cache does NOT bound how
+long a changed group goes unseen: the token lifespan does, 1h. See lesson-471.) `tests/test_access_review.py` evaluates every role
 path in the repo with a real JMESPath engine against an ID token with no groups.
 `make auth-review` keeps measuring the live tier.
 
