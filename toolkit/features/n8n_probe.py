@@ -230,7 +230,20 @@ async function vikunja(method, taskId) {
   return { status: res.status, title: task.title == null ? null : String(task.title) };
 }
 
+async function findTasks(key) {
+  const res = await fetch('http://vikunja:3456/api/v1/tasks?s=' + encodeURIComponent(key), {
+    headers: { Authorization: 'Bearer ' + (process.env.VIKUNJA_API_TOKEN || '') },
+  });
+  if (!res.ok) return { status: res.status, ids: [] };
+  const tasks = await res.json();
+  const ids = (Array.isArray(tasks) ? tasks : [])
+    .filter((t) => String(t.title || '').startsWith(key + ':'))
+    .map((t) => t.id);
+  return { status: res.status, ids };
+}
+
 async function main() {
+  if (REQUEST.op === 'find_tasks') return out(await findTasks(REQUEST.key));
   if (REQUEST.op === 'get_task') return out(await vikunja('GET', REQUEST.taskId));
   if (REQUEST.op === 'delete_task') return out({ status: (await vikunja('DELETE', REQUEST.taskId)).status });
   const sqlite3 = require('sqlite3');
@@ -377,7 +390,8 @@ class _Probe:
             return self._verdict(label, self._why_not_created(workflow["id"], before, status, text))
         task_id = _task_id(text)
         if task_id is None:
-            return self._verdict(label, [f"HTTP 201 without a taskId in the response: {text[:200]}"])
+            missing = [f"HTTP 201 without a taskId in the response: {text[:200]}"]
+            return self._verdict(label, missing + self._sweep(label, task_key))
         errors: list[str] = []
         try:
             summary, error = self._await_one(workflow["id"], before)
@@ -397,6 +411,24 @@ class _Probe:
         if not 200 <= int(deleted) < 300:
             errors.append(f"cleanup failed (HTTP {deleted}): delete task {task_id} in Vikunja by hand")
         return self._verdict(label, errors)
+
+    def _sweep(self, label: str, task_key: str) -> list[str]:
+        """Delete what a 201 created when the response did not say which task it was.
+
+        The key carries the probe's own timestamp, so matching titles by it can
+        only find this run's task, never a real one.
+        """
+        found = self._pod({"op": "find_tasks", "key": task_key})
+        if found["status"] != 200:
+            return [f"cleanup search failed (HTTP {found['status']}): delete tasks titled {task_key!r} by hand"]
+        errors: list[str] = []
+        for task_id in found["ids"]:
+            deleted = self._pod({"op": "delete_task", "taskId": task_id})["status"]
+            if 200 <= int(deleted) < 300:
+                logger.info(f"  {label}: deleted task {task_id}, found by its key")
+            else:
+                errors.append(f"cleanup failed (HTTP {deleted}): delete task {task_id} in Vikunja by hand")
+        return errors
 
     def _why_not_created(self, workflow_id: str, before: int, status: int, text: str) -> list[str]:
         """Explain a signed event that created nothing, from the path its execution took.

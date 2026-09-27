@@ -162,13 +162,21 @@ class _Cluster:
     whether the request carried a valid forge signature.
     """
 
-    def __init__(self, *, signed_creates: bool = True, delete_status: int = 204, open_gates: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        signed_creates: bool = True,
+        delete_status: int = 204,
+        open_gates: bool = False,
+        omit_task_id: bool = False,
+    ) -> None:
         self.executions: dict[str, list[dict[str, Any]]] = {}
         self.tasks: dict[int, str] = {}
         self.deleted: list[int] = []
         self.signed_creates = signed_creates
         self.delete_status = delete_status
         self.open_gates = open_gates  # the #1712 defect: every gate routes to TRUE
+        self.omit_task_id = omit_task_id  # the Respond Task Created defect: 201 without taskId
         self.posts: list[tuple[str, bytes, dict[str, str]]] = []
         self.workflow_ids = {name: load_workflow(name)["id"] for name in (FORGE, SLACK, AGENT)}
 
@@ -185,7 +193,10 @@ class _Cluster:
                 task_id = 100 + len(self.tasks)
                 self.tasks[task_id] = json.loads(body)["issue"]["title"]
                 self._run(FORGE, {"Has Task Key & Valid Sig?": [1, 0], "Create Task from Issue": [1]})
-                return 201, json.dumps({"status": "ok", "created": True, "taskId": task_id})
+                body_out = {"status": "ok", "created": True}
+                if not self.omit_task_id:
+                    body_out["taskId"] = task_id
+                return 201, json.dumps(body_out)
             if self.open_gates:
                 self._run(FORGE, {"Has Task Key & Valid Sig?": [1, 0], "Find Task for Issue": [0]})
             else:
@@ -216,6 +227,9 @@ class _Cluster:
         if op == "delete_task":
             self.deleted.append(request["taskId"])
             return json.dumps({"status": self.delete_status})
+        if op == "find_tasks":
+            ids = [i for i, title in self.tasks.items() if title.startswith(request["key"] + ":")]
+            return json.dumps({"status": 200, "ids": ids})
         raise AssertionError(f"unexpected op {op}")
 
 
@@ -264,6 +278,16 @@ def test_a_failed_cleanup_fails_the_probe_and_names_the_task(capsys: pytest.Capt
     cluster = _Cluster(delete_status=500)
     assert _run(cluster) is False
     assert f"task {cluster.deleted[0]}" in " ".join(capsys.readouterr().out.split())
+
+
+def test_a_201_without_a_task_id_fails_and_still_deletes_the_task(capsys: pytest.CaptureFixture[str]) -> None:
+    """The workflow once answered 201 with no `taskId` (its response read the
+    notice's `$json`). The task existed all the same, and a probe that cleans up
+    only by id left it behind -- in prod, on the real board."""
+    cluster = _Cluster(omit_task_id=True)
+    assert _run(cluster) is False
+    assert cluster.deleted == list(cluster.tasks)
+    assert "without a taskId" in capsys.readouterr().out
 
 
 def test_a_missing_forge_secret_fails_before_any_request() -> None:
