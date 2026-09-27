@@ -1,62 +1,85 @@
-"""Unit tests for Slack slash command parser and signature verification."""
+"""`Parse Slack Command`: Slack request signing and command parsing (APP-CONFIG-015 AC2).
+
+Every test feeds the node the item n8n 2.12.3 really produces behind a Webhook v2
+with `rawBody: true` for a Slack slash command: the form already parsed into
+`body`, and the signed bytes in `binary.data` (captured in `tests/fixtures/n8n/`).
+The previous tests fed a `$json.rawBody` string n8n never produces (#1712,
+lesson-467).
+
+Slack signs `v0:<timestamp>:<raw body>`. The bodies here carry a bare `~`, as an
+RFC 3986 encoder leaves it, while `URLSearchParams(...).toString()` writes `%7E`
+(measured in Node), so a body rebuilt from the parsed form does not reproduce the
+signed bytes. Which encoder Slack uses is not assumed; the point is that only the
+delivered bytes are ever verified.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
-import subprocess
 import time
+import urllib.parse
 from pathlib import Path
+from typing import Any
+
+from tests.n8n_code_node import node_js, run_code_node, webhook_item
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / "infra/n8n/workflows/slack-task-capture.json"
+SECRET = "slack-signing-secret"
+FORM = "application/x-www-form-urlencoded"
 
 
-def get_slack_parser_js() -> str:
-    with open(WORKFLOW_PATH, encoding="utf-8") as f:
-        data = json.load(f)
-    node = next(n for n in data["nodes"] if n["name"] == "Parse Slack Command")
-    return node["parameters"]["jsCode"]
+def slack_form(fields: dict[str, str]) -> bytes:
+    """A form body as an RFC 3986 encoder writes it: spaces as `+`, `~` left bare."""
+    return urllib.parse.urlencode(fields).encode()
 
 
-def eval_slack_node(body: dict, headers: dict, env: dict) -> dict:
-    """Execute the exact workflow JS code in Node.js."""
-    js_code = get_slack_parser_js()
-    script = f"""
-    const $json = {json.dumps({"body": body, "headers": headers})};
-    const $env = {json.dumps(env)};
-    const result = (() => {{
-        {js_code}
-    }})();
-    console.log(JSON.stringify(result[0].json));
-    """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
-    return json.loads(proc.stdout.strip())
+def slack_signature(raw: bytes, ts: int, secret: str = SECRET) -> str:
+    base = f"v0:{ts}:".encode() + raw
+    return "v0=" + hmac.new(secret.encode(), base, hashlib.sha256).hexdigest()
 
 
-def generate_slack_signature(body_str: str, secret: str, timestamp: int) -> str:
-    sig_base = f"v0:{timestamp}:{body_str}"
-    mac = hmac.new(secret.encode(), sig_base.encode(), hashlib.sha256)
-    return f"v0={mac.hexdigest()}"
+def parse(
+    raw: bytes | None,
+    fields: dict[str, str],
+    headers: dict[str, str],
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    js = node_js("slack-task-capture.json", "Parse Slack Command")
+    item = webhook_item(raw, headers, fields, content_type=FORM)
+    (out,) = run_code_node(js, [item], {"SLACK_SIGNING_SECRET": SECRET} if env is None else env)
+    return out
 
 
-def test_slack_workflow_node_valid_signature_and_command() -> None:
-    body = {
-        "text": "create Refactor auth layer #kubelab P1",
-        "response_url": "https://hooks.slack.com/commands/123",
-        "user_name": "developer",
-    }
-    secret = "slack-signing-secret"
-    ts = int(time.time())
-    body_json = json.dumps(body, separators=(",", ":"))
-    sig = generate_slack_signature(body_json, secret, ts)
-    headers = {
-        "x-slack-signature": sig,
-        "x-slack-request-timestamp": str(ts),
-    }
-    env = {"SLACK_SIGNING_SECRET": secret}
+def signed(fields: dict[str, str], ts: int | None = None) -> tuple[bytes, dict[str, str]]:
+    ts = int(time.time()) if ts is None else ts
+    raw = slack_form(fields)
+    return raw, {"X-Slack-Signature": slack_signature(raw, ts), "X-Slack-Request-Timestamp": str(ts)}
 
-    result = eval_slack_node(body, headers, env)
+
+COMMAND = {
+    "command": "/task",
+    "text": "create Production fix ~now #teledyne P0",
+    "response_url": "https://hooks.slack.com/commands/123",
+    "user_name": "admin",
+}
+
+
+def test_signature_over_the_delivered_form_bytes_is_valid() -> None:
+    raw, headers = signed(COMMAND)
+    result = parse(raw, COMMAND, headers)
+    assert result["isValidSlack"] is True
+    assert result["title"] == "Production fix ~now"
+    assert result["project"] == "teledyne"
+    assert result["priority"] == "P0"
+    assert result["priorityNum"] == 4
+
+
+def test_command_without_project_or_priority_parses() -> None:
+    fields = {**COMMAND, "text": "create Refactor auth layer #kubelab P1"}
+    raw, headers = signed(fields)
+    result = parse(raw, fields, headers)
     assert result["isValidSlack"] is True
     assert result["title"] == "Refactor auth layer"
     assert result["project"] == "kubelab"
@@ -64,72 +87,44 @@ def test_slack_workflow_node_valid_signature_and_command() -> None:
     assert result["priorityNum"] == 3
 
 
-def test_slack_workflow_node_raw_form_urlencoded_signature() -> None:
-    raw_form = (
-        "command=%2Ftask&text=create+Production+fix+%23teledyne+P0"
-        "&response_url=https%3A%2F%2Fhooks.slack.com%2Fcommands%2F123&user_name=admin"
-    )
-    secret = "slack-signing-secret"
-    ts = int(time.time())
-    sig = generate_slack_signature(raw_form, secret, ts)
-    headers = {
-        "x-slack-signature": sig,
-        "x-slack-request-timestamp": str(ts),
-        "content-type": "application/x-www-form-urlencoded",
-    }
-    env = {"SLACK_SIGNING_SECRET": secret}
-    parsed_body = {
-        "command": "/task",
-        "text": "create Production fix #teledyne P0",
-        "response_url": "https://hooks.slack.com/commands/123",
-        "user_name": "admin",
-    }
-
-    js_code = get_slack_parser_js()
-    script = f"""
-    const $json = {{body: {json.dumps(parsed_body)}, rawBody: {json.dumps(raw_form)}, headers: {json.dumps(headers)}}};
-    const $env = {json.dumps(env)};
-    const result = (() => {{
-        {js_code}
-    }})();
-    console.log(JSON.stringify(result[0].json));
-    """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
-    result = json.loads(proc.stdout.strip())
-    assert result["isValidSlack"] is True
-    assert result["title"] == "Production fix"
-    assert result["project"] == "teledyne"
-    assert result["priority"] == "P0"
-    assert result["priorityNum"] == 4
-
-
-def test_slack_workflow_node_invalid_signature_fails_closed() -> None:
-    body = {"text": "create Task without auth"}
-    secret = "slack-signing-secret"
-    ts = int(time.time())
-    headers = {
-        "x-slack-signature": "v0=invalid_sig",
-        "x-slack-request-timestamp": str(ts),
-    }
-    env = {"SLACK_SIGNING_SECRET": secret}
-
-    result = eval_slack_node(body, headers, env)
+def test_wrong_signature_fails_closed() -> None:
+    raw, headers = signed(COMMAND)
+    headers["X-Slack-Signature"] = slack_signature(raw, int(headers["X-Slack-Request-Timestamp"]), "other")
+    result = parse(raw, COMMAND, headers)
     assert result["isValidSlack"] is False
     assert "Invalid" in result["ackMessage"]
 
 
-def test_slack_workflow_node_expired_timestamp_fails_closed() -> None:
-    body = {"text": "create Task with expired timestamp"}
-    secret = "slack-signing-secret"
-    ts = int(time.time()) - 400  # > 5 minutes ago
-    sig = generate_slack_signature(json.dumps(body), secret, ts)
-    headers = {
-        "x-slack-signature": sig,
-        "x-slack-request-timestamp": str(ts),
-    }
-    env = {"SLACK_SIGNING_SECRET": secret}
+def test_stale_timestamp_fails_closed_even_when_correctly_signed() -> None:
+    raw, headers = signed(COMMAND, ts=int(time.time()) - 400)  # outside Slack's 5-minute window
+    result = parse(raw, COMMAND, headers)
+    assert result["isValidSlack"] is False
 
-    result = eval_slack_node(body, headers, env)
+
+def test_signature_over_different_bytes_fails_closed() -> None:
+    raw, headers = signed(COMMAND)
+    tampered = slack_form({**COMMAND, "text": "create Something else #kubelab P0"})
+    result = parse(tampered, COMMAND, headers)
+    assert result["isValidSlack"] is False
+
+
+def test_no_raw_bytes_fails_closed_even_when_the_rebuilt_form_would_match() -> None:
+    """Without the signed bytes nothing is trusted: the old re-encoding fallback must not return.
+
+    The signature is computed over exactly what `new URLSearchParams(body).toString()`
+    produces, which is what the removed fallback verified.
+    """
+    ts = int(time.time())
+    # `URLSearchParams` differs from Python's encoder only on `~` for this command.
+    rebuilt = urllib.parse.urlencode(COMMAND).replace("~", "%7E").encode()
+    headers = {"X-Slack-Signature": slack_signature(rebuilt, ts), "X-Slack-Request-Timestamp": str(ts)}
+    result = parse(None, COMMAND, headers)
+    assert result["isValidSlack"] is False
+
+
+def test_missing_secret_fails_closed() -> None:
+    raw, headers = signed(COMMAND)
+    result = parse(raw, COMMAND, headers, env={})
     assert result["isValidSlack"] is False
 
 

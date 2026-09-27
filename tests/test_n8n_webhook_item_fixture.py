@@ -59,3 +59,12 @@ def test_the_harness_runtime_behaves_as_the_capture_measured() -> None:
     assert base64.b64decode(out["b64"]) == raw
     assert out["rawBodyType"] == "undefined"
     assert out["rejected"] is True
+
+
+def test_n8n_delivers_a_slack_form_body_as_binary_too() -> None:
+    saw = FIXTURE["code_node_saw_form"]
+    sent = base64.b64decode(FIXTURE["sent_form_body_base64"])
+    assert saw["rawBodyType"] == "undefined"
+    assert base64.b64decode(saw["helperBytesBase64"]) == sent
+    assert saw["item"]["binary"]["data"]["mimeType"] == "application/x-www-form-urlencoded"
+    assert isinstance(saw["item"]["json"]["body"], dict)

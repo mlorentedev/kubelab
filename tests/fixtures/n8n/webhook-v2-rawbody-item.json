@@ -15,7 +15,6 @@
           "host": "127.0.0.1:5699",
           "user-agent": "Python-urllib/3.12",
           "content-type": "application/json",
-          "x-gitea-event": "issues",
           "connection": "close"
         },
         "params": {},
@@ -44,6 +43,45 @@
       }
     },
     "helperBytesBase64": "ewogICJhY3Rpb24iOiAib3BlbmVkIiwKICAiaXNzdWUiOiB7CiAgICAibnVtYmVyIjogMiwKICAgICJ0aXRsZSI6ICJBUFAtQ09ORklHLTAxNTogcHJvYmUg4oCUIG7Dum1lcm8iCiAgfSwKICAicmVwb3NpdG9yeSI6IHsKICAgICJuYW1lIjogInByb2JlIiwKICAgICJvd25lciI6IHsKICAgICAgImxvZ2luIjogImt1YmVsYWIiCiAgICB9CiAgfQp9Cg==",
+    "rawBodyType": "undefined",
+    "bufferAvailable": true
+  },
+  "sent_form_body_base64": "dG9rZW49eCZjb21tYW5kPSUyRnRhc2smdGV4dD1jcmVhdGUrRml4K351cmdlbnQrJTIza3ViZWxhYitQMSZyZXNwb25zZV91cmw9aHR0cHMlM0ElMkYlMkZob29rcy5zbGFjay5jb20lMkZjb21tYW5kcyUyRjEmdXNlcl9uYW1lPXByb2Jl",
+  "code_node_saw_form": {
+    "missingPropertyError": {
+      "rejected": true,
+      "value": {}
+    },
+    "item": {
+      "json": {
+        "headers": {
+          "accept-encoding": "identity",
+          "content-length": "135",
+          "host": "127.0.0.1:5699",
+          "user-agent": "Python-urllib/3.12",
+          "content-type": "application/x-www-form-urlencoded",
+          "connection": "close"
+        },
+        "params": {},
+        "query": {},
+        "body": {
+          "token": "x",
+          "command": "/task",
+          "text": "create Fix ~urgent #kubelab P1",
+          "response_url": "https://hooks.slack.com/commands/1",
+          "user_name": "probe"
+        },
+        "webhookUrl": "https://n8n.staging.kubelab.live/webhook/capture-probe",
+        "executionMode": "production"
+      },
+      "binary": {
+        "data": {
+          "data": "dG9rZW49eCZjb21tYW5kPSUyRnRhc2smdGV4dD1jcmVhdGUrRml4K351cmdlbnQrJTIza3ViZWxhYitQMSZyZXNwb25zZV91cmw9aHR0cHMlM0ElMkYlMkZob29rcy5zbGFjay5jb20lMkZjb21tYW5kcyUyRjEmdXNlcl9uYW1lPXByb2Jl",
+          "mimeType": "application/x-www-form-urlencoded"
+        }
+      }
+    },
+    "helperBytesBase64": "dG9rZW49eCZjb21tYW5kPSUyRnRhc2smdGV4dD1jcmVhdGUrRml4K351cmdlbnQrJTIza3ViZWxhYitQMSZyZXNwb25zZV91cmw9aHR0cHMlM0ElMkYlMkZob29rcy5zbGFjay5jb20lMkZjb21tYW5kcyUyRjEmdXNlcl9uYW1lPXByb2Jl",
     "rawBodyType": "undefined",
     "bufferAvailable": true
   }

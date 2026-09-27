@@ -46,10 +46,11 @@ def webhook_item(
 
     `raw=None` drops the binary property, the shape a request with no body (or a
     webhook without `rawBody`) produces. Header names are lower-cased because the
-    Webhook node passes Node's `req.headers`, which are.
+    Webhook node passes Node's `req.headers`, which are, and `content-type` is
+    always present, as it is on every request the capture recorded.
     """
     item = copy.deepcopy(CAPTURED_ITEM)
-    item["json"]["headers"] = {k.lower(): v for k, v in headers.items()}
+    item["json"]["headers"] = {"content-type": content_type, **{k.lower(): v for k, v in headers.items()}}
     item["json"]["body"] = parsed_body
     if raw is None:
         item.pop("binary", None)
