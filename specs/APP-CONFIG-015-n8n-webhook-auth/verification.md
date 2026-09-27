@@ -12,15 +12,15 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] AC1 -> `941f1da4` / `tests/test_n8n_multi_forge_sync.py` (red 4, then green), on the item captured from `n8nio/n8n:2.12.3` (`95d48925`)
 - [x] AC2 -> `11821e6c` / `tests/test_n8n_slack_capture.py` (red 3, then green), including `test_stale_timestamp_fails_closed_even_when_correctly_signed`
 - [x] AC3 -> `efcc992f` / `tests/test_n8n_filter_nodes_v2_shape.py`; mutation: restoring `Is Slack Valid?` fails 2 tests
-- [ ] AC4 staging -> blocked. `make n8n-probe ENV=staging` 2026-09-27: execution 44 passes `Has Task Key & Valid Sig?` (the signature is accepted), then fails in `Find Task for Issue` with `HTTP 401 Authorization failed`. Staging SOPS holds the token minted in prod Vikunja (`same_value=True`, compared in process), which staging's own Vikunja rejects. Recorded on #1699.
+- [x] AC4 staging -> `make n8n-probe ENV=staging` 2026-09-27, after the staging-minted token (`39d83b95`, #1699): the signed `opened` event answered 201, task 7 `PROBE-1790476108: n8n webhook probe` was read back from Vikunja and deleted. The first run with the new token found one more defect: the 201 carried no `taskId`, because `Respond Task Created` read the notice's `$json` (fixed in `d1e22157`; the probe now also deletes a task found by its key when no id comes back, `28db0ef4`)
 - [ ] AC4 prod -> pending merge
-- [x] AC5 staging -> `make n8n-probe ENV=staging` 2026-09-27: unsigned forge (execution 45) and wrong-secret forge (46) stop at `Has Task Key & Valid Sig?`; unsigned Slack (47) stops at `Is Slack Valid?`; in each, nothing reached the gate's TRUE output and no `httpRequest` node ran. Unauthenticated agent-dispatcher: HTTP 403 and no execution.
+- [x] AC5 staging -> `make n8n-probe ENV=staging` 2026-09-27, run twice. Second run: executions 53-55, same result. First run: unsigned forge (execution 45) and wrong-secret forge (46) stop at `Has Task Key & Valid Sig?`; unsigned Slack (47) stops at `Is Slack Valid?`; in each, nothing reached the gate's TRUE output and no `httpRequest` node ran. Unauthenticated agent-dispatcher: HTTP 403 and no execution.
 - [ ] AC5 prod -> pending merge
 
 ## Test status
 
 - Test suite: `make test` -> 2772 passed, 15 skipped, 1 xfailed (2026-09-26, before the probe); `tests/test_n8n_probe.py` 20 passed
-- Live: `make n8n-probe ENV=staging` (above)
+- Live: `make n8n-probe ENV=staging` (above): `[SUCCESS] n8n webhook probe passed`
 - No regressions in existing test suite: yes
 
 ## Decisions made during implementation
