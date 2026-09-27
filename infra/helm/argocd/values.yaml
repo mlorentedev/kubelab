@@ -224,8 +224,17 @@ configs:
       userInfoPath: /api/oidc/userinfo
       userInfoCacheExpiration: 5m
   rbac:
+    # Tiers (ADR-062 D2, amended by AUTH-011): `admins` administer, `users` operate,
+    # anyone else reads. Operating is readonly plus sync and resource actions (restart,
+    # ...) on applications: no create, update or delete of an application, no exec,
+    # nothing on repositories, clusters, projects or accounts. Argo CD's own evaluator
+    # checks each of those in tests/test_access_review.py, with the pinned image.
     policy.csv: |
+      g, role:operator, role:readonly
+      p, role:operator, applications, sync, */*, allow
+      p, role:operator, applications, action/*, */*, allow
       g, admins, role:admin
+      g, users, role:operator
     policy.default: role:readonly
     scopes: '[groups]'
   secret:

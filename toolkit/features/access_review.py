@@ -1,7 +1,8 @@
 """Access review: the live privilege of every account, reconciled to the declared one (AUTH-004 AC2).
 
 The tier is declared once, as group membership in `apps.services.security.authelia.users`
-(ADR-062 D2): `admins` is the admin tier, everyone else is a user. Each app applies
+(ADR-062 D2, amended by AUTH-011): `admins` administer, `users` operate, and anyone
+else only reads. Each app maps those three tiers onto its own roles, and applies
 that rule only when someone logs in, and keeps the result in its own database:
 Gitea's `is_admin`, Grafana's org role. So taking someone out of `admins` changes
 nothing in an app until they next log in there, and a session already open keeps
@@ -35,10 +36,14 @@ from typing import Any
 
 from toolkit.features.break_glass_rotation import Request, _http
 
-#: The group that grants the admin tier, as Grafana's role mapping, Argo CD's RBAC
-#: and Gitea's auth source spell it. `tests/test_access_review.py` fails if any of
-#: them stops agreeing with this.
+#: The groups that grant the admin and operating tiers, as Grafana's role mapping,
+#: Argo CD's RBAC and Gitea's auth source spell them. `tests/test_access_review.py`
+#: fails if any of them stops agreeing with these.
 ADMIN_GROUP = "admins"
+OPERATOR_GROUP = "users"
+
+#: The declared tiers. Each app says what each one is called there (`tier_map`).
+ADMIN, OPERATOR, VIEWER = "admin", "operator", "viewer"
 
 
 @dataclass(frozen=True)
@@ -62,12 +67,18 @@ class Finding:
     detail: str = ""
 
 
-def declared_admins(values: dict[str, Any]) -> dict[str, bool]:
-    """Username → whether the declaration puts it in the admin tier.
+def _tier(groups: list[str]) -> str:
+    if ADMIN_GROUP in groups:
+        return ADMIN
+    return OPERATOR if OPERATOR_GROUP in groups else VIEWER
+
+
+def declared_tiers(values: dict[str, Any]) -> dict[str, str]:
+    """Username → the tier its groups declare: ADMIN, OPERATOR or VIEWER.
 
     Every Authelia user resolves through the one identity resolver. The machine
     identities (`machine`, `reviewer`, ...) are declared in `apps.auth.identities`
-    but are never Authelia users, and are never admins (ADR-062 D1). Reading every
+    but are never Authelia users, and only read (ADR-062 D1). Reading every
     identity rather than naming the keys is what keeps a new one from reporting
     `undeclared`, as `reviewer` did when TOOL-080 added it.
     """
@@ -78,10 +89,10 @@ def declared_admins(values: dict[str, Any]) -> dict[str, bool]:
     for entry in authelia.get("users") or []:
         name = resolve_user_identity(entry, values)
         if name:
-            tiers[name] = ADMIN_GROUP in (entry.get("groups") or [])
+            tiers[name] = _tier(entry.get("groups") or [])
     for name in (values.get("apps", {}).get("auth", {}).get("identities") or {}).values():
         if name:
-            tiers.setdefault(name, False)
+            tiers.setdefault(name, VIEWER)
     return tiers
 
 
@@ -89,9 +100,12 @@ def declared_admins(values: dict[str, Any]) -> dict[str, bool]:
 
 
 class GiteaTiers:
-    """Gitea's `is_admin`, which it re-reads from its database on every request."""
+    """Gitea's `is_admin`, which it re-reads from its database on every request.
+    It has nothing between admin and user, and a user already owns repositories and
+    pushes, which is all operating needs."""
 
     admin_tier, user_tier = "admin", "user"
+    tier_map = {ADMIN: admin_tier, OPERATOR: user_tier, VIEWER: user_tier}
 
     def __init__(self, request: Request = _http) -> None:
         self._request = request
@@ -136,11 +150,11 @@ class GiteaTiers:
 
 class GrafanaTiers:
     """Grafana's org role, checked on every request and written from `groups` at each
-    login. Non-admins are `Viewer`, as `GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH` maps
-    them. The API refuses to edit a role that OAuth syncs, so `set_tier` revokes the
-    account's sessions instead, and the role changes at the login that follows."""
+    login, as `GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH` maps it. The API refuses to
+    edit a role that OAuth syncs, so `set_tier` revokes the account's sessions
+    instead, and the role changes at the login that follows."""
 
-    admin_tier, user_tier = "Admin", "Viewer"
+    tier_map = {ADMIN: "Admin", OPERATOR: "Editor", VIEWER: "Viewer"}
     #: The stored tier changes at the account's next login, not when `set_tier` answers.
     settles_on_next_login = True
 
@@ -182,14 +196,14 @@ class ReviewError(RuntimeError):
 # --------------------------------------------------------------------------- the review
 
 
-def review(service: str, declared: Mapping[str, bool], accounts: list[Account], tiers: Any) -> list[Finding]:
+def review(service: str, declared: Mapping[str, str], accounts: list[Account], tiers: Any) -> list[Finding]:
     """Judge each live account against the declaration. Pure: no I/O."""
     findings = []
     for account in sorted(accounts, key=lambda a: a.user):
         if account.user not in declared:
             findings.append(Finding(service, account.user, None, account.tier, "undeclared", _sign_in(account)))
             continue
-        want = tiers.admin_tier if declared[account.user] else tiers.user_tier
+        want = tiers.tier_map[declared[account.user]]
         status = "ok" if account.tier == want else "drift"
         findings.append(Finding(service, account.user, want, account.tier, status, _sign_in(account)))
     return findings
@@ -201,7 +215,7 @@ def _sign_in(account: Account) -> str:
 
 def reconcile(
     service: str,
-    declared: Mapping[str, bool],
+    declared: Mapping[str, str],
     tiers: Any,
     base_url: str,
     auth: str,
@@ -219,7 +233,7 @@ def reconcile(
     `admins` still surfaces as `refused` instead of being re-declared here.
     """
     if protected:
-        declared = {protected: True, **declared}
+        declared = {protected: ADMIN, **declared}
     accounts = {a.user: a for a in tiers.read(base_url, auth)}
     findings = [
         Finding(
@@ -303,7 +317,7 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
     from toolkit.features.secrets_manager import SecretsManager
 
     values = load_values(env, project_root)
-    declared = declared_admins(values)
+    declared = declared_tiers(values)
     decls = bg.declarations(values)
     manager = SecretsManager(project_root)
     findings: list[Finding] = []
