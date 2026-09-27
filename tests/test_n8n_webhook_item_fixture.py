@@ -51,14 +51,20 @@ def test_the_harness_runtime_behaves_as_the_capture_measured() -> None:
     js = """
     const bytes = await this.helpers.getBinaryDataBuffer(0, 'data');
     let rejected = false;
-    try { await this.helpers.getBinaryDataBuffer(0, 'absent'); } catch (e) { rejected = true; }
-    return [{ json: { b64: bytes.toString('base64'), rawBodyType: typeof $json.rawBody, rejected } }];
+    let thrown;
+    try { await this.helpers.getBinaryDataBuffer(0, 'absent'); } catch (e) {
+      rejected = true;
+      thrown = JSON.parse(JSON.stringify(e ?? null));
+    }
+    return [{ json: { b64: bytes.toString('base64'), rawBodyType: typeof $json.rawBody, rejected, thrown } }];
     """
     raw = '{\n  "t": "número"\n}\n'.encode()
     (out,) = run_code_node(js, [webhook_item(raw, {}, {"t": "número"})])
     assert base64.b64decode(out["b64"]) == raw
     assert out["rawBodyType"] == "undefined"
     assert out["rejected"] is True
+    # The same value n8n rejected with, so a node that inspects the error sees what it would in n8n.
+    assert out["thrown"] == FIXTURE["code_node_saw"]["missingPropertyError"]["value"]
 
 
 def test_n8n_delivers_a_slack_form_body_as_binary_too() -> None:
