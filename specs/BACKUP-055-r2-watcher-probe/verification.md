@@ -57,6 +57,32 @@ The token is `kubelab-r2-watcher`, an account token with "Workers R2 Storage Buc
   - `ghost` → `readable:0 ... repository does not exist`;
   - fleet `nodes:2 unhealthy:2 healthy:0`; rc=1; 4.9 s.
 
+### AC1/AC3: the CronJob (2026-09-26, `e55be964`, `f2fbb112` before the rebase)
+
+- `tests/test_r2_backup_watcher_manifest.py` renders both overlays and asserts: the image equals `backup.watcher.image`; `envFrom` names the one `SecretMapping` for the watcher; the mounted `probe.sh` and `targets.txt` are byte-equal to the committed files, at the directory of the probe's own `WATCHER_TARGETS` default; the command is `sh probe.sh` with no `-e`; `backoffLimit: 0`, `restartPolicy: Never`, `Forbid`; no service account token; `/tmp` on an emptyDir under a read-only root. It also checks that the probe's `STAGING_DIR`/`SENTINEL` defaults equal the `node_backup` role's.
+- **The deadline cannot silence the probe.** Kubelet signals PID 1 only, and `sh` runs its trap once the running `timeout restic` returns. So `activeDeadlineSeconds` (600) is asserted greater than nodes × 2 × `RESTIC_TIMEOUT` (480), and `terminationGracePeriodSeconds` (90) greater than one `RESTIC_TIMEOUT` (60). Both values are read from the probe and the targets, not copied. Mutations: grace 30 s → red; deadline 180 s (the old value) → red.
+- restic as uid 65534 on a read-only rootfs with a tmpfs `/tmp`: `snapshots --no-lock --no-cache` and `ls latest` work (a throwaway local repository, 2026-09-27).
+
+### AC6: runbook links (2026-09-26)
+
+- `tests/test_alert_runbook_urls.py`: every `runbook_url` in `grafana-alerting/` names a committed file and, when it carries an anchor, a heading with that GitHub slug. Red on two rules at first: `obs015-r2-backup-health` **and** `obs015-pvc-unbound-failure` both pointed at `docs/runbooks/backup-restore.md`, which does not exist. Mutation: renaming the runbook heading → red.
+- The runbook section is `offsite-backup-restore.md#r2-backup-alert`.
+
+### Task 10: staging (2026-09-27)
+
+Coordinated with both kubelab lanes (`kubelab-7d`, `kubelab-vikunja-migration-wt-55`); both replied OK before the repoint. `targetRevision` was `master` before, `feat/backup-055-r2-watcher-probe` during.
+
+- `make apply-secrets ENV=staging DRY_RUN=1`: only `r2-backup-watcher-secrets` `created`, every other Secret `unchanged`. Applied by the operator; the second run was all `unchanged` (also seen as a `deploy-k8s` prerequisite: 12 × `unchanged`).
+- Argo CD synced the branch: the live CronJob carries `restic/restic:0.19.1` and `activeDeadlineSeconds: 600`.
+- **Healthy run**: 4 × `r2_backup_node` `healthy:1`, fleet `nodes:4 unhealthy:0 healthy:1`. 21 s from Job start to completion, pod start included. Peak memory (cgroup `memory.peak`, a throwaway Job): **46 MiB**.
+- **AC3 mutations**, four throwaway Jobs from the CronJob, the Secret and the bucket untouched:
+  - fake source (`rpi3 … ghost_service`) → `missing:["ghost_service"]`, fleet `nodes:4 unhealthy:1 healthy:0`;
+  - fake node `ghost` → `readable:0`, `repository does not exist`, fleet `nodes:5 unhealthy:1 healthy:0`;
+  - `RESTIC_PASSWORD` overridden on the Job → 4 × `wrong password or no key found`, fleet `unhealthy:4 healthy:0`;
+  - `SENTINEL=.no-such-sentinel` → 4 × `no capture sentinel`, fleet `unhealthy:4 healthy:0`.
+- The lines reached staging Loki, except the fake-source Job's: the CronJob controller adopts Jobs created `--from` it, and with 4 failed at once `failedJobsHistoryLimit: 3` deleted the oldest Job and its pod within about a minute, before Vector read the file. An artifact of four concurrent failures; a real failed run is kept.
+- **Rule**: `obs015-r2-backup-health` FIRING in staging at 00:50Z (the last bad line at 00:29:34Z; `interval: 10m` plus `for: 10m`), with the new summary and runbook link. After the mutation Jobs were deleted and one healthy Job ran (00:58Z, fleet `healthy:1`), the rule was no longer firing at 01:07:51Z.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
