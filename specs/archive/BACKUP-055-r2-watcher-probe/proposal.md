@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-055-r2-watcher-probe"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-25"
 issue: "mlorentedev/kubelab#1572"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
