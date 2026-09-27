@@ -46,6 +46,23 @@ def test_the_declared_tiers_come_from_the_groups() -> None:
     assert tiers[COMMON["apps"]["auth"]["identities"]["machine"]] is False, "the machine identity is never an admin"
 
 
+def test_every_declared_identity_is_judged_and_the_machine_ones_are_never_admins() -> None:
+    """Every account in `apps.auth.identities` is declared, not only `machine`.
+
+    Measured 2026-09-26: TOOL-080 added `reviewer: mentor`, and the prod review
+    reported it `undeclared` because only the `machine` key was read.
+    """
+    from toolkit.features.configuration import resolve_user_identity
+
+    tiers = declared_admins(COMMON)
+    users = COMMON["apps"]["services"]["security"]["authelia"]["users"]
+    humans = {resolve_user_identity(u, COMMON) for u in users}
+    for role, name in COMMON["apps"]["auth"]["identities"].items():
+        assert name in tiers, f"identity {role}={name} is not declared to the review"
+        if name not in humans:
+            assert tiers[name] is False, f"{role}={name} is no Authelia user, so it is never an admin"
+
+
 def test_every_app_spells_the_admin_group_the_same_way() -> None:
     """The group name is a literal in three consumers; they must agree with the review."""
     grafana = (REPO / "infra/k8s/base/services/grafana-config/grafana.env").read_text()

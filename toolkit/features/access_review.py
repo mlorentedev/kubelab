@@ -66,8 +66,10 @@ def declared_admins(values: dict[str, Any]) -> dict[str, bool]:
     """Username → whether the declaration puts it in the admin tier.
 
     Every Authelia user resolves through the one identity resolver. The machine
-    identity is declared in `apps.auth.identities` but is never an Authelia user,
-    and is never an admin (ADR-062 D1).
+    identities (`machine`, `reviewer`, ...) are declared in `apps.auth.identities`
+    but are never Authelia users, and are never admins (ADR-062 D1). Reading every
+    identity rather than naming the keys is what keeps a new one from reporting
+    `undeclared`, as `reviewer` did when TOOL-080 added it.
     """
     from toolkit.features.configuration import resolve_user_identity
 
@@ -77,9 +79,9 @@ def declared_admins(values: dict[str, Any]) -> dict[str, bool]:
         name = resolve_user_identity(entry, values)
         if name:
             tiers[name] = ADMIN_GROUP in (entry.get("groups") or [])
-    machine = (values.get("apps", {}).get("auth", {}).get("identities") or {}).get("machine")
-    if machine:
-        tiers.setdefault(machine, False)
+    for name in (values.get("apps", {}).get("auth", {}).get("identities") or {}).values():
+        if name:
+            tiers.setdefault(name, False)
     return tiers
 
 
