@@ -96,6 +96,16 @@ Coordinated with both kubelab lanes (`kubelab-7d`, `kubelab-vikunja-migration-wt
 - One Job (`r2bw-t11-prod`), 01:37:50Z → 01:38:25Z: 4 × `r2_backup_node` `healthy:1` with `sentinel:1` and `missing:[]`, fleet `nodes:4 unhealthy:0 healthy:1`. All five lines in prod Loki (`toolkit obs logs --env prod`), and `make alerts ENV=prod` shows nothing firing.
 - Review coverage of #1851: PR-Agent only. CodeRabbit was rate-limited on every head and Codex had no quota.
 
+### Pool review dispositions (2026-09-27)
+
+`review.md`: `nan/deepseek-v4-flash`, PASS-WITH-GAPS at `31ab9314`, no Blocker.
+
+- Major, a last target with no trailing newline is never probed: **applied** in #1866, with a regression test that was red under dash and busybox.
+- Minor, "is a directory" versus path presence: **deferred** to #1865 (BACKUP-056). Theoretical; no R2 repository holds such a file.
+- Minor, `test_the_probe_never_takes_a_lock` survives a direct `restic` call: **applied** in #1866. The fake restic refuses a locking call and the test reads the calls; the reviewer's mutation now goes red.
+- Minor, `toolkit sync all` skips `r2-watcher-targets`: **applied** in #1866, so `validate-sync` and CI now check it.
+- Minor, R4's wording: **clarified here**. On a global failure (missing env var, unreadable or empty targets file) there is no node to name yet, so the owed artifact is the single fleet line with `healthy:0`, which `test_a_pod_without_its_secret_still_reports_unhealthy` and `test_missing_targets_still_report_unhealthy` assert. A per-node `healthy:0` line is owed only once a node has been read from the targets.
+
 ## Test status
 
 - Test suite: `make test` → 2823 passed, 15 skipped, 1 xfailed (the OPS-023 AC5 guard), rc=0, on the rebased #1851 head.
