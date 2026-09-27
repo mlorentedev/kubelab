@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from tests.n8n_code_node import run_code_node as run_webhook_code_node
+from tests.n8n_code_node import webhook_item
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.gitea_repos import load_webhooks
 from toolkit.features.n8n_import import PLACEHOLDER_SSOT, resolve_placeholders
@@ -104,20 +106,17 @@ EMPTY_ITEM: list[Any] = [{}]  # what `alwaysOutputData` emits when there is no d
 ERROR_ITEM: list[Any] = [{"error": "401 unauthorized"}]  # what `continueOnFail` emits
 
 
-def parse_event(body: dict[str, Any]) -> dict[str, Any]:
-    payload = json.dumps(body, separators=(",", ":"))
-    js = node_js("Parse Forge Event")
-    headers = json.dumps({"x-gitea-signature": sign(payload.encode())})
-    script = f"""
-    const $json = {{ rawBody: {json.dumps(payload)}, headers: {headers} }};
-    const $env = {json.dumps({"FORGE_WEBHOOK_SECRET": SECRET})};
-    const result = (() => {{
-        {js}
-    }})();
-    console.log(JSON.stringify(result[0].json));
+def parse_event(body: dict[str, Any], signature: str | None = None) -> dict[str, Any]:
+    """Run `Parse Forge Event` on the item n8n really delivers (tests/n8n_code_node.py).
+
+    The body goes on the wire the way Gitea sends it -- indented -- and is signed over
+    those bytes, unless `signature` overrides the header.
     """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
-    return json.loads(proc.stdout.strip())
+    raw = json.dumps(body, indent=2).encode()
+    headers = {"x-gitea-signature": signature if signature is not None else sign(raw)}
+    item = webhook_item(raw, headers, body)
+    (out,) = run_webhook_code_node(node_js("Parse Forge Event"), [item], {"FORGE_WEBHOOK_SECRET": SECRET})
+    return out
 
 
 def issue_event(action: str, title: str, *, number: int = 7) -> dict[str, Any]:
@@ -211,17 +210,7 @@ def test_the_declared_webhook_events_cover_the_create_trigger() -> None:
 
 
 def test_an_unsigned_issue_event_creates_nothing() -> None:
-    body = issue_event("opened", "APP-CONFIG-008: x")
-    js = node_js("Parse Forge Event")
-    script = f"""
-    const $json = {{ rawBody: {json.dumps(json.dumps(body, separators=(",", ":")))},
-                     headers: {json.dumps({"x-gitea-signature": "sha256=wrong"})} }};
-    const $env = {json.dumps({"FORGE_WEBHOOK_SECRET": SECRET})};
-    const result = (() => {{ {js} }})();
-    console.log(JSON.stringify(result[0].json));
-    """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
-    result = json.loads(proc.stdout.strip())
+    result = parse_event(issue_event("opened", "APP-CONFIG-008: x"), signature="sha256=wrong")
     assert result["isValidSig"] is False
     assert result["isCreateCandidate"] is False
 
