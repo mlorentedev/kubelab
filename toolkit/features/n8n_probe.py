@@ -86,6 +86,8 @@ class ExecutionSummary:
     status: str
     outputs: dict[str, list[int]]
     """Node name -> item count on each output of its first run. A key means the node ran."""
+    error: str | None = None
+    """For a failed execution: the failing node and its error message, credentials redacted in the pod."""
 
 
 # ── Pure helpers ──────────────────────────────────────────────────────────────
@@ -135,7 +137,8 @@ def judge_gate_stop(summary: ExecutionSummary, gate: str, http_nodes: set[str]) 
     """Why `summary` is NOT an execution that stopped at `gate`; empty when it is."""
     errors = []
     if summary.status != "success":
-        errors.append(f"execution {summary.id} ended with status {summary.status}, not success")
+        detail = f": {summary.error}" if summary.error else ""
+        errors.append(f"execution {summary.id} ended with status {summary.status}, not success{detail}")
     outputs = summary.outputs.get(gate)
     if outputs is None:
         errors.append(f"gate {gate!r} never ran in execution {summary.id}")
@@ -174,7 +177,10 @@ def wait_for_execution(
             return None, f"ambiguous: {len(rows)} new executions ({ids}); another delivery arrived, re-run"
         if len(rows) == 1 and rows[0]["status"] not in _NON_TERMINAL:
             row = rows[0]
-            return ExecutionSummary(id=int(row["id"]), status=str(row["status"]), outputs=row["outputs"]), None
+            summary = ExecutionSummary(
+                id=int(row["id"]), status=str(row["status"]), outputs=row["outputs"], error=row.get("error")
+            )
+            return summary, None
         if clock() >= deadline:
             break
         sleep(interval)
@@ -194,16 +200,24 @@ _POD_SCRIPT = """
 const DB = '/home/node/.n8n/database.sqlite';
 const out = (v) => process.stdout.write(JSON.stringify(v) + '\\n');
 
+// Only node names, item counts and the failing node's message leave the pod. An
+// HTTP node's error can quote the request, so anything shaped like a credential
+// is cut before it is printed.
+const redact = (s) => String(s).replace(/(Bearer|Basic|token|secret|key)(["'=: ]+)[^\\s"',}]+/gi, '$1$2[REDACTED]');
+
 function summarise(data) {
-  if (!data) return {};
+  if (!data) return { outputs: {}, error: null };
   const { parse } = require('flatted');
-  const runData = ((parse(data) || {}).resultData || {}).runData || {};
+  const result = (parse(data) || {}).resultData || {};
   const outputs = {};
-  for (const [name, runs] of Object.entries(runData)) {
+  for (const [name, runs] of Object.entries(result.runData || {})) {
     const main = (runs[0] && runs[0].data && runs[0].data.main) || [];
     outputs[name] = main.map((o) => (Array.isArray(o) ? o.length : 0));
   }
-  return outputs;
+  const e = result.error;
+  const code = e && e.httpCode ? 'HTTP ' + e.httpCode + ' ' : '';
+  const error = e ? redact(`${result.lastNodeExecuted || '?'}: ${code}${e.message || ''}`).slice(0, 300) : null;
+  return { outputs, error };
 }
 
 async function vikunja(method, taskId) {
@@ -233,7 +247,7 @@ async function main() {
       + 'LEFT JOIN execution_data d ON d.executionId = e.id '
       + 'WHERE e.workflowId = ? AND e.id > ? ORDER BY e.id',
       [REQUEST.workflowId, REQUEST.after]);
-    return out(rows.map((r) => ({ id: Number(r.id), status: r.status, outputs: summarise(r.data) })));
+    return out(rows.map((r) => ({ id: Number(r.id), status: r.status, ...summarise(r.data) })));
   }
   throw new Error('unknown op ' + REQUEST.op);
 }
@@ -360,14 +374,7 @@ class _Probe:
             return False
         status, text = sent
         if status != 201:
-            return self._verdict(
-                label,
-                [
-                    f"HTTP {status}, expected 201 (task created). If the gate rejected the signature, the "
-                    f"SOPS value at {FORGE_SECRET_KEY} differs from the pod's FORGE_WEBHOOK_SECRET: "
-                    f"make apply-secrets ENV={self.env}"
-                ],
-            )
+            return self._verdict(label, self._why_not_created(workflow["id"], before, status, text))
         task_id = _task_id(text)
         if task_id is None:
             return self._verdict(label, [f"HTTP 201 without a taskId in the response: {text[:200]}"])
@@ -390,6 +397,27 @@ class _Probe:
         if not 200 <= int(deleted) < 300:
             errors.append(f"cleanup failed (HTTP {deleted}): delete task {task_id} in Vikunja by hand")
         return self._verdict(label, errors)
+
+    def _why_not_created(self, workflow_id: str, before: int, status: int, text: str) -> list[str]:
+        """Explain a signed event that created nothing, from the path its execution took.
+
+        The response body carries only the workflow's own status fields (taskKey,
+        reason), never request data, so it is safe to show.
+        """
+        errors = [f"HTTP {status}, expected 201 (task created); response: {text[:200]}"]
+        summary, error = self._await_one(workflow_id, before)
+        if error or summary is None:
+            return [*errors, error or "no execution"]
+        errors.append(f"execution {summary.id} ({summary.status}) ran: {', '.join(summary.outputs)}")
+        if summary.error:
+            errors.append(f"execution {summary.id} failed in {summary.error}")
+        gate = summary.outputs.get(_FORGE_GATE, [])
+        if len(gate) > 1 and gate[1] and not gate[0]:
+            errors.append(
+                f"the signature gate rejected a correctly signed event: the SOPS value at {FORGE_SECRET_KEY} "
+                f"differs from the pod's FORGE_WEBHOOK_SECRET (make apply-secrets ENV={self.env})"
+            )
+        return errors
 
     def forge_stops_at_its_gate(self, label: str, secret: str | None) -> bool:
         label = f"{label} (AC5)"
