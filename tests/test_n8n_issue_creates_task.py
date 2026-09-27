@@ -471,8 +471,9 @@ def test_the_post_create_nodes_read_the_event_from_the_node_that_holds_it() -> N
     `undefined` -- the notice would read "Task created: undefined" and
     `JSON.stringify` would silently drop the undefined fields from the 201 body.
 
-    Both nodes must reach back to `Pick Project for Repo` for the event, and the
-    only field they may take from `$json` is the new task's `id`.
+    Both nodes must reach back to `Pick Project for Repo` for the event. Only the
+    notice, which directly follows the create, may take the task's `id` from
+    `$json`; the response follows the notice, so it names the create node.
     """
     for name, key in [("Notify Task Created", "jsonBody"), ("Respond Task Created", "responseBody")]:
         body = node(name)["parameters"][key]
@@ -480,9 +481,17 @@ def test_the_post_create_nodes_read_the_event_from_the_node_that_holds_it() -> N
         for field in ("taskKey", "repoOwner", "repoName", "issueNumber", "projectTitle", "projectId", "issueUrl"):
             assert f"$json.{field}" not in body, f"{name} reads $json.{field}, which is undefined there"
 
-    assert "$json.id" in node("Respond Task Created")["parameters"]["responseBody"], (
+    # `$json` is the IMMEDIATE predecessor's output. `Notify Task Created` follows
+    # `Create Task from Issue`, so there `$json.id` is the new task's id; but
+    # `Respond Task Created` follows the notice, so there `$json` is Apprise's
+    # answer, `$json.id` is undefined and `JSON.stringify` drops `taskId` from
+    # the 201. Measured in staging by `make n8n-probe` on 2026-09-27 (#1712).
+    respond = node("Respond Task Created")["parameters"]["responseBody"]
+    assert "taskId: $('Create Task from Issue').first().json.id" in respond, (
         "the created task's id is the cheapest observable that a task exists (#1659)"
     )
+    assert "$json.id" not in respond, "Respond Task Created's $json is the notice's answer, not the task"
+    assert "$json.id" in node("Notify Task Created")["parameters"]["jsonBody"]
 
 
 def test_the_creation_notice_does_not_announce_a_bucket() -> None:
