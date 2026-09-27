@@ -38,10 +38,10 @@ Order: the gate guard first, because it is static and needs no fixture. Then the
 - [x] Staging: `make import-n8n ENV=staging` (DB-only, so staging's `targetRevision` did not need to move; the BACKUP-055 lane agreed) ✓ 2026-09-27
 - [x] [AC4] Staging: deliver a signed `opened` event and read the created task back from the Vikunja API. Unblocked by a staging-minted token (#1699); the first run then found the missing `taskId` in the 201, fixed in `d1e22157`. Task 7 read back and deleted ✓ 2026-09-27
 - [x] [AC5] Staging: send an unsigned POST to each public webhook. Each stops at its gate in the execution data, with no Vikunja write and no Apprise call. `make n8n-probe ENV=staging`: executions 45-47 stop at their gate, agent-dispatcher 403 ✓ 2026-09-27
-- [ ] PR, triage, merge by the operator. Then point staging back to `master`.
-- [ ] [AC4] Prod: `make import-n8n ENV=prod`, re-deliver `teledyne/openkm-brain#2`, and read its task from Vikunja.
-- [ ] [AC5] Prod: the unsigned probes from staging, repeated.
-- [ ] If the n8n execution history shows unsigned requests that reached a write node before the fix, file a ticket (proposal, Out of scope).
+- [x] PR, triage, merge by the operator: #1855, then #1864 for what the staging AC4 run found. Staging's `targetRevision` never moved (the import is DB-only), so there is nothing to point back ✓ 2026-09-27
+- [x] [AC4] Prod: `make import-n8n ENV=prod`, re-deliver `teledyne/openkm-brain#2`, and read its task from Vikunja. Redelivered by closing and reopening the issue, since the forge's replay offers only a test push; task 3 is in Bitacora ✓ 2026-09-27
+- [x] [AC5] Prod: the unsigned probes from staging, repeated. `make n8n-probe ENV=prod`: executions 198-200 stop at their gates, agent-dispatcher 403 ✓ 2026-09-27
+- [x] If the n8n execution history shows unsigned requests that reached a write node before the fix, file a ticket (proposal, Out of scope). None in the retained window (2026-09-23 onward); see `verification.md` ✓ 2026-09-27
 
 ## Closing
 
