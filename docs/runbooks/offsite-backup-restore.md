@@ -68,6 +68,90 @@ the age and does **not** judge it — an on-demand node is legitimately hours or
 days stale, and that judgement belongs to the coverage monitor in Uptime Kuma
 (AC9), which knows the node's class. Two controls, one opinion each.
 
+## R2 backup alert
+
+`obs015-r2-backup-health` reads the in-cluster watcher (BACKUP-055): a CronJob in
+each cluster that, every 6h, asks R2 the same question `backup-coverage` asks,
+with a **read-only** token. For every node in `backup.sources` it checks that the
+repository opens, holds a snapshot, contains every declared source under the
+staging dir, and contains the capture sentinel (`.capture-complete`), which the
+node writes last and refuses to ship without. It does **not** judge age; the
+Uptime Kuma coverage monitor owns that.
+
+The rule fires in two cases, and the first step tells them apart:
+
+```bash
+toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_"' --since 24h
+```
+
+- **No lines at all**: the watcher is not running, so coverage is *unknown*.
+  Check `kubectl get cronjob,jobs -n kubelab | grep r2-backup-watcher`: a Job that
+  never started (image pull, missing `r2-backup-watcher-secrets`) or a CronJob
+  that was never deployed.
+- **Lines**: one `r2_backup_node` per node, then one `r2_backup_health` for the
+  fleet. The fleet line is healthy only if every node is. Find the node with
+  `"healthy":0` and read its `reason`:
+
+| `reason` | Meaning | First move |
+|---|---|---|
+| `unreadable: ... AccessDenied` / `403` | The read-only token was revoked or expired | Rotate it (below) |
+| `unreadable: ... wrong password` | `backup.restic_password` in the cluster Secret differs from the repository's | `make apply-secrets ENV=<env>`; if it persists, see [Rotation](#rotation--the-ordering-matters) |
+| `unreadable: ... does not exist` | The node's repository is missing | `make backup-coverage ENV=prod`, then the node's ship logs |
+| `no snapshots` | The repository exists and is empty | The node has never shipped: `make backup-node NODE=<node> ENV=prod` |
+| `missing sources` (`missing:[...]`) | The newest snapshot lacks a declared service | The capture on that node skipped it; read `node-backup-capture.service` there |
+| `no capture sentinel` | A snapshot shipped without the capture finishing | The ship guard regressed; treat the snapshot as incomplete |
+| `listing failed: ...` | The snapshot opened but its listing did not | Usually transient; the next run is in 6h |
+
+A fleet line with `"error":"terminated by signal"` or `"probe stopped before
+checking every node"` means the Job hit its deadline. The per-node lines printed
+before it are still valid.
+
+A line from one run is one verdict: the Job never retries. To re-check now instead
+of waiting for the next run:
+
+```bash
+kubectl create job -n kubelab --from=cronjob/r2-backup-watcher r2-backup-watcher-manual
+kubectl logs -n kubelab job/r2-backup-watcher-manual
+kubectl delete job -n kubelab r2-backup-watcher-manual
+```
+
+### Rotating the read-only token
+
+The watcher's token is `kubelab-r2-watcher`. It is separate from the nodes' write
+token on purpose: it can list and read objects in `kubelab-backups` and nothing
+else, so a leak from the cluster cannot delete or rewrite a backup.
+
+1. Cloudflare dashboard → **R2 Object Storage** → **Manage API tokens** (top
+   right of the R2 overview) → **Create Account API token**.
+2. **Token name**: `kubelab-r2-watcher`.
+3. **Permissions**: **Object Read only**.
+4. **Specify bucket(s)**: **Apply to specific buckets only** → `kubelab-backups`.
+5. **TTL**: Forever. **Client IP Address Filtering**: leave empty (the cluster's
+   egress address is not stable).
+6. **Create API Token**. The page shows the **Access Key ID** and the **Secret
+   Access Key** once; keep the tab open for the next step.
+7. Store both halves, each from stdin so neither reaches shell history:
+
+   ```bash
+   toolkit secrets set backup.r2.readonly_access_key_id --env common --stdin
+   toolkit secrets set backup.r2.readonly_secret_access_key --env common --stdin
+   ```
+
+8. Push them to both clusters and re-check:
+
+   ```bash
+   make apply-secrets ENV=staging
+   make apply-secrets ENV=prod
+   ```
+
+   Then run the manual Job above in each. Four `"healthy":1` node lines and a
+   fleet `"healthy":1` mean the new token works.
+9. Only then delete the old token in the dashboard (same **Manage API tokens**
+   page → the old row → **Delete**).
+
+In the dashboard's own terms, this is the account token scope
+"Workers R2 Storage Bucket Item Read" on `kubelab-backups`.
+
 ## Backing up on demand
 
 The timers cover the schedule. This is for the moment before you do something

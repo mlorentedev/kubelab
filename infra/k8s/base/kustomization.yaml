@@ -99,6 +99,16 @@ configMapGenerator:
     envs:
       - services/n8n-config/n8n.env
 
+  # The R2 watcher's probe and its targets (BACKUP-055). Each Job pod reads them
+  # fresh, so a stable name would also work; the hash is kept because it is never
+  # wrong, and the CronJob then records which probe a given run used.
+  # targets.txt is generated: `make sync-r2-watcher-targets`.
+  - name: r2-backup-watcher-probe
+    namespace: kubelab
+    files:
+      - services/r2-backup-watcher/probe.sh
+      - services/r2-backup-watcher/targets.txt
+
   - name: authelia-assets
     namespace: kubelab
     files:
@@ -204,6 +214,8 @@ images:
     newTag: v1.7.6
   - name: postgres
     newTag: 16-alpine
+  - name: restic/restic
+    newTag: 0.19.1
   - name: docker.io/mlorentedev/kubelab-errors
     newTag: 1.2.0
   # Custom apps web/api: per-env tags via `toolkit deployment promote` (overlays).

@@ -35,6 +35,8 @@ IMAGE_SOURCES = [
     "apps.services.security.authelia.redis_image",
     "apps.services.security.crowdsec.image",
     "infra.postgres.image",
+    # BACKUP-055: the R2 watcher; its tag is tied to backup.r2.restic_version.
+    "backup.watcher.image",
 ]
 
 # Marker comments kept above the images block.

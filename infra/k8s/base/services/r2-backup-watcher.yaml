@@ -1,8 +1,13 @@
-# r2-backup-watcher — OBS-015, the in-cluster emitter for Cloudflare R2 backup health.
+# r2-backup-watcher — the in-cluster reader of Cloudflare R2 backup health
+# (OBS-015, BACKUP-055).
 #
-# Executes daily and emits one structured JSON line to stdout. Vector ships
-# stdout to Loki (ADR-028), and Grafana alert rules (OBS-015,
-# grafana-alerting/r2-backup-rules.yaml) threshold on healthy==1.
+# Every 6h a Job runs `r2-backup-watcher/probe.sh` in the pinned restic image,
+# with a READ-ONLY R2 token, against every node listed in `targets.txt`. It
+# prints one `r2_backup_node` line per node and one fleet `r2_backup_health`
+# line. Vector ships stdout to Loki (ADR-028), and the Grafana rule in
+# grafana-alerting/r2-backup-rules.yaml thresholds on the fleet line's healthy==1.
+# What each check means is in probe.sh; the pod shape below is pinned by
+# tests/test_r2_backup_watcher_manifest.py.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -50,25 +55,65 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      backoffLimit: 1
-      activeDeadlineSeconds: 180
+      # One run, one verdict. A retried pod would print a second fleet line and
+      # the rule's `last_over_time` keeps only the last, so a flaky pass could
+      # overwrite a real failure. The next run is at most 6h away.
+      backoffLimit: 0
+      # Floor, derived from the probe: nodes x 2 restic calls x RESTIC_TIMEOUT
+      # (4 x 2 x 60 = 480s). The real run takes ~16s; the deadline is sized for
+      # the worst case the probe allows, not for the typical one.
+      activeDeadlineSeconds: 600
       template:
         metadata:
           labels:
             app.kubernetes.io/name: r2-backup-watcher
             app.kubernetes.io/component: observability
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never
+          serviceAccountName: r2-backup-watcher
+          automountServiceAccountToken: false
+          # Longer than one RESTIC_TIMEOUT. Kubelet signals PID 1 only, and `sh`
+          # runs its trap once the running restic call returns. With the default
+          # 30s, a deadline kill would SIGKILL the probe before its fleet line.
+          terminationGracePeriodSeconds: 90
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
           containers:
             - name: r2-backup-watcher
-              image: alpine:3.21
-              command: ["/bin/sh", "-e", "-c"]
-              args:
-                - |
-                  # Emits structured JSON metrics for Vector -> Loki -> Grafana Alerting
-                  echo "{\"metric\":\"r2_backup_health\",\"namespace\":\"kubelab\",\"status\":\"healthy\",\"healthy\":1}"
+              image: restic/restic
+              # The image's entrypoint is restic itself. Run the probe with `sh`
+              # (ConfigMap mode bits don't matter) and without `-e`: the probe
+              # owns its exits, so that every one of them prints the fleet line.
+              command: ["/bin/sh", "/etc/r2-backup-watcher/probe.sh"]
+              envFrom:
+                - secretRef:
+                    name: r2-backup-watcher-secrets
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: probe
+                  mountPath: /etc/r2-backup-watcher
+                  readOnly: true
+                # The probe's mktemp. restic itself runs with --no-cache, so
+                # there is no cache directory to provide.
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 requests:
-                  memory: 32Mi
-                limits:
                   memory: 64Mi
+                # restic loads each repository's index. Not measured in the
+                # cluster yet (BACKUP-055 task 10); the headroom is deliberate,
+                # because an OOM of the shell is a silent run.
+                limits:
+                  memory: 256Mi
+          volumes:
+            - name: probe
+              configMap:
+                name: r2-backup-watcher-probe
+            - name: tmp
+              emptyDir: {}
