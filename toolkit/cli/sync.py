@@ -276,7 +276,10 @@ def images(
     from toolkit.scripts import sync_k8s_images
 
     if check:
-        output_files = [settings.project_root / "infra/k8s/base/kustomization.yaml"]
+        output_files = [
+            settings.project_root / "infra/k8s/base/kustomization.yaml",
+            settings.project_root / "infra/k8s/overlays/prod/kustomization.yaml",
+        ]
         if not _run_with_check(output_files, sync_k8s_images.main, "images"):
             raise typer.Exit(1)
     else:
@@ -453,7 +456,10 @@ def sync_all(
         from toolkit.scripts import sync_k8s_images
 
         if check:
-            output_files = [settings.project_root / "infra/k8s/base/kustomization.yaml"]
+            output_files = [
+                settings.project_root / "infra/k8s/base/kustomization.yaml",
+                settings.project_root / "infra/k8s/overlays/prod/kustomization.yaml",
+            ]
             if not _run_with_check(output_files, sync_k8s_images.main, "images"):
                 failures.append("images")
         else:
