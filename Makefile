@@ -1596,6 +1596,16 @@ notify-smoke:
 	@test -n "$(filter $(ENV),staging)" || (echo "Usage: make notify-smoke ENV=staging" && exit 1)
 	@$(TOOLKIT) infra n8n smoke --env $(ENV)
 
+# Probe the public n8n webhooks end to end (APP-CONFIG-015 AC4/AC5): a signed
+# forge issue creates a Vikunja task (read back, then deleted); unsigned and
+# wrongly signed forge events and an unsigned Slack command stop at their gate,
+# judged from n8n's execution record; an unauthenticated agent-dispatcher call
+# gets 403. In prod the signed probe also posts one "Task Created" message.
+.PHONY: n8n-probe
+n8n-probe:
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make n8n-probe ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra n8n probe --env $(ENV)
+
 # Prove the offsite backup destination (Cloudflare R2) is usable: that the token
 # is scoped to its own bucket, that the bucket is reachable, and that a
 # write/read/DELETE round-trip succeeds. Writes 1 KB under `_smoketest/` and
