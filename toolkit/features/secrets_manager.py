@@ -240,7 +240,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     # writes. A written reminder is not a mechanism (lesson-365).
     SecretSpec(
         key_path=f"{_AUTH}.users_operator_password_hash",
-        description="Argon2 hash of admin user password (username from apps.auth.identities.operator)",
+        description="Argon2 hash of the operator role account's password (username from apps.auth.identities.operator)",
         kind=SecretKind.ARGON2_HASH,
         services=("authelia",),
         derived_from="(interactive password prompt)",

@@ -63,6 +63,16 @@ def test_every_declared_identity_is_judged_and_the_machine_ones_are_never_admins
             assert tiers[name] is False, f"{role}={name} is no Authelia user, so it is never an admin"
 
 
+def test_the_role_account_is_never_an_admin() -> None:
+    """ADR-062 D1: a role account is impersonal, so it holds no administrative power.
+
+    `operator` sat in `admins` until AUTH-004 AC2 step 2, which made the tier
+    enforced first and then took it out. This keeps it out.
+    """
+    operator = COMMON["apps"]["auth"]["identities"]["operator"]
+    assert declared_admins(COMMON)[operator] is False, f"the role account {operator!r} is in {ADMIN_GROUP!r}"
+
+
 def test_every_app_spells_the_admin_group_the_same_way() -> None:
     """The group name is a literal in three consumers; they must agree with the review."""
     grafana = (REPO / "infra/k8s/base/services/grafana-config/grafana.env").read_text()

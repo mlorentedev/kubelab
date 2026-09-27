@@ -57,11 +57,17 @@ class TestUsersDatabaseGenerator:
             f"must match apps.contact.email SSOT ({contact_email!r}) via loader injection (SSOT-014c)"
         )
 
-    def test_admin_has_admins_group(self, env: str) -> None:
+    def test_only_the_superadmin_has_admins_group(self, env: str) -> None:
+        """ADR-062 D1: the named human is the admin; the role account is not."""
         parsed, merged = self._build(env)
-        admin_username = merged["apps"]["auth"]["identities"]["operator"]
-        admin_entry = parsed["users"][admin_username]
-        assert "admins" in admin_entry.get("groups", []), f"Admin '{admin_username}' in {env} must have 'admins' group"
+        identities = merged["apps"]["auth"]["identities"]
+        superadmin, operator = identities["superadmin"], identities["operator"]
+        assert "admins" in parsed["users"][superadmin].get("groups", []), (
+            f"superadmin '{superadmin}' in {env} must have 'admins' group"
+        )
+        assert "admins" not in parsed["users"][operator].get("groups", []), (
+            f"role account '{operator}' in {env} must not have 'admins' group"
+        )
 
     def test_admin_has_password_hash(self, env: str) -> None:
         parsed, merged = self._build(env)
