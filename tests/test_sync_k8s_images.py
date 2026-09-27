@@ -61,6 +61,85 @@ class TestCollectImages:
         assert "newTag: 1.2.3" in block
 
 
+class TestProdOnlyImages:
+    """TOOL-080: a manifest declared ONLY in overlays/prod/ needs its `images:`
+
+    override in THAT kustomization, not base's. A transformer applies only to
+    the resource set assembled at its own layer, so base's `images:` block
+    never reaches a resource `pr-agent.yaml` adds directly in the prod overlay
+    — adding the source path to `IMAGE_SOURCES` alone would resolve a `newTag`
+    that touches nothing.
+    """
+
+    def _config(self) -> dict:
+        return {
+            "apps": {
+                "services": {"automation": {"pr_agent": {"image": "pragent/pr-agent:0.45.0-gitea_app"}}},
+            }
+        }
+
+    def test_pr_agent_is_a_prod_only_image_source(self) -> None:
+        assert "apps.services.automation.pr_agent.image" in sync_k8s_images.PROD_IMAGE_SOURCES
+        assert "apps.services.automation.pr_agent.image" not in sync_k8s_images.IMAGE_SOURCES
+
+    def test_collect_images_resolves_from_a_custom_source_list(self) -> None:
+        images = sync_k8s_images.collect_images(
+            self._config(), sources=sync_k8s_images.PROD_IMAGE_SOURCES, include_errors=False
+        )
+        assert images == [("pragent/pr-agent", "0.45.0-gitea_app")]
+
+    def test_sync_writes_the_prod_kustomization_from_the_prod_only_sources(self, tmp_path: Path) -> None:
+        common_yaml = tmp_path / "common.yaml"
+        common_yaml.write_text(yaml.safe_dump(self._config()), encoding="utf-8", newline="\n")
+        kustomization = tmp_path / "kustomization.yaml"
+        kustomization.write_text(
+            "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n", encoding="utf-8", newline="\n"
+        )
+
+        rc = sync_k8s_images.sync(
+            common_yaml=common_yaml,
+            kustomization=kustomization,
+            sources=sync_k8s_images.PROD_IMAGE_SOURCES,
+            include_errors=False,
+        )
+
+        assert rc == 0
+        result = kustomization.read_text(encoding="utf-8")
+        assert "name: pragent/pr-agent" in result
+        assert "newTag: 0.45.0-gitea_app" in result
+
+    def test_main_writes_both_the_base_and_prod_kustomizations(self, tmp_path: Path, monkeypatch) -> None:
+        base_kustomization = tmp_path / "base.yaml"
+        prod_kustomization = tmp_path / "prod.yaml"
+        base_kustomization.write_text("kind: Kustomization\n", encoding="utf-8")
+        prod_kustomization.write_text("kind: Kustomization\n", encoding="utf-8")
+        common_yaml = tmp_path / "common.yaml"
+        common_yaml.write_text(
+            yaml.safe_dump(
+                {
+                    "apps": {
+                        "services": {
+                            "automation": {
+                                "n8n": {"image": "n8nio/n8n:1.0.0"},
+                                "pr_agent": {"image": "pragent/pr-agent:0.45.0-gitea_app"},
+                            }
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(sync_k8s_images, "COMMON_YAML", common_yaml)
+        monkeypatch.setattr(sync_k8s_images, "KUSTOMIZATION", base_kustomization)
+        monkeypatch.setattr(sync_k8s_images, "PROD_KUSTOMIZATION", prod_kustomization)
+
+        assert sync_k8s_images.main() == 0
+        assert "n8nio/n8n" in base_kustomization.read_text()
+        assert "pragent/pr-agent" not in base_kustomization.read_text()
+        assert "pragent/pr-agent" in prod_kustomization.read_text()
+        assert "n8nio/n8n" not in prod_kustomization.read_text()
+
+
 class TestWindowsSafeCheckIdempotency:
     """TOOL-020 regression: `sync --check` must not report drift from its own write.
 

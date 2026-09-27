@@ -1531,6 +1531,19 @@ apps:
         # n8n calls it at http://apprise:8000. Bot tokens / chat IDs live in SOPS
         # (apps.services.automation.apprise.*), never in this declarative SSOT.
 
+      # PR-Agent (TOOL-080, #1823) — the forge's read-only PR reviewer, a Gitea
+      # webhook server. Prod only: the manifest lives in overlays/prod/, never
+      # base (proposal, "Out of scope: Staging" — the forge is singleton and the
+      # reviewer identity/webhook exist once, not per environment). No
+      # `health_path`: `GET /` returns 404 (verification.md), so it is left out
+      # of `toolkit services health` rather than declared against an endpoint
+      # that would report a permanent FAIL.
+      pr_agent:
+        name: pr-agent
+        image: pragent/pr-agent:0.45.0-gitea_app
+        domain: pr-agent.kubelab.live
+        default_port: 3000
+
     # Data services (storage, databases)
     data:
       minio:
