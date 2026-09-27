@@ -43,13 +43,26 @@
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.isDelegable }}",
-              "value2": true
+              "id": "827f8139-81e3-5119-89ea-7d9e7bfc40cb",
+              "leftValue": "={{ $json.isDelegable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "e4000000-0000-4000-8000-000000000003",
       "name": "Is Delegable?",

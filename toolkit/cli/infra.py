@@ -618,6 +618,37 @@ def n8n_smoke(
         raise typer.Exit(1)
 
 
+@n8n_app.command("probe")
+def n8n_probe(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    verify_tls: Annotated[
+        bool | None,
+        typer.Option(
+            "--verify-tls/--no-verify-tls",
+            help="Verify the webhook TLS cert (default: on in prod, off in staging, which is VPN-only)",
+        ),
+    ] = None,
+) -> None:
+    """Probe the public n8n webhooks end to end (APP-CONFIG-015 AC4/AC5).
+
+    A signed forge `opened` issue must create a Vikunja task (read back, then
+    deleted). Unsigned and wrongly signed forge events and an unsigned Slack
+    command must stop at their gate, judged from n8n's execution record. An
+    unauthenticated agent-dispatcher call must get 403. In prod the signed probe
+    also posts one "Task Created" message to the operator channel.
+    """
+    if env == "dev":
+        logger.info("Dev environment uses Docker Compose, not K8s")
+        raise typer.Exit(0)
+
+    validate_environment_config(env)
+
+    from toolkit.features.n8n_probe import run_n8n_probe
+
+    if not run_n8n_probe(env, settings.project_root, verify_tls=verify_tls):
+        raise typer.Exit(1)
+
+
 @k8s_app.command("alert-smoke")
 def k8s_alert_smoke(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment (staging only)")],

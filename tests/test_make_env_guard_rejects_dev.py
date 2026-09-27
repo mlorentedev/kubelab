@@ -94,6 +94,7 @@ GUARDED: dict[str, str] = {
     "grafana-admin-reconcile": "staging",
     "apply-middleware-secrets": "staging",
     "import-n8n": "staging",
+    "n8n-probe": "staging",
     "notify-smoke": "staging",
     "alert-smoke": "staging",
     "flush-sessions": "staging",
