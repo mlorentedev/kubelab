@@ -817,6 +817,24 @@ SECRET_CATALOG: list[SecretSpec] = [
         ),
         envs=("prod",),
     ),
+    SecretSpec(
+        key_path="apps.services.automation.pr_agent.nan_api_key",
+        description="NaN Builders API key for the PR-Agent review server's model calls (LiteLLM OPENAI__KEY)",
+        # EXTERNAL, not RANDOM_*: this is a copy of the Bitwarden `NAN_API_KEY`
+        # (Manu, 2026-09-24), not a value this repo generates.
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.NEVER,
+        services=("pr-agent",),
+        rotate_note=(
+            "Two copies of one credential (proposal, Risks): `NAN_API_KEY` rotates every 90 days "
+            "in the dotfiles registry and this SOPS copy does not follow on its own. Re-copy with "
+            'dotf secrets run --only NAN_API_KEY -- sh -c \'printf %s "$NAN_API_KEY" | toolkit secrets '
+            "set apps.services.automation.pr_agent.nan_api_key --env prod --stdin'. If the copies "
+            "drift, NaN returns 401 and the silence detector (AC8) catches it -- that is the "
+            "backstop, not the fix."
+        ),
+        envs=("prod",),
+    ),
     # =========================================================================
     # MinIO
     # =========================================================================

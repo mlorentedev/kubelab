@@ -27,6 +27,14 @@ class SecretMapping:
     optional_keys: dict[str, str] = field(default_factory=dict)  # k8s_key → flattened_env_var (optional)
     literals: dict[str, str] = field(default_factory=dict)  # k8s_key → pre-rendered value
     namespace: str = "kubelab"  # target K8s namespace
+    # `None` = every environment, mirroring `SecretSpec.envs` in the catalog
+    # (ANSIBLE-033: the audit dimension, not ownership). A mapping whose SOURCE
+    # keys are catalogued for one env only (TOOL-080's `pr-agent-secrets`, prod
+    # only) must not even be attempted elsewhere: `_apply_single_secret` fails
+    # closed on a required key that was never supposed to exist there, which
+    # would take `apply-secrets ENV=staging` down for a workload staging never
+    # runs (proposal, "Out of scope: Staging").
+    envs: tuple[str, ...] | None = None
 
 
 # ── Secret definitions (declarative) ──────────────────────────────────────────
@@ -133,6 +141,20 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         },
     ),
     SecretMapping(
+        name="pr-agent-secrets",
+        keys={
+            # All three REQUIRED (TOOL-080 AC6) — never `optional_keys`. Unlike
+            # n8n's Slack/Vikunja keys, a pod missing any one of these cannot do
+            # its job at all: no model key, no signature verification, no forge
+            # read. `envs=("prod",)` matches every SOPS key below in
+            # SECRET_CATALOG (proposal, "Out of scope: Staging").
+            "OPENAI__KEY": "APPS_SERVICES_AUTOMATION_PR_AGENT_NAN_API_KEY",
+            "GITEA__WEBHOOK_SECRET": "APPS_SERVICES_AUTOMATION_PR_AGENT_WEBHOOK_SECRET",
+            "GITEA__PERSONAL_ACCESS_TOKEN": "APPS_SERVICES_CORE_GITEA_REVIEWER_TOKEN",
+        },
+        envs=("prod",),
+    ),
+    SecretMapping(
         name="vikunja-secrets",
         keys={
             "VIKUNJA_DATABASE_PASSWORD": "APPS_SERVICES_CORE_VIKUNJA_DB_PASSWORD",
@@ -190,6 +212,11 @@ RETIRED_SECRETS: tuple[tuple[str, str], ...] = (
     # OPS-023: held the MinIO root password and OIDC client secret.
     ("kubelab", "minio-secrets"),
 )
+
+
+def _definitions_for_env(env: str, definitions: list[SecretMapping]) -> list[SecretMapping]:
+    """Every mapping applicable to `env` — all of them, unless scoped narrower."""
+    return [m for m in definitions if m.envs is None or env in m.envs]
 
 
 def _get_kubeconfig(env: str) -> str:
@@ -264,10 +291,16 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
 
     logger.success(f"Loaded {len(env_vars)} env vars from config + SOPS")
 
+    # 1b. Only the mappings this env actually owns (SecretMapping.envs). A
+    # prod-only mapping has no source values in a staging vault at all — that
+    # is absence, not a placeholder — so it is filtered out here rather than
+    # tripping either guard below.
+    applicable = _definitions_for_env(env, SECRET_DEFINITIONS)
+
     # 2. Pre-deploy guard (TOOL-019 / C6): never push a placeholder value to a cluster.
     placeholder_hits = sorted(
         f"{mapping.name}.{k8s_key}"
-        for mapping in SECRET_DEFINITIONS
+        for mapping in applicable
         for k8s_key, env_var in mapping.keys.items()
         if is_placeholder(env_vars.get(env_var))
     )
@@ -309,7 +342,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # 4. Apply each secret
     all_ok = True
     changed: set[tuple[str, str]] = set()
-    for mapping in SECRET_DEFINITIONS:
+    for mapping in applicable:
         extra = dynamic_literals.get(mapping.name, {})
         ok = _apply_single_secret(
             mapping, env_vars, extra, dry_run, env=env, namespace=mapping.namespace, changed=changed
