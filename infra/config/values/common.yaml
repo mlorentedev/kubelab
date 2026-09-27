@@ -1789,7 +1789,7 @@ apps:
           - admins
           - users
         - identity: operator
-          displayname: Administrator
+          displayname: Operator
             # email auto-filled from apps.contact.email by the config loader (SSOT-014c).
           disabled: false
           # `users` only: a role account holds no administrative power (ADR-062 D1).
