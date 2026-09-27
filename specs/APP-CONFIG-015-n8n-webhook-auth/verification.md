@@ -9,22 +9,25 @@ created: "2026-09-26"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> `941f1da4` / `tests/test_n8n_multi_forge_sync.py` (red 4, then green), on the item captured from `n8nio/n8n:2.12.3` (`95d48925`)
+- [x] AC2 -> `11821e6c` / `tests/test_n8n_slack_capture.py` (red 3, then green), including `test_stale_timestamp_fails_closed_even_when_correctly_signed`
+- [x] AC3 -> `efcc992f` / `tests/test_n8n_filter_nodes_v2_shape.py`; mutation: restoring `Is Slack Valid?` fails 2 tests
+- [ ] AC4 staging -> blocked. `make n8n-probe ENV=staging` 2026-09-27: execution 44 passes `Has Task Key & Valid Sig?` (the signature is accepted), then fails in `Find Task for Issue` with `HTTP 401 Authorization failed`. Staging SOPS holds the token minted in prod Vikunja (`same_value=True`, compared in process), which staging's own Vikunja rejects. Recorded on #1699.
+- [ ] AC4 prod -> pending merge
+- [x] AC5 staging -> `make n8n-probe ENV=staging` 2026-09-27: unsigned forge (execution 45) and wrong-secret forge (46) stop at `Has Task Key & Valid Sig?`; unsigned Slack (47) stops at `Is Slack Valid?`; in each, nothing reached the gate's TRUE output and no `httpRequest` node ran. Unauthenticated agent-dispatcher: HTTP 403 and no execution.
+- [ ] AC5 prod -> pending merge
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test` -> 2772 passed, 15 skipped, 1 xfailed (2026-09-26, before the probe); `tests/test_n8n_probe.py` 20 passed
+- Live: `make n8n-probe ENV=staging` (above)
+- No regressions in existing test suite: yes
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- The IF gates were migrated to the v2 filter shape rather than pinned back to `typeVersion: 1` (operator, 2026-09-26).
+- AC4/AC5 are probed by a codified `make n8n-probe`, not ad-hoc requests (operator, 2026-09-26). It judges n8n's execution record, not the HTTP status: Slack acknowledges before its gate, so its status says nothing.
+- A signed Slack probe is not included: AC4 is the forge path, and a signed Slack command would POST to a `response_url` the probe cannot own. AC2's unit tests cover the Slack signature.
 
 ## Promotion candidates
 
