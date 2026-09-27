@@ -13,9 +13,17 @@ K8s Secret it is supposed to describe.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
 from toolkit.features import k8s_secrets as ks
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, SecretMapping
 from toolkit.features.secrets_manager import SECRET_CATALOG, Expiry, SecretKind
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PR_AGENT_MAPPING = next(m for m in SECRET_DEFINITIONS if m.name == "pr-agent-secrets")
 
@@ -38,13 +46,38 @@ class TestNanApiKeyCatalogEntry:
         assert spec.envs == ("prod",)
         assert spec.expiry == Expiry.NEVER
 
-    def test_rotate_note_names_the_exact_recopy_one_liner(self) -> None:
+    def test_rotate_note_points_at_the_make_target(self) -> None:
+        # The re-copy is a declared operation, not a pipe someone has to remember
+        # every 90 days: the note names the target, and the target owns the pipe.
         spec = _catalog("apps.services.automation.pr_agent.nan_api_key")
-        one_liner = (
-            'dotf secrets run --only NAN_API_KEY -- sh -c \'printf %s "$NAN_API_KEY" | '
-            "toolkit secrets set apps.services.automation.pr_agent.nan_api_key --env prod --stdin'"
+        assert "make secrets-copy-nan-key" in spec.rotate_note
+
+
+@pytest.mark.skipif(shutil.which("make") is None, reason="make is not installed")
+class TestSecretsCopyNanKeyTarget:
+    """`make secrets-copy-nan-key` copies the Bitwarden value over stdin only."""
+
+    def _recipe(self) -> str:
+        proc = subprocess.run(  # noqa: S603
+            ["make", "-n", "secrets-copy-nan-key", "TOOLKIT=toolkit"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
-        assert one_liner in spec.rotate_note
+        assert proc.returncode == 0, proc.stderr
+        return proc.stdout
+
+    def test_reads_the_value_from_bitwarden_through_dotf(self) -> None:
+        assert "dotf secrets run --only NAN_API_KEY --" in self._recipe()
+
+    def test_writes_the_catalogued_key_over_stdin(self) -> None:
+        spec = _catalog("apps.services.automation.pr_agent.nan_api_key")
+        recipe = self._recipe()
+        assert f"toolkit secrets set {spec.key_path} --env prod --stdin" in recipe
+        # The value may only travel through the pipe, never argv or stdout.
+        assert 'printf %s "$NAN_API_KEY" |' in recipe
+        assert "echo" not in recipe
 
 
 class TestPrAgentSecretMapping:

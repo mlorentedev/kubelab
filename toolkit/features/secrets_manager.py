@@ -828,8 +828,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note=(
             "Two copies of one credential (proposal, Risks): `NAN_API_KEY` rotates every 90 days "
             "in the dotfiles registry and this SOPS copy does not follow on its own. Re-copy with "
-            'dotf secrets run --only NAN_API_KEY -- sh -c \'printf %s "$NAN_API_KEY" | toolkit secrets '
-            "set apps.services.automation.pr_agent.nan_api_key --env prod --stdin'. If the copies "
+            "`make secrets-copy-nan-key` (Bitwarden unlocked), then `make apply-secrets ENV=prod`. If the copies "
             "drift, NaN returns 401 and the silence detector (AC8) catches it -- that is the "
             "backstop, not the fix."
         ),

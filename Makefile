@@ -428,6 +428,14 @@ secrets-jwks:
 secrets-hash:
 	@$(TOOLKIT) secrets hash --env $(ENV)
 
+# PR-Agent's model key is a COPY of the Bitwarden `NAN_API_KEY` (TOOL-080): the
+# dotfiles registry rotates it every 90 days and this SOPS copy does not follow.
+# Re-run after each rotation, then `make apply-secrets ENV=prod`. The value only
+# travels through the pipe: never argv, never stdout. Needs Bitwarden unlocked.
+.PHONY: secrets-copy-nan-key
+secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-Agent (re-run after each rotation)
+	@dotf secrets run --only NAN_API_KEY -- sh -c 'printf %s "$$NAN_API_KEY" | $(TOOLKIT) secrets set apps.services.automation.pr_agent.nan_api_key --env prod --stdin'
+
 # -----------------------------------------------------------------------------
 # Monitoring (Uptime Kuma)
 # -----------------------------------------------------------------------------

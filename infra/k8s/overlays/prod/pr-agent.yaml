@@ -101,11 +101,15 @@ spec:
             # is a starting point, not a measured ceiling: revisit after the
             # burst measurement in the live rollout (tasks.md, PR 4 "Measure a
             # burst").
+            # Memory measured 2026-09-27 at --cpus=1: master + 2 workers sit at
+            # 300 MiB idle, so 512 Mi left ~200 Mi for every in-flight review.
+            # The request is the measured idle figure, the limit leaves room for
+            # concurrent reviews until the burst measurement says otherwise.
             limits:
-              memory: 512Mi
+              memory: 768Mi
               cpu: "1.0"
             requests:
-              memory: 128Mi
+              memory: 320Mi
               cpu: "0.1"
       volumes:
         # Read-only rootfs (above) needs a writable /tmp, and HOME=/tmp points

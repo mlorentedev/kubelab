@@ -131,6 +131,14 @@ Run from master `3f46c450` on a branch, so that the recorded token lands through
   (79/84 present). The pod stays in `CreateContainerConfigError` until it is
   copied in and `apply-secrets` runs — both out of scope for this build.
 
+## Image runtime (2026-09-27, local Docker, `pragent/pr-agent:0.45.0-gitea_app`)
+
+Digest `sha256:750c6cf8532b7aa81ef55a71cce0d8c24485cd18cbdcca21d3885788ce2b69f4`. The image declares no `User`; its command is gunicorn with `UvicornWorker` and `pr_agent/servers/gunicorn_config.py`, binding `0.0.0.0:3000`.
+
+- **Non-root works, with one condition.** `--user 65534:65534 --read-only --tmpfs /tmp` exits 1 at import: `azure.devops` creates its cache dir under `$HOME`, which for uid 65534 is `/nonexistent`, so `OSError: [Errno 30] Read-only file system: '/nonexistent'`. Adding `HOME=/tmp` fixes it: the master and its workers start as `nobody`. That is why the manifest sets `runAsNonRoot`, `readOnlyRootFilesystem`, an `emptyDir` on `/tmp` and `HOME=/tmp`.
+- **Signature check, locally (AC3 still needs its live record).** With `GITEA__WEBHOOK_SECRET` set, a POST to `/api/v1/gitea_webhooks` with no `X-Gitea-Signature` returned **400** ("Missing signature header"), and one with a wrong signature returned **401** ("Request signatures didn't match"). `GET /` returns 404, so the probes use TCP, not HTTP on `/`.
+- **Memory.** With `--cpus=1 --memory=512m` (the Deployment's CPU limit), gunicorn ran a master and 2 workers at **300 MiB idle**, not OOM-killed. 512 Mi would have left about 200 Mi for every in-flight review, so the limit is 768 Mi and the request 320 Mi, until the burst measurement (PR 4b) says otherwise.
+
 ## Test status
 
 - PR 2 (reviewer identity), 2026-09-24: `poetry run pytest -q tests/` → 2661 passed, 15 skipped. The new files are `tests/test_gitea_review_team.py` (24) and `tests/test_gitea_reviewer_identity.py` (10), plus `test_the_reviewer_grant_is_exactly_the_measured_requirement`. Each was red before its implementation.
