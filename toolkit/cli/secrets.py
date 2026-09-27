@@ -495,6 +495,14 @@ def set_secret(
             help="Read the value from stdin: prompts if interactive (Enter submits), reads the pipe otherwise",
         ),
     ] = False,
+    from_env: Annotated[
+        str | None,
+        typer.Option(
+            "--from-env",
+            metavar="VAR",
+            help="Read the value from environment variable VAR (for `dotf secrets run -- toolkit ...`)",
+        ),
+    ] = None,
 ) -> None:
     """Set a secret value in the SOPS vault.
 
@@ -506,6 +514,11 @@ def set_secret(
       toolkit secrets set <key> --env staging --stdin            # interactive prompt
       printf -- '-1004…' | toolkit secrets set <key> --env staging --stdin   # piped
 
+    --from-env VAR reads the value from the process environment, so a value that
+    `dotf secrets run` injected reaches this command with no shell in between:
+
+      dotf secrets run --only TOKEN -- toolkit secrets set apps.x.token --env prod --from-env TOKEN
+
     Example:
       toolkit secrets set aws.access_key_id AKIA... --env common
       printf %s "$TOKEN" | toolkit secrets set apps.x.token --env staging --stdin
@@ -515,10 +528,15 @@ def set_secret(
         logger.error(f"Invalid env: {env}. Must be one of: {', '.join(valid_envs)}")
         raise typer.Exit(1)
 
-    if use_stdin and value is not None:
-        logger.error("Pass the value as an argument OR via --stdin, not both")
+    if sum((value is not None, use_stdin, from_env is not None)) > 1:
+        logger.error("Pass the value as an argument, via --stdin or via --from-env: only one")
         raise typer.Exit(1)
-    if use_stdin:
+    if from_env is not None:
+        value = os.environ.get(from_env)
+        if not value:
+            logger.error(f"--from-env {from_env}: the variable is unset or empty")
+            raise typer.Exit(1)
+    elif use_stdin:
         value = _stdin_value()
         if not value:
             logger.error("--stdin given but no value was provided")

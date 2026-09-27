@@ -71,13 +71,16 @@ class TestSecretsCopyNanKeyTarget:
     def test_reads_the_value_from_bitwarden_through_dotf(self) -> None:
         assert "dotf secrets run --only NAN_API_KEY --" in self._recipe()
 
-    def test_writes_the_catalogued_key_over_stdin(self) -> None:
+    def test_writes_the_catalogued_key_from_the_environment_without_a_shell(self) -> None:
+        # dotf refuses any `sh -c` snippet containing `set` (it reads as the
+        # builtin that dumps every variable), so the value cannot travel
+        # through a pipe here. `--from-env` reads it inside the process: no
+        # shell, no argv, no stdout.
         spec = _catalog("apps.services.automation.pr_agent.nan_api_key")
         recipe = self._recipe()
-        assert f"toolkit secrets set {spec.key_path} --env prod --stdin" in recipe
-        # The value may only travel through the pipe, never argv or stdout.
-        assert 'printf %s "$NAN_API_KEY" |' in recipe
-        assert "echo" not in recipe
+        assert f"toolkit secrets set {spec.key_path} --env prod --from-env NAN_API_KEY" in recipe
+        assert "sh -c" not in recipe
+        assert "$NAN_API_KEY" not in recipe
 
 
 class TestPrAgentSecretMapping:

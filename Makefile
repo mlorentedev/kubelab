@@ -430,11 +430,13 @@ secrets-hash:
 
 # PR-Agent's model key is a COPY of the Bitwarden `NAN_API_KEY` (TOOL-080): the
 # dotfiles registry rotates it every 90 days and this SOPS copy does not follow.
-# Re-run after each rotation, then `make apply-secrets ENV=prod`. The value only
-# travels through the pipe: never argv, never stdout. Needs Bitwarden unlocked.
+# Re-run after each rotation, then `make apply-secrets ENV=prod`. Needs Bitwarden
+# unlocked. `--from-env` reads the value inside the process, so it touches no
+# argv, no stdout and no shell: dotf refuses any `sh -c` snippet containing
+# `set`, which it reads as the builtin that dumps every variable.
 .PHONY: secrets-copy-nan-key
 secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-Agent (re-run after each rotation)
-	@dotf secrets run --only NAN_API_KEY -- sh -c 'printf %s "$$NAN_API_KEY" | $(TOOLKIT) secrets set apps.services.automation.pr_agent.nan_api_key --env prod --stdin'
+	@dotf secrets run --only NAN_API_KEY -- $(TOOLKIT) secrets set apps.services.automation.pr_agent.nan_api_key --env prod --from-env NAN_API_KEY
 
 # -----------------------------------------------------------------------------
 # Monitoring (Uptime Kuma)

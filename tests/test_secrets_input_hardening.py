@@ -121,6 +121,58 @@ class TestSecretsSetStdin:
         mgr.set_secret.assert_called_once_with("staging", "apps.x.k", "plainvalue")
 
 
+class TestSecretsSetFromEnv:
+    """`--from-env VAR` reads the value from the process environment.
+
+    It exists for `dotf secrets run --only X -- toolkit secrets set ... --from-env X`:
+    the value reaches the process without a shell, so no argv, no stdout, and no
+    `sh -c` snippet for dotf's introspection guard to refuse (TOOL-080).
+    """
+
+    def _invoke(self, args: list[str], monkeypatch, **env: str):
+        for name, val in env.items():
+            monkeypatch.setenv(name, val)
+        mgr = MagicMock()
+        mgr.set_secret.return_value = True
+        with patch("toolkit.cli.secrets._get_manager", return_value=mgr):
+            result = runner.invoke(app, ["secrets", "set", "apps.x.k", "--env", "prod", *args])
+        return result, mgr
+
+    def test_reads_the_named_variable(self, monkeypatch) -> None:
+        result, mgr = self._invoke(["--from-env", "SOME_KEY"], monkeypatch, SOME_KEY="s3cr3t-value")
+        assert result.exit_code == 0, result.output
+        mgr.set_secret.assert_called_once_with("prod", "apps.x.k", "s3cr3t-value")
+        assert "s3cr3t-value" not in result.output
+
+    def test_an_unset_variable_is_an_error_and_writes_nothing(self, monkeypatch) -> None:
+        monkeypatch.delenv("SOME_KEY", raising=False)
+        result, mgr = self._invoke(["--from-env", "SOME_KEY"], monkeypatch)
+        assert result.exit_code != 0
+        mgr.set_secret.assert_not_called()
+
+    def test_an_empty_variable_is_an_error_and_writes_nothing(self, monkeypatch) -> None:
+        result, mgr = self._invoke(["--from-env", "SOME_KEY"], monkeypatch, SOME_KEY="")
+        assert result.exit_code != 0
+        mgr.set_secret.assert_not_called()
+
+    def test_combined_with_stdin_is_an_error(self, monkeypatch) -> None:
+        result, mgr = self._invoke(["--from-env", "SOME_KEY", "--stdin"], monkeypatch, SOME_KEY="v")
+        assert result.exit_code != 0
+        assert "not both" in result.output or "only one" in result.output
+        mgr.set_secret.assert_not_called()
+
+    def test_combined_with_a_positional_value_is_an_error(self, monkeypatch) -> None:
+        monkeypatch.setenv("SOME_KEY", "v")
+        mgr = MagicMock()
+        with patch("toolkit.cli.secrets._get_manager", return_value=mgr):
+            result = runner.invoke(
+                app, ["secrets", "set", "apps.x.k", "positional", "--env", "prod", "--from-env", "SOME_KEY"]
+            )
+        assert result.exit_code != 0
+        assert "not both" in result.output or "only one" in result.output
+        mgr.set_secret.assert_not_called()
+
+
 # ─────────────────────────── secrets init idempotency ──────────────────────────
 
 
