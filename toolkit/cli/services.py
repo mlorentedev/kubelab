@@ -463,6 +463,7 @@ def gitea_reconcile(
     Never deletes: `ReconcilePlan` has no field a deletion could travel in
     (#1076 scope), and undeclared entries are printed rather than acted on.
     """
+    from toolkit.features.gitea_actions_secrets import sops_value
     from toolkit.features.gitea_client import GiteaError
     from toolkit.features.gitea_repos import (
         READ_TEAM,
@@ -471,7 +472,7 @@ def gitea_reconcile(
         format_plan,
         load_declaration,
         load_settings,
-        load_webhook,
+        load_webhooks,
         plan_reconcile,
     )
 
@@ -500,7 +501,7 @@ def gitea_reconcile(
     # is a fault in the declaration, and finding it out after several network round
     # trips reports it as though the forge were involved.
     declared_settings = load_settings(merged)
-    declared_webhook = load_webhook(merged)
+    declared_webhooks = load_webhooks(merged)
 
     try:
         # Read with the admin credential: a listing taken with the bot's token
@@ -556,7 +557,7 @@ def gitea_reconcile(
         existing_repo_settings,
         declared_settings,
         existing_repo_hooks,
-        declared_webhook,
+        declared_webhooks,
         reviewer=str(reviewer) if reviewer else None,
         existing_review_teams=existing_review_teams,
     )
@@ -594,7 +595,7 @@ def gitea_reconcile(
     # Read only when a migration is actually planned, so an ordinary reconcile does
     # not depend on credentials it never uses.
     migration_token = None
-    webhook_secret = None
+    webhook_secrets: dict[str, str | None] = {}
     superadmin: "GiteaBasicAuthClient | None" = None
     # ONE CLIENT FOR BOTH, because it is one credential: migration and repository
     # settings are the two operations here that no token may perform, and each was
@@ -606,11 +607,12 @@ def gitea_reconcile(
 
         gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
         migration_token = gitea_cfg.get("github_migration_token")
-        # The same secret n8n validates deliveries against, read from the n8n service
-        # rather than copied under `gitea`: there is exactly one value, and a second
-        # SOPS key holding it is a rotation that silently half-lands. Absence is
-        # reported per repository by `execute`, never written as an unsigned hook.
-        webhook_secret = merged["apps"]["services"]["automation"]["n8n"].get("forge_webhook_secret")
+        # Each declared hook reads its OWN secret from its OWN `secret_key` (TOOL-080)
+        # -- `sops_value` is the same dotted-path lookup `gitea-actions-secrets` uses,
+        # returning "" for an absent or placeholder value, turned into None below so
+        # `execute` refuses rather than writes unsigned. Keyed by URL, matching how
+        # `execute` resolves a `WebhookChange` back to its declaration.
+        webhook_secrets = {hook.spec.url: (sops_value(merged, hook.secret_key) or None) for hook in declared_webhooks}
         admin_password = gitea_cfg.get("admin_password")
         if not admin_password:
             logger.error(
@@ -631,9 +633,9 @@ def gitea_reconcile(
         bot,
         bot_username=bot_username,
         declared_settings=declared_settings,
-        declared_webhook=declared_webhook,
+        declared_webhooks=declared_webhooks,
         migration_token=migration_token,
-        webhook_secret=str(webhook_secret) if webhook_secret else None,
+        webhook_secrets=webhook_secrets,
         migrator=superadmin,
         configurator=superadmin,
     )

@@ -26,7 +26,7 @@ import pytest
 from tests.test_gitea_repo_reconcile import (
     DECLARED,
     DECLARED_SETTINGS,
-    DECLARED_WEBHOOK,
+    N8N_HOOK_ONLY,
     converged_for,
     hooks_for,
     settings_for,
@@ -70,7 +70,7 @@ def _plan(**overrides: Any) -> Any:
         "existing_repo_settings": settings_for(DECLARED),
         "declared_settings": DECLARED_SETTINGS,
         "existing_repo_hooks": hooks_for(DECLARED),
-        "declared_webhook": DECLARED_WEBHOOK,
+        "declared_webhooks": N8N_HOOK_ONLY,
     }
     kwargs.update(overrides)
     return plan_reconcile(DECLARED, **kwargs)
@@ -312,7 +312,7 @@ def test_execute_ensures_each_planned_review_team_with_the_reviewer() -> None:
         forge,  # type: ignore[arg-type]
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=N8N_HOOK_ONLY,
     )
     assert report.review_teams_ensured == ["personal"]
     assert ("create_team", ("personal", "reviewers", "read", False)) in forge.calls
@@ -331,7 +331,7 @@ def test_execute_records_a_review_team_it_could_not_converge() -> None:
         forge,  # type: ignore[arg-type]
         bot_username="hefesto",
         declared_settings=DECLARED_SETTINGS,
-        declared_webhook=DECLARED_WEBHOOK,
+        declared_webhooks=N8N_HOOK_ONLY,
     )
     assert report.review_teams_ensured == []
     assert [target for target, _ in report.failures] == ["team personal/reviewers"]
