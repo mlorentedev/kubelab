@@ -106,9 +106,9 @@ spec:
               resources:
                 requests:
                   memory: 64Mi
-                # restic loads each repository's index. Not measured in the
-                # cluster yet (BACKUP-055 task 10); the headroom is deliberate,
-                # because an OOM of the shell is a silent run.
+                # restic loads each repository's index: 46 MiB peak measured in
+                # staging (cgroup memory.peak, 2026-09-27). The headroom is
+                # deliberate: indexes grow, and an OOM of the shell is a silent run.
                 limits:
                   memory: 256Mi
           volumes:
