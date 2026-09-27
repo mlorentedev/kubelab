@@ -18,10 +18,11 @@ the API refuses to change it (`ErrCannotChangeRoleForExternallySyncedUser`). So
 for Grafana, correcting means revoking the account's sessions: the next request
 signs in again through Authelia and takes the declared tier. That is reported as
 `bounded`, not `fixed`, because the stored role only changes at that next login.
-Argo CD keeps no user database: it
-reads the groups from Authelia's UserInfo and caches them for
-`userInfoCacheExpiration`, so its gap closes within that bound without any edit.
-It is reported, from the live hub config, rather than reconciled.
+Argo CD keeps no user database: it reads the groups from Authelia's UserInfo.
+Authelia answers UserInfo with the groups captured when the access token was
+issued, so a changed group reaches Argo CD only when that token expires and the
+session signs in again (ARGOCD_TOKEN_LIFESPAN), not when its UserInfo cache
+expires. It is reported, from the live hub config, rather than reconciled.
 
 Accounts that exist in an app but belong to no declared identity are reported and
 never touched: removing an account is a decision, not a reconciliation.
@@ -266,11 +267,20 @@ def reconcile(
     return result
 
 
+#: How long a demotion can go unseen by Argo CD (#1861). A UserInfo refetch reuses
+#: the stored access token, and Authelia answers with the groups captured when that
+#: token was issued, so the bound is the token's lifespan, not
+#: `userInfoCacheExpiration`. No `lifespans` is configured, so this is Authelia
+#: 4.39's default; `tests/test_access_review.py` fails if either config sets one.
+ARGOCD_TOKEN_LIFESPAN = "1h"
+
+
 def argocd_group_bound(read_cm: Callable[[], str]) -> str:
     """How long a changed group can go unseen by Argo CD, read from the LIVE hub.
 
-    With `enableUserInfoGroups`, Argo CD caches the groups from Authelia's UserInfo
-    for `userInfoCacheExpiration`. Without it, the groups would have to be in the ID
+    With `enableUserInfoGroups`, Argo CD reads the groups from Authelia's UserInfo,
+    which fixes them at token issue: a change is seen within ARGOCD_TOKEN_LIFESPAN,
+    at the next sign-in. Without it, the groups would have to be in the ID
     token, and under Authelia 4.39 they are not: RBAC then matches no group at all.
     Read from the running `argocd-cm`, not the Helm values, because what counts is
     what the hub runs, which is only true after `make deploy-argocd`.
@@ -279,7 +289,10 @@ def argocd_group_bound(read_cm: Callable[[], str]) -> str:
 
     oidc = yaml.safe_load(read_cm() or "") or {}
     if oidc.get("enableUserInfoGroups"):
-        return f"groups from UserInfo, seen within {oidc.get('userInfoCacheExpiration') or 'the default cache'}"
+        return (
+            f"groups from UserInfo, fixed at token issue: a change is seen within {ARGOCD_TOKEN_LIFESPAN}"
+            " (the argocd token lifespan), at the next sign-in"
+        )
     return "NO groups: the live hub reads them from the ID token, which carries none, so RBAC matches no group"
 
 
