@@ -250,7 +250,7 @@ If no App exists yet:
 - A forge's **Test Delivery / Test Push** button sends a synthetic `push`,
   which never takes the issue or PR path: it proves the URL and the secret
   only. To re-run an issue event, close and reopen the issue (`reopened` is a
-  create trigger); to re-run a PR event, use *Redeliver* on that PR's delivery.
+  create trigger); to re-run a PR event, redeliver that PR's delivery from the webhook's recent deliveries.
 - **Slack**: run `/task create smoke test #kubelab P3` and confirm the task
   appears in Vikunja's `kubelab` namespace and `#dev-activity` receives the
   notification.
